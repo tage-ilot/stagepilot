@@ -2,7 +2,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
+import { Update } from "@tauri-apps/plugin-updater";
+import type { DownloadEvent } from "@tauri-apps/plugin-updater";
 import {
   saveWindowState,
   StateFlags,
@@ -32,7 +33,7 @@ export type UpdateRelaunchResult = {
 
 export interface UpdaterAdapter {
   isEnabled(): boolean;
-  check(): Promise<UpdateCandidate | null>;
+  check(options?: { betaEnabled?: boolean }): Promise<UpdateCandidate | null>;
   prepareRelaunch(version: string): Promise<void>;
   clearRelaunchMarker(): void;
   relaunch(): Promise<void>;
@@ -81,6 +82,15 @@ const normalizeProgress = (
   };
 };
 
+type ChannelUpdateMetadata = {
+  rid: number;
+  currentVersion: string;
+  version: string;
+  date?: string;
+  body?: string;
+  rawJson: Record<string, unknown>;
+};
+
 const candidateFromUpdate = (update: Update): UpdateCandidate => ({
   currentVersion: update.currentVersion,
   availableVersion: update.version,
@@ -117,9 +127,22 @@ export const tauriUpdaterAdapter: UpdaterAdapter = {
     if (import.meta.env.PROD) return true;
     return import.meta.env.VITE_STAGEPILOT_ENABLE_UPDATER === "true";
   },
-  check: async () => {
-    const update = await check({ timeout: UPDATE_CHECK_TIMEOUT_MS });
-    return update ? candidateFromUpdate(update) : null;
+  check: async (options) => {
+    // The stock `check()` export from `@tauri-apps/plugin-updater` cannot
+    // select a non-default endpoint at runtime (its `CheckOptions` has no
+    // endpoints override in 2.10.1), so channel selection goes through a
+    // custom Rust command instead. That command still builds its updater
+    // via the plugin's own `updater_builder()` and returns the same
+    // resource-table-backed metadata shape the plugin's own `check` IPC
+    // command does, so `Update.download()`/`Update.install()` — and their
+    // signature verification — are completely unchanged.
+    const metadata = await invoke<ChannelUpdateMetadata | null>(
+      "check_for_update_on_channel",
+      { betaEnabled: options?.betaEnabled ?? false },
+    );
+    if (!metadata) return null;
+    const update = new Update(metadata);
+    return candidateFromUpdate(update);
   },
   prepareRelaunch: async (version) => {
     const marker: RelaunchMarker = {

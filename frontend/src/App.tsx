@@ -35,6 +35,7 @@ function StagePilotApp() {
   });
   const updater = useUpdater({
     ready: dashboardVisible && Boolean(stagePilot.state),
+    betaEnabled: stagePilotSettings?.settings.beta_updates_enabled ?? false,
   });
 
   useEffect(() => {
