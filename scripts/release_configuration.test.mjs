@@ -30,7 +30,7 @@ test("Tauri updater configuration preserves stable identity and trusted endpoint
     "Tauri's trailing /** pattern matches directories rather than resource files",
   );
   assert.deepEqual(config.plugins.updater.endpoints, [
-    "https://github.com/huntrw6/stagepilot/releases/latest/download/latest.json",
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json",
   ]);
   assert.ok(config.plugins.updater.pubkey);
   assert.equal(
