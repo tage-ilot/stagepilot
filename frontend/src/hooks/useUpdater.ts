@@ -33,6 +33,7 @@ export type UpdaterState = {
 export type UseUpdaterOptions = {
   adapter?: UpdaterAdapter;
   ready: boolean;
+  betaEnabled?: boolean;
   startupDelayMs?: number;
   checkIntervalMs?: number;
 };
@@ -52,6 +53,7 @@ const initialState: UpdaterState = {
 export function useUpdater({
   adapter = tauriUpdaterAdapter,
   ready,
+  betaEnabled = false,
   startupDelayMs = 5_000,
   checkIntervalMs = 6 * 60 * 60 * 1_000,
 }: UseUpdaterOptions) {
@@ -60,13 +62,15 @@ export function useUpdater({
   const checking = useRef<Promise<void> | null>(null);
   const installing = useRef(false);
   const lastCheckedAt = useRef(0);
+  const betaEnabledRef = useRef(betaEnabled);
+  betaEnabledRef.current = betaEnabled;
 
   const checkForUpdate = useCallback(async () => {
     if (!ready || !adapter.isEnabled() || checking.current || installing.current) return;
     const operation = (async () => {
       setState((current) => ({ ...current, status: "checking", error: null }));
       try {
-        const update = await adapter.check();
+        const update = await adapter.check({ betaEnabled: betaEnabledRef.current });
         candidate.current = update;
         lastCheckedAt.current = Date.now();
         setState((current) => update

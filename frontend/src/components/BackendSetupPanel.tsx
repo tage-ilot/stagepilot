@@ -36,6 +36,7 @@ export function BackendSetupPanel({
   const [lanAccess, setLanAccess] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(true);
   const [dashboardPin, setDashboardPin] = useState("");
+  const [betaUpdatesEnabled, setBetaUpdatesEnabled] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -45,6 +46,7 @@ export function BackendSetupPanel({
     setLanAccess(settings.settings.lan_access ?? false);
     setPinEnabled(settings.settings.web_dashboard_pin_enabled ?? true);
     setDashboardPin("");
+    setBetaUpdatesEnabled(settings.settings.beta_updates_enabled ?? false);
   }, [settings]);
 
   const parsedSettings = useMemo<GeneralSettingsInput | null>(() => {
@@ -58,9 +60,10 @@ export function BackendSetupPanel({
       server_port: parsedPort,
       lan_access: lanAccess,
       web_dashboard_pin_enabled: pinEnabled,
+      beta_updates_enabled: betaUpdatesEnabled,
       ...(dashboardPin ? { web_dashboard_pin: dashboardPin } : {}),
     };
-  }, [dashboardPin, lanAccess, logLevel, pinEnabled, serverPort, timezone]);
+  }, [betaUpdatesEnabled, dashboardPin, lanAccess, logLevel, pinEnabled, serverPort, timezone]);
   const connectionStatus = live
     ? "connected"
     : state.application_status === "error" ? "error" : "disconnected";
@@ -131,6 +134,23 @@ export function BackendSetupPanel({
             </span>
             <span className="mt-1 block text-xs text-slate-400">
               Other devices can open http://&lt;this-computer&apos;s-IP&gt;:{serverPort}.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-300">
+          <input
+            checked={betaUpdatesEnabled}
+            className="mt-0.5 size-4 accent-rose-500"
+            disabled={pending}
+            onChange={(event) => setBetaUpdatesEnabled(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            <span className="block font-semibold text-slate-200">
+              Receive pre-release (beta) builds
+            </span>
+            <span className="mt-1 block text-xs text-slate-400">
+              Beta builds are less tested. Turning this off does not downgrade an already-installed beta.
             </span>
           </span>
         </label>

@@ -55,9 +55,9 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/huntrw6/stagepilot/releases/latest/download/latest.json"
+        "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCQTUzMzI4Rjk3RURFQkIKUldTNzNuNzVLRE9seS8wVjR4alZEeXJPbUlNb0kwN251V1hDMms4TWI5Sm9MTldkSFBsc3NXZmEK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGM0Q4RTk1NTQwQUFDNDUKUldTc1ZBb1ZtVFgyNkxJajN0V3RWTExZL2lFN0RPZmVnNm93YnpneXJOZjhkdTd5SjBSdTN0dmEK"
     }
   }
 }

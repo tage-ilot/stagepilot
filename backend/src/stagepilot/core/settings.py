@@ -92,6 +92,7 @@ class PersistentSettings(BaseModel):
     server_port: int = Field(default=8765, ge=1, le=65535)
     lan_access: bool = False
     web_dashboard_pin_enabled: bool = True
+    beta_updates_enabled: bool = False
     web_dashboard_pin_hash: str | None = Field(default=None, exclude=True)
     planning_center: PersistentPlanningCenterSettings = Field(
         default_factory=PersistentPlanningCenterSettings
@@ -544,6 +545,7 @@ class SettingsService:
                 "onboarding": self._persistent.onboarding,
                 "web_dashboard_pin_enabled": self._persistent.web_dashboard_pin_enabled,
                 "web_dashboard_pin_hash": self._persistent.web_dashboard_pin_hash,
+                "beta_updates_enabled": self._persistent.beta_updates_enabled,
             },
             deep=True,
         )

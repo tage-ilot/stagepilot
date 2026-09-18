@@ -19,6 +19,7 @@ use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
     ShellExt,
 };
+use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
 
 #[cfg(target_os = "windows")]
@@ -29,7 +30,11 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const PROBE_INTERVAL: Duration = Duration::from_millis(250);
 const RECENT_BACKEND_LINES: usize = 32;
 const BACKEND_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
-const STAGEPILOT_GITHUB_URL: &str = "https://github.com/huntrw6/stagepilot";
+const STAGEPILOT_GITHUB_URL: &str = "https://github.com/tage-ilot/stagepilot";
+const STABLE_UPDATE_ENDPOINT: &str =
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
+const BETA_UPDATE_ENDPOINT: &str =
+    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StagePilotMenuAction {
@@ -754,6 +759,74 @@ async fn prepare_for_update(
     Ok(())
 }
 
+/// Metadata describing an update found by [`check_for_update_on_channel`].
+///
+/// This mirrors the plugin's own (private) `Metadata` shape exactly, since
+/// the frontend reconstructs the plugin's public `Update` class from it and
+/// then drives the plugin's own `download`/`install` IPC commands by
+/// resource id — the same signature-verified path the plugin's default
+/// `check` command hands to JS.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChannelUpdateMetadata {
+    rid: tauri::ResourceId,
+    current_version: String,
+    version: String,
+    date: Option<String>,
+    body: Option<String>,
+    raw_json: serde_json::Value,
+}
+
+/// Checks for an update using a dynamically selected endpoint (stable or
+/// beta) instead of the static `tauri.conf.json` endpoint list.
+///
+/// This still goes through `updater_builder()` — the same builder the
+/// plugin's own default `check` IPC command uses internally — so signature
+/// verification is identical to the default path; only the endpoint list
+/// changes. Signature verification itself is never bypassed or reimplemented,
+/// and the resulting `Update` resource is registered the same way the
+/// plugin's own `check` command registers it, so downloads/installs continue
+/// to go through the plugin's verified IPC commands.
+#[tauri::command]
+async fn check_for_update_on_channel(
+    webview: tauri::Webview,
+    beta_enabled: bool,
+) -> Result<Option<ChannelUpdateMetadata>, String> {
+    let endpoint = if beta_enabled {
+        BETA_UPDATE_ENDPOINT
+    } else {
+        STABLE_UPDATE_ENDPOINT
+    };
+    let url = url::Url::parse(endpoint).map_err(|error| {
+        format!("StagePilot could not parse the update endpoint {endpoint}: {error}")
+    })?;
+
+    let updater = webview
+        .updater_builder()
+        .endpoints(vec![url])
+        .map_err(|error| format!("StagePilot could not configure the update channel: {error}"))?
+        .build()
+        .map_err(|error| format!("StagePilot could not build the updater: {error}"))?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|error| format!("StagePilot could not check for updates: {error}"))?;
+
+    Ok(update.map(|update| {
+        let metadata = ChannelUpdateMetadata {
+            current_version: update.current_version.clone(),
+            version: update.version.clone(),
+            date: update.date.map(|date| date.to_string()),
+            body: update.body.clone(),
+            raw_json: update.raw_json.clone(),
+            rid: 0,
+        };
+        let rid = webview.resources_table().add(update);
+        ChannelUpdateMetadata { rid, ..metadata }
+    }))
+}
+
 #[tauri::command]
 fn hide_application_window(app: tauri::AppHandle) -> Result<(), String> {
     let window = app
@@ -959,6 +1032,7 @@ pub fn run() {
             backend_supervisor_status,
             restart_managed_backend,
             prepare_for_update,
+            check_for_update_on_channel,
             hide_application_window
         ])
         .setup(move |app| {
@@ -1042,7 +1116,7 @@ mod tests {
         assert_eq!(macos["bundle"]["macOS"]["minimumSystemVersion"], "12.0");
         assert_eq!(
             config["plugins"]["updater"]["endpoints"][0],
-            "https://github.com/huntrw6/stagepilot/releases/latest/download/latest.json"
+            "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json"
         );
         assert!(config["plugins"]["updater"]["pubkey"]
             .as_str()

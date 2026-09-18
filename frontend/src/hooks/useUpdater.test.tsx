@@ -157,4 +157,19 @@ describe("useUpdater", () => {
 
     expect(result.current.successMessage).toBe("StagePilot updated to 1.2.0.");
   });
+
+  it("passes the current betaEnabled toggle to the adapter on every check", async () => {
+    const adapter = makeAdapter(null);
+    const { result, rerender } = renderHook(
+      ({ betaEnabled }) => useUpdater({ adapter, ready: true, betaEnabled, startupDelayMs: 10 }),
+      { initialProps: { betaEnabled: false } },
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(adapter.check).toHaveBeenLastCalledWith({ betaEnabled: false });
+
+    rerender({ betaEnabled: true });
+    await act(async () => result.current.checkForUpdate());
+    expect(adapter.check).toHaveBeenLastCalledWith({ betaEnabled: true });
+  });
 });

@@ -72,7 +72,7 @@ describe("startup completion integration", () => {
     rerender(<App />);
     act(() => vi.advanceTimersByTime(50));
     expect(screen.getByTestId("dashboard")).toBeInTheDocument();
-    expect(startup.updater).toHaveBeenLastCalledWith({ ready: true });
+    expect(startup.updater).toHaveBeenLastCalledWith({ ready: true, betaEnabled: false });
 
     act(() => vi.advanceTimersByTime(1_000));
     expect(startup.activateConfiguredServices).toHaveBeenCalledOnce();

@@ -99,6 +99,7 @@ def test_built_in_defaults_load_without_a_saved_file(tmp_path: Path) -> None:
     assert service.snapshot().onboarding.general_completed is False
     assert settings.midi.note == 112
     assert service.snapshot().web_dashboard_pin_enabled is True
+    assert service.snapshot().beta_updates_enabled is False
     assert verify_dashboard_pin("1234", service.snapshot().web_dashboard_pin_hash)
     assert set(dict(settings.midi.mappings.configured()).values()) == {
         100,
@@ -108,6 +109,20 @@ def test_built_in_defaults_load_without_a_saved_file(tmp_path: Path) -> None:
         104,
         105,
     }
+
+
+def test_beta_updates_toggle_survives_a_new_service_instance(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    first = settings_service(path)
+    first.load()
+    assert first.snapshot().beta_updates_enabled is False
+
+    first.save(first.snapshot().model_copy(update={"beta_updates_enabled": True}))
+
+    second = settings_service(path)
+    second.load()
+    assert second.snapshot().beta_updates_enabled is True
+    assert second.effective_snapshot().beta_updates_enabled is True
 
 
 def test_dashboard_pin_is_hashed_and_survives_restart(tmp_path: Path) -> None:
