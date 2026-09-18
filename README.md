@@ -11,13 +11,13 @@ Production desktop builds check the signed
 stays unchanged when StagePilot is current; an **Update** button appears beside
 the logo only when a newer signed release is available.
 
-## Download StagePilot 1.1.102
+## Download StagePilot 1.1.103
 
-Download the installer for your computer from the [StagePilot v1.1.102 release](https://github.com/huntrw6/stagepilot/releases/tag/v1.1.102):
+Download the installer for your computer from the [StagePilot v1.1.103 release](https://github.com/huntrw6/stagepilot/releases/tag/v1.1.103):
 
-- [Windows x64 installer](https://github.com/huntrw6/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_x64-setup.exe)
-- [Intel Mac DMG](https://github.com/huntrw6/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_x64.dmg)
-- [Apple Silicon Mac DMG](https://github.com/huntrw6/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_aarch64.dmg)
+- [Windows x64 installer](https://github.com/huntrw6/stagepilot/releases/download/v1.1.103/StagePilot_1.1.103_x64-setup.exe)
+- [Intel Mac DMG](https://github.com/huntrw6/stagepilot/releases/download/v1.1.103/StagePilot_1.1.103_x64.dmg)
+- [Apple Silicon Mac DMG](https://github.com/huntrw6/stagepilot/releases/download/v1.1.103/StagePilot_1.1.103_aarch64.dmg)
 
 On **Windows**, run the installer and open StagePilot from the Start menu.
 

@@ -36,7 +36,7 @@ if (tauri.productName !== "StagePilot") throw new Error("The stable product name
 if (tauri.identifier !== "org.stagepilot.desktop") throw new Error("The stable bundle identifier changed.");
 if (tauri.app?.windows?.[0]?.label !== "main") throw new Error("The stable main window label changed.");
 if (tauri.bundle?.createUpdaterArtifacts !== true) throw new Error("Updater artifacts are not enabled.");
-if (tauri.plugins?.updater?.endpoints?.[0] !== "https://github.com/huntrw6/stagepilot/releases/latest/download/latest.json") {
+if (tauri.plugins?.updater?.endpoints?.[0] !== "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json") {
   throw new Error("The trusted updater endpoint is missing or changed.");
 }
 if (!tauri.plugins?.updater?.pubkey || tauri.plugins.updater.pubkey === "STAGEPILOT_UPDATER_PUBLIC_KEY_REQUIRED") {

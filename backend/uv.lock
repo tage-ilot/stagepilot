@@ -831,7 +831,7 @@ wheels = [
 
 [[package]]
 name = "stagepilot"
-version = "1.1.102"
+version = "1.1.103"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
