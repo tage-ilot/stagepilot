@@ -76,7 +76,7 @@ if (-not $env:CARGO_TARGET_DIR -and $GitTopLevel.StartsWith("//")) {
 
 Invoke-Checked "Verify GitHub authentication" { gh auth status }
 
-$RemoteTags = gh api repos/huntrw6/stagepilot/tags --paginate --jq '.[].name'
+$RemoteTags = gh api repos/tage-ilot/stagepilot/tags --paginate --jq '.[].name'
 if ($LASTEXITCODE -ne 0 -or -not $RemoteTags) {
     throw "Could not identify the existing StagePilot version tags on GitHub."
 }
@@ -292,16 +292,16 @@ Write-Host "`nWaiting for the GitHub release workflow..." -ForegroundColor Cyan
 $RunId = $null
 for ($attempt = 0; $attempt -lt 12 -and -not $RunId; $attempt += 1) {
     Start-Sleep -Seconds 5
-    $RunId = gh run list --repo huntrw6/stagepilot --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
+    $RunId = gh run list --repo tage-ilot/stagepilot --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
 }
 if (-not $RunId) {
     throw "The tag was pushed, but the GitHub release workflow was not found. Check GitHub Actions manually."
 }
 
 Invoke-Checked "Build and publish StagePilot $Tag on GitHub" {
-    gh run watch $RunId --repo huntrw6/stagepilot --interval 15 --exit-status
+    gh run watch $RunId --repo tage-ilot/stagepilot --interval 15 --exit-status
 }
 
-$ReleaseUrl = gh release view $Tag --repo huntrw6/stagepilot --json url --jq '.url'
+$ReleaseUrl = gh release view $Tag --repo tage-ilot/stagepilot --json url --jq '.url'
 Write-Host "`nStagePilot $Tag is published:" -ForegroundColor Green
 Write-Host $ReleaseUrl

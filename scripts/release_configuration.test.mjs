@@ -134,7 +134,7 @@ test("release automation suggests the next published patch and confirms with YES
   const releaseScript = read("scripts/create-release.ps1");
   assert.match(
     releaseScript,
-    /gh api repos\/huntrw6\/stagepilot\/tags --paginate --jq '\.\[\]\.name'/,
+    /gh api repos\/tage-ilot\/stagepilot\/tags --paginate --jq '\.\[\]\.name'/,
   );
   assert.match(releaseScript, /Sort-Object -Property Version -Descending/);
   assert.match(

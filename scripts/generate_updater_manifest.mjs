@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [assetsDirectory, tag, repository = "huntrw6/stagepilot"] = process.argv.slice(2);
+const [assetsDirectory, tag, repository = "tage-ilot/stagepilot"] = process.argv.slice(2);
 if (!assetsDirectory || !tag) throw new Error("Usage: node scripts/generate_updater_manifest.mjs ASSETS_DIR vVERSION [OWNER/REPO]");
 const version = tag.replace(/^v/, "");
 if (`v${version}` !== tag) throw new Error(`Invalid release tag: ${tag}`);

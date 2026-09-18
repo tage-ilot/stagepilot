@@ -70,8 +70,8 @@ const replacements = [
   ["backend/src/stagepilot/__init__.py", /^__version__ = "[^"]+"/m, `__version__ = "${version}"`],
   [
     "backend/src/stagepilot/core/config.py",
-    /default="StagePilot\/[^ ]+ \(https:\/\/github\.com\/huntrw6\/stagepilot\)"/,
-    `default="StagePilot/${version} (https://github.com/huntrw6/stagepilot)"`,
+    /default="StagePilot\/[^ ]+ \(https:\/\/github\.com\/tage-ilot\/stagepilot\)"/,
+    `default="StagePilot/${version} (https://github.com/tage-ilot/stagepilot)"`,
   ],
   [
     "backend/src/stagepilot/core/config.py",
@@ -103,7 +103,7 @@ readme = replaceOnce(
   "README.md",
 );
 readme = readme.replace(
-  /https:\/\/github\.com\/huntrw6\/stagepilot\/releases\/(?:tag|download)\/v\d+\.\d+\.\d+/g,
+  /https:\/\/github\.com\/tage-ilot\/stagepilot\/releases\/(?:tag|download)\/v\d+\.\d+\.\d+/g,
   (url) => url.replace(/v\d+\.\d+\.\d+$/, `v${version}`),
 );
 readme = readme.replace(
