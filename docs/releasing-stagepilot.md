@@ -10,6 +10,28 @@ The macOS community release is ad-hoc signed without Hardened Runtime; it does
 not require Apple Developer ID or notarization. See
 [macOS ad-hoc signing](macos-adhoc-signing.md).
 
+## Signing key rotation (2026-09-17)
+
+The updater signing key was rotated on 2026-09-17 in both `tage-ilot/stagepilot`
+and `tage-ilot/stagepilot-beta`. `plugins.updater.pubkey` in
+`desktop/src-tauri/tauri.conf.json` now points at the new key
+(`RWSsVAoVmTX26LIj3tWtVLLY/iE7DOfeg6owbzgyrNf8du7yJ0Ru3tva`).
+
+This is a breaking change for existing installs: it is not backward or
+forward compatible with the old key.
+
+- Stable installs of `v1.1.102` and earlier were built against the old main
+  key. They cannot verify a release signed with the new key and will not
+  auto-update onto it. Those installs must be reinstalled manually once.
+- Beta installs of `v1.1.103-beta.1` through `beta.6` were built against the
+  old beta key and have the same problem for the beta channel. Those installs
+  must also be reinstalled manually once.
+
+Every release cut after the rotation (stable `v1.1.103` onward, beta
+`v1.1.103-beta.7` onward) is signed with the new key and verifies normally
+against the pubkey committed in this repo, on both the stable and beta
+channels, going forward.
+
 ## One-time updater key setup
 
 Generate the long-term key outside the repository. This prompts for a password:
