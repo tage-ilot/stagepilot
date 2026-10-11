@@ -655,9 +655,9 @@ describe("Lights hold-until-saved conformance (guard)", () => {
 
   // Held controls: class (a). Every one must be marked, counted, restored by Discard, drive the dirty flag, and not save on change/blur.
   const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
-    { label: "MIDI output", value: "Other output", saved: "StagePilot to Lightkey", payload: { output_name: "Other output" } },
+    { label: "MIDI Output to Lighting Controller", value: "Other output", saved: "StagePilot to Lightkey", payload: { output_name: "Other output" } },
     { label: "MIDI channel", value: "5", saved: "3", payload: { channel: 5 } },
-    { label: "Note pulse (ms)", value: "250", saved: "100", payload: { pulse_ms: 250 } },
+    { label: "Note length (ms)", value: "250", saved: "100", payload: { pulse_ms: 250 } },
   ];
   it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved, payload }) => {
     const onSaveSettings = vi.fn();
@@ -715,7 +715,7 @@ describe("Lights hold-until-saved conformance (guard)", () => {
     mount({ onTest });
     const cueTest = screen.getAllByRole("button", { name: "Test" })[0]!;
     expect(cueTest).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("MIDI output"), { target: { value: "Other output" } });
+    fireEvent.change(screen.getByLabelText("MIDI Output to Lighting Controller"), { target: { value: "Other output" } });
     expect(cueTest).toBeDisabled();
     expect(cueTest).toHaveAttribute("aria-describedby", screen.getByRole("button", { name: "Send test cue" }).getAttribute("aria-describedby"));
     fireEvent.click(cueTest);

@@ -603,7 +603,7 @@ describe("Dashboard Planning Center plan states", () => {
   describe("leaving a setup panel with held changes (any panel, not only Playback)", () => {
     const cases: Array<{ card: RegExp; close: string; field: string; value: string }> = [
       { card: /^Presentation/, close: "Close Presentation configuration", field: "Host", value: "192.0.2.10" },
-      { card: /^Lights/, close: "Close Lights configuration", field: "Note pulse (ms)", value: "250" },
+      { card: /^Lights/, close: "Close Lights configuration", field: "Note length (ms)", value: "250" },
       { card: /^StagePilot/, close: "Close StagePilot configuration", field: "Log level", value: "DEBUG" },
     ];
     it.each(cases)("asks before discarding held $field changes; clean panels close without asking", async ({ card, close, field, value }) => {
