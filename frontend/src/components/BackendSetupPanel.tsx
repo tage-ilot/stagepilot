@@ -134,6 +134,15 @@ export function SendAllLogsButton() {
   );
 }
 
+function HeldMarker() {
+  return (
+    <span className="mt-1 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
+      <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
+      Not saved yet
+    </span>
+  );
+}
+
 export function BackendSetupPanel({
   state,
   health,
@@ -164,8 +173,7 @@ export function BackendSetupPanel({
   const [releaseChannel, setReleaseChannel] = useState<GeneralSettingsInput["release_channel"]>("BETA");
   const remote = useRemoteAccess();
 
-  // Each draft follows its own saved value, so an immediate save of log level, release channel
-  // or PIN never overwrites a held timezone, port or network-access draft.
+  // Each draft follows its own saved value.
   const savedSettings = settings?.settings ?? null;
   const syncedTimezone = savedSettings?.timezone ?? null;
   const syncedLogLevel = savedSettings?.log_level ?? null;
@@ -184,7 +192,7 @@ export function BackendSetupPanel({
     const parsedPort = Number(serverPort);
     if (!timezone.trim()) return null;
     if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return null;
-    if (dashboardPin && dashboardPin.length < 4) return null;
+    if (pinEnabled && dashboardPin && dashboardPin.length < 4) return null;
     return {
       timezone: timezone.trim(),
       log_level: logLevel,
@@ -192,67 +200,36 @@ export function BackendSetupPanel({
       lan_access: lanAccess,
       web_dashboard_pin_enabled: pinEnabled,
       release_channel: releaseChannel,
-      ...(dashboardPin ? { web_dashboard_pin: dashboardPin } : {}),
+      ...(pinEnabled && dashboardPin ? { web_dashboard_pin: dashboardPin } : {}),
     };
   }, [dashboardPin, lanAccess, logLevel, pinEnabled, releaseChannel, serverPort, timezone]);
-  // Held changes are the restart-needed items only (DESIGN.md): port, network access, timezone.
-  // Log level, release channel and the PIN requirement save immediately on change; a new PIN
-  // saves on blur or Enter (not per keystroke). Those immediate saves send the saved port,
-  // network access and timezone, never the held drafts.
+  // Every field here is held until Save configuration. PUT /settings rewrites the whole settings
+  // file, may reconfigure the MIDI port, and reports restart_required; the PIN endpoint signs out
+  // every dashboard session (backend/src/stagepilot/api/dashboard_auth.py).
   const saved = settings?.settings ?? null;
   const heldTimezone = saved !== null && timezone !== saved.timezone;
   const heldPort = saved !== null && serverPort !== String(saved.server_port);
   const heldLan = saved !== null && lanAccess !== (saved.lan_access ?? false);
-  const changeCount = Number(heldTimezone) + Number(heldPort) + Number(heldLan);
-  const otherDiffers = saved !== null && (
-    logLevel !== saved.log_level
-    || pinEnabled !== (saved.web_dashboard_pin_enabled ?? true)
-    || releaseChannel !== (saved.release_channel ?? "BETA")
-    || dashboardPin !== ""
-  );
-  type AutoField = "log_level" | "release_channel" | "pin_enabled" | "pin";
+  const heldLogLevel = saved !== null && logLevel !== saved.log_level;
+  const heldChannel = saved !== null && releaseChannel !== (saved.release_channel ?? "BETA");
+  const heldPinEnabled = saved !== null && pinEnabled !== (saved.web_dashboard_pin_enabled ?? true);
+  const heldPin = pinEnabled && dashboardPin !== "";
+  const changeCount = [heldTimezone, heldPort, heldLan, heldLogLevel, heldChannel, heldPinEnabled, heldPin]
+    .filter(Boolean).length;
   const [saveFailed, setSaveFailed] = useState(false);
-  const [autoField, setAutoField] = useState<AutoField | null>(null);
-  const [autoFailed, setAutoFailed] = useState<AutoField | null>(null);
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const wasPending = useRef(false);
   useEffect(() => {
     if (wasPending.current && !pending) {
-      if (autoField) {
-        if (error) setAutoFailed(autoField);
-        else {
-          setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-          if (autoField === "pin") setDashboardPin("");
-        }
-        setAutoField(null);
-      } else {
-        setSaveFailed(Boolean(error));
+      setSaveFailed(Boolean(error));
+      if (!error) {
+        setDashboardPin("");
+        setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       }
     }
     wasPending.current = pending;
-  }, [pending, error, autoField]);
-  const autoSave = (field: AutoField, patch: Partial<GeneralSettingsInput>) => {
-    if (!saved || pending) return;
-    setAutoField(field);
-    setAutoFailed(null);
-    setAutoSavedAt(null);
-    onSave({
-      timezone: saved.timezone,
-      log_level: saved.log_level,
-      server_port: saved.server_port,
-      lan_access: saved.lan_access ?? false,
-      web_dashboard_pin_enabled: saved.web_dashboard_pin_enabled ?? true,
-      release_channel: saved.release_channel ?? "BETA",
-      ...patch,
-    });
-  };
-  const autoStatus = (field: AutoField) => (pending && autoField === field ? "Saving…" : undefined);
-  const autoError = (field: AutoField) => (autoFailed === field ? "Couldn't save" : undefined);
-  const savePin = () => {
-    if (!dashboardPin || dashboardPin.length < 4) return;
-    autoSave("pin", { web_dashboard_pin: dashboardPin });
-  };
-  const saveState: SaveBarState = pending && autoField === null
+  }, [pending, error]);
+  const saveState: SaveBarState = pending
     ? { kind: "saving" }
     : saveFailed && changeCount > 0
       ? { kind: "error", message: "Couldn't save" }
@@ -269,14 +246,17 @@ export function BackendSetupPanel({
     setTimezone(saved.timezone);
     setServerPort(String(saved.server_port));
     setLanAccess(saved.lan_access ?? false);
+    setLogLevel(saved.log_level);
+    setReleaseChannel(saved.release_channel ?? "BETA");
+    setPinEnabled(saved.web_dashboard_pin_enabled ?? true);
+    setDashboardPin("");
     setSaveFailed(false);
   };
   const save = () => {
-    // A clean Save is a no-op once settings are loaded; log level, release channel and PIN edits still save.
+    // A clean Save is a no-op once settings are loaded.
     if (!parsedSettings || pending) return;
-    if (saved !== null && changeCount === 0 && !otherDiffers) return;
+    if (saved !== null && changeCount === 0) return;
     setSaveFailed(false);
-    setAutoFailed(null);
     setAutoSavedAt(null);
     onSave(parsedSettings);
   };
@@ -363,12 +343,7 @@ export function BackendSetupPanel({
             <span className="block font-semibold text-ink">
               Allow dashboard access from this local network
             </span>
-            {heldLan && (
-              <span className="mt-1 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
-                <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
-                Not saved yet
-              </span>
-            )}
+            {heldLan && <HeldMarker />}
             <span className="mt-1 block text-xs text-ink-muted">
               Other devices can open http://&lt;this-computer&apos;s-IP&gt;:{serverPort}.
             </span>
@@ -382,7 +357,6 @@ export function BackendSetupPanel({
               disabled={pending}
               onChange={(event) => {
                 setPinEnabled(event.target.checked);
-                autoSave("pin_enabled", { web_dashboard_pin_enabled: event.target.checked });
               }}
               type="checkbox"
             />
@@ -390,13 +364,14 @@ export function BackendSetupPanel({
               <span className="block font-semibold text-ink">
                 Require a PIN for web dashboards
               </span>
+              {heldPinEnabled && <HeldMarker />}
               <span className="mt-1 block text-xs text-ink-muted">
                 Enabled by default. The initial PIN is 1234.
               </span>
             </span>
           </label>
           {pinEnabled && (
-            <Field className="mt-3" error={autoError("pin")} hint={autoStatus("pin") ?? "Saves when you leave the field or press Enter."} label="Replace dashboard PIN">
+            <Field className="mt-3" heldChange={heldPin} hint="Saved with Save configuration." label="Replace dashboard PIN">
               <Input
                 autoComplete="new-password"
                 className="font-mono"
@@ -404,9 +379,7 @@ export function BackendSetupPanel({
                 inputMode="numeric"
                 maxLength={64}
                 minLength={4}
-                onBlur={savePin}
-                onChange={(event) => { setDashboardPin(event.target.value); setAutoFailed(null); }}
-                onKeyDown={(event) => { if (event.key === "Enter") savePin(); }}
+                onChange={(event) => setDashboardPin(event.target.value)}
                 placeholder="Leave blank to keep the saved PIN"
                 type="password"
                 value={dashboardPin}
@@ -454,13 +427,12 @@ export function BackendSetupPanel({
             value={serverPort}
           />
         </Field>
-        <Field error={autoError("log_level")} hint={autoStatus("log_level")} label="Log level">
+        <Field heldChange={heldLogLevel} label="Log level">
           <Select
             disabled={pending}
             onChange={(event) => {
               const value = event.target.value as GeneralSettingsInput["log_level"];
               setLogLevel(value);
-              autoSave("log_level", { log_level: value });
             }}
             value={logLevel}
           >
@@ -469,13 +441,12 @@ export function BackendSetupPanel({
             ))}
           </Select>
         </Field>
-        <Field error={autoError("release_channel")} hint={autoStatus("release_channel")} label="Release channel">
+        <Field heldChange={heldChannel} label="Release channel">
           <Select
             disabled={pending}
             onChange={(event) => {
               const value = event.target.value as GeneralSettingsInput["release_channel"];
               setReleaseChannel(value);
-              autoSave("release_channel", { release_channel: value });
             }}
             value={releaseChannel}
           >
@@ -487,7 +458,7 @@ export function BackendSetupPanel({
       </div>
 
       <p className="mt-4 text-xs text-ink-muted">
-        Timezone, logging, port, and network-access changes take effect after a backend restart. PIN changes apply immediately.
+        Timezone, logging, port, and network-access changes take effect after a backend restart. Saving a PIN change signs out every open dashboard.
       </p>
       {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
