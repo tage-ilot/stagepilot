@@ -16,7 +16,7 @@ import {
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
-import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
@@ -59,6 +59,7 @@ export function LightsSetupPanel({
   settings,
   state,
   error,
+  onRetryLoad,
   message,
   pendingOperation,
   onClose,
@@ -73,6 +74,7 @@ export function LightsSetupPanel({
   settings: SettingsResponse | null;
   state: ApplicationState;
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "save" | "refresh" | "test" | "save-cues" | null;
   onClose?: () => void;
@@ -253,11 +255,7 @@ export function LightsSetupPanel({
         title="Lights"
       />
 
-      {(error || message) && (
-        <InlineAlert aria-live="polite" className="mt-4" tone={error ? "danger" : "info"}>
-          {error ?? message}
-        </InlineAlert>
-      )}
+      <PanelAlert className="mt-4" error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cancelPlaybackScan, discoverPlaybackSongOrder, findPlayback, getPlaybackEvents, getPlaybackStatus, getSettings, updatePlaybackSettings, updateSettings } from "../api";
+import { describeError } from "../errorText";
 import type { PlaybackMonitorEntry, PlaybackSettingsInput, PlaybackStatusResponse, SettingsResponse } from "../types";
 
 export type PlaybackOperation = "save" | "source" | "scan" | "discover" | null;
@@ -67,7 +68,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
       } catch (cause) {
         if (generation.current === current && statusRevision.current === revision) {
           setStatus(null);
-          setStatusError(cause instanceof Error ? cause.message : "Playback status unavailable.");
+          setStatusError(describeError(cause, "Playback status unavailable."));
           if (operation.current === "scan" && scanStarted.current !== null) {
             operation.current = null;
             scanStarted.current = null;
@@ -99,7 +100,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
     } catch (cause) {
       if (generation.current === current) {
         scanStarted.current = null;
-        setError(cause instanceof Error ? cause.message : "Playback operation failed.");
+        setError(describeError(cause, "Playback operation failed."));
       }
       return false;
     } finally {
@@ -163,7 +164,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
         ++statusRevision.current;
         setStatus(next);
       } catch (cause) {
-        if (generation.current === current) setError(cause instanceof Error ? cause.message : "Could not cancel the scan.");
+        if (generation.current === current) setError(describeError(cause, "Could not cancel the scan."));
       } finally {
         if (generation.current === current) {
           scanStarted.current = null;

@@ -69,4 +69,16 @@ describe("ErrorBoundary", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+
+  it("copies the error details and says so", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    render(<ErrorBoundary><Boom /></ErrorBoundary>);
+    fireEvent.click(screen.getByRole("button", { name: "Copy error details" }));
+
+    expect(await screen.findByText("Error details copied.")).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Error: kaboom"));
+  });
 });

@@ -15,6 +15,7 @@ import { Button } from "./ui/Button";
 import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
@@ -140,6 +141,7 @@ export function PlanningCenterSetupPanel({
   status,
   serviceTypes,
   error,
+  onRetryLoad,
   message,
   pendingOperation,
   pendingAction,
@@ -158,6 +160,7 @@ export function PlanningCenterSetupPanel({
   status: PlanningCenterStatusResponse | null;
   serviceTypes: PlanningCenterServiceType[];
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "test" | "load-types" | "save" | "oauth-sign-in" | "oauth-disconnect" | null;
   pendingAction: string | null;
@@ -543,11 +546,7 @@ export function PlanningCenterSetupPanel({
         <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
       </div>
 
-      {(error || message) && (
-        <InlineAlert className="mt-4" tone={error ? "danger" : "success"}>
-          {error ?? message}
-        </InlineAlert>
-      )}
+      <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!status ? onRetryLoad : undefined} />
       {!state.plugins.planning_center && (
         <p className="mt-3 text-xs text-warning-text">
           Saving this configuration enables Services. Restart StagePilot to start the connection.

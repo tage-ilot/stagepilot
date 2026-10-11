@@ -58,6 +58,7 @@ import type {
   StateEnvelope,
 } from "../types";
 import { restartDesktopBackend, signInWithPlanningCenter } from "../desktop";
+import { describeError } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
 
 import { useDashboardAccess } from "../access/AccessContext";
@@ -140,7 +141,7 @@ export function useStagePilot() {
       setMidi(response);
       setMidiError(null);
     } catch (cause) {
-      setMidiError(cause instanceof Error ? cause.message : "MIDI inputs unavailable.");
+      setMidiError(describeError(cause, "MIDI inputs unavailable."));
     }
   }, [canConfigure]);
 
@@ -160,7 +161,7 @@ export function useStagePilot() {
       setProPresenterError(null);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "Presentation status unavailable.",
+        describeError(cause, "Presentation status unavailable."),
       );
     }
   }, [canConfigure]);
@@ -171,7 +172,7 @@ export function useStagePilot() {
       setSettings(await getSettings());
       setSettingsError(null);
     } catch (cause) {
-      setSettingsError(cause instanceof Error ? cause.message : "Configuration unavailable.");
+      setSettingsError(describeError(cause, "Configuration unavailable."));
     }
   }, [canConfigure]);
 
@@ -181,7 +182,7 @@ export function useStagePilot() {
       setLights(await getLightsStatus());
       setLightsError(null);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lights output unavailable.");
+      setLightsError(describeError(cause, "Lights output unavailable."));
     }
   }, [canConfigure]);
 
@@ -192,7 +193,7 @@ export function useStagePilot() {
       setPlanningCenterError(null);
     } catch (cause) {
       setPlanningCenterError(
-        cause instanceof Error ? cause.message : "Services status unavailable.",
+        describeError(cause, "Services status unavailable."),
       );
     }
   }, [canConfigure]);
@@ -216,7 +217,7 @@ export function useStagePilot() {
         await loadSettings();
       } catch (cause) {
         if (active) {
-          setError(cause instanceof Error ? cause.message : "Backend unavailable.");
+          setError(describeError(cause, "Backend unavailable."));
         }
       }
     };
@@ -384,6 +385,15 @@ export function useStagePilot() {
     void loadPlanningCenterStatus();
   }, [loadPlanningCenterStatus, state?.planning_center_status]);
 
+  // Retry for a failed panel load: every panel reads its own error, so reload them all and recover without a page reload.
+  const retryLoads = useCallback(() => {
+    void loadSettings();
+    void loadMidiInputs();
+    void loadProPresenter();
+    void loadLights();
+    void loadPlanningCenterStatus();
+  }, [loadSettings, loadMidiInputs, loadProPresenter, loadLights, loadPlanningCenterStatus]);
+
   const dispatch = useCallback(
     async (action: ActionName) => {
     if (!canOperate) return;
@@ -396,7 +406,7 @@ export function useStagePilot() {
         if (!response.accepted) setError(response.message);
         else setError(null);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Action failed.");
+        setError(describeError(cause, "Action failed."));
       } finally {
         setPendingAction(null);
       }
@@ -415,7 +425,7 @@ export function useStagePilot() {
         setActionMessage(response.message);
         setError(response.accepted ? null : response.message);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Service plan selection failed.");
+        setError(describeError(cause, "Service plan selection failed."));
       } finally {
         setPendingPlanId(null);
       }
@@ -456,7 +466,7 @@ export function useStagePilot() {
           "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes.",
         );
       } catch (cause) {
-        setSettingsError(cause instanceof Error ? cause.message : "Configuration update failed.");
+        setSettingsError(describeError(cause, "Configuration update failed."));
       } finally {
         setPendingSettingsOperation(false);
       }
@@ -492,7 +502,7 @@ export function useStagePilot() {
         );
         return true;
       } catch (cause) {
-        setSettingsError(cause instanceof Error ? cause.message : "MIDI configuration update failed.");
+        setSettingsError(describeError(cause, "MIDI configuration update failed."));
         return false;
       } finally {
         setPendingSettingsOperation(false);
@@ -513,7 +523,7 @@ export function useStagePilot() {
         setPlanningCenterMessage(response.message);
       } catch (cause) {
         setPlanningCenterError(
-          cause instanceof Error ? cause.message : "Services connection test failed.",
+          describeError(cause, "Services connection test failed."),
         );
       } finally {
         setPendingPlanningCenterOperation(null);
@@ -533,7 +543,7 @@ export function useStagePilot() {
       setPlanningCenterMessage(`Loaded ${serviceTypes.length} service types.`);
     } catch (cause) {
       setPlanningCenterError(
-        cause instanceof Error ? cause.message : "Service types could not be loaded.",
+        describeError(cause, "Service types could not be loaded."),
       );
     } finally {
       setPendingPlanningCenterOperation(null);
@@ -579,7 +589,7 @@ export function useStagePilot() {
         }
       } catch (cause) {
         setPlanningCenterError(
-          cause instanceof Error ? cause.message : "Services configuration could not be saved.",
+          describeError(cause, "Services configuration could not be saved."),
         );
       } finally {
         setPendingPlanningCenterOperation(null);
@@ -604,7 +614,7 @@ export function useStagePilot() {
       setPlanningCenterMessage("Connected to Planning Center.");
     } catch (cause) {
       setPlanningCenterError(
-        cause instanceof Error ? cause.message : "Planning Center sign-in failed.",
+        describeError(cause, "Planning Center sign-in failed."),
       );
     } finally {
       setPendingPlanningCenterOperation(null);
@@ -622,7 +632,7 @@ export function useStagePilot() {
       setPlanningCenterMessage("Disconnected from Planning Center.");
     } catch (cause) {
       setPlanningCenterError(
-        cause instanceof Error ? cause.message : "Could not disconnect from Planning Center.",
+        describeError(cause, "Could not disconnect from Planning Center."),
       );
     } finally {
       setPendingPlanningCenterOperation(null);
@@ -638,7 +648,7 @@ export function useStagePilot() {
       setMidi(await refreshMidiInputs());
       setMidiMessage("MIDI input list refreshed.");
     } catch (cause) {
-      setMidiError(cause instanceof Error ? cause.message : "MIDI refresh failed.");
+      setMidiError(describeError(cause, "MIDI refresh failed."));
     } finally {
       setPendingMidiOperation(null);
     }
@@ -655,7 +665,7 @@ export function useStagePilot() {
       setMidiMessage(response.message);
       if (!response.accepted) setMidiError(response.message);
     } catch (cause) {
-      setMidiError(cause instanceof Error ? cause.message : "MIDI input selection failed.");
+      setMidiError(describeError(cause, "MIDI input selection failed."));
     } finally {
       setPendingMidiOperation(null);
     }
@@ -674,7 +684,7 @@ export function useStagePilot() {
         setMidiMessage(response.message);
         if (!response.accepted) setMidiError(response.message);
       } catch (cause) {
-        setMidiError(cause instanceof Error ? cause.message : "MIDI cue simulation failed.");
+        setMidiError(describeError(cause, "MIDI cue simulation failed."));
       } finally {
         setPendingMidiCue(null);
       }
@@ -708,7 +718,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "Presentation configuration update failed.",
+        describeError(cause, "Presentation configuration update failed."),
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -727,7 +737,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "Presentation connection test failed.",
+        describeError(cause, "Presentation connection test failed."),
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -746,7 +756,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "Presentation timer refresh failed.",
+        describeError(cause, "Presentation timer refresh failed."),
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -765,7 +775,7 @@ export function useStagePilot() {
       setLightsMessage(response.message);
       if (!response.accepted) setLightsError(response.message);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lights configuration failed.");
+      setLightsError(describeError(cause, "Lights configuration failed."));
     } finally {
       setPendingLightsOperation(null);
     }
@@ -780,7 +790,7 @@ export function useStagePilot() {
       setLights(await refreshLightingOutputs());
       setLightsMessage("Lights MIDI outputs refreshed.");
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lights output refresh failed.");
+      setLightsError(describeError(cause, "Lights output refresh failed."));
     } finally {
       setPendingLightsOperation(null);
     }
@@ -797,7 +807,7 @@ export function useStagePilot() {
       setLightsMessage(response.message);
       if (!response.accepted) setLightsError(response.message);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lights test cue failed.");
+      setLightsError(describeError(cause, "Lights test cue failed."));
     } finally {
       setPendingLightsOperation(null);
     }
@@ -819,7 +829,7 @@ export function useStagePilot() {
       setSettings(await getSettings());
       setLightsMessage(response.message);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lighting cue map failed to save.");
+      setLightsError(describeError(cause, "Lighting cue map failed to save."));
     } finally {
       setPendingLightsOperation(null);
     }
@@ -845,7 +855,7 @@ export function useStagePilot() {
       setLightsMessage(`Cleared lighting cues for all ${songs.length} songs in the service plan.`);
     } catch (cause) {
       setLightsError(
-        cause instanceof Error ? cause.message : "Lighting cue maps failed to clear.",
+        describeError(cause, "Lighting cue maps failed to clear."),
       );
     } finally {
       setPendingLightsOperation(null);
@@ -935,6 +945,7 @@ export function useStagePilot() {
     lightsMessage,
     pendingLightsOperation,
     dispatch,
+    retryLoads,
     selectPlan,
     saveGeneralSettings,
     saveMidiSettings,

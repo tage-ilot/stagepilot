@@ -14,7 +14,7 @@ import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
-import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { Select } from "./ui/Select";
@@ -150,6 +150,7 @@ export function BackendSetupPanel({
   onClose,
   settings,
   error,
+  onRetryLoad,
   message,
   pending,
   onSave,
@@ -160,6 +161,7 @@ export function BackendSetupPanel({
   onClose: () => void;
   settings: SettingsResponse | null;
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pending: boolean;
   onSave: (settings: GeneralSettingsInput) => void;
@@ -463,11 +465,7 @@ export function BackendSetupPanel({
       {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 
-      {(error || message) && (
-        <InlineAlert className="mt-3" tone={error ? "danger" : "info"}>
-          {error ?? message}
-        </InlineAlert>
-      )}
+      <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!settings ? onRetryLoad : undefined} />
 
       <p className="mt-4 text-xs text-ink-muted">
         The dashboard remembers the saved server port for its next launch. Environment variables may still override these values for development.
