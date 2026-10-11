@@ -625,9 +625,9 @@ In beta 31, "Connect a specific computer", "Recent activity" and
 "Alternate connection: MIDI settings" are three near-identical grey rows that
 do three different jobs. Rule: **a row's shape says what kind of thing it is.**
 1. **A way of connecting (Playback API vs MIDI) is never a collapsed row.** It
-   is the **Connection method** segmented control at the top of the panel,
-   labelled **Main** / **Alternate**. The selected segment takes the service
-   tone; when the alternate is selected, the tab and header badge say so
+   is the **Connection method** select at the top of the panel,
+   with the options **Main** / **Alternate**. (Built as a select, not a
+   segmented control; the SegmentedControl primitive was deleted unused.) When the alternate is selected, the tab and header badge say so
    (`Connected · MIDI`) and a neutral banner explains how to switch back. The
    existing "Playback connection type" select in Advanced is promoted to this.
 2. **Extra options = Advanced:** the one tinted row with a one-line summary.
@@ -637,7 +637,7 @@ do three different jobs. Rule: **a row's shape says what kind of thing it is.**
    belongs to** ("Other computer…" at the end of the computer select), not a
    separate collapsed row.
 Words: "Alternate connection: MIDI settings" becomes **MIDI** under
-**Connection method**, and "Main" / "Alternate" are labels on the segments.
+**Connection method**, and "Main" / "Alternate" are labels on the options.
 
 ### Vocabulary (one word for one thing, everywhere)
 | Say | Never say | Meaning |
@@ -803,24 +803,28 @@ a skill check against beta 31 or against this guide.
 
 ## How this drives the app
 
-Today the app has **three** overlapping systems, which is the reason one file
-cannot yet restyle everything:
+Status (final audit, 2026-10-11): the three systems below are one system once
+the open Phase 5 and 6 PRs (#132 to #142) are merged. The table records what
+main had before them and where each went; the plan steps after it are done
+except where noted.
 
 | Layer | Where | Reach |
 | --- | --- | --- |
-| `--sp-*` CSS variables (18 defined) | `index.css` `:root` | used only by hand-written CSS classes (~14 distinct vars, ~35 refs); **0 refs in components** |
-| `stage-*` Tailwind colours (5 defined) | `tailwind.config.js` | 1 shade (`stage-850`), 3 uses; 4 shades unused (now renamed or deleted in this file) |
-| Stock Tailwind palette (`slate`, `emerald`, `amber`, `rose`, `sky`, `fuchsia`, `blue`, `orange`) | inline in ~25 component files | nearly everything, including 49 `text-white` |
+| `--sp-*` CSS variables | `index.css` `:root` | deleted in PR #139 |
+| `stage-*` Tailwind colours | `tailwind.config.js` | deleted in PR #139 |
+| Stock Tailwind palette | components | none left in `src` non-test files (checked at the final audit; guard in PR #142) |
 
-Wiring plan once you approve the values (each step is a small PR; rendered
-output is unchanged until you change a token):
+Wiring plan (each step was a small PR; status at the final audit):
 
 1. `npx @google/design.md export` to generate the Tailwind theme and CSS
-   variables from this file; replace both `:root` and `stage-*` with it.
+   variables from this file; replace both `:root` and `stage-*` with it. Done
+   (plumbing in Phase 2; the old `--sp-*` and `stage-*` are deleted in PR #139).
 2. Add semantic Tailwind names (`text-muted`, `bg-success`, `border`)
    and migrate components screen by screen; add a CI grep that blocks new
-   raw hex and new stock-palette colours.
-3. Add `design.md lint` to CI and a line in `CONTRIBUTING.md`.
+   raw hex and new stock-palette colours. Done: the migration landed in
+   Phases 3 to 4 and the tokens-only guard over all of `src` is PR #142.
+3. Add `design.md lint` to CI and a line in `CONTRIBUTING.md`. Done in PR #142 (CI step; the
+   `CONTRIBUTING.md` line is in the same PR).
 
 ### Audit ledger: discrepancies found and how each was handled
 
@@ -908,3 +912,11 @@ Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - `elevation.overlay` is approved.
 - Save behaviour: explicit save with held markers everywhere (option A); the
   backend split for true save-as-you-go (option C) is later work.
+
+Status at the final audit (2026-10-11): the items above are built in the open
+PRs #132 to #142, which the owner has not merged yet. Still not done:
+- Option C (backend split for true save-as-you-go).
+- Two `impeccable` side-tab detector warnings remain by design in `index.css`
+  (coral resize handle and current-song stripe), plus two for the loader stripes
+  the owner asked to keep. They are the coral rails this file asks for.
+- Real-device touch, screen-reader and 200% browser zoom checks (only emulated).

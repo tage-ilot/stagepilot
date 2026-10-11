@@ -11,17 +11,14 @@ hand-maps the custom elevation/default, overlay, level-1 and label text shadow.
 Colors `text*` -> `ink*`, `border*` -> `edge*`, `panel*` -> `surface-panel*`.
 Thus `text-ink`, `border-edge`, `bg-surface-panel` do not collide with CSS
 recipes. Other colors retain token names. Radius/spacing names use `ds-`;
-typography sizes/families use `type-`. Bare `rounded` remains stock 4px;
-`rounded-ds-default` is 8px. Phase 3 promotes DEFAULT only when its surfaces
-migrate. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
+typography sizes/families use `type-`. Bare `rounded` is 8px (PR #140: `DEFAULT` is the `ds-default` token);
+`rounded-ds-default` is the same value. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
 omits numeric lineHeight values; generated typography is not used by components
 in this phase, so surface migrations must explicitly apply the DESIGN.md leading.
 CSS colors retain authored rgba precision rather than exporter's hex rounding.
 
-`stage.950/900/850` alias background/scrollbar-track/card. Unused stage.800/700
-remain compatibility-only until lock-in. `--sp-bg/text/accent/accent-hover/focus/
-danger` alias design background/ink/primary/primary-hover/primary-focus/danger-soft.
-Motion variables stay in index.css; they are unchanged. No component classes change.
+The `stage.*` colours and the `--sp-*` aliases were deleted in PR #139. Motion
+variables stay in index.css.
 
 ## Compatibility mismatch ledger (baseline output wins in this PR)
 
@@ -50,12 +47,11 @@ The actual family name is Inter Variable (the spec's Inter), applied only to the
 existing root stack. Brand and monospace timers are unchanged. Font metrics/glyphs
 are the sole intended visual exception; review separate font-on screenshots.
 
-## Dormant UI foundation and review gallery
+## UI primitives and review gallery
 
-`src/components/ui/` is deliberately excluded from app Tailwind content while
-primitives are dormant. Nothing in the app imports that folder. Surface migrations
-must include the migrated primitive files in app content when introducing imports.
-This prevents review-only utilities and tests from changing the shipped stylesheet.
+The primitives in `src/components/ui/` are used by the app (they are no longer
+dormant). `SegmentedControl`, `ActionMenu` and `Textarea` had no app user and were
+deleted in PR #141. App Tailwind content now includes `src/components/ui/` (gallery source and tests stay excluded).
 `can-hover:` wraps real `:hover` in `(hover: hover)`; `coarse:` wraps utilities in
 `(pointer: coarse)`. Stock hover behavior and every existing token value are unchanged.
 The fourth Node regression test compiles both variants with Tailwind/PostCSS.
