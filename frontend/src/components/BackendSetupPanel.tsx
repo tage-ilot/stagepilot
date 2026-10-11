@@ -209,7 +209,49 @@ export function BackendSetupPanel({
         title="StagePilot"
       />
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <h3 className="mt-5 font-semibold text-ink">Status</h3>
+      <dl className="mt-3 grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">API endpoint</dt>
+          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
+          <dd className={`mt-1 font-semibold ${live ? "text-success-text" : "text-danger-text"}`}>
+            {live ? "Connected" : "Not connected"}
+          </dd>
+          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">Backend version</dt>
+          <dd className="mt-1 text-ink">{health ? `v${health.version}` : "Loading"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">State revision</dt>
+          <dd className="mt-1 tabular-nums text-ink">{state.revision}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-5">
+        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Connection health</p>
+        <div className="mt-3 grid gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+          {(health?.plugins ?? Object.values(state.plugins)).map((plugin) => (
+            <div key={plugin.name}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-ink">{plugin.name}</p>
+                <span className="text-xs capitalize text-ink-muted">{plugin.status}</span>
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">v{plugin.version}{plugin.last_error ? ` · ${plugin.last_error}` : ""}</p>
+            </div>
+          ))}
+          {!health?.plugins.length && !Object.keys(state.plugins).length && (
+            <p className="text-sm text-ink-muted">No connections reported.</p>
+          )}
+        </div>
+      </div>
+
+      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Basic</h3>
+      <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
         <Field label="Timezone">
           <Input
             disabled={pending}
@@ -218,39 +260,6 @@ export function BackendSetupPanel({
             value={timezone}
           />
         </Field>
-        <Field label="Log level">
-          <Select
-            disabled={pending}
-            onChange={(event) => setLogLevel(event.target.value as GeneralSettingsInput["log_level"])}
-            value={logLevel}
-          >
-            {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
-              <option key={level} value={level}>{level}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Server port">
-          <Input
-            disabled={pending}
-            inputMode="numeric"
-            onChange={(event) => setServerPort(event.target.value)}
-            value={serverPort}
-          />
-        </Field>
-        <Field label="Release channel">
-          <Select
-            disabled={pending}
-            onChange={(event) => setReleaseChannel(event.target.value as GeneralSettingsInput["release_channel"])}
-            value={releaseChannel}
-          >
-            {(["STABLE", "BETA"] as const).map((channel) => (
-              <option key={channel} value={channel}>{channel}</option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      <div className="mt-5 grid gap-x-4 gap-y-4 border-t border-edge-subtle pt-4 lg:grid-cols-3">
         <label className="flex touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
             checked={lanAccess}
@@ -303,12 +312,11 @@ export function BackendSetupPanel({
             </Field>
           )}
         </div>
-        {/* Removed in Phase 4: the checkbox-row expander is replaced by the Connection method select. */}
-        <label
-          aria-controls="remote-access-inline"
-          aria-expanded={remote.panelOpen}
-          className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 rounded-ds-lg border border-edge px-3 py-3 text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-edge-medium"
-        >
+      </div>
+
+      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">People</h3>
+      <div className="mt-3 space-y-4">
+        <label className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
             checked={remote.enabled}
             className="mt-0.5 size-4 accent-primary"
@@ -331,17 +339,41 @@ export function BackendSetupPanel({
             </span>
           </span>
         </label>
+        {remote.panelOpen && <RemoteAccessPanel control={remote} />}
       </div>
 
-      <div
-        className={`dashboard-expand-region mt-4 ${remote.panelOpen ? "dashboard-expand-region-open" : ""}`}
-        id="remote-access-inline"
-      >
-        <div className="dashboard-expand-region-inner">
-          <div className="overflow-hidden border-t border-edge-subtle pt-4">
-            <RemoteAccessPanel control={remote} />
-          </div>
-        </div>
+      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Advanced</h3>
+      <div className="mt-3 grid gap-4 sm:grid-cols-3">
+        <Field label="Server port">
+          <Input
+            disabled={pending}
+            inputMode="numeric"
+            onChange={(event) => setServerPort(event.target.value)}
+            value={serverPort}
+          />
+        </Field>
+        <Field label="Log level">
+          <Select
+            disabled={pending}
+            onChange={(event) => setLogLevel(event.target.value as GeneralSettingsInput["log_level"])}
+            value={logLevel}
+          >
+            {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
+              <option key={level} value={level}>{level}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Release channel">
+          <Select
+            disabled={pending}
+            onChange={(event) => setReleaseChannel(event.target.value as GeneralSettingsInput["release_channel"])}
+            value={releaseChannel}
+          >
+            {(["STABLE", "BETA"] as const).map((channel) => (
+              <option key={channel} value={channel}>{channel}</option>
+            ))}
+          </Select>
+        </Field>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -363,49 +395,10 @@ export function BackendSetupPanel({
         </InlineAlert>
       )}
 
-      <dl className="mt-5 grid gap-x-4 gap-y-4 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">API endpoint</dt>
-          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
-          <dd className={`mt-1 font-semibold ${live ? "text-success-text" : "text-danger-text"}`}>
-            {live ? "Connected" : "Not connected"}
-          </dd>
-          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Backend version</dt>
-          <dd className="mt-1 text-ink">{health ? `v${health.version}` : "Loading"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">State revision</dt>
-          <dd className="mt-1 tabular-nums text-ink">{state.revision}</dd>
-        </div>
-      </dl>
-
-      <div className="mt-5 border-t border-edge-subtle pt-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Connection health</p>
-        <div className="mt-3 grid gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(health?.plugins ?? Object.values(state.plugins)).map((plugin) => (
-            <div key={plugin.name}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-ink">{plugin.name}</p>
-                <span className="text-xs capitalize text-ink-muted">{plugin.status}</span>
-              </div>
-              <p className="mt-1 text-xs text-ink-muted">v{plugin.version}{plugin.last_error ? ` · ${plugin.last_error}` : ""}</p>
-            </div>
-          ))}
-          {!health?.plugins.length && !Object.keys(state.plugins).length && (
-            <p className="text-sm text-ink-muted">No connections reported.</p>
-          )}
-        </div>
-      </div>
-
       <p className="mt-4 text-xs text-ink-muted">
         The dashboard remembers the saved server port for its next launch. Environment variables may still override these values for development.
       </p>
+
 
       <SendAllLogsButton />
     </Panel>
