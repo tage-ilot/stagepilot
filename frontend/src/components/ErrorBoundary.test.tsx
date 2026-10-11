@@ -22,7 +22,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(screen.getByText("All good")).toBeInTheDocument();
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("catches a thrown render error and shows the send-logs UI", () => {
@@ -34,7 +34,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("StagePilot ran into a problem")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send logs to developer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload StagePilot" })).toBeInTheDocument();
@@ -56,5 +56,17 @@ describe("ErrorBoundary", () => {
 
     expect(await screen.findByText("Logs sent to the developer.")).toBeInTheDocument();
     expect(mocks.sendDiagnosticsBundle).toHaveBeenCalledOnce();
+  });
+
+  it("renders on the boundary layer, non-dismissible", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    expect(document.querySelector("[data-dialog-backdrop]")).toHaveAttribute("data-layer", "boundary");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
