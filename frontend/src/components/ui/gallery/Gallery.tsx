@@ -1,4 +1,5 @@
 import { ButtonSection } from "./ButtonSection";
+import { FieldSection } from "./FieldSection";
 
 export function Gallery() {
   return (
@@ -8,6 +9,7 @@ export function Gallery() {
         <p>Review-only components. Nothing on this page controls a running show.</p>
       </header>
       <ButtonSection />
+      <FieldSection />
       <p className="text-sm text-ink-muted">Default · Hover · Focus · Active · Disabled · Loading · Error</p>
     </main>
   );
