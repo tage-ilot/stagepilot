@@ -6,7 +6,7 @@ import { DASHBOARD_LAYOUT_KEY, loadDashboardLayout } from "./dashboardLayoutStor
 import { DashboardGrid } from "./DashboardGrid";
 
 const widgets = {
-  "service-plan": <div className="widget-autosize-target">Service Plan content</div>,
+  "service-plan": <div className="widget-autosize-target">Service plan content</div>,
   "now-playing": <div className="widget-autosize-target">Now Playing content</div>,
   "manual-controls": <div className="widget-autosize-target">Manual Controls content</div>,
   events: <div>Events content</div>,

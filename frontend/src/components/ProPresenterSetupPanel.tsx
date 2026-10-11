@@ -82,11 +82,11 @@ export function ProPresenterSetupPanel({
   return (
     <Panel className="mt-5" id="propresenter-configuration" variant="setup">
       <SetupPanelHeader
-        closeLabel="Close ProPresenter configuration"
-        description="Timer output and connection settings persist between StagePilot launches."
+        closeLabel="Close Presentation configuration"
+        description="Timer output and connection configuration persist between StagePilot launches."
         onClose={onClose}
         status={propresenter?.connection_status ?? "loading"}
-        title="ProPresenter countdown"
+        title="Presentation countdown"
       />
 
       {propresenter?.detail && (
@@ -95,13 +95,13 @@ export function ProPresenterSetupPanel({
 
       {!propresenter && !error && (
         <InlineAlert className="mt-4" tone="info">
-          Loading ProPresenter configuration…
+          Loading Presentation configuration…
         </InlineAlert>
       )}
 
       {propresenter && disabled && (
         <InlineAlert className="mt-4" tone="warning">
-          Save these settings to enable ProPresenter, then restart StagePilot.
+          Save these settings to enable Presentation, then restart StagePilot.
         </InlineAlert>
       )}
 
@@ -150,7 +150,7 @@ export function ProPresenterSetupPanel({
 
       <div className="mt-4 max-w-md">
         <Field
-          hint="Selecting a Look does not change ProPresenter until you save these settings."
+          hint="Selecting a Look does not change Presentation until you save these settings."
           label="ProPresenter Look"
         >
           {/* Phase 4: visible label only today via aria-label; kept as is. */}

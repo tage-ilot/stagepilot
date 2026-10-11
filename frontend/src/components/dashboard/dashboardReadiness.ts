@@ -98,7 +98,7 @@ export function buildConnectionCardViews({
     planningCenter: serviceIsDemo
       ? {
           status: "disconnected",
-          detail: "Demo plan loaded — configure Planning Center",
+          detail: "Demo service plan loaded — configure Services",
           configured: false,
           mode: "demo",
         }
@@ -114,10 +114,10 @@ export function buildConnectionCardViews({
                         minute: "2-digit",
                         second: "2-digit",
                       }).format(new Date(state.last_successful_plan_reload_at))}`
-                    : "Planning Center API connected"
+                    : "Services API connected"
                   : undefined,
               )
-            : "Configure Planning Center credentials",
+            : "Configure Services credentials",
           configured: planningConfigured,
           mode: planningConfigured ? "real" : "disabled",
         },
@@ -167,15 +167,15 @@ export function buildConnectionCardViews({
       ? {
           status: "disconnected",
           detail: propresenterEnabled
-            ? "Simulated timer active — configure ProPresenter to connect"
-            : "ProPresenter disabled",
+            ? "Simulated timer active — configure Presentation to connect"
+            : "Presentation disabled",
           configured: false,
           mode: "simulated",
         }
       : !propresenterEnabled
         ? {
             status: "disconnected",
-            detail: "ProPresenter disabled",
+            detail: "Presentation disabled",
             configured: false,
             mode: "disabled",
           }
@@ -191,7 +191,7 @@ export function buildConnectionCardViews({
     lights: !lightsEnabled
       ? {
           status: "disconnected",
-          detail: "Configure a lighting MIDI output",
+          detail: "Configure a Lights MIDI output",
           configured: false,
           mode: "disabled",
         }
@@ -199,7 +199,7 @@ export function buildConnectionCardViews({
           status: state.lights_status,
           detail: statusDetail(
             state.lights_status,
-            lights?.detail ?? (lightOutput ? `Waiting for ${lightOutput}` : "No lighting output selected"),
+            lights?.detail ?? (lightOutput ? `Waiting for ${lightOutput}` : "No Lights output selected"),
           ),
           configured: Boolean(lightOutput),
           mode: "real",
@@ -225,7 +225,7 @@ export function buildReadinessChecks({
   if (stateOnly) {
     return [
       ...Object.entries(views).map(([id, view]) => ({
-        id, label: `${({ planningCenter: "Planning Center", midi: "MIDI", propresenter: "ProPresenter", lights: "Lights" } as Record<string, string>)[id]} ${view.status}`,
+        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lights" } as Record<string, string>)[id]} ${view.status}`,
         passed: view.status === "connected", required: true, severity: "info" as const,
         status: view.status === "connecting" ? "disconnected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
@@ -249,8 +249,8 @@ export function buildReadinessChecks({
     {
       id: "planning-center",
       label: views.planningCenter.status === "connected"
-        ? "Planning Center connected"
-        : "Planning Center disconnected",
+        ? "Services connected"
+        : "Services disconnected",
       passed: views.planningCenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -259,7 +259,7 @@ export function buildReadinessChecks({
     },
     {
       id: "service-plan",
-      label: servicePlanReady ? "Planning Center plan loaded" : "Planning Center plan not loaded",
+      label: servicePlanReady ? "Service plan loaded" : "Service plan not loaded",
       passed: servicePlanReady,
       required: true,
       severity: "blocking",
@@ -290,8 +290,8 @@ export function buildReadinessChecks({
     {
       id: "propresenter",
       label: views.propresenter.status === "connected"
-        ? "ProPresenter connected"
-        : "ProPresenter disconnected",
+        ? "Presentation connected"
+        : "Presentation disconnected",
       passed: views.propresenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -337,7 +337,7 @@ export function buildReadinessChecks({
   });
   checks.push({
     id: "backend",
-    label: live ? "StagePilot backend connected" : "StagePilot backend disconnected",
+    label: live ? "StagePilot connected" : "StagePilot disconnected",
     passed: live,
     required: true,
     severity: "blocking",

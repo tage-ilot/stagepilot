@@ -186,7 +186,7 @@ function StagePilotApp() {
                 aria-live={startupProgress.phase === "failed" ? "assertive" : undefined}
                 className={`mt-2 text-sm ${backendSupervisor?.state === "failed" ? "text-danger-text" : "text-ink-muted"}`}
               >
-                {backendSupervisor?.message ?? "Waiting for the StagePilot backend."}
+                {backendSupervisor?.message ?? "Waiting for StagePilot."}
               </p>
             )}
             {startupProgress.phase === "failed" && (

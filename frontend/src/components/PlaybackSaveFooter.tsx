@@ -53,7 +53,7 @@ export function usePlaybackDraft(playback?: PlaybackController): PlaybackDraft {
     try {
       const ok = await playback.save({ ...status.settings, enabled, auto_scan: autoScan, fast_transport: fastTransport });
       if (!ok) {
-        setError("Your settings were not saved. Your changes are still here; try again.");
+        setError("Your configuration was not saved. Your changes are still here; try again.");
         return false;
       }
       setSaved(true);

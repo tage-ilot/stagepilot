@@ -181,10 +181,10 @@ export function LightsSetupPanel({
     <Panel className="mt-5" id="lights-configuration" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lights configuration"
-        description="Send elapsed-time MIDI Note On/Off pulses to Lightkey or another lighting application."
+        description="Send elapsed-time MIDI Note On/Off cues to Lights."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
-        title="Lighting configuration"
+        title="Lights configuration"
       />
 
       {(error || message) && (
@@ -194,7 +194,7 @@ export function LightsSetupPanel({
       )}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-4">
-        <Field className="lg:col-span-2" label="MIDI output to the Lightkey Mac">
+        <Field className="lg:col-span-2" label="MIDI output">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
             {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
@@ -214,7 +214,7 @@ export function LightsSetupPanel({
           <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
         </Field>
       </div>
-      <p className="mt-2 text-type-body-sm text-ink-muted">On the Lightkey Mac, choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
+      <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lights" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
         <Button disabled={!parsedSettings || pendingOperation !== null} onClick={() => parsedSettings && onSaveSettings(parsedSettings)} variant="primary">{pendingOperation === "save" ? "Connecting…" : "Save and connect"}</Button>
@@ -222,7 +222,7 @@ export function LightsSetupPanel({
 
       <div className="mt-6 border-t border-edge-subtle pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold text-ink">Test MIDI pulse</h3>
+          <h3 className="font-semibold text-ink">Test cue</h3>
           <div className="flex items-center gap-2" aria-label="MIDI note display">
             <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-info-text" : "text-ink-muted"}>♪</span>
             <button
@@ -260,7 +260,7 @@ export function LightsSetupPanel({
           </Field>
           <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lights" variant="tinted">Add lighting cue</Button>
         </div>
-        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the ProPresenter countdown confirms it started.</p>
+        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         <div className="mt-3 grid gap-2">
           {cues.map((cue) => (

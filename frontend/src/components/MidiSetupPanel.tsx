@@ -25,7 +25,7 @@ const cues: ReadonlyArray<readonly [MidiCueName, string]> = [
   ["restart_current", "Restart current"],
   ["previous", "Previous"],
   ["next", "Next"],
-  ["reload_plan", "Reload plan"],
+  ["reload_plan", "Reload service plan"],
   ["stop_timer", "Stop timer"],
 ];
 
@@ -204,7 +204,7 @@ export function MidiSetupPanel({
               </ol>
               {songs.length > 99 && (
                 <p className="mt-3 text-xs text-danger-text">
-                  This plan has more than 99 songs. Positions after 99 cannot be addressed by MIDI velocity.
+                  This service plan has more than 99 songs. Positions after 99 cannot be addressed by MIDI velocity.
                 </p>
               )}
             </>

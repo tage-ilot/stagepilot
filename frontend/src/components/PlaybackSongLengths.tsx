@@ -26,7 +26,7 @@ export function PlaybackSongLengths({ status }: { status: PlaybackStatusResponse
           return (
             <li key={index} className="grid min-w-0 grid-cols-1 gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
               <div className="min-w-0 break-words text-ink-body">
-                <span className="font-semibold">{index + 1}. {song ? song.title : "No plan song"}</span>
+                <span className="font-semibold">{index + 1}. {song ? song.title : "No service plan song"}</span>
                 {song && <> {" "}<span className="ml-2 tabular-nums text-ink-muted">Plan: {duration(song.duration_seconds)}</span></>}
               </div>
               {index < lengths.length && <p className="min-w-0 break-words tabular-nums text-ink-body">Playback: {duration(length)}</p>}

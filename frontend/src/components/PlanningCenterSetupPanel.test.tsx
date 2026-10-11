@@ -194,17 +194,17 @@ describe("PlanningCenterSetupPanel", () => {
 
     const disclosure = screen.getByText("Manual API Connection").closest("details");
     expect(disclosure).not.toHaveAttribute("open");
-    expect(screen.getByRole("heading", { name: "Service Plan Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Service plan configuration" })).toBeInTheDocument();
 
     for (const label of [
       "Service type",
       "Timezone",
-      "Plan title preference",
+      "Service plan title preference",
       "Preferred service time",
     ]) {
       expect(screen.getByLabelText(label).closest("details")).toBeNull();
     }
-    for (const name of ["Load service types", "Save settings", "Load today’s plan"]) {
+    for (const name of ["Load service types", "Save settings", "Load today’s service plan"]) {
       expect(screen.getByRole("button", { name }).closest("details")).toBeNull();
     }
   });
@@ -404,7 +404,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     const serviceTypeSelect = screen.getByLabelText("Service type");
     expect(screen.getByRole("option", {
-      name: "All service types (nearest upcoming plan)",
+      name: "All service types (nearest upcoming service plan)",
     })).toBeInTheDocument();
 
     await user.selectOptions(serviceTypeSelect, "stagepilot:all-service-types");
@@ -448,7 +448,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     expect(screen.getByText("Sunday Services · 09:00")).toBeInTheDocument();
     expect(screen.getByText("Student Ministry · 18:00")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Use plan" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Use service plan" })).toHaveLength(2);
   });
 
   it("tests temporary credentials and saves a discovered service type", async () => {
@@ -554,12 +554,12 @@ describe("PlanningCenterSetupPanel", () => {
     });
 
     const reconnectAlert = screen.getByRole("alert");
-    expect(reconnectAlert).toHaveTextContent("Your Planning Center connection has expired");
+    expect(reconnectAlert).toHaveTextContent("Your Services connection has expired");
     expect(
       screen.getByRole("button", { name: "Reconnect to Planning Center" }),
     ).toBeInTheDocument();
     // The generic error/message banner (a <p>, not role="alert") is a
     // separate code path and must not render for this state.
-    expect(screen.queryByText("Planning Center connection test failed.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Services connection test failed.")).not.toBeInTheDocument();
   });
 });

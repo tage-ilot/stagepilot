@@ -455,7 +455,7 @@ describe("Dashboard Planning Center plan states", () => {
 
       act(() => vi.advanceTimersByTime(6_000));
       expect(notification).toHaveTextContent(
-        "Looking for the current or next upcoming Planning Center plan. The last successful plan is still displayed as stale.",
+        "Looking for the current or next upcoming Planning Center plan. The last successful service plan is still displayed as stale.",
       );
 
       act(() => vi.advanceTimersByTime(6_000));
@@ -506,7 +506,7 @@ describe("Dashboard Planning Center plan states", () => {
     const user = userEvent.setup();
     renderDashboard(ambiguousServiceState, { selectPlan });
 
-    expect(screen.getByText("Plan selection required")).toBeInTheDocument();
+    expect(screen.getByText("Service plan selection required")).toBeInTheDocument();
     expect(screen.getByText("Sunday Morning")).toBeInTheDocument();
     expect(screen.getByText("Sunday Evening")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Multiple plans match 2026-07-19" })).toBeInTheDocument();
@@ -656,7 +656,7 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback/ }));
       await user.click(screen.getByLabelText("Connect to Playback automatically"));
-      await user.click(screen.getByRole("button", { name: /^ProPresenter/ }));
+      await user.click(screen.getByRole("button", { name: /^Presentation/ }));
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     });
   });
@@ -685,11 +685,11 @@ describe("Dashboard Planning Center plan states", () => {
       state: unavailableState,
     });
 
-    expect(screen.getByText("Planning Center disconnected")).toBeInTheDocument();
-    expect(screen.getByText("Planning Center plan not loaded")).toBeInTheDocument();
+    expect(screen.getByText("Services disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
     expect(screen.getByText("Playback disconnected")).toBeInTheDocument();
-    expect(screen.getByText("ProPresenter disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
   });
 
   it("shows when the service plan was last successfully loaded", () => {
@@ -725,7 +725,7 @@ describe("Dashboard Planning Center plan states", () => {
 
     expect(screen.getByText("Upcoming Sunday Service")).toBeInTheDocument();
     expect(screen.getByText("Weekend Services \u00B7 2026-07-19 \u00B7 09:00")).toBeInTheDocument();
-    expect(screen.getByText("Planning Center plan loaded")).toBeInTheDocument();
+    expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
     expect(screen.getByText("Lights MIDI output disconnected")).toBeInTheDocument();
@@ -1074,7 +1074,7 @@ describe("Dashboard widget layout", () => {
     const user = userEvent.setup();
     renderDashboard(loadedServiceState);
 
-    expect(screen.queryByRole("button", { name: "Move Service Plan later" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move Service plan later" })).not.toBeInTheDocument();
     expect(screen.queryByRole("toolbar", { name: "Dashboard layout tools" })).not.toBeInTheDocument();
 
     const editLayout = screen.getByRole("button", { name: "Edit layout" });
@@ -1091,7 +1091,7 @@ describe("Dashboard widget layout", () => {
       dashboardGrid!.compareDocumentPosition(layoutToolbar)
       & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Move Service Plan later" }));
+    await user.click(screen.getByRole("button", { name: "Move Service plan later" }));
 
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem("stagepilot.dashboard-layout.v2")!);
@@ -1139,7 +1139,7 @@ describe("Dashboard widget layout", () => {
       "Start next": "go",
       "Restart current": "go",
       Previous: "back",
-      "Reload plan": "reload",
+      "Reload service plan": "reload",
       "Stop timer": "stop",
       "Reset position": "stop",
     };
@@ -1211,7 +1211,7 @@ describe("Dashboard connection configuration panels", () => {
       state: applicationState(loadedServiceState, { plugins: {} }),
     });
 
-    expect(screen.queryByLabelText("StagePilot setup progress")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("StagePilot configuration progress")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Finish configuring StagePilot" }),
     ).not.toBeInTheDocument();
@@ -1223,22 +1223,22 @@ describe("Dashboard connection configuration panels", () => {
       state: applicationState(loadedServiceState, { plugins: {} }),
     });
 
-    const planningCenter = screen.getByRole("button", { name: /^Planning Center connected/ });
+    const planningCenter = screen.getByRole("button", { name: /^Services connected/ });
     const midiConnection = screen.getByRole("button", { name: /^MIDI \/ Playback connected/ });
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("heading", { name: "Planning Center Services" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument();
 
     await user.click(planningCenter);
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("heading", { name: "Planning Center Services" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Services" })).toBeInTheDocument();
 
     await user.click(midiConnection);
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
     expect(midiConnection).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByRole("heading", { name: "Planning Center Services" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
 
     await user.click(midiConnection);
@@ -1275,9 +1275,9 @@ describe("Dashboard connection configuration panels", () => {
 
     const panels = [
       {
-        card: /^Planning Center connected/,
-        close: "Close Planning Center configuration",
-        heading: "Planning Center Services",
+        card: /^Services connected/,
+        close: "Close Services configuration",
+        heading: "Services",
       },
       {
         card: /^MIDI \/ Playback connected/,
@@ -1285,28 +1285,29 @@ describe("Dashboard connection configuration panels", () => {
         heading: "Playback connection",
       },
       {
-        card: /^ProPresenter connected/,
-        close: "Close ProPresenter configuration",
-        heading: "ProPresenter countdown",
+        card: /^Presentation connected/,
+        close: "Close Presentation configuration",
+        heading: "Presentation countdown",
       },
       {
         card: /^Lights disconnected/,
         close: "Close Lights configuration",
-        heading: "Lighting configuration",
+        heading: "Lights configuration",
       },
       {
-        card: /^StagePilot backend connected/,
-        close: "Close StagePilot backend configuration",
-        heading: "StagePilot backend",
+        card: /^StagePilot connected/,
+        close: "Close StagePilot configuration",
+        heading: "StagePilot",
       },
     ] as const;
 
     for (const panel of panels) {
+      const panelHeading = () => screen.queryAllByRole("heading", { name: panel.heading }).filter((h) => h.closest("section[data-variant=\"setup\"]") !== null);
       await user.click(screen.getByRole("button", { name: panel.card }));
-      expect(screen.getByRole("heading", { name: panel.heading })).toBeInTheDocument();
+      expect(panelHeading()).toHaveLength(1);
 
       await user.click(screen.getByRole("button", { name: panel.close }));
-      expect(screen.queryByRole("heading", { name: panel.heading })).not.toBeInTheDocument();
+      expect(panelHeading()).toHaveLength(0);
     }
   });
 

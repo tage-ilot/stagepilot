@@ -100,7 +100,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
     {status?.provisioned && !status.credential_available && credentialWarning && <p className="text-sm text-warning-text">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</p>}
     {status?.permanently_revoked && <div role="group" aria-label="Reset installation identity" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
       <p className="text-sm text-warning-text">
-        Your previous Remote Access setup could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
+        Your previous Remote Access configuration could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
       </p>
       <Button className="gap-2" variant="primary" disabled={busy || resetBusy} type="button" onClick={() => {
         if (resetBusy) return;
@@ -134,7 +134,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       </div>
     </div>}
     {confirmDisable && <div role="group" aria-label="Confirm disable Remote Access" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
-      <p className="text-sm text-warning-text">Disconnect all Remote users? Local StagePilot will keep running.</p>
+      <p className="text-sm text-warning-text">Disconnect all people? Local StagePilot will keep running.</p>
       <div className="flex flex-wrap gap-3">
         <Button variant="primary" disabled={busy} type="button" onClick={confirmDisableAccept}>Confirm disable</Button>
         <Button variant="secondary" type="button" onClick={cancelDisable}>Cancel</Button>
@@ -146,7 +146,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       <p className="text-sm text-warning-text">Remote Access is running. Create the first Operator to allow sign-in.</p>
     </>}
     {(bootstrap || status && !status.needs_operator) && <>
-      {!bootstrap && <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">Remote users</h3>}
+      {!bootstrap && <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">People</h3>}
       <p className="text-sm text-ink-body">Viewers are read-only. Operators can control StagePilot and manage users. Keep at least one enabled Operator. User changes revoke that user's sessions.</p>
       {!bootstrap && <ul className="divide-y divide-edge-subtle">{users.map((user) => {
         const last = user.enabled && user.role === "Operator" && operators <= 1;

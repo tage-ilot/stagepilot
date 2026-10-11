@@ -37,7 +37,7 @@ export function SetupPanelHeader({
     >
       <div className="col-start-1 row-start-1 min-w-0">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-ink-muted">
-          Production setup
+          Connection configuration
         </p>
         <h2 className="mt-1 text-lg font-semibold text-ink" id={headingId}>
           {title}
