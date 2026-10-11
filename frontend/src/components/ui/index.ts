@@ -28,3 +28,5 @@ export type { SegmentedControlProps, SegmentedOption, SegmentCaption } from "./S
 export { SaveBar } from "./SaveBar";
 export { changeCountText } from "./changeCount";
 export type { SaveBarProps, SaveBarState } from "./SaveBar";
+export { Dialog } from "./Dialog";
+export type { DialogProps, DialogLayer, DialogTone } from "./Dialog";

@@ -1,4 +1,5 @@
 import { ButtonSection } from "./ButtonSection";
+import { DialogSection } from "./DialogSection";
 import { DisclosureSection } from "./DisclosureSection";
 import { FieldSection } from "./FieldSection";
 import { PanelSection } from "./PanelSection";
@@ -16,6 +17,7 @@ export function Gallery() {
       <DisclosureSection />
       <SegmentedSection />
       <SaveBarSection />
+      <DialogSection />
       <ButtonSection />
       <FieldSection />
       <p className="text-sm text-ink-muted">Default · Hover · Focus · Active · Disabled · Loading · Error</p>
