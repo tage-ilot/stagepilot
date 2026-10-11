@@ -6,15 +6,19 @@ import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { PlanningCenterLengths } from "./PlanningCenterLengths";
 import { ScanProgress } from "./ScanProgress";
 import { PlaybackSongLengths } from "./PlaybackSongLengths";
+import { Button } from "./ui/Button";
+import { Disclosure } from "./ui/Disclosure";
+import { Field } from "./ui/Field";
+import { InlineAlert } from "./ui/InlineAlert";
+import { Input } from "./ui/Input";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
-const button = "min-h-11 rounded-lg border border-sky-400/30 bg-sky-400/10 px-3.5 py-2.5 text-sm font-semibold text-sky-200 hover:bg-sky-400/20";
-const big = "min-h-12 w-full rounded-xl border border-sky-300/40 bg-sky-500 px-5 py-3 text-base font-bold text-white hover:bg-sky-400 sm:w-auto";
+const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink";
 const toneClass = {
-  connected: "border-emerald-400/30 bg-emerald-400/10 text-emerald-100",
-  backup: "border-amber-400/30 bg-amber-400/10 text-amber-100",
-  searching: "border-amber-400/30 bg-amber-400/10 text-amber-100",
-  idle: "border-white/10 bg-white/5 text-slate-200",
+  connected: "border-success/30 bg-success/10 text-success-text",
+  backup: "border-warning/30 bg-warning/10 text-warning-text",
+  searching: "border-warning/30 bg-warning/10 text-warning-text",
+  idle: "border-edge bg-edge-subtle text-ink-body",
 } as const;
 const LOCAL_NETWORK_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
@@ -49,18 +53,18 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
 
   return (
     <div className="mt-4 space-y-4">
-      <div className={`rounded-xl border p-4 ${toneClass[tone]}`} role="status" aria-live="polite" data-testid="playback-banner">
+      <div className={`rounded-ds-xl border p-4 ${toneClass[tone]}`} role="status" aria-live="polite" data-testid="playback-banner">
         <p className="text-base font-semibold">{status ? status.reason : playback?.error ?? "Checking Playback…"}</p>
-        {status?.scan.state === "scanning" && <p className="mt-1 text-sm opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
+        {status?.scan.state === "scanning" && <p className="mt-1 text-sm tabular-nums opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
       </div>
 
       <div className="space-y-3">
         {scanning
-          ? <button className={big} type="button" onClick={playback?.cancelScan}>Scanning… (cancel)</button>
-          : <button className={big} type="button" onClick={() => playback?.scan()}>{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</button>}
+          ? <Button className="w-full sm:w-auto" onClick={playback?.cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
+          : <Button className="w-full sm:w-auto" onClick={() => playback?.scan()} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
         {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
           ? (
-            <div role="alert" className="rounded-lg border border-rose-400/30 bg-rose-400/[0.06] p-3 text-sm text-slate-200" data-testid="scan-error">
+            <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
               <p className="font-semibold">macOS is blocking StagePilot's local-network access</p>
               <ol className="mt-2 list-decimal pl-5 space-y-1">
                 <li>Quit StagePilot.</li>
@@ -69,116 +73,114 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
                 <li>Reopen StagePilot and scan again.</li>
               </ol>
               <div className="mt-2 flex flex-wrap gap-3">
-                <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
-                {scan.details && <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
+                <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
+                {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
+                {!scan.typed && <button className={linkButton} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
               </div>
-            </div>
+            </InlineAlert>
           )
           : scan.error_class
           ? (
-            <div role="alert" className="rounded-lg border border-rose-400/30 bg-rose-400/[0.06] p-3 text-sm text-slate-200" data-testid="scan-error">
+            <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
               <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't scan the network"}</p>
               <p className="mt-1">{scan.reason}</p>
-              <p className="mt-1 text-xs text-slate-400">{scanSummary(scan)}</p>
+              <p className="mt-1 text-xs text-ink-muted">{scanSummary(scan)}</p>
               <div className="mt-2 flex flex-wrap gap-3">
-                {scan.settings_url && <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
-                {scan.details && <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className="min-h-11 text-sky-200 underline" type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
+                {scan.settings_url && <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
+                {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
+                {!scan.typed && <button className={linkButton} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
               </div>
-            </div>
+            </InlineAlert>
           )
           : (
-            <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-200">
+            <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
               <p className="font-semibold">Couldn't find Playback</p>
-              <ul className="mt-1 list-disc pl-5 text-slate-300">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
-              {scan.hosts_total ? <p className="mt-1 text-xs text-slate-400">{scanSummary(scan)}</p> : null}
-              <button className="mt-2 min-h-11 text-sky-200 underline" type="button" onClick={() => setSpecific(true)}>Enter address instead</button>
+              <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
+              {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
+              <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>
             </div>
           ))}
         {scan?.state === "found" && scan.candidates.length > 1 && !scanning && (
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3" role="group" aria-label="Choose which Playback">
-            <p className="text-sm font-semibold text-slate-100">Choose which Playback</p>
+          <div className="rounded-ds-lg bg-edge-subtle p-3" role="group" aria-label="Choose which Playback">
+            <p className="text-sm font-semibold text-ink">Choose which Playback</p>
             <ul className="mt-2 grid gap-2">{scan.candidates.map((candidate) => (
-              <li key={candidate.host}><button className={`${button} w-full text-left`} type="button" onClick={() => playback?.scan(candidate.host)}>{candidate.name} <span className="text-xs text-slate-400">{candidate.host}</span></button></li>
+              <li key={candidate.host}><Button className="w-full justify-start text-left" onClick={() => playback?.scan(candidate.host)} tone="playback" variant="tinted">{candidate.name} <span className="ml-1.5 text-xs text-ink-muted">{candidate.host}</span></Button></li>
             ))}</ul>
           </div>
         )}
-        {playback?.error && <p role="alert" className="text-sm text-rose-200">{playback.error}</p>}
-        {playback?.message && <p role="status" className="text-sm text-sky-200">{playback.message}</p>}
+        {playback?.error && <p role="alert" className="text-sm text-danger-text">{playback.error}</p>}
+        {playback?.message && <p role="status" className="text-sm text-info-text">{playback.message}</p>}
       </div>
 
       {status && (
-        <section className="space-y-2 rounded-xl border border-sky-400/20 bg-sky-400/[0.05] p-4" aria-labelledby="song-order-heading">
-          <h3 id="song-order-heading" className="font-bold text-white">Song order</h3>
+        <section className="space-y-2 rounded-ds-xl bg-integration-playback/5 p-4" aria-labelledby="song-order-heading">
+          <h3 id="song-order-heading" className="font-bold text-ink">Song order</h3>
           <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>
-          {!apiConnected ? <p className="text-sm text-slate-300">Connect to Playback first.</p>
-              : status.playing ? <p className="text-sm text-amber-200">Stop Playback to set up song order.</p>
+          {!apiConnected ? <p className="text-sm text-ink-body">Connect to Playback first.</p>
+              : status.playing ? <p className="text-sm text-warning-text">Stop Playback to set up song order.</p>
                 : <>
-                  {orderSaved ? <p className="text-sm text-emerald-200">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
-                    : <>{notice && <p className="text-sm text-amber-200">{notice}</p>}
-                      <p className="text-sm text-slate-300">StagePilot steps through your Playback songs once to learn the order. Playback must be stopped.</p></>}
-                  <button className={orderSaved ? button : big} type="button" onClick={() => setConfirm(true)}>{orderSaved ? "Set up again" : "Set up song order"}</button>
+                  {orderSaved ? <p className="text-sm text-success-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
+                    : <>{notice && <p className="text-sm text-warning-text">{notice}</p>}
+                      <p className="text-sm text-ink-body">StagePilot steps through your Playback songs once to learn the order. Playback must be stopped.</p></>}
+                  <Button className={orderSaved ? undefined : "w-full sm:w-auto"} onClick={() => setConfirm(true)} size={orderSaved ? "control" : "touch"} tone="playback" variant={orderSaved ? "tinted" : "primary"}>{orderSaved ? "Set up again" : "Set up song order"}</Button>
                 </>}
           </ScanProgress></div>
           <PlanningCenterLengths status={status} onStatus={playback?.acceptStatus} />
           </div>
-          {mismatch && <p className="text-sm text-slate-300">{mismatch}</p>}
+          {mismatch && <p className="text-sm text-ink-body">{mismatch}</p>}
           <PlaybackSongLengths status={status} />
-          {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-rose-200">{status.last_error}</p>}
+          {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-danger-text">{status.last_error}</p>}
         </section>
       )}
-      {confirm && <div role="dialog" aria-modal="true" aria-labelledby="discover-confirm-heading" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-        <div className="max-w-lg space-y-4 rounded-xl border border-sky-400/30 bg-slate-950 p-5 shadow-2xl">
-          <h3 id="discover-confirm-heading" className="text-lg font-bold text-white">Set up song order?</h3>
-          <p className="text-sm text-slate-200">StagePilot will step through the songs in Playback to read their lengths, then go back to the song that was selected. Playback must stay stopped. Nothing will be played.</p>
+      {confirm && <div role="dialog" aria-modal="true" aria-labelledby="discover-confirm-heading" className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4">
+        <div className="max-w-lg space-y-4 rounded-ds-xl border border-edge-medium bg-surface-950 p-5 shadow-elevation-overlay">
+          <h3 id="discover-confirm-heading" className="text-lg font-bold text-ink">Set up song order?</h3>
+          <p className="text-sm text-ink-body">StagePilot will step through the songs in Playback to read their lengths, then go back to the song that was selected. Playback must stay stopped. Nothing will be played.</p>
           <div className="flex flex-wrap gap-3">
-            <button className={button} autoFocus onClick={() => { setConfirm(false); playback?.discover(); }} type="button">Set up song order</button>
-            <button className={button} onClick={() => setConfirm(false)} type="button">Cancel</button>
+            <Button autoFocus onClick={() => { setConfirm(false); playback?.discover(); }} tone="playback" variant="tinted">Set up song order</Button>
+            <Button onClick={() => setConfirm(false)} tone="playback" variant="tinted">Cancel</Button>
           </div>
         </div>
       </div>}
 
-      <div className="space-y-3 rounded-xl border border-white/10 p-4">
-        <label className="flex min-h-11 items-center gap-3 text-sm text-slate-200">
-          <input type="checkbox" checked={apiOn} disabled={!status || !draft} onChange={(event) => draft?.setEnabled(event.target.checked)} />
+      <div className="space-y-3 border-t border-edge-subtle pt-4">
+        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
+          <input className="size-4 accent-primary" type="checkbox" checked={apiOn} disabled={!status || !draft} onChange={(event) => draft?.setEnabled(event.target.checked)} />
           Connect to Playback automatically
         </label>
-        <label className="flex min-h-11 items-center gap-3 text-sm text-slate-200">
-          <input type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
+        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
+          <input className="size-4 accent-primary" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
           Look for Playback on the network if it isn't on this computer
         </label>
-        <label className="flex min-h-11 items-center gap-3 text-sm text-slate-200">
-          <input type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby="fast-transport-help" onChange={(event) => draft?.setFastTransport(event.target.checked)} />
+        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
+          <input className="size-4 accent-primary" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby="fast-transport-help" onChange={(event) => draft?.setFastTransport(event.target.checked)} />
           Respond to Play immediately
         </label>
-        <p id="fast-transport-help" className="text-sm text-slate-400">Reacts to the command instead of waiting up to one second for Playback to report it.</p>
+        <p id="fast-transport-help" className="text-sm text-ink-muted">Reacts to the command instead of waiting up to one second for Playback to report it.</p>
       </div>
 
       <div>
-        <button className="min-h-11 text-sm font-semibold text-slate-200" type="button" aria-expanded={specific} aria-controls="playback-specific" onClick={() => setSpecific((value) => !value)}>{specific ? "▾" : "▸"} Connect a specific computer</button>
+        <button className="min-h-ds-touch-target touch-manipulation text-sm font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink" type="button" aria-expanded={specific} aria-controls="playback-specific" onClick={() => setSpecific((value) => !value)}>{specific ? "▾" : "▸"} Connect a specific computer</button>
         {specific && <form id="playback-specific" className="mt-2 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
-          <label className="w-full min-w-0 flex-none text-sm text-slate-300 sm:min-w-48 sm:flex-1">
-            Computer name or address
-            <input className="mt-1 block min-h-11 w-full rounded-lg border border-white/10 bg-slate-950 px-3 text-white" value={host} placeholder="192.0.2.10" onChange={(event) => setHost(event.target.value)} aria-invalid={!hostOk} />
-          </label>
-          <button className={button} type="submit" disabled={!trimmed || !hostOk || scanning}>Connect</button>
-          {!trimmed && <p className="w-full text-xs text-slate-400">Type an address to connect.</p>}
-          {!hostOk && <p role="alert" className="w-full text-sm text-rose-200">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
+          <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
+            <Input value={host} placeholder="192.0.2.10" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
+          </Field>
+          <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>
+          {!trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
+          {!hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
         </form>}
       </div>
 
-      <details className="border-t border-white/10 pt-3">
-        <summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-200">Recent activity</summary>
-        {!playback?.events.length ? <p className="mt-2 text-sm text-slate-400">Nothing yet.</p> : <ul className="mt-2 max-h-56 overflow-auto text-sm text-slate-300" aria-label="Recent activity">
+      <Disclosure title="Recent activity" variant="activity">
+        {!playback?.events.length ? <p className="text-sm text-ink-muted">Nothing yet.</p> : <ul className="max-h-56 overflow-auto overscroll-contain text-sm text-ink-body" aria-label="Recent activity">
           {[...playback.events].reverse().map(({ event, discovery, at }, index) => {
             const position = event.song_id === null ? -1 : status?.song_order.indexOf(event.song_id) ?? -1;
             const known = !status?.stale && position >= 0 ? position : -1;
-            return <li key={`${event.timestamp}-${index}`} className="flex gap-3 py-0.5"><span className="whitespace-nowrap text-slate-400">{at ? new Date(at).toLocaleTimeString() : ""}</span><span>{playbackActivityText(event.type, known)}{discovery ? " (while setting up song order)" : ""}</span></li>;
+            return <li key={`${event.timestamp}-${index}`} className="flex gap-3 py-0.5"><span className="whitespace-nowrap tabular-nums text-ink-muted">{at ? new Date(at).toLocaleTimeString() : ""}</span><span>{playbackActivityText(event.type, known)}{discovery ? " (while setting up song order)" : ""}</span></li>;
           })}
         </ul>}
-      </details>
+      </Disclosure>
     </div>
   );
 }

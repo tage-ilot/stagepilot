@@ -197,12 +197,10 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   }
 }
 
-.setup-panel .text-slate-500,
 .now-playing-panel .text-slate-500 {
   color: rgb(148 163 184);
 }
 
-.setup-panel .text-slate-600,
 .now-playing-panel .text-slate-600 {
   color: rgb(100 116 139);
 }
@@ -326,14 +324,6 @@ textarea:focus-visible {
 .stage-panel {
   border: 1px solid var(--sp-border);
   background: var(--sp-surface);
-  box-shadow: var(--sp-panel-shadow);
-}
-
-.setup-panel {
-  border-color: var(--sp-border) !important;
-  background:
-    linear-gradient(120deg, var(--sp-accent-subtle), transparent 36%),
-    rgb(5 10 16 / 0.84) !important;
   box-shadow: var(--sp-panel-shadow);
 }
 

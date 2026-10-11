@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
+import { Button } from "./ui/Button";
 
 export interface PlaybackDraft {
   enabled: boolean;
@@ -74,8 +75,6 @@ export function usePlaybackDraft(playback?: PlaybackController): PlaybackDraft {
   return { enabled, autoScan, fastTransport, setEnabled, setAutoScan, setFastTransport, dirty, saving, saved, error, save, revert };
 }
 
-const primary = "min-h-11 rounded-lg border border-sky-300/40 bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40";
-
 export function PlaybackSaveFooter({ draft, playback, midiDirty = false }: {
   draft: PlaybackDraft;
   playback?: PlaybackController;
@@ -83,18 +82,18 @@ export function PlaybackSaveFooter({ draft, playback, midiDirty = false }: {
 }) {
   const reason = draft.error ?? (draft.dirty ? playback?.error ?? null : null);
   return (
-    <div className="sticky bottom-0 z-10 -mx-5 mt-5 space-y-2 rounded-b-2xl border-t border-white/10 bg-slate-950/95 px-5 py-3 backdrop-blur" data-testid="playback-save-footer">
-      {reason && <p role="alert" className="text-sm text-rose-200">{reason}</p>}
-      {midiDirty && <p className="text-sm text-amber-200">You also have unsaved MIDI changes in Alternate connection: MIDI settings. They are saved with Save MIDI settings, not here.</p>}
+    <div className="sticky bottom-0 z-10 -mx-5 mt-5 space-y-2 rounded-b-ds-xl border-t border-edge bg-surface-950/95 px-5 py-3 backdrop-blur" data-testid="playback-save-footer">
+      {reason && <p role="alert" className="text-sm text-danger-text">{reason}</p>}
+      {midiDirty && <p className="text-sm text-warning-text">You also have unsaved MIDI changes in Alternate connection: MIDI settings. They are saved with Save MIDI settings, not here.</p>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button className={primary} type="button" disabled={!draft.dirty || draft.saving || !playback?.status} onClick={() => void draft.save()}>
+        <Button disabled={!draft.dirty || draft.saving || !playback?.status} onClick={() => void draft.save()} variant="primary">
           {draft.saving ? "Saving…" : "Save settings"}
-        </button>
-        {draft.dirty && !draft.saving && <span className="text-xs font-semibold text-amber-200">Unsaved changes</span>}
-        {draft.dirty && !draft.saving && <button className="min-h-11 text-sm text-slate-300 underline hover:text-white" type="button" onClick={draft.revert}>Discard changes</button>}
+        </Button>
+        {draft.dirty && !draft.saving && <span className="text-xs font-semibold text-warning-text">Unsaved changes</span>}
+        {draft.dirty && !draft.saving && <button className="min-h-ds-touch-target touch-manipulation text-sm text-ink-body underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink" type="button" onClick={draft.revert}>Discard changes</button>}
         {!draft.dirty && !draft.saving && (draft.saved
-          ? <span role="status" className="text-sm font-semibold text-emerald-300">Saved</span>
-          : <span className="text-xs text-slate-400">No changes to save</span>)}
+          ? <span role="status" className="text-sm font-semibold text-success-text">Saved</span>
+          : <span className="text-xs text-ink-muted">No changes to save</span>)}
       </div>
     </div>
   );

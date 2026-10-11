@@ -55,4 +55,11 @@ describe("continuous song scan progress", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("data-reduced-motion", "true");
     view.rerender(<ScanProgress state="done" steps={5} total={5} />); tick(320); expect(amount()).toBe(1);
   });
+  it("draws the fill with transform, not width", () => {
+    render(<ScanProgress state="running" steps={2} total={5} />);
+    tick(1000);
+    const fill = screen.getByRole("progressbar").firstElementChild as HTMLElement;
+    expect(fill.style.transform).toMatch(/^scaleX\(/);
+    expect(fill.style.width).toBe("");
+  });
 });
