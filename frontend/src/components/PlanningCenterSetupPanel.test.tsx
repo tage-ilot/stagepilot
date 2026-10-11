@@ -636,6 +636,17 @@ describe("PlanningCenterSetupPanel SaveBar", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it("marks Application ID and Remove saved secret as held", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.click(screen.getByRole("button", { name: /Manual API Connection/ }));
+    await user.type(screen.getByLabelText("Application ID"), "x");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+    expect(bar()).toHaveTextContent(/1\s+change waiting/);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("Discard restores the saved values and returns to clean", async () => {
     const user = userEvent.setup();
     renderPanel();

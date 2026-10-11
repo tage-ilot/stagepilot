@@ -192,16 +192,12 @@ export function LightsSetupPanel({
     && (savedOutputName === null
       || outputName !== savedOutputName
       || channel !== String(savedLights.channel));
-  // Held changes: only the output and the channel are listed (DESIGN.md). Note pulse saves
-  // immediately (on blur or Enter, so a half-typed number never reconfigures the MIDI output)
-  // and sends the saved output and channel, never the held drafts.
+  // Held changes: output, channel and note pulse. Any Lights save reconfigures the plugin
+  // (cancels the running timeline, reopens the MIDI port), so none of them saves on its own.
   const heldOutput = savedLights != null && outputName !== (savedOutputName ?? "");
   const heldChannel = savedLights != null && channel !== String(savedLights.channel);
-  const changeCount = Number(heldOutput) + Number(heldChannel);
-  const pulseDiffers = savedLights != null && pulseMs !== String(savedLights.pulse_ms);
-  const pulseValid = /^\d+$/.test(pulseMs) && Number(pulseMs) >= 10 && Number(pulseMs) <= 2_000;
-  const [pulseSaving, setPulseSaving] = useState(false);
-  const [pulseSaveFailed, setPulseSaveFailed] = useState(false);
+  const heldPulse = savedLights != null && pulseMs !== String(savedLights.pulse_ms);
+  const changeCount = Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
   const [saveFailed, setSaveFailed] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const previousOperation = useRef<typeof pendingOperation>(null);
@@ -209,19 +205,13 @@ export function LightsSetupPanel({
     const previous = previousOperation.current;
     previousOperation.current = pendingOperation;
     if (previous === "save" && pendingOperation !== "save") {
-      if (pulseSaving) {
-        setPulseSaving(false);
-        setPulseSaveFailed(Boolean(error));
-        if (!error) setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-      } else {
-        setSaveFailed(Boolean(error));
-      }
+      setSaveFailed(Boolean(error));
     }
     if (previous === "save-cues" && pendingOperation !== "save-cues" && !error) {
       setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     }
-  }, [pendingOperation, error, pulseSaving]);
-  const saveState: SaveBarState = pendingOperation === "save" && !pulseSaving
+  }, [pendingOperation, error]);
+  const saveState: SaveBarState = pendingOperation === "save"
     ? { kind: "saving" }
     : saveFailed && changeCount > 0
       ? { kind: "error", message: "Couldn't save" }
@@ -240,26 +230,12 @@ export function LightsSetupPanel({
     setChannel(String(savedLights.channel));
     setPulseMs(String(savedLights.pulse_ms));
     setSaveFailed(false);
-    setPulseSaveFailed(false);
-  };
-
-  const savePulse = () => {
-    if (!savedLights || !pulseDiffers || !pulseValid || pulseSaving || pendingOperation !== null) return;
-    setPulseSaving(true);
-    setPulseSaveFailed(false);
-    setAutoSavedAt(null);
-    onSaveSettings({
-      enabled: savedLights.enabled,
-      output_name: savedOutputName,
-      channel: savedLights.channel,
-      pulse_ms: Number(pulseMs),
-    });
   };
 
   const save = () => {
-    // A clean Save is a no-op once Lights is enabled; the note pulse edit alone still saves.
+    // A clean Save is a no-op once Lights is enabled.
     if (!parsedSettings || pendingOperation !== null) return;
-    if (changeCount === 0 && !pulseDiffers && savedLights?.enabled) return;
+    if (changeCount === 0 && savedLights?.enabled) return;
     setSaveFailed(false);
     setAutoSavedAt(null);
     onSaveSettings(parsedSettings);
@@ -302,8 +278,8 @@ export function LightsSetupPanel({
             {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
           </Select>
         </Field>
-        <Field error={pulseSaveFailed ? "Couldn't save the note pulse" : undefined} hint={pulseSaving && pendingOperation === "save" ? "Saving…" : undefined} label="Note pulse (ms)">
-          <Input className="tabular-nums" max={2000} min={10} onBlur={savePulse} onChange={(event) => { setPulseMs(event.target.value); setPulseSaveFailed(false); }} onKeyDown={(event) => { if (event.key === "Enter") savePulse(); }} type="number" value={pulseMs} />
+        <Field heldChange={heldPulse} label="Note pulse (ms)">
+          <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
         </Field>
       </div>
       <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
