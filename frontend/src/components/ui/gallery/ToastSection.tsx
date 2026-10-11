@@ -5,7 +5,7 @@ import type { GalleryState } from "./states";
 
 function Frame({ children }: { children: React.ReactNode }) {
   // A transformed box makes `fixed` descendants position inside it, so each toast is visible in page flow.
-  return <div className="relative h-72 overflow-hidden rounded-ds-lg border border-edge-subtle bg-surface-900 [transform:translateZ(0)]">{children}</div>;
+  return <div className="relative h-[28rem] overflow-hidden rounded-ds-lg border border-edge-subtle bg-surface-900 [transform:translateZ(0)]">{children}</div>;
 }
 
 const longTitle = "StagePilot's backend keeps crashing and could not restart after the last three attempts";
@@ -18,6 +18,7 @@ function Cell({ state, side, tone, title = "StagePilot ran into a problem", desc
     <Frame>
       <Toast
         side={side}
+        className="!max-w-[calc(100%-3rem)]"
         tone={tone}
         kicker={tone === "warning" ? "Heads up" : "Something went wrong"}
         title={title}
@@ -33,7 +34,7 @@ function Cell({ state, side, tone, title = "StagePilot ran into a problem", desc
   );
 }
 
-/** Real Toast. Each sits inside a transformed frame so several show at once; the app mounts them fixed at the viewport corner. */
+/** Real Toast. The frame stands in for the viewport (max width follows the frame, as 100vw-3rem does in the app). Each sits inside a transformed frame so several show at once; the app mounts them fixed at the viewport corner. */
 export function ToastSection() {
   return (
     <Section name="toast" title="Toast">
