@@ -498,7 +498,7 @@ describe("Dashboard Planning Center plan states", () => {
   it("shows errors in the same header slot with error styling", () => {
     renderDashboard(loadedServiceState, { error: "Backend unavailable." });
 
-    expect(screen.getByRole("status")).toHaveClass("border-rose-400/25");
+    expect(screen.getByRole("status")).toHaveClass("border-danger/25");
   });
 
   it("renders ambiguous candidates and sends the selected plan ID", async () => {
@@ -532,7 +532,7 @@ describe("Dashboard Planning Center plan states", () => {
     renderDashboard({ ...loadedServiceState, is_stale: true });
 
     expect(screen.getByText("Check system")).toBeInTheDocument();
-    expect(screen.getByRole("tooltip").firstElementChild).toHaveClass("bg-slate-950/85");
+    expect(screen.getByRole("tooltip").firstElementChild).toHaveClass("bg-surface-950/85");
   });
 
   it("keeps readiness details open across its trigger and panel hover region", () => {
@@ -584,7 +584,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getAllByText("Connected to Playback").length).toBeGreaterThan(0);
     expect(screen.queryByText("Demo integration running")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-slate-400");
+    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-ink-muted");
     expect(screen.getByText("Optional")).toBeInTheDocument();
   });
 
@@ -1102,7 +1102,7 @@ describe("Dashboard widget layout", () => {
     });
 
     expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-slate-400");
+    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-ink-muted");
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 

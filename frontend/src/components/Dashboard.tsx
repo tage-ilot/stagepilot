@@ -50,6 +50,7 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
+import { StatusDot } from "./ui";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
 
@@ -796,9 +797,9 @@ export function Dashboard({
 
   return (
     <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
-      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[auto_minmax(12rem,1fr)_auto] sm:gap-4">
-        <div className="flex items-center">
-          <h1 className="relative z-10 -translate-y-4 shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-white">StagePilot</h1>
+      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_auto] sm:gap-4">
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-y-1 sm:col-span-1">
+          <h1 className="relative z-10 -translate-y-4 shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
               onClick={updater.openConfirmation}
@@ -810,10 +811,10 @@ export function Dashboard({
         <div
           aria-atomic="true"
           aria-live="polite"
-          className={`col-span-2 row-start-2 min-w-0 justify-self-end sm:col-span-1 sm:col-start-2 sm:row-start-1 ${notification ? "" : "hidden sm:block"}`}
+          className={`col-span-1 row-start-2 min-w-0 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:justify-self-end ${notification ? "" : "hidden sm:block"}`}
         >
           <div
-            className={`ml-auto h-9 w-fit max-w-full truncate rounded-lg border px-4 py-2 text-center text-sm transition-opacity ${notification ? `opacity-100 ${notification.tone === "error" ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : "border-sky-400/20 bg-sky-400/10 text-sky-200"}` : "invisible border-transparent opacity-0"}`}
+            className={`ml-auto h-9 w-fit max-w-full truncate rounded-ds-lg border px-4 py-2 text-center text-sm transition-opacity ${notification ? `opacity-100 ${notification.tone === "error" ? "border-danger/25 bg-danger/10 text-danger-text" : "border-info/20 bg-info/10 text-info-text"}` : "invisible border-transparent opacity-0"}`}
             role="status"
             title={notification?.message}
           >
@@ -821,7 +822,7 @@ export function Dashboard({
           </div>
         </div>
         <div
-          className="relative z-40"
+          className="relative z-40 col-start-2 row-start-2 justify-self-end sm:col-start-3 sm:row-start-1"
           ref={readinessHover.containerRef}
           {...readinessHover.hoverProps}
         >
@@ -829,33 +830,33 @@ export function Dashboard({
             aria-describedby="system-readiness-popover"
             title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
             aria-expanded={readinessHover.open}
-            className={`flex shrink-0 cursor-help items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition hover:brightness-125 hover:ring-1 hover:ring-white/25 hover:shadow-[0_0_18px_rgba(255,255,255,0.12)] ${ready ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : systemError ? "border-rose-400/30 bg-rose-400/10 text-rose-300" : "border-amber-400/30 bg-amber-400/10 text-amber-300"}`}
+            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20" : systemError ? "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20" : "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20"}`}
             type="button"
           >
-            <span className={`h-2 w-2 rounded-full ${ready ? "bg-emerald-400" : systemError ? "bg-rose-400" : "bg-amber-400"}`} />
+            <StatusDot tone={ready ? "success" : systemError ? "danger" : "warning"} />
             {!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
           </button>
           <div
-            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
+            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
             id="system-readiness-popover"
             role="tooltip"
           >
-            <div className="rounded-xl border border-white/10 bg-slate-950/85 p-3 shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div className="rounded-ds-xl border border-edge bg-surface-950/85 p-3 shadow-elevation-overlay backdrop-blur-xl">
               <ul className="grid gap-1.5">
                 {checks.map((check) => (
                   <li
-                    className="flex items-center gap-2 rounded-lg bg-white/[0.035] px-3 py-2 text-sm"
+                    className="flex items-center gap-2 rounded-ds-lg bg-edge-subtle px-3 py-2 text-sm"
                     key={check.id}
                     title={check.detail}
                   >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[0.65rem] font-black ${check.status === "connected" ? "bg-emerald-400/15 text-emerald-300" : check.status === "error" ? "bg-rose-400/15 text-rose-300" : "bg-white/[0.07] text-slate-400"}`}>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${check.status === "connected" ? "bg-success/15 text-success-text" : check.status === "error" ? "bg-danger/15 text-danger-text" : "bg-edge text-ink-muted"}`}>
                       {check.status === "connected" ? "✓" : check.status === "error" ? "!" : "—"}
                     </span>
-                    <span className={check.status === "connected" ? "text-emerald-200" : check.status === "error" ? "text-rose-200" : "text-slate-400"}>
+                    <span className={check.status === "connected" ? "text-success-text" : check.status === "error" ? "text-danger-text" : "text-ink-muted"}>
                       {check.label}
                     </span>
                     {!check.required && (
-                      <span className="ml-auto text-[0.6rem] font-bold uppercase tracking-wider text-slate-500">
+                      <span className="ml-auto text-type-micro font-bold uppercase tracking-wider text-ink-muted">
                         Optional
                       </span>
                     )}
