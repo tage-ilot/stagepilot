@@ -153,6 +153,18 @@ function renderPanel({
 }
 
 describe("PlanningCenterSetupPanel", () => {
+  it("uses design-system primitives for the panel, fields and buttons", () => {
+    renderPanel();
+    expect(document.getElementById("planning-center-configuration")).toHaveAttribute("data-variant", "setup");
+    expect(screen.getByLabelText("Service type").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Secret")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Secret")).toHaveAttribute("autocomplete", "current-password");
+    expect(screen.getByRole("button", { name: "Save settings" })).toHaveAttribute("data-variant", "primary");
+    const load = screen.getByRole("button", { name: "Load service types" });
+    expect(load).toHaveAttribute("data-variant", "tinted");
+    expect(load).toHaveAttribute("data-tone", "services");
+  });
+
   it.each([
     ["manual", false],
     ["oauth", true],
