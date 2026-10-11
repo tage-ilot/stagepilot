@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import { openExternalUrl } from "../desktop";
@@ -17,6 +17,7 @@ import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
+import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 
@@ -201,6 +202,50 @@ export function PlanningCenterSetupPanel({
     [appId, connectionMethod, serviceTypeId, timezone],
   );
   const busy = pendingOperation !== null;
+
+  // Held changes: fields that differ from the saved values. Nothing here saves on change.
+  const saved = settings?.settings;
+  const savedPc = saved?.planning_center;
+  const savedTimezone = saved ? saved.timezone || systemTimezone() : null;
+  const held = {
+    appId: Boolean(savedPc) && appId.trim() !== (savedPc?.app_id ?? "").trim(),
+    secret: secret !== "",
+    removeSecret,
+    serviceType: Boolean(savedPc) && serviceTypeId !== (savedPc?.service_type_id ?? ""),
+    timezone: savedTimezone !== null && timezone !== savedTimezone,
+    title: Boolean(savedPc) && titlePreference.trim() !== (savedPc?.plan_title_preference ?? "").trim(),
+    time: Boolean(savedPc) && preferredTime !== (savedPc?.preferred_service_time ?? ""),
+  };
+  const changeCount = Object.values(held).filter(Boolean).length;
+  const [saveFailed, setSaveFailed] = useState(false);
+  const wasSaving = useRef(false);
+  useEffect(() => {
+    const saving = pendingOperation === "save";
+    if (wasSaving.current && !saving) setSaveFailed(Boolean(error));
+    wasSaving.current = saving;
+  }, [pendingOperation, error]);
+  const saveState: SaveBarState = pendingOperation === "save"
+    ? { kind: "saving" }
+    : saveFailed && changeCount > 0
+      ? { kind: "error", message: "Couldn't save" }
+      : changeCount > 0
+        ? { kind: "held", count: changeCount }
+        : { kind: "clean" };
+  const blockedReason = changeCount > 0 && !valid
+    ? "Add an Application ID (or sign in), choose a service type and a timezone before saving."
+    : null;
+
+  const discard = () => {
+    if (!settings) return;
+    setAppId(settings.settings.planning_center.app_id ?? "");
+    setServiceTypeId(settings.settings.planning_center.service_type_id ?? "");
+    setTimezone(settings.settings.timezone || systemTimezone());
+    setTitlePreference(settings.settings.planning_center.plan_title_preference ?? "");
+    setPreferredTime(settings.settings.planning_center.preferred_service_time ?? "");
+    setSecret("");
+    setRemoveSecret(false);
+    setSaveFailed(false);
+  };
   const manualSummary = `${connectionMethod === "oauth" ? "Sign-in" : "App ID and Secret"} · ${settings?.settings.planning_center.app_id?.trim() ? `App ID ${settings.settings.planning_center.app_id.trim()}` : "App ID not set"}`;
 
   const testInput = (): PlanningCenterTestInput => ({
@@ -209,7 +254,8 @@ export function PlanningCenterSetupPanel({
   });
 
   const save = () => {
-    if (!publicSettings || !valid) return;
+    if (!publicSettings || !valid || busy || (changeCount === 0 && state.plugins.planning_center)) return;
+    setSaveFailed(false);
     onSave(
       {
         app_id: appId.trim(),
@@ -367,7 +413,7 @@ export function PlanningCenterSetupPanel({
               value={appId}
             />
           </div>
-          <Field label="Secret">
+          <Field heldChange={held.secret} label="Secret">
             <Input
               autoComplete="current-password"
               disabled={busy || removeSecret}
@@ -411,7 +457,7 @@ export function PlanningCenterSetupPanel({
           Service plan configuration
         </h3>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="Service type">
+          <Field heldChange={held.serviceType} label="Service type">
             <Select
               disabled={busy || serviceTypes.length === 0}
               onChange={(event) => setServiceTypeId(event.target.value)}
@@ -427,7 +473,7 @@ export function PlanningCenterSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field label="Timezone">
+          <Field heldChange={held.timezone} label="Timezone">
             <Select
               disabled={busy}
               onChange={(event) => {
@@ -445,7 +491,7 @@ export function PlanningCenterSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field label="Service plan title preference">
+          <Field heldChange={held.title} label="Service plan title preference">
             <Input
               disabled={busy}
               onChange={(event) => setTitlePreference(event.target.value)}
@@ -453,7 +499,7 @@ export function PlanningCenterSetupPanel({
               value={titlePreference}
             />
           </Field>
-          <Field label="Preferred service time">
+          <Field heldChange={held.time} label="Preferred service time">
             <Input
               className="tabular-nums"
               disabled={busy}
@@ -474,13 +520,6 @@ export function PlanningCenterSetupPanel({
             {pendingOperation === "load-types" ? "Loading…" : "Load service types"}
           </Button>
           <Button
-            disabled={busy || !valid}
-            onClick={save}
-            variant="primary"
-          >
-            {pendingOperation === "save" ? "Saving…" : "Save settings"}
-          </Button>
-          <Button
             disabled={pendingAction !== null || !state.plugins.planning_center}
             onClick={onReload}
             tone="services"
@@ -489,6 +528,8 @@ export function PlanningCenterSetupPanel({
             {pendingAction === "reload_plan" ? "Loading…" : "Load today’s service plan"}
           </Button>
         </div>
+        {blockedReason && <p className="mt-4 text-sm text-ink-body" id="planning-center-save-blocked">{blockedReason}</p>}
+        <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
       </div>
 
       {(error || message) && (
