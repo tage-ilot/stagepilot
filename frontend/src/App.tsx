@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "./components/ui";
 import { Dashboard } from "./components/Dashboard";
 import { DesktopTitleBar } from "./components/DesktopTitleBar";
 import { DashboardAccessGate } from "./components/DashboardAccessGate";
@@ -157,7 +158,7 @@ function StagePilotApp() {
         <DesktopTitleBar />
         <main className="grid min-h-[calc(100vh-2.25rem)] place-items-center px-6 text-center">
           <div className="w-full max-w-4xl overflow-hidden px-2">
-            <h1 className="select-none font-brand text-6xl leading-none text-white sm:text-8xl lg:text-[11.25rem]">
+            <h1 className="select-none font-brand text-6xl leading-none text-ink sm:text-8xl lg:text-[11.25rem]">
               StagePilot
             </h1>
             <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />
@@ -177,13 +178,13 @@ function StagePilotApp() {
                 <span className="loading-progress-scan" />
               </div>
             </div>
-            <p className="mt-6 text-lg font-semibold text-white">
+            <p className="mt-6 text-lg font-semibold text-ink">
               {progressHeadline}
             </p>
             {showStartupDetails && (
               <p
                 aria-live={startupProgress.phase === "failed" ? "assertive" : undefined}
-                className={`mt-2 text-sm ${backendSupervisor?.state === "failed" ? "text-rose-300" : "text-slate-400"}`}
+                className={`mt-2 text-sm ${backendSupervisor?.state === "failed" ? "text-danger-text" : "text-ink-muted"}`}
               >
                 {backendSupervisor?.message ?? "Waiting for the StagePilot backend."}
               </p>
@@ -191,27 +192,27 @@ function StagePilotApp() {
             {startupProgress.phase === "failed" && (
               <div className="mt-6 flex flex-wrap justify-center gap-3">
                 {backendSupervisor?.managed && (
-                  <button
-                    className="rounded-lg border border-rose-300/50 bg-rose-950/60 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-900/70"
+                  <Button
                     onClick={() => void retryBackend()}
-                    type="button"
+                    size="touch"
+                    variant="destructive-soft"
                   >
                     Retry Backend
-                  </button>
+                  </Button>
                 )}
                 {backendSupervisor?.log_path && (
-                  <button
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/60 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-800/70"
+                  <Button
                     onClick={() => void copyLogPath()}
-                    type="button"
+                    size="touch"
+                    variant="secondary"
                   >
                     Copy Backend Log
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
             {backendActionMessage && (
-              <p aria-live="polite" className="mt-3 text-sm text-slate-300">
+              <p aria-live="polite" className="mt-3 text-sm text-ink-body">
                 {backendActionMessage}
               </p>
             )}

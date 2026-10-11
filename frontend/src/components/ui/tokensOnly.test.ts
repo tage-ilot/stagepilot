@@ -13,7 +13,7 @@ const forbidden = [
 function violations(source: string) {
   return forbidden.filter((pattern) => pattern.test(source));
 }
-const sources = import.meta.glob<string>(["./**/*.tsx", "!./**/*.test.tsx", "!./**/*.spec.tsx"], {
+const sources = import.meta.glob<string>(["./**/*.tsx", "../**/*.tsx", "../../App.tsx", "!./**/*.test.tsx", "!./**/*.spec.tsx", "!../**/*.test.tsx", "!../**/*.spec.tsx"], {
   query: "?raw", import: "default", eager: true,
 });
 
@@ -27,6 +27,8 @@ describe("UI tokens only (including gallery)", () => {
   it("scans every non-test TSX file recursively", () => {
     const files = Object.keys(sources);
     expect(files.some((path) => path.endsWith("gallery/Gallery.tsx"))).toBe(true);
+    expect(files.some((path) => path.endsWith("../../App.tsx"))).toBe(true);
+    expect(files.some((path) => path.endsWith("../Dashboard.tsx"))).toBe(true);
     for (const [file, source] of Object.entries(sources)) expect(violations(source), file).toEqual([]);
   });
 });
