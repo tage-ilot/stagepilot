@@ -79,4 +79,15 @@ describe("packaged backend startup recovery", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry Backend" }));
     await waitFor(() => expect(desktop.restartDesktopBackend).toHaveBeenCalledOnce());
   });
+
+  it("renders the failure actions with the Button primitive at touch size", async () => {
+    render(<App />);
+
+    const retry = await screen.findByRole("button", { name: "Retry Backend" });
+    const copy = screen.getByRole("button", { name: "Copy Backend Log" });
+    expect(retry).toHaveAttribute("data-variant", "destructive-soft");
+    expect(copy).toHaveAttribute("data-variant", "secondary");
+    expect(retry).toHaveAttribute("data-size", "touch");
+    expect(copy).toHaveAttribute("data-size", "touch");
+  });
 });
