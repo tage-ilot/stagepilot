@@ -8,8 +8,28 @@ import { fileURLToPath } from "node:url";
 import process from "node:process";
 import resolveConfig from "tailwindcss/resolveConfig.js";
 import config from "../tailwind.config.js";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+test("pointer variants generate scoped real hover and coarse target CSS", async () => {
+  const result = await postcss([tailwindcss({
+    ...config,
+    content: [{ raw: 'can-hover:bg-primary coarse:min-h-ds-touch-target', extension: "html" }],
+  })]).process("@tailwind utilities;", { from: undefined });
+  const rules = [];
+  result.root.walkRules((rule) => rules.push(rule));
+  const hover = rules.find((rule) => rule.selector === ".can-hover\\:bg-primary:hover");
+  const coarse = rules.find((rule) => rule.selector === ".coarse\\:min-h-ds-touch-target");
+  assert.ok(hover);
+  assert.ok(coarse);
+  assert.equal(hover.parent.name, "media");
+  assert.equal(hover.parent.params, "(hover: hover)");
+  assert.equal(coarse.parent.name, "media");
+  assert.equal(coarse.parent.params, "(pointer: coarse)");
+  assert.ok(coarse.nodes.some((node) => node.prop === "min-height" && node.value === "44px"));
+  assert.equal(config.future?.hoverOnlyWhenSupported, undefined);
+});
 test("compatibility keeps stock radii, spacing, brand and stage colors", () => {
   const theme = resolveConfig(config).theme;
   assert.equal(theme.borderRadius.DEFAULT, "0.25rem");

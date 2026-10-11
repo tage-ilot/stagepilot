@@ -49,3 +49,24 @@ font-src 'self' data: permits emitted local woff2 assets; no CSP change needed.
 The actual family name is Inter Variable (the spec's Inter), applied only to the
 existing root stack. Brand and monospace timers are unchanged. Font metrics/glyphs
 are the sole intended visual exception; review separate font-on screenshots.
+
+## Dormant UI foundation and review gallery
+
+`src/components/ui/` is deliberately excluded from app Tailwind content while
+primitives are dormant. Nothing in the app imports that folder. Surface migrations
+must include the migrated primitive files in app content when introducing imports.
+This prevents review-only utilities and tests from changing the shipped stylesheet.
+`can-hover:` wraps real `:hover` in `(hover: hover)`; `coarse:` wraps utilities in
+`(pointer: coarse)`. Stock hover behavior and every existing token value are unchanged.
+The fourth Node regression test compiles both variants with Tailwind/PostCSS.
+
+`npm run ui:gallery` serves `/ui-gallery.html` on loopback port 5174.
+`npm run ui:gallery:build` writes the separate, ignored `dist-gallery/` bundle.
+Gallery Tailwind content includes only UI source, not tests. `Section` and `StateRow`
+are in `ui/gallery/Section.tsx`; `render(state)` supplies real primitive props for
+default/hover/focus/active/disabled/loading/error (use visible "Not applicable" text
+for unsupported states). Mark the actual DOM interaction target `data-gallery-target`.
+Keep section names and row labels unique: the capture tool uses them as stable keys.
+Hover/focus/active variants must not fake interaction classes. The capture tool drives
+real hover, keyboard Tab and a held mouse press; loading/disabled/error use props.
+The tokens-only Vitest guard scans all non-test UI TSX, including gallery source.

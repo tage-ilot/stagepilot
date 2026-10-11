@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "ui:gallery": "vite --config vite.ui-gallery.config.ts --open /ui-gallery.html",
+    "ui:gallery:build": "tsc --noEmit && vite build --config vite.ui-gallery.config.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "npm run tokens:check && eslint .",
+    "lint": "npm run tokens:check && eslint . --ignore-pattern 'dist-gallery/**'",
     "tokens:generate": "node scripts/design-tokens.mjs",
     "tokens:check": "node scripts/design-tokens.mjs --check",
     "test": "node --test scripts/design-tokens.check.mjs && vitest run",
