@@ -12,6 +12,7 @@ import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
+import { Select } from "./ui/Select";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
 const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink";
@@ -22,21 +23,29 @@ const toneClass = {
   idle: "border-edge bg-edge-subtle text-ink-body",
 } as const;
 const LOCAL_NETWORK_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
+const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 
 export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
-  const [specific, setSpecific] = useState(false);
+  const [choice, setChoice] = useState("");
   const [confirm, setConfirm] = useState(false);
-  useEffect(() => setHost(status?.settings.host ?? ""), [status?.settings.host]);
+  useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
 
   const scan = status?.scan;
   const scanning = scan?.state === "scanning" || playback?.pending === "scan";
   const running = status?.discovery === "running" || playback?.pending === "discover";
   const apiConnected = status?.sources.playback_api.connected ?? false;
-  const trimmed = host.trim();
+  const other = choice === OTHER_COMPUTER;
+  const trimmed = other ? host.trim() : choice;
   const hostOk = validPlaybackHost(trimmed);
+  const savedHost = status?.settings.host ?? null;
+  const candidates = status?.scan.candidates ?? [];
+  const computers = [
+    ...candidates.map((candidate) => ({ host: candidate.host, label: `${candidate.name} (${candidate.host})` })),
+    ...(savedHost && !candidates.some((candidate) => candidate.host === savedHost) ? [{ host: savedHost, label: `${savedHost} (saved)` }] : []),
+  ];
   const orderSaved = Boolean(status?.song_order.length) && !status?.stale;
   const notice = status ? playbackOrderNotice(status) : null;
   const mismatch = status && orderSaved ? playbackSongCountMismatch(status) : null;
@@ -76,7 +85,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
               <div className="mt-2 flex flex-wrap gap-3">
                 <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
                 {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className={linkButton} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
+                {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
               </div>
             </InlineAlert>
           )
@@ -89,7 +98,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
               <div className="mt-2 flex flex-wrap gap-3">
                 {scan.settings_url && <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
                 {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className={linkButton} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>}
+                {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
               </div>
             </InlineAlert>
           )
@@ -98,7 +107,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
               <p className="font-semibold">Couldn't find Playback</p>
               <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
               {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
-              <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setSpecific(true)}>Enter address instead</button>
+              <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>
             </div>
           ))}
         {scan?.state === "found" && scan.candidates.length > 1 && !scanning && (
@@ -163,17 +172,20 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
         <p id="fast-transport-help" className="text-sm text-ink-muted">Reacts to the command instead of waiting up to one second for Playback to report it.</p>
       </div>
 
-      <div>
-        <button className="min-h-ds-touch-target touch-manipulation text-sm font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink" type="button" aria-expanded={specific} aria-controls="playback-specific" onClick={() => setSpecific((value) => !value)}>{specific ? "▾" : "▸"} Connect a specific computer</button>
-        {specific && <form id="playback-specific" className="mt-2 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
-          <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
-            <Input value={host} placeholder="192.0.2.10" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
-          </Field>
-          <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>
-          {!trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
-          {!hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
-        </form>}
-      </div>
+      <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
+        <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer">
+          <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer" onChange={(event) => setChoice(event.target.value)}>
+            {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
+            <option value={OTHER_COMPUTER}>Other computer…</option>
+          </Select>
+        </Field>
+        {other && <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
+          <Input value={host} placeholder="192.0.2.10" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
+        </Field>}
+        {choice && <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>}
+        {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
+        {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
+      </form>
 
       <Disclosure title="Recent activity" variant="activity">
         {!playback?.events.length ? <p className="text-sm text-ink-muted">Nothing yet.</p> : <ul className="max-h-56 overflow-auto overscroll-contain text-sm text-ink-body" aria-label="Recent activity">
