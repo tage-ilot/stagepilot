@@ -2,6 +2,7 @@ import { ButtonSection } from "./ButtonSection";
 import { DisclosureSection } from "./DisclosureSection";
 import { FieldSection } from "./FieldSection";
 import { PanelSection } from "./PanelSection";
+import { SegmentedSection } from "./SegmentedSection";
 
 export function Gallery() {
   return (
@@ -12,6 +13,7 @@ export function Gallery() {
       </header>
       <PanelSection />
       <DisclosureSection />
+      <SegmentedSection />
       <ButtonSection />
       <FieldSection />
       <p className="text-sm text-ink-muted">Default · Hover · Focus · Active · Disabled · Loading · Error</p>

@@ -23,3 +23,5 @@ export { InlineAlert } from "./InlineAlert";
 export type { InlineAlertProps, InlineAlertTone } from "./InlineAlert";
 export { Disclosure } from "./Disclosure";
 export type { DisclosureProps, DisclosureVariant, DisclosureTone } from "./Disclosure";
+export { SegmentedControl } from "./SegmentedControl";
+export type { SegmentedControlProps, SegmentedOption, SegmentCaption } from "./SegmentedControl";
