@@ -31,7 +31,9 @@ describe("explicit Planning Center split button", () => {
     expect(within(dialog).getByText(/4:05 → 4:28/)).toBeVisible(); expect(within(dialog).getByText(/No change/)).toBeVisible();
     const confirm = within(dialog).getByRole("button", { name: "Update Planning Center" }); expect(confirm).toBeEnabled();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" })); expect(api.confirmPlanLengths).not.toHaveBeenCalled(); expect(update()).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" })); expect(api.confirmPlanLengths).not.toHaveBeenCalled();
+    // Focus returns from Dialog's cleanup and from the component's busy/returnFocus effect after the dialog unmounts; wait for it instead of reading it synchronously.
+    await waitFor(() => expect(update()).toHaveFocus());
   });
   it("one confirmation covers every measured length; result and Restore appear and restore updates result", async () => {
     vi.mocked(api.previewPlanLengths).mockResolvedValue({ ...preview, items: [{ ...preview.items[0]! }] });

@@ -766,6 +766,14 @@ export function Dashboard({
   );
   const [playbackDirty, setPlaybackDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const discardOpen = leaveTarget !== undefined;
+  // Focus Discard once per opening (after Dialog's own first-control focus). Not a callback ref: that re-ran on every render and pulled focus back.
+  useEffect(() => {
+    if (!discardOpen) return;
+    const timer = window.setTimeout(() => discardButton.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [discardOpen]);
   // Leaving the Playback panel with unsaved changes asks first; everything else is immediate.
   const goTo = (target: ConnectionPanel | null) => {
     if (activeConnection === "midi" && target !== "midi" && playbackDirty) { setLeaveTarget(target); return; }
@@ -1033,7 +1041,7 @@ export function Dashboard({
           <>
             <Button onClick={() => setLeaveTarget(undefined)} size="touch" variant="secondary">Keep editing</Button>
             {/* Dialog focuses the first control on open; the Discard button takes focus after that, as before. */}
-            <Button ref={(node) => { if (node) window.setTimeout(() => node.focus(), 0); }} onClick={() => { setPlaybackDirty(false); if (leaveTarget !== undefined) setActiveConnection(leaveTarget); setLeaveTarget(undefined); }} size="touch" variant="destructive">Discard</Button>
+            <Button ref={discardButton} onClick={() => { setPlaybackDirty(false); if (leaveTarget !== undefined) setActiveConnection(leaveTarget); setLeaveTarget(undefined); }} size="touch" variant="destructive">Discard</Button>
           </>
         }
       />
