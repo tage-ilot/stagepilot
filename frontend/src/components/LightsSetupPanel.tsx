@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import type {
   ApplicationState,
@@ -81,6 +81,7 @@ export function LightsSetupPanel({
   onSaveCues: (song: Song, cues: LightingCue[]) => void;
   onClearAllCues?: (songs: Song[]) => void;
 }) {
+  const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
   const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
   const [outputName, setOutputName] = useState("");
@@ -174,6 +175,14 @@ export function LightsSetupPanel({
     }
   };
 
+  const savedLights = settings?.settings.lights ?? lights;
+  const savedOutputName = savedLights?.output_name ?? null;
+  // Test cue goes out through the connected (saved) port, so it is only offered
+  // while the draft output and channel equal what is saved.
+  const draftDiffersFromSaved = savedLights != null
+    && (savedOutputName === null
+      || outputName !== savedOutputName
+      || channel !== String(savedLights.channel));
   const currentOutputMissing = outputName
     && !lights?.outputs.some((output) => output.name === outputName);
 
@@ -251,8 +260,9 @@ export function LightsSetupPanel({
           <Field label="Test lighting velocity">
             <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
           </Field>
-          <Button className="self-end" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         </div>
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
       </div>
 
       <div className="mt-6 border-t border-edge-subtle pt-5">
