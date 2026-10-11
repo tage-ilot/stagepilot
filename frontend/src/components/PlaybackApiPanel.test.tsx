@@ -273,11 +273,19 @@ describe("Song order card", () => {
 describe("Recent activity", () => {
   it("is an activity Disclosure that opens and closes from its button", async () => {
     render(<PlaybackApiPanel playback={controller()} />);
-    const toggle = screen.getByRole("button", { name: "Recent activity" });
+    const toggle = screen.getByRole("button", { name: /^Recent activity\s*0 events$/ });
     expect(toggle.closest("[data-variant='activity']")).toHaveAttribute("data-state", "closed");
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Nothing yet.")).toBeVisible();
+  });
+  it("shows the event count on the activity Disclosure (singular and plural)", () => {
+    const ev = { type: "song.started", timestamp: 1, song_id: 202, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null };
+    const { unmount } = render(<PlaybackApiPanel playback={controller({ events: [{ event: ev, discovery: false }] })} />);
+    expect(screen.getByRole("button", { name: /^Recent activity\s*1 event$/ })).toBeInTheDocument();
+    unmount();
+    render(<PlaybackApiPanel playback={controller({ events: [{ event: ev, discovery: false }, { event: ev, discovery: false }] })} />);
+    expect(screen.getByRole("button", { name: /^Recent activity\s*2 events$/ })).toBeInTheDocument();
   });
   const event = { type: "song.started", timestamp: 123.4, song_id: 202, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null };
   it("renders transport rollback as plain activity, without a song number", () => {

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -183,17 +183,41 @@ describe("PlanningCenterSetupPanel", () => {
       },
     });
 
-    const summary = screen.getByText("Manual API Connection");
-    const disclosure = summary.closest("details");
-    expect(disclosure).not.toHaveAttribute("open");
+    const toggle = screen.getByRole("button", { name: /Manual API Connection/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Advanced / manual connection")).not.toBeInTheDocument();
+  });
+
+  it("is an advanced Services Disclosure operated by button, Enter and Space, with a real-value summary only while closed", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const toggle = screen.getByRole("button", { name: /Manual API Connection/ });
+    expect(toggle.tagName).toBe("BUTTON");
+    expect(toggle.closest("[data-variant=advanced]")).toHaveAttribute("data-tone", "services");
+    const summary = within(toggle).getByText("App ID and Secret · App ID saved-app-id");
+    expect(summary).toHaveAttribute("title", "App ID and Secret · App ID saved-app-id");
+    expect(screen.queryByText(/replacement-secret|saved-secret/)).toBeNull();
+    const bodyId = toggle.getAttribute("aria-controls");
+    expect(bodyId).toBeTruthy();
+    expect(document.getElementById(bodyId!)).toContainElement(screen.getByLabelText("Application ID"));
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(toggle).queryByText(/App ID saved-app-id/)).toBeNull();
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(toggle).getByText(/App ID saved-app-id/)).toBeInTheDocument();
+  });
+
+  it("summarises OAuth sign-in and an unset App ID", () => {
+    renderPanel({ status: { connection_status: "connected", configured: true, app_id: null, service_type_id: "sunday", planning_center_secret_saved: false, connection_method: "oauth", oauth_connected: true, oauth_needs_reconnect: false, detail: null } as PlanningCenterStatusResponse, panelSettings: { ...settings, settings: { ...settings.settings, planning_center: { ...settings.settings.planning_center, app_id: null } } } as typeof settings });
+    expect(screen.getByRole("button", { name: /Manual API Connection/ })).toHaveTextContent("Sign-in · App ID not set");
   });
 
   it("keeps shared service plan settings visible outside the closed manual disclosure", () => {
     renderPanel();
 
-    const disclosure = screen.getByText("Manual API Connection").closest("details");
-    expect(disclosure).not.toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: /Manual API Connection/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("heading", { name: "Service plan configuration" })).toBeInTheDocument();
 
     for (const label of [
@@ -202,10 +226,10 @@ describe("PlanningCenterSetupPanel", () => {
       "Service plan title preference",
       "Preferred service time",
     ]) {
-      expect(screen.getByLabelText(label).closest("details")).toBeNull();
+      expect(screen.getByLabelText(label).closest("[data-variant=advanced]")).toBeNull();
     }
     for (const name of ["Load service types", "Save settings", "Load today’s service plan"]) {
-      expect(screen.getByRole("button", { name }).closest("details")).toBeNull();
+      expect(screen.getByRole("button", { name }).closest("[data-variant=advanced]")).toBeNull();
     }
   });
 
@@ -259,7 +283,7 @@ describe("PlanningCenterSetupPanel", () => {
     vi.useFakeTimers();
     try {
       renderPanel();
-      fireEvent.click(screen.getByText("Manual API Connection"));
+      fireEvent.click(screen.getByRole("button", { name: /Manual API Connection/ }));
 
       const helpButton = screen.getByRole("button", {
         name: "How to get a Planning Center Personal Access Token",
@@ -457,7 +481,7 @@ describe("PlanningCenterSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onSave, onTest });
 
-    await user.click(screen.getByText("Manual API Connection"));
+    await user.click(screen.getByRole("button", { name: /Manual API Connection/ }));
     await user.type(screen.getByLabelText("Secret"), "replacement-secret");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
 
@@ -521,7 +545,7 @@ describe("PlanningCenterSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onSave });
 
-    await user.click(screen.getByText("Manual API Connection"));
+    await user.click(screen.getByRole("button", { name: /Manual API Connection/ }));
     await user.clear(screen.getByLabelText("Application ID"));
     await user.type(screen.getByLabelText("Application ID"), "manual-app-id");
     await user.type(screen.getByLabelText("Secret"), "manual-secret");

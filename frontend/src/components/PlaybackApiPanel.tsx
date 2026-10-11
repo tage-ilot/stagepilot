@@ -187,7 +187,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
         {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
       </form>
 
-      <Disclosure title="Recent activity" variant="activity">
+      <Disclosure title="Recent activity" variant="activity" count={playback?.events.length ?? 0}>
         {!playback?.events.length ? <p className="text-sm text-ink-muted">Nothing yet.</p> : <ul className="max-h-56 overflow-auto overscroll-contain text-sm text-ink-body" aria-label="Recent activity">
           {[...playback.events].reverse().map(({ event, discovery, at }, index) => {
             const position = event.song_id === null ? -1 : status?.song_order.indexOf(event.song_id) ?? -1;

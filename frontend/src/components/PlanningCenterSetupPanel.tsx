@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
+import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
@@ -200,6 +201,7 @@ export function PlanningCenterSetupPanel({
     [appId, connectionMethod, serviceTypeId, timezone],
   );
   const busy = pendingOperation !== null;
+  const manualSummary = `${connectionMethod === "oauth" ? "Sign-in" : "App ID and Secret"} · ${settings?.settings.planning_center.app_id?.trim() ? `App ID ${settings.settings.planning_center.app_id.trim()}` : "App ID not set"}`;
 
   const testInput = (): PlanningCenterTestInput => ({
     ...(appId.trim() ? { app_id: appId.trim() } : {}),
@@ -296,23 +298,16 @@ export function PlanningCenterSetupPanel({
         </InlineAlert>
       )}
 
-      {/* Kept as a native <details>: Disclosure renders a button, which would break the existing
-          summary/details assertions and Enter/Space-on-summary. Restyled to the advanced-services look. */}
-      <details
-        className="mt-5 rounded-ds-lg border border-edge border-l-[3px] border-l-advanced-services bg-advanced-services/10 p-4"
+      <Disclosure
+        className="mt-5"
+        onOpenChange={setManualConnectionOpen}
         open={manualConnectionOpen}
+        summary={manualSummary}
+        title="Manual API Connection"
+        tone="services"
+        variant="advanced"
       >
-        <summary
-          className="min-h-ds-touch-target cursor-pointer touch-manipulation select-none py-2.5 text-sm font-bold uppercase tracking-wider text-advanced-services -my-2.5"
-          onClick={(event) => {
-            event.preventDefault();
-            setManualConnectionOpen((value) => !value);
-          }}
-        >
-          Manual API Connection
-        </summary>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="text-sm text-ink-body">
             <div className="mb-1.5 flex items-center gap-1.5">
               <label
@@ -409,7 +404,7 @@ export function PlanningCenterSetupPanel({
             </Button>
           </div>
         )}
-      </details>
+      </Disclosure>
 
       <div className="mt-5 border-t border-edge-subtle pt-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted">
