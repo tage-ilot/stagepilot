@@ -105,7 +105,7 @@ const state: ApplicationState = {
   last_action: null,
 };
 
-function renderPanel({
+function panelElement({
   onTest = vi.fn(),
   onSave = vi.fn(),
   onLoadServiceTypes = vi.fn(),
@@ -124,11 +124,13 @@ function renderPanel({
     oauth_needs_reconnect: false,
     detail: null,
   } as PlanningCenterStatusResponse,
-  pendingOperation = null,
+  pendingOperation = null as "save" | null,
+  error = null as string | null,
+  panelPlugins = {} as Record<string, unknown>,
 } = {}) {
-  render(
+  return (
     <PlanningCenterSetupPanel
-      error={null}
+      error={error}
       message={null}
       onClose={vi.fn()}
       onDisconnectOAuth={onDisconnectOAuth}
@@ -146,10 +148,14 @@ function renderPanel({
         { id: "wednesday", name: "Wednesday Service" },
       ]}
       settings={panelSettings}
-      state={panelState}
+      state={{ ...panelState, plugins: { ...panelState.plugins, ...panelPlugins } } as ApplicationState}
       status={status}
-    />,
+    />
   );
+}
+
+function renderPanel(options: Parameters<typeof panelElement>[0] = {}) {
+  return render(panelElement(options));
 }
 
 describe("PlanningCenterSetupPanel", () => {
@@ -159,7 +165,7 @@ describe("PlanningCenterSetupPanel", () => {
     expect(screen.getByLabelText("Service type").tagName).toBe("SELECT");
     expect(screen.getByLabelText("Secret")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Secret")).toHaveAttribute("autocomplete", "current-password");
-    expect(screen.getByRole("button", { name: "Save settings" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
     const load = screen.getByRole("button", { name: "Load service types" });
     expect(load).toHaveAttribute("data-variant", "tinted");
     expect(load).toHaveAttribute("data-tone", "services");
@@ -228,7 +234,7 @@ describe("PlanningCenterSetupPanel", () => {
     ]) {
       expect(screen.getByLabelText(label).closest("[data-variant=advanced]")).toBeNull();
     }
-    for (const name of ["Load service types", "Save settings", "Load today’s service plan"]) {
+    for (const name of ["Load service types", "Save configuration", "Load today’s service plan"]) {
       expect(screen.getByRole("button", { name }).closest("[data-variant=advanced]")).toBeNull();
     }
   });
@@ -265,7 +271,7 @@ describe("PlanningCenterSetupPanel", () => {
     });
 
     const loadButton = screen.getByRole("button", { name: "Load service types" });
-    const saveButton = screen.getByRole("button", { name: "Save settings" });
+    const saveButton = screen.getByRole("button", { name: "Save configuration" });
     expect(loadButton).toBeEnabled();
     expect(saveButton).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Test connection" })).not.toBeInTheDocument();
@@ -385,7 +391,7 @@ describe("PlanningCenterSetupPanel", () => {
 
       expect(screen.getByLabelText("Timezone")).toHaveValue("America/Denver");
       expect(screen.getByRole("option", { name: "Denver (UTC-7)" })).toHaveProperty("selected", true);
-      await user.click(screen.getByRole("button", { name: "Save settings" }));
+      await user.click(screen.getByRole("button", { name: "Save configuration" }));
       expect(onSave).toHaveBeenCalledWith(expect.any(Object), "America/Denver");
     } finally {
       resolvedOptionsSpy.mockRestore();
@@ -405,7 +411,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     expect(screen.getByLabelText("Timezone")).toHaveValue("America/Denver");
     expect(screen.getByRole("option", { name: "Denver (UTC-7)" })).toHaveProperty("selected", true);
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(onSave).toHaveBeenCalledWith(expect.any(Object), "America/Denver");
   });
 
@@ -415,7 +421,7 @@ describe("PlanningCenterSetupPanel", () => {
     renderPanel({ onSave });
 
     await user.selectOptions(screen.getByLabelText("Timezone"), "Asia/Kolkata");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSave).toHaveBeenCalledWith(expect.any(Object), "Asia/Kolkata");
     expect(onSave.mock.calls[0]?.[1]).not.toMatch(/^Etc\/GMT/);
@@ -432,7 +438,7 @@ describe("PlanningCenterSetupPanel", () => {
     })).toBeInTheDocument();
 
     await user.selectOptions(serviceTypeSelect, "stagepilot:all-service-types");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ service_type_id: "stagepilot:all-service-types" }),
@@ -492,7 +498,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     expect(screen.queryByLabelText("Service source")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Service type"), "wednesday");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -550,7 +556,7 @@ describe("PlanningCenterSetupPanel", () => {
     await user.type(screen.getByLabelText("Application ID"), "manual-app-id");
     await user.type(screen.getByLabelText("Secret"), "manual-secret");
     await user.selectOptions(screen.getByLabelText("Service type"), "wednesday");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -585,5 +591,122 @@ describe("PlanningCenterSetupPanel", () => {
     // The generic error/message banner (a <p>, not role="alert") is a
     // separate code path and must not render for this state.
     expect(screen.queryByText("Services connection test failed.")).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanningCenterSetupPanel SaveBar", () => {
+  const saveButton = () => screen.getByRole("button", { name: "Save configuration" });
+  const bar = () => document.querySelector("[data-save-bar]") as HTMLElement;
+
+  it("replaces the old save buttons with one Save configuration", () => {
+    renderPanel();
+    expect(screen.getAllByRole("button", { name: "Save configuration" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save and connect" })).not.toBeInTheDocument();
+  });
+
+  it("is clean at first, dimmed, with the reason beside it, and the button is not hidden", () => {
+    renderPanel({ panelPlugins: { planning_center: true } });
+    expect(bar()).toHaveAttribute("data-state", "clean");
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText("Not saved yet")).not.toBeInTheDocument();
+  });
+
+  it("does not call onSave on a clean save when the connection is already enabled", async () => {
+    const onSave = vi.fn();
+    renderPanel({ onSave, panelPlugins: { planning_center: true } });
+    await userEvent.setup().click(saveButton());
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("counts held changes and marks the four fields; nothing saves on change", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.selectOptions(screen.getByLabelText("Service type"), "wednesday");
+    await user.type(screen.getByLabelText("Preferred service time"), "1015");
+    await user.type(screen.getByLabelText("Service plan title preference"), " Early");
+    expect(bar()).toHaveAttribute("data-state", "held");
+    expect(bar()).toHaveTextContent(/3\s+changes waiting\. Not saved yet\./);
+    expect(screen.getAllByText("Not saved yet").filter((el) => el.hasAttribute("data-held-marker"))).toHaveLength(3);
+    expect(screen.getByLabelText("Service type").closest("[data-field]")).toHaveAttribute("data-state", "held");
+    expect(screen.getByLabelText("Service plan title preference").closest("[data-field]")).toHaveAttribute("data-state", "held");
+    expect(screen.getByLabelText("Preferred service time").closest("[data-field]")).toHaveAttribute("data-state", "held");
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("Discard restores the saved values and returns to clean", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.selectOptions(screen.getByLabelText("Service type"), "wednesday");
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByLabelText("Service type")).toHaveValue("sunday");
+    expect(bar()).toHaveAttribute("data-state", "clean");
+  });
+
+  it("sends the same payload as before, including secret and remove_secret", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.click(screen.getByRole("button", { name: /Manual API Connection/ }));
+    await user.type(screen.getByLabelText("Secret"), "new-secret");
+    await user.click(saveButton());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        app_id: "saved-app-id",
+        service_type_id: "sunday",
+        plan_title_preference: "Sunday Morning",
+        preferred_service_time: "09:00",
+        upcoming_lookahead_days: 30,
+        request_timeout_seconds: 10,
+        secret: "new-secret",
+      },
+      "America/Los_Angeles",
+    );
+  });
+
+  it("sends remove_secret when the saved secret is removed", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.click(screen.getByRole("button", { name: /Manual API Connection/ }));
+    await user.click(screen.getByLabelText("Remove saved secret"));
+    expect(bar()).toHaveTextContent(/1\s+change waiting/);
+    await user.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ remove_secret: true }), "America/Los_Angeles");
+    expect(onSave.mock.calls[0]?.[0]).not.toHaveProperty("secret");
+  });
+
+  it("shows Saving… while the save is pending", () => {
+    renderPanel({ pendingOperation: "save" });
+    expect(bar()).toHaveAttribute("data-state", "saving");
+    expect(screen.getByText("Saving…")).toBeInTheDocument();
+  });
+
+  it("shows Couldn't save with Try again after a failed save, and Try again re-sends the same payload", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    const view = renderPanel({ onSave, pendingOperation: null });
+    await user.selectOptions(screen.getByLabelText("Service type"), "wednesday");
+    view.rerender(panelElement({ onSave, pendingOperation: "save" }));
+    view.rerender(panelElement({ onSave, pendingOperation: null, error: "Planning Center said no." }));
+    expect(bar()).toHaveAttribute("data-state", "error");
+    expect(screen.getByText("Couldn't save")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ service_type_id: "wednesday" }), "America/Los_Angeles");
+  });
+
+  it("keeps the restart-needed note while the connection is not enabled", () => {
+    renderPanel();
+    expect(screen.getByText(/Restart StagePilot to start the connection/)).toBeInTheDocument();
+  });
+
+  it("keeps Reload service plan, Test connection and sign-in as plain actions outside the bar", () => {
+    renderPanel();
+    const reload = screen.getByRole("button", { name: "Load today’s service plan" });
+    expect(bar().contains(reload)).toBe(false);
+    expect(bar().contains(screen.getByRole("button", { name: "Sign in with Planning Center" }))).toBe(false);
   });
 });
