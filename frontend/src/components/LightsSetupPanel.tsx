@@ -14,6 +14,12 @@ import {
   confirmClearSelectedLightingCues,
 } from "./lightingCueConfirmations";
 import { SetupPanelHeader } from "./SetupPanelHeader";
+import { Button } from "./ui/Button";
+import { Field } from "./ui/Field";
+import { InlineAlert } from "./ui/InlineAlert";
+import { Input } from "./ui/Input";
+import { Panel } from "./ui/Panel";
+import { Select } from "./ui/Select";
 
 const midiNoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
 const midiNoteName = (note: number) =>
@@ -172,7 +178,7 @@ export function LightsSetupPanel({
     && !lights?.outputs.some((output) => output.name === outputName);
 
   return (
-    <section className="setup-panel mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20" id="lights-configuration">
+    <Panel className="mt-5" id="lights-configuration" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lights configuration"
         description="Send elapsed-time MIDI Note On/Off pulses to Lightkey or another lighting application."
@@ -182,15 +188,14 @@ export function LightsSetupPanel({
       />
 
       {(error || message) && (
-        <p aria-live="polite" className={`mt-4 rounded-lg border px-3 py-2 text-sm ${error ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : "border-sky-400/20 bg-sky-400/10 text-sky-200"}`}>
+        <InlineAlert aria-live="polite" className="mt-4" tone={error ? "danger" : "info"}>
           {error ?? message}
-        </p>
+        </InlineAlert>
       )}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-4">
-        <label className="text-sm text-slate-300 lg:col-span-2">
-          MIDI output to the Lightkey Mac
-          <select className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" onChange={(event) => setOutputName(event.target.value)} value={outputName}>
+        <Field className="lg:col-span-2" label="MIDI output to the Lightkey Mac">
+          <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
             {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
             {lights?.outputs.map((output, index) => (
@@ -198,89 +203,86 @@ export function LightsSetupPanel({
                 {output.name}{output.connected ? " (connected)" : output.ambiguous ? " (ambiguous)" : ""}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="text-sm text-slate-300">
-          MIDI channel
-          <select className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" onChange={(event) => setChannel(event.target.value)} value={channel}>
+          </Select>
+        </Field>
+        <Field label="MIDI channel">
+          <Select onChange={(event) => setChannel(event.target.value)} value={channel}>
             {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="text-sm text-slate-300">
-          Note pulse (ms)
-          <input className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
-        </label>
+          </Select>
+        </Field>
+        <Field label="Note pulse (ms)">
+          <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
+        </Field>
       </div>
-      <p className="mt-2 text-xs text-slate-500">On the Lightkey Mac, choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
+      <p className="mt-2 text-type-body-sm text-ink-muted">On the Lightkey Mac, choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button className="rounded-lg border border-sky-300/30 bg-sky-300/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-300/20 disabled:opacity-40" disabled={pendingOperation !== null} onClick={onRefresh} type="button">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</button>
-        <button className="rounded-lg bg-sky-300 px-3 py-2 text-sm font-bold text-slate-950 transition hover:bg-sky-200 disabled:opacity-40" disabled={!parsedSettings || pendingOperation !== null} onClick={() => parsedSettings && onSaveSettings(parsedSettings)} type="button">{pendingOperation === "save" ? "Connecting…" : "Save and connect"}</button>
+        <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lights" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
+        <Button disabled={!parsedSettings || pendingOperation !== null} onClick={() => parsedSettings && onSaveSettings(parsedSettings)} variant="primary">{pendingOperation === "save" ? "Connecting…" : "Save and connect"}</Button>
       </div>
 
-      <div className="mt-6 border-t border-white/7 pt-5">
+      <div className="mt-6 border-t border-edge-subtle pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold text-slate-100">Test MIDI pulse</h3>
+          <h3 className="font-semibold text-ink">Test MIDI pulse</h3>
           <div className="flex items-center gap-2" aria-label="MIDI note display">
-            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-sky-200" : "text-slate-500"}>♪</span>
+            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-info-text" : "text-ink-muted"}>♪</span>
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className="relative h-7 w-12 cursor-pointer rounded-full border border-sky-300/30 bg-slate-900 transition-colors duration-200 hover:border-sky-300/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-2 coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"
             >
               <span
                 aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-full bg-sky-300 shadow-sm shadow-sky-300/30 transition-transform duration-200 ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lights shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
-            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-sky-200" : "text-slate-500"}>#</span>
+            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-info-text" : "text-ink-muted"}>#</span>
           </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
-          <select aria-label="Test lighting note" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+          <Select aria-label="Test lighting note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
             {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-          </select>
-          <input aria-label="Test lighting velocity" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-          <button className="rounded-lg border border-sky-300/30 bg-sky-300/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-300/20 disabled:opacity-40" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(Number(testNote), Number(testVelocity))} type="button">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</button>
+          </Select>
+          <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+          <Button disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         </div>
       </div>
 
-      <div className="mt-6 border-t border-white/7 pt-5">
+      <div className="mt-6 border-t border-edge-subtle pt-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <label className="min-w-64 text-sm text-slate-300">
-            Song lighting timeline
-            <select className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100" onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
+          <Field className="min-w-64" label="Song lighting timeline">
+            <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
-            </select>
-          </label>
-          <button className="rounded-lg border border-sky-300/30 bg-sky-300/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-300/20 disabled:opacity-40" disabled={!selectedSong || pendingOperation !== null} onClick={addCue} type="button">Add lighting cue</button>
+            </Select>
+          </Field>
+          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lights" variant="tinted">Add lighting cue</Button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the ProPresenter countdown confirms it started.</p>
+        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the ProPresenter countdown confirms it started.</p>
 
         <div className="mt-3 grid gap-2">
           {cues.map((cue) => (
-            <div className="grid gap-2 rounded-lg border border-white/7 bg-white/[0.025] p-3 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
-              <input aria-label="Cue elapsed time" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 font-mono text-slate-100 disabled:opacity-50" defaultValue={formatElapsed(cue.at_seconds)} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="00:00" />
-              <select aria-label="Lighting cue note" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100 disabled:opacity-50" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
+            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
+              <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="00:00" />
+              <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
                 {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-              </select>
-              <input aria-label="Lighting cue velocity" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100 disabled:opacity-50" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
-              <input aria-label="Lighting cue label" className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-slate-100 disabled:opacity-50" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="Verse, chorus, blackout…" value={cue.label} />
-              <button className="rounded-lg border border-sky-300/30 bg-sky-300/10 px-3 py-2 text-xs font-bold text-sky-200 transition hover:bg-sky-300/20 disabled:opacity-40" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(cue.note, cue.velocity)} type="button">Test</button>
-              <button aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} className="rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs font-bold text-rose-300 disabled:opacity-40" disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} type="button">Remove</button>
+              </Select>
+              <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
+              <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="Verse, chorus, blackout…" value={cue.label} />
+              <Button disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
+              <Button aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}
-          {!cues.length && <p className="rounded-lg border border-dashed border-white/10 px-4 py-5 text-center text-sm text-slate-500">No lighting cues saved for this song.</p>}
+          {!cues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">No lighting cues saved for this song.</p>}
         </div>
-        {selectedSong?.duration_seconds != null && <p className="mt-2 text-xs text-slate-500">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
+        {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm font-bold text-rose-200 transition hover:bg-rose-400/20 disabled:opacity-40" disabled={!cues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} type="button">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</button>
-          <button className="rounded-lg border border-rose-400/40 bg-rose-400/20 px-4 py-2 text-sm font-bold text-rose-100 transition hover:bg-rose-400/30 disabled:opacity-40" disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} type="button">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</button>
+          <Button disabled={!cues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>
+          <Button disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</Button>
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }
