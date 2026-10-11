@@ -39,7 +39,7 @@ colors:
   on-danger-soft: "#4c0519"    # dark RED (not black) text when a rose fill is light: 8.3:1 on rose-300, 5.8:1 on rose-400
   info: "#38bdf8"              # informational / neutral action   (sky-400)
   info-text: "#bae6fd"         #                                  (sky-200)
-  neutral: "#64748b"           # disconnected / idle              (slate-500)
+  idle: "#64748b"              # disconnected / idle              (slate-500)
   # --- Integration identity (each connected service owns one hue) ---
   integration-services: "#60a5fa"        # blue-400. UI label "Services" (Planning Center today)
   integration-services-text: "#bfdbfe"   # blue-200

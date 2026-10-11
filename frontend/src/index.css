@@ -12,30 +12,14 @@
 
 :root {
   color-scheme: dark;
-  --sp-bg: #090d12;
-  --sp-surface: rgb(15 23 32 / 0.94);
-  --sp-surface-strong: rgb(5 10 16 / 0.9);
-  --sp-border: rgb(255 255 255 / 0.09);
-  --sp-text: #f8f4ec;
-  --sp-text-muted: #9aa9bb;
-  --sp-text-quiet: #718096;
-  --sp-accent: #ff6238;
-  --sp-accent-hover: #ff805e;
-  --sp-accent-subtle: rgb(255 98 56 / 0.13);
-  --sp-focus: #ff9b7e;
-  --sp-success: #42dda4;
-  --sp-warning: #f6c453;
-  --sp-danger: #fb7185;
-  --sp-info: #7dd3fc;
-  --sp-panel-shadow: 5px 6px 0 rgb(3 7 12 / 0.32), 0 18px 48px rgb(0 0 0 / 0.24);
-  --sp-expressive-shadow: var(--sp-panel-shadow);
+  /* Compatibility aliases are generated in design-tokens.css. */
   --sp-motion-fast: 140ms;
   --sp-motion-live: 420ms;
   --sp-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --status-motion: 275ms;
   --status-ease: linear;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
