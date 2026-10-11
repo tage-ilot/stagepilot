@@ -58,7 +58,7 @@ export const Toast = forwardRef<HTMLDivElement, ToastProps>(function Toast(
       data-side={side}
       onMouseDown={(event: MouseEvent<HTMLDivElement>) => event.stopPropagation()}
       className={cx(
-        "fixed bottom-6 z-[110] w-full max-w-[min(24rem,calc(100vw-3rem))] overscroll-contain rounded-ds-2xl border bg-surface-950 p-5 shadow-elevation-overlay touch-manipulation",
+        "fixed bottom-6 mb-[env(safe-area-inset-bottom)] z-[110] max-h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] w-full max-w-[min(24rem,calc(100vw-3rem))] overflow-y-auto overscroll-contain rounded-ds-2xl border bg-surface-950 p-5 shadow-elevation-overlay touch-manipulation",
         sides[side],
         look.border,
         className,

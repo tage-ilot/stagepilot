@@ -832,7 +832,7 @@ export function Dashboard({
             aria-describedby="system-readiness-popover"
             title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
             aria-expanded={readinessHover.open}
-            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20" : systemError ? "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20" : "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20"}`}
+            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/40 bg-surface-950 text-success-text can-hover:bg-surface-900" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
             type="button"
           >
             <StatusDot tone={ready ? "success" : systemError ? "danger" : "warning"} />
