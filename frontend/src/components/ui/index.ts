@@ -25,3 +25,6 @@ export { Disclosure } from "./Disclosure";
 export type { DisclosureProps, DisclosureVariant, DisclosureTone } from "./Disclosure";
 export { SegmentedControl } from "./SegmentedControl";
 export type { SegmentedControlProps, SegmentedOption, SegmentCaption } from "./SegmentedControl";
+export { SaveBar } from "./SaveBar";
+export { changeCountText } from "./changeCount";
+export type { SaveBarProps, SaveBarState } from "./SaveBar";
