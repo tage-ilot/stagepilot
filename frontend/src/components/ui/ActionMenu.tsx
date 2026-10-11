@@ -123,7 +123,7 @@ export function ActionMenu({
           role="menu"
           aria-label={menuLabel}
           onKeyDown={onMenuKey}
-          className="absolute left-0 top-full z-20 mt-1 max-h-72 w-64 max-w-full overflow-y-auto overscroll-contain rounded-ds-lg border border-edge-medium bg-surface-950/95 p-1 shadow-elevation-overlay touch-manipulation"
+          className="absolute left-0 top-full z-20 mt-1 max-h-72 w-64 min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain rounded-ds-lg border border-edge-medium bg-surface-950/95 p-1 shadow-elevation-overlay touch-manipulation"
         >
           {items.map((item) => {
             const checked = item.value === value;

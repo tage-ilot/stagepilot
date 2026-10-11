@@ -16,7 +16,7 @@ function Live({ state, forceOpen }: { state: GalleryState; forceOpen?: boolean }
     return <p data-gallery-unavailable className="text-sm text-ink-muted">Not applicable: the trigger has no {state} state (the caller shows progress or errors beside it).</p>;
   }
   return (
-    <div className={forceOpen ? "min-h-64" : undefined}>
+    <div className={forceOpen ? "min-h-72" : undefined}>
       <span data-gallery-target className="inline-block max-w-full">
         <ActionMenu
           label="Plan category"
