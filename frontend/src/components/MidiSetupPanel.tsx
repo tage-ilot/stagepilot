@@ -11,7 +11,7 @@ import type {
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
-import { PlaybackSaveFooter, usePlaybackDraft } from "./PlaybackSaveFooter";
+import { PlaybackSaveFooter, usePlaybackDraft, type PlaybackMethod } from "./PlaybackSaveFooter";
 import { playbackMidiNote } from "./playbackStatus";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -84,8 +84,8 @@ export function MidiSetupPanel({
   songs?: Song[];
   playback?: PlaybackController;
 }) {
-  const [advanced, setAdvanced] = useState(false);
-  const draft = usePlaybackDraft(playback);
+  const savedMethod: PlaybackMethod = settings?.settings.integration_modes.midi_source ?? "playback_api";
+  const draft = usePlaybackDraft(playback, savedMethod);
   const [candidateId, setCandidateId] = useState("");
   const [channel, setChannel] = useState("1");
   const [note, setNote] = useState("112");
@@ -139,7 +139,7 @@ export function MidiSetupPanel({
     };
   }, [channel, debounce, note, settings, velocities]);
 
-  const midiDirty = Boolean(settings) && advanced && (
+  const midiDirty = Boolean(settings) && (
     channel !== String(settings!.settings.midi.channel)
     || note !== String(settings!.settings.midi.note)
     || debounce !== String(settings!.settings.midi.debounce_ms)
@@ -167,20 +167,24 @@ export function MidiSetupPanel({
         headingId="midi-setup-heading"
         onClose={onClose}
         status={connectionStatus}
+        statusDetail={savedMethod === "real" ? "MIDI (alternate)" : undefined}
         title="Playback"
       />
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
-      <PlaybackApiPanel playback={playback} draft={draft} />
-      <button className="mt-4 min-h-ds-touch-target max-w-full touch-manipulation whitespace-normal break-words rounded-ds-lg border border-edge px-4 py-2 text-left text-sm font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-edge-subtle" aria-expanded={advanced} aria-controls="playback-advanced" onClick={() => setAdvanced((value) => !value)} type="button">{advanced ? "▾" : "▸"} Alternate connection: MIDI settings</button>
-      {advanced && <div id="playback-advanced">
-        <Field className="mt-3 sm:max-w-md" label="Playback connection type">
-          <Select value={settings?.settings.integration_modes.midi_source ?? "playback_api"} disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"} onChange={(event) => playback?.selectSource(event.target.value === "real" ? "real" : "playback_api")}>
-            <option value="playback_api">Playback connection (recommended)</option>
-            <option value="real">MIDI</option>
-            {settings?.settings.integration_modes.midi_source === "simulated" && <option value="simulated" disabled>Simulation (legacy)</option>}
-          </Select>
-        </Field>
+      <Field className="mt-3 sm:max-w-md" label="Connection method">
+        <Select
+          disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
+          onChange={(event) => draft.setMethod(event.target.value === "real" ? "real" : event.target.value === "simulated" ? "simulated" : "playback_api")}
+          value={draft.method}
+        >
+          <option value="playback_api">Playback API (main)</option>
+          <option value="real">MIDI (alternate)</option>
+          {savedMethod === "simulated" && <option value="simulated" disabled>Simulation (legacy)</option>}
+        </Select>
+      </Field>
+      {draft.method === "playback_api" && <PlaybackApiPanel playback={playback} draft={draft} />}
+      {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
       <div className="mt-4 rounded-ds-lg bg-integration-playback/5 p-3">
@@ -252,8 +256,8 @@ export function MidiSetupPanel({
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button
-            disabled={pendingSettingsSave || parsedSettings === null}
-            onClick={() => parsedSettings && onSaveSettings(parsedSettings)}
+            disabled={pendingSettingsSave || draft.saving || parsedSettings === null}
+            onClick={() => { if (parsedSettings) void draft.applyMethod().then((ok) => { if (ok) onSaveSettings(parsedSettings); }); }}
             variant="primary"
           >
             {pendingSettingsSave ? "Saving…" : "Save MIDI settings"}

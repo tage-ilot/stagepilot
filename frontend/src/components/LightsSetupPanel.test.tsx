@@ -142,6 +142,14 @@ const state: ApplicationState = {
 };
 
 describe("LightsSetupPanel", () => {
+  it("shows its single connection method as a line of text, not a select", () => {
+    render(
+      <LightsSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(screen.getByText("Sends cues by MIDI").tagName).toBe("P");
+    expect(screen.queryByLabelText("Connection method")).not.toBeInTheDocument();
+  });
+
   it("uses the dashboard connection status while detail data is still loading", () => {
     render(
       <LightsSetupPanel

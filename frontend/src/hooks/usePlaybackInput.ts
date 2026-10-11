@@ -11,7 +11,7 @@ export interface PlaybackController {
   message: string | null;
   pending: PlaybackOperation;
   save: (settings: PlaybackSettingsInput) => Promise<boolean>;
-  selectSource: (source: "playback_api" | "real") => void;
+  selectSource: (source: "playback_api" | "real") => Promise<boolean>;
   scan: (host?: string) => void;
   cancelScan: () => void;
   discover: () => void;
@@ -124,9 +124,9 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
     });
   }, [onSettings, run]);
 
-  const selectSource = useCallback((source: "playback_api" | "real") => {
+  const selectSource = useCallback((source: "playback_api" | "real"): Promise<boolean> => {
     const current = generation.current;
-    void run("source", async () => {
+    return run("source", async () => {
       // Read fresh settings so source changes preserve discovered order and MIDI values.
       const saved = await getSettings();
       if (generation.current !== current) return;
@@ -139,7 +139,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
       if (generation.current !== current) return;
       ++statusRevision.current;
       setStatus(connection);
-      setMessage("Connection type saved.");
+      setMessage("Connection method saved.");
     });
   }, [onSettings, run]);
 

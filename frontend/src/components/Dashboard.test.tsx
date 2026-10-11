@@ -601,13 +601,14 @@ describe("Dashboard Planning Center plan states", () => {
   });
 
   describe("leaving Playback with unsaved changes", () => {
+    const apiSettings = { ...productionSettings, settings: { ...productionSettings.settings, integration_modes: { ...productionSettings.settings.integration_modes, midi_source: "playback_api" as const } } };
     const playback = (): PlaybackController => ({
       status: playbackStatus(), events: [], error: null, message: null, pending: null,
-      save: vi.fn().mockResolvedValue(true), selectSource: vi.fn(), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(),
+      save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(),
     });
     const openPlayback = async () => {
       const user = userEvent.setup();
-      renderDashboard(loadedServiceState, { playback: playback() });
+      renderDashboard(loadedServiceState, { playback: playback(), settings: apiSettings });
       await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback/ }));
       return user;
     };

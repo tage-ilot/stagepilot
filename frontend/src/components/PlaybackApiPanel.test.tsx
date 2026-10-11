@@ -20,7 +20,7 @@ const none = (overrides = {}) => playbackStatus({
 });
 const controller = (overrides: Partial<PlaybackController> = {}): PlaybackController => ({
   status: playbackStatus(), events: [], error: null, message: null, pending: null,
-  save: vi.fn().mockResolvedValue(true), selectSource: vi.fn(), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(), ...overrides,
+  save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(), ...overrides,
 });
 const panel = (playback = controller(), extra: { onDirtyChange?: (dirty: boolean) => void } = {}) => render(<MidiSetupPanel
   playback={playback} midi={null} messages={[]} error={null} message={null}
@@ -38,7 +38,7 @@ describe("Scan Network is always first and never dead", () => {
     panel(playback);
     const scan = screen.getByRole("button", { name: "Scan Network" });
     expect(scan).toBeEnabled();
-    const primary = screen.getAllByRole("button").find((b) => !/Close|Alternate connection: MIDI settings/.test(b.textContent ?? "") && !/Close/.test(b.getAttribute("aria-label") ?? ""));
+    const primary = screen.getAllByRole("button").find((b) => !/Close/.test(b.textContent ?? "") && !/Close/.test(b.getAttribute("aria-label") ?? ""));
     expect(primary).toBe(scan);
     fireEvent.click(scan);
     expect(playback.scan).toHaveBeenCalledWith();
@@ -236,22 +236,137 @@ describe("Main view has no jargon", () => {
   it("avoids API, monotonic, velocity, manual address", () => {
     panel(controller());
     const text = document.body.textContent ?? "";
-    expect(text).not.toMatch(/monotonic|manual address|Playback API|velocities/i);
+    expect(text).not.toMatch(/monotonic|manual address|velocities/i);
   });
 });
 
-describe("Alternate connection: MIDI settings and MIDI", () => {
-  it("collapsed by default; one labelled choice; MIDI controls unchanged", async () => {
+describe("Connection method select (Playback API main / MIDI alternate)", () => {
+  const validMidi = { ...playbackSettings, settings: { ...playbackSettings.settings, midi: { ...playbackSettings.settings.midi, mappings: { start_next: 100, restart_current: 101, previous: 102, next: 103, reload_plan: 104, stop_timer: 105 } } } };
+  const midiStatus = () => playbackStatus({ sources: { playback_api: { connected: false, reason: "Playback is not connected." }, midi: { connected: true, reason: "MIDI is connected." } } });
+  const method = () => screen.getByLabelText("Connection method");
+
+  it("opens on the saved method with one labelled Field + Select and the two options", () => {
+    panel();
+    expect(method().tagName).toBe("SELECT");
+    expect(method()).toHaveValue("playback_api");
+    expect(screen.getByRole("option", { name: "Playback API (main)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "MIDI (alternate)" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Alternate connection: MIDI settings/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Connection method" })).not.toBeInTheDocument();
+  });
+
+  it("switching the select swaps the fields as a view and calls nothing", async () => {
     const playback = controller();
     const user = userEvent.setup();
     panel(playback);
-    expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Alternate connection: MIDI settings/ }));
-    expect(screen.getByLabelText("Playback connection type")).toHaveValue("playback_api");
-    expect(screen.getByRole("option", { name: "Playback connection (recommended)" })).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Playback connection type"), "real");
-    expect(playback.selectSource).toHaveBeenCalledWith("real");
+    await user.selectOptions(method(), "real");
+    expect(playback.selectSource).not.toHaveBeenCalled();
+    expect(playback.save).not.toHaveBeenCalled();
     expect(screen.getByLabelText("MIDI channel")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Scan Network" })).not.toBeInTheDocument();
+    await user.selectOptions(method(), "playback_api");
+    expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  });
+
+  it("holds the method in the draft: unsaved, reported dirty, and discard restores the saved one", async () => {
+    const onDirtyChange = vi.fn();
+    const user = userEvent.setup();
+    panel(controller(), { onDirtyChange });
+    await user.selectOptions(method(), "real");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(method()).toHaveValue("playback_api");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("saving applies selectSource first, then the Playback settings", async () => {
+    const order: string[] = [];
+    const playback = controller({
+      selectSource: vi.fn(async () => { order.push("selectSource"); return true; }),
+      save: vi.fn(async () => { order.push("save"); return true; }),
+    });
+    const user = userEvent.setup();
+    panel(playback);
+    await user.selectOptions(method(), "real");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(order).toEqual(["selectSource"]);
+    expect(playback.selectSource).toHaveBeenCalledWith("real");
+    expect(playback.save).not.toHaveBeenCalled();
+  });
+
+  it("method change plus setting change: selectSource then save, in that order", async () => {
+    const order: string[] = [];
+    const playback = controller({
+      selectSource: vi.fn(async () => { order.push("selectSource"); return true; }),
+      save: vi.fn(async () => { order.push("save"); return true; }),
+    });
+    const Host = () => { const draft = usePlaybackDraft(playback, "real"); return <>
+      <button onClick={() => { draft.setMethod("playback_api"); draft.setFastTransport(!draft.fastTransport); }} type="button">edit</button>
+      <button onClick={() => void draft.save()} type="button">go</button></>; };
+    render(<Host />);
+    await userEvent.click(screen.getByRole("button", { name: "edit" }));
+    await userEvent.click(screen.getByRole("button", { name: "go" }));
+    expect(order).toEqual(["selectSource", "save"]);
+    expect(playback.selectSource).toHaveBeenCalledWith("playback_api");
+  });
+
+  it("stops at the first failure: save is not called and the draft stays", async () => {
+    const playback = controller({ selectSource: vi.fn().mockResolvedValue(false), save: vi.fn().mockResolvedValue(true) });
+    const user = userEvent.setup();
+    panel(playback);
+    await user.selectOptions(method(), "real");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(playback.selectSource).toHaveBeenCalledTimes(1);
+    expect(playback.save).not.toHaveBeenCalled();
+    expect(method()).toHaveValue("real");
+    expect(screen.getByRole("alert")).toHaveTextContent(/not saved/);
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeEnabled();
+  });
+
+  it("a failing selectSource in the MIDI view leaves Save MIDI settings uncalled", async () => {
+    const playback = controller({ selectSource: vi.fn().mockResolvedValue(false) });
+    const onSaveSettings = vi.fn();
+    const user = userEvent.setup();
+    render(<MidiSetupPanel playback={playback} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={validMidi} onSaveSettings={onSaveSettings} />);
+    await user.selectOptions(method(), "real");
+    await user.click(screen.getByRole("button", { name: "Save MIDI settings" }));
+    expect(playback.selectSource).toHaveBeenCalledWith("real");
+    expect(onSaveSettings).not.toHaveBeenCalled();
+    expect(method()).toHaveValue("real");
+  });
+
+  it("Save MIDI settings applies selectSource first, then the MIDI save", async () => {
+    const order: string[] = [];
+    const playback = controller({ selectSource: vi.fn(async () => { order.push("selectSource"); return true; }) });
+    const onSaveSettings = vi.fn(() => { order.push("saveMidi"); });
+    const user = userEvent.setup();
+    render(<MidiSetupPanel playback={playback} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={validMidi} onSaveSettings={onSaveSettings} />);
+    await user.selectOptions(method(), "real");
+    await user.click(screen.getByRole("button", { name: "Save MIDI settings" }));
+    expect(order).toEqual(["selectSource", "saveMidi"]);
+  });
+
+  it("opens on the saved alternate method and appends it to the header badge only then", () => {
+    const saved = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "real" as const } } };
+    const view = render(<MidiSetupPanel playback={controller({ status: midiStatus() })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={saved} onSaveSettings={vi.fn()} />);
+    expect(method()).toHaveValue("real");
+    expect(screen.getByLabelText("MIDI channel")).toBeVisible();
+    expect(view.container.querySelector("[data-setup-panel-header]")).toHaveTextContent("MIDI (alternate)");
+    view.unmount();
+    panel();
+    expect(document.querySelector("[data-setup-panel-header]")).not.toHaveTextContent("alternate");
+  });
+
+  it("shows the legacy simulation source as a disabled option and still opens on it", () => {
+    const sim = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "simulated" as const } } };
+    render(<MidiSetupPanel playback={controller()} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={sim} onSaveSettings={vi.fn()} />);
+    expect(method()).toHaveValue("simulated");
+    expect(screen.getByRole("option", { name: "Simulation (legacy)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
   });
 });
 
@@ -273,9 +388,9 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     // One banner, one sentence: exactly the backend text.
     expect(screen.getByTestId("playback-banner")).toHaveTextContent(reason);
     expect(screen.getAllByText(reason)).toHaveLength(1);
-    await userEvent.setup().click(screen.getByRole("button", { name: /Alternate connection: MIDI settings/ }));
+    await userEvent.setup().selectOptions(screen.getByLabelText("Connection method"), "real");
     // MIDI detail in the alternate connection section never says the opposite of the banner.
-    const advanced = document.getElementById("playback-advanced") as HTMLElement;
+    const advanced = document.getElementById("playback-midi-method") as HTMLElement;
     if (midi) expect(advanced).toHaveTextContent(/MIDI is connected/);
     else expect(advanced).not.toHaveTextContent(/MIDI is connected|MIDI input connected/);
     expect(advanced).not.toHaveTextContent(/disconnected for this session/);
@@ -285,7 +400,8 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     const checks = buildReadinessChecks({ state: playbackState, settings: playbackSettings, propresenter: null, live: true, views });
     expect(checks.find((check) => check.id === "midi")).toMatchObject({ passed: connected, detail: reason });
     render(<SetupChecklist state={playbackState} settings={playbackSettings} playback={status} midi={null} propresenter={null} live onOpen={vi.fn()} />);
-    expect(screen.getAllByText(reason).length).toBeGreaterThanOrEqual(2);
+    // The banner belongs to the Playback API view, which the MIDI method swapped out; the checklist still says the same sentence.
+    expect(screen.getAllByText(reason).length).toBeGreaterThanOrEqual(1);
   });
 
   it.each([{ stale: true, song_order: [101, 202] }, { stale: false, song_order: [] }])("keeps connection green and action readiness separate for invalid order %o", (mapping) => {
@@ -436,9 +552,9 @@ describe("Save settings footer", () => {
   it("names dirty MIDI fields instead of ignoring them", async () => {
     const user = userEvent.setup();
     panel();
-    await user.click(screen.getByRole("button", { name: /Alternate connection: MIDI settings/ }));
+    await user.selectOptions(screen.getByLabelText("Connection method"), "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
-    expect(screen.getByTestId("playback-save-footer")).toHaveTextContent(/unsaved MIDI changes in Alternate connection: MIDI settings/);
+    expect(screen.getByTestId("playback-save-footer")).toHaveTextContent(/unsaved MIDI changes\. They are saved with Save MIDI settings/);
   });
 
   it("reports dirtiness upward so leaving can ask first", () => {

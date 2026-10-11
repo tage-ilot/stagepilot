@@ -3,7 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { Button } from "./ui/Button";
 
+export type PlaybackMethod = "playback_api" | "real" | "simulated";
+
 export interface PlaybackDraft {
+  /** Connection method shown in the panel. A view switch held in the draft; only a save applies it. */
+  method: PlaybackMethod;
+  methodDirty: boolean;
+  setMethod: (value: PlaybackMethod) => void;
+  /** Writes the chosen method (selectSource) when it differs from the saved one. True when nothing is left to apply. */
+  applyMethod: () => Promise<boolean>;
   enabled: boolean;
   autoScan: boolean;
   fastTransport: boolean;
@@ -22,7 +30,7 @@ const SAVED_FLASH_MS = 2_000;
 
 // One draft of every editable setting in the visible Playback panel. Scan Network and
 // Connect are instant actions that save themselves; they never read or wait on this draft.
-export function usePlaybackDraft(playback?: PlaybackController): PlaybackDraft {
+export function usePlaybackDraft(playback?: PlaybackController, savedMethod: PlaybackMethod = "playback_api"): PlaybackDraft {
   const status = playback?.status ?? null;
   const savedEnabled = status?.settings.enabled ?? true;
   const savedAutoScan = status?.settings.auto_scan ?? true;
@@ -30,24 +38,51 @@ export function usePlaybackDraft(playback?: PlaybackController): PlaybackDraft {
   const [fastTransport, setFastTransportState] = useState(savedFastTransport);
   const [enabled, setEnabledState] = useState(savedEnabled);
   const [autoScan, setAutoScanState] = useState(savedAutoScan);
+  const [method, setMethodState] = useState<PlaybackMethod>(savedMethod);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
+  useEffect(() => setMethodState(savedMethod), [savedMethod]);
   useEffect(() => setEnabledState(savedEnabled), [savedEnabled]);
   useEffect(() => setAutoScanState(savedAutoScan), [savedAutoScan]);
   useEffect(() => setFastTransportState(savedFastTransport), [savedFastTransport]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const dirty = enabled !== savedEnabled || autoScan !== savedAutoScan || fastTransport !== savedFastTransport;
+  const methodDirty = method !== savedMethod;
+  const settingsDirty = enabled !== savedEnabled || autoScan !== savedAutoScan || fastTransport !== savedFastTransport;
+  const dirty = settingsDirty || methodDirty;
+  const setMethod = useCallback((value: PlaybackMethod) => { setSaved(false); setError(null); setMethodState(value); }, []);
   const setEnabled = useCallback((value: boolean) => { setSaved(false); setError(null); setEnabledState(value); }, []);
   const setAutoScan = useCallback((value: boolean) => { setSaved(false); setError(null); setAutoScanState(value); }, []);
 
   const setFastTransport = useCallback((value: boolean) => { setSaved(false); setError(null); setFastTransportState(value); }, []);
 
+  const applyMethod = useCallback(async () => {
+    if (!methodDirty || method === "simulated") return true;
+    if (!playback) return false;
+    setError(null);
+    setSaving(true);
+    try {
+      const ok = await playback.selectSource(method);
+      if (!ok) setError("Your connection method was not saved. Your changes are still here; try again.");
+      return ok;
+    } finally {
+      setSaving(false);
+    }
+  }, [method, methodDirty, playback]);
+
   const save = useCallback(async () => {
     if (!status || !playback) return false;
+    // Method first, then the settings; the first failure stops the save and keeps the draft.
+    if (methodDirty && !(await applyMethod())) return false;
+    if (!settingsDirty) {
+      setSaved(true);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setSaved(false), SAVED_FLASH_MS);
+      return true;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -63,16 +98,17 @@ export function usePlaybackDraft(playback?: PlaybackController): PlaybackDraft {
     } finally {
       setSaving(false);
     }
-  }, [autoScan, enabled, fastTransport, playback, status]);
+  }, [applyMethod, autoScan, enabled, fastTransport, methodDirty, playback, settingsDirty, status]);
 
   const revert = useCallback(() => {
+    setMethodState(savedMethod);
     setEnabledState(savedEnabled);
     setAutoScanState(savedAutoScan);
     setFastTransportState(savedFastTransport);
     setError(null);
-  }, [savedAutoScan, savedEnabled, savedFastTransport]);
+  }, [savedAutoScan, savedEnabled, savedFastTransport, savedMethod]);
 
-  return { enabled, autoScan, fastTransport, setEnabled, setAutoScan, setFastTransport, dirty, saving, saved, error, save, revert };
+  return { method, methodDirty, setMethod, applyMethod, enabled, autoScan, fastTransport, setEnabled, setAutoScan, setFastTransport, dirty, saving, saved, error, save, revert };
 }
 
 export function PlaybackSaveFooter({ draft, playback, midiDirty = false }: {
@@ -84,7 +120,7 @@ export function PlaybackSaveFooter({ draft, playback, midiDirty = false }: {
   return (
     <div className="sticky bottom-0 z-10 -mx-5 mt-5 space-y-2 rounded-b-ds-xl border-t border-edge bg-surface-950/95 px-5 py-3 backdrop-blur" data-testid="playback-save-footer">
       {reason && <p role="alert" className="text-sm text-danger-text">{reason}</p>}
-      {midiDirty && <p className="text-sm text-warning-text">You also have unsaved MIDI changes in Alternate connection: MIDI settings. They are saved with Save MIDI settings, not here.</p>}
+      {midiDirty && <p className="text-sm text-warning-text">You also have unsaved MIDI changes. They are saved with Save MIDI settings, not here.</p>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <Button disabled={!draft.dirty || draft.saving || !playback?.status} onClick={() => void draft.save()} variant="primary">
           {draft.saving ? "Saving…" : "Save settings"}
