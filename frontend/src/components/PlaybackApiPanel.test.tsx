@@ -202,6 +202,14 @@ describe("Song order card", () => {
 });
 
 describe("Recent activity", () => {
+  it("is an activity Disclosure that opens and closes from its button", async () => {
+    render(<PlaybackApiPanel playback={controller()} />);
+    const toggle = screen.getByRole("button", { name: "Recent activity" });
+    expect(toggle.closest("[data-variant='activity']")).toHaveAttribute("data-state", "closed");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Nothing yet.")).toBeVisible();
+  });
   const event = { type: "song.started", timestamp: 123.4, song_id: 202, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null };
   it("renders transport rollback as plain activity, without a song number", () => {
     render(<PlaybackApiPanel playback={controller({ events: [{ event: { ...event, type: "transport.reverted", provisional: false }, discovery: false }] })} />);

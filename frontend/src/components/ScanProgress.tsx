@@ -66,9 +66,9 @@ export function ScanProgress(props: ScanProgressProps) {
   if (!visible || props.state === "failed") return <>{props.children}</>;
   const determinate = props.total > 0 || props.state === "done";
   return <div className="py-2" aria-live="polite">
-    <div role="progressbar" aria-label="Reading Playback song lengths" aria-valuemin={determinate ? 0 : undefined} aria-valuemax={determinate ? 100 : undefined} aria-valuenow={determinate ? Math.round(value * 1000) / 10 : undefined} data-progress={value} data-reduced-motion={reduced} className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-      <div className="h-full rounded-full bg-sky-400" style={{ width: `${value * 100}%` }} />
+    <div role="progressbar" aria-label="Reading Playback song lengths" aria-valuemin={determinate ? 0 : undefined} aria-valuemax={determinate ? 100 : undefined} aria-valuenow={determinate ? Math.round(value * 1000) / 10 : undefined} data-progress={value} data-reduced-motion={reduced} className="h-1.5 w-full overflow-hidden rounded-ds-full bg-edge">
+      <div className="h-full w-full origin-left rounded-ds-full bg-integration-playback" style={{ transform: `scaleX(${value})` }} />
     </div>
-    <p className="mt-2 text-xs text-slate-400">{props.state === "done" ? "Song scan complete." : "Reading song lengths… Please wait."}</p>
+    <p className="mt-2 text-xs tabular-nums text-ink-muted">{props.state === "done" ? "Song scan complete." : "Reading song lengths… Please wait."}</p>
   </div>;
 }
