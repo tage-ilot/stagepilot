@@ -159,7 +159,7 @@ describe("LightsSetupPanel", () => {
       />,
     );
 
-    expect(screen.getByText("disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
     expect(screen.queryByText("loading")).not.toBeInTheDocument();
   });
 

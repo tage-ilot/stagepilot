@@ -17,6 +17,7 @@ import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { Select } from "./ui/Select";
+import { connectionWord } from "./ui/statusWord";
 
 const ALL_SERVICE_TYPES_ID = "stagepilot:all-service-types";
 
@@ -507,7 +508,7 @@ export function PlanningCenterSetupPanel({
       <dl className="mt-5 grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">Connection</dt>
-          <dd className="mt-1 capitalize text-ink-body">{status?.connection_status ?? state.planning_center_status}</dd>
+          <dd className="mt-1 text-ink-body">{connectionWord[status?.connection_status ?? state.planning_center_status]}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">Credential</dt>
