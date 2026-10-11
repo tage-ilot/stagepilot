@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import { Field } from "./Field";
 import { Input } from "./Input";
 import { Select } from "./Select";
-import { Textarea } from "./Textarea";
 
 const has = (el: HTMLElement, token: string) => el.className.split(/\s+/).includes(token);
 
@@ -16,10 +15,9 @@ describe("Field", () => {
     expect(screen.getByLabelText("Cue name")).toBeInstanceOf(HTMLInputElement);
   });
 
-  it("works for select and textarea too", () => {
-    render(<><Field label="Plan"><Select><option>A</option></Select></Field><Field label="Notes"><Textarea /></Field></>);
+  it("works for select too", () => {
+    render(<><Field label="Plan"><Select><option>A</option></Select></Field></>);
     expect(screen.getByLabelText("Plan").tagName).toBe("SELECT");
-    expect(screen.getByLabelText("Notes").tagName).toBe("TEXTAREA");
   });
 
   it("puts the label before the control in the DOM (above, never left)", () => {
@@ -139,25 +137,6 @@ describe("Input", () => {
   });
 });
 
-describe("Textarea", () => {
-  it("is 44px+, resizable vertically, taller minimum", () => {
-    render(<Textarea aria-label="t" />);
-    const el = screen.getByLabelText("t");
-    expect(has(el, "min-h-ds-touch-target")).toBe(true);
-    expect(has(el, "min-h-[5.5rem]")).toBe(true);
-    expect(has(el, "resize-y")).toBe(true);
-  });
-
-  it("error, disabled and ref", async () => {
-    const ref = createRef<HTMLTextAreaElement>();
-    const onChange = vi.fn();
-    render(<><Textarea ref={ref} aria-label="e" error /><Textarea aria-label="d" disabled onChange={onChange} /></>);
-    expect(screen.getByLabelText("e")).toHaveAttribute("aria-invalid", "true");
-    expect(ref.current).toBe(screen.getByLabelText("e"));
-    await userEvent.type(screen.getByLabelText("d"), "x");
-    expect(onChange).not.toHaveBeenCalled();
-  });
-});
 
 describe("Select", () => {
   it("renders options and fires onChange with the new value (uncontrolled)", async () => {

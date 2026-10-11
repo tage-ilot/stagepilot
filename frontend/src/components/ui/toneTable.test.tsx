@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { InlineAlert, type InlineAlertTone } from "./InlineAlert";
-import { SegmentedControl } from "./SegmentedControl";
 import { StatusDot } from "./StatusDot";
 import type { Tone } from "./types";
 
@@ -49,15 +48,6 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
     expect(textClasses(el)).toEqual([`text-${table[tone].text}`]);
   });
 
-  it.each(tones)("SegmentedControl selected %s", (tone) => {
-    render(<SegmentedControl legend="L" name="n" value="a" onChange={() => {}} tone={tone} options={[{ value: "a", label: "Aaa" }, { value: "b", label: "Bbb" }]} />);
-    const label = screen.getByText("Aaa").closest("label")!;
-    const target = label.querySelector<HTMLElement>("[class*='border-']") ?? label;
-    const holder = classes(target).includes(`border-${table[tone].accent}`) ? target : label;
-    expect(classes(holder)).toContain(`border-${table[tone].accent}`);
-    expect(classes(holder)).toContain(`bg-${table[tone].accent}/15`);
-    expect(textClasses(holder)).toEqual([`text-${table[tone].text}`]);
-  });
 
   it.each(tones)("StatusDot %s", (tone) => {
     const { container } = render(<StatusDot tone={tone} />);

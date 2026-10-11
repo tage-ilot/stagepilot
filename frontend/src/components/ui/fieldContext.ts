@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-/** Set by Field, read by Input/Select/Textarea. Outside a Field every value is empty, so controls stay usable alone. */
+/** Set by Field, read by Input/Select. Outside a Field every value is empty, so controls stay usable alone. */
 export interface FieldContextValue {
   id?: string;
   describedBy?: string;
