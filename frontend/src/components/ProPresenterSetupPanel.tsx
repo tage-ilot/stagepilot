@@ -11,6 +11,7 @@ import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { Select } from "./ui/Select";
+import { connectionWord } from "./ui/statusWord";
 
 export function ProPresenterSetupPanel({
   propresenter,
@@ -208,7 +209,7 @@ export function ProPresenterSetupPanel({
       <dl className="mt-5 grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-3">
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">API</dt>
-          <dd className="mt-1 text-ink-body">{propresenter?.connection_status ?? "Unknown"}</dd>
+          <dd className="mt-1 text-ink-body">{propresenter ? connectionWord[propresenter.connection_status] : "Unknown"}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">Configured timer</dt>

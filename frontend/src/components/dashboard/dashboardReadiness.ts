@@ -8,6 +8,7 @@ import type {
   SettingsResponse,
   PlaybackStatusResponse,
 } from "../../types";
+import { connectionWord } from "../ui/statusWord";
 import { playbackConnectionDetail, playbackOrderNotice } from "../playbackStatus";
 
 export type ConnectionCardView = {
@@ -40,7 +41,7 @@ const statusDetail = (status: ConnectionStatus, detail: string | null | undefine
   if (status === "connecting") return "Connecting";
   if (status === "error") return "Connection failed";
   if (status === "connected") return "Connected";
-  return "Disconnected";
+  return "Not connected";
 };
 
 export function buildConnectionCardViews({
@@ -225,12 +226,12 @@ export function buildReadinessChecks({
   if (stateOnly) {
     return [
       ...Object.entries(views).map(([id, view]) => ({
-        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lights" } as Record<string, string>)[id]} ${view.status}`,
+        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lights" } as Record<string, string>)[id]} ${connectionWord[view.status].toLowerCase()}`,
         passed: view.status === "connected", required: true, severity: "info" as const,
         status: view.status === "connecting" ? "disconnected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
       })),
-      { id: "backend", label: live ? "Live state connected" : "Live state disconnected",
+      { id: "backend", label: live ? "Live state connected" : "Live state not connected",
         passed: live, required: true, severity: "info", status: live ? "connected" : "disconnected" },
     ];
   }
@@ -250,7 +251,7 @@ export function buildReadinessChecks({
       id: "planning-center",
       label: views.planningCenter.status === "connected"
         ? "Services connected"
-        : "Services disconnected",
+        : "Services not connected",
       passed: views.planningCenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -280,7 +281,7 @@ export function buildReadinessChecks({
     },
     {
       id: "midi",
-      label: views.midi.status === "connected" ? "Playback connected" : "Playback disconnected",
+      label: views.midi.status === "connected" ? "Playback connected" : "Playback not connected",
       passed: views.midi.status === "connected",
       required: true,
       severity: "blocking",
@@ -291,7 +292,7 @@ export function buildReadinessChecks({
       id: "propresenter",
       label: views.propresenter.status === "connected"
         ? "Presentation connected"
-        : "Presentation disconnected",
+        : "Presentation not connected",
       passed: views.propresenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -324,7 +325,7 @@ export function buildReadinessChecks({
     id: "lights",
     label: views.lights.status === "connected"
       ? "Lights MIDI output connected"
-      : "Lights MIDI output disconnected",
+      : "Lights MIDI output not connected",
     passed: views.lights.status === "connected",
     required: lightsRequired,
     severity: lightsRequired ? "blocking" : "info",
@@ -337,7 +338,7 @@ export function buildReadinessChecks({
   });
   checks.push({
     id: "backend",
-    label: live ? "StagePilot connected" : "StagePilot disconnected",
+    label: live ? "StagePilot connected" : "StagePilot not connected",
     passed: live,
     required: true,
     severity: "blocking",

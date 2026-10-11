@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { StatusDot } from "./ui";
+import { StatusDot, connectionWord } from "./ui";
 import type { Tone } from "./ui";
 
 type Status = "connected" | "connecting" | "disconnected" | "error";
@@ -43,7 +43,7 @@ export function StatusCard({
   const Element = interactive ? "button" : "div";
   return (
     <Element
-      aria-label={`${accessibleTitle} ${status}. ${detail}`}
+      aria-label={`${accessibleTitle} ${connectionWord[status]}. ${detail}`}
       aria-controls={interactive ? controls : undefined}
       aria-expanded={interactive ? active : undefined}
       data-status={status}
@@ -61,7 +61,7 @@ export function StatusCard({
           <p className="status-card-title whitespace-nowrap text-type-micro font-semibold uppercase tracking-[0.14em] text-ink-muted transition-colors can-hover:group-hover:text-ink-body" title={title}>{title}</p>
           <div className="status-card-status mt-2 flex min-w-0 items-center gap-1 xl:gap-2" data-status-motion-part="status">
             <StatusDot className="status-card-dot" size="md" tone={statusTone[status]} />
-            <span className={`status-card-status-word whitespace-nowrap font-semibold uppercase ${statusTextStyles[status]}`}>{status}</span>
+            <span className={`status-card-status-word whitespace-nowrap font-semibold ${statusTextStyles[status]}`}>{connectionWord[status]}</span>
           </div>
         </div>
         <span

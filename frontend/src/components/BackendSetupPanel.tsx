@@ -371,7 +371,7 @@ export function BackendSetupPanel({
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
           <dd className={`mt-1 font-semibold ${live ? "text-success-text" : "text-danger-text"}`}>
-            {live ? "Connected" : "Disconnected"}
+            {live ? "Connected" : "Not connected"}
           </dd>
           <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
         </div>

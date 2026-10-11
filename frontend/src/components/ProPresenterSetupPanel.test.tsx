@@ -89,7 +89,7 @@ describe("ProPresenterSetupPanel", () => {
       />,
     );
 
-    expect(screen.getAllByText("connected")).toHaveLength(2);
+    expect(screen.getAllByText("Connected")).toHaveLength(2);
     expect(screen.getByText("Not found")).toBeInTheDocument();
     expect(screen.getByText(/API connected, but timer/i)).toBeInTheDocument();
   });

@@ -1,18 +1,9 @@
 import type { ConnectionStatus } from "../types";
-import { Badge } from "./ui/Badge";
+import { StatusBadge } from "./ui/Badge";
 import { Button } from "./ui/Button";
-import { statusTone, type StatusWord } from "./ui/statusWord";
+import { connectionWord } from "./ui/statusWord";
 
 type SetupPanelStatus = ConnectionStatus | "loading";
-
-// The badge keeps its existing status text (wording changes are Phase 4); only the tone comes from statusTone.
-const statusWords: Record<SetupPanelStatus, StatusWord> = {
-  connected: "Connected",
-  connecting: "Connecting",
-  disconnected: "Not connected",
-  error: "Error",
-  loading: "Not connected",
-};
 
 export function SetupPanelHeader({
   title,
@@ -44,14 +35,12 @@ export function SetupPanelHeader({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">{description}</p>
       </div>
-      <Badge
+      <StatusBadge
         className="col-span-2 row-start-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:self-center"
+        data-status={status}
         data-status-badge
-        dot
-        tone={statusTone[statusWords[status]]}
-      >
-        {status}
-      </Badge>
+        status={connectionWord[status]}
+      />
       {onClose && (
         <Button
           aria-label={closeLabel}

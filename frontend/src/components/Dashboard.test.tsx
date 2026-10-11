@@ -579,12 +579,12 @@ describe("Dashboard Planning Center plan states", () => {
 
     expect(screen.getByRole("heading", { name: "StagePilot" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback connected/ }));
+    await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback Connected/ }));
     expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
     expect(screen.getAllByText("Connected to Playback").length).toBeGreaterThan(0);
     expect(screen.queryByText("Demo integration running")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lights MIDI output not connected")).toHaveClass("text-ink-muted");
     expect(screen.getByText("Optional")).toBeInTheDocument();
   });
 
@@ -595,7 +595,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
     expect(screen.getByText("Connected to Playback")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback connected/ }));
+    await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback Connected/ }));
 
     expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
   });
@@ -685,11 +685,11 @@ describe("Dashboard Planning Center plan states", () => {
       state: unavailableState,
     });
 
-    expect(screen.getByText("Services disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Services not connected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
-    expect(screen.getByText("Playback disconnected")).toBeInTheDocument();
-    expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Playback not connected")).toBeInTheDocument();
+    expect(screen.getByText("Presentation not connected")).toBeInTheDocument();
   });
 
   it("shows when the service plan was last successfully loaded", () => {
@@ -728,7 +728,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lights MIDI output disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Lights MIDI output not connected")).toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s plan loaded")).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s service")).not.toBeInTheDocument();
   });
@@ -1128,7 +1128,7 @@ describe("Dashboard widget layout", () => {
     });
 
     expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lights MIDI output not connected")).toHaveClass("text-ink-muted");
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 
@@ -1223,8 +1223,8 @@ describe("Dashboard connection configuration panels", () => {
       state: applicationState(loadedServiceState, { plugins: {} }),
     });
 
-    const planningCenter = screen.getByRole("button", { name: /^Services connected/ });
-    const midiConnection = screen.getByRole("button", { name: /^MIDI \/ Playback connected/ });
+    const planningCenter = screen.getByRole("button", { name: /^Services Connected/ });
+    const midiConnection = screen.getByRole("button", { name: /^MIDI \/ Playback Connected/ });
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument();
@@ -1275,27 +1275,27 @@ describe("Dashboard connection configuration panels", () => {
 
     const panels = [
       {
-        card: /^Services connected/,
+        card: /^Services Connected/,
         close: "Close Services configuration",
         heading: "Services",
       },
       {
-        card: /^MIDI \/ Playback connected/,
+        card: /^MIDI \/ Playback Connected/,
         close: "Close MIDI / Playback configuration",
         heading: "Playback connection",
       },
       {
-        card: /^Presentation connected/,
+        card: /^Presentation Connected/,
         close: "Close Presentation configuration",
         heading: "Presentation countdown",
       },
       {
-        card: /^Lights disconnected/,
+        card: /^Lights Not connected/,
         close: "Close Lights configuration",
         heading: "Lights configuration",
       },
       {
-        card: /^StagePilot connected/,
+        card: /^StagePilot Connected/,
         close: "Close StagePilot configuration",
         heading: "StagePilot",
       },

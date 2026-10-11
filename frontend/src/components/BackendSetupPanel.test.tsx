@@ -265,7 +265,7 @@ describe("Backend panel primitives", () => {
     expect(close.className).toContain("min-h-ds-touch-target");
     const badge = document.querySelector("[data-status-badge]");
     expect(badge).toHaveAttribute("data-tone", "idle");
-    expect(badge).toHaveTextContent("disconnected");
+    expect(badge).toHaveTextContent("Not connected");
     expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("min-[480px]:grid-cols-");
   });
 
