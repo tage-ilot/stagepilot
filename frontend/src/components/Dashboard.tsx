@@ -839,7 +839,7 @@ export function Dashboard({
             {!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
           </button>
           <div
-            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
+            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] motion-reduce:transition-none ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
             id="system-readiness-popover"
             role="tooltip"
           >

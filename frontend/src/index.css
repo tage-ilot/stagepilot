@@ -293,6 +293,23 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   border-bottom: 3px solid var(--sp-accent);
 }
 
+/* Touch: the 16px resize corner gets a 44px invisible hit area (the drawn corner
+   is unchanged) and no browser pan/zoom while it is dragged. */
+.stagepilot-dashboard-grid .ui-resizable-se {
+  touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .dashboard-layout-editing .ui-resizable-se::before {
+    content: "";
+    position: absolute;
+    right: -14px;
+    bottom: -14px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
 .stagepilot-dashboard-grid > .grid-stack-placeholder > .placeholder-content {
   border: 1px dashed rgb(255 98 56 / 0.72);
   border-radius: 0.75rem;
@@ -566,6 +583,15 @@ textarea:focus-visible {
     text-align: center;
     transition-property: color, opacity !important;
     transition-duration: 75ms !important;
+  }
+
+  /* Reduced motion: the compact card's colour/opacity change is instant. The
+     75ms rule above is !important, so the global reduced-motion rule needs this
+     matching override. The state (colour, compact layout) still changes. */
+  @media (prefers-reduced-motion: reduce) {
+    .connections-status.status-compact .status-card {
+      transition-duration: 0.01ms !important;
+    }
   }
 
   .connections-status.status-compact .status-card-surface {
