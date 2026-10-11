@@ -11,6 +11,12 @@ import type {
 } from "../types";
 import { ButtonSpinner, RemoteAccessPanel } from "./RemoteAccessPanel";
 import { SetupPanelHeader } from "./SetupPanelHeader";
+import { Button } from "./ui/Button";
+import { Field } from "./ui/Field";
+import { Input } from "./ui/Input";
+import { InlineAlert } from "./ui/InlineAlert";
+import { Panel } from "./ui/Panel";
+import { Select } from "./ui/Select";
 
 /** Client-side cooldown (seconds) between manual "send all logs" clicks. */
 const SEND_LOGS_COOLDOWN_SECONDS = 60;
@@ -43,16 +49,14 @@ export function CopyLogButton() {
   };
 
   return (
-    <button
-      aria-disabled={status === "copying"}
-      className="rounded-lg border border-white/15 px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-40"
+    <Button
       disabled={status === "copying"}
       onClick={() => void onClick()}
       title={message ?? undefined}
-      type="button"
+      variant="secondary"
     >
       {status === "copying" ? "Copying…" : "Copy Log"}
-    </button>
+    </Button>
   );
 }
 
@@ -109,24 +113,18 @@ export function SendAllLogsButton() {
       : "Send all logs to developer";
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/7 pt-4">
+    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-edge-subtle pt-4">
       <CopyLogButton />
-      <button
-        aria-disabled={disabled}
-        className="rounded-lg border border-white/15 px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-40"
-        disabled={disabled}
-        onClick={() => void onClick()}
-        type="button"
-      >
+      <Button disabled={disabled} onClick={() => void onClick()} variant="secondary">
         {label}
-      </button>
-      <p className="text-xs text-slate-500">
+      </Button>
+      <p className="text-xs text-ink-muted">
         Sends recent backend/frontend logs and app info straight to the developer, for support purposes. Limited to once per minute.
       </p>
       {message && (
         <p
           aria-live="polite"
-          className={`w-full text-xs ${status === "error" ? "text-rose-300" : "text-emerald-300"}`}
+          className={`w-full text-xs ${status === "error" ? "text-danger-text" : "text-success-text"}`}
         >
           {message}
         </p>
@@ -196,10 +194,11 @@ export function BackendSetupPanel({
     : state.application_status === "error" ? "error" : "disconnected";
 
   return (
-    <section
+    <Panel
       aria-labelledby="backend-setup-heading"
-      className="setup-panel mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20"
+      className="mt-5"
       id="backend-configuration"
+      variant="setup"
     >
       <SetupPanelHeader
         closeLabel="Close StagePilot backend configuration"
@@ -211,20 +210,16 @@ export function BackendSetupPanel({
       />
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm text-slate-300">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Timezone</span>
-          <input
-            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-rose-400/50"
+        <Field label="Timezone">
+          <Input
             disabled={pending}
             onChange={(event) => setTimezone(event.target.value)}
             placeholder="America/Los_Angeles"
             value={timezone}
           />
-        </label>
-        <label className="text-sm text-slate-300">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Log level</span>
-          <select
-            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-slate-100"
+        </Field>
+        <Field label="Log level">
+          <Select
             disabled={pending}
             onChange={(event) => setLogLevel(event.target.value as GeneralSettingsInput["log_level"])}
             value={logLevel}
@@ -232,22 +227,18 @@ export function BackendSetupPanel({
             {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
               <option key={level} value={level}>{level}</option>
             ))}
-          </select>
-        </label>
-        <label className="text-sm text-slate-300">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Server port</span>
-          <input
-            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-rose-400/50"
+          </Select>
+        </Field>
+        <Field label="Server port">
+          <Input
             disabled={pending}
             inputMode="numeric"
             onChange={(event) => setServerPort(event.target.value)}
             value={serverPort}
           />
-        </label>
-        <label className="text-sm text-slate-300">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Release channel</span>
-          <select
-            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-slate-100"
+        </Field>
+        <Field label="Release channel">
+          <Select
             disabled={pending}
             onChange={(event) => setReleaseChannel(event.target.value as GeneralSettingsInput["release_channel"])}
             value={releaseChannel}
@@ -255,52 +246,51 @@ export function BackendSetupPanel({
             {(["STABLE", "BETA"] as const).map((channel) => (
               <option key={channel} value={channel}>{channel}</option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        <label className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-300">
+      <div className="mt-5 grid gap-x-4 gap-y-4 border-t border-edge-subtle pt-4 lg:grid-cols-3">
+        <label className="flex touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
             checked={lanAccess}
-            className="mt-0.5 size-4 accent-rose-500"
+            className="mt-0.5 size-4 accent-primary"
             disabled={pending}
             onChange={(event) => setLanAccess(event.target.checked)}
             type="checkbox"
           />
           <span>
-            <span className="block font-semibold text-slate-200">
+            <span className="block font-semibold text-ink">
               Allow dashboard access from this local network
             </span>
-            <span className="mt-1 block text-xs text-slate-400">
+            <span className="mt-1 block text-xs text-ink-muted">
               Other devices can open http://&lt;this-computer&apos;s-IP&gt;:{serverPort}.
             </span>
           </span>
         </label>
-        <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-300">
-          <label className="flex items-start gap-3">
+        <div className="text-sm text-ink-body">
+          <label className="flex touch-manipulation items-start gap-3">
             <input
               checked={pinEnabled}
-              className="mt-0.5 size-4 accent-rose-500"
+              className="mt-0.5 size-4 accent-primary"
               disabled={pending}
               onChange={(event) => setPinEnabled(event.target.checked)}
               type="checkbox"
             />
             <span>
-              <span className="block font-semibold text-slate-200">
+              <span className="block font-semibold text-ink">
                 Require a PIN for web dashboards
               </span>
-              <span className="mt-1 block text-xs text-slate-400">
+              <span className="mt-1 block text-xs text-ink-muted">
                 Enabled by default. The initial PIN is 1234.
               </span>
             </span>
           </label>
           {pinEnabled && (
-            <label className="mt-3 block text-xs font-bold uppercase tracking-wider text-slate-500">
-              Replace dashboard PIN
-              <input
+            <Field className="mt-3" label="Replace dashboard PIN">
+              <Input
                 autoComplete="new-password"
-                className="mt-1.5 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-rose-400/50"
+                className="font-mono"
                 disabled={pending}
                 inputMode="numeric"
                 maxLength={64}
@@ -310,17 +300,18 @@ export function BackendSetupPanel({
                 type="password"
                 value={dashboardPin}
               />
-            </label>
+            </Field>
           )}
         </div>
+        {/* Removed in Phase 4: the checkbox-row expander is replaced by the Connection method select. */}
         <label
           aria-controls="remote-access-inline"
           aria-expanded={remote.panelOpen}
-          className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-300"
+          className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 rounded-ds-lg border border-edge px-3 py-3 text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-edge-medium"
         >
           <input
             checked={remote.enabled}
-            className="mt-0.5 size-4 accent-rose-500"
+            className="mt-0.5 size-4 accent-primary"
             disabled={remote.checkboxBusy}
             onChange={(event) => {
               if (event.target.checked) remote.requestEnable();
@@ -330,12 +321,12 @@ export function BackendSetupPanel({
           />
           <span>
             <span className="inline-flex items-center gap-2">
-              <span className="block font-semibold text-slate-200">
+              <span className="block font-semibold text-ink">
                 Remote Access
               </span>
               {remote.checkboxBusy && <ButtonSpinner />}
             </span>
-            <span className="mt-1 block text-xs text-slate-400">
+            <span className="mt-1 block text-xs text-ink-muted">
               Securely view or operate this StagePilot from another device.
             </span>
           </span>
@@ -347,79 +338,76 @@ export function BackendSetupPanel({
         id="remote-access-inline"
       >
         <div className="dashboard-expand-region-inner">
-          <div className="overflow-hidden rounded-lg border border-white/7 bg-black/20 p-4">
+          <div className="overflow-hidden border-t border-edge-subtle pt-4">
             <RemoteAccessPanel control={remote} />
           </div>
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          className="rounded-lg border border-rose-400/40 bg-rose-500 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-40"
+        <Button
           disabled={pending || parsedSettings === null}
           onClick={() => parsedSettings && onSave(parsedSettings)}
-          type="button"
+          variant="primary"
         >
           {pending ? "Saving…" : "Save general settings"}
-        </button>
-        <p className="text-xs text-slate-500">
+        </Button>
+        <p className="text-xs text-ink-muted">
           Timezone, logging, port, and network-access changes take effect after a backend restart. PIN changes apply immediately.
         </p>
       </div>
 
       {(error || message) && (
-        <p className={`mt-3 rounded-lg border px-3 py-2 text-sm ${error ? "border-rose-400/20 bg-rose-400/10 text-rose-200" : "border-sky-400/20 bg-sky-400/10 text-sky-200"}`}>
+        <InlineAlert className="mt-3" tone={error ? "danger" : "info"}>
           {error ?? message}
-        </p>
+        </InlineAlert>
       )}
 
-      <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-3">
-          <p className="text-xs uppercase tracking-wider text-slate-500">API endpoint</p>
-          <p className="mt-1 break-all font-mono text-xs text-slate-200">{apiOrigin}</p>
+      <dl className="mt-5 grid gap-x-4 gap-y-4 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">API endpoint</dt>
+          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
         </div>
-        <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-3">
-          <p className="text-xs uppercase tracking-wider text-slate-500">WebSocket</p>
-          <p className={`mt-1 font-semibold ${live ? "text-emerald-300" : "text-rose-300"}`}>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
+          <dd className={`mt-1 font-semibold ${live ? "text-success-text" : "text-danger-text"}`}>
             {live ? "Connected" : "Disconnected"}
-          </p>
-          <p className="mt-1 break-all font-mono text-[0.68rem] text-slate-500">{websocketUrl}</p>
+          </dd>
+          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
         </div>
-        <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-3">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Backend version</p>
-          <p className="mt-1 text-slate-200">{health ? `v${health.version}` : "Loading"}</p>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">Backend version</dt>
+          <dd className="mt-1 text-ink">{health ? `v${health.version}` : "Loading"}</dd>
         </div>
-        <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-3">
-          <p className="text-xs uppercase tracking-wider text-slate-500">State revision</p>
-          <p className="mt-1 text-slate-200">{state.revision}</p>
+        <div>
+          <dt className="text-xs uppercase tracking-wider text-ink-muted">State revision</dt>
+          <dd className="mt-1 tabular-nums text-ink">{state.revision}</dd>
         </div>
-      </div>
+      </dl>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-white/7 bg-black/20">
-        <div className="border-b border-white/7 px-3 py-2.5">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Plugin health</p>
-        </div>
-        <div className="grid gap-px bg-white/5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-5 border-t border-edge-subtle pt-4">
+        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Plugin health</p>
+        <div className="mt-3 grid gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
           {(health?.plugins ?? Object.values(state.plugins)).map((plugin) => (
-            <div className="bg-stage-850 px-3 py-3" key={plugin.name}>
+            <div key={plugin.name}>
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-slate-200">{plugin.name}</p>
-                <span className="text-xs capitalize text-slate-400">{plugin.status}</span>
+                <p className="font-semibold text-ink">{plugin.name}</p>
+                <span className="text-xs capitalize text-ink-muted">{plugin.status}</span>
               </div>
-              <p className="mt-1 text-xs text-slate-500">v{plugin.version}{plugin.last_error ? ` · ${plugin.last_error}` : ""}</p>
+              <p className="mt-1 text-xs text-ink-muted">v{plugin.version}{plugin.last_error ? ` · ${plugin.last_error}` : ""}</p>
             </div>
           ))}
           {!health?.plugins.length && !Object.keys(state.plugins).length && (
-            <p className="bg-stage-850 px-3 py-3 text-sm text-slate-500">No plugins reported.</p>
+            <p className="text-sm text-ink-muted">No plugins reported.</p>
           )}
         </div>
       </div>
 
-      <p className="mt-4 text-xs text-slate-500">
+      <p className="mt-4 text-xs text-ink-muted">
         The dashboard remembers the saved server port for its next launch. Environment variables may still override these values for development.
       </p>
 
       <SendAllLogsButton />
-    </section>
+    </Panel>
   );
 }
