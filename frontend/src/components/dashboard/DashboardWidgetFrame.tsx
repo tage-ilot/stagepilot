@@ -20,12 +20,12 @@ export function DashboardWidgetFrame({
   onMove: (id: DashboardItemId, offset: -1 | 1) => void;
 }) {
   return (
-    <div className={`dashboard-widget-frame relative h-full min-h-0 ${editing ? "rounded-xl ring-1 ring-[#ff6238]/40" : ""}`}>
+    <div className={`dashboard-widget-frame relative h-full min-h-0 ${editing ? "rounded-ds-xl ring-1 ring-primary/40" : ""}`}>
       {editing && (
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-lg border border-white/10 bg-slate-950/90 p-1 shadow-lg">
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-ds-lg border border-edge bg-surface-950/90 p-1 shadow-elevation-default">
           <button
             aria-label={`Move ${label} earlier`}
-            className="grid h-7 w-7 place-items-center rounded text-sm text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-25"
+            className="grid h-7 w-7 coarse:h-ds-touch-target coarse:w-ds-touch-target place-items-center touch-manipulation rounded-ds-lg text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-ink/10 can-hover:text-ink disabled:opacity-25"
             disabled={first}
             onClick={() => onMove(id, -1)}
             title={`Move ${label} earlier`}
@@ -35,7 +35,7 @@ export function DashboardWidgetFrame({
           </button>
           <button
             aria-label={`Drag ${label} to a new dashboard position`}
-            className="dashboard-widget-handle flex h-7 cursor-grab touch-none select-none items-center gap-1 rounded px-2 text-[0.65rem] font-bold uppercase tracking-wider text-[#ff9b7e] hover:bg-white/10 active:cursor-grabbing"
+            className="dashboard-widget-handle flex h-7 coarse:h-ds-touch-target cursor-grab touch-none select-none items-center gap-1 rounded-ds-lg px-2 font-type-micro text-type-micro uppercase text-primary-focus transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-ink/10 active:cursor-grabbing"
             title={`Drag ${label} to a new dashboard position`}
             type="button"
           >
@@ -44,7 +44,7 @@ export function DashboardWidgetFrame({
           </button>
           <button
             aria-label={`Move ${label} later`}
-            className="grid h-7 w-7 place-items-center rounded text-sm text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-25"
+            className="grid h-7 w-7 coarse:h-ds-touch-target coarse:w-ds-touch-target place-items-center touch-manipulation rounded-ds-lg text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-ink/10 can-hover:text-ink disabled:opacity-25"
             disabled={last}
             onClick={() => onMove(id, 1)}
             title={`Move ${label} later`}
