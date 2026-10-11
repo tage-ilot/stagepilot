@@ -345,14 +345,14 @@ function SongRow({ song, current, next, hoverWarmup }: { song: Song; current: bo
   return (
     <li
       ref={popoverHoverRef as unknown as Ref<HTMLLIElement>}
-      className={`group grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-ink/5 ${current ? "current-song-row" : ""}`}
+      className={`group grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-ink/5 ${current ? "current-song-row" : ""}`}
       {...popoverHoverProps}
     >
       <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : "bg-ink/5 text-ink-muted group-hover:bg-ink/10"}`}>
         {song.order}
       </span>
       <div className="min-w-0">
-        <p className="truncate font-medium text-ink">{song.title}</p>
+        <p className="break-words font-medium text-ink [overflow-wrap:anywhere]">{song.title}</p>
         <div className="mt-0.5 flex gap-2 font-type-micro text-type-micro uppercase">
           {current && <span className="text-primary-hover">Current · live</span>}
           {next && <span className="text-warning-text">Up next</span>}
@@ -374,7 +374,7 @@ function ReferenceItemRow({ item, hoverWarmup }: { item: SkippedServiceItem; hov
   if (item.reason === "header") {
     return (
       <li className="border-t border-edge-subtle bg-surface-950/40 px-4 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-surface-950/50">
-        <p className="truncate text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">
+        <p className="break-words text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted [overflow-wrap:anywhere]">
           {item.title}
         </p>
       </li>
@@ -384,12 +384,12 @@ function ReferenceItemRow({ item, hoverWarmup }: { item: SkippedServiceItem; hov
   return (
     <li
       ref={refHoverRef as unknown as Ref<HTMLLIElement>}
-      className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-edge-subtle bg-surface-950/30 px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-surface-950/40"
+      className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-edge-subtle bg-surface-950/30 px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-surface-950/40"
       {...refHoverProps}
     >
       <span className="grid h-7 w-7 place-items-center rounded-ds-lg bg-surface-950/40 text-xs font-bold text-idle">•</span>
       <div className="min-w-0">
-        <p className="truncate font-medium text-ink-muted">{item.title}</p>
+        <p className="break-words font-medium text-ink-muted [overflow-wrap:anywhere]">{item.title}</p>
         {item.description && (
           <p className="mt-0.5 truncate text-xs text-idle">{item.description}</p>
         )}
@@ -799,7 +799,7 @@ export function Dashboard({
 
   return (
     <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
-      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_auto] sm:gap-4">
+      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_minmax(0,auto)] sm:gap-4">
         <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-y-1 sm:col-span-1">
           <h1 className="relative z-10 -translate-y-4 shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
@@ -824,7 +824,7 @@ export function Dashboard({
           </div>
         </div>
         <div
-          className="relative z-40 col-start-2 row-start-2 justify-self-end sm:col-start-3 sm:row-start-1"
+          className="relative z-40 col-start-2 row-start-2 min-w-0 max-w-full justify-self-end sm:col-start-3 sm:row-start-1"
           ref={readinessHover.containerRef}
           {...readinessHover.hoverProps}
         >
@@ -832,11 +832,11 @@ export function Dashboard({
             aria-describedby="system-readiness-popover"
             title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
             aria-expanded={readinessHover.open}
-            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20" : systemError ? "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20" : "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20"}`}
+            className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20" : systemError ? "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20" : "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20"}`}
             type="button"
           >
             <StatusDot tone={ready ? "success" : systemError ? "danger" : "warning"} />
-            {!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
+            <span className="min-w-0 text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
           </button>
           <div
             className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
@@ -1097,10 +1097,10 @@ export function Dashboard({
           "service-plan": (
         <Panel className="widget-autosize-target flex h-full min-h-0 flex-col overflow-hidden !p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
+            <div className="min-w-0 max-w-full">
               <p className="section-kicker">Service plan</p>
-              <h2 className="mt-1 text-lg font-bold text-ink">{plan?.title ?? "No service loaded"}</h2>
-              <p className="mt-1 text-xs text-ink-muted">
+              <h2 className="mt-1 break-words text-lg font-bold text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
+              <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
               </p>
             </div>
@@ -1111,6 +1111,12 @@ export function Dashboard({
               </p>
             </div>
           </div>
+          {!servicePlanEntries.length && (
+            <div className="border-t border-edge-subtle p-4">
+              <p className="text-sm text-ink-muted">No songs in this service plan yet.</p>
+              {canOperate && <Button className="mt-3" disabled={pendingAction !== null} onClick={() => dispatch("reload_plan")} variant="secondary">Reload service plan</Button>}
+            </div>
+          )}
           <ol aria-label="Service plan order" className="min-h-0 flex-1 overflow-hidden" data-autosize-content>
             {servicePlanEntries.map((entry) => entry.kind === "song"
               ? <SongRow key={`song-${entry.song.id}`} song={entry.song} current={entry.song.id === state.current_song?.id} next={entry.song.id === state.next_song?.id} hoverWarmup={hoverPreviewWarmupRef.current} />

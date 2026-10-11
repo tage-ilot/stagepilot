@@ -336,7 +336,7 @@ export function LightsSetupPanel({
         </div>
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
-        <div className="mt-3 grid gap-2">
+        <div className="mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain" data-testid="lighting-cue-list">
           {cues.map((cue) => (
             <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
               <Field label="Cue elapsed time">
