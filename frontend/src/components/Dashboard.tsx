@@ -837,14 +837,14 @@ export function Dashboard({
             aria-describedby="system-readiness-popover"
             title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
             aria-expanded={readinessHover.open}
-            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20" : systemError ? "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20" : "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20"}`}
+            className={`flex max-w-full shrink-0 cursor-help touch-manipulation items-center gap-2 whitespace-nowrap rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/40 bg-surface-950 text-success-text can-hover:bg-surface-900" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
             type="button"
           >
             <StatusDot tone={ready ? "success" : systemError ? "danger" : "warning"} />
             {!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
           </button>
           <div
-            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
+            className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] motion-reduce:transition-none ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
             id="system-readiness-popover"
             role="tooltip"
           >
@@ -1108,7 +1108,7 @@ export function Dashboard({
         <Panel className="widget-autosize-target flex h-full min-h-0 flex-col overflow-hidden !p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
-              <p className="section-kicker">Service plan</p>
+              <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
               <h2 className="mt-1 text-lg font-bold text-ink">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 text-xs text-ink-muted">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
@@ -1156,7 +1156,7 @@ export function Dashboard({
           ),
           "manual-controls": canOperate ? (
           <Panel className="widget-autosize-target manual-controls-panel h-full min-h-0 overflow-hidden">
-            <p className="section-kicker">Manual controls</p>
+            <p className="text-type-kicker uppercase text-ink-muted">Manual controls</p>
             {!live && (
               <InlineAlert className="mt-3" id="manual-controls-offline" tone="warning">
                 {OFFLINE_CONTROLS_SENTENCE}
@@ -1174,7 +1174,7 @@ export function Dashboard({
           ) : null,
           events: (
         <Panel className="flex h-full min-h-0 flex-col overflow-hidden !p-0">
-          <div className="flex items-center justify-between p-4"><p className="section-kicker">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
+          <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
             {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}

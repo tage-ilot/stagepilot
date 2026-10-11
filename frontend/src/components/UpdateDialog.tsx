@@ -95,7 +95,7 @@ export function UpdateDialog({
             role="progressbar"
           >
             <div
-              className={`h-full rounded-ds-full bg-info transition-[width] duration-200 motion-reduce:transition-none ${progress?.percentage == null ? "w-1/3 animate-pulse" : ""}`}
+              className={`h-full rounded-ds-full bg-info transition-[width] duration-200 motion-reduce:transition-none ${progress?.percentage == null ? "w-1/3 animate-pulse motion-reduce:animate-none" : ""}`}
               style={progress?.percentage == null ? undefined : { width: `${progress.percentage}%` }}
             />
           </div>

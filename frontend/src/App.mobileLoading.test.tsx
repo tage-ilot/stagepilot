@@ -82,8 +82,12 @@ describe("StagePilot pre-dashboard loading screen fits narrow (mobile/tablet) vi
     // The real hiding is the max-width: 1023px rule on this class (proved in screenshots).
     expect(bar).toHaveClass("loading-progress-track--desktop-only");
     const fill = bar.querySelector(".loading-progress-fill") as HTMLElement;
-    expect(fill.style.transform).toMatch(/^scaleX\(/);
+    // Progress is a clip-path reveal of a full-width striped fill: no width or
+    // scale animation, so the pixel stripes keep their size.
+    expect(fill.style.getPropertyValue("--progress")).not.toBe("");
+    expect(fill.style.transform).toBe("");
     expect(fill.style.width).toBe("");
+    expect(bar.querySelector(".loading-progress-edge")).not.toBeNull();
     const spinner = document.querySelector(".loading-spinner-circular");
     expect(spinner).not.toBeNull();
     expect(spinner?.className).toContain("loading-spinner-circular--mobile-only");
