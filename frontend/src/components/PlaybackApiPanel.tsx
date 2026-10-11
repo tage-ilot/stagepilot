@@ -7,6 +7,7 @@ import { PlanningCenterLengths } from "./PlanningCenterLengths";
 import { ScanProgress } from "./ScanProgress";
 import { PlaybackSongLengths } from "./PlaybackSongLengths";
 import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
 import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
@@ -133,16 +134,18 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
           {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-danger-text">{status.last_error}</p>}
         </section>
       )}
-      {confirm && <div role="dialog" aria-modal="true" aria-labelledby="discover-confirm-heading" className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4">
-        <div className="max-w-lg space-y-4 rounded-ds-xl border border-edge-medium bg-surface-950 p-5 shadow-elevation-overlay">
-          <h3 id="discover-confirm-heading" className="text-lg font-bold text-ink">Set up song order?</h3>
-          <p className="text-sm text-ink-body">StagePilot will step through the songs in Playback to read their lengths, then go back to the song that was selected. Playback must stay stopped. Nothing will be played.</p>
-          <div className="flex flex-wrap gap-3">
-            <Button autoFocus onClick={() => { setConfirm(false); playback?.discover(); }} tone="playback" variant="tinted">Set up song order</Button>
-            <Button onClick={() => setConfirm(false)} tone="playback" variant="tinted">Cancel</Button>
-          </div>
-        </div>
-      </div>}
+      <Dialog
+        open={confirm}
+        dismissible={false}
+        title="Set up song order?"
+        description="StagePilot will step through the songs in Playback to read their lengths, then go back to the song that was selected. Playback must stay stopped. Nothing will be played."
+        actions={
+          <>
+            <Button autoFocus onClick={() => { setConfirm(false); playback?.discover(); }} size="touch" tone="playback" variant="tinted">Set up song order</Button>
+            <Button onClick={() => setConfirm(false)} size="touch" tone="playback" variant="tinted">Cancel</Button>
+          </>
+        }
+      />
 
       <div className="space-y-3 border-t border-edge-subtle pt-4">
         <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">

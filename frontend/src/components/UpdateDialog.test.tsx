@@ -71,6 +71,25 @@ describe("StagePilot update UI", () => {
     expect(returnFocus.current).toHaveFocus();
   });
 
+  it("ignores Escape while the update is installing", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<UpdateDialog onCancel={onCancel} onCloseError={vi.fn()} onConfirm={vi.fn()} onRetry={vi.fn()} returnFocus={createRef()} updater={{ ...confirmation, status: "installing" }} />);
+    await user.keyboard("{Escape}");
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("focuses Cancel first and traps Tab inside the confirmation", async () => {
+    const user = userEvent.setup();
+    render(<UpdateDialog onCancel={vi.fn()} onCloseError={vi.fn()} onConfirm={vi.fn()} onRetry={vi.fn()} returnFocus={createRef()} updater={confirmation} />);
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Update and Restart" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
   it("renders known and indeterminate progress without cancellation controls", () => {
     const { rerender } = render(
       <UpdateDialog
