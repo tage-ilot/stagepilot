@@ -319,7 +319,7 @@ describe("Recent event stream 5-minute expiry", () => {
     const errorMessage = screen.getByText(/Could not connect\./);
     expect(errorMessage).toBeInTheDocument();
     expect(errorMessage.closest("p")?.textContent).toMatch(/propresenter/i);
-    expect(document.querySelectorAll(".border-rose-400\\/15")).toHaveLength(1);
+    expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
     expect(screen.getByText("connection.changed")).toBeInTheDocument();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
 
@@ -332,7 +332,7 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(screen.getByText(/Could not connect\./)).toBeInTheDocument();
     expect(screen.getByText("connection.changed")).toBeInTheDocument();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
-    expect(document.querySelectorAll(".border-rose-400\\/15")).toHaveLength(1);
+    expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
   });
 
   it("keeps the pinned error inspectable once its raw event is evicted from recent_events", () => {
@@ -746,8 +746,8 @@ describe("Dashboard Planning Center plan states", () => {
     expect(rows[2]).toHaveTextContent("Pastor John");
     expect(rows[2]).toHaveTextContent("02:00");
     expect(rows[2]).not.toHaveTextContent("Reference");
-    expect(screen.getByText("Welcome")).toHaveClass("text-slate-400");
-    expect(screen.getByText("Pastor John")).toHaveClass("text-slate-600");
+    expect(screen.getByText("Welcome")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Pastor John")).toHaveClass("text-idle");
   });
 });
 
@@ -1104,6 +1104,31 @@ describe("Dashboard widget layout", () => {
     expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
     expect(screen.getByText("Lights MIDI output disconnected")).toHaveClass("text-ink-muted");
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
+  });
+
+  it("renders manual controls as live buttons in the four tones with 44px targets", () => {
+    renderDashboard(loadedServiceState);
+
+    const expected: Record<string, string> = {
+      "Start next": "go",
+      "Restart current": "go",
+      Previous: "back",
+      "Reload plan": "reload",
+      "Stop timer": "stop",
+      "Reset position": "stop",
+    };
+    for (const [name, tone] of Object.entries(expected)) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveAttribute("data-variant", "live");
+      expect(button).toHaveAttribute("data-tone", tone);
+      expect(button).toHaveClass("min-h-ds-touch-target");
+      // Pressed state comes from tokens; no raw white text on the fill (checked here, never pressed in capture).
+      // A disabled live control (no current song) drops hover/press styling by design.
+      if (!(button as HTMLButtonElement).disabled) {
+        expect(button.className).toContain(tone === "go" || tone === "back" ? "active:text-on-primary" : "active:text-on-danger");
+      }
+      expect(button.className).not.toMatch(/hover:text-white|slate-|rose-|emerald-/);
+    }
   });
 
   it("adds intentional spacers and resets them without confirmation", async () => {

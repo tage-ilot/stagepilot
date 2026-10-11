@@ -50,7 +50,7 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
-import { StatusDot } from "./ui";
+import { Button, Panel, StatusDot, type LiveTone } from "./ui";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
 
@@ -113,22 +113,16 @@ function ActionButton({
   disabled: boolean;
   onAction: (action: ActionName) => void;
 }) {
-  const color = {
-    green: "border-emerald-400/40 bg-transparent text-emerald-200 hover:border-emerald-300/70 hover:bg-emerald-400 hover:text-slate-950 active:bg-emerald-500 active:text-slate-950",
-    orange: "border-orange-300/40 bg-transparent text-orange-200 hover:border-orange-200/70 hover:bg-orange-300 hover:text-slate-950 active:bg-orange-400 active:text-slate-950",
-    red: "border-rose-400/40 bg-transparent text-rose-200 hover:border-rose-300/70 hover:bg-rose-500 hover:text-white active:bg-rose-600 active:text-white",
-    blue: "border-blue-600/50 bg-transparent text-blue-200 hover:border-blue-400/70 hover:bg-blue-700 hover:text-white active:bg-blue-800 active:text-white",
-    neutral: "border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10",
-  }[tone];
+  const liveTone = { green: "go", orange: "back", red: "stop", blue: "reload", neutral: undefined }[tone] as LiveTone | undefined;
   return (
-    <button
-      className={`rounded-lg border px-3.5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${color}`}
+    <Button
       disabled={disabled}
+      liveTone={liveTone}
       onClick={() => onAction(action)}
-      type="button"
+      variant={liveTone ? "live" : "secondary"}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -333,12 +327,12 @@ function CursorPopover({
   return (
     <div
       ref={popoverRef}
-      className="pointer-events-none fixed z-50 w-[min(18rem,calc(100vw-1rem))] rounded-lg border border-white/10 bg-slate-950/95 p-3 text-sm text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-xl"
+      className="pointer-events-none fixed z-50 w-[min(18rem,calc(100vw-1rem))] rounded-ds-lg border border-edge bg-surface-950/95 p-3 text-sm text-ink-body shadow-elevation-overlay backdrop-blur-xl"
       role="tooltip"
       style={{ left: position.x, top: position.y }}
     >
       {title && title.trim() && (
-        <p className="mb-1 truncate text-xs font-bold uppercase tracking-wider text-slate-100">{title}</p>
+        <p className="mb-1 truncate text-xs font-bold uppercase tracking-wider text-ink">{title}</p>
       )}
       {text}
     </div>
@@ -351,22 +345,22 @@ function SongRow({ song, current, next, hoverWarmup }: { song: Song; current: bo
   return (
     <li
       ref={popoverHoverRef as unknown as Ref<HTMLLIElement>}
-      className={`group grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-white/5 px-4 py-3 transition duration-150 ease-out hover:bg-white/[0.04] ${current ? "current-song-row" : ""}`}
+      className={`group grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-ink/5 ${current ? "current-song-row" : ""}`}
       {...popoverHoverProps}
     >
-      <span className={`grid h-7 w-7 place-items-center rounded text-xs font-bold transition duration-150 ${current ? "bg-[#ff6238] text-slate-950" : "bg-white/5 text-slate-500 group-hover:bg-white/10"}`}>
+      <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : "bg-ink/5 text-ink-muted group-hover:bg-ink/10"}`}>
         {song.order}
       </span>
       <div className="min-w-0">
-        <p className="truncate font-medium text-slate-100">{song.title}</p>
-        <div className="mt-0.5 flex gap-2 text-[0.68rem] font-bold uppercase tracking-wider">
-          {current && <span className="text-[#ff805e]">Current · live</span>}
-          {next && <span className="text-amber-300">Up next</span>}
-          {song.is_generic && <span className="text-amber-300">Generic item</span>}
-          {!song.duration_seconds && <span className="text-rose-300">Missing duration</span>}
+        <p className="truncate font-medium text-ink">{song.title}</p>
+        <div className="mt-0.5 flex gap-2 font-type-micro text-type-micro uppercase">
+          {current && <span className="text-primary-hover">Current · live</span>}
+          {next && <span className="text-warning-text">Up next</span>}
+          {song.is_generic && <span className="text-warning-text">Generic item</span>}
+          {!song.duration_seconds && <span className="text-danger-text">Missing duration</span>}
         </div>
       </div>
-      <span className={`font-mono text-sm font-semibold tabular-nums ${song.duration_seconds ? "text-slate-300" : "text-rose-300"}`}>
+      <span className={`font-mono text-sm font-semibold tabular-nums ${song.duration_seconds ? "text-ink-body" : "text-danger-text"}`}>
         {formatDuration(song.duration_seconds)}
       </span>
       <CursorPopover open={popover.open} position={popover.position} title={song.title} text={song.description} popoverRef={popover.popoverRef} />
@@ -379,8 +373,8 @@ function ReferenceItemRow({ item, hoverWarmup }: { item: SkippedServiceItem; hov
   const { ref: refHoverRef, ...refHoverProps } = popover.hoverProps;
   if (item.reason === "header") {
     return (
-      <li className="border-t border-white/[0.04] bg-black/30 px-4 py-2 transition duration-150 ease-out hover:bg-black/40">
-        <p className="truncate text-xs font-extrabold uppercase tracking-[0.14em] text-slate-400">
+      <li className="border-t border-edge-subtle bg-surface-950/40 px-4 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-surface-950/50">
+        <p className="truncate text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">
           {item.title}
         </p>
       </li>
@@ -390,17 +384,17 @@ function ReferenceItemRow({ item, hoverWarmup }: { item: SkippedServiceItem; hov
   return (
     <li
       ref={refHoverRef as unknown as Ref<HTMLLIElement>}
-      className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-white/[0.035] bg-black/20 px-4 py-3 transition duration-150 ease-out hover:bg-black/30"
+      className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-t border-edge-subtle bg-surface-950/30 px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-surface-950/40"
       {...refHoverProps}
     >
-      <span className="grid h-7 w-7 place-items-center rounded bg-black/25 text-xs font-bold text-slate-700">•</span>
+      <span className="grid h-7 w-7 place-items-center rounded-ds-lg bg-surface-950/40 text-xs font-bold text-idle">•</span>
       <div className="min-w-0">
-        <p className="truncate font-medium text-slate-500">{item.title}</p>
+        <p className="truncate font-medium text-ink-muted">{item.title}</p>
         {item.description && (
-          <p className="mt-0.5 truncate text-xs text-slate-600">{item.description}</p>
+          <p className="mt-0.5 truncate text-xs text-idle">{item.description}</p>
         )}
       </div>
-      <span className="font-mono text-sm font-semibold tabular-nums text-slate-600">
+      <span className="font-mono text-sm font-semibold tabular-nums text-idle">
         {formatDuration(item.duration_seconds)}
       </span>
       <CursorPopover open={popover.open} position={popover.position} title={item.title} text={item.description} popoverRef={popover.popoverRef} />
@@ -894,24 +888,24 @@ export function Dashboard({
       )}
 
       {serviceLoad.status === "ambiguous" && (
-        <section className="mb-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4" aria-live="polite">
-          <p className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-amber-300">Plan selection required</p>
-          <h2 className="mt-1 text-lg font-bold text-white">Multiple plans match {serviceLoad.target_date ?? "the service date"}</h2>
-          {serviceLoad.message && <p className="mt-1 text-sm font-medium text-amber-100">{serviceLoad.message}</p>}
-          <p className="mt-1 text-sm text-amber-100/70">
+        <section className="mb-5 rounded-xl border border-warning/30 bg-warning/10 p-4" aria-live="polite">
+          <p className="font-type-kicker text-type-kicker uppercase text-warning-text">Plan selection required</p>
+          <h2 className="mt-1 text-lg font-bold text-ink">Multiple plans match {serviceLoad.target_date ?? "the service date"}</h2>
+          {serviceLoad.message && <p className="mt-1 text-sm font-medium text-warning-text">{serviceLoad.message}</p>}
+          <p className="mt-1 text-sm text-warning-text/70">
             {serviceLoad.is_stale ? "The previous plan remains available but is marked stale. " : ""}
             {canOperate ? "Choose the service plan StagePilot should load." : "Waiting for an Operator to select the service plan."}
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {serviceLoad.candidates.map((candidate) => (
-              <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-300/15 bg-slate-950/30 px-3 py-3">
+              <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-ds-lg border border-warning/15 bg-surface-950/30 px-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-100">{candidate.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
+                  <p className="truncate font-semibold text-ink">{candidate.title}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
                 </div>
                 {canOperate && <button
                   aria-label={pendingPlanId === candidate.id ? `Loading ${candidate.title}` : `Use ${candidate.title}`}
-                  className="shrink-0 rounded-lg bg-amber-300 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-50"
+                  className="shrink-0 touch-manipulation rounded-ds-lg bg-warning px-3 py-2 text-xs font-bold text-on-primary transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-warning-text disabled:cursor-wait disabled:opacity-50 coarse:min-h-ds-touch-target"
                   disabled={pendingPlanId !== null}
                   onClick={() => selectPlan(candidate.id)}
                   type="button"
@@ -1091,18 +1085,18 @@ export function Dashboard({
         canEditLayout={canConfigure}
         widgets={{
           "service-plan": (
-        <section className="stage-panel widget-autosize-target flex h-full min-h-0 flex-col overflow-hidden rounded-xl">
+        <Panel className="widget-autosize-target flex h-full min-h-0 flex-col overflow-hidden !p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
               <p className="section-kicker">Service plan</p>
-              <h2 className="mt-1 text-lg font-bold text-white">{plan?.title ?? "No service loaded"}</h2>
-              <p className="mt-1 text-xs text-slate-500">
+              <h2 className="mt-1 text-lg font-bold text-ink">{plan?.title ?? "No service loaded"}</h2>
+              <p className="mt-1 text-xs text-ink-muted">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-slate-200">{plan?.songs.length ?? 0} songs</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm font-semibold tabular-nums text-ink-body">{plan?.songs.length ?? 0} songs</p>
+              <p className="text-xs tabular-nums text-ink-muted">
                 {plan ? formatPlanCurrentAsOf(state.last_successful_plan_reload_at) : "Load time unavailable"}
               </p>
             </div>
@@ -1112,36 +1106,36 @@ export function Dashboard({
               ? <SongRow key={`song-${entry.song.id}`} song={entry.song} current={entry.song.id === state.current_song?.id} next={entry.song.id === state.next_song?.id} hoverWarmup={hoverPreviewWarmupRef.current} />
               : <ReferenceItemRow key={`reference-${entry.item.item_id}`} item={entry.item} hoverWarmup={hoverPreviewWarmupRef.current} />)}
           </ol>
-        </section>
+        </Panel>
           ),
           "now-playing": (
-          <section className="now-playing-panel widget-autosize-target h-full min-h-0 overflow-hidden rounded-2xl border p-5 sm:p-6">
+          <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="live-kicker text-[0.68rem] font-black uppercase tracking-[0.2em]">Now playing · live signal</p>
-              <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wider ${state.timer.status === "running" ? "bg-emerald-400/15 text-emerald-300" : state.timer.status === "error" ? "bg-rose-400/15 text-rose-300" : "bg-white/5 text-slate-400"}`}>Timer {state.timer.status}</span>
+              <p className="font-type-kicker text-type-kicker uppercase text-primary">Now playing · live signal</p>
+              <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success/15 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
-            <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-white" key={state.current_song?.id ?? "idle"}>{state.current_song?.title ?? "Waiting for first cue"}</h2>
+            <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.current_song?.id ?? "idle"}>{state.current_song?.title ?? "Waiting for first cue"}</h2>
             <div className="mt-2 flex items-end justify-between gap-5">
               <div>
-                <p className="text-sm text-slate-500">Time remaining</p>
+                <p className="text-sm text-ink-muted">Time remaining</p>
                 <p className="operational-timer mt-1 font-mono text-[clamp(3rem,5vw,5.4rem)] font-light leading-none">{formatDuration(timerRemaining)}</p>
               </div>
               <div className="elapsed-time-block pb-1 text-right">
-                <p className="text-sm font-semibold text-slate-400 sm:text-base">Elapsed time</p>
-                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-[#ff9b7e]">{formatDuration(timerElapsed)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-400 sm:text-sm">of {formatDuration(state.current_song?.duration_seconds)}</p>
+                <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
+                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-primary-focus">{formatDuration(timerElapsed)}</p>
+                <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.current_song?.duration_seconds)}</p>
               </div>
             </div>
-            <div className="now-playing-metadata mt-7 grid grid-cols-2 gap-4 border-t border-white/7 pt-4 text-sm">
-              <div><p className="text-xs text-slate-500">Position</p><p className="mt-1 font-semibold text-slate-200">{state.current_song_index == null ? "Not started" : `${state.current_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
-              <div><p className="text-xs text-slate-500">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-slate-100">{state.next_song?.title ?? "End of service"}</p></div>
-              <div><p className="text-xs text-slate-500">Countdown started</p><p className="mt-1 font-semibold text-slate-200">{formatTime(state.timer.started_at)}</p></div>
-              <div><p className="text-xs text-slate-500">Last action</p><p className="mt-1 font-semibold capitalize text-slate-200">{state.last_action?.replaceAll("_", " ") ?? "None"}</p></div>
+            <div className="now-playing-metadata mt-7 grid grid-cols-2 gap-4 border-t border-edge-subtle pt-4 text-sm">
+              <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{state.current_song_index == null ? "Not started" : `${state.current_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
+              <div><p className="text-xs text-ink-muted">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.next_song?.title ?? "End of service"}</p></div>
+              <div><p className="text-xs text-ink-muted">Countdown started</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{formatTime(state.timer.started_at)}</p></div>
+              <div><p className="text-xs text-ink-muted">Last action</p><p className="mt-1 font-semibold capitalize text-ink-body">{state.last_action?.replaceAll("_", " ") ?? "None"}</p></div>
             </div>
-          </section>
+          </Panel>
           ),
           "manual-controls": canOperate ? (
-          <section className="stage-panel widget-autosize-target manual-controls-panel h-full min-h-0 overflow-hidden rounded-xl p-4">
+          <Panel className="widget-autosize-target manual-controls-panel h-full min-h-0 overflow-hidden">
             <p className="section-kicker">Manual controls</p>
             <div className="manual-controls-grid mt-3 grid gap-2">
               <ActionButton action="start_next" label="Start next" tone="green" disabled={pendingAction !== null} onAction={dispatch} />
@@ -1151,17 +1145,17 @@ export function Dashboard({
               <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
               <ActionButton action="reset_position" label="Reset position" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
             </div>
-          </section>
+          </Panel>
           ) : null,
           events: (
-        <section className="stage-panel flex h-full min-h-0 flex-col overflow-hidden rounded-xl">
-          <div className="flex items-center justify-between p-4"><p className="section-kicker">Recent event stream</p><span className="text-xs text-slate-600">Latest {activity.length}</span></div>
-          <div className="min-h-0 flex-1 overflow-auto border-t border-white/5">
-            {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-rose-400/15 bg-rose-500/[0.08] px-4 py-2.5 text-xs"><time className="font-mono text-rose-300/70">{formatTime(pinnedError.timestamp)}</time><p className="text-rose-200"><span className="font-bold uppercase text-rose-300">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
-            {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-white/[0.055] px-4 py-2.5 text-xs"><time className="font-mono text-slate-600">{formatTime(event.timestamp)}</time><p className="truncate text-slate-300"><span className="font-semibold text-slate-200">{event.type}</span> · {event.source}</p></div>)}
-            {!activity.length && <p className="p-4 text-sm text-slate-500">Waiting for demo events…</p>}
+        <Panel className="flex h-full min-h-0 flex-col overflow-hidden !p-0">
+          <div className="flex items-center justify-between p-4"><p className="section-kicker">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
+            {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
+            {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}
+            {!activity.length && <p className="p-4 text-sm text-ink-muted">Waiting for demo events…</p>}
           </div>
-        </section>
+        </Panel>
           ),
         }}
       />

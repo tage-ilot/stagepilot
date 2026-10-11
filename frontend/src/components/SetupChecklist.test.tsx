@@ -187,12 +187,12 @@ describe("SetupChecklist", () => {
     renderChecklist(null);
 
     expect(screen.getByLabelText("StagePilot setup progress")).toHaveClass(
-      "bg-slate-950/70",
-      "shadow-2xl",
+      "bg-surface-950/70",
+      "shadow-elevation-default",
     );
     expect(screen.getByText("Select a setup step to open its connection panel.")).toHaveClass(
-      "text-slate-300",
+      "text-ink-body",
     );
-    expect(screen.getByText("Review and save startup defaults")).toHaveClass("text-slate-400");
+    expect(screen.getByText("Review and save startup defaults")).toHaveClass("text-ink-muted");
   });
 });

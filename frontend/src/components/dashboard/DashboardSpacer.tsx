@@ -13,12 +13,12 @@ export function DashboardSpacer({
     return <div aria-hidden="true" className="pointer-events-none h-full opacity-0" />;
   }
   return (
-    <div className="flex h-full min-h-0 items-center justify-center rounded-xl border border-dashed border-sky-300/40 bg-sky-300/[0.06]">
+    <div className="flex h-full min-h-0 items-center justify-center rounded-ds-xl border border-dashed border-info/40 bg-info/5">
       <div className="text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-sky-200">Intentional spacer</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-info-text">Intentional spacer</p>
         <button
           aria-label="Remove dashboard spacer"
-          className="mt-2 rounded-md border border-rose-400/30 px-2.5 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-400/20"
+          className="mt-2 touch-manipulation rounded-ds-lg border border-danger/30 bg-danger/10 px-2.5 py-1.5 text-xs font-semibold text-danger-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-danger/20 coarse:min-h-ds-touch-target"
           onClick={() => onRemove(id)}
           type="button"
         >
