@@ -458,4 +458,128 @@ describe("LightsSetupPanel", () => {
       expect(control).toHaveAttribute("aria-label", name);
     }
   });
+
+  describe("Save configuration bar", () => {
+    const twoOutputs: LightsStatusResponse = {
+      ...lights,
+      outputs: [
+        ...lights.outputs,
+        { name: "Other MIDI port", ambiguous: false, selected: false, connected: false },
+      ],
+    };
+    const make = (over: Partial<React.ComponentProps<typeof LightsSetupPanel>> = {}) => (
+      <LightsSetupPanel
+        error={null}
+        lights={twoOutputs}
+        message={null}
+        onRefresh={vi.fn()}
+        onSaveCues={vi.fn()}
+        onSaveSettings={vi.fn()}
+        onTest={vi.fn()}
+        pendingOperation={null}
+        settings={settings}
+        state={state}
+        {...over}
+      />
+    );
+    const bar = () => document.querySelector("[data-save-bar]") as HTMLElement;
+
+    it("replaces Save and connect with one Save configuration, clean at first", () => {
+      render(make());
+      expect(screen.queryByRole("button", { name: "Save and connect" })).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Save configuration" })).toHaveLength(1);
+      expect(bar()).toHaveAttribute("data-state", "clean");
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("holds output and channel only, counts two, and does not save on change", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      expect(bar()).toHaveAttribute("data-state", "held");
+      expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
+      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
+      expect(onSaveSettings).not.toHaveBeenCalled();
+    });
+
+    it("does not mark or count Note pulse, but still saves it in the payload", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      render(make({ onSaveSettings }));
+      const pulse = screen.getByLabelText("Note pulse (ms)");
+      await user.clear(pulse);
+      await user.type(pulse, "250");
+      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+      expect(bar()).toHaveAttribute("data-state", "clean");
+      await user.click(screen.getByRole("button", { name: "Save configuration" }));
+      expect(onSaveSettings).toHaveBeenCalledTimes(1);
+      expect(onSaveSettings.mock.calls[0]?.[0]).toEqual({ enabled: true, output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250 });
+    });
+
+    it("sends a byte-identical payload to onSaveSettings", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      await user.click(screen.getByRole("button", { name: "Save configuration" }));
+      const payload = onSaveSettings.mock.calls[0]?.[0];
+      expect(payload).toEqual({ enabled: true, output_name: "Other MIDI port", channel: 5, pulse_ms: 100 });
+      expect(JSON.stringify(payload)).toBe('{"enabled":true,"output_name":"Other MIDI port","channel":5,"pulse_ms":100}');
+    });
+
+    it("a clean Save does nothing once Lights is enabled", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      render(make({ onSaveSettings }));
+      await user.click(screen.getByRole("button", { name: "Save configuration" }));
+      expect(onSaveSettings).not.toHaveBeenCalled();
+    });
+
+    it("Discard restores the saved output and channel", async () => {
+      const user = userEvent.setup();
+      render(make());
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      await user.click(screen.getByRole("button", { name: "Discard" }));
+      expect(screen.getByLabelText("MIDI output")).toHaveValue("StagePilot to Lightkey");
+      expect(screen.getByLabelText("MIDI channel")).toHaveValue("3");
+      expect(bar()).toHaveAttribute("data-state", "clean");
+    });
+
+    it("shows saving, then Couldn't save with Try again that resends the same payload", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      const view = render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
+      expect(bar()).toHaveAttribute("data-state", "saving");
+      expect(screen.getByText("Saving…")).toBeInTheDocument();
+      view.rerender(make({ onSaveSettings, error: "No port" }));
+      expect(bar()).toHaveAttribute("data-state", "error");
+      expect(screen.getByText("Couldn't save")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, output_name: "StagePilot to Lightkey", channel: 5, pulse_ms: 100 });
+    });
+
+    it("shows Saved automatically only after a cue save, and keeps Refresh and Send test cue as actions", () => {
+      const view = render(make({ pendingOperation: "save-cues" }));
+      expect(bar()).toHaveAttribute("data-state", "clean");
+      view.rerender(make());
+      expect(bar()).toHaveAttribute("data-state", "auto");
+      expect(bar()).toHaveTextContent(/Saved automatically at/);
+      expect(screen.getByRole("button", { name: "Refresh outputs" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send test cue" })).toBeInTheDocument();
+    });
+
+    it("does not show auto after a failed cue save", () => {
+      const view = render(make({ pendingOperation: "save-cues" }));
+      view.rerender(make({ error: "boom" }));
+      expect(bar()).toHaveAttribute("data-state", "clean");
+    });
+  });
 });
