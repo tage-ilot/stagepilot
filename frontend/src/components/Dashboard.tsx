@@ -492,7 +492,7 @@ export function Dashboard({
   dispatch: (action: ActionName) => void;
   selectPlan: (planId: string) => void;
   saveGeneralSettings?: (settings: GeneralSettingsInput) => void;
-  saveMidiSettings?: (settings: MidiSettingsInput) => void;
+  saveMidiSettings?: (settings: MidiSettingsInput) => void | boolean | Promise<boolean | void>;
   testPlanningCenterConnection?: (input: PlanningCenterTestInput) => void;
   loadPlanningCenterServiceTypes?: () => void;
   savePlanningCenter?: (

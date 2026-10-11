@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   MidiCueName,
@@ -11,7 +11,8 @@ import type {
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
-import { PlaybackSaveFooter, usePlaybackDraft, type PlaybackMethod } from "./PlaybackSaveFooter";
+import { PlaybackSaveBar, usePlaybackDraft, type PlaybackMethod } from "./PlaybackSaveFooter";
+import { usePlaybackSave } from "./usePlaybackSave";
 import { playbackMidiNote } from "./playbackStatus";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -80,7 +81,8 @@ export function MidiSetupPanel({
   pendingSettingsSave?: boolean;
   settingsError?: string | null;
   settingsMessage?: string | null;
-  onSaveSettings: (settings: MidiSettingsInput) => void;
+  /** May resolve false when the save failed (the one Save configuration then stops and shows Couldn't save). */
+  onSaveSettings: (settings: MidiSettingsInput) => void | boolean | Promise<boolean | void>;
   songs?: Song[];
   playback?: PlaybackController;
 }) {
@@ -139,13 +141,38 @@ export function MidiSetupPanel({
     };
   }, [channel, debounce, note, settings, velocities]);
 
-  const midiDirty = Boolean(settings) && (
-    channel !== String(settings!.settings.midi.channel)
-    || note !== String(settings!.settings.midi.note)
-    || debounce !== String(settings!.settings.midi.debounce_ms)
-    || cues.some(([cue]) => velocities[cue] !== String(settings!.settings.midi.mappings[cue] ?? ""))
-  );
-  useEffect(() => { onDirtyChange?.(draft.dirty); }, [draft.dirty, onDirtyChange]);
+  const midiView = draft.method !== "playback_api";
+  const savedMidi = settings?.settings.midi;
+  const midiCount = !savedMidi ? 0
+    : Number(channel !== String(savedMidi.channel))
+      + Number(note !== String(savedMidi.note))
+      + Number(debounce !== String(savedMidi.debounce_ms))
+      + cues.filter(([cue]) => velocities[cue] !== String(savedMidi.mappings[cue] ?? "")).length;
+  const midiDirty = midiCount > 0;
+  const midiHeld = midiView ? midiDirty : false;
+  const heldVelocity = (cue: MidiCueName) => midiView && Boolean(savedMidi) && velocities[cue] !== String(savedMidi!.mappings[cue] ?? "");
+  const revertMidi = useCallback(() => {
+    if (!settings) return;
+    const saved = settings.settings.midi;
+    setChannel(String(saved.channel));
+    setNote(String(saved.note));
+    setDebounce(String(saved.debounce_ms));
+    setVelocities(Object.fromEntries(cues.map(([cue]) => [cue, String(saved.mappings[cue] ?? "")])) as Record<MidiCueName, string>);
+  }, [settings]);
+  const applyMidi = useCallback(async () => {
+    if (!parsedSettings) return false;
+    return (await onSaveSettings(parsedSettings)) !== false;
+  }, [onSaveSettings, parsedSettings]);
+  const save = usePlaybackSave(draft, playback, {
+    // Choosing MIDI while the saved MIDI input is off also writes the MIDI settings (enabled), as the old Save MIDI settings did after selectSource.
+    pending: midiView && (midiDirty || (draft.methodDirty && savedMidi?.enabled === false && parsedSettings !== null)),
+    count: midiHeld ? midiCount : 0,
+    valid: parsedSettings !== null,
+    snapshot: midiView ? JSON.stringify(parsedSettings) : "",
+    apply: applyMidi,
+    revert: revertMidi,
+  });
+  useEffect(() => { onDirtyChange?.(save.dirty); }, [save.dirty, onDirtyChange]);
   const enabled = midi?.enabled ?? false;
   const selectedInput = midi?.inputs.find((input) => input.selected) ?? null;
   const connectedInput = midi?.inputs.find((input) => input.connected) ?? null;
@@ -172,7 +199,7 @@ export function MidiSetupPanel({
       />
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
-      <Field className="mt-3 sm:max-w-md" label="Connection method">
+      <Field className="mt-3 sm:max-w-md" heldChange={draft.methodDirty} label="Connection method">
         <Select
           disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
           onChange={(event) => draft.setMethod(event.target.value === "real" ? "real" : event.target.value === "simulated" ? "simulated" : "playback_api")}
@@ -218,10 +245,10 @@ export function MidiSetupPanel({
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="MIDI channel">
+          <Field heldChange={midiView && Boolean(savedMidi) && channel !== String(savedMidi!.channel)} label="MIDI channel">
             <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setChannel(event.target.value)} value={channel} />
           </Field>
-          <Field label="Fixed note">
+          <Field heldChange={midiView && Boolean(savedMidi) && note !== String(savedMidi!.note)} label="Fixed note">
             <Select
               disabled={pendingSettingsSave}
               onChange={(event) => setNote(event.target.value)}
@@ -234,13 +261,13 @@ export function MidiSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field label="Debounce (ms)">
+          <Field heldChange={midiView && Boolean(savedMidi) && debounce !== String(savedMidi!.debounce_ms)} label="Debounce (ms)">
             <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setDebounce(event.target.value)} value={debounce} />
           </Field>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {cues.map(([cue, label]) => (
-            <Field key={cue} label={`${label} velocity`}>
+            <Field heldChange={heldVelocity(cue)} key={cue} label={`${label} velocity`}>
               <Input
                 aria-label={`${label} velocity`}
                 className="tabular-nums"
@@ -254,16 +281,7 @@ export function MidiSetupPanel({
             </Field>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button
-            disabled={pendingSettingsSave || draft.saving || parsedSettings === null}
-            onClick={() => { if (parsedSettings) void draft.applyMethod().then((ok) => { if (ok) onSaveSettings(parsedSettings); }); }}
-            variant="primary"
-          >
-            {pendingSettingsSave ? "Saving…" : "Save MIDI settings"}
-          </Button>
-          <p className="text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
-        </div>
+        <p className="mt-3 text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
       </div>
 
       {(settingsError || settingsMessage) && (
@@ -445,7 +463,7 @@ export function MidiSetupPanel({
         )}
       </div>
       </div>}
-      <PlaybackSaveFooter draft={draft} playback={playback} midiDirty={midiDirty} />
+      <PlaybackSaveBar save={save} />
     </Panel>
   );
 }

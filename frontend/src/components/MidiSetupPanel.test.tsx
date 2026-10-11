@@ -125,7 +125,7 @@ describe("MidiSetupPanel", () => {
       expect(screen.getByLabelText(name).closest("[data-field]")).not.toBeNull();
     }
     expect(screen.getByLabelText("Connection method").tagName).toBe("SELECT");
-    expect(screen.getByRole("button", { name: "Save MIDI settings" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
   });
   it("shows the loaded service plan song-to-velocity map", () => {
     renderPanel({
@@ -247,7 +247,7 @@ describe("MidiSetupPanel", () => {
     await user.selectOptions(fixedNote, "105");
     await user.clear(screen.getByLabelText("MIDI channel"));
     await user.type(screen.getByLabelText("MIDI channel"), "4");
-    await user.click(screen.getByRole("button", { name: "Save MIDI settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSaveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true, channel: 4, note: 105, debounce_ms: 250 }),
