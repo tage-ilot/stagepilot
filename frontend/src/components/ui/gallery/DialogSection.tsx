@@ -54,6 +54,7 @@ export function DialogSection() {
       <Example label="Layer: confirm (z 50)" layer="confirm" title="Confirm layer" />
       <Example label="Layer: update (z 100)" layer="update" title="Update layer" dismissible={false} />
       <Example label="Layer: fatal (z 110)" layer="fatal" title="Fatal layer" dismissible={false} />
+      <Example label="Layer: boundary (z 120)" layer="boundary" title="Boundary layer" dismissible={false} />
       <div data-gallery-row="Live (real overlay)" className="space-y-2">
         <h3 className="font-semibold text-ink-body">Live: opens a real full-screen dialog</h3>
         <span data-gallery-target><Button onClick={() => setLive(true)}>Open dialog</Button></span>

@@ -108,6 +108,7 @@ describe("Dialog", () => {
     ["confirm", "z-50"],
     ["update", "z-[100]"],
     ["fatal", "z-[110]"],
+    ["boundary", "z-[120]"],
   ] as const)("layer %s maps to %s", (layer, cls) => {
     const { container } = render(<Dialog open title="T" layer={layer} />);
     expect(has(backdrop(container), cls)).toBe(true);

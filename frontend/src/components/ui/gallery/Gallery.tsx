@@ -1,3 +1,4 @@
+import { ActionMenuSection } from "./ActionMenuSection";
 import { ButtonSection } from "./ButtonSection";
 import { DialogSection } from "./DialogSection";
 import { DisclosureSection } from "./DisclosureSection";
@@ -5,6 +6,7 @@ import { FieldSection } from "./FieldSection";
 import { PanelSection } from "./PanelSection";
 import { SaveBarSection } from "./SaveBarSection";
 import { SegmentedSection } from "./SegmentedSection";
+import { ToastSection } from "./ToastSection";
 
 export function Gallery() {
   return (
@@ -18,6 +20,8 @@ export function Gallery() {
       <SegmentedSection />
       <SaveBarSection />
       <DialogSection />
+      <ToastSection />
+      <ActionMenuSection />
       <ButtonSection />
       <FieldSection />
       <p className="text-sm text-ink-muted">Default · Hover · Focus · Active · Disabled · Loading · Error</p>

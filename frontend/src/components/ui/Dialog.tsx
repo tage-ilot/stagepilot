@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 
 import { cx } from "./cx";
 
-export type DialogLayer = "confirm" | "update" | "fatal";
+export type DialogLayer = "confirm" | "update" | "fatal" | "boundary";
 export type DialogTone = "default" | "danger";
 
 export interface DialogProps {
@@ -15,7 +15,7 @@ export interface DialogProps {
   description?: ReactNode;
   /** Only sets data-tone. The caller picks the primary action's Button variant. */
   tone?: DialogTone;
-  /** DESIGN.md stacking order: confirm 50, update 100, fatal 110. */
+  /** DESIGN.md stacking order: confirm 50, update 100, fatal 110, boundary 120 (full-screen error boundary). */
   layer?: DialogLayer;
   children?: ReactNode;
   /** Footer buttons. Stacked full width below 481px, a row from 481px. Put the safe option first. */
@@ -28,6 +28,7 @@ const layers: Record<DialogLayer, string> = {
   confirm: "z-50",
   update: "z-[100]",
   fatal: "z-[110]",
+  boundary: "z-[120]",
 };
 
 const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
