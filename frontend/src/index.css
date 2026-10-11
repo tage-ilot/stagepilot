@@ -86,18 +86,43 @@ body {
   image-rendering: pixelated;
 }
 
-/* The fill animates transform (scaleX from the left edge), never width. The
-   scale distorts patterns, so the fill is one flat state colour and the moving
-   effect is a soft shimmer sized in percent. */
+/* The fill is always full width and never animates width or scale, so the
+   beta 31 pixel stripes keep their exact size and sharp edges. Progress is a
+   clip-path reveal driven by --progress (0..1) set inline from App.tsx. */
 .loading-progress-fill {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--ds-info);
-  box-shadow: inset 0 -3px 0 rgb(2 6 23 / 35%);
-  transform-origin: left center;
-  transition: transform 140ms linear;
+  background: repeating-linear-gradient(
+    90deg,
+    #0284c7 0,
+    #0284c7 10px,
+    #38bdf8 10px,
+    #38bdf8 14px,
+    #67e8f9 14px,
+    #67e8f9 16px,
+    #082f49 16px,
+    #082f49 20px
+  );
+  box-shadow:
+    inset 0 3px 0 rgb(255 255 255 / 38%),
+    inset 0 -3px 0 rgb(3 105 161 / 75%);
+  clip-path: inset(0 calc((1 - var(--progress, 1)) * 100%) 0 0);
+  image-rendering: pixelated;
+  transition: clip-path 140ms linear;
+}
+
+/* Leading edge (white then blue, 4px each) that followed the fill in beta 31. */
+.loading-progress-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--progress, 1) * 100%);
+  width: 4px;
+  background: #f8fafc;
+  box-shadow: 4px 0 0 #0ea5e9;
+  transition: left 140ms linear;
 }
 
 /* Small circular loading spinner, shown instead of the bar on phone/tablet
@@ -187,7 +212,8 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-progress-fill {
+  .loading-progress-fill,
+  .loading-progress-edge {
     transition: none;
   }
 
@@ -213,7 +239,25 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 }
 
 .loading-progress-track--failed .loading-progress-fill {
-  background: var(--ds-danger-solid);
+  background: repeating-linear-gradient(
+    90deg,
+    #9f1239 0,
+    #9f1239 10px,
+    #e11d48 10px,
+    #e11d48 14px,
+    #fb7185 14px,
+    #fb7185 16px,
+    #4c0519 16px,
+    #4c0519 20px
+  );
+  box-shadow:
+    inset 0 3px 0 rgb(255 255 255 / 25%),
+    inset 0 -3px 0 rgb(76 5 25 / 80%);
+}
+
+.loading-progress-track--failed .loading-progress-edge {
+  background: #fff1f2;
+  box-shadow: 4px 0 0 #e11d48;
 }
 
 .loading-progress-track--failed .loading-progress-scan,

@@ -231,7 +231,7 @@ export function LightsSetupPanel({
           ? { kind: "auto", at: autoSavedAt }
           : { kind: "clean" };
   const blockedReason = changeCount > 0 && parsedSettings === null
-    ? "Choose an output, a channel from 1 to 15 and a note pulse from 10 to 2000 ms before saving."
+    ? "Choose an output, a channel from 1 to 15 and a note length from 10 to 2000 ms before saving."
     : null;
 
   const discard = () => {
@@ -286,7 +286,7 @@ export function LightsSetupPanel({
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-4">
-        <Field className="lg:col-span-2" heldChange={heldOutput} label="MIDI output">
+        <Field className="lg:col-span-2" heldChange={heldOutput} label="MIDI Output to Lighting Controller">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
             {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
@@ -302,7 +302,7 @@ export function LightsSetupPanel({
             {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
           </Select>
         </Field>
-        <Field error={pulseSaveFailed ? "Couldn't save the note pulse" : undefined} hint={pulseSaving && pendingOperation === "save" ? "Saving…" : undefined} label="Note pulse (ms)">
+        <Field error={pulseSaveFailed ? "Couldn't save the note length" : undefined} hint={pulseSaving && pendingOperation === "save" ? "Saving…" : undefined} label="Note length (ms)">
           <Input className="tabular-nums" max={2000} min={10} onBlur={savePulse} onChange={(event) => { setPulseMs(event.target.value); setPulseSaveFailed(false); }} onKeyDown={(event) => { if (event.key === "Enter") savePulse(); }} type="number" value={pulseMs} />
         </Field>
       </div>
