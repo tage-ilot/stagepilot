@@ -764,7 +764,7 @@ export function Dashboard({
     0,
     timerDuration - Math.ceil(elapsedMilliseconds / 1_000),
   );
-  const [playbackDirty, setPlaybackDirty] = useState(false);
+  const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
   const discardOpen = leaveTarget !== undefined;
@@ -774,9 +774,10 @@ export function Dashboard({
     const timer = window.setTimeout(() => discardButton.current?.focus(), 0);
     return () => window.clearTimeout(timer);
   }, [discardOpen]);
-  // Leaving the Playback panel with unsaved changes asks first; everything else is immediate.
+  // Leaving any setup panel with held (unsaved) changes asks first; everything else is immediate.
   const goTo = (target: ConnectionPanel | null) => {
-    if (activeConnection === "midi" && target !== "midi" && playbackDirty) { setLeaveTarget(target); return; }
+    if (activeConnection !== null && target !== activeConnection && panelDirty) { setLeaveTarget(target); return; }
+    setPanelDirty(false);
     setActiveConnection(target);
   };
   const toggleConnection = (connection: ConnectionPanel) => {
@@ -989,6 +990,7 @@ export function Dashboard({
 
       {canConfigure && activeConnection === "planning-center" && (
         <PlanningCenterSetupPanel
+          onDirtyChange={setPanelDirty}
           error={planningCenterError}
           message={planningCenterMessage}
           onClose={closeConnection}
@@ -1017,7 +1019,7 @@ export function Dashboard({
           midi={midi}
           messages={midiMessages}
           onClose={closeConnection}
-          onDirtyChange={setPlaybackDirty}
+          onDirtyChange={setPanelDirty}
           onRefresh={refreshMidi}
           onSelect={selectMidi}
           onSimulate={simulateMidi}
@@ -1041,13 +1043,14 @@ export function Dashboard({
           <>
             <Button onClick={() => setLeaveTarget(undefined)} size="touch" variant="secondary">Keep editing</Button>
             {/* Dialog focuses the first control on open; the Discard button takes focus after that, as before. */}
-            <Button ref={discardButton} onClick={() => { setPlaybackDirty(false); if (leaveTarget !== undefined) setActiveConnection(leaveTarget); setLeaveTarget(undefined); }} size="touch" variant="destructive">Discard</Button>
+            <Button ref={discardButton} onClick={() => { setPanelDirty(false); if (leaveTarget !== undefined) setActiveConnection(leaveTarget); setLeaveTarget(undefined); }} size="touch" variant="destructive">Discard</Button>
           </>
         }
       />
 
       {canConfigure && activeConnection === "propresenter" && (
         <ProPresenterSetupPanel
+          onDirtyChange={setPanelDirty}
           error={propresenterError}
           message={propresenterMessage}
           onClose={closeConnection}
@@ -1061,6 +1064,7 @@ export function Dashboard({
 
       {canConfigure && activeConnection === "lights" && (
         <LightsSetupPanel
+          onDirtyChange={setPanelDirty}
           connectionStatus={connectionViews.lights.status}
           error={lightsError}
           lights={lights}
@@ -1079,6 +1083,7 @@ export function Dashboard({
 
       {canConfigure && activeConnection === "backend" && (
         <BackendSetupPanel
+          onDirtyChange={setPanelDirty}
           error={settingsError}
           health={health}
           live={live}

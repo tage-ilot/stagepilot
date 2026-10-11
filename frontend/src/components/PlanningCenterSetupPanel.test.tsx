@@ -1,3 +1,4 @@
+import React from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -719,5 +720,69 @@ describe("PlanningCenterSetupPanel SaveBar", () => {
     const reload = screen.getByRole("button", { name: "Load today’s service plan" });
     expect(bar().contains(reload)).toBe(false);
     expect(bar().contains(screen.getByRole("button", { name: "Sign in with Planning Center" }))).toBe(false);
+  });
+});
+
+describe("Services hold-until-saved conformance (guard)", () => {
+  const bar = () => document.querySelector("[data-save-bar]")!;
+  const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
+    { label: "Application ID", value: "new-app-id", saved: "saved-app-id", payload: { app_id: "new-app-id" } },
+    { label: "Secret", value: "new-secret", saved: "", payload: { secret: "new-secret" } },
+    { label: "Service type", value: "wednesday", saved: "sunday", payload: { service_type_id: "wednesday" } },
+    { label: "Service plan title preference", value: "Morning", saved: "Sunday Morning", payload: { plan_title_preference: "Morning" } },
+  ];
+  it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved, payload }) => {
+    const onSave = vi.fn();
+    const onDirtyChange = vi.fn();
+    render(React.cloneElement(panelElement({ onSave }), { onDirtyChange }));
+    const control = screen.getByLabelText(label);
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-held-marker], [data-held-note]")).toHaveLength(1);
+    expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining(payload), expect.any(String));
+    // Save does not clear the draft, so Discard is still offered; the Secret field is the one field that Save clears itself.
+    if (label === "Secret") { expect(screen.getByLabelText(label)).toHaveValue(""); return; }
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(saved);
+    expect(bar()).toHaveAttribute("data-state", "clean");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("Remove saved secret is marked, counted, saved only by Save configuration and restored by Discard", () => {
+    const onSave = vi.fn();
+    const onDirtyChange = vi.fn();
+    render(React.cloneElement(panelElement({ onSave }), { onDirtyChange }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Remove saved secret/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox", { name: /Remove saved secret/ }).closest("label")).toHaveTextContent("Not saved yet");
+    expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ remove_secret: true }), expect.any(String));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("checkbox", { name: /Remove saved secret/ })).not.toBeChecked();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("Timezone and Preferred service time are held and counted", () => {
+    const onDirtyChange = vi.fn();
+    render(React.cloneElement(panelElement(), { onDirtyChange }));
+    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "America/New_York" } });
+    expect(bar()).toHaveTextContent("1 change waiting");
+    fireEvent.change(screen.getByLabelText("Preferred service time"), { target: { value: "10:00" } });
+    expect(bar()).toHaveTextContent("2 changes waiting");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("Load service types and Load today's plan are explicit actions that never change the held count", () => {
+    const onLoadServiceTypes = vi.fn();
+    render(panelElement({ onLoadServiceTypes }));
+    fireEvent.click(screen.getByRole("button", { name: "Load service types" }));
+    expect(onLoadServiceTypes).toHaveBeenCalledOnce();
+    expect(bar()).toHaveAttribute("data-state", "clean");
   });
 });

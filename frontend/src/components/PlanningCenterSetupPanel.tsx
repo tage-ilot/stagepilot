@@ -145,6 +145,7 @@ export function PlanningCenterSetupPanel({
   pendingAction,
   pendingPlanId,
   onClose,
+  onDirtyChange,
   onTest,
   onLoadServiceTypes,
   onSave,
@@ -163,6 +164,7 @@ export function PlanningCenterSetupPanel({
   pendingAction: string | null;
   pendingPlanId: string | null;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onTest: (input: PlanningCenterTestInput) => void;
   onLoadServiceTypes: () => void;
   onSave: (
@@ -226,6 +228,7 @@ export function PlanningCenterSetupPanel({
     time: Boolean(savedPc) && preferredTime !== (savedPc?.preferred_service_time ?? ""),
   };
   const changeCount = Object.values(held).filter(Boolean).length;
+  useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const wasSaving = useRef(false);
   useEffect(() => {

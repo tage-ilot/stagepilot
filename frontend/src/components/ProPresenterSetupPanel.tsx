@@ -23,6 +23,7 @@ export function ProPresenterSetupPanel({
   onTest,
   onRefreshTimers,
   onClose,
+  onDirtyChange,
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
@@ -32,6 +33,7 @@ export function ProPresenterSetupPanel({
   onTest: () => void;
   onRefreshTimers: () => void;
   onClose?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("1025");
@@ -86,6 +88,7 @@ export function ProPresenterSetupPanel({
     timeout: configuredTimeout !== undefined && timeout.trim() !== String(configuredTimeout),
   };
   const changeCount = Object.values(held).filter(Boolean).length;
+  useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const wasSaving = useRef(false);
   useEffect(() => {
@@ -238,6 +241,8 @@ export function ProPresenterSetupPanel({
           {pendingOperation === "refresh" ? "Refreshing…" : "Refresh timers and Looks"}
         </Button>
       </div>
+
+      {changeCount > 0 && <p className="mt-3 text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
 
       {(error || message) && (
         <InlineAlert className="mt-4" tone={error ? "danger" : "success"}>
