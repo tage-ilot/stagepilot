@@ -58,7 +58,7 @@ export function WebDashboardPinGate({ children }: { children: ReactNode }) {
           </p>
           {!checking && (
             <>
-              <Field label="Dashboard PIN" className="text-left">
+              <Field label="Dashboard PIN" className="text-left" error={error}>
                 <Input
                   autoComplete="current-password"
                   autoFocus
@@ -76,11 +76,6 @@ export function WebDashboardPinGate({ children }: { children: ReactNode }) {
                 {pending ? "Checking…" : "Open dashboard"}
               </Button>
             </>
-          )}
-          {error && (
-            <p aria-live="assertive" className="text-type-body-md text-danger-text">
-              {error}
-            </p>
           )}
         </form>
       </Panel>

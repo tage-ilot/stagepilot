@@ -43,6 +43,20 @@ describe("WebDashboardPinGate", () => {
     expect(await screen.findByText("StagePilot loading screen")).toBeInTheDocument();
   });
 
+  it("shows a rejected PIN under the field, announced, with one button", async () => {
+    const user = userEvent.setup();
+    mocks.login.mockRejectedValue(new Error("Incorrect dashboard PIN."));
+    render(<WebDashboardPinGate><div>app</div></WebDashboardPinGate>);
+    await user.type(await screen.findByLabelText("Dashboard PIN"), "1234");
+    await user.click(screen.getByRole("button", { name: "Open dashboard" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Incorrect dashboard PIN.");
+    const pin = screen.getByLabelText("Dashboard PIN");
+    expect(pin).toHaveAttribute("aria-invalid", "true");
+    expect(pin.getAttribute("aria-describedby")).toContain(alert.id);
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
   it("skips the PIN UI when protection is disabled", async () => {
     mocks.getStatus.mockResolvedValue({ required: false, authenticated: true });
     render(
