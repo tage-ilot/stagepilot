@@ -506,18 +506,89 @@ describe("LightsSetupPanel", () => {
       expect(onSaveSettings).not.toHaveBeenCalled();
     });
 
-    it("does not mark or count Note pulse, but still saves it in the payload", async () => {
+    it("saves Note pulse on blur with the saved output and channel, leaving held drafts and markers alone", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      const view = render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      const pulse = screen.getByLabelText("Note pulse (ms)");
+      await user.clear(pulse);
+      await user.type(pulse, "250");
+      expect(onSaveSettings).not.toHaveBeenCalled();
+      await user.tab();
+      expect(onSaveSettings).toHaveBeenCalledTimes(1);
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250 });
+      view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
+      expect(screen.getByText("Saving…", { selector: "p" })).toBeInTheDocument();
+      expect(bar()).toHaveAttribute("data-state", "held");
+      view.rerender(make({ onSaveSettings }));
+      expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
+      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
+      expect(screen.getByLabelText("MIDI output")).toHaveValue("Other MIDI port");
+      expect(screen.getByLabelText("MIDI channel")).toHaveValue("5");
+    });
+
+    it("saves Note pulse on Enter once, shows Saved automatically, and keeps held drafts after the saved settings refresh", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      const view = render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      const pulse = screen.getByLabelText("Note pulse (ms)");
+      await user.clear(pulse);
+      await user.type(pulse, "250{Enter}");
+      await user.tab();
+      expect(onSaveSettings).toHaveBeenCalledTimes(1);
+      view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
+      const refreshed = { ...settings, settings: { ...settings.settings, lights: { ...settings.settings.lights, pulse_ms: 250 } } };
+      view.rerender(make({ onSaveSettings, settings: refreshed }));
+      expect(screen.getByLabelText("MIDI channel")).toHaveValue("5");
+      expect(screen.getByLabelText("Note pulse (ms)")).toHaveValue(250);
+      expect(bar()).toHaveAttribute("data-state", "held");
+      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+    });
+
+    it("shows Saved automatically after a Note pulse save when nothing is held", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      const view = render(make({ onSaveSettings }));
+      const pulse = screen.getByLabelText("Note pulse (ms)");
+      await user.clear(pulse);
+      await user.type(pulse, "250");
+      await user.tab();
+      view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
+      view.rerender(make({ onSaveSettings }));
+      expect(bar()).toHaveAttribute("data-state", "auto");
+      expect(bar()).toHaveTextContent(/Saved automatically at/);
+    });
+
+    it("does not save an out-of-range Note pulse", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
       const pulse = screen.getByLabelText("Note pulse (ms)");
       await user.clear(pulse);
+      await user.type(pulse, "5");
+      await user.tab();
+      expect(onSaveSettings).not.toHaveBeenCalled();
+    });
+
+    it("a failed Note pulse save keeps the typed value with an error and leaves the held markers", async () => {
+      const user = userEvent.setup();
+      const onSaveSettings = vi.fn();
+      const view = render(make({ onSaveSettings }));
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      const pulse = screen.getByLabelText("Note pulse (ms)");
+      await user.clear(pulse);
       await user.type(pulse, "250");
-      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
-      expect(bar()).toHaveAttribute("data-state", "clean");
-      await user.click(screen.getByRole("button", { name: "Save configuration" }));
-      expect(onSaveSettings).toHaveBeenCalledTimes(1);
-      expect(onSaveSettings.mock.calls[0]?.[0]).toEqual({ enabled: true, output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250 });
+      await user.tab();
+      view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
+      view.rerender(make({ onSaveSettings, error: "No port" }));
+      expect(screen.getByLabelText("Note pulse (ms)")).toHaveValue(250);
+      expect(screen.getByText("Couldn't save the note pulse")).toBeInTheDocument();
+      expect(bar()).toHaveAttribute("data-state", "held");
+      expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+      expect(screen.getByLabelText("MIDI channel")).toHaveValue("5");
     });
 
     it("sends a byte-identical payload to onSaveSettings", async () => {
