@@ -635,6 +635,21 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     });
 
+    it("focuses Discard once on open; Dashboard re-renders at 250 ms and 5 s do not pull focus back from Keep editing", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await openPlayback();
+      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Discard" })).toHaveFocus());
+      await user.tab({ shift: true });
+      expect(screen.getByRole("button", { name: "Keep editing" })).toHaveFocus();
+      for (const ms of [300, 600, 5_400, 5_400]) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+        expect(screen.getByRole("button", { name: "Keep editing" })).toHaveFocus();
+      }
+    });
+
     it("also asks when switching to another tab, and never asks when nothing changed", async () => {
       const user = await openPlayback();
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
