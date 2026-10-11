@@ -167,12 +167,12 @@ function StagePilotApp() {
               aria-valuemin={1}
               aria-valuenow={Math.round(startupProgress.value)}
               aria-valuetext={startupProgress.valueText}
-              className={`loading-progress-track loading-progress-track--${startupProgress.tone} mx-auto mt-10 w-full max-w-xl`}
+              className={`loading-progress-track loading-progress-track--${startupProgress.tone} loading-progress-track--desktop-only mx-auto mt-10 w-full max-w-xl`}
               role="progressbar"
             >
               <div
                 className={`loading-progress-fill ${startupProgress.moving ? "loading-progress-fill--moving" : ""}`}
-                style={{ width: `${startupProgress.value}%` }}
+                style={{ transform: `scaleX(${startupProgress.value / 100})` }}
               >
                 <span className="loading-progress-scan" />
               </div>

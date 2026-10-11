@@ -69,65 +69,49 @@ body {
 .loading-progress-track {
   height: 18px;
   overflow: hidden;
-  border: 3px solid #020617;
-  outline: 2px solid #dbeafe;
+  border: 3px solid var(--ds-surface-950);
+  outline: 2px solid var(--ds-info-text);
   outline-offset: 0;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #07101f 0,
-      #07101f 14px,
-      #0f1f35 14px,
-      #0f1f35 18px
-    );
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ds-surface-950) 0,
+    var(--ds-surface-950) 14px,
+    var(--ds-surface-900) 14px,
+    var(--ds-surface-900) 18px
+  );
   box-shadow:
-    5px 5px 0 #020617,
-    0 0 0 1px #38bdf8,
-    0 0 20px rgb(14 165 233 / 25%);
+    5px 5px 0 var(--ds-surface-950),
+    0 0 0 1px var(--ds-info),
+    0 0 20px rgb(56 189 248 / 25%);
   image-rendering: pixelated;
 }
 
+/* The fill animates transform (scaleX from the left edge), never width. The
+   scale distorts patterns, so the fill is one flat state colour and the moving
+   effect is a soft shimmer sized in percent. */
 .loading-progress-fill {
   position: relative;
+  width: 100%;
   height: 100%;
   overflow: hidden;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #0284c7 0,
-      #0284c7 10px,
-      #38bdf8 10px,
-      #38bdf8 14px,
-      #67e8f9 14px,
-      #67e8f9 16px,
-      #082f49 16px,
-      #082f49 20px
-    );
-  box-shadow:
-    inset 0 3px 0 rgb(255 255 255 / 38%),
-    inset 0 -3px 0 rgb(3 105 161 / 75%),
-    1px 0 0 #dbeafe;
-  transition: width 140ms linear;
+  background: var(--ds-info);
+  box-shadow: inset 0 -3px 0 rgb(2 6 23 / 35%);
+  transform-origin: left center;
+  transition: transform 140ms linear;
 }
 
-/* Small circular loading spinner matching the rectangular loading-progress
-   bar's pixel-art/retro blue visual language (not the orange brand accent). */
+/* Small circular loading spinner, shown instead of the bar on phone/tablet
+   widths. It follows the bar states (blue loading, amber delayed, red failed). */
 .loading-spinner-circular {
   display: none;
   width: 40px;
   height: 40px;
   margin: 1.5rem auto 0;
   border-radius: 9999px;
-  border: 4px solid #07101f;
-  outline: 2px solid #dbeafe;
-  outline-offset: 0;
-  border-top-color: #38bdf8;
-  border-right-color: #38bdf8;
-  box-shadow:
-    5px 5px 0 #020617,
-    0 0 0 1px #38bdf8,
-    0 0 20px rgb(14 165 233 / 25%);
-  image-rendering: pixelated;
+  border: 4px solid var(--ds-surface-950);
+  border-top-color: var(--ds-info);
+  border-right-color: var(--ds-info);
+  box-shadow: 0 0 20px rgb(56 189 248 / 25%);
   animation: loading-spinner-spin 800ms steps(8, end) infinite;
 }
 
@@ -137,38 +121,68 @@ body {
   }
 }
 
+/* Spinner state colours, driven by the bar's tone class in the same container. */
+div:has(> .loading-progress-track--delayed) > .loading-spinner-circular {
+  border-top-color: var(--ds-warning);
+  border-right-color: var(--ds-warning);
+  box-shadow: 0 0 20px rgb(251 191 36 / 22%);
+}
+
+div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
+  border-color: var(--ds-surface-950);
+  border-top-color: var(--ds-danger-soft);
+  border-right-color: var(--ds-danger-soft);
+  box-shadow: 0 0 20px rgb(244 63 94 / 24%);
+  animation: none;
+}
+
+/* Reduced motion: no spin; the arc stays visible in the state colour. */
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner-circular {
     animation: none;
   }
 }
 
-/* Only shown on phone/tablet-sized viewports, mirroring the 1024px
-   desktop/mobile breakpoint used elsewhere in this codebase. */
+/* Phone/tablet (mirrors the 1024px desktop/mobile breakpoint): the spinner
+   replaces the bar. The bar stays in the accessibility tree (progressbar role
+   and values) but is visually hidden. */
 @media (max-width: 1023px) {
   .loading-spinner-circular--mobile-only {
     display: block;
+  }
+
+  .loading-progress-track--desktop-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    outline: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 
 .loading-progress-scan {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -42px;
-  width: 28px;
-  background: rgb(255 255 255 / 70%);
-  box-shadow: 12px 0 0 rgb(186 230 253 / 35%);
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgb(186 230 253 / 45%) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 40% 100%;
+  background-position: -40% 0;
   animation: loading-pixel-scan 900ms steps(7, end) infinite;
 }
 
 @keyframes loading-pixel-scan {
-  from {
-    transform: translateX(0);
-  }
-
   to {
-    transform: translateX(620px);
+    background-position: 140% 0;
   }
 }
 
@@ -195,36 +209,21 @@ body {
 
 .loading-progress-track--delayed {
   box-shadow:
-    5px 5px 0 #020617,
-    0 0 0 1px #f59e0b,
-    0 0 20px rgb(245 158 11 / 22%);
+    5px 5px 0 var(--ds-surface-950),
+    0 0 0 1px var(--ds-warning),
+    0 0 20px rgb(251 191 36 / 22%);
 }
 
 .loading-progress-track--failed {
-  outline-color: #fecdd3;
+  outline-color: var(--ds-danger-text);
   box-shadow:
-    5px 5px 0 #020617,
-    0 0 0 1px #fb7185,
+    5px 5px 0 var(--ds-surface-950),
+    0 0 0 1px var(--ds-danger-soft),
     0 0 20px rgb(244 63 94 / 24%);
 }
 
 .loading-progress-track--failed .loading-progress-fill {
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #9f1239 0,
-      #9f1239 10px,
-      #e11d48 10px,
-      #e11d48 14px,
-      #fb7185 14px,
-      #fb7185 16px,
-      #4c0519 16px,
-      #4c0519 20px
-    );
-  box-shadow:
-    inset 0 3px 0 rgb(255 255 255 / 25%),
-    inset 0 -3px 0 rgb(76 5 25 / 80%),
-    1px 0 0 #fecdd3;
+  background: var(--ds-danger-solid);
 }
 
 .loading-progress-track--failed .loading-progress-scan,

@@ -75,10 +75,15 @@ describe("StagePilot pre-dashboard loading screen fits narrow (mobile/tablet) vi
     expect(heading.className).toMatch(/\blg:text-\[11\.25rem\]/);
   });
 
-  it("shows the mobile-only circular spinner alongside the progress bar on a narrow viewport", async () => {
+  it("renders the mobile-only circular spinner and marks the bar for CSS hiding on a narrow viewport", async () => {
     render(<App />);
 
-    await screen.findByRole("progressbar", { name: "StagePilot startup progress" });
+    const bar = await screen.findByRole("progressbar", { name: "StagePilot startup progress" });
+    // The real hiding is the max-width: 1023px rule on this class (proved in screenshots).
+    expect(bar).toHaveClass("loading-progress-track--desktop-only");
+    const fill = bar.querySelector(".loading-progress-fill") as HTMLElement;
+    expect(fill.style.transform).toMatch(/^scaleX\(/);
+    expect(fill.style.width).toBe("");
     const spinner = document.querySelector(".loading-spinner-circular");
     expect(spinner).not.toBeNull();
     expect(spinner?.className).toContain("loading-spinner-circular--mobile-only");
