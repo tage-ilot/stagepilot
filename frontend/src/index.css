@@ -12,10 +12,9 @@
 
 :root {
   color-scheme: dark;
-  /* Compatibility aliases are generated in design-tokens.css. */
-  --sp-motion-fast: 140ms;
-  --sp-motion-live: 420ms;
-  --sp-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-fast: 140ms;
+  --motion-live: 420ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --status-motion: 275ms;
   --status-ease: linear;
   font-family:
@@ -23,8 +22,8 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  background: var(--sp-bg);
-  color: var(--sp-text);
+  background: var(--ds-background);
+  color: var(--ds-ink);
 }
 
 * {
@@ -36,7 +35,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0 auto;
-  background-color: var(--sp-bg);
+  background-color: var(--ds-background);
   background-attachment: scroll;
   background-image:
     linear-gradient(180deg, rgb(5 9 14 / 0.08), rgb(5 9 14 / 0.28) 44rem, rgb(5 9 14 / 0.5)),
@@ -57,13 +56,13 @@ body {
 
 .font-brand {
   font-family: "StagePilot Logo", ui-sans-serif, system-ui, sans-serif;
-  -webkit-text-stroke: 1px #000;
+  -webkit-text-stroke: 1px var(--brand-outline);
   paint-order: stroke fill;
   text-shadow:
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    1px 1px 0 #000;
+    -1px -1px 0 var(--brand-outline),
+    1px -1px 0 var(--brand-outline),
+    -1px 1px 0 var(--brand-outline),
+    1px 1px 0 var(--brand-outline);
 }
 
 .loading-progress-track {
@@ -289,8 +288,8 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   bottom: 7px;
   width: 16px;
   height: 16px;
-  border-right: 3px solid var(--sp-accent);
-  border-bottom: 3px solid var(--sp-accent);
+  border-right: 3px solid var(--ds-primary);
+  border-bottom: 3px solid var(--ds-primary);
 }
 
 /* Touch: the 16px resize corner gets a 44px invisible hit area (the drawn corner
@@ -313,7 +312,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 .stagepilot-dashboard-grid > .grid-stack-placeholder > .placeholder-content {
   border: 1px dashed rgb(255 98 56 / 0.72);
   border-radius: 0.75rem;
-  background: var(--sp-accent-subtle);
+  background: color-mix(in srgb, var(--ds-primary) 13%, transparent);
 }
 
 .dashboard-grid-item-interacting {
@@ -370,16 +369,8 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--sp-focus);
+  outline: 2px solid var(--ds-primary-focus);
   outline-offset: 3px;
-}
-
-.section-kicker {
-  color: var(--sp-text-quiet);
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
 }
 
 @container (min-width: 46rem) {
@@ -389,11 +380,11 @@ textarea:focus-visible {
 }
 
 .live-title-transition {
-  animation: live-title-reveal var(--sp-motion-live) var(--sp-ease) both;
+  animation: live-title-reveal var(--motion-live) var(--ease) both;
 }
 
 .operational-timer {
-  color: var(--sp-text);
+  color: var(--ds-ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.06em;
   text-shadow: 0 0 28px rgb(255 98 56 / 0.12);
@@ -401,7 +392,7 @@ textarea:focus-visible {
 
 .current-song-row {
   position: relative;
-  background: linear-gradient(90deg, var(--sp-accent-subtle), transparent 72%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ds-primary) 13%, transparent), transparent 72%);
 }
 
 .current-song-row::before {
@@ -410,12 +401,12 @@ textarea:focus-visible {
   bottom: 0;
   left: 0;
   width: 3px;
-  background: var(--sp-accent);
+  background: var(--ds-primary);
   content: "";
 }
 
 .event-row {
-  transition: background-color var(--sp-motion-fast) ease;
+  transition: background-color var(--motion-fast) ease;
 }
 
 .event-row:hover {
@@ -700,7 +691,7 @@ textarea:focus-visible {
 
 .manual-controls-grid {
   grid-template-columns: minmax(0, 1fr);
-  transition: grid-template-columns var(--sp-motion-fast) var(--sp-ease);
+  transition: grid-template-columns var(--motion-fast) var(--ease);
 }
 
 @container (min-width: 18rem) {
@@ -734,13 +725,13 @@ textarea:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d131a;
+  background: var(--ds-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 2px solid #0d131a;
+  border: 2px solid var(--ds-scrollbar-track);
   border-radius: 999px;
-  background: #334155;
+  background: theme("colors.slate.700");
 }
 
 /* Phones and tablets: a focused field is never hidden under the sticky save bar. */

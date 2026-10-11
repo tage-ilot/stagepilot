@@ -1098,7 +1098,7 @@ export function Dashboard({
         <Panel className="widget-autosize-target flex h-full min-h-0 flex-col overflow-hidden !p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
-              <p className="section-kicker">Service plan</p>
+              <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
               <h2 className="mt-1 text-lg font-bold text-ink">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 text-xs text-ink-muted">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
@@ -1146,7 +1146,7 @@ export function Dashboard({
           ),
           "manual-controls": canOperate ? (
           <Panel className="widget-autosize-target manual-controls-panel h-full min-h-0 overflow-hidden">
-            <p className="section-kicker">Manual controls</p>
+            <p className="text-type-kicker uppercase text-ink-muted">Manual controls</p>
             <div className="manual-controls-grid mt-3 grid gap-2">
               <ActionButton action="start_next" label="Start next" tone="green" disabled={pendingAction !== null} onAction={dispatch} />
               <ActionButton action="restart_current" label="Restart current" tone="green" disabled={pendingAction !== null || !state.current_song} onAction={dispatch} />
@@ -1159,7 +1159,7 @@ export function Dashboard({
           ) : null,
           events: (
         <Panel className="flex h-full min-h-0 flex-col overflow-hidden !p-0">
-          <div className="flex items-center justify-between p-4"><p className="section-kicker">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
+          <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
             {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}

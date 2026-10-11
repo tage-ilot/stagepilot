@@ -30,7 +30,7 @@ test("pointer variants generate scoped real hover and coarse target CSS", async 
   assert.ok(coarse.nodes.some((node) => node.prop === "min-height" && node.value === "44px"));
   assert.equal(config.future?.hoverOnlyWhenSupported, undefined);
 });
-test("compatibility keeps stock radii, spacing, brand and stage colors", () => {
+test("compatibility keeps stock radii, spacing, brand; stage colours are gone", () => {
   const theme = resolveConfig(config).theme;
   assert.equal(theme.borderRadius.DEFAULT, "0.25rem");
   assert.equal(theme.borderRadius.lg, "0.5rem");
@@ -39,7 +39,7 @@ test("compatibility keeps stock radii, spacing, brand and stage colors", () => {
   assert.equal(theme.spacing["2xl"], undefined);
   assert.equal(theme.spacing["ds-2xl"], "24px");
   assert.equal(theme.fontFamily.brand, undefined);
-  assert.equal(theme.colors.stage[850], "#111923");
+  assert.equal(theme.colors.stage, undefined);
   assert.equal(theme.colors.idle, "#64748b");
   assert.equal(theme.colors.ink, "#f8f4ec");
   assert.equal(theme.colors.neutral[500], "#737373");
