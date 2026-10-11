@@ -376,7 +376,7 @@ describe("LightsSetupPanel", () => {
       const onTest = vi.fn();
       const user = userEvent.setup();
       render(panel(onTest, settings));
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       const button = screen.getByRole("button", { name: "Send test cue" });
       expect(button).toBeDisabled();
       expect(button).toHaveAccessibleDescription(reason);
@@ -413,7 +413,7 @@ describe("LightsSetupPanel", () => {
       // saved output is missing from the list but still selected: draft equals saved
       expect(screen.getByRole("option", { name: /StagePilot to Lightkey \(currently unavailable\)/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeEnabled();
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
     });
 
@@ -421,7 +421,7 @@ describe("LightsSetupPanel", () => {
       const onTest = vi.fn();
       const user = userEvent.setup();
       const { rerender } = render(panel(onTest, settings));
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
       rerender(panel(onTest, withSaved("Other MIDI port", 3)));
       const button = screen.getByRole("button", { name: "Send test cue" });
@@ -495,15 +495,15 @@ describe("LightsSetupPanel", () => {
       expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("aria-disabled", "true");
     });
 
-    it("holds output, channel and note pulse, counts three, and does not save on change", async () => {
+    it("holds output, channel and note length, counts three, and does not save on change", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
-      const pulse = screen.getByLabelText("Note pulse (ms)");
+      const pulse = screen.getByLabelText("Note length (ms)");
       await user.clear(pulse);
       await user.type(pulse, "250{Enter}");
       await user.tab();
@@ -514,11 +514,11 @@ describe("LightsSetupPanel", () => {
       expect(onSaveSettings).not.toHaveBeenCalled();
     });
 
-    it("Note pulse alone is held, marked, and saved only by Save configuration", async () => {
+    it("Note length alone is held, marked, and saved only by Save configuration", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      const pulse = screen.getByLabelText("Note pulse (ms)");
+      const pulse = screen.getByLabelText("Note length (ms)");
       await user.clear(pulse);
       await user.type(pulse, "250");
       await user.tab();
@@ -530,31 +530,31 @@ describe("LightsSetupPanel", () => {
       expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250 });
     });
 
-    it("blocks Save with a reason while Note pulse is out of range", async () => {
+    it("blocks Save with a reason while Note length is out of range", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      const pulse = screen.getByLabelText("Note pulse (ms)");
+      const pulse = screen.getByLabelText("Note length (ms)");
       await user.clear(pulse);
       await user.type(pulse, "5");
       await user.tab();
-      expect(screen.getByText(/note pulse from 10 to 2000 ms/)).toBeInTheDocument();
+      expect(screen.getByText(/note length from 10 to 2000 ms/)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       expect(onSaveSettings).not.toHaveBeenCalled();
     });
 
-    it("keeps the typed Note pulse and held markers after a failed save", async () => {
+    it("keeps the typed Note length and held markers after a failed save", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       const view = render(make({ onSaveSettings }));
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
-      const pulse = screen.getByLabelText("Note pulse (ms)");
+      const pulse = screen.getByLabelText("Note length (ms)");
       await user.clear(pulse);
       await user.type(pulse, "250");
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       view.rerender(make({ onSaveSettings, pendingOperation: "save" }));
       view.rerender(make({ onSaveSettings, error: "No port" }));
-      expect(screen.getByLabelText("Note pulse (ms)")).toHaveValue(250);
+      expect(screen.getByLabelText("Note length (ms)")).toHaveValue(250);
       expect(screen.getByLabelText("MIDI channel")).toHaveValue("5");
       expect(bar()).toHaveAttribute("data-state", "error");
       expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
@@ -564,7 +564,7 @@ describe("LightsSetupPanel", () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       const payload = onSaveSettings.mock.calls[0]?.[0];
@@ -580,17 +580,17 @@ describe("LightsSetupPanel", () => {
       expect(onSaveSettings).not.toHaveBeenCalled();
     });
 
-    it("Discard restores the saved output, channel and note pulse", async () => {
+    it("Discard restores the saved output, channel and note length", async () => {
       const user = userEvent.setup();
       render(make());
-      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
-      await user.clear(screen.getByLabelText("Note pulse (ms)"));
-      await user.type(screen.getByLabelText("Note pulse (ms)"), "250");
+      await user.clear(screen.getByLabelText("Note length (ms)"));
+      await user.type(screen.getByLabelText("Note length (ms)"), "250");
       await user.click(screen.getByRole("button", { name: "Discard" }));
-      expect(screen.getByLabelText("MIDI output")).toHaveValue("StagePilot to Lightkey");
+      expect(screen.getByLabelText("MIDI Output to Lighting Controller")).toHaveValue("StagePilot to Lightkey");
       expect(screen.getByLabelText("MIDI channel")).toHaveValue("3");
-      expect(screen.getByLabelText("Note pulse (ms)")).toHaveValue(100);
+      expect(screen.getByLabelText("Note length (ms)")).toHaveValue(100);
       expect(bar()).toHaveAttribute("data-state", "clean");
     });
 
