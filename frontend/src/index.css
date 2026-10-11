@@ -611,6 +611,8 @@ textarea:focus-visible {
 
   .connections-status.status-compact .status-card-status {
     justify-content: center;
+    min-width: 0;
+    max-width: 100%;
     margin-top: clamp(0.01rem, 0.2vw, 0.08rem);
     gap: clamp(0.16rem, 0.55vw, 0.3rem);
     filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.95));
@@ -624,17 +626,19 @@ textarea:focus-visible {
   }
 
   .connections-status.status-compact .status-card-status-word {
-    max-width: none;
-    overflow: visible;
-    font-size: clamp(0.4rem, 1.75vw, 0.68rem);
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    /* 11px floor (DESIGN.md): the word ellipsizes when the card is narrow; the full word stays in the card's aria-label and the dot carries the state. */
+    font-size: 0.6875rem;
     letter-spacing: -0.025em;
-    text-overflow: clip;
+    text-overflow: ellipsis;
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.95);
     transition: none;
   }
 
   .connections-status.status-compact .status-card[data-status] .status-card-status-word {
-    font-size: clamp(0.4rem, 1.75vw, 0.68rem);
+    font-size: 0.6875rem;
   }
 
   .connections-status.status-compact .status-card-icon {
@@ -711,4 +715,11 @@ textarea:focus-visible {
   border: 2px solid #0d131a;
   border-radius: 999px;
   background: #334155;
+}
+
+/* Phones and tablets: a focused field is never hidden under the sticky save bar. */
+@media (max-width: 1023.98px) {
+  html {
+    scroll-padding-bottom: 6rem;
+  }
 }

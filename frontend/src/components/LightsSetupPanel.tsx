@@ -297,7 +297,7 @@ export function LightsSetupPanel({
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-2 coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"
