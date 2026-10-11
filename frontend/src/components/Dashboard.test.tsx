@@ -1208,6 +1208,43 @@ describe("Dashboard widget layout", () => {
   });
 });
 
+describe("Dashboard reduced motion", () => {
+  const runResize = async (reduce: boolean) => {
+    const originalWidth = window.innerWidth;
+    const animate = vi.fn(() => ({ cancel: vi.fn(), finished: Promise.resolve() }));
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduce && query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+    try {
+      renderDashboard(loadedServiceState);
+      animate.mockClear();
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+      act(() => window.dispatchEvent(new Event("resize")));
+      await waitFor(() => expect(document.querySelector(".connections-status")).toHaveClass("status-compact"));
+      return animate;
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+      delete (HTMLElement.prototype as { animate?: unknown }).animate;
+      vi.unstubAllGlobals();
+    }
+  };
+
+  it("reduced motion: status cards switch to the compact layout with no tween", async () => {
+    const animate = await runResize(true);
+    expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("motion allowed: the same switch still animates the cards", async () => {
+    const animate = await runResize(false);
+    expect(animate).toHaveBeenCalled();
+  });
+});
+
 describe("Dashboard connection configuration panels", () => {
   it("keeps the retained first-launch setup UI disabled", () => {
     renderDashboard(loadedServiceState, {

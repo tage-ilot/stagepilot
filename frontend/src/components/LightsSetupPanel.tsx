@@ -221,7 +221,7 @@ export function LightsSetupPanel({
           ? { kind: "auto", at: autoSavedAt }
           : { kind: "clean" };
   const blockedReason = changeCount > 0 && parsedSettings === null
-    ? "Choose an output, a channel from 1 to 15 and a note pulse from 10 to 2000 ms before saving."
+    ? "Choose an output, a channel from 1 to 15 and a note length from 10 to 2000 ms before saving."
     : null;
 
   const discard = () => {
@@ -262,7 +262,7 @@ export function LightsSetupPanel({
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-4">
-        <Field className="lg:col-span-2" heldChange={heldOutput} label="MIDI output">
+        <Field className="lg:col-span-2" heldChange={heldOutput} label="MIDI Output to Lighting Controller">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
             {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
@@ -278,7 +278,7 @@ export function LightsSetupPanel({
             {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
           </Select>
         </Field>
-        <Field heldChange={heldPulse} label="Note pulse (ms)">
+        <Field heldChange={heldPulse} label="Note length (ms)">
           <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
         </Field>
       </div>
@@ -297,7 +297,7 @@ export function LightsSetupPanel({
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-2 coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"

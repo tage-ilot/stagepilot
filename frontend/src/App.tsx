@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Button } from "./components/ui";
 import { Dashboard } from "./components/Dashboard";
@@ -173,10 +173,15 @@ function StagePilotApp() {
             >
               <div
                 className={`loading-progress-fill ${startupProgress.moving ? "loading-progress-fill--moving" : ""}`}
-                style={{ transform: `scaleX(${startupProgress.value / 100})` }}
+                style={{ "--progress": startupProgress.value / 100 } as CSSProperties}
               >
                 <span className="loading-progress-scan" />
               </div>
+              <span
+                aria-hidden="true"
+                className="loading-progress-edge"
+                style={{ "--progress": startupProgress.value / 100 } as CSSProperties}
+              />
             </div>
             <p className="mt-6 text-lg font-semibold text-ink">
               {progressHeadline}
