@@ -55,7 +55,7 @@ describe("ProPresenterSetupPanel", () => {
 
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "192.168.4.40");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     await user.click(screen.getByRole("button", { name: "Refresh timers and Looks" }));
 
@@ -129,7 +129,7 @@ describe("ProPresenterSetupPanel", () => {
     );
 
     expect(screen.queryByLabelText("Timer output")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
 
     expect(onSave).toHaveBeenCalledWith({
       host: "127.0.0.1",
@@ -197,7 +197,7 @@ describe("ProPresenterSetupPanel", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "look-worship");
     expect(onSave).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ look_id: "look-worship" }));
   });
 
@@ -215,7 +215,8 @@ describe("ProPresenterSetupPanel", () => {
     );
 
     expect(container.querySelector("#propresenter-configuration")).toHaveAttribute("data-variant", "setup");
-    expect(screen.getByRole("button", { name: "Save settings" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
     for (const name of ["Test connection", "Refresh timers and Looks"]) {
       const button = screen.getByRole("button", { name });
       expect(button).toHaveAttribute("data-variant", "tinted");
@@ -234,5 +235,119 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
     const look = screen.getByRole("combobox", { name: "ProPresenter Look" });
     expect(document.querySelector(`label[for="${look.id}"]`)).toHaveTextContent(/^ProPresenter Look$/);
+  });
+
+  const renderPanel = (props: Partial<React.ComponentProps<typeof ProPresenterSetupPanel>> = {}) =>
+    render(
+      <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={status} {...props} />,
+    );
+
+  it("starts clean with a dimmed Save configuration and a reason beside it", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    const bar = document.querySelector("[data-save-bar]");
+    expect(bar).toHaveAttribute("data-state", "clean");
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save configuration" });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    await user.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("holds edits: count, held markers on the edited fields, nothing sent until Save", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "look-worship");
+    expect(onSave).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
+    expect(screen.getByText(/2 changes/)).toBeInTheDocument();
+    expect(screen.getAllByText("Not saved yet").length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('[data-field][data-state="held"]')).toHaveLength(2);
+  });
+
+  it("a changed countdown timer is a held change and is sent with Save", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({
+      onSave,
+      propresenter: { ...status, timers: [...status.timers, { id: "t2", name: "Alternate Timer", index: 1, is_countdown: true, state: "stopped" }] },
+    });
+    await user.selectOptions(screen.getByRole("combobox", { name: /Detected timer/i }), "Alternate Timer");
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
+    expect(screen.getByText(/1 change/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ timer_name: "Alternate Timer" }));
+  });
+
+  it("sends a payload byte-identical to the old Save settings payload", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "  192.0.2.10  ");
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "1026");
+    await user.clear(screen.getByLabelText("Timeout (seconds)"));
+    await user.type(screen.getByLabelText("Timeout (seconds)"), "4.5");
+    await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "");
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(onSave.mock.calls[0]?.[0])).toBe(
+      JSON.stringify({ host: "192.0.2.10", port: 1026, timer_name: "Song Countdown", look_id: null, request_timeout_seconds: 4.5 }),
+    );
+  });
+
+  it("Discard restores the saved values and clears the held state", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByLabelText("Host")).toHaveValue("127.0.0.1");
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
+  });
+
+  it("explains an invalid edit and does not send", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onSave });
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "99999");
+    expect(screen.getByText(/port from 1 to 65535/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("shows saving, then Couldn't save with Try again that re-sends the same payload", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    const base = {
+      error: null as string | null, message: null, onRefreshTimers: vi.fn(), onSave, onTest: vi.fn(), propresenter: status,
+    };
+    const { rerender } = render(<ProPresenterSetupPanel {...base} pendingOperation={null} />);
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    rerender(<ProPresenterSetupPanel {...base} pendingOperation="save" />);
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "saving");
+    expect(screen.getByText("Saving…")).toBeInTheDocument();
+    rerender(<ProPresenterSetupPanel {...base} error="Request failed" pendingOperation={null} />);
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "error");
+    expect(screen.getByText("Couldn't save")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onSave.mock.calls[1]?.[0]).toEqual(onSave.mock.calls[0]?.[0]);
+  });
+
+  it("keeps Test connection and Refresh as actions outside the bar and keeps the Look helper text", () => {
+    renderPanel();
+    const bar = document.querySelector("[data-save-bar]") as HTMLElement;
+    expect(bar.contains(screen.getByRole("button", { name: "Test connection" }))).toBe(false);
+    expect(bar.contains(screen.getByRole("button", { name: "Refresh timers and Looks" }))).toBe(false);
+    expect(screen.getByText("Selecting a Look does not change Presentation until you save these settings.")).toBeInTheDocument();
   });
 });

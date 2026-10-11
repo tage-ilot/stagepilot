@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ProPresenterSettingsInput,
@@ -10,6 +10,7 @@ import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
+import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 
@@ -75,6 +76,50 @@ export function ProPresenterSetupPanel({
 
   const disabled = !propresenter?.enabled;
   const busy = pendingOperation !== null;
+
+  // Held changes: fields that differ from the saved values. Nothing here saves on change.
+  const held = {
+    host: configuredHost !== undefined && host.trim() !== configuredHost,
+    port: configuredPort !== undefined && port.trim() !== String(configuredPort),
+    timer: configuredTimerName !== undefined && timerName.trim() !== configuredTimerName,
+    look: configuredLookId !== undefined && lookId !== (configuredLookId ?? ""),
+    timeout: configuredTimeout !== undefined && timeout.trim() !== String(configuredTimeout),
+  };
+  const changeCount = Object.values(held).filter(Boolean).length;
+  const [saveFailed, setSaveFailed] = useState(false);
+  const wasSaving = useRef(false);
+  useEffect(() => {
+    const saving = pendingOperation === "save";
+    if (wasSaving.current && !saving) setSaveFailed(Boolean(error));
+    wasSaving.current = saving;
+  }, [pendingOperation, error]);
+  const saveState: SaveBarState = pendingOperation === "save"
+    ? { kind: "saving" }
+    : saveFailed && changeCount > 0
+      ? { kind: "error", message: "Couldn't save" }
+      : changeCount > 0
+        ? { kind: "held", count: changeCount }
+        : { kind: "clean" };
+  const blockedReason = changeCount > 0 && parsedSettings === null
+    ? "Enter a host, a port from 1 to 65535, a timer and a timeout above 0 and up to 60 seconds before saving."
+    : null;
+
+  const discard = () => {
+    if (!propresenter) return;
+    setHost(propresenter.host);
+    setPort(String(propresenter.port));
+    setTimerName(propresenter.timer_name);
+    setLookId(propresenter.look_id ?? "");
+    setTimeout(String(propresenter.request_timeout_seconds));
+    setSaveFailed(false);
+  };
+
+  const save = () => {
+    // Before Presentation is enabled, Save works with no edits (as it did before); afterwards a clean Save is a no-op.
+    if (!parsedSettings || busy || (changeCount === 0 && propresenter?.enabled)) return;
+    setSaveFailed(false);
+    onSave(parsedSettings);
+  };
   const timerDetected = Boolean(
     propresenter?.timers.some((timer) => timer.name === timerName),
   );
@@ -108,14 +153,14 @@ export function ProPresenterSetupPanel({
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Host">
+        <Field heldChange={held.host} label="Host">
           <Input
             disabled={busy}
             onChange={(event) => setHost(event.target.value)}
             value={host}
           />
         </Field>
-        <Field label="Port">
+        <Field heldChange={held.port} label="Port">
           <Input
             disabled={busy}
             inputMode="numeric"
@@ -123,7 +168,7 @@ export function ProPresenterSetupPanel({
             value={port}
           />
         </Field>
-        <Field label="Detected timer">
+        <Field heldChange={held.timer} label="Detected timer">
           <Select
             disabled={busy}
             onChange={(event) => setTimerName(event.target.value)}
@@ -140,7 +185,7 @@ export function ProPresenterSetupPanel({
             ))}
           </Select>
         </Field>
-        <Field label="Timeout (seconds)">
+        <Field heldChange={held.timeout} label="Timeout (seconds)">
           <Input
             disabled={busy}
             inputMode="decimal"
@@ -152,6 +197,7 @@ export function ProPresenterSetupPanel({
 
       <div className="mt-4 max-w-md">
         <Field
+          heldChange={held.look}
           hint="Selecting a Look does not change Presentation until you save these settings."
           label="ProPresenter Look"
         >
@@ -176,13 +222,6 @@ export function ProPresenterSetupPanel({
 
       <div className="mt-5 flex flex-wrap gap-2">
         <Button
-          disabled={busy || parsedSettings === null}
-          onClick={() => parsedSettings && onSave(parsedSettings)}
-          variant="primary"
-        >
-          {pendingOperation === "save" ? "Saving…" : "Save settings"}
-        </Button>
-        <Button
           disabled={disabled || busy}
           onClick={onTest}
           tone="presentation"
@@ -205,6 +244,9 @@ export function ProPresenterSetupPanel({
           {error ?? message}
         </InlineAlert>
       )}
+
+      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
+      <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 
       <dl className="mt-5 grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-3">
         <div>
