@@ -224,4 +224,15 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getByLabelText("ProPresenter Look")).toHaveValue("look-default");
     expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("3");
   });
+
+  it("shows the anatomy copy: kicker, Presentation title, one sentence, Basic heading and a visible Look label", () => {
+    render(
+      <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={status} />,
+    );
+    expect(screen.getByText("Connection configuration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Presentation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
+    const look = screen.getByRole("combobox", { name: "ProPresenter Look" });
+    expect(document.querySelector(`label[for="${look.id}"]`)).toHaveTextContent(/^ProPresenter Look$/);
+  });
 });

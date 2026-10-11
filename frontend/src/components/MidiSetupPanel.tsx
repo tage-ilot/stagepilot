@@ -163,13 +163,14 @@ export function MidiSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close MIDI / Playback configuration"
-        description="The selected source and accepted input device persist between StagePilot launches."
+        description="Choose how StagePilot receives song and action cues from Playback, kept between StagePilot launches."
         headingId="midi-setup-heading"
         onClose={onClose}
         status={connectionStatus}
-        title="Playback connection"
+        title="Playback"
       />
 
+      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <PlaybackApiPanel playback={playback} draft={draft} />
       <button className="mt-4 min-h-ds-touch-target max-w-full touch-manipulation whitespace-normal break-words rounded-ds-lg border border-edge px-4 py-2 text-left text-sm font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-edge-subtle" aria-expanded={advanced} aria-controls="playback-advanced" onClick={() => setAdvanced((value) => !value)} type="button">{advanced ? "▾" : "▸"} Alternate connection: MIDI settings</button>
       {advanced && <div id="playback-advanced">

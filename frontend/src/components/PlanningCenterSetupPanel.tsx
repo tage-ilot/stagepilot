@@ -241,6 +241,8 @@ export function PlanningCenterSetupPanel({
         title="Services"
       />
 
+      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+
       {oauthNeedsReconnect && (
         <InlineAlert className="mt-4 px-4 py-3" tone="warning">
           <p className="font-semibold">Your Services connection has expired</p>

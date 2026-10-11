@@ -320,4 +320,32 @@ describe("LightsSetupPanel", () => {
 
     expect(onTest).toHaveBeenCalledWith(76, 115);
   });
+
+  it("shows the kicker, one sentence, a Basic heading and a visible label equal to each former aria-label-only control", () => {
+    render(
+      <LightsSetupPanel
+        error={null}
+        lights={lights}
+        message={null}
+        onRefresh={vi.fn()}
+        onSaveCues={vi.fn()}
+        onSaveSettings={vi.fn()}
+        onTest={vi.fn()}
+        pendingOperation={null}
+        settings={settings}
+        state={state}
+      />,
+    );
+
+    expect(screen.getByText("Connection configuration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lights" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
+    for (const name of ["Test lighting note", "Test lighting velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
+      const control = screen.getByLabelText(name);
+      const visible = document.querySelector(`label[for="${control.id}"]`);
+      expect(visible, name).not.toBeNull();
+      expect(visible).toHaveTextContent(new RegExp(`^${name}$`));
+      expect(control).toHaveAttribute("aria-label", name);
+    }
+  });
 });
