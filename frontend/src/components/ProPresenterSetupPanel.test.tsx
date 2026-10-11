@@ -200,4 +200,28 @@ describe("ProPresenterSetupPanel", () => {
     await user.click(screen.getByRole("button", { name: "Save settings" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ look_id: "look-worship" }));
   });
+
+  it("renders on the setup panel primitives with tokenised buttons", () => {
+    const { container } = render(
+      <ProPresenterSetupPanel
+        error={null}
+        message={null}
+        onRefreshTimers={vi.fn()}
+        onSave={vi.fn()}
+        onTest={vi.fn()}
+        pendingOperation={null}
+        propresenter={status}
+      />,
+    );
+
+    expect(container.querySelector("#propresenter-configuration")).toHaveAttribute("data-variant", "setup");
+    expect(screen.getByRole("button", { name: "Save settings" })).toHaveAttribute("data-variant", "primary");
+    for (const name of ["Test connection", "Refresh timers and Looks"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveAttribute("data-variant", "tinted");
+      expect(button).toHaveAttribute("data-tone", "presentation");
+    }
+    expect(screen.getByLabelText("ProPresenter Look")).toHaveValue("look-default");
+    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("3");
+  });
 });
