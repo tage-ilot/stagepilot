@@ -56,14 +56,7 @@ export default {
     "scrim": "#000000b3",
     "loader-track": "#07101f",
     "loader-outline": "#dbeafe",
-    "loader-fill": "#38bdf8",
-    "stage": {
-      "700": "#223142",
-      "800": "#17212c",
-      "850": "#111923",
-      "900": "#0d131a",
-      "950": "#090d12"
-    }
+    "loader-fill": "#38bdf8"
   },
   "fontFamily": {
     "type-brand": [

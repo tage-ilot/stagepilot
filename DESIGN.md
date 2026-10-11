@@ -627,7 +627,8 @@ do three different jobs. Rule: **a row's shape says what kind of thing it is.**
 1. **A way of connecting (Playback API vs MIDI) is never a collapsed row.** It
    is the **Connection method** select at the top of the panel,
    with the options **Main** / **Alternate**. (Built as a select, not a
-   segmented control; the SegmentedControl primitive was deleted unused.) When the alternate is selected, the tab and header badge say so
+   segmented control; the unused SegmentedControl primitive is deleted by
+   draft PR #141.) When the alternate is selected, the tab and header badge say so
    (`Connected · MIDI`) and a neutral banner explains how to switch back. The
    existing "Playback connection type" select in Advanced is promoted to this.
 2. **Extra options = Advanced:** the one tinted row with a one-line summary.
@@ -804,13 +805,14 @@ a skill check against beta 31 or against this guide.
 ## How this drives the app
 
 Status (final audit, 2026-10-11): the three systems below are one system once
-the open Phase 5 and 6 PRs (#132 to #142) are merged. The table records what
+the Phase 5 and 6 PRs (#132 to #142) are merged. Merged at the final audit:
+#132, #137, #138, #139, #142. Still draft: #133 to #136, #140, #141. The table records what
 main had before them and where each went; the plan steps after it are done
 except where noted.
 
 | Layer | Where | Reach |
 | --- | --- | --- |
-| `--sp-*` CSS variables | `index.css` `:root` | deleted in PR #139 |
+| `--sp-*` CSS variables | `index.css` `:root` | deleted by PR #139 (merged) |
 | `stage-*` Tailwind colours | `tailwind.config.js` | deleted in PR #139 |
 | Stock Tailwind palette | components | none left in `src` non-test files (checked at the final audit; guard in PR #142) |
 
@@ -913,8 +915,8 @@ Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - Save behaviour: explicit save with held markers everywhere (option A); the
   backend split for true save-as-you-go (option C) is later work.
 
-Status at the final audit (2026-10-11): the items above are built in the open
-PRs #132 to #142, which the owner has not merged yet. Still not done:
+Status at the final audit (2026-10-11): the items above are built in PRs #132 to #142; #133 to #136, #140 and
+#141 are still draft and wait for the owner. Still not done:
 - Option C (backend split for true save-as-you-go).
 - Two `impeccable` side-tab detector warnings remain by design in `index.css`
   (coral resize handle and current-song stripe), plus two for the loader stripes

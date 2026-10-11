@@ -11,14 +11,13 @@ hand-maps the custom elevation/default, overlay, level-1 and label text shadow.
 Colors `text*` -> `ink*`, `border*` -> `edge*`, `panel*` -> `surface-panel*`.
 Thus `text-ink`, `border-edge`, `bg-surface-panel` do not collide with CSS
 recipes. Other colors retain token names. Radius/spacing names use `ds-`;
-typography sizes/families use `type-`. Bare `rounded` is 8px (PR #140: `DEFAULT` is the `ds-default` token);
-`rounded-ds-default` is the same value. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
+typography sizes/families use `type-`. Bare `rounded` is 8px once draft PR #140 merges (`DEFAULT` becomes the `ds-default` token; on main it is still the stock 4px, and no component uses a bare `rounded`);
+`rounded-ds-default` is 8px. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
 omits numeric lineHeight values; generated typography is not used by components
 in this phase, so surface migrations must explicitly apply the DESIGN.md leading.
 CSS colors retain authored rgba precision rather than exporter's hex rounding.
 
-The `stage.*` colours and the `--sp-*` aliases were deleted in PR #139. Motion
-variables stay in index.css.
+The `--sp-*` aliases and `stage.*` colours were deleted at lock-in (card 6.1). Motion variables (`--motion-fast`, `--motion-live`, `--ease`) live in index.css. `--brand-outline` (#000) is the one documented literal (wordmark outline).
 
 ## Compatibility mismatch ledger (baseline output wins in this PR)
 
@@ -50,8 +49,8 @@ are the sole intended visual exception; review separate font-on screenshots.
 ## UI primitives and review gallery
 
 The primitives in `src/components/ui/` are used by the app (they are no longer
-dormant). `SegmentedControl`, `ActionMenu` and `Textarea` had no app user and were
-deleted in PR #141. App Tailwind content now includes `src/components/ui/` (gallery source and tests stay excluded).
+dormant). `SegmentedControl`, `ActionMenu` and `Textarea` have no app user and are
+deleted by draft PR #141 (still present on main until it merges). App Tailwind content includes `src/components/ui/`; only `ui/gallery/` and tests are excluded.
 `can-hover:` wraps real `:hover` in `(hover: hover)`; `coarse:` wraps utilities in
 `(pointer: coarse)`. Stock hover behavior and every existing token value are unchanged.
 The fourth Node regression test compiles both variants with Tailwind/PostCSS.
