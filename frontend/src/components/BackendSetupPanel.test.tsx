@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api";
 import * as desktop from "../desktop";
 import * as diagnostics from "../diagnostics";
-import type { ApplicationState } from "../types";
+import type { ApplicationState, SettingsResponse } from "../types";
 import { BackendSetupPanel } from "./BackendSetupPanel";
 
 vi.mock("../api", async (original) => ({
@@ -56,8 +56,14 @@ beforeEach(() => {
   vi.mocked(desktop.setRemoteAutostart).mockResolvedValue();
 });
 
-function renderPanel() {
-  render(
+const saved = {
+  timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false,
+  web_dashboard_pin_enabled: true, release_channel: "BETA",
+};
+const settingsResponse = {settings: saved} as unknown as SettingsResponse;
+
+function renderPanel(props: Partial<React.ComponentProps<typeof BackendSetupPanel>> = {}) {
+  return render(
     <BackendSetupPanel
       state={state}
       health={null}
@@ -68,6 +74,7 @@ function renderPanel() {
       message={null}
       pending={false}
       onSave={vi.fn()}
+      {...props}
     />,
   );
 }
@@ -270,7 +277,7 @@ describe("StagePilot panel sections", () => {
     for (const label of ["Server port", "Log level", "Release channel"]) {
       expect(after(section("Advanced"), screen.getByLabelText(label))).toBe(true);
     }
-    expect(after(screen.getByLabelText("Release channel"), screen.getByRole("button", {name: "Save general settings"}))).toBe(true);
+    expect(after(screen.getByLabelText("Release channel"), screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
   });
 
   it("People is a plain section: no expander wiring, and the Remote panel stays closed while Remote is off", async () => {
@@ -306,12 +313,109 @@ describe("Backend panel primitives", () => {
     expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("min-[480px]:grid-cols-");
   });
 
-  it("Save is the primary Button and stays disabled with an empty timezone", () => {
-    renderPanel();
-    const save = screen.getByRole("button", {name: "Save general settings"});
+  it("Save is the primary Button and does nothing with an empty timezone", () => {
+    const onSave = vi.fn();
+    renderPanel({onSave});
+    const save = screen.getByRole("button", {name: "Save configuration"});
     expect(save).toHaveAttribute("data-variant", "primary");
-    expect(save).not.toBeDisabled();
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: " "}});
-    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByText(/Enter a timezone, a port/)).toBeInTheDocument();
+  });
+});
+
+describe("Save configuration SaveBar", () => {
+  const bar = () => document.querySelector("[data-save-bar]")!;
+  const withSettings = (extra: Partial<React.ComponentProps<typeof BackendSetupPanel>> = {}) =>
+    renderPanel({settings: settingsResponse, ...extra});
+
+  it("has one Save configuration, no old Save button, and starts clean", () => {
+    withSettings();
+    expect(screen.getAllByRole("button", {name: "Save configuration"})).toHaveLength(1);
+    expect(screen.queryByRole("button", {name: "Save general settings"})).not.toBeInTheDocument();
+    expect(bar()).toHaveAttribute("data-state", "clean");
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("holds and counts only port, network access and timezone", () => {
+    withSettings();
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    expect(bar()).toHaveAttribute("data-state", "held");
+    expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    expect(bar()).toHaveTextContent("3 changes waiting");
+  });
+
+  it("sends a payload byte-identical to the old save for the same edits", () => {
+    const onSave = vi.fn();
+    withSettings({onSave});
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: " UTC "}});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    const expected = {
+      timezone: "UTC", log_level: "DEBUG", server_port: 9000, lan_access: true,
+      web_dashboard_pin_enabled: true, release_channel: "BETA", web_dashboard_pin: "4321",
+    };
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[0]).toEqual(expected);
+    expect(JSON.stringify(onSave.mock.calls[0]?.[0])).toBe(JSON.stringify(expected));
+  });
+
+  it("a clean Save does nothing, but a PIN or log level edit alone still saves", () => {
+    const onSave = vi.fn();
+    withSettings({onSave});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "ERROR"}});
+    expect(bar()).toHaveAttribute("data-state", "clean");
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({log_level: "ERROR"});
+  });
+
+  it("Discard restores the saved port, network access and timezone", () => {
+    withSettings();
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
+    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    fireEvent.click(screen.getByRole("button", {name: "Discard"}));
+    expect(screen.getByLabelText("Server port")).toHaveValue("8765");
+    expect(screen.getByLabelText("Timezone")).toHaveValue("America/Los_Angeles");
+    expect(screen.getByRole("checkbox", {name: /local network/})).not.toBeChecked();
+    expect(bar()).toHaveAttribute("data-state", "clean");
+  });
+
+  it("shows saving while pending", () => {
+    withSettings({pending: true});
+    expect(bar()).toHaveAttribute("data-state", "saving");
+    expect(bar()).toHaveTextContent("Saving…");
+  });
+
+  it("shows Couldn't save with Try again that resends the same payload, keeps restart messaging", () => {
+    const onSave = vi.fn();
+    const props = {settings: settingsResponse, onSave};
+    const view = renderPanel({...props});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending {...props} />);
+    view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} message={null} pending={false} {...props} error="boom" />);
+    expect(bar()).toHaveAttribute("data-state", "error");
+    expect(bar()).toHaveTextContent("Couldn't save");
+    fireEvent.click(screen.getByRole("button", {name: "Try again"}));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({server_port: 9000}));
+    expect(screen.getByText(/take effect after a backend restart/)).toBeInTheDocument();
+  });
+
+  it("keeps diagnostics and remote actions as actions", async () => {
+    withSettings();
+    expect(screen.getByRole("button", {name: "Copy Log"})).toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Send all logs to developer"})).toBeInTheDocument();
+    expect(await screen.findByRole("checkbox", {name: /Remote Access/})).toBeInTheDocument();
   });
 });

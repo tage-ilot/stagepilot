@@ -16,6 +16,7 @@ import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Panel } from "./ui/Panel";
+import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { Select } from "./ui/Select";
 
 /** Client-side cooldown (seconds) between manual "send all logs" clicks. */
@@ -189,6 +190,50 @@ export function BackendSetupPanel({
       ...(dashboardPin ? { web_dashboard_pin: dashboardPin } : {}),
     };
   }, [dashboardPin, lanAccess, logLevel, pinEnabled, releaseChannel, serverPort, timezone]);
+  // Held changes are the restart-needed items only (DESIGN.md): port, network access, timezone.
+  // Log level, release channel and the PIN stay in the same save payload but are not marked or
+  // counted. Nothing here saves on change.
+  const saved = settings?.settings ?? null;
+  const heldTimezone = saved !== null && timezone !== saved.timezone;
+  const heldPort = saved !== null && serverPort !== String(saved.server_port);
+  const heldLan = saved !== null && lanAccess !== (saved.lan_access ?? false);
+  const changeCount = Number(heldTimezone) + Number(heldPort) + Number(heldLan);
+  const otherDiffers = saved !== null && (
+    logLevel !== saved.log_level
+    || pinEnabled !== (saved.web_dashboard_pin_enabled ?? true)
+    || releaseChannel !== (saved.release_channel ?? "BETA")
+    || dashboardPin !== ""
+  );
+  const [saveFailed, setSaveFailed] = useState(false);
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (wasPending.current && !pending) setSaveFailed(Boolean(error));
+    wasPending.current = pending;
+  }, [pending, error]);
+  const saveState: SaveBarState = pending
+    ? { kind: "saving" }
+    : saveFailed && changeCount > 0
+      ? { kind: "error", message: "Couldn't save" }
+      : changeCount > 0
+        ? { kind: "held", count: changeCount }
+        : { kind: "clean" };
+  const blockedReason = parsedSettings === null
+    ? "Enter a timezone, a port from 1 to 65535 and a PIN of at least 4 characters before saving."
+    : null;
+  const discard = () => {
+    if (!saved) return;
+    setTimezone(saved.timezone);
+    setServerPort(String(saved.server_port));
+    setLanAccess(saved.lan_access ?? false);
+    setSaveFailed(false);
+  };
+  const save = () => {
+    // A clean Save is a no-op once settings are loaded; log level, release channel and PIN edits still save.
+    if (!parsedSettings || pending) return;
+    if (saved !== null && changeCount === 0 && !otherDiffers) return;
+    setSaveFailed(false);
+    onSave(parsedSettings);
+  };
   const connectionStatus = live
     ? "connected"
     : state.application_status === "error" ? "error" : "disconnected";
@@ -252,7 +297,7 @@ export function BackendSetupPanel({
 
       <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Basic</h3>
       <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
-        <Field label="Timezone">
+        <Field heldChange={heldTimezone} label="Timezone">
           <Input
             disabled={pending}
             onChange={(event) => setTimezone(event.target.value)}
@@ -272,6 +317,12 @@ export function BackendSetupPanel({
             <span className="block font-semibold text-ink">
               Allow dashboard access from this local network
             </span>
+            {heldLan && (
+              <span className="mt-1 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
+                <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
+                Not saved yet
+              </span>
+            )}
             <span className="mt-1 block text-xs text-ink-muted">
               Other devices can open http://&lt;this-computer&apos;s-IP&gt;:{serverPort}.
             </span>
@@ -344,7 +395,7 @@ export function BackendSetupPanel({
 
       <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Advanced</h3>
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
-        <Field label="Server port">
+        <Field heldChange={heldPort} label="Server port">
           <Input
             disabled={pending}
             inputMode="numeric"
@@ -376,18 +427,11 @@ export function BackendSetupPanel({
         </Field>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          disabled={pending || parsedSettings === null}
-          onClick={() => parsedSettings && onSave(parsedSettings)}
-          variant="primary"
-        >
-          {pending ? "Saving…" : "Save general settings"}
-        </Button>
-        <p className="text-xs text-ink-muted">
-          Timezone, logging, port, and network-access changes take effect after a backend restart. PIN changes apply immediately.
-        </p>
-      </div>
+      <p className="mt-4 text-xs text-ink-muted">
+        Timezone, logging, port, and network-access changes take effect after a backend restart. PIN changes apply immediately.
+      </p>
+      {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
+      <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 
       {(error || message) && (
         <InlineAlert className="mt-3" tone={error ? "danger" : "info"}>
