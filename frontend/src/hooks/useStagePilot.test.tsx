@@ -288,7 +288,7 @@ describe("useStagePilot", () => {
 
     await act(async () => { await socket!.onclose?.(); });
 
-    expect(result.current.error).toBe("Waiting for the local backend.");
+    expect(result.current.error).toBe("Waiting for local StagePilot.");
     expect(result.current.error).not.toContain("interrupted");
   });
 
@@ -672,7 +672,7 @@ describe("useStagePilot", () => {
     mockedUpdatePlanningCenterSettings.mockResolvedValue(configured);
     mockedUpdateProPresenterSettings.mockResolvedValue({
       accepted: true,
-      message: "ProPresenter connected.",
+      message: "Presentation connected.",
       propresenter: {
         enabled: true,
         host: configured.settings.propresenter.host,

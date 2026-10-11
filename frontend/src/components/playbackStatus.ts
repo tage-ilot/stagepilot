@@ -28,10 +28,10 @@ export function playbackSongCountMismatch(status: PlaybackStatusResponse): strin
   const extra = Math.abs(playback - plan);
   const first = Math.min(playback, plan) + 1;
   const range = extra === 1 ? `${first}` : `${first}-${Math.max(playback, plan)}`;
-  const counts = `Playback has ${playback} song${playback === 1 ? "" : "s"}, this plan has ${plan}.`;
+  const counts = `Playback has ${playback} song${playback === 1 ? "" : "s"}, this service plan has ${plan}.`;
   return playback > plan
     ? `${counts} Playback song${extra === 1 ? "" : "s"} ${range} ${extra === 1 ? "is" : "are"} ignored.`
-    : `${counts} Plan song${extra === 1 ? "" : "s"} ${range} ${extra === 1 ? "has" : "have"} no Playback song.`;
+    : `${counts} Service plan song${extra === 1 ? "" : "s"} ${range} ${extra === 1 ? "has" : "have"} no Playback song.`;
 }
 
 export type BannerTone = "connected" | "searching" | "backup" | "idle";

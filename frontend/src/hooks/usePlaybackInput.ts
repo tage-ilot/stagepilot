@@ -120,7 +120,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
       const saved = await getSettings();
       if (generation.current !== current) return;
       onSettings(saved);
-      setMessage("Settings saved.");
+      setMessage("Configuration saved.");
     });
   }, [onSettings, run]);
 

@@ -75,13 +75,13 @@ export function SetupChecklist({
     panel?: SetupPanel;
   }> = [
     {
-      label: "General settings",
+      label: "General configuration",
       detail: generalComplete ? "Timezone, logging, and server port saved" : "Review and save startup defaults",
       complete: generalComplete,
       panel: "backend",
     },
     {
-      label: "Planning Center",
+      label: "Services",
       detail: planningCenterComplete ? "Credentials and service type saved" : "Save credentials and select a service type",
       complete: planningCenterComplete,
       panel: "planning-center",
@@ -93,14 +93,14 @@ export function SetupChecklist({
       panel: "midi",
     },
     {
-      label: "ProPresenter",
-      detail: proPresenterComplete ? "Real timer output configured" : "Save the API and countdown timer settings",
+      label: "Presentation",
+      detail: proPresenterComplete ? "Real timer output configured" : "Save the API and countdown timer configuration",
       complete: proPresenterComplete,
       panel: "propresenter",
     },
     {
       label: "Connection test",
-      detail: connectionsComplete ? "All integrations are connected" : "Connect Planning Center, Playback, and ProPresenter",
+      detail: connectionsComplete ? "All connections are connected" : "Connect Services, Playback, and Presentation",
       complete: connectionsComplete,
     },
     {
@@ -123,9 +123,9 @@ export function SetupChecklist({
   if (!visible) return null;
 
   return (
-    <section className="relative mb-5 rounded-ds-xl border border-info/20 bg-surface-950/70 p-4 shadow-elevation-default" aria-label="StagePilot setup progress">
+    <section className="relative mb-5 rounded-ds-xl border border-info/20 bg-surface-950/70 p-4 shadow-elevation-default" aria-label="StagePilot configuration progress">
       <button
-        aria-label="Close first-launch setup"
+        aria-label="Close first-launch configuration"
         className="absolute right-3 top-3 grid h-8 w-8 coarse:h-ds-touch-target coarse:w-ds-touch-target place-items-center touch-manipulation rounded-ds-lg border border-edge bg-ink/5 text-lg text-ink-muted transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-edge-medium can-hover:bg-ink/10 can-hover:text-ink"
         onClick={() => setVisible(false)}
         title="Close"
@@ -135,14 +135,14 @@ export function SetupChecklist({
       </button>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="pr-10">
-          <p className="font-type-kicker text-type-kicker uppercase text-info-text">First-launch setup</p>
+          <p className="font-type-kicker text-type-kicker uppercase text-info-text">First-launch configuration</p>
           <h2 className="mt-1 text-lg font-bold text-ink">
-            {setupComplete ? "StagePilot setup is complete" : "Finish configuring StagePilot"}
+            {setupComplete ? "StagePilot configuration is complete" : "Finish configuring StagePilot"}
           </h2>
           <p aria-live="polite" className="mt-1 text-sm text-ink-body">
             {setupComplete
               ? "Everything is connected and ready. This checklist will close automatically."
-              : "Select a setup step to open its connection panel."}
+              : "Select a configuration step to open its connection panel."}
           </p>
         </div>
         <span className="rounded-ds-full border border-info/20 bg-surface-950/30 px-3 py-1.5 text-xs font-bold tabular-nums text-info-text">

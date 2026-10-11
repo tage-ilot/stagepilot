@@ -154,12 +154,12 @@ describe("Song order card", () => {
   });
 
   it.each([
-    [5, 4, "Playback has 5 songs, this plan has 4. Playback song 5 is ignored."],
-    [4, 6, "Playback has 4 songs, this plan has 6. Plan songs 5-6 have no Playback song."],
-    [6, 4, "Playback has 6 songs, this plan has 4. Playback songs 5-6 are ignored."],
-    [4, 5, "Playback has 4 songs, this plan has 5. Plan song 5 has no Playback song."],
-    [1, 0, "Playback has 1 song, this plan has 0. Playback song 1 is ignored."],
-    [0, 1, "Playback has 0 songs, this plan has 1. Plan song 1 has no Playback song."],
+    [5, 4, "Playback has 5 songs, this service plan has 4. Playback song 5 is ignored."],
+    [4, 6, "Playback has 4 songs, this service plan has 6. Service plan songs 5-6 have no Playback song."],
+    [6, 4, "Playback has 6 songs, this service plan has 4. Playback songs 5-6 are ignored."],
+    [4, 5, "Playback has 4 songs, this service plan has 5. Service plan song 5 has no Playback song."],
+    [1, 0, "Playback has 1 song, this service plan has 0. Playback song 1 is ignored."],
+    [0, 1, "Playback has 0 songs, this service plan has 1. Service plan song 1 has no Playback song."],
   ])("shows saved count mismatch %i/%i, including while playing", (song_count, plan_song_count, text) => {
     const status = playbackStatus({ song_count, plan_song_count });
     const view = render(<PlaybackApiPanel playback={controller({ status })} />);
@@ -198,7 +198,7 @@ describe("Song order card", () => {
       playing: true, song_count: 2, plan_song_count: 1, song_lengths: [180, 202],
       plan_songs: [{ title: "Plan title", duration_seconds: 180 }],
     }) })} />);
-    expect(screen.getAllByText("Playback has 2 songs, this plan has 1. Playback song 2 is ignored.")).toHaveLength(1);
+    expect(screen.getAllByText("Playback has 2 songs, this service plan has 1. Playback song 2 is ignored.")).toHaveLength(1);
     expect(screen.getByRole("group", { name: "Song lengths" })).toBeVisible();
     expect(screen.getByText("1. Plan title")).toBeVisible();
   });
@@ -311,7 +311,7 @@ describe("No dead primary button without a visible fix", () => {
   it.each(states)("%s", (_name, status) => {
     panel(controller({ status }));
     const footer = screen.getByTestId("playback-save-footer");
-    const disabled = screen.getAllByRole("button").filter((button) => (button as HTMLButtonElement).disabled && !footer.contains(button) && !button.closest('[aria-label="Planning Center song times"]'));
+    const disabled = screen.getAllByRole("button").filter((button) => (button as HTMLButtonElement).disabled && !footer.contains(button) && !button.closest('[aria-label="Services song times"]'));
     expect(disabled.map((b) => b.textContent)).toEqual([]);
     expect(screen.getAllByRole("button").some((b) => /Scan Network|Scanning|Scan again/.test(b.textContent ?? "") && !(b as HTMLButtonElement).disabled)).toBe(true);
   });

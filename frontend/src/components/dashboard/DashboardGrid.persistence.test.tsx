@@ -6,7 +6,7 @@ import { DASHBOARD_LAYOUT_KEY, loadDashboardLayout } from "./dashboardLayoutStor
 import { DashboardGrid } from "./DashboardGrid";
 
 const widgets = {
-  "service-plan": <div className="widget-autosize-target">Service Plan content</div>,
+  "service-plan": <div className="widget-autosize-target">Service plan content</div>,
   "now-playing": <div className="widget-autosize-target">Now Playing content</div>,
   "manual-controls": <div className="widget-autosize-target">Manual Controls content</div>,
   events: <div>Events content</div>,
@@ -132,7 +132,7 @@ describe("a restored custom layout is not overwritten during startup sizing", ()
       ...widgets,
       "service-plan": (
         <div className="widget-autosize-target">
-          Service Plan content with an additional item
+          Service plan content with an additional item
         </div>
       ),
     }} />);
@@ -154,7 +154,7 @@ describe("a fresh install's first render matches clicking Reset Layout", () => {
       configurable: true,
     });
     vi.useFakeTimers();
-    // Give the Service Plan widget real measured content: taller than its
+    // Give the Service plan widget real measured content: taller than its
     // static registry default (h: 35 desktop rows * 28px cell height),
     // so the content-fit measurement pass produces a *different* height
     // than the raw static default -- this is what previously diverged

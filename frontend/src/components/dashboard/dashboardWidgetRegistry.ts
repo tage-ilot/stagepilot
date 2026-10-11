@@ -10,7 +10,7 @@ export type DashboardWidgetDefinition = {
 };
 export const DASHBOARD_WIDGETS: Record<DashboardWidgetId, DashboardWidgetDefinition> = {
   "service-plan": {
-    title: "Service Plan",
+    title: "Service plan",
     desktop: { x: 0, y: 0, w: 7, h: 35, minW: 5, minH: 9, maxW: 12 },
     tablet: { x: 0, y: 0, w: 6, h: 28, minW: 4, minH: 9, maxW: 6 },
   },

@@ -165,32 +165,32 @@ describe("SetupChecklist", () => {
     vi.useFakeTimers();
     renderChecklist();
 
-    expect(screen.getByRole("heading", { name: "StagePilot setup is complete" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "StagePilot configuration is complete" })).toBeInTheDocument();
     expect(screen.getByText(/Everything is connected and ready/)).toBeInTheDocument();
     expect(screen.getByText("6 of 6 complete")).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(2500));
 
-    expect(screen.queryByLabelText("StagePilot setup progress")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("StagePilot configuration progress")).not.toBeInTheDocument();
   });
 
   it("can be dismissed with its close button", async () => {
     const user = userEvent.setup();
     renderChecklist(null);
 
-    await user.click(screen.getByRole("button", { name: "Close first-launch setup" }));
+    await user.click(screen.getByRole("button", { name: "Close first-launch configuration" }));
 
-    expect(screen.queryByLabelText("StagePilot setup progress")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("StagePilot configuration progress")).not.toBeInTheDocument();
   });
 
   it("uses the same dark translucent treatment as configuration panels", () => {
     renderChecklist(null);
 
-    expect(screen.getByLabelText("StagePilot setup progress")).toHaveClass(
+    expect(screen.getByLabelText("StagePilot configuration progress")).toHaveClass(
       "bg-surface-950/70",
       "shadow-elevation-default",
     );
-    expect(screen.getByText("Select a setup step to open its connection panel.")).toHaveClass(
+    expect(screen.getByText("Select a configuration step to open its connection panel.")).toHaveClass(
       "text-ink-body",
     );
     expect(screen.getByText("Review and save startup defaults")).toHaveClass("text-ink-muted");

@@ -154,7 +154,7 @@ describe("dashboard integration truthfulness", () => {
     expect(views.planningCenter).toMatchObject({
       status: "disconnected",
       mode: "demo",
-      detail: "Demo plan loaded — configure Planning Center",
+      detail: "Demo service plan loaded — configure Services",
     });
     expect(views.midi.status).toBe("disconnected");
     expect(views.propresenter.status).toBe("disconnected");
@@ -169,7 +169,7 @@ describe("dashboard integration truthfulness", () => {
     });
     expect(readinessPassed(checks)).toBe(false);
     expect(checks.find((check) => check.id === "service-plan")).toMatchObject({
-      label: "Planning Center plan not loaded",
+      label: "Service plan not loaded",
       passed: false,
     });
   });
@@ -215,7 +215,7 @@ describe("dashboard integration truthfulness", () => {
       mode: "real",
     });
     expect(checks.find((check) => check.id === "planning-center")).toMatchObject({
-      label: "Planning Center connected",
+      label: "Services connected",
       passed: true,
       status: "connected",
     });

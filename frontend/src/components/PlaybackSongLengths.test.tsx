@@ -33,7 +33,7 @@ describe("Playback song lengths", () => {
   it("keeps extra Playback positions when Playback is longer", () => {
     show({ plan_songs: [song("First", 180)], song_lengths: [180, 245] });
     expect(rows()).toHaveLength(2);
-    expect(rows()[1]).toHaveTextContent("2. No plan songPlayback: 4:05");
+    expect(rows()[1]).toHaveTextContent("2. No service plan songPlayback: 4:05");
     expect(within(rows()[1]!).queryByText(/^Plan:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/differs by/)).not.toBeInTheDocument();
   });

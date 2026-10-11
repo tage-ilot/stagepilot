@@ -259,7 +259,7 @@ describe("Backend panel primitives", () => {
 
   it("header close is a 44px secondary Button and the status badge uses the status tone", () => {
     renderPanel();
-    const close = screen.getByRole("button", {name: "Close StagePilot backend configuration"});
+    const close = screen.getByRole("button", {name: "Close StagePilot configuration"});
     expect(close).toHaveAttribute("data-variant", "secondary");
     expect(close).toHaveAttribute("data-size", "touch");
     expect(close.className).toContain("min-h-ds-touch-target");

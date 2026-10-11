@@ -232,19 +232,19 @@ export function PlanningCenterSetupPanel({
       variant="setup"
     >
       <SetupPanelHeader
-        closeLabel="Close Planning Center configuration"
-        description="Sign in with Planning Center, or manage a manual connection, to keep the Service Plan updated."
+        closeLabel="Close Services configuration"
+        description="Sign in with Planning Center, or manage a manual connection, to keep the Service plan updated."
         headingId="planning-center-setup-heading"
         onClose={onClose}
         status={status?.connection_status ?? state.planning_center_status}
-        title="Planning Center Services"
+        title="Services"
       />
 
       {oauthNeedsReconnect && (
         <InlineAlert className="mt-4 px-4 py-3" tone="warning">
-          <p className="font-semibold">Your Planning Center connection has expired</p>
+          <p className="font-semibold">Your Services connection has expired</p>
           <p className="mt-1">
-            Sign in again to keep loading your Service Plan from Planning Center.
+            Sign in again to keep loading your Service plan from Planning Center.
           </p>
           <Button
             className="mt-3"
@@ -355,7 +355,7 @@ export function PlanningCenterSetupPanel({
                       , create a new token, and give it a recognizable name. Copy
                       its Client ID into Application ID and its Secret into the
                       Secret field. Save the settings, then load your service types
-                      to keep StagePilot&apos;s Service Plan updated.
+                      to keep StagePilot&apos;s Service plan updated.
                     </p>
                   </div>
                 </div>
@@ -410,7 +410,7 @@ export function PlanningCenterSetupPanel({
 
       <div className="mt-5 border-t border-edge-subtle pt-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted">
-          Service Plan Settings
+          Service plan configuration
         </h3>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Field label="Service type">
@@ -420,7 +420,7 @@ export function PlanningCenterSetupPanel({
               value={serviceTypeId}
             >
               <option value="">Load and choose a service type</option>
-              <option value={ALL_SERVICE_TYPES_ID}>All service types (nearest upcoming plan)</option>
+              <option value={ALL_SERVICE_TYPES_ID}>All service types (nearest upcoming service plan)</option>
               {serviceTypeId && !selectedServiceTypeKnown && (
                 <option value={serviceTypeId}>Saved service type ({serviceTypeId})</option>
               )}
@@ -447,7 +447,7 @@ export function PlanningCenterSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field label="Plan title preference">
+          <Field label="Service plan title preference">
             <Input
               disabled={busy}
               onChange={(event) => setTitlePreference(event.target.value)}
@@ -488,7 +488,7 @@ export function PlanningCenterSetupPanel({
             tone="services"
             variant="tinted"
           >
-            {pendingAction === "reload_plan" ? "Loading…" : "Load today’s plan"}
+            {pendingAction === "reload_plan" ? "Loading…" : "Load today’s service plan"}
           </Button>
         </div>
       </div>
@@ -500,7 +500,7 @@ export function PlanningCenterSetupPanel({
       )}
       {!state.plugins.planning_center && (
         <p className="mt-3 text-xs text-warning-text">
-          Saving this configuration enables Planning Center. Restart StagePilot to start the connection.
+          Saving this configuration enables Services. Restart StagePilot to start the connection.
         </p>
       )}
 
@@ -525,7 +525,7 @@ export function PlanningCenterSetupPanel({
 
       {serviceLoad.candidates.length > 0 && (
         <div className="mt-5 border-t border-edge-subtle pt-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-warning-text">Matching plans</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-warning-text">Matching service plans</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             {serviceLoad.candidates.map((candidate) => (
               <div className="flex items-center justify-between gap-3 rounded-ds-lg bg-surface-900/60 px-3 py-2" key={candidate.id}>
@@ -539,7 +539,7 @@ export function PlanningCenterSetupPanel({
                   onClick={() => onSelectPlan(candidate.id)}
                   variant="primary"
                 >
-                  {pendingPlanId === candidate.id ? "Loading…" : "Use plan"}
+                  {pendingPlanId === candidate.id ? "Loading…" : "Use service plan"}
                 </Button>
               </div>
             ))}

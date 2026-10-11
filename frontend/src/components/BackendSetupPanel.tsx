@@ -44,7 +44,7 @@ export function CopyLogButton() {
       setMessage("Backend log copied to the clipboard.");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to copy the backend log.");
+      setMessage(error instanceof Error ? error.message : "Unable to copy the StagePilot log.");
     }
   };
 
@@ -201,12 +201,12 @@ export function BackendSetupPanel({
       variant="setup"
     >
       <SetupPanelHeader
-        closeLabel="Close StagePilot backend configuration"
-        description="Runtime identity, local API endpoints, WebSocket state, and plugin health for this session."
+        closeLabel="Close StagePilot configuration"
+        description="Runtime identity, local API endpoints, WebSocket state, and connection health for this session."
         headingId="backend-setup-heading"
         onClose={onClose}
         status={connectionStatus}
-        title="StagePilot backend"
+        title="StagePilot"
       />
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -386,7 +386,7 @@ export function BackendSetupPanel({
       </dl>
 
       <div className="mt-5 border-t border-edge-subtle pt-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Plugin health</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Connection health</p>
         <div className="mt-3 grid gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
           {(health?.plugins ?? Object.values(state.plugins)).map((plugin) => (
             <div key={plugin.name}>
@@ -398,7 +398,7 @@ export function BackendSetupPanel({
             </div>
           ))}
           {!health?.plugins.length && !Object.keys(state.plugins).length && (
-            <p className="text-sm text-ink-muted">No plugins reported.</p>
+            <p className="text-sm text-ink-muted">No connections reported.</p>
           )}
         </div>
       </div>

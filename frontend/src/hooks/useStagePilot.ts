@@ -160,7 +160,7 @@ export function useStagePilot() {
       setProPresenterError(null);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "ProPresenter status unavailable.",
+        cause instanceof Error ? cause.message : "Presentation status unavailable.",
       );
     }
   }, [canConfigure]);
@@ -171,7 +171,7 @@ export function useStagePilot() {
       setSettings(await getSettings());
       setSettingsError(null);
     } catch (cause) {
-      setSettingsError(cause instanceof Error ? cause.message : "Settings unavailable.");
+      setSettingsError(cause instanceof Error ? cause.message : "Configuration unavailable.");
     }
   }, [canConfigure]);
 
@@ -181,7 +181,7 @@ export function useStagePilot() {
       setLights(await getLightsStatus());
       setLightsError(null);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lighting output unavailable.");
+      setLightsError(cause instanceof Error ? cause.message : "Lights output unavailable.");
     }
   }, [canConfigure]);
 
@@ -192,7 +192,7 @@ export function useStagePilot() {
       setPlanningCenterError(null);
     } catch (cause) {
       setPlanningCenterError(
-        cause instanceof Error ? cause.message : "Planning Center status unavailable.",
+        cause instanceof Error ? cause.message : "Services status unavailable.",
       );
     }
   }, [canConfigure]);
@@ -268,7 +268,7 @@ export function useStagePilot() {
         setError(
           liveConnectionEstablished.current
             ? "Live connection interrupted; reconnecting."
-            : access.mode === "remote" ? "Waiting for the remote backend." : "Waiting for the local backend.",
+            : access.mode === "remote" ? "Waiting for remote StagePilot." : "Waiting for local StagePilot.",
         );
         // Browsers report an HTTP-rejected WS handshake as opaque code 1006.
         // Ask the server before reconnecting; network failures still use backoff.
@@ -415,7 +415,7 @@ export function useStagePilot() {
         setActionMessage(response.message);
         setError(response.accepted ? null : response.message);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Plan selection failed.");
+        setError(cause instanceof Error ? cause.message : "Service plan selection failed.");
       } finally {
         setPendingPlanId(null);
       }
@@ -453,10 +453,10 @@ export function useStagePilot() {
         setSettings(accessResponse);
         rememberServerPort(response.settings.server_port);
         setSettingsMessage(
-          "General settings saved. Restart StagePilot and reload the dashboard to apply startup changes.",
+          "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes.",
         );
       } catch (cause) {
-        setSettingsError(cause instanceof Error ? cause.message : "Settings update failed.");
+        setSettingsError(cause instanceof Error ? cause.message : "Configuration update failed.");
       } finally {
         setPendingSettingsOperation(false);
       }
@@ -487,11 +487,11 @@ export function useStagePilot() {
         }
         setSettingsMessage(
           response.restart_required
-            ? "MIDI settings saved. Restart StagePilot to apply the hardware input configuration."
-            : "MIDI settings saved and applied to the running Playback input.",
+            ? "MIDI configuration saved. Restart StagePilot to apply the hardware input configuration."
+            : "MIDI configuration saved and applied to the running Playback input.",
         );
       } catch (cause) {
-        setSettingsError(cause instanceof Error ? cause.message : "MIDI settings update failed.");
+        setSettingsError(cause instanceof Error ? cause.message : "MIDI configuration update failed.");
       } finally {
         setPendingSettingsOperation(false);
       }
@@ -511,7 +511,7 @@ export function useStagePilot() {
         setPlanningCenterMessage(response.message);
       } catch (cause) {
         setPlanningCenterError(
-          cause instanceof Error ? cause.message : "Planning Center connection test failed.",
+          cause instanceof Error ? cause.message : "Services connection test failed.",
         );
       } finally {
         setPendingPlanningCenterOperation(null);
@@ -528,7 +528,7 @@ export function useStagePilot() {
     try {
       const serviceTypes = await getPlanningCenterServiceTypes();
       setPlanningCenterServiceTypes(serviceTypes);
-      setPlanningCenterMessage(`Loaded ${serviceTypes.length} Planning Center service types.`);
+      setPlanningCenterMessage(`Loaded ${serviceTypes.length} service types.`);
     } catch (cause) {
       setPlanningCenterError(
         cause instanceof Error ? cause.message : "Service types could not be loaded.",
@@ -568,16 +568,16 @@ export function useStagePilot() {
             setPlanningCenterError(response.warning);
           }
           setPlanningCenterMessage(
-            "Planning Center settings saved securely. Restart StagePilot to apply the service source.",
+            "Services configuration saved securely. Restart StagePilot to apply the service source.",
           );
         } else {
           setPlanningCenterMessage(
-            "Planning Center settings saved securely and applied to the running service source.",
+            "Services configuration saved securely and applied to the running service source.",
           );
         }
       } catch (cause) {
         setPlanningCenterError(
-          cause instanceof Error ? cause.message : "Planning Center settings could not be saved.",
+          cause instanceof Error ? cause.message : "Services configuration could not be saved.",
         );
       } finally {
         setPendingPlanningCenterOperation(null);
@@ -706,7 +706,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "ProPresenter settings update failed.",
+        cause instanceof Error ? cause.message : "Presentation configuration update failed.",
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -725,7 +725,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "ProPresenter connection test failed.",
+        cause instanceof Error ? cause.message : "Presentation connection test failed.",
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -744,7 +744,7 @@ export function useStagePilot() {
       if (!response.accepted) setProPresenterError(response.message);
     } catch (cause) {
       setProPresenterError(
-        cause instanceof Error ? cause.message : "ProPresenter timer refresh failed.",
+        cause instanceof Error ? cause.message : "Presentation timer refresh failed.",
       );
     } finally {
       setPendingProPresenterOperation(null);
@@ -763,7 +763,7 @@ export function useStagePilot() {
       setLightsMessage(response.message);
       if (!response.accepted) setLightsError(response.message);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lighting settings failed.");
+      setLightsError(cause instanceof Error ? cause.message : "Lights configuration failed.");
     } finally {
       setPendingLightsOperation(null);
     }
@@ -776,9 +776,9 @@ export function useStagePilot() {
     setLightsMessage(null);
     try {
       setLights(await refreshLightingOutputs());
-      setLightsMessage("Lighting MIDI outputs refreshed.");
+      setLightsMessage("Lights MIDI outputs refreshed.");
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lighting output refresh failed.");
+      setLightsError(cause instanceof Error ? cause.message : "Lights output refresh failed.");
     } finally {
       setPendingLightsOperation(null);
     }
@@ -795,7 +795,7 @@ export function useStagePilot() {
       setLightsMessage(response.message);
       if (!response.accepted) setLightsError(response.message);
     } catch (cause) {
-      setLightsError(cause instanceof Error ? cause.message : "Lighting test cue failed.");
+      setLightsError(cause instanceof Error ? cause.message : "Lights test cue failed.");
     } finally {
       setPendingLightsOperation(null);
     }

@@ -669,7 +669,7 @@ export function Dashboard({
   const serviceNotification = serviceLoad.status !== "idle"
     && serviceLoad.status !== "loaded"
     && serviceLoad.status !== "ambiguous"
-    ? `${serviceLoad.message ?? "Planning Center plan status changed."}${serviceLoad.is_stale ? " The last successful plan is still displayed as stale." : ""}`
+    ? `${serviceLoad.message ?? "Service plan status changed."}${serviceLoad.is_stale ? " The last successful service plan is still displayed as stale." : ""}`
     : null;
   useEffect(() => {
     const previous = previousNotificationSources.current;
@@ -897,11 +897,11 @@ export function Dashboard({
 
       {serviceLoad.status === "ambiguous" && (
         <section className="mb-5 rounded-xl border border-warning/30 bg-warning/10 p-4" aria-live="polite">
-          <p className="font-type-kicker text-type-kicker uppercase text-warning-text">Plan selection required</p>
+          <p className="font-type-kicker text-type-kicker uppercase text-warning-text">Service plan selection required</p>
           <h2 className="mt-1 text-lg font-bold text-ink">Multiple plans match {serviceLoad.target_date ?? "the service date"}</h2>
           {serviceLoad.message && <p className="mt-1 text-sm font-medium text-warning-text">{serviceLoad.message}</p>}
           <p className="mt-1 text-sm text-warning-text/70">
-            {serviceLoad.is_stale ? "The previous plan remains available but is marked stale. " : ""}
+            {serviceLoad.is_stale ? "The previous service plan remains available but is marked stale. " : ""}
             {canOperate ? "Choose the service plan StagePilot should load." : "Waiting for an Operator to select the service plan."}
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -918,7 +918,7 @@ export function Dashboard({
                   onClick={() => selectPlan(candidate.id)}
                   type="button"
                 >
-                  {pendingPlanId === candidate.id ? "Loading…" : "Use this plan"}
+                  {pendingPlanId === candidate.id ? "Loading…" : "Use this service plan"}
                 </button>}
               </div>
             ))}
@@ -933,7 +933,7 @@ export function Dashboard({
       >
         <StatusCard
           interactive={canConfigure}
-          accessibleTitle="Planning Center"
+          accessibleTitle="Services"
           active={activeConnection === "planning-center"}
           controls="planning-center-configuration"
           detail={connectionViews.planningCenter.detail}
@@ -955,7 +955,7 @@ export function Dashboard({
         />
         <StatusCard
           interactive={canConfigure}
-          accessibleTitle="ProPresenter"
+          accessibleTitle="Presentation"
           active={activeConnection === "propresenter"}
           controls="propresenter-configuration"
           detail={connectionViews.propresenter.detail}
@@ -976,7 +976,7 @@ export function Dashboard({
         />
         <StatusCard
           interactive={canConfigure}
-          accessibleTitle="StagePilot backend"
+          accessibleTitle="StagePilot"
           active={activeConnection === "backend"}
           controls="backend-configuration"
           detail={health ? `v${health.version} · state revision ${state.revision}` : "Connecting to local API"}
@@ -1151,7 +1151,7 @@ export function Dashboard({
               <ActionButton action="start_next" label="Start next" tone="green" disabled={pendingAction !== null} onAction={dispatch} />
               <ActionButton action="restart_current" label="Restart current" tone="green" disabled={pendingAction !== null || !state.current_song} onAction={dispatch} />
               <ActionButton action="previous" label="Previous" tone="orange" disabled={pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="reload_plan" label="Reload plan" tone="blue" disabled={pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="reload_plan" label="Reload service plan" tone="blue" disabled={pendingAction !== null} onAction={dispatch} />
               <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
               <ActionButton action="reset_position" label="Reset position" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
             </div>

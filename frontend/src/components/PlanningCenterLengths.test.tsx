@@ -9,7 +9,7 @@ vi.mock("../api", () => ({ getLengthCategories: vi.fn(), chooseLengthCategory: v
 const ready = (extra: Partial<PlaybackStatusResponse> = {}) => playbackStatus({ planning_center_connected: true, captured_at: "2026-10-07T12:00:00Z", song_order: [1, 2], song_lengths: [268, null], discovery: "done", planning_center_update_service_type_id: "type", ...extra });
 const preview: LengthPreview = { token: "preview", category: "Sunday Service", plan_title: "Sunday", plan_date: "2026-10-11", message: "", items: [{ item_id: "one", title: "Worship", old_length: 245, new_length: 268, status: "updated", reason: null }, { item_id: "two", title: "Second", old_length: 240, new_length: null, status: "skipped", reason: "No measured Playback length." }] };
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(api.previewPlanLengths).mockResolvedValue(preview); vi.mocked(api.getLengthCategories).mockResolvedValue([{ id: "type", name: "Sunday Service" }, { id: "youth", name: "Youth" }]); });
-const update = () => screen.getByRole("button", { name: "Update Planning Center" });
+const update = () => screen.getByRole("button", { name: "Update Services" });
 const show = (extra: Partial<PlaybackStatusResponse> = {}) => render(<PlanningCenterLengths status={ready(extra)} />);
 describe("explicit Planning Center split button", () => {
   it.each([
@@ -17,7 +17,7 @@ describe("explicit Planning Center split button", () => {
     [{ stale: true }, "The setlist changed. Scan songs again."],
     [{ discovery: "failed" }, "The song scan failed or was cancelled. Scan songs again."],
     [{ song_lengths: [null] }, "The scan has no song lengths. Scan songs again."],
-    [{ planning_center_connected: false }, "Connect Planning Center first."],
+    [{ planning_center_connected: false }, "Connect Services first."],
     [{ playing: true }, "Stop Playback first."],
     [{ discovery: "running" }, "Wait for the song scan to finish."],
   ] as [Partial<PlaybackStatusResponse>, string][])("unavailable with reason %o", (extra, reason) => {
@@ -29,7 +29,7 @@ describe("explicit Planning Center split button", () => {
     fireEvent.click(update()); const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Sunday Service · Sunday · 2026-10-11/)).toBeVisible();
     expect(within(dialog).getByText(/4:05 → 4:28/)).toBeVisible(); expect(within(dialog).getByText(/No change/)).toBeVisible();
-    const confirm = within(dialog).getByRole("button", { name: "Update Planning Center" }); expect(confirm).toBeEnabled();
+    const confirm = within(dialog).getByRole("button", { name: "Update Services" }); expect(confirm).toBeEnabled();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" })); expect(api.confirmPlanLengths).not.toHaveBeenCalled();
     // Focus returns from Dialog's cleanup and from the component's busy/returnFocus effect after the dialog unmounts; wait for it instead of reading it synchronously.
@@ -40,21 +40,21 @@ describe("explicit Planning Center split button", () => {
     vi.mocked(api.confirmPlanLengths).mockResolvedValue(ready({ planning_center_undo_available: true, planning_center_lengths: { status: "done", message: "Updated 1 songs in Planning Center: Worship 4:05 -> 4:28. StagePilot reloaded the plan and verified the song times.", items: [], reload: "verified" } }));
     vi.mocked(api.restorePlanLengths).mockResolvedValue(ready({ planning_center_undo_available: false, planning_center_lengths: { status: "done", message: "Restored 1 songs in Planning Center.", items: [], reload: "verified" } }));
     show(); fireEvent.click(update()); const dialog = await screen.findByRole("dialog"); expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Update Planning Center" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update Services" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument()); expect(api.confirmPlanLengths).toHaveBeenCalledWith("preview");
-    expect(screen.getByText(/Updated 1 songs/)).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "Restore Planning Center times" }));
-    await screen.findByText(/Restored 1 songs/); expect(screen.queryByRole("button", { name: "Restore Planning Center times" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Updated 1 songs/)).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "Restore Services times" }));
+    await screen.findByText(/Restored 1 songs/); expect(screen.queryByRole("button", { name: "Restore Services times" })).not.toBeInTheDocument();
   });
   it("already matches offers no write action", async () => {
     vi.mocked(api.previewPlanLengths).mockResolvedValue({ ...preview, message: "Planning Center already matches Playback to the second.", items: [{ ...preview.items[0]!, status: "skipped", reason: "Already the same." }] });
     show(); fireEvent.click(update()); const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Planning Center already matches Playback to the second.")).toBeVisible(); expect(within(dialog).queryByRole("button", { name: "Update Planning Center" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Planning Center already matches Playback to the second.")).toBeVisible(); expect(within(dialog).queryByRole("button", { name: "Update Services" })).not.toBeInTheDocument();
   });
   it("menu keyboard arrows, Enter persists immediately, Escape returns focus, remembers selected category", async () => {
     const user = userEvent.setup(); const onStatus = vi.fn();
     vi.mocked(api.chooseLengthCategory).mockResolvedValue(ready({ planning_center_update_service_type_id: "youth" }));
     render(<PlanningCenterLengths status={ready()} onStatus={onStatus} />);
-    const arrow = screen.getByRole("button", { name: "Choose plan category" }); await user.click(arrow);
+    const arrow = screen.getByRole("button", { name: "Choose service plan category" }); await user.click(arrow);
     const menu = await screen.findByRole("menu"); await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")[0]).toHaveFocus());
     await user.keyboard("{ArrowDown}{Enter}"); await waitFor(() => expect(api.chooseLengthCategory).toHaveBeenCalledWith("youth")); await waitFor(() => expect(arrow).toHaveFocus()); expect(onStatus).toHaveBeenCalled();
     await user.click(arrow); await screen.findByRole("menu"); expect(screen.getByRole("menuitemradio", { name: "✓ Youth" })).toHaveAttribute("aria-checked", "true");

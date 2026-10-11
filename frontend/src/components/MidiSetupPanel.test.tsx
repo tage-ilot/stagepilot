@@ -189,7 +189,7 @@ describe("MidiSetupPanel", () => {
       "Restart current",
       "Previous",
       "Next",
-      "Reload plan",
+      "Reload service plan",
       "Stop timer",
     ]) {
       await user.click(screen.getByRole("button", { name: new RegExp(label) }));
