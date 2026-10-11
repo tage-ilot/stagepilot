@@ -244,3 +244,37 @@ describe("Copy Log", () => {
     expect(await screen.findByTitle("No backend log is available yet.")).toBeInTheDocument();
   });
 });
+
+describe("Backend panel primitives", () => {
+  it("renders as a setup Panel with labelled Field controls", async () => {
+    renderPanel();
+    const panel = document.getElementById("backend-configuration");
+    expect(panel).toHaveAttribute("data-variant", "setup");
+    for (const name of ["Timezone", "Server port"]) expect(screen.getByLabelText(name)).toHaveAttribute("data-state", "default");
+    expect(screen.getByLabelText("Log level").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Release channel").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveAttribute("type", "password");
+    expect(await screen.findByRole("checkbox", {name: /Remote Access/})).toBeInTheDocument();
+  });
+
+  it("header close is a 44px secondary Button and the status badge uses the status tone", () => {
+    renderPanel();
+    const close = screen.getByRole("button", {name: "Close StagePilot backend configuration"});
+    expect(close).toHaveAttribute("data-variant", "secondary");
+    expect(close).toHaveAttribute("data-size", "touch");
+    expect(close.className).toContain("min-h-ds-touch-target");
+    const badge = document.querySelector("[data-status-badge]");
+    expect(badge).toHaveAttribute("data-tone", "idle");
+    expect(badge).toHaveTextContent("disconnected");
+    expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("min-[480px]:grid-cols-");
+  });
+
+  it("Save is the primary Button and stays disabled with an empty timezone", () => {
+    renderPanel();
+    const save = screen.getByRole("button", {name: "Save general settings"});
+    expect(save).toHaveAttribute("data-variant", "primary");
+    expect(save).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: " "}});
+    expect(save).toBeDisabled();
+  });
+});
