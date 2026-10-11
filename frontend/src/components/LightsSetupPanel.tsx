@@ -184,7 +184,7 @@ export function LightsSetupPanel({
         description="Send elapsed-time MIDI Note On/Off cues to Lights."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
-        title="Lights configuration"
+        title="Lights"
       />
 
       {(error || message) && (
@@ -193,7 +193,8 @@ export function LightsSetupPanel({
         </InlineAlert>
       )}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-4">
+      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+      <div className="mt-3 grid gap-4 lg:grid-cols-4">
         <Field className="lg:col-span-2" label="MIDI output">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
@@ -242,11 +243,15 @@ export function LightsSetupPanel({
           </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
-          <Select aria-label="Test lighting note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
-            {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-          </Select>
-          <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-          <Button disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          <Field label="Test lighting note">
+            <Select aria-label="Test lighting note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+              {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Test lighting velocity">
+            <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+          </Field>
+          <Button className="self-end" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         </div>
       </div>
 
@@ -265,14 +270,22 @@ export function LightsSetupPanel({
         <div className="mt-3 grid gap-2">
           {cues.map((cue) => (
             <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
-              <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="00:00" />
-              <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
+              <Field label="Cue elapsed time">
+                <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="00:00" />
+              </Field>
+              <Field label="Lighting cue note">
+                <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
                 {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
               </Select>
-              <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
-              <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="Verse, chorus, blackout…" value={cue.label} />
-              <Button disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
-              <Button aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
+              </Field>
+              <Field label="Lighting cue velocity">
+                <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
+              </Field>
+              <Field label="Lighting cue label">
+                <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="Verse, chorus, blackout…" value={cue.label} />
+              </Field>
+              <Button className="self-end" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
+              <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}
           {!cues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">No lighting cues saved for this song.</p>}

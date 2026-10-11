@@ -28,6 +28,14 @@ describe("status words", () => {
     expect(badge.className).toContain("uppercase");
   });
 
+  it("SetupPanelHeader shows the kicker, the connection name as title and the sentence", () => {
+    render(<SetupPanelHeader closeLabel="Close" description="One sentence." headingId="h" status="connected" title="Presentation" />);
+    expect(screen.getByText("Connection configuration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Presentation" })).toHaveAttribute("id", "h");
+    expect(screen.getByText("One sentence.")).toBeInTheDocument();
+    expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("grid-cols-[minmax(0,1fr)_auto]");
+  });
+
   it.each(words.filter(([status]) => status !== "loading") as Array<[ConnectionStatus, string]>)(
     "StatusCard shows %s as %s in sentence case without a CSS uppercase class and keeps data-status",
     (status, word) => {

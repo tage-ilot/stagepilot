@@ -578,9 +578,9 @@ describe("Dashboard Planning Center plan states", () => {
     });
 
     expect(screen.getByRole("heading", { name: "StagePilot" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback Connected/ }));
-    expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
     expect(screen.getAllByText("Connected to Playback").length).toBeGreaterThan(0);
     expect(screen.queryByText("Demo integration running")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
@@ -592,12 +592,12 @@ describe("Dashboard Planning Center plan states", () => {
     const user = userEvent.setup();
     renderDashboard(loadedServiceState);
 
-    expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
     expect(screen.getByText("Connected to Playback")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback Connected/ }));
 
-    expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
   });
 
   describe("leaving Playback with unsaved changes", () => {
@@ -618,10 +618,10 @@ describe("Dashboard Planning Center plan states", () => {
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
       await user.click(screen.getByRole("button", { name: "Keep editing" }));
-      expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       await user.click(screen.getByRole("button", { name: "Discard" }));
-      expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
     });
 
     it("discard dialog focuses Discard, ignores Escape and backdrop clicks, and is a dialog with the same name", async () => {
@@ -1239,12 +1239,12 @@ describe("Dashboard connection configuration panels", () => {
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
     expect(midiConnection).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
 
     await user.click(midiConnection);
 
     expect(midiConnection).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
   });
 
   it("keeps all connection cards in one row with persistent icons", () => {
@@ -1282,17 +1282,17 @@ describe("Dashboard connection configuration panels", () => {
       {
         card: /^MIDI \/ Playback Connected/,
         close: "Close MIDI / Playback configuration",
-        heading: "Playback connection",
+        heading: "Playback",
       },
       {
         card: /^Presentation Connected/,
         close: "Close Presentation configuration",
-        heading: "Presentation countdown",
+        heading: "Presentation",
       },
       {
         card: /^Lights Not connected/,
         close: "Close Lights configuration",
-        heading: "Lights configuration",
+        heading: "Lights",
       },
       {
         card: /^StagePilot Connected/,

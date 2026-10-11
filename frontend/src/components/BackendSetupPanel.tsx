@@ -202,7 +202,7 @@ export function BackendSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close StagePilot configuration"
-        description="Runtime identity, local API endpoints, WebSocket state, and connection health for this session."
+        description="Shows the runtime identity, local API endpoints, WebSocket state and connection health for this session."
         headingId="backend-setup-heading"
         onClose={onClose}
         status={connectionStatus}
