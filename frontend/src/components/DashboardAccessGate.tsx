@@ -5,6 +5,7 @@ import { isDesktopShell } from "../desktop";
 import { AccessContext } from "../access/AccessContext";
 import { DESKTOP_ACCESS, NO_CAPABILITIES, invalidateAccess, onAccessInvalidated, setApiAccess } from "../access/accessState";
 import type { DashboardAccess } from "../types";
+import { Button, Field, Input, Panel } from "./ui";
 
 export function DashboardAccessGate({ children }: { children: ReactNode }) {
   const [access, setAccess] = useState<DashboardAccess | null>(() => isDesktopShell() ? DESKTOP_ACCESS : null);
@@ -84,12 +85,11 @@ export function DashboardAccessGate({ children }: { children: ReactNode }) {
     return (
       <AccessContext.Provider value={access}>
         {access.mode === "remote" && (
-          <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2 text-xs text-slate-300">
+          <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2 text-type-body-sm text-ink-body">
             <span>Remote · {access.user?.role} · {access.user?.email}</span>
             {!access.capabilities.canOperate && <span>Read-only access</span>}
-            <button className="rounded border border-white/20 px-3 py-1" disabled={pending}
-              onClick={() => void signOut()} type="button">Sign out</button>
-            {error && <span role="alert">{error}</span>}
+            <Button disabled={pending} onClick={() => void signOut()} size="touch" type="button" variant="secondary">Sign out</Button>
+            {error && <span className="text-danger-text" role="alert">{error}</span>}
           </div>
         )}
         {children}
@@ -124,44 +124,39 @@ export function DashboardAccessGate({ children }: { children: ReactNode }) {
     }
   };
 
-  const inputClass = "mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-3 text-white outline-none focus:border-sky-300/50";
   return (
     <main className="grid min-h-screen place-items-center px-6 text-center">
-      <form className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-950/75 p-7 shadow-2xl shadow-black/40 backdrop-blur-xl"
-        onSubmit={(event) => void submit(event)}>
-        <h1 className="select-none font-brand text-4xl leading-none text-white sm:text-6xl lg:text-7xl">StagePilot</h1>
-        {checking && <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />}
-        <p className="mt-5 text-sm text-slate-300">
-          {checking ? "Checking dashboard access…" : remote ? "Sign in to StagePilot Remote."
-            : hasLogin ? "Enter the dashboard PIN to continue." : "Dashboard access is unavailable."}
-        </p>
-        {!checking && hasLogin && <>
-          {remote ? <>
-            <label className="mt-5 block text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-              Email
-              <input autoComplete="username" autoFocus className={inputClass} disabled={pending}
-                maxLength={254} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
-            </label>
-            <label className="mt-5 block text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-              Password
-              <input autoComplete="current-password" className={inputClass} disabled={pending}
-                maxLength={1024} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
-            </label>
-          </> : <label className="mt-5 block text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-            Dashboard PIN
-            <input autoComplete="current-password" autoFocus
-              className={`${inputClass} text-center font-mono text-xl tracking-[0.35em]`} disabled={pending}
-              inputMode="numeric" maxLength={64} onChange={(event) => setPin(event.target.value)} required type="password" value={pin} />
-          </label>}
-          <button className="mt-4 w-full rounded-lg bg-sky-400 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-sky-300 disabled:opacity-50"
-            disabled={pending || (remote ? !email || !password : pin.length < 4)} type="submit">
-            {pending ? "Checking…" : remote ? "Sign in" : "Open dashboard"}
-          </button>
-        </>}
-        {!checking && !hasLogin && <button className="mt-4 rounded border border-white/20 px-4 py-2"
-          onClick={() => void check()} type="button">Retry access check</button>}
-        {error && <p aria-live="assertive" className="mt-4 text-sm text-rose-300">{error}</p>}
-      </form>
+      <Panel as="div" className="w-full max-w-sm p-7 backdrop-blur-xl">
+        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <h1 className="select-none font-brand text-4xl leading-none text-ink sm:text-6xl lg:text-7xl">StagePilot</h1>
+          {checking && <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />}
+          <p className="text-type-body-md text-ink-body">
+            {checking ? "Checking dashboard access…" : remote ? "Sign in to StagePilot Remote."
+              : hasLogin ? "Enter the dashboard PIN to continue." : "Dashboard access is unavailable."}
+          </p>
+          {!checking && hasLogin && <>
+            {remote ? <>
+              <Field label="Email" className="text-left">
+                <Input autoComplete="username" autoFocus disabled={pending}
+                  maxLength={254} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
+              </Field>
+              <Field label="Password" className="text-left">
+                <Input autoComplete="current-password" disabled={pending}
+                  maxLength={1024} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
+              </Field>
+            </> : <Field label="Dashboard PIN" className="text-left">
+              <Input autoComplete="current-password" autoFocus
+                className="text-center font-mono text-xl tracking-[0.35em]" disabled={pending}
+                inputMode="numeric" maxLength={64} onChange={(event) => setPin(event.target.value)} required type="password" value={pin} />
+            </Field>}
+            <Button disabled={pending || (remote ? !email || !password : pin.length < 4)} fullWidth size="touch" type="submit" variant="primary">
+              {pending ? "Checking…" : remote ? "Sign in" : "Open dashboard"}
+            </Button>
+          </>}
+          {!checking && !hasLogin && <Button onClick={() => void check()} size="touch" type="button" variant="secondary">Retry access check</Button>}
+          {error && <p aria-live="assertive" className="text-type-body-md text-danger-text">{error}</p>}
+        </form>
+      </Panel>
     </main>
   );
 }

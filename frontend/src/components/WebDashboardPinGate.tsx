@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { getDashboardAuthStatus, loginDashboard } from "../api";
 import { isDesktopShell } from "../desktop";
+import { Button, Field, Input, Panel } from "./ui";
 
 export function WebDashboardPinGate({ children }: { children: ReactNode }) {
   const [authorized, setAuthorized] = useState(isDesktopShell());
@@ -48,43 +49,41 @@ export function WebDashboardPinGate({ children }: { children: ReactNode }) {
 
   return (
     <main className="grid min-h-screen place-items-center px-6 text-center">
-      <form
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-950/75 p-7 shadow-2xl shadow-black/40 backdrop-blur-xl"
-        onSubmit={(event) => void submit(event)}
-      >
-        <h1 className="select-none font-brand text-4xl leading-none text-white sm:text-6xl lg:text-7xl">StagePilot</h1>
-        {checking && <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />}
-        <p className="mt-5 text-sm text-slate-300">
-          {checking ? "Checking dashboard access…" : "Enter the dashboard PIN to continue."}
-        </p>
-        {!checking && (
-          <>
-            <label className="mt-5 block text-left text-xs font-bold uppercase tracking-wider text-slate-400">
-              Dashboard PIN
-              <input
-                autoComplete="current-password"
-                autoFocus
-                className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-3 text-center font-mono text-xl tracking-[0.35em] text-white outline-none focus:border-sky-300/50"
-                disabled={pending}
-                inputMode="numeric"
-                maxLength={64}
-                onChange={(event) => setPin(event.target.value)}
-                required
-                type="password"
-                value={pin}
-              />
-            </label>
-            <button
-              className="mt-4 w-full rounded-lg bg-sky-400 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-sky-300 disabled:opacity-50"
-              disabled={pending || pin.length < 4}
-              type="submit"
-            >
-              {pending ? "Checking…" : "Open dashboard"}
-            </button>
-          </>
-        )}
-        {error && <p aria-live="assertive" className="mt-4 text-sm text-rose-300">{error}</p>}
-      </form>
+      <Panel as="div" className="w-full max-w-sm p-7 backdrop-blur-xl">
+        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <h1 className="select-none font-brand text-4xl leading-none text-ink sm:text-6xl lg:text-7xl">StagePilot</h1>
+          {checking && <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />}
+          <p className="text-type-body-md text-ink-body">
+            {checking ? "Checking dashboard access…" : "Enter the dashboard PIN to continue."}
+          </p>
+          {!checking && (
+            <>
+              <Field label="Dashboard PIN" className="text-left">
+                <Input
+                  autoComplete="current-password"
+                  autoFocus
+                  className="text-center font-mono text-xl tracking-[0.35em]"
+                  disabled={pending}
+                  inputMode="numeric"
+                  maxLength={64}
+                  onChange={(event) => setPin(event.target.value)}
+                  required
+                  type="password"
+                  value={pin}
+                />
+              </Field>
+              <Button disabled={pending || pin.length < 4} fullWidth size="touch" type="submit" variant="primary">
+                {pending ? "Checking…" : "Open dashboard"}
+              </Button>
+            </>
+          )}
+          {error && (
+            <p aria-live="assertive" className="text-type-body-md text-danger-text">
+              {error}
+            </p>
+          )}
+        </form>
+      </Panel>
     </main>
   );
 }

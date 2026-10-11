@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { sendDiagnosticsBundle, copyDiagnosticsLog } from "../diagnostics";
+import { Button, Dialog } from "./ui";
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -56,50 +57,33 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   render() {
     if (!this.state.error) return this.props.children;
 
+    // Primitives only (Dialog, Button, plain elements): nothing here may depend on app state that can throw.
     return (
-      <div
-        className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/80 px-6"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div
-          aria-describedby="error-boundary-message"
-          aria-labelledby="error-boundary-title"
-          aria-live="assertive"
-          aria-modal="true"
-          className="w-full max-w-sm rounded-2xl border border-rose-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/60"
-          role="alertdialog"
-          tabIndex={-1}
+      <div className="contents" onMouseDown={(event) => event.stopPropagation()}>
+        <Dialog
+          open
+          dismissible={false}
+          layer="boundary"
+          tone="danger"
+          title="StagePilot ran into a problem"
+          description="Reloading usually fixes this. You can also send logs to the developer to help track it down."
+          actions={
+            <>
+              <Button disabled={this.state.sending} onClick={() => void this.sendLogs()} size="touch" variant="secondary">
+                {this.state.sending ? "Sending…" : "Send logs to developer"}
+              </Button>
+              <Button onClick={this.reload} size="touch" variant="destructive-soft">
+                Reload StagePilot
+              </Button>
+            </>
+          }
         >
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">Something went wrong</p>
-          <h2 className="mt-1 text-lg font-bold text-white" id="error-boundary-title">
-            StagePilot ran into a problem
-          </h2>
-          <p className="mt-2 text-sm text-slate-300" id="error-boundary-message">
-            Reloading usually fixes this. You can also send logs to the developer to help track it down.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10"
-              disabled={this.state.sending}
-              onClick={() => void this.sendLogs()}
-              type="button"
-            >
-              {this.state.sending ? "Sending…" : "Send logs to developer"}
-            </button>
-            <button
-              className="rounded-lg bg-rose-300 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-rose-200"
-              onClick={this.reload}
-              type="button"
-            >
-              Reload StagePilot
-            </button>
-          </div>
           {this.state.sendMessage && (
-            <p aria-live="polite" className="mt-2 text-xs text-slate-400">
+            <p aria-live="polite" className="text-type-body-sm text-ink-muted">
               {this.state.sendMessage}
             </p>
           )}
-        </div>
+        </Dialog>
       </div>
     );
   }
