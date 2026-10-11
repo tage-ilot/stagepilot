@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -114,7 +114,6 @@ function renderPanel({
       songs={songs}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: /Alternate connection: MIDI settings/ }));
 }
 
 describe("MidiSetupPanel", () => {
@@ -122,10 +121,10 @@ describe("MidiSetupPanel", () => {
     renderPanel({});
     expect(document.getElementById("midi-configuration")).toHaveAttribute("data-variant", "setup");
     expect(document.getElementById("midi-configuration")!.className).not.toContain("setup-panel");
-    for (const name of ["Playback connection type", "MIDI channel", "Fixed note", "Debounce (ms)"]) {
+    for (const name of ["Connection method", "MIDI channel", "Fixed note", "Debounce (ms)"]) {
       expect(screen.getByLabelText(name).closest("[data-field]")).not.toBeNull();
     }
-    expect(screen.getByLabelText("Playback connection type").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Connection method").tagName).toBe("SELECT");
     expect(screen.getByRole("button", { name: "Save MIDI settings" })).toHaveAttribute("data-variant", "primary");
   });
   it("shows the loaded service plan song-to-velocity map", () => {

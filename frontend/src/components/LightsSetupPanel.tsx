@@ -203,6 +203,7 @@ export function LightsSetupPanel({
       )}
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+      <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-4">
         <Field className="lg:col-span-2" label="MIDI output">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>

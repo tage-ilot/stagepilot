@@ -1,5 +1,5 @@
 import type { ConnectionStatus } from "../types";
-import { StatusBadge } from "./ui/Badge";
+import { Badge, StatusBadge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { connectionWord } from "./ui/statusWord";
 
@@ -12,6 +12,7 @@ export function SetupPanelHeader({
   closeLabel,
   headingId,
   onClose,
+  statusDetail,
 }: {
   title: string;
   description: string;
@@ -19,6 +20,8 @@ export function SetupPanelHeader({
   closeLabel: string;
   headingId?: string;
   onClose?: () => void;
+  /** Extra badge after the status word, e.g. the saved alternate connection method. */
+  statusDetail?: string;
 }) {
   // Text and close share row one; below 480px the badge drops to row two, above it sits between them.
   return (
@@ -35,12 +38,25 @@ export function SetupPanelHeader({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">{description}</p>
       </div>
+      {statusDetail ? (
+        <div
+          className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:self-center"
+        >
+        <StatusBadge
+          data-status={status}
+          data-status-badge
+          status={connectionWord[status]}
+        />
+          <Badge tone="playback">{statusDetail}</Badge>
+        </div>
+      ) : (
       <StatusBadge
         className="col-span-2 row-start-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:self-center"
         data-status={status}
         data-status-badge
         status={connectionWord[status]}
       />
+      )}
       {onClose && (
         <Button
           aria-label={closeLabel}

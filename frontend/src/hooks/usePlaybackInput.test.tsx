@@ -47,7 +47,7 @@ describe("usePlaybackInput", () => {
     const onSettings = vi.fn();
     const { result, rerender } = renderHook(({ can }) => usePlaybackInput(can, onSettings), { initialProps: { can: false } });
     await tick();
-    act(() => { result.current.scan(); result.current.discover(); result.current.selectSource("real"); });
+    act(() => { result.current.scan(); result.current.discover(); void result.current.selectSource("real"); });
     expect(api.getPlaybackStatus).not.toHaveBeenCalled();
     expect(api.findPlayback).not.toHaveBeenCalled();
     expect(api.discoverPlaybackSongOrder).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe("usePlaybackInput", () => {
     await tick();
     expect(api.updatePlaybackSettings).toHaveBeenCalledWith(input);
     expect(onSettings).toHaveBeenCalledWith(playbackSettings);
-    act(() => result.current.selectSource("real"));
+    act(() => { void result.current.selectSource("real"); });
     await tick();
     expect(api.updateSettings).toHaveBeenCalledWith({ ...playbackSettings.settings,
       integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "real" },
@@ -123,7 +123,7 @@ describe("usePlaybackInput", () => {
     vi.mocked(api.discoverPlaybackSongOrder).mockReturnValue(done.promise);
     const { result } = renderHook(() => usePlaybackInput(true, vi.fn()));
     await tick();
-    act(() => { result.current.discover(); result.current.scan(); result.current.selectSource("real"); });
+    act(() => { result.current.discover(); result.current.scan(); void result.current.selectSource("real"); });
     expect(api.discoverPlaybackSongOrder).toHaveBeenCalledOnce();
     expect(api.findPlayback).not.toHaveBeenCalled();
     vi.mocked(api.getPlaybackStatus).mockResolvedValue(playbackStatus({ discovery: "running", progress: 8 }));
