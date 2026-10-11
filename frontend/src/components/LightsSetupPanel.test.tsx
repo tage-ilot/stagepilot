@@ -321,6 +321,108 @@ describe("LightsSetupPanel", () => {
     expect(onTest).toHaveBeenCalledWith(76, 115);
   });
 
+  describe("Send test cue follows the saved output", () => {
+    const reason = "Save the new output first. Test cue sends to the saved output.";
+    const twoOutputs: LightsStatusResponse = {
+      ...lights,
+      outputs: [
+        ...lights.outputs,
+        { name: "Other MIDI port", ambiguous: false, selected: false, connected: false },
+      ],
+    };
+    const withSaved = (output_name: string | null, channel: number): SettingsResponse => ({
+      ...settings,
+      settings: { ...settings.settings, lights: { ...settings.settings.lights, output_name, channel } },
+    });
+    const panel = (onTest: () => void, s: SettingsResponse, l: LightsStatusResponse = twoOutputs) => (
+      <LightsSetupPanel
+        error={null}
+        lights={l}
+        message={null}
+        onRefresh={vi.fn()}
+        onSaveCues={vi.fn()}
+        onSaveSettings={vi.fn()}
+        onTest={onTest}
+        pendingOperation={null}
+        settings={s}
+        state={state}
+      />
+    );
+
+    it("is enabled with no reason while the draft equals the saved output and channel", async () => {
+      const onTest = vi.fn();
+      const user = userEvent.setup();
+      render(panel(onTest, settings));
+      const button = screen.getByRole("button", { name: "Send test cue" });
+      expect(button).toBeEnabled();
+      expect(button).not.toHaveAttribute("aria-describedby");
+      expect(screen.queryByText(reason)).not.toBeInTheDocument();
+      await user.click(button);
+      expect(onTest).toHaveBeenCalledTimes(1);
+      expect(onTest).toHaveBeenCalledWith(60, 127);
+    });
+
+    it("is disabled with a described reason while a different output is selected", async () => {
+      const onTest = vi.fn();
+      const user = userEvent.setup();
+      render(panel(onTest, settings));
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      const button = screen.getByRole("button", { name: "Send test cue" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(reason);
+      expect(screen.getByText(reason)).toBeVisible();
+      await user.click(button);
+      expect(onTest).not.toHaveBeenCalled();
+    });
+
+    it("is disabled with a described reason while only the channel differs", async () => {
+      const onTest = vi.fn();
+      const user = userEvent.setup();
+      render(panel(onTest, settings));
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
+      const button = screen.getByRole("button", { name: "Send test cue" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(reason);
+      await user.selectOptions(screen.getByLabelText("MIDI channel"), "3");
+      expect(screen.getByRole("button", { name: "Send test cue" })).toBeEnabled();
+      expect(screen.queryByText(reason)).not.toBeInTheDocument();
+    });
+
+    it("is disabled with the reason when no output is saved yet", () => {
+      const noSaved = { ...twoOutputs, output_name: null };
+      render(panel(vi.fn(), withSaved(null, 3), noSaved));
+      const button = screen.getByRole("button", { name: "Send test cue" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(reason);
+    });
+
+    it("is enabled on the saved but unavailable output and disabled once another output is chosen", async () => {
+      const user = userEvent.setup();
+      const gone: LightsStatusResponse = { ...twoOutputs, outputs: twoOutputs.outputs.slice(1) };
+      render(panel(vi.fn(), settings, gone));
+      // saved output is missing from the list but still selected: draft equals saved
+      expect(screen.getByRole("option", { name: /StagePilot to Lightkey \(currently unavailable\)/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send test cue" })).toBeEnabled();
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
+    });
+
+    it("re-enables after the saved output updates to the draft and sends unchanged arguments", async () => {
+      const onTest = vi.fn();
+      const user = userEvent.setup();
+      const { rerender } = render(panel(onTest, settings));
+      await user.selectOptions(screen.getByLabelText("MIDI output"), "Other MIDI port");
+      expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
+      rerender(panel(onTest, withSaved("Other MIDI port", 3)));
+      const button = screen.getByRole("button", { name: "Send test cue" });
+      expect(button).toBeEnabled();
+      expect(button).not.toHaveAttribute("aria-describedby");
+      await user.selectOptions(screen.getByLabelText("Test lighting note"), "76");
+      await user.click(button);
+      expect(onTest).toHaveBeenCalledWith(76, 127);
+    });
+  });
+
   it("shows the kicker, one sentence, a Basic heading and a visible label equal to each former aria-label-only control", () => {
     render(
       <LightsSetupPanel
