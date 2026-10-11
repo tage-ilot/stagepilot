@@ -146,7 +146,6 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       <p className="text-sm text-warning-text">Remote Access is running. Create the first Operator to allow sign-in.</p>
     </>}
     {(bootstrap || status && !status.needs_operator) && <>
-      {!bootstrap && <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">People</h3>}
       <p className="text-sm text-ink-body">Viewers are read-only. Operators can control StagePilot and manage users. Keep at least one enabled Operator. User changes revoke that user's sessions.</p>
       {!bootstrap && <ul className="divide-y divide-edge-subtle">{users.map((user) => {
         const last = user.enabled && user.role === "Operator" && operators <= 1;

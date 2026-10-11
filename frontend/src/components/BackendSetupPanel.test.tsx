@@ -88,7 +88,8 @@ describe("Remote Access checkbox", () => {
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(true));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(true);
     await waitFor(() => expect(checkbox).toBeChecked());
-    expect(checkbox.closest("label")).toHaveAttribute("aria-expanded", "true");
+    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
+    expect(checkbox.closest("label")).not.toHaveAttribute("aria-controls");
 
     // Enabled, but still no Operator: the bootstrap form is a required next
     // step and stays visible, not a precondition that was waited on.
@@ -127,7 +128,8 @@ describe("Remote Access checkbox", () => {
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(false));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
     await waitFor(() => expect(checkbox).not.toBeChecked());
-    expect(checkbox.closest("label")).toHaveAttribute("aria-expanded", "false");
+    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
+    expect(screen.queryByLabelText("Remote Access", {selector: "div"})).not.toBeInTheDocument();
   });
 
   it("unchecking then cancelling reverts the checkbox to checked with Remote Access still enabled", async () => {
@@ -242,6 +244,41 @@ describe("Copy Log", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy Log" }));
 
     expect(await screen.findByTitle("No backend log is available yet.")).toBeInTheDocument();
+  });
+});
+
+describe("StagePilot panel sections", () => {
+  it("shows Status, Basic, People, Advanced in that order as plain headings", async () => {
+    renderPanel();
+    await screen.findByRole("checkbox", {name: /Remote Access/});
+    const names = screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent);
+    expect(names).toEqual(["Status", "Basic", "People", "Advanced"]);
+  });
+
+  it("puts the restart-needed fields in the right sections and keeps Release channel in Advanced", async () => {
+    renderPanel();
+    await screen.findByRole("checkbox", {name: /Remote Access/});
+    const section = (name: string) => {
+      const heading = screen.getByRole("heading", {name});
+      return heading;
+    };
+    const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(section("Basic"), screen.getByLabelText("Timezone"))).toBe(true);
+    expect(after(section("Basic"), screen.getByRole("checkbox", {name: /local network/}))).toBe(true);
+    expect(after(section("Basic"), screen.getByRole("checkbox", {name: /PIN/}))).toBe(true);
+    expect(after(section("People"), screen.getByRole("checkbox", {name: /Remote Access/}))).toBe(true);
+    for (const label of ["Server port", "Log level", "Release channel"]) {
+      expect(after(section("Advanced"), screen.getByLabelText(label))).toBe(true);
+    }
+    expect(after(screen.getByLabelText("Release channel"), screen.getByRole("button", {name: "Save general settings"}))).toBe(true);
+  });
+
+  it("People is a plain section: no expander wiring, and the Remote panel stays closed while Remote is off", async () => {
+    renderPanel();
+    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
+    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
+    expect(document.getElementById("remote-access-inline")).toBeNull();
+    expect(screen.queryByRole("heading", {name: "Create first Operator"})).not.toBeInTheDocument();
   });
 });
 
