@@ -75,30 +75,96 @@ describe("Scan Network is always first and never dead", () => {
   });
 });
 
-describe("Connect to a specific computer", () => {
-  it("Enter connects in one action without a separate save; blank and invalid cannot connect", async () => {
-    const playback = controller({ status: none() });
-    const user = userEvent.setup();
+describe("Computer select with Other computer…", () => {
+  const user = () => userEvent.setup();
+  const computer = () => screen.getByLabelText("Computer");
+  const withHosts = (host: string | null, candidates: { name: string; host: string }[] = []) => controller({ status: none({
+    scan: scanOf(candidates.length ? "found" : "idle", { candidates }),
+    settings: { enabled: true, host, port: 8080, auto_scan: true, fast_transport: true },
+  }) });
+
+  it("lists scan candidates, the saved host when not among them, and Other computer… last", () => {
+    render(<PlaybackApiPanel playback={withHosts("192.0.2.9", [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }])} />);
+    expect(computer().tagName).toBe("SELECT");
+    expect(within(computer()).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Example Mac (192.0.2.1)", "Other PC (192.0.2.2)", "192.0.2.9 (saved)", "Other computer…"]);
+    expect(computer()).toHaveValue("192.0.2.9");
+  });
+
+  it("does not repeat a saved host that is already a candidate", () => {
+    render(<PlaybackApiPanel playback={withHosts("192.0.2.2", [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }])} />);
+    expect(screen.getAllByRole("option", { name: /192\.0\.2\.2/ })).toHaveLength(1);
+    expect(computer()).toHaveValue("192.0.2.2");
+  });
+
+  it("empty candidates and no saved host: only Other computer… and nothing selected", () => {
+    render(<PlaybackApiPanel playback={withHosts(null)} />);
+    expect(within(computer()).getAllByRole("option").map((o) => o.textContent)).toEqual(["Other computer…"]);
+    expect(computer()).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
+  });
+
+  it("the old expander text is gone", () => {
+    render(<PlaybackApiPanel playback={withHosts(null)} />);
+    expect(screen.queryByText(/Connect a specific computer/)).not.toBeInTheDocument();
+    expect(document.getElementById("playback-specific")).not.toHaveAttribute("aria-expanded");
+  });
+
+  it("choosing a listed computer then Connect scans exactly that host; changing the select alone calls nothing", async () => {
+    const playback = withHosts(null, [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }]);
+    const u = user();
     render(<PlaybackApiPanel playback={playback} />);
-    await user.click(screen.getByRole("button", { name: /Connect a specific computer/ }));
+    await u.selectOptions(computer(), "192.0.2.2");
+    expect(playback.scan).not.toHaveBeenCalled();
+    await u.click(screen.getByRole("button", { name: "Connect" }));
+    expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.2");
+  });
+
+  it("Other computer… shows the address field; Enter connects in one action; blank cannot connect", async () => {
+    const playback = withHosts(null);
+    const u = user();
+    render(<PlaybackApiPanel playback={playback} />);
+    await u.selectOptions(computer(), "__other__");
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByText("Type an address to connect.")).toBeVisible();
-    await user.type(screen.getByLabelText("Computer name or address"), "192.0.2.10{Enter}");
-    expect(playback.scan).toHaveBeenCalledWith("192.0.2.10");
+    await u.type(screen.getByLabelText("Computer name or address"), "  192.0.2.10  {Enter}");
+    expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.10");
     expect(screen.queryByText(/Save address|Find \/ Scan|override/)).not.toBeInTheDocument();
   });
 
   it.each(["http://192.0.2.10", "192.0.2.10:8080", "bad host", "999.0.2.10", "a/b"])("rejects invalid address %s inline", async (value) => {
-    const playback = controller({ status: none() });
-    const user = userEvent.setup();
+    const playback = withHosts(null);
     render(<PlaybackApiPanel playback={playback} />);
-    await user.click(screen.getByRole("button", { name: /Connect a specific computer/ }));
+    await user().selectOptions(computer(), "__other__");
     fireEvent.change(screen.getByLabelText("Computer name or address"), { target: { value } });
     expect(screen.getByRole("alert")).toHaveTextContent("no http://");
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     fireEvent.submit(screen.getByLabelText("Computer name or address").closest("form")!);
     expect(playback.scan).not.toHaveBeenCalled();
   });
+
+  it("Enter address instead (not found) selects Other computer… and opens the address field", async () => {
+    render(<PlaybackApiPanel playback={controller({ status: none({ scan: scanOf("not_found") }) })} />);
+    expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "Enter address instead" }));
+    expect(computer()).toHaveValue("__other__");
+    expect(screen.getByLabelText("Computer name or address")).toBeVisible();
+  });
+
+  it("Enter address instead in a scan error (refused, permission denied) opens the same field", async () => {
+    for (const error_class of ["refused", "permission_denied"]) {
+      const scan = scanOf("not_found", { error_class, typed: false, reason: "x", details: "{}" });
+      const { unmount } = render(<PlaybackApiPanel playback={controller({ status: none({ scan }) })} />);
+      await user().click(screen.getByRole("button", { name: "Enter address instead" }));
+      expect(computer()).toHaveValue("__other__");
+      expect(screen.getByLabelText("Computer name or address")).toBeVisible();
+      unmount();
+    }
+  });
+});
+
+describe("validPlaybackHost", () => {
   it.each(["", "192.0.2.10", "playback.local", "127.0.0.1", "::1"])("accepts bare host %s", (host) => expect(validPlaybackHost(host)).toBe(true));
 });
 
