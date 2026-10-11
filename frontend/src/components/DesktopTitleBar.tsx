@@ -15,14 +15,14 @@ export function DesktopTitleBar() {
   return (
     <div
       aria-label="Window controls"
-      className="sticky top-0 z-[100] h-9 select-none"
+      className="sticky top-0 z-[100] h-9 select-none coarse:h-ds-touch-target"
       data-tauri-drag-region
       onDoubleClick={() => runWindowAction(toggleMaximizeDesktopWindow)}
     >
       <div className="absolute inset-y-0 right-0 flex" onDoubleClick={(event) => event.stopPropagation()}>
         <button
           aria-label="Minimize window"
-          className="grid h-9 w-12 place-items-center text-lg leading-none text-white/80 transition hover:bg-black/35 hover:text-white"
+          className="grid h-9 w-12 place-items-center text-lg leading-none touch-manipulation text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-surface-panel-strong can-hover:text-ink coarse:h-ds-touch-target coarse:w-ds-touch-target"
           onClick={() => runWindowAction(minimizeDesktopWindow)}
           type="button"
         >
@@ -30,7 +30,7 @@ export function DesktopTitleBar() {
         </button>
         <button
           aria-label="Maximize or restore window"
-          className="grid h-9 w-12 place-items-center text-white/80 transition hover:bg-black/35 hover:text-white"
+          className="grid h-9 w-12 place-items-center touch-manipulation text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-surface-panel-strong can-hover:text-ink coarse:h-ds-touch-target coarse:w-ds-touch-target"
           onClick={() => runWindowAction(toggleMaximizeDesktopWindow)}
           type="button"
         >
@@ -38,7 +38,7 @@ export function DesktopTitleBar() {
         </button>
         <button
           aria-label="Hide StagePilot window"
-          className="grid h-9 w-12 place-items-center text-xl leading-none text-white/80 transition hover:bg-red-600 hover:text-white"
+          className="grid h-9 w-12 place-items-center text-xl leading-none touch-manipulation text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-danger-solid can-hover:text-on-danger coarse:h-ds-touch-target coarse:w-ds-touch-target"
           onClick={() => runWindowAction(hideDesktopWindow)}
           title="Hide StagePilot (it will keep running)"
           type="button"
