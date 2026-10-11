@@ -140,11 +140,11 @@ export function DashboardAccessGate({ children }: { children: ReactNode }) {
                 <Input autoComplete="username" autoFocus disabled={pending}
                   maxLength={254} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
               </Field>
-              <Field label="Password" className="text-left">
+              <Field label="Password" className="text-left" error={error}>
                 <Input autoComplete="current-password" disabled={pending}
                   maxLength={1024} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
               </Field>
-            </> : <Field label="Dashboard PIN" className="text-left">
+            </> : <Field label="Dashboard PIN" className="text-left" error={error}>
               <Input autoComplete="current-password" autoFocus
                 className="text-center font-mono text-xl tracking-[0.35em]" disabled={pending}
                 inputMode="numeric" maxLength={64} onChange={(event) => setPin(event.target.value)} required type="password" value={pin} />
@@ -154,7 +154,7 @@ export function DashboardAccessGate({ children }: { children: ReactNode }) {
             </Button>
           </>}
           {!checking && !hasLogin && <Button onClick={() => void check()} size="touch" type="button" variant="secondary">Retry access check</Button>}
-          {error && <p aria-live="assertive" className="text-type-body-md text-danger-text">{error}</p>}
+          {error && !(hasLogin && !checking) && <p aria-live="assertive" className="text-type-body-md text-danger-text">{error}</p>}
         </form>
       </Panel>
     </main>

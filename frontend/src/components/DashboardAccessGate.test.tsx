@@ -169,3 +169,36 @@ describe("fits narrow (mobile/tablet) viewports, matching the App startup screen
     expect(document.querySelector(".loading-spinner-circular")).toBeNull();
   });
 });
+
+it("shows a failed remote sign-in under the password field, announced, with one primary button", async () => {
+  const user = userEvent.setup();
+  mocks.getAccess.mockResolvedValue(remote);
+  mocks.remoteLogin.mockRejectedValue(new Error("Too many login attempts. Try again later."));
+  renderGate();
+  await user.type(await screen.findByLabelText("Email"), "viewer@example.com");
+  await user.type(screen.getByLabelText("Password"), "wrong-password");
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Too many login attempts. Try again later.");
+  const password = screen.getByLabelText("Password");
+  expect(password).toHaveAttribute("aria-invalid", "true");
+  expect(password.getAttribute("aria-describedby")).toContain(alert.id);
+  expect(alert.closest("[data-field]")).toContainElement(password);
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+});
+
+it("shows a failed PIN under the PIN field and keeps one primary button", async () => {
+  const user = userEvent.setup();
+  mocks.getAccess.mockResolvedValue({ ...remote, authentication: "pin" });
+  mocks.login.mockRejectedValue(new Error("Incorrect dashboard PIN."));
+  renderGate();
+  await user.type(await screen.findByLabelText("Dashboard PIN"), "1234");
+  await user.click(screen.getByRole("button", { name: "Open dashboard" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Incorrect dashboard PIN.");
+  const pin = screen.getByLabelText("Dashboard PIN");
+  expect(pin).toHaveAttribute("aria-invalid", "true");
+  expect(pin.getAttribute("aria-describedby")).toContain(alert.id);
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+});
