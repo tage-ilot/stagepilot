@@ -682,8 +682,12 @@ The close button never shrinks below 44px. The save bar's buttons stack full
 width below 480px.
 
 ### Saving (decided: save as you go, plus an always-visible Save configuration button)
-- **Default: a change saves the moment it is made.** Selects and toggles save
-  on change; text fields save when the user leaves the field or presses Enter.
+- **Default (option A, decided 2026-10-11): every field is explicit-save.** A
+  change is held, marked, and saved only by `Save configuration`. Reason: today
+  saving any field in a panel reconnects or restarts something that a running
+  show may be using. True save-as-you-go (option C) is planned for later, once
+  the backend can apply non-disruptive fields without reconnecting; until then
+  nothing saves on change, on leaving a field, or on Enter.
 - **The `Save configuration` button is always visible** at the bottom of every
   connection panel, for every kind of change, including ones that already saved
   by themselves. Reason: an operator can't be expected to know which controls
@@ -701,19 +705,21 @@ width below 480px.
      effect when this is pressed, **whether or not a show is running** (decided).
   5. **Couldn't save:** red, what failed and `Try again`; the field keeps its
      value.
-- **Held until `Save configuration` (decided):** anything that could change what
-  a running show uses.
+- **Held until `Save configuration` (decided):** every field in every
+  connection panel and in the StagePilot panel.
   - **Services:** service type, service plan choice, `Reload service plan`.
   - **Presentation:** which timer or target receives the countdown.
   - **Playback:** connection method, which computer, velocities.
-  - **Lights:** only the **MIDI network / output and the MIDI channel** (they can
-    change everything being sent).
-  - **StagePilot:** anything needing an app restart (port, network access,
-    timezone).
-- **Saved immediately, even during a show (decided):** all other Lights
-  configuration (cue list, cue notes, velocities, labels, elapsed times, note
-  names vs numbers) because operators need to add cues quickly during a show;
-  tests; display preferences; PIN; names and labels.
+  - **Lights:** the **MIDI network / output, the MIDI channel and the note
+    pulse** (any Lights save reconfigures the plugin: it cancels the running
+    lighting timeline and reopens the MIDI port).
+  - **StagePilot:** port, network access, timezone, log level, release channel,
+    PIN requirement and the new PIN (the PIN is never saved per keystroke).
+- **Saved immediately, even during a show (decided):** only Lights cue list
+  edits (cue notes, velocities, labels, elapsed times, add and remove), which
+  already use their own endpoints, because operators need to add cues quickly
+  during a show. Tests and display preferences (note names vs numbers) change no
+  saved configuration.
 - A held field is marked with an amber dot and `Not saved yet` until saved, so
   it's clear which controls wait and which don't.
 - On phones the save bar is sticky at the bottom of the screen.

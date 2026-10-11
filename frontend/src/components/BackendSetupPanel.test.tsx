@@ -338,7 +338,7 @@ describe("Save configuration SaveBar", () => {
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
   });
 
-  it("holds and counts only port, network access and timezone", () => {
+  it("holds and counts every field, including log level", () => {
     withSettings();
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
@@ -347,8 +347,8 @@ describe("Save configuration SaveBar", () => {
     expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    expect(bar()).toHaveTextContent("3 changes waiting");
-    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
+    expect(bar()).toHaveTextContent("4 changes waiting");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(4);
   });
 
   it("sends a payload byte-identical to the old save for the same edits", () => {
@@ -414,10 +414,9 @@ describe("Save configuration SaveBar", () => {
   });
 });
 
-describe("Immediate saves for log level, release channel and PIN", () => {
+describe("Log level, release channel and PIN are held until Save configuration", () => {
   const bar = () => document.querySelector("[data-save-bar]")!;
   const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA"};
-  const savedPayload = {...savedBase};
   const build = (over: Record<string, unknown> = {}, savedOver: Record<string, unknown> = {}) => (
     <BackendSetupPanel
       state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null}
@@ -425,109 +424,82 @@ describe("Immediate saves for log level, release channel and PIN", () => {
       {...over}
     />
   );
-  const holdAll = () => {
-    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
-    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
-  };
-  const heldIntact = () => {
-    expect(screen.getByLabelText("Timezone")).toHaveValue("UTC");
-    expect(screen.getByLabelText("Server port")).toHaveValue("9000");
-    expect(screen.getByRole("checkbox", {name: /local network/})).toBeChecked();
+  it("does not save on change, blur or Enter, and counts each field", () => {
+    const onSave = vi.fn();
+    render(build({onSave}));
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    const pin = screen.getByLabelText("Replace dashboard PIN");
+    fireEvent.change(pin, {target: {value: "4321"}});
+    fireEvent.blur(pin);
+    fireEvent.keyDown(pin, {key: "Enter"});
+    expect(onSave).not.toHaveBeenCalled();
     expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
-  };
-
-  it("log level saves on change with the saved held fields, and the held drafts survive the refresh", () => {
-    const onSave = vi.fn();
-    const view = render(build({onSave}));
-    holdAll();
-    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({...savedPayload, log_level: "DEBUG"});
-    view.rerender(build({onSave, pending: true}));
-    expect(screen.getByText("Saving…", {selector: "p"})).toBeInTheDocument();
-    expect(bar()).toHaveAttribute("data-state", "held");
-    view.rerender(build({onSave}, {log_level: "DEBUG"}));
-    expect(screen.getByLabelText("Log level")).toHaveValue("DEBUG");
-    heldIntact();
-  });
-
-  it("release channel saves on change and shows the autosave confirmation", () => {
-    const onSave = vi.fn();
-    const view = render(build({onSave}));
-    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
-    expect(onSave).toHaveBeenCalledWith({...savedPayload, release_channel: "STABLE"});
-    view.rerender(build({onSave, pending: true}));
-    view.rerender(build({onSave}, {release_channel: "STABLE"}));
-    expect(bar()).toHaveAttribute("data-state", "auto");
-    expect(bar()).toHaveTextContent(/Saved automatically at/);
-  });
-
-  it("PIN does not save per keystroke; it saves on blur, sends only the saved held fields, then clears the field", () => {
-    const onSave = vi.fn();
-    const view = render(build({onSave}));
-    holdAll();
-    const pin = screen.getByLabelText("Replace dashboard PIN");
-    fireEvent.change(pin, {target: {value: "4"}});
-    fireEvent.change(pin, {target: {value: "4321"}});
-    expect(onSave).not.toHaveBeenCalled();
-    fireEvent.blur(pin);
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({...savedPayload, web_dashboard_pin: "4321"});
-    view.rerender(build({onSave, pending: true}));
-    view.rerender(build({onSave}, {}));
-    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
-    expect(bar()).toHaveTextContent("3 changes waiting");
-    heldIntact();
-  });
-
-  it("PIN saves on Enter, and a PIN shorter than 4 characters is not saved", () => {
-    const onSave = vi.fn();
-    render(build({onSave}));
-    const pin = screen.getByLabelText("Replace dashboard PIN");
-    fireEvent.change(pin, {target: {value: "12"}});
-    fireEvent.blur(pin);
-    expect(onSave).not.toHaveBeenCalled();
-    fireEvent.change(pin, {target: {value: "1234"}});
-    fireEvent.keyDown(pin, {key: "Enter"});
-    expect(onSave).toHaveBeenCalledWith({...savedPayload, web_dashboard_pin: "1234"});
-  });
-
-  it("Require a PIN checkbox saves on change", () => {
-    const onSave = vi.fn();
-    render(build({onSave}));
     fireEvent.click(screen.getByRole("checkbox", {name: /Require a PIN/}));
-    expect(onSave).toHaveBeenCalledWith({...savedPayload, web_dashboard_pin_enabled: false});
+    expect(onSave).not.toHaveBeenCalled();
+    // Turning the PIN requirement off hides the PIN field and drops the typed PIN from the count.
+    expect(bar()).toHaveTextContent("3 changes waiting");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
   });
 
-  it.each([
-    ["Log level", "DEBUG"],
-    ["Release channel", "STABLE"],
-  ])("a failed %s save keeps the typed value with an error and leaves the held drafts", (label, value) => {
+  it("Save configuration sends all of them in one payload", () => {
     const onSave = vi.fn();
-    const view = render(build({onSave}));
-    holdAll();
-    fireEvent.change(screen.getByLabelText(label), {target: {value}});
-    view.rerender(build({onSave, pending: true}));
-    view.rerender(build({onSave, error: "boom"}));
-    expect(screen.getByLabelText(label)).toHaveValue(value);
-    expect(screen.getByText("Couldn't save", {selector: "p"})).toBeInTheDocument();
-    expect(bar()).toHaveAttribute("data-state", "held");
-    heldIntact();
+    render(build({onSave}));
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith({...savedBase, log_level: "DEBUG", release_channel: "STABLE", web_dashboard_pin: "4321"});
   });
 
-  it("a failed PIN save keeps the typed PIN with an error", () => {
+  it("a PIN shorter than 4 characters blocks Save", () => {
+    const onSave = vi.fn();
+    render(build({onSave}));
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "12"}});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByText(/PIN of at least 4/)).toBeInTheDocument();
+  });
+
+  it("Discard restores log level, release channel, PIN requirement and clears the PIN", () => {
+    render(build());
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.click(screen.getByRole("checkbox", {name: /Require a PIN/}));
+    fireEvent.click(screen.getByRole("button", {name: "Discard"}));
+    expect(screen.getByLabelText("Log level")).toHaveValue("INFO");
+    expect(screen.getByLabelText("Release channel")).toHaveValue("BETA");
+    expect(screen.getByRole("checkbox", {name: /Require a PIN/})).toBeChecked();
+    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
+    expect(bar()).toHaveAttribute("data-state", "clean");
+  });
+
+  it("a failed save keeps the typed values and markers", () => {
     const onSave = vi.fn();
     const view = render(build({onSave}));
-    holdAll();
-    const pin = screen.getByLabelText("Replace dashboard PIN");
-    fireEvent.change(pin, {target: {value: "4321"}});
-    fireEvent.blur(pin);
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     view.rerender(build({onSave, pending: true}));
     view.rerender(build({onSave, error: "boom"}));
+    expect(screen.getByLabelText("Log level")).toHaveValue("DEBUG");
     expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("4321");
-    expect(screen.getByText("Couldn't save", {selector: "p"})).toBeInTheDocument();
-    heldIntact();
+    expect(bar()).toHaveAttribute("data-state", "error");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
+  });
+
+  it("after a successful save the PIN field clears and the bar is clean", () => {
+    const onSave = vi.fn();
+    const view = render(build({onSave}));
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
+    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
+    view.rerender(build({onSave, pending: true}));
+    view.rerender(build({onSave}, {log_level: "DEBUG"}));
+    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
+    expect(bar()).toHaveAttribute("data-state", "auto");
   });
 });

@@ -125,6 +125,15 @@ const systemTimezone = () => {
 const formatTimestamp = (value: string | null) =>
   value ? new Date(value).toLocaleString() : "Not yet";
 
+function HeldNote() {
+  return (
+    <span className="mt-1.5 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
+      <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
+      Not saved yet
+    </span>
+  );
+}
+
 export function PlanningCenterSetupPanel({
   state,
   settings,
@@ -412,6 +421,7 @@ export function PlanningCenterSetupPanel({
               onChange={(event) => setAppId(event.target.value)}
               value={appId}
             />
+            {held.appId && <HeldNote />}
           </div>
           <Field heldChange={held.secret} label="Secret">
             <Input
@@ -435,6 +445,7 @@ export function PlanningCenterSetupPanel({
               type="checkbox"
             />
             Remove saved secret
+            {held.removeSecret && <HeldNote />}
           </label>
         </div>
 
