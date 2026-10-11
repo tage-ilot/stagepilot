@@ -621,7 +621,7 @@ describe("Dashboard Planning Center plan states", () => {
       await user.click(screen.getByRole("button", { name: "Keep editing" }));
       expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
-      await user.click(screen.getByRole("button", { name: "Discard" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" }));
       expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
     });
 
@@ -630,7 +630,7 @@ describe("Dashboard Planning Center plan states", () => {
       await user.click(screen.getByLabelText("Connect to Playback automatically"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       const dialog = screen.getByRole("dialog", { name: "Discard unsaved changes?" });
-      await waitFor(() => expect(screen.getByRole("button", { name: "Discard" })).toHaveFocus());
+      await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" })).toHaveFocus());
       await user.keyboard("{Escape}");
       await user.click(dialog.parentElement!);
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
@@ -642,7 +642,7 @@ describe("Dashboard Planning Center plan states", () => {
       await openPlayback();
       await user.click(screen.getByLabelText("Connect to Playback automatically"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "Discard" })).toHaveFocus());
+      await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" })).toHaveFocus());
       await user.tab({ shift: true });
       expect(screen.getByRole("button", { name: "Keep editing" })).toHaveFocus();
       for (const ms of [300, 600, 5_400, 5_400]) {

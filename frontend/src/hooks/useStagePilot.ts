@@ -466,8 +466,8 @@ export function useStagePilot() {
 
   const saveMidiSettings = useCallback(
     async (input: MidiSettingsInput) => {
-    if (!canConfigure) return;
-      if (!settings) return;
+    if (!canConfigure) return false;
+      if (!settings) return false;
       setPendingSettingsOperation(true);
       setSettingsError(null);
       setSettingsMessage(null);
@@ -483,15 +483,17 @@ export function useStagePilot() {
         setSettings(response);
         if (response.restart_required && await restartDesktopBackend()) {
           window.location.reload();
-          return;
+          return true;
         }
         setSettingsMessage(
           response.restart_required
             ? "MIDI configuration saved. Restart StagePilot to apply the hardware input configuration."
             : "MIDI configuration saved and applied to the running Playback input.",
         );
+        return true;
       } catch (cause) {
         setSettingsError(cause instanceof Error ? cause.message : "MIDI configuration update failed.");
+        return false;
       } finally {
         setPendingSettingsOperation(false);
       }

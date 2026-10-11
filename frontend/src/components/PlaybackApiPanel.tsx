@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { openExternalUrl } from "../desktop";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -25,6 +25,17 @@ const toneClass = {
 const LOCAL_NETWORK_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
 const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
+
+
+// A checkbox row with the same held marker as Field heldChange (amber dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
+function HeldRow({ held, id, children }: { held: boolean; id: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3">
+      <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">{children}</label>
+      {held && <span id={id} data-held-marker className="inline-flex items-center gap-1.5 text-type-body-sm text-warning-text"><span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />Not saved yet</span>}
+    </div>
+  );
+}
 
 export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
   const status = playback?.status;
@@ -157,18 +168,18 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
       />
 
       <div className="space-y-3 border-t border-edge-subtle pt-4">
-        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
-          <input className="size-4 accent-primary" type="checkbox" checked={apiOn} disabled={!status || !draft} onChange={(event) => draft?.setEnabled(event.target.checked)} />
+        <HeldRow held={Boolean(draft && status && draft.enabled !== status.settings.enabled)} id="held-enabled">
+          <input className="size-4 accent-primary" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
           Connect to Playback automatically
-        </label>
-        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
-          <input className="size-4 accent-primary" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
+        </HeldRow>
+        <HeldRow held={Boolean(draft && status && draft.autoScan !== status.settings.auto_scan)} id="held-auto-scan">
+          <input className="size-4 accent-primary" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.autoScan !== status.settings.auto_scan ? "held-auto-scan" : undefined} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
           Look for Playback on the network if it isn't on this computer
-        </label>
-        <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">
-          <input className="size-4 accent-primary" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby="fast-transport-help" onChange={(event) => draft?.setFastTransport(event.target.checked)} />
+        </HeldRow>
+        <HeldRow held={Boolean(draft && status && draft.fastTransport !== status.settings.fast_transport)} id="held-fast-transport">
+          <input className="size-4 accent-primary" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.fastTransport !== status.settings.fast_transport ? "fast-transport-help held-fast-transport" : "fast-transport-help"} onChange={(event) => draft?.setFastTransport(event.target.checked)} />
           Respond to Play immediately
-        </label>
+        </HeldRow>
         <p id="fast-transport-help" className="text-sm text-ink-muted">Reacts to the command instead of waiting up to one second for Playback to report it.</p>
       </div>
 
