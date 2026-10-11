@@ -274,7 +274,7 @@ elevation-options:               # custom section: PICK ONE strength for elevati
 elevation:                       # custom section (not in the Google spec; the linter ignores it)
   # Light comes from the upper-left, like the background photo. Shadows are warm brown-red, never cool grey/black.
   default: "inset 1px 1px 0 rgb(255 190 150 / 0.07), 2px 3px 6px rgb(33 15 13 / 0.35), 6px 10px 24px rgb(22 13 12 / 0.42), 12px 28px 64px rgb(22 13 12 / 0.45)"
-  overlay: "0 8px 24px rgb(22 13 12 / 0.45), 0 24px 80px rgb(22 13 12 / 0.60)"   # PROPOSED: dialogs, toasts, popovers (replaces shadow-2xl). Not yet previewed.
+  overlay: "0 8px 24px rgb(22 13 12 / 0.45), 0 24px 80px rgb(22 13 12 / 0.60)"   # DECIDED (owner approved, 2026-10-11): dialogs, toasts, popovers (replaces shadow-2xl).
 ---
 
 # StagePilot design reference
@@ -305,14 +305,15 @@ is not.
 
 ## Our look
 
-**PROPOSED, drawn from what the app already does. Edit freely.** The style in
+**DECIDED (owner accepted, 2026-10-11), drawn from what the app already does.** The style in
 one line: **8-bit meets film flare, with a modern touch.** The app is a calm,
 modern control surface (Inter, clean panels, clear status colours) with two
 signatures that make it ours: a little pixel-art character and a warm,
 cinematic glow. Both are accents. Neither takes over.
 
 ### 8-bit: where it lives (system moments only)
-- **Yes:** the startup/loading bar and the phone spinner (stepped pixel
+- **Yes:** the startup/loading bar (its fill KEEPS the pixel stripes, decided:
+  the stripes must not be flattened or stretched) and the phone spinner (stepped pixel
   stripes, hard 5px offset shadow, `image-rendering: pixelated`, animation in
   `steps()`), and the outlined arcade wordmark (StagePilot Logo with its 1px
   black outline), and the generic pixel-art service icons
@@ -488,7 +489,7 @@ that is not a status, a service, or coral.
   right edge over the darkest part of the image, which the 10% white border
   covers.
 - `elevation.overlay` (dialogs, toasts, popovers) is a stronger version of
-  the same idea and replaces `shadow-2xl`. **Proposed, not yet previewed.**
+  the same idea and replaces `shadow-2xl`. **Decided** (owner approved after review).
 - The old "printed" offset shadow is deleted (decided); `elevation.default` is the only panel shadow.
 - **Strength:** `elevation.default` is level 1 until you pick a stronger level from `elevation-options` (5 levels, each darker). The dialog and toast shadow scales with it.
 - Live panel: 5px coral left rail with a faint glow. Hover on cards raises
@@ -558,8 +559,7 @@ add noise without adding hierarchy.
 
 ## Patterns
 
-Everything here is **PROPOSED** until the owner confirms it; items he has
-answered are marked **(decided)**. Principle behind all of it: **anyone can use
+Everything here is **DECIDED** (owner accepted the recommendations on 2026-10-11, with the specific answers marked **(decided)** below). Principle behind all of it: **anyone can use
 the app with no training.** No hunting and no manuals: each control is where
 the user expects it, labels say exactly what will happen, and the choices
 offered are the ones that make sense at that moment. Nothing is kept just
@@ -620,7 +620,7 @@ company, so the word stays in the UI.
   section; Advanced always comes after Basic. Motion: 500ms expand, honouring
   reduced motion.
 
-### Telling expandable things apart (PROPOSED)
+### Telling expandable things apart (decided)
 In beta 31, "Connect a specific computer", "Recent activity" and
 "Alternate connection: MIDI settings" are three near-identical grey rows that
 do three different jobs. Rule: **a row's shape says what kind of thing it is.**
@@ -646,14 +646,14 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 | **Services** | Planning Center (unless signing in to it) | the connection that supplies the service plan |
 | **Presentation** | ProPresenter (unless an API screen needs it) | the connection that shows the countdown |
 | **Playback** | MultiTracks | the connection that tells StagePilot a song started |
-| **Lights** | lighting controller, Lightkey | the connection that receives cues |
+| **Lights** | Lightkey | the connection that receives cues. Describe its output as **MIDI Output to Lighting Controller** (decided) |
 | **MIDI** | (stays) | a connection method: alternate for Playback, main for Lights |
 | **Configuration** | settings, setup, production setup | what you edit for a connection (decided) |
 | **Basic / Advanced** | alternate, specific, manual | the two parts of Configuration |
 | **StagePilot** | backend, local API, plugin health | the fifth status card; its panel holds the app's own status and all app-wide configuration |
 | **Service plan** | plan | the day's list of songs (decided) |
 | **Cue** | pulse | a message sent to Lights (decided) |
-| **Note** | (stays) | the MIDI note a cue uses; the alternate, more descriptive word (decided) |
+| **Note** | pulse | the MIDI note a cue uses, and how long it lasts. Use **Note** wherever the app said "pulse": "Note length (ms)", "Test cue" (decided 2026-10-11) |
 | **People** | remote users | who can sign in remotely |
 | **Connected / Connecting / Not connected / Error** | disconnected | the four status words (sentence case in text, UPPERCASE in badges) |
 
@@ -760,7 +760,8 @@ a skill check against beta 31 or against this guide.
 - **Text:** `…` (single character) in placeholders and loading text, and
   placeholders show an example ("For example, Sunday Morning…"); `tabular-nums`
   on every timer, clock, count and duration; non-breaking space between a number
-  and its unit; 11px is the smallest text anywhere (no 10px).
+  and its unit; 11px is the smallest text anywhere (no 10px), with ONE owner-decided
+  exception: the status word on compact status cards (1000px and below).
 - **Forms:** every field has a visible label above it; correct `type`,
   `inputmode` and `autocomplete`; never block paste; validate on blur and keep
   the user's input on error; focus the first error after a failed save; the Save
@@ -896,7 +897,14 @@ kept because the current code does it.
 
 ## Still open
 
-Nothing blocking. Decided but not built: bundling Inter, the new shadow,
-the 44px touch rule, every Pattern above, and migrating components to tokens.
-The `elevation.overlay` shadow for dialogs and toasts is proposed and not yet
-previewed.
+Nothing blocking. Decisions recorded 2026-10-11 (owner):
+- Release channel lives in **Advanced** in the StagePilot panel.
+- "Pulse" becomes **Note** everywhere ("Note length (ms)", "Test cue").
+- The Lights output reads **MIDI Output to Lighting Controller**; no vendor name.
+- Compact status words may go **below the 11px floor**. This is the one
+  documented exception (status word, compact cards, 1000px and below). Nothing
+  else may.
+- The loading-bar fill keeps its **pixel stripes**.
+- `elevation.overlay` is approved.
+- Save behaviour: explicit save with held markers everywhere (option A); the
+  backend split for true save-as-you-go (option C) is later work.
