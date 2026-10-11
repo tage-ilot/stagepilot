@@ -1,4 +1,5 @@
 import { ButtonSection } from "./ButtonSection";
+import { DisclosureSection } from "./DisclosureSection";
 import { FieldSection } from "./FieldSection";
 import { PanelSection } from "./PanelSection";
 
@@ -10,6 +11,7 @@ export function Gallery() {
         <p>Review-only components. Nothing on this page controls a running show.</p>
       </header>
       <PanelSection />
+      <DisclosureSection />
       <ButtonSection />
       <FieldSection />
       <p className="text-sm text-ink-muted">Default · Hover · Focus · Active · Disabled · Loading · Error</p>
