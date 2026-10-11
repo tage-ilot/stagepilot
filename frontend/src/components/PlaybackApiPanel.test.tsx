@@ -121,6 +121,9 @@ describe("Song order card", () => {
     expect(dialog).toHaveTextContent("Nothing will be played.");
     expect(dialog).not.toHaveTextContent("2 seconds");
     expect(playback.discover).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: "Set up song order" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Set up song order" }));

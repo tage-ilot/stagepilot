@@ -50,7 +50,7 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
-import { Button, Panel, StatusDot, type LiveTone } from "./ui";
+import { Button, Dialog, Panel, StatusDot, type LiveTone } from "./ui";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
 
@@ -1024,17 +1024,19 @@ export function Dashboard({
         />
       )}
 
-      {leaveTarget !== undefined && (
-        <div role="alertdialog" aria-modal="true" aria-label="Discard unsaved changes?" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="max-w-sm space-y-4 rounded-xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
-            <p className="text-base font-semibold text-white">Discard unsaved changes?</p>
-            <div className="flex flex-wrap gap-3">
-              <button className="min-h-11 rounded-lg border border-rose-300/40 bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-100" type="button" autoFocus onClick={() => { setPlaybackDirty(false); setActiveConnection(leaveTarget); setLeaveTarget(undefined); }}>Discard</button>
-              <button className="min-h-11 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200" type="button" onClick={() => setLeaveTarget(undefined)}>Keep editing</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={leaveTarget !== undefined}
+        dismissible={false}
+        tone="danger"
+        title="Discard unsaved changes?"
+        actions={
+          <>
+            <Button onClick={() => setLeaveTarget(undefined)} size="touch" variant="secondary">Keep editing</Button>
+            {/* Dialog focuses the first control on open; the Discard button takes focus after that, as before. */}
+            <Button ref={(node) => { if (node) window.setTimeout(() => node.focus(), 0); }} onClick={() => { setPlaybackDirty(false); if (leaveTarget !== undefined) setActiveConnection(leaveTarget); setLeaveTarget(undefined); }} size="touch" variant="destructive">Discard</Button>
+          </>
+        }
+      />
 
       {canConfigure && activeConnection === "propresenter" && (
         <ProPresenterSetupPanel

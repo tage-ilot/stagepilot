@@ -616,7 +616,7 @@ describe("Dashboard Planning Center plan states", () => {
       const user = await openPlayback();
       await user.click(screen.getByLabelText("Connect to Playback automatically"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
-      expect(screen.getByRole("alertdialog", { name: "Discard unsaved changes?" })).toBeVisible();
+      expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
       await user.click(screen.getByRole("button", { name: "Keep editing" }));
       expect(screen.getByRole("heading", { name: "Playback connection" })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
@@ -624,14 +624,25 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.queryByRole("heading", { name: "Playback connection" })).not.toBeInTheDocument();
     });
 
+    it("discard dialog focuses Discard, ignores Escape and backdrop clicks, and is a dialog with the same name", async () => {
+      const user = await openPlayback();
+      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
+      const dialog = screen.getByRole("dialog", { name: "Discard unsaved changes?" });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Discard" })).toHaveFocus());
+      await user.keyboard("{Escape}");
+      await user.click(dialog.parentElement!);
+      expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    });
+
     it("also asks when switching to another tab, and never asks when nothing changed", async () => {
       const user = await openPlayback();
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
-      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback/ }));
       await user.click(screen.getByLabelText("Connect to Playback automatically"));
       await user.click(screen.getByRole("button", { name: /^ProPresenter/ }));
-      expect(screen.getByRole("alertdialog", { name: "Discard unsaved changes?" })).toBeVisible();
+      expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     });
   });
 

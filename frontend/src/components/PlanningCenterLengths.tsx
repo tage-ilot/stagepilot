@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { chooseLengthCategory, confirmPlanLengths, getLengthCategories, previewPlanLengths, restorePlanLengths } from "../api";
+import { Dialog } from "./ui/Dialog";
 import type { LengthPreview, PlaybackStatusResponse, PlanningCenterServiceType } from "../types";
 
 const button = "min-h-ds-touch-target touch-manipulation rounded-ds-lg border border-integration-services/30 bg-integration-services/10 px-3 py-2 text-sm font-semibold text-integration-services-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-integration-services/20 disabled:cursor-not-allowed disabled:border-edge disabled:bg-surface-900 disabled:text-ink-muted";
@@ -27,7 +28,6 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
   const main = useRef<HTMLButtonElement>(null);
   const arrow = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const dialog = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
   const returnFocus = useRef<"arrow" | "main" | null>(null);
   useEffect(() => { if (!busy && returnFocus.current) { (returnFocus.current === "arrow" ? arrow : main).current?.focus(); returnFocus.current = null; } }, [busy, open, preview]);
@@ -38,7 +38,6 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
   useEffect(() => setSelected(status.planning_center_update_service_type_id), [status.planning_center_update_service_type_id]);
   useEffect(() => setUndo(status.planning_center_undo_available ?? false), [status.planning_center_undo_available]);
   useEffect(() => { if (open) menu.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [open, categories]);
-  useEffect(() => { if (preview) dialog.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [preview]);
   useEffect(() => {
     if (!open) return;
     const outside = (e: PointerEvent) => { if (!menu.current?.contains(e.target as Node) && !arrow.current?.contains(e.target as Node)) setOpen(false); };
@@ -74,16 +73,20 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
     {error && <p role="alert" className="break-words text-sm text-danger-text">{error}</p>}
     {(result || status.planning_center_lengths?.message) && <p role="status" className="break-words text-sm text-ink-body">{result || status.planning_center_lengths?.message}</p>}
     {undo && <button className={button} disabled={busy || status.playing || status.discovery === "running" || !status.planning_center_connected} onClick={() => void run(async () => accept(await restorePlanLengths()))}>Restore Planning Center times</button>}
-    {preview && <div role="dialog" aria-modal="true" aria-labelledby="length-preview-heading" className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4" onKeyDown={e => {
-      if (e.key === "Escape" && !busy) { e.preventDefault(); close(); }
-      if (e.key === "Tab") { const controls = [...dialog.current!.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)")]; const first = controls[0]; const last = controls.at(-1); if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); } }
-    }}><div ref={dialog} className="max-h-[85vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-ds-xl border border-integration-services/30 bg-surface-950 p-5 shadow-elevation-overlay">
-      <h3 id="length-preview-heading" className="text-lg font-bold text-ink">Update Planning Center?</h3>
-      <p className="break-words text-sm text-ink-body">{preview.category} · {preview.plan_title} · {preview.plan_date}</p>
-      <ul className="divide-y divide-edge text-sm text-ink-body">{preview.items.map(r => <li key={r.item_id} className="break-words py-2"><strong>{r.title}</strong> {r.status === "skipped" ? `No change — ${r.reason}` : `${duration(r.old_length)} → ${duration(r.new_length)}`}</li>)}</ul>
+    <Dialog
+      open={!!preview}
+      dismissible={!busy}
+      onClose={close}
+      title="Update Planning Center?"
+      description={preview ? `${preview.category} · ${preview.plan_title} · ${preview.plan_date}` : undefined}
+      actions={preview && <>
+        {preview.items.some(r => r.status === "updated") && <button className={button} disabled={busy || !!reason} onClick={() => void run(async () => { accept(await confirmPlanLengths(preview.token)); close(); })}>Update Planning Center</button>}
+        <button className={button} disabled={busy} onClick={close}>Cancel</button>
+      </>}
+    >{preview && <>
+      <ul className="divide-y divide-edge-subtle text-sm text-ink-body">{preview.items.map(r => <li key={r.item_id} className="break-words py-2"><strong>{r.title}</strong> {r.status === "skipped" ? `No change — ${r.reason}` : `${duration(r.old_length)} → ${duration(r.new_length)}`}</li>)}</ul>
       {preview.message && <p className="text-sm text-ink-body">{preview.message}</p>}
-      <div className="flex flex-wrap gap-3">{preview.items.some(r => r.status === "updated") && <button className={button} disabled={busy || !!reason} onClick={() => void run(async () => { accept(await confirmPlanLengths(preview.token)); close(); })}>Update Planning Center</button>}<button className={button} disabled={busy} onClick={close}>Cancel</button></div>
       {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
-    </div></div>}
+    </>}</Dialog>
   </div>;
 }
