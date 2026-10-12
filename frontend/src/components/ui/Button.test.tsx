@@ -67,13 +67,13 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
-  it("label shadow: present for secondary, tinted, destructive, live; absent for primary and destructive-soft", () => {
-    for (const variant of ["secondary", "tinted", "destructive"] as const) {
+  it("label shadow: present for primary (white on red), secondary, tinted, destructive, live; absent for destructive-soft", () => {
+    for (const variant of ["primary", "secondary", "tinted", "destructive"] as const) {
       const { unmount } = render(<Button variant={variant}>x</Button>);
       expect(shadow(screen.getByRole("button"))).toBe(true);
       unmount();
     }
-    for (const variant of ["primary", "destructive-soft"] as const) {
+    for (const variant of ["destructive-soft"] as const) {
       const { unmount } = render(<Button variant={variant}>x</Button>);
       expect(shadow(screen.getByRole("button"))).toBe(false);
       unmount();
@@ -87,7 +87,7 @@ describe("Button", () => {
       expect(shadow(b)).toBe(true);
       const dark = t === "go" || t === "back";
       expect(b.className.includes("can-hover:[text-shadow:none]")).toBe(dark);
-      expect(b.className.includes("can-hover:text-on-primary")).toBe(dark);
+      expect(b.className.includes("can-hover:text-on-light")).toBe(dark);
       expect(b.className.includes("can-hover:text-on-danger")).toBe(!dark);
       unmount();
     }

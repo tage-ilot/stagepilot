@@ -22,7 +22,7 @@ describe("Badge", () => {
     for (const tone of ["success", "warning"] as const) {
       const { unmount } = render(<Badge tone={tone} emphasis="solid">{tone}</Badge>);
       const el = screen.getByText(tone);
-      expect(el).toHaveClass(`bg-${tone}`, "text-on-primary");
+      expect(el).toHaveClass(`bg-${tone}`, "text-on-light");
       expect(el).not.toHaveClass("text-shadow-label");
       unmount();
     }

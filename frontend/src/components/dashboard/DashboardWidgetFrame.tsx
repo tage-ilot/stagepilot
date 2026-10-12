@@ -35,7 +35,7 @@ export function DashboardWidgetFrame({
           </button>
           <button
             aria-label={`Drag ${label} to a new dashboard position`}
-            className="dashboard-widget-handle flex h-7 coarse:h-ds-touch-target cursor-grab touch-none select-none items-center gap-1 rounded-ds-lg px-2 font-type-micro text-type-micro uppercase text-primary-focus transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-ink/10 active:cursor-grabbing"
+            className="dashboard-widget-handle flex h-7 coarse:h-ds-touch-target cursor-grab touch-none select-none items-center gap-1 rounded-ds-lg px-2 font-type-micro text-type-micro uppercase text-primary-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-ink/10 active:cursor-grabbing"
             title={`Drag ${label} to a new dashboard position`}
             type="button"
           >
