@@ -87,8 +87,8 @@ colors:
   flare-gold: "#dcaf50"
 
 typography:
-  # DECIDED: bundle Inter (self-hosted variable font, no CDN, so it works offline in the desktop app).
-  # Not done yet: today Inter is declared but never loaded.
+  # DECIDED: Geist (self-hosted variable font via @fontsource-variable/geist, no CDN, so it works offline in the desktop app).
+  # Geist replaced Inter by owner decision on 2026-10-11 (tabular numbers, 100-900 weight axis, OFL-1.1).
   brand:
     fontFamily: StagePilot Logo
     fontSize: 4.05rem            # dashboard header lock-up (leading 0.56)
@@ -106,55 +106,55 @@ typography:
     lineHeight: 1
     letterSpacing: "-0.06em"      # timer only. (The -0.045em seen once is the song title, below. No conflict.)
   song-title:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 3.65rem            # real CSS clamp(2rem, 3.2vw, 3.65rem); live panel current-song heading
     fontWeight: 900
     lineHeight: 0.96
     letterSpacing: "-0.045em"
   text-strong:                   # DECIDED: same colour as `text` (#f8f4ec), just bolder. Use for emphasis inside body copy and field labels.
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.875rem
     fontWeight: 700
     lineHeight: 1.45
   h1:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 1.5rem
     fontWeight: 700
     lineHeight: 1.2
   h2:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 1.125rem
     fontWeight: 700
     lineHeight: 1.3
   body-md:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.875rem
     fontWeight: 400
     lineHeight: 1.45
   body-sm:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.75rem
     fontWeight: 400
     lineHeight: 1.4
   label:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.875rem
     fontWeight: 600
     lineHeight: 1.2
   kicker:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.6875rem          # CHANGED: 11px. One micro size replaces 0.6 / 0.65 / 0.68rem
     fontWeight: 800
     lineHeight: 1.2
     letterSpacing: "0.18em"      # tracking scale is now 3 steps: wider 0.05em (uppercase labels), 0.18em (kickers), 0.35em (display)
   badge:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.75rem
     fontWeight: 700
     lineHeight: 1.2
     letterSpacing: "0.05em"
   micro:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 0.6875rem          # CHANGED: 11px, same size as kicker (was 0.6 / 0.65 rem)
     fontWeight: 700
     lineHeight: 1.2
@@ -339,7 +339,7 @@ is not.
 
 **DECIDED (owner accepted, 2026-10-11), drawn from what the app already does.** The style in
 one line: **8-bit meets film flare, with a modern touch.** The app is a calm,
-modern control surface (Inter, clean panels, clear status colours) with two
+modern control surface (Geist, clean panels, clear status colours) with two
 signatures that make it ours: a little pixel-art character and a warm,
 cinematic glow. Both are accents. Neither takes over.
 
@@ -355,7 +355,7 @@ cinematic glow. Both are accents. Neither takes over.
   when failed.
 - **No:** pixel fonts for body text or labels, pixelated borders or corners on
   panels and buttons, retro "game" wording, 8-bit sound or icons everywhere.
-  Controls stay modern: 8px corners, Inter, clean borders.
+  Controls stay modern: 8px corners, Geist, clean borders.
 
 ### Film flare: where it lives (light and warmth)
 - **Yes:** the photo background, the warm brown-red soft shadow lit from the
@@ -368,7 +368,7 @@ cinematic glow. Both are accents. Neither takes over.
   flares, vignettes) stacked on top of the photo.
 
 ### Modern: the baseline
-Inter (bundled), 8px/12px corners, the three widget borders, tokens only,
+Geist (bundled), 8px/12px corners, the three widget borders, tokens only,
 44/36px targets, plain verb-and-object labels, visible status with words.
 
 ### Avoid (generic defaults that would blur our identity)
@@ -468,9 +468,12 @@ that is not a status, a service, or the primary red.
   `App.tsx`). About 20 hardcoded hex values in `index.css`.
 
 ## Typography
-- **Inter, bundled** (decided): self-hosted variable font, no CDN, so the
-  desktop app looks the same offline and on every OS. Not yet implemented;
-  today the stack falls back to the OS UI font.
+- **Geist, bundled** (decided): self-hosted variable font
+  (`@fontsource-variable/geist`, OFL-1.1), no CDN, so the desktop app looks the
+  same offline and on every OS. Geist replaced Inter by owner decision on
+  2026-10-11. It is safe because it keeps tabular numbers (`tnum`), has the same
+  100-900 weight axis and the same Latin glyph coverage, and its licence permits
+  bundling (notice in `THIRD_PARTY_NOTICES.md`).
 - **StagePilot Logo** (`assets/logo-font.ttf`) is for the wordmark only, with a
   1px black outline (`.font-brand`).
 - **Sizes (decided):** `text-sm` 14px (197 uses), `text-xs` 12px (134),
@@ -480,7 +483,7 @@ that is not a status, a service, or the primary red.
   900 small chips (13), 800 kickers.
 - **Timer:** light-weight **monospace**, tabular numerals,
   `clamp(3rem, 5vw, 5.4rem)`, tracking `-0.06em`. **Song title** (live
-  panel heading) is a separate style: Inter 900,
+  panel heading) is a separate style: Geist 900,
   `clamp(2rem, 3.2vw, 3.65rem)`, tracking `-0.045em`. These are two different
   elements, not a conflict.
 - **Tracking (decided): three steps.** `0.05em` (Tailwind `tracking-wider`,
@@ -876,14 +879,14 @@ Wiring plan (each step was a small PR; status at the final audit):
 
 | # | Finding | Handling |
 | --- | --- | --- |
-| 1 | Draft v1 said timer is Inter 900, 4rem. Real: mono, weight 300, clamp(3rem, 5vw, 5.4rem) | Fixed in tokens |
+| 1 | Draft v1 said timer is Inter 900 (historical), 4rem. Real: mono, weight 300, clamp(3rem, 5vw, 5.4rem) | Fixed in tokens |
 | 2 | Draft v1 listed `brand` at 1.5rem; real sizes are 4.05rem header and up to 11.25rem splash | Fixed; added `brand-hero` |
 | 3 | Draft v1 claimed text pairs pass AA. `text-muted` (slate-500) is 3.4-4.2:1; `danger` as text 4.4:1; white on coral 3.0, rose-500 3.7, fuchsia-500 3.5 | `text-muted` CHANGED to `#7b8ba1`; others documented as rules |
 | 4 | `--sp-*` vs rendered values differ (success `#42dda4` vs `#34d399`, warning `#f6c453` vs `#fbbf24`, info `#7dd3fc` vs `#38bdf8`, muted `#9aa9bb` vs `#94a3b8`, quiet `#718096`) | Rendered values used; `--sp-*` values listed as OPEN Q1 |
 | 5 | `stage-800` / `stage-700` defined but never used; `stage-900` only in scrollbar CSS | Decided: delete both unused; `stage-850` -> `card`, `stage-900` -> `scrollbar-track` |
 | 6 | Missing `panel`, `panel-strong`, dialog/toast/popover, scrim, widget borders | Added |
 | 7 | Missing z-index scale (7 layers) with two apparent stacking conflicts | Added table; layering decided: keep as is |
-| 8 | Missing: Inter not loaded; tap-target rule mostly unenforced; no placeholder style; two shadow languages; 3 button recipes | Decided: bundle Inter, 44/36px tap targets, placeholder style, new shadow, one panel recipe; the primary is the only solid action colour (it was coral until 2026-10-11) |
+| 8 | Missing: Inter not loaded (now Geist, bundled); tap-target rule mostly unenforced; no placeholder style; two shadow languages; 3 button recipes | Decided: bundle a font (Geist since 2026-10-11), 44/36px tap targets, placeholder style, new shadow, one panel recipe; coral is the only solid primary |
 | 9 | Draft v1 listed `rounded` sm/md as in use; bare `rounded` (4px) is the real odd one | Documented |
 
 | 10 | I said one timer used -0.045em vs -0.06em. Wrong: -0.045em is the song title heading, a different element | Corrected; `song-title` token added |
@@ -910,7 +913,7 @@ kept because the current code does it.
 - The primary red is the only solid primary button. Playback is fuchsia `#e879f9`;
   MIDI is a connection method, not a service colour. Live controls keep four
   severity colours.
-- Inter is bundled. Three tracking steps; one 11px micro size; bare `rounded`
+- Geist is bundled (replaced Inter, 2026-10-11). Three tracking steps; one 11px micro size; bare `rounded`
   becomes 8px. Inputs on `surface-950`.
 - Photo background stays, fixed behind scrolling content. Blue loading bar
   stays; its white lead-in line is removed.
