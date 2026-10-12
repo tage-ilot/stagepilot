@@ -213,7 +213,7 @@ describe("Song order card", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("stale: amber message with the same one button; saved: confirmation count", () => {
+  it("stale: warning message with the same one button; saved: confirmation count", () => {
     const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ stale: true }) })} />);
     expect(screen.getByText("Your Playback setlist changed. Set up song order again.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Set up song order" })).toBeEnabled();
