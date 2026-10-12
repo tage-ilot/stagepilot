@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.104-beta.32] - 2026-10-12
+## [1.1.104-beta.33] - 2026-10-12
 
 ### Changed
 
@@ -29,6 +29,8 @@
 ### Notes
 
 - Visual and interface release. No backend behavior or API changes.
+- beta.32 was tagged but never published (its Windows build failed a line-ending
+  check in the build tooling); beta.33 carries the same changes plus that fix.
 - Real-device touch, screen-reader and 200% browser zoom checks were emulated
   only; hardware acceptance is not implied.
 - Startup and error screen text over the background photo can be low contrast at
