@@ -95,14 +95,14 @@ body {
   overflow: hidden;
   background: repeating-linear-gradient(
     90deg,
-    #0284c7 0,
-    #0284c7 10px,
-    #38bdf8 10px,
-    #38bdf8 14px,
-    #67e8f9 14px,
-    #67e8f9 16px,
-    #082f49 16px,
-    #082f49 20px
+    var(--loader-fill-a) 0,
+    var(--loader-fill-a) 10px,
+    var(--ds-info) 10px,
+    var(--ds-info) 14px,
+    var(--loader-fill-c) 14px,
+    var(--loader-fill-c) 16px,
+    var(--loader-fill-d) 16px,
+    var(--loader-fill-d) 20px
   );
   box-shadow:
     inset 0 3px 0 rgb(255 255 255 / 38%),
@@ -119,8 +119,8 @@ body {
   bottom: 0;
   left: calc(var(--progress, 1) * 100%);
   width: 4px;
-  background: #f8fafc;
-  box-shadow: 4px 0 0 #0ea5e9;
+  background: var(--loader-edge-white);
+  box-shadow: 4px 0 0 var(--loader-edge-blue);
   transition: left 140ms linear;
 }
 
@@ -240,14 +240,14 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 .loading-progress-track--failed .loading-progress-fill {
   background: repeating-linear-gradient(
     90deg,
-    #9f1239 0,
-    #9f1239 10px,
-    #e11d48 10px,
-    #e11d48 14px,
-    #fb7185 14px,
-    #fb7185 16px,
-    #4c0519 16px,
-    #4c0519 20px
+    var(--loader-failed-a) 0,
+    var(--loader-failed-a) 10px,
+    var(--ds-danger-solid) 10px,
+    var(--ds-danger-solid) 14px,
+    var(--ds-danger-soft) 14px,
+    var(--ds-danger-soft) 16px,
+    var(--ds-on-danger-soft) 16px,
+    var(--ds-on-danger-soft) 20px
   );
   box-shadow:
     inset 0 3px 0 rgb(255 255 255 / 25%),
@@ -255,8 +255,8 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 }
 
 .loading-progress-track--failed .loading-progress-edge {
-  background: #fff1f2;
-  box-shadow: 4px 0 0 #e11d48;
+  background: var(--loader-failed-edge-white);
+  box-shadow: 4px 0 0 var(--ds-danger-solid);
 }
 
 .loading-progress-track--failed .loading-progress-scan,

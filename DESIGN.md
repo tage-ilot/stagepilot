@@ -915,10 +915,9 @@ Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - Save behaviour: explicit save with held markers everywhere (option A); the
   backend split for true save-as-you-go (option C) is later work.
 
-Status at the final audit (2026-10-11): the items above are built in PRs #132 to #142; #133 to #136, #140 and
-#141 are still draft and wait for the owner. Still not done:
+Still not done:
+- Real-device touch, screen-reader and real 200% browser zoom checks (only emulated).
+- Exhaustive destructive-action confirmation audit.
 - Option C (backend split for true save-as-you-go).
-- Two `impeccable` side-tab detector warnings remain by design in `index.css`
-  (coral resize handle and current-song stripe), plus two for the loader stripes
-  the owner asked to keep. They are the coral rails this file asks for.
-- Real-device touch, screen-reader and 200% browser zoom checks (only emulated).
+
+Decided exception: startup/error screen text over the photo may measure as low as 1.1:1 at the brightest patch; owner decided to leave it (2026-10-11).

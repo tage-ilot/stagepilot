@@ -192,13 +192,13 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
 
       <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
         <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer">
-          <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer" onChange={(event) => setChoice(event.target.value)}>
+          <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer…" onChange={(event) => setChoice(event.target.value)}>
             {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
             <option value={OTHER_COMPUTER}>Other computer…</option>
           </Select>
         </Field>
         {other && <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
-          <Input value={host} placeholder="192.0.2.10" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
+          <Input value={host} placeholder="For example, 192.0.2.10…" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
         </Field>}
         {choice && <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>}
         {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
