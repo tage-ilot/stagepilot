@@ -52,6 +52,7 @@ colors:
   integration-presentation: "#fdba74"    # orange-300. UI label "Presentation" (ProPresenter today)
   integration-presentation-text: "#fed7aa"     # orange-200
   integration-lights: "#38bdf8"          # sky-400
+  integration-lights-text: "#bae6fd"     # sky-200: Lights badge/button text. Was info-text before info became teal; Lights keeps its own sky text
   integration-playback: "#e879f9"        # fuchsia-400. DECIDED: Playback takes MIDI's old colour; MIDI has none of its own (it is configured under Playback)
   integration-playback-text: "#f5d0fe"   # fuchsia-200
   # DECIDED direction: a muted version of each service colour for the "Advanced" parts of its setup

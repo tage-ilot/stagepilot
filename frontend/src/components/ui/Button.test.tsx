@@ -80,15 +80,18 @@ describe("Button", () => {
     }
   });
 
-  it("live: light text keeps the shadow; dark hover text (go, back) removes it; reload and stop keep it", () => {
+  it("live: light text keeps the shadow; dark hover text (go, back, reload on-info) removes it; stop keeps it", () => {
     for (const t of liveTones) {
       const { unmount } = render(<Button variant="live" liveTone={t}>x</Button>);
       const b = screen.getByRole("button");
       expect(shadow(b)).toBe(true);
-      const dark = t === "go" || t === "back";
+      const dark = t === "go" || t === "back" || t === "reload";
+      const darkToken = t === "reload" ? "on-info" : "on-light";
       expect(b.className.includes("can-hover:[text-shadow:none]")).toBe(dark);
-      expect(b.className.includes("can-hover:text-on-light")).toBe(dark);
+      expect(b.className.includes("active:[text-shadow:none]")).toBe(dark);
+      expect(b.className.includes(`can-hover:text-${darkToken}`)).toBe(dark);
       expect(b.className.includes("can-hover:text-on-danger")).toBe(!dark);
+      expect(b.className.includes("text-white")).toBe(false);
       unmount();
     }
   });

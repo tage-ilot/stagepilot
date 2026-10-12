@@ -1180,7 +1180,7 @@ describe("Dashboard widget layout", () => {
       // Pressed state comes from tokens; no raw white text on the fill (checked here, never pressed in capture).
       // A disabled live control (no current song) drops hover/press styling by design.
       if (!(button as HTMLButtonElement).disabled) {
-        expect(button.className).toContain(tone === "go" || tone === "back" ? "active:text-on-light" : "active:text-on-danger");
+        expect(button.className).toContain(tone === "go" || tone === "back" ? "active:text-on-light" : tone === "reload" ? "active:text-on-info" : "active:text-on-danger");
       }
       expect(button.className).not.toMatch(/hover:text-white|slate-|rose-|emerald-/);
     }
@@ -1461,6 +1461,36 @@ describe("Long content and empty lists", () => {
     expect(row).not.toHaveClass("truncate");
     expect(row).toHaveClass("break-words");
     expect(screen.getByRole("heading", { name: LONG })).toHaveClass("break-words");
+  });
+
+  it("marks only the next song with the info label and chip; the current song keeps the primary family", () => {
+    const songs = [
+      { ...base, id: "a", order: 1, title: "Alpha" },
+      { ...base, id: "b", order: 2, title: "Bravo", is_generic: true },
+      { ...base, id: "c", order: 3, title: "Charlie" },
+    ];
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs }, current_song: songs[0], current_song_index: 0, next_song: songs[1] }),
+    });
+    const rows = within(screen.getByRole("list", { name: "Service plan order" })).getAllByRole("listitem");
+    const upNext = within(rows[1]!).getByText("Up next");
+    expect(upNext).toHaveClass("text-info-text");
+    expect(upNext).not.toHaveClass("text-warning-text");
+    expect(within(rows[1]!).getByText("2")).toHaveClass("bg-info/15", "text-info-text");
+    expect(within(rows[1]!).getByText("Generic item")).toHaveClass("text-warning-text");
+    expect(within(rows[0]!).queryByText("Up next")).toBeNull();
+    expect(within(rows[0]!).getByText("1")).toHaveClass("bg-primary", "text-on-primary");
+    expect(within(rows[0]!).getByText("Current · live")).toHaveClass("text-primary-text");
+    expect(within(rows[2]!).queryByText("Up next")).toBeNull();
+    expect(within(rows[2]!).getByText("3")).toHaveClass("bg-ink/5", "text-ink-muted");
+    expect(within(rows[2]!).getByText("3")).not.toHaveClass("bg-info/15");
+  });
+
+  it("keeps the Now playing Up next caption muted and its value plain ink", () => {
+    renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { next_song: base }) });
+    const caption = screen.getByText("Up next", { selector: "p" });
+    expect(caption).toHaveClass("text-xs", "text-ink-muted");
+    expect(caption.nextElementSibling).toHaveClass("text-ink");
   });
 
   it("renders 300 songs in the plan list", () => {

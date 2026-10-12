@@ -24,7 +24,7 @@ const tinted: Record<Tone, string> = {
   services: "border-integration-services/30 bg-integration-services/10 text-integration-services-text can-hover:bg-integration-services/20",
   presentation: "border-integration-presentation/30 bg-integration-presentation/10 text-integration-presentation-text can-hover:bg-integration-presentation/20",
   playback: "border-integration-playback/30 bg-integration-playback/10 text-integration-playback-text can-hover:bg-integration-playback/20",
-  lights: "border-integration-lights/30 bg-integration-lights/10 text-info-text can-hover:bg-integration-lights/20",
+  lights: "border-integration-lights/30 bg-integration-lights/10 text-integration-lights-text can-hover:bg-integration-lights/20",
   success: "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20",
   warning: "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20",
   danger: "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20",
@@ -32,11 +32,11 @@ const tinted: Record<Tone, string> = {
   idle: "border-idle/30 bg-idle/10 text-ink-muted can-hover:bg-idle/20",
 };
 
-// Rest: transparent on surface-950, light text (label shadow). Go/back flip to dark text on hover/press, so the shadow is removed there.
+// Rest: transparent on surface-950, light text (label shadow). Go, back and reload flip to dark text on hover/press (on-light, on-info), so the shadow is removed there.
 const live: Record<LiveTone, string> = {
   go: "border-live-go/40 text-live-go-text can-hover:border-live-go/70 can-hover:bg-live-go can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-go/80 active:text-on-light active:[text-shadow:none]",
   back: "border-live-back/40 text-live-back-text can-hover:border-live-back/70 can-hover:bg-live-back can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-back/80 active:text-on-light active:[text-shadow:none]",
-  reload: "border-live-reload/50 text-live-reload-text can-hover:border-live-reload/70 can-hover:bg-live-reload can-hover:text-on-danger active:bg-live-reload/80 active:text-on-danger",
+  reload: "border-live-reload/50 text-live-reload-text can-hover:border-live-reload/70 can-hover:bg-live-reload can-hover:text-on-info can-hover:[text-shadow:none] active:bg-live-reload/80 active:text-on-info active:[text-shadow:none]",
   stop: "border-live-stop/40 text-live-stop-text can-hover:border-live-stop/70 can-hover:bg-live-stop can-hover:text-on-danger active:bg-live-stop/80 active:text-on-danger",
 };
 
