@@ -128,7 +128,7 @@ body {
 }
 
 /* Small circular loading spinner, shown instead of the bar on phone/tablet
-   widths. It follows the bar states (blue loading, amber delayed, red failed). */
+   widths. It follows the bar states (blue loading, warning delayed, red failed). */
 .loading-spinner-circular {
   display: none;
   width: 40px;
@@ -152,7 +152,7 @@ body {
 div:has(> .loading-progress-track--delayed) > .loading-spinner-circular {
   border-top-color: var(--ds-warning);
   border-right-color: var(--ds-warning);
-  box-shadow: 0 0 20px rgb(251 191 36 / 22%);
+  box-shadow: 0 0 20px rgb(227 78 31 / 22%);
 }
 
 div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
@@ -229,7 +229,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   box-shadow:
     5px 5px 0 var(--ds-surface-950),
     0 0 0 1px var(--ds-warning),
-    0 0 20px rgb(251 191 36 / 22%);
+    0 0 20px rgb(227 78 31 / 22%);
 }
 
 .loading-progress-track--failed {
