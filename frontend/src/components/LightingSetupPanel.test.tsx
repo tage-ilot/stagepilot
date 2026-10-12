@@ -10,7 +10,7 @@ import type {
   SettingsResponse,
   Song,
 } from "../types";
-import { LightsSetupPanel } from "./LightsSetupPanel";
+import { LightingSetupPanel } from "./LightingSetupPanel";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -143,13 +143,13 @@ const state: ApplicationState = {
   last_action: "start_next",
 };
 
-describe("LightsSetupPanel", () => {
+describe("LightingSetupPanel", () => {
   it("keeps 40 cues in a bounded scroll region and renders a 200-character cue label", () => {
     const label = "W".repeat(200);
     const cues = Array.from({ length: 40 }, (_, index) => ({ id: `c${index}`, at_seconds: index * 5, note: 60, velocity: 100, label: index === 0 ? label : `Cue ${index}` }));
     const many = { ...settings, settings: { ...settings.settings, lights: { ...settings.settings.lights, cue_maps: { "song-1": { song_key: "song-1", song_title: "Holy Forever", cues } } } } };
     render(
-      <LightsSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={many} state={state} />,
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={many} state={state} />,
     );
     const region = screen.getByTestId("lighting-cue-list");
     expect(region).toHaveClass("overflow-y-auto", "overscroll-contain");
@@ -158,9 +158,36 @@ describe("LightsSetupPanel", () => {
     expect(labels[0]).toHaveValue(label);
   });
 
+  it("shows the test cue result as a teal informational status with a dot; errors stay danger", () => {
+    const { rerender } = render(
+      <LightingSetupPanel error={null} lights={lights} message="Sent lighting test cue on MIDI note 60" onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("text-info-text");
+    expect(status).toHaveTextContent("Sent lighting test cue on MIDI note 60");
+    expect(status.querySelector('[data-part="dot"]')).toHaveClass("bg-info");
+    rerender(
+      <LightingSetupPanel error="Lighting failed" lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.querySelector('[data-part="dot"]')).toBeNull();
+  });
+
+  it("note display glyphs are teal when active and muted when inactive; the toggle stays Lighting", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const glyphs = [screen.getByText("♪"), screen.getByText("#")];
+    expect(glyphs.filter((g) => g.className.includes("text-info-text"))).toHaveLength(1);
+    expect(glyphs.filter((g) => g.className.includes("text-ink-muted"))).toHaveLength(1);
+    const toggle = screen.getByRole("switch");
+    expect(toggle.className).toContain("integration-lighting");
+    expect(toggle.className).not.toContain("info");
+  });
+
   it("shows its single connection method as a line of text, not a select", () => {
     render(
-      <LightsSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
     expect(screen.getByText("Sends cues by MIDI").tagName).toBe("P");
     expect(screen.queryByLabelText("Connection method")).not.toBeInTheDocument();
@@ -168,7 +195,7 @@ describe("LightsSetupPanel", () => {
 
   it("uses the dashboard connection status while detail data is still loading", () => {
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         connectionStatus="disconnected"
         error={null}
         lights={null}
@@ -191,7 +218,7 @@ describe("LightsSetupPanel", () => {
     const user = userEvent.setup();
     const onSaveCues = vi.fn();
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -226,7 +253,7 @@ describe("LightsSetupPanel", () => {
     const user = userEvent.setup();
     const onSaveCues = vi.fn();
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -263,7 +290,7 @@ describe("LightsSetupPanel", () => {
     const user = userEvent.setup();
     const onSaveCues = vi.fn();
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -294,7 +321,7 @@ describe("LightsSetupPanel", () => {
     const onSaveCues = vi.fn();
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -323,7 +350,7 @@ describe("LightsSetupPanel", () => {
     const user = userEvent.setup();
     const onTest = vi.fn();
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -359,7 +386,7 @@ describe("LightsSetupPanel", () => {
       settings: { ...settings.settings, lights: { ...settings.settings.lights, output_name, channel } },
     });
     const panel = (onTest: () => void, s: SettingsResponse, l: LightsStatusResponse = twoOutputs) => (
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={l}
         message={null}
@@ -449,7 +476,7 @@ describe("LightsSetupPanel", () => {
 
   it("shows the kicker, one sentence, a Basic heading and a visible label equal to each former aria-label-only control", () => {
     render(
-      <LightsSetupPanel
+      <LightingSetupPanel
         error={null}
         lights={lights}
         message={null}
@@ -464,7 +491,7 @@ describe("LightsSetupPanel", () => {
     );
 
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Lights" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lighting" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
     for (const name of ["Test lighting note", "Test lighting velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
       const control = screen.getByLabelText(name);
@@ -483,8 +510,8 @@ describe("LightsSetupPanel", () => {
         { name: "Other MIDI port", ambiguous: false, selected: false, connected: false },
       ],
     };
-    const make = (over: Partial<React.ComponentProps<typeof LightsSetupPanel>> = {}) => (
-      <LightsSetupPanel
+    const make = (over: Partial<React.ComponentProps<typeof LightingSetupPanel>> = {}) => (
+      <LightingSetupPanel
         error={null}
         lights={twoOutputs}
         message={null}
@@ -586,7 +613,7 @@ describe("LightsSetupPanel", () => {
       expect(JSON.stringify(payload)).toBe('{"enabled":true,"output_name":"Other MIDI port","channel":5,"pulse_ms":100}');
     });
 
-    it("a clean Save does nothing once Lights is enabled", async () => {
+    it("a clean Save does nothing once Lighting is enabled", async () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
@@ -641,7 +668,7 @@ describe("LightsSetupPanel", () => {
   });
 });
 
-describe("Lights hold-until-saved conformance (guard)", () => {
+describe("Lighting hold-until-saved conformance (guard)", () => {
   const twoOutputs: LightsStatusResponse = {
     ...lights,
     outputs: [
@@ -651,7 +678,7 @@ describe("Lights hold-until-saved conformance (guard)", () => {
   };
   type Fn<A extends unknown[]> = (...args: A) => void;
   const mount = (extra: { onSaveSettings?: Fn<[LightsSettingsInput]>; onSaveCues?: Fn<[Song, LightingCue[]]>; onTest?: Fn<[number, number]>; onDirtyChange?: Fn<[boolean]> } = {}) => render(
-    <LightsSetupPanel
+    <LightingSetupPanel
       error={null}
       lights={twoOutputs}
       message={null}

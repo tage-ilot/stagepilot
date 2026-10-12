@@ -300,6 +300,7 @@ export function PlanningCenterSetupPanel({
       aria-labelledby="planning-center-setup-heading"
       className="mt-5"
       id="planning-center-configuration"
+      tone="services"
       variant="setup"
     >
       <SetupPanelHeader
@@ -392,7 +393,7 @@ export function PlanningCenterSetupPanel({
                 <button
                   aria-describedby="planning-center-pat-help"
                   aria-label="How to get a Planning Center Personal Access Token"
-                  className="relative grid h-4 w-4 touch-manipulation place-items-center rounded-ds-full border border-ink-muted pb-px text-type-micro font-black leading-none normal-case tracking-normal text-ink-muted transition-colors duration-[140ms] after:absolute after:left-1/2 after:top-1/2 after:hidden after:size-ds-touch-target after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] coarse:after:block can-hover:border-integration-services can-hover:text-integration-services-text motion-reduce:transition-none"
+                  className="relative grid h-4 w-4 touch-manipulation place-items-center rounded-ds-full border border-ink-muted pb-px text-type-micro font-black leading-none normal-case tracking-normal text-ink-muted transition-colors duration-[140ms] after:absolute after:left-1/2 after:top-1/2 after:hidden after:size-ds-touch-target after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] coarse:after:block can-hover:border-integration-services-soft can-hover:text-integration-services-text motion-reduce:transition-none"
                   type="button"
                 >
                   ?
@@ -407,7 +408,7 @@ export function PlanningCenterSetupPanel({
                     <p className="mt-2 leading-relaxed">
                       Open Planning Center&apos;s{" "}
                       <a
-                        className="font-semibold text-integration-services-text underline decoration-integration-services/50 underline-offset-2 can-hover:text-ink"
+                        className="font-semibold text-info-text underline decoration-info/50 underline-offset-2 can-hover:text-info active:text-info-active"
                         href="https://api.planningcenteronline.com/personal_access_tokens"
                         onClick={(event) => {
                           event.preventDefault();

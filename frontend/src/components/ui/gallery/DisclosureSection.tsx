@@ -1,7 +1,7 @@
 import { Disclosure, type DisclosureTone } from "../Disclosure";
 import { Section } from "./Section";
 
-const tones: DisclosureTone[] = ["services", "presentation", "playback", "lights"];
+const tones: DisclosureTone[] = ["services", "presentation", "playback", "lighting", "backend"];
 const long = "Endpoint 192.0.2.10 · Port 8080 · Channel 1 · Auto reconnect on · Timeout 30 seconds · Retry every 5 seconds";
 
 /** Real Disclosure. Closed and open rendered via defaultOpen; interaction states are driven by Playwright on the real target. */

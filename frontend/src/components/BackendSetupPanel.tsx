@@ -282,6 +282,7 @@ export function BackendSetupPanel({
       aria-labelledby="backend-setup-heading"
       className="mt-5"
       id="backend-configuration"
+      tone="backend"
       variant="setup"
     >
       <SetupPanelHeader

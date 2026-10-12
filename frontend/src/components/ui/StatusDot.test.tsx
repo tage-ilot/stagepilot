@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { StatusDot } from "./StatusDot";
 import type { Tone } from "./types";
 
-const tones: Tone[] = ["services", "presentation", "playback", "lights", "success", "warning", "danger", "info", "idle"];
+const tones: Tone[] = ["services", "presentation", "playback", "lighting", "backend", "success", "warning", "danger", "info", "idle"];
 
 describe("StatusDot", () => {
   it("is decorative by default", () => {

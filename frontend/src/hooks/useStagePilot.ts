@@ -116,9 +116,9 @@ export function useStagePilot() {
   >(null);
 
   const [lights, setLights] = useState<LightsStatusResponse | null>(null);
-  const [lightsError, setLightsError] = useState<string | null>(null);
-  const [lightsMessage, setLightsMessage] = useState<string | null>(null);
-  const [pendingLightsOperation, setPendingLightsOperation] = useState<
+  const [lightingError, setLightingError] = useState<string | null>(null);
+  const [lightingMessage, setLightingMessage] = useState<string | null>(null);
+  const [pendingLightingOperation, setPendingLightingOperation] = useState<
     "save" | "refresh" | "test" | "save-cues" | null
   >(null);
 
@@ -178,13 +178,13 @@ export function useStagePilot() {
     }
   }, [canConfigure]);
 
-  const loadLights = useCallback(async () => {
+  const loadLighting = useCallback(async () => {
     if (!canConfigure) return;
     try {
       setLights(await getLightsStatus());
-      setLightsError(null);
+      setLightingError(null);
     } catch (cause) {
-      setLightsError(describeError(cause, "Lights output unavailable."));
+      setLightingError(describeError(cause, "Lighting output unavailable."));
     }
   }, [canConfigure]);
 
@@ -304,7 +304,7 @@ export function useStagePilot() {
     void loadMidiInputs();
     void loadMidiMessages();
     void loadProPresenter();
-    void loadLights();
+    void loadLighting();
     void loadPlanningCenterStatus();
     connect();
 
@@ -323,7 +323,7 @@ export function useStagePilot() {
     loadMidiMessages,
     loadPlanningCenterStatus,
     loadProPresenter,
-    loadLights,
+    loadLighting,
     loadSettings,
   ]);
 
@@ -346,10 +346,10 @@ export function useStagePilot() {
   useEffect(() => {
     if (!lights?.enabled) return;
     const timer = window.setInterval(() => {
-      void loadLights();
+      void loadLighting();
     }, LIGHTS_MONITOR_INTERVAL);
     return () => window.clearInterval(timer);
-  }, [lights?.enabled, loadLights]);
+  }, [lights?.enabled, loadLighting]);
 
   useEffect(() => {
     const status = state?.midi_status;
@@ -392,9 +392,9 @@ export function useStagePilot() {
     void loadSettings();
     void loadMidiInputs();
     void loadProPresenter();
-    void loadLights();
+    void loadLighting();
     void loadPlanningCenterStatus();
-  }, [loadSettings, loadMidiInputs, loadProPresenter, loadLights, loadPlanningCenterStatus]);
+  }, [loadSettings, loadMidiInputs, loadProPresenter, loadLighting, loadPlanningCenterStatus]);
 
   const dispatch = useCallback(
     async (action: ActionName) => {
@@ -795,68 +795,68 @@ export function useStagePilot() {
     }
   }, [claim, release, canConfigure]);
 
-  const saveLights = useCallback(async (input: LightsSettingsInput) => {
+  const saveLighting = useCallback(async (input: LightsSettingsInput) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
-    setPendingLightsOperation("save");
-    setLightsError(null);
-    setLightsMessage(null);
+    setPendingLightingOperation("save");
+    setLightingError(null);
+    setLightingMessage(null);
     try {
       const response = await updateLightsSettings(input);
       setLights(response.lights);
       setSettings(await getSettings());
-      setLightsMessage(response.message);
-      if (!response.accepted) setLightsError(response.message);
+      setLightingMessage(response.message);
+      if (!response.accepted) setLightingError(response.message);
     } catch (cause) {
-      setLightsError(describeError(cause, "Lights configuration failed."));
+      setLightingError(describeError(cause, "Lighting configuration failed."));
     } finally {
       release("lights");
-      setPendingLightsOperation(null);
+      setPendingLightingOperation(null);
     }
   }, [claim, release, canConfigure]);
 
-  const refreshLights = useCallback(async () => {
+  const refreshLighting = useCallback(async () => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
-    setPendingLightsOperation("refresh");
-    setLightsError(null);
-    setLightsMessage(null);
+    setPendingLightingOperation("refresh");
+    setLightingError(null);
+    setLightingMessage(null);
     try {
       setLights(await refreshLightingOutputs());
-      setLightsMessage("Lights MIDI outputs refreshed.");
+      setLightingMessage("Lighting MIDI outputs refreshed.");
     } catch (cause) {
-      setLightsError(describeError(cause, "Lights output refresh failed."));
+      setLightingError(describeError(cause, "Lighting output refresh failed."));
     } finally {
       release("lights");
-      setPendingLightsOperation(null);
+      setPendingLightingOperation(null);
     }
   }, [claim, release, canConfigure]);
 
   const sendLightingTest = useCallback(async (note: number, velocity: number) => {
     if (!canOperate) return;
     if (!claim("lights")) return;
-    setPendingLightsOperation("test");
-    setLightsError(null);
-    setLightsMessage(null);
+    setPendingLightingOperation("test");
+    setLightingError(null);
+    setLightingMessage(null);
     try {
       const response = await testLightingCue(note, velocity);
       setLights(response.lights);
-      setLightsMessage(response.message);
-      if (!response.accepted) setLightsError(response.message);
+      setLightingMessage(response.message);
+      if (!response.accepted) setLightingError(response.message);
     } catch (cause) {
-      setLightsError(describeError(cause, "Lights test cue failed."));
+      setLightingError(describeError(cause, "Lighting test cue failed."));
     } finally {
       release("lights");
-      setPendingLightsOperation(null);
+      setPendingLightingOperation(null);
     }
   }, [claim, release, canOperate]);
 
   const saveLightingCues = useCallback(async (song: Song, cues: LightingCue[]) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
-    setPendingLightsOperation("save-cues");
-    setLightsError(null);
-    setLightsMessage(null);
+    setPendingLightingOperation("save-cues");
+    setLightingError(null);
+    setLightingMessage(null);
     const cueMap: SongLightingCueMap = {
       song_key: song.source_song_id ?? song.id,
       song_title: song.title,
@@ -866,41 +866,41 @@ export function useStagePilot() {
       const response = await updateLightingCueMap(cueMap);
       setLights(response.lights);
       setSettings(await getSettings());
-      setLightsMessage(response.message);
+      setLightingMessage(response.message);
     } catch (cause) {
-      setLightsError(describeError(cause, "Lighting cue map failed to save."));
+      setLightingError(describeError(cause, "Lighting cue map failed to save."));
     } finally {
       release("lights");
-      setPendingLightsOperation(null);
+      setPendingLightingOperation(null);
     }
   }, [claim, release, canConfigure]);
 
   const clearAllLightingCues = useCallback(async (songs: Song[]) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
-    setPendingLightsOperation("save-cues");
-    setLightsError(null);
-    setLightsMessage(null);
+    setPendingLightingOperation("save-cues");
+    setLightingError(null);
+    setLightingMessage(null);
     try {
-      let latestLights: LightsStatusResponse | null = null;
+      let latestLighting: LightsStatusResponse | null = null;
       for (const song of songs) {
         const response = await updateLightingCueMap({
           song_key: song.source_song_id ?? song.id,
           song_title: song.title,
           cues: [],
         });
-        latestLights = response.lights;
+        latestLighting = response.lights;
       }
-      if (latestLights) setLights(latestLights);
+      if (latestLighting) setLights(latestLighting);
       setSettings(await getSettings());
-      setLightsMessage(`Cleared lighting cues for all ${songs.length} songs in the service plan.`);
+      setLightingMessage(`Cleared lighting cues for all ${songs.length} songs in the service plan.`);
     } catch (cause) {
-      setLightsError(
+      setLightingError(
         describeError(cause, "Lighting cue maps failed to clear."),
       );
     } finally {
       release("lights");
-      setPendingLightsOperation(null);
+      setPendingLightingOperation(null);
     }
   }, [claim, release, canConfigure]);
 
@@ -925,7 +925,7 @@ export function useStagePilot() {
     }
 
     if (saved.lights.enabled && saved.lights.output_name) {
-      await saveLights({
+      await saveLighting({
         enabled: true,
         output_name: saved.lights.output_name,
         channel: saved.lights.channel,
@@ -948,7 +948,7 @@ export function useStagePilot() {
   }, [canActivateServices,
     refreshMidi,
     planningCenterStatus,
-    saveLights,
+    saveLighting,
     savePlanningCenter,
     saveProPresenter,
     settings,
@@ -983,9 +983,9 @@ export function useStagePilot() {
     propresenterMessage,
     pendingProPresenterOperation,
     lights,
-    lightsError,
-    lightsMessage,
-    pendingLightsOperation,
+    lightingError,
+    lightingMessage,
+    pendingLightingOperation,
     dispatch,
     retryLoads,
     selectPlan,
@@ -1002,8 +1002,8 @@ export function useStagePilot() {
     saveProPresenter,
     runProPresenterTest,
     refreshProPresenter,
-    saveLights,
-    refreshLights,
+    saveLighting,
+    refreshLighting,
     sendLightingTest,
     saveLightingCues,
     clearAllLightingCues,

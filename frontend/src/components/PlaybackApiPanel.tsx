@@ -15,7 +15,7 @@ import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink";
+const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-info active:text-info-active";
 const toneClass = {
   connected: "border-success/30 bg-success/10 text-success-text",
   backup: "border-warning/30 bg-warning/10 text-warning-text",
@@ -27,7 +27,7 @@ const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 
 
-// A checkbox row with the same held marker as Field heldChange (amber dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
+// A checkbox row with the same held marker as Field heldChange (warning dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
 function HeldRow({ held, id, children }: { held: boolean; id: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3">
@@ -141,7 +141,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
       </div>
 
       {status && (
-        <section className="space-y-2 rounded-ds-xl bg-integration-playback/5 p-4" aria-labelledby="song-order-heading">
+        <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
           <h3 id="song-order-heading" className="font-bold text-ink">Song order</h3>
           <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>

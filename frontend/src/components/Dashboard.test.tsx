@@ -588,7 +588,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getAllByText("Connected to Playback").length).toBeGreaterThan(0);
     expect(screen.queryByText("Demo integration running")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lights MIDI output not connected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lighting MIDI output not connected")).toHaveClass("text-ink-muted");
     expect(screen.getByText("Optional")).toBeInTheDocument();
   });
 
@@ -607,7 +607,7 @@ describe("Dashboard Planning Center plan states", () => {
   describe("leaving a setup panel with held changes (any panel, not only Playback)", () => {
     const cases: Array<{ card: RegExp; close: string; field: string; value: string }> = [
       { card: /^Presentation/, close: "Close Presentation configuration", field: "Host", value: "192.0.2.10" },
-      { card: /^Lights/, close: "Close Lights configuration", field: "Note length (ms)", value: "250" },
+      { card: /^Lighting/, close: "Close Lighting configuration", field: "Note length (ms)", value: "250" },
       { card: /^StagePilot/, close: "Close StagePilot configuration", field: "Log level", value: "DEBUG" },
     ];
     it.each(cases)("asks before discarding held $field changes; clean panels close without asking", async ({ card, close, field, value }) => {
@@ -757,7 +757,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lights MIDI output not connected")).toBeInTheDocument();
+    expect(screen.getByText("Lighting MIDI output not connected")).toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s plan loaded")).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s service")).not.toBeInTheDocument();
   });
@@ -1135,8 +1135,8 @@ describe("Dashboard widget layout", () => {
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
   });
 
-  it("blocks readiness when a configured Lights output disconnects", () => {
-    const configuredLightsSettings: SettingsResponse = {
+  it("blocks readiness when a configured Lighting output disconnects", () => {
+    const configuredlightssettings: SettingsResponse = {
       ...productionSettings,
       settings: {
         ...productionSettings.settings,
@@ -1149,7 +1149,7 @@ describe("Dashboard widget layout", () => {
     };
 
     renderDashboard(loadedServiceState, {
-      settings: configuredLightsSettings,
+      settings: configuredlightssettings,
       state: applicationState(loadedServiceState, {
         lights_status: "disconnected",
         plugins: {},
@@ -1157,7 +1157,7 @@ describe("Dashboard widget layout", () => {
     });
 
     expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lights MIDI output not connected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lighting MIDI output not connected")).toHaveClass("text-ink-muted");
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 
@@ -1194,6 +1194,8 @@ describe("Dashboard widget layout", () => {
     await user.click(screen.getByRole("button", { name: "Edit layout" }));
     await user.click(screen.getByRole("button", { name: "Add spacer" }));
     expect(screen.getByText("Intentional spacer")).toBeInTheDocument();
+    expect(screen.getByText("Intentional spacer")).toHaveClass("text-info-text");
+    expect(screen.getByText("Intentional spacer").parentElement?.parentElement).toHaveClass("border-info/40");
 
     const customized = JSON.parse(window.localStorage.getItem("stagepilot.dashboard-layout.v2")!);
     expect(customized.desktop.some((item: { kind: string }) => item.kind === "spacer")).toBe(true);
@@ -1356,9 +1358,9 @@ describe("Dashboard connection configuration panels", () => {
         heading: "Presentation",
       },
       {
-        card: /^Lights Not connected/,
-        close: "Close Lights configuration",
-        heading: "Lights",
+        card: /^Lighting Not connected/,
+        close: "Close Lighting configuration",
+        heading: "Lighting",
       },
       {
         card: /^StagePilot Connected/,

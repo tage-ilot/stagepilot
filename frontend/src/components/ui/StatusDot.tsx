@@ -11,10 +11,11 @@ export interface StatusDotProps extends Omit<ComponentPropsWithoutRef<"span">, "
 }
 
 const dotTone: Record<Tone, string> = {
-  services: "bg-integration-services",
-  presentation: "bg-integration-presentation",
-  playback: "bg-integration-playback",
-  lights: "bg-integration-lights",
+  services: "bg-integration-services-soft",
+  presentation: "bg-integration-presentation-soft",
+  playback: "bg-integration-playback-soft",
+  lighting: "bg-integration-lighting-soft",
+  backend: "bg-integration-backend-soft",
   success: "bg-success",
   warning: "bg-warning",
   danger: "bg-danger",

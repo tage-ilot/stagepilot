@@ -91,7 +91,7 @@ export function UpdateDialog({
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progress?.percentage ?? undefined}
-            className="h-3 overflow-hidden rounded-ds-full bg-surface-900"
+            className="h-3 overflow-hidden rounded-ds-full bg-info/15"
             role="progressbar"
           >
             <div

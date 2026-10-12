@@ -128,7 +128,7 @@ body {
 }
 
 /* Small circular loading spinner, shown instead of the bar on phone/tablet
-   widths. It follows the bar states (blue loading, amber delayed, red failed). */
+   widths. It follows the bar states (blue loading, warning delayed, red failed). */
 .loading-spinner-circular {
   display: none;
   width: 40px;
@@ -152,7 +152,7 @@ body {
 div:has(> .loading-progress-track--delayed) > .loading-spinner-circular {
   border-top-color: var(--ds-warning);
   border-right-color: var(--ds-warning);
-  box-shadow: 0 0 20px rgb(251 191 36 / 22%);
+  box-shadow: 0 0 20px rgb(227 78 31 / 22%);
 }
 
 div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
@@ -229,7 +229,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   box-shadow:
     5px 5px 0 var(--ds-surface-950),
     0 0 0 1px var(--ds-warning),
-    0 0 20px rgb(251 191 36 / 22%);
+    0 0 20px rgb(227 78 31 / 22%);
 }
 
 .loading-progress-track--failed {
@@ -742,4 +742,12 @@ textarea:focus-visible {
   html {
     scroll-padding-bottom: 6rem;
   }
+}
+
+/* StagePilot (backend) is the same hex as the primary red (DESIGN.md Colour collisions): its selected card
+   must not wear the live/selected red rail and wash. It keeps the neutral card and a 1px backend border. */
+.status-card[data-tone="backend"][aria-expanded="true"] .status-card-surface {
+  border-color: var(--ds-integration-backend-soft);
+  background: var(--ds-surface-panel-strong);
+  box-shadow: var(--ds-elevation-default);
 }

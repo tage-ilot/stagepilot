@@ -3,7 +3,7 @@ import { useId, useState, type ComponentPropsWithoutRef, type ReactNode } from "
 import { cx } from "./cx";
 
 export type DisclosureVariant = "advanced" | "activity";
-export type DisclosureTone = "services" | "presentation" | "playback" | "lights";
+export type DisclosureTone = "services" | "presentation" | "playback" | "lighting" | "backend";
 
 export interface DisclosureProps extends Omit<ComponentPropsWithoutRef<"div">, "title" | "children"> {
   variant: DisclosureVariant;
@@ -34,7 +34,8 @@ const advancedTone: Record<DisclosureTone, { row: string; bar: string }> = {
   services: { row: "bg-advanced-services/10 text-advanced-services can-hover:bg-advanced-services/20", bar: "border-advanced-services" },
   presentation: { row: "bg-advanced-presentation/10 text-advanced-presentation can-hover:bg-advanced-presentation/20", bar: "border-advanced-presentation" },
   playback: { row: "bg-advanced-playback/10 text-advanced-playback can-hover:bg-advanced-playback/20", bar: "border-advanced-playback" },
-  lights: { row: "bg-advanced-lights/10 text-advanced-lights can-hover:bg-advanced-lights/20", bar: "border-advanced-lights" },
+  lighting: { row: "bg-advanced-lighting/10 text-advanced-lighting can-hover:bg-advanced-lighting/20", bar: "border-advanced-lighting" },
+  backend: { row: "bg-advanced-backend/10 text-advanced-backend can-hover:bg-advanced-backend/20", bar: "border-advanced-backend" },
 };
 
 function summaryText(summary: ReactNode) {
@@ -93,7 +94,7 @@ export function Disclosure({
         {!advanced && count !== undefined ? (
           <span
             data-part="count"
-            className="rounded-ds-full border border-edge-subtle px-2 py-0.5 text-xs font-bold tabular-nums text-ink-muted"
+            className="rounded-ds-full border border-info/30 bg-info/15 px-2 py-0.5 text-xs font-bold tabular-nums text-info-text"
           >
             {count} {count === 1 ? countNoun : `${countNoun}s`}
           </span>

@@ -47,7 +47,7 @@ describe("Disclosure", () => {
 
   it("supports defaultOpen and onOpenChange in uncontrolled mode", async () => {
     const onOpenChange = vi.fn();
-    render(<Disclosure variant="advanced" tone="lights" title="A" defaultOpen onOpenChange={onOpenChange}>x</Disclosure>);
+    render(<Disclosure variant="advanced" tone="lighting" title="A" defaultOpen onOpenChange={onOpenChange}>x</Disclosure>);
     expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "true");
     await userEvent.click(screen.getByRole("button"));
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -86,7 +86,7 @@ describe("Disclosure", () => {
   it("renders a tabular-nums count badge for activity and pluralises", () => {
     const { rerender } = render(<Disclosure variant="activity" title="Recent activity" count={12}>x</Disclosure>);
     const badge = screen.getByText("12 events");
-    expect(badge).toHaveClass("tabular-nums");
+    expect(badge).toHaveClass("tabular-nums", "bg-info/15", "text-info-text", "border-info/30");
     rerender(<Disclosure variant="activity" title="Recent activity" count={1}>x</Disclosure>);
     expect(screen.getByText("1 event")).toBeInTheDocument();
     rerender(<Disclosure variant="advanced" tone="services" title="Advanced" count={3}>x</Disclosure>);
@@ -108,7 +108,7 @@ describe("Disclosure", () => {
     expect(document.querySelector("[data-variant='activity']")).not.toHaveAttribute("data-tone");
   });
 
-  it.each(["services", "presentation", "playback", "lights"] as const)("advanced %s uses its own colour", (tone) => {
+  it.each(["services", "presentation", "playback", "lighting", "backend"] as const)("advanced %s uses its own colour", (tone) => {
     render(<Disclosure variant="advanced" tone={tone} title="A">x</Disclosure>);
     expect(screen.getByRole("button")).toHaveClass(`text-advanced-${tone}`);
     expect(document.querySelector("[data-part='bar']")).toHaveClass(`border-advanced-${tone}`);

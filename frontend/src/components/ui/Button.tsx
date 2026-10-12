@@ -21,10 +21,11 @@ export interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
 
 // Class strings are written out in full so Tailwind can see them.
 const tinted: Record<Tone, string> = {
-  services: "border-integration-services/30 bg-integration-services/10 text-integration-services-text can-hover:bg-integration-services/20",
-  presentation: "border-integration-presentation/30 bg-integration-presentation/10 text-integration-presentation-text can-hover:bg-integration-presentation/20",
-  playback: "border-integration-playback/30 bg-integration-playback/10 text-integration-playback-text can-hover:bg-integration-playback/20",
-  lights: "border-integration-lights/30 bg-integration-lights/10 text-integration-lights-text can-hover:bg-integration-lights/20",
+  services: "border-integration-services-soft/30 bg-integration-services-soft/10 text-integration-services-text can-hover:bg-integration-services-soft/20",
+  presentation: "border-integration-presentation-soft/30 bg-integration-presentation-soft/10 text-integration-presentation-text can-hover:bg-integration-presentation-soft/20",
+  playback: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text can-hover:bg-integration-playback-soft/20",
+  lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text can-hover:bg-integration-lighting-soft/20",
+  backend: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text can-hover:bg-integration-backend-soft/20",
   success: "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20",
   warning: "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20",
   danger: "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20",

@@ -7,7 +7,7 @@ import { Button, type ButtonVariant } from "./Button";
 import type { LiveTone, Tone } from "./types";
 
 const variants: ButtonVariant[] = ["primary", "secondary", "tinted", "destructive", "destructive-soft", "live"];
-const tones: Tone[] = ["services", "presentation", "playback", "lights", "success", "warning", "danger", "info", "idle"];
+const tones: Tone[] = ["services", "presentation", "playback", "lighting", "backend", "success", "warning", "danger", "info", "idle"];
 const liveTones: LiveTone[] = ["go", "back", "reload", "stop"];
 const stock = /\b(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b|#[0-9a-f]{3,8}\b/i;
 const shadow = (el: HTMLElement) => el.className.split(/\s+/).includes("text-shadow-label");
