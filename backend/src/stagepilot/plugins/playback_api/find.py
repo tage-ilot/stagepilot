@@ -229,8 +229,20 @@ def find_playback(
     timeout: float = 3.0,
     probe_endpoint: Probe = probe,
     networks: Callable[[], tuple[ipaddress.IPv4Network, ...]] = local_networks,
+    cancelled: Callable[[], bool] = lambda: False,
 ) -> DiscoveryResult | None:
-    """Blocking worker-thread operation; manual override never falls back."""
+    """Blocking worker-thread operation; manual override never falls back.
+
+    ``cancelled`` is polled before every probe so a stop/config change ends a scan
+    within one probe timeout instead of finishing the whole network.
+    """
+    raw_probe = probe_endpoint
+
+    def guarded(host: str, port: int, timeout: float) -> Heartbeat | None:
+        return None if cancelled() else raw_probe(host, port, timeout)
+
+    probe_endpoint = guarded
+
     if host_override is not None:
         heartbeat = probe_endpoint(host_override, port, timeout)
         return DiscoveryResult(host_override, port, "manual", heartbeat) if heartbeat else None
