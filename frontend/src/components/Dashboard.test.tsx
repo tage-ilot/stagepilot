@@ -1194,6 +1194,8 @@ describe("Dashboard widget layout", () => {
     await user.click(screen.getByRole("button", { name: "Edit layout" }));
     await user.click(screen.getByRole("button", { name: "Add spacer" }));
     expect(screen.getByText("Intentional spacer")).toBeInTheDocument();
+    expect(screen.getByText("Intentional spacer")).toHaveClass("text-info-text");
+    expect(screen.getByText("Intentional spacer").parentElement?.parentElement).toHaveClass("border-info/40");
 
     const customized = JSON.parse(window.localStorage.getItem("stagepilot.dashboard-layout.v2")!);
     expect(customized.desktop.some((item: { kind: string }) => item.kind === "spacer")).toBe(true);

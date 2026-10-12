@@ -158,6 +158,33 @@ describe("LightingSetupPanel", () => {
     expect(labels[0]).toHaveValue(label);
   });
 
+  it("shows the test cue result as a teal informational status with a dot; errors stay danger", () => {
+    const { rerender } = render(
+      <LightingSetupPanel error={null} lights={lights} message="Sent lighting test cue on MIDI note 60" onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("text-info-text");
+    expect(status).toHaveTextContent("Sent lighting test cue on MIDI note 60");
+    expect(status.querySelector('[data-part="dot"]')).toHaveClass("bg-info");
+    rerender(
+      <LightingSetupPanel error="Lighting failed" lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.querySelector('[data-part="dot"]')).toBeNull();
+  });
+
+  it("note display glyphs are teal when active and muted when inactive; the toggle stays Lighting", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const glyphs = [screen.getByText("♪"), screen.getByText("#")];
+    expect(glyphs.filter((g) => g.className.includes("text-info-text"))).toHaveLength(1);
+    expect(glyphs.filter((g) => g.className.includes("text-ink-muted"))).toHaveLength(1);
+    const toggle = screen.getByRole("switch");
+    expect(toggle.className).toContain("integration-lighting");
+    expect(toggle.className).not.toContain("info");
+  });
+
   it("shows its single connection method as a line of text, not a select", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,

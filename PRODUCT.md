@@ -38,8 +38,8 @@ sees or what the lights do.
 ## Capabilities and Constraints
 
 - Four connections plus the app itself: Services, Playback, Presentation,
-  Lights, and StagePilot.
-- Playback can connect by the Playback API (main) or MIDI (alternate); Lights
+  Lighting, and StagePilot.
+- Playback can connect by the Playback API (main) or MIDI (alternate); Lighting
   connect by MIDI.
 - Changes that could alter what a running show sends are held until the
   operator presses Save configuration; other changes save as they are made.

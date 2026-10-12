@@ -62,9 +62,9 @@ All normal setup happens inside StagePilot; command-line variables are not requi
 2. Click **Planning Center**, enter the Personal Access Token Application ID and Secret, test the connection, and choose a service type from the discovered list.
 3. Click **MIDI / Playback**, select the MIDI input, channel, cue note, action velocities, and debounce time.
 4. Click **ProPresenter**, enter its host and API port, select the song timer and optional Look, then test the connection.
-5. Click **Lights** to select an output and add elapsed-time lighting cues when lighting automation is needed.
+5. Click **Lighting** to select an output and add elapsed-time lighting cues when lighting automation is needed.
 
-Settings persist between launches. On future launches, StagePilot automatically refreshes the saved MIDI input and reconnects configured Planning Center, ProPresenter, and Lights integrations after startup finishes. Planning Center credentials are stored separately in the operating system credential store and are never returned by the StagePilot API.
+Settings persist between launches. On future launches, StagePilot automatically refreshes the saved MIDI input and reconnects configured Planning Center, ProPresenter, and Lighting integrations after startup finishes. Planning Center credentials are stored separately in the operating system credential store and are never returned by the StagePilot API.
 
 The title-bar **X** hides the dashboard while StagePilot and its integrations continue running. Restore it from the StagePilot system-tray icon on Windows or the StagePilot Dock/menu-bar icon on macOS. Use **Quit StagePilot** from that menu when you want to stop the application and its managed backend completely.
 
