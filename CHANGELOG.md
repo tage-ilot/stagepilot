@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [1.1.104-beta.32] - 2026-10-12
+
+### Changed
+
+- Frontend facelift: one design system (`DESIGN.md`) drives the whole interface.
+  Inter is bundled and used everywhere; shared Button, Field, Select, Panel,
+  Badge, Disclosure, Save bar and Dialog components replace per-screen styling;
+  every panel, the header and status cards, live controls, dialogs and the
+  startup screens use them. The loading bar keeps its pixel stripes. Buttons are
+  44px on touch devices; the global corner radius is 8px.
+- Settings panels use "Configuration" and "Service plan", and "Note" replaces
+  "pulse" (for example "Note length (ms)", "Test cue"). Lights shows
+  "MIDI Output to Lighting Controller".
+- Playback: a Connection method choice (Playback API main, MIDI alternate)
+  replaces the alternate-connection row; "Other computer..." replaces
+  "Connect a specific computer".
+- Every configuration panel has one always-visible Save configuration button.
+  Fields that could interrupt a running show (connection method, ports, MIDI
+  output, channel and note length, PIN, network access, timezone) are held with a
+  "Not saved yet" marker until you save. Send test cue uses the saved output and
+  is disabled, with a reason, while a new output is unsaved.
+- Clearer offline and API error messages, safer repeated clicks on Save, and
+  better handling of long names, long song lists and 320px screens.
+
+### Notes
+
+- Visual and interface release. No backend behavior or API changes.
+- Real-device touch, screen-reader and 200% browser zoom checks were emulated
+  only; hardware acceptance is not implied.
+- Startup and error screen text over the background photo can be low contrast at
+  its brightest spot; left as is by owner decision.
+
 ## [1.1.104-beta.31] - 2026-10-08
 
 ### Fixed
