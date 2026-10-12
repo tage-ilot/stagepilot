@@ -157,7 +157,7 @@ has been reviewed.
    `GET /api/v1/midi/messages`. Confirm channel, note, velocity, disposition, and action before
    connecting production automation.
 6. For output, run an AppleMIDI test destination, add it to
-   `STAGEPILOT_MIDI_OUTBOUND_PEERS`, set the matching Lights output name, and use the dashboard's
+   `STAGEPILOT_MIDI_OUTBOUND_PEERS`, set the matching Lighting output name, and use the dashboard's
    existing harmless lighting test cue. Confirm one note-on and one note-off at the destination.
 7. If discovery fails, check `docker compose logs stagepilot-midi`, UDP 5353, VLAN multicast, and
    Avahi/Bonjour availability on the client. Keep discovery disabled if the network filters it;

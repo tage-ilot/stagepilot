@@ -150,7 +150,7 @@ MIDI, or ProPresenter. Dashboard readiness derives production checks from the
 saved integration modes, real connection state, plan source/freshness, and
 timer availability; a demo plan cannot satisfy Planning Center readiness.
 The header system-status control exposes those checks on hover and keyboard
-focus. Lights always appears in that summary but remains optional until an
+focus. Lighting always appears in that summary but remains optional until an
 output is configured; a configured output that becomes unavailable blocks
 readiness.
 
