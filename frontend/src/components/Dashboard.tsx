@@ -51,6 +51,7 @@ import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
 import { Button, Dialog, Panel, StatusDot, type LiveTone } from "./ui";
+import { InlineAlert } from "./ui/InlineAlert";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
 
@@ -99,6 +100,8 @@ const connectionIcon = (source: string, name: string, compact = false) => (
     src={source}
   />
 );
+
+const OFFLINE_CONTROLS_SENTENCE = "Can't reach StagePilot, so these controls are off until it is back.";
 
 function ActionButton({
   action,
@@ -436,6 +439,7 @@ export function Dashboard({
   lightsMessage = null,
   pendingLightsOperation = null,
   dispatch,
+  retryLoads = () => undefined,
   selectPlan,
   saveGeneralSettings = () => undefined,
   saveMidiSettings = () => undefined,
@@ -490,6 +494,7 @@ export function Dashboard({
   lightsMessage?: string | null;
   pendingLightsOperation?: "save" | "refresh" | "test" | "save-cues" | null;
   dispatch: (action: ActionName) => void;
+  retryLoads?: () => void;
   selectPlan: (planId: string) => void;
   saveGeneralSettings?: (settings: GeneralSettingsInput) => void;
   saveMidiSettings?: (settings: MidiSettingsInput) => void | boolean | Promise<boolean | void>;
@@ -992,6 +997,7 @@ export function Dashboard({
         <PlanningCenterSetupPanel
           onDirtyChange={setPanelDirty}
           error={planningCenterError}
+          onRetryLoad={retryLoads}
           message={planningCenterMessage}
           onClose={closeConnection}
           onDisconnectOAuth={disconnectPlanningCenter}
@@ -1015,6 +1021,7 @@ export function Dashboard({
         <MidiSetupPanel
           playback={playback}
           error={midiError}
+          onRetryLoad={retryLoads}
           message={midiMessage}
           midi={midi}
           messages={midiMessages}
@@ -1052,6 +1059,7 @@ export function Dashboard({
         <ProPresenterSetupPanel
           onDirtyChange={setPanelDirty}
           error={propresenterError}
+          onRetryLoad={retryLoads}
           message={propresenterMessage}
           onClose={closeConnection}
           onRefreshTimers={refreshProPresenter}
@@ -1067,6 +1075,7 @@ export function Dashboard({
           onDirtyChange={setPanelDirty}
           connectionStatus={connectionViews.lights.status}
           error={lightsError}
+          onRetryLoad={retryLoads}
           lights={lights}
           message={lightsMessage}
           onClearAllCues={clearAllLightingCues}
@@ -1085,6 +1094,7 @@ export function Dashboard({
         <BackendSetupPanel
           onDirtyChange={setPanelDirty}
           error={settingsError}
+          onRetryLoad={retryLoads}
           health={health}
           live={live}
           message={settingsMessage}
@@ -1158,13 +1168,18 @@ export function Dashboard({
           "manual-controls": canOperate ? (
           <Panel className="widget-autosize-target manual-controls-panel h-full min-h-0 overflow-hidden">
             <p className="text-type-kicker uppercase text-ink-muted">Manual controls</p>
+            {!live && (
+              <InlineAlert className="mt-3" id="manual-controls-offline" tone="warning">
+                {OFFLINE_CONTROLS_SENTENCE}
+              </InlineAlert>
+            )}
             <div className="manual-controls-grid mt-3 grid gap-2">
-              <ActionButton action="start_next" label="Start next" tone="green" disabled={pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={pendingAction !== null || !state.current_song} onAction={dispatch} />
-              <ActionButton action="previous" label="Previous" tone="orange" disabled={pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="reload_plan" label="Reload service plan" tone="blue" disabled={pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="reset_position" label="Reset position" tone="red" disabled={pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="start_next" label="Start next" tone="green" disabled={!live || pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={!live || pendingAction !== null || !state.current_song} onAction={dispatch} />
+              <ActionButton action="previous" label="Previous" tone="orange" disabled={!live || pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="reload_plan" label="Reload service plan" tone="blue" disabled={!live || pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={!live || pendingAction !== null} onAction={dispatch} />
+              <ActionButton action="reset_position" label="Reset position" tone="red" disabled={!live || pendingAction !== null} onAction={dispatch} />
             </div>
           </Panel>
           ) : null,

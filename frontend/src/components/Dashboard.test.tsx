@@ -212,6 +212,7 @@ function renderDashboard(
   {
     actionMessage = null,
     error = null,
+    live = true,
     pendingPlanId = null,
     selectPlan = vi.fn(),
     dispatch = vi.fn(),
@@ -222,6 +223,7 @@ function renderDashboard(
   }: {
     actionMessage?: string | null;
     error?: string | null;
+    live?: boolean;
     pendingPlanId?: string | null;
     selectPlan?: (planId: string) => void;
     dispatch?: () => void;
@@ -237,7 +239,7 @@ function renderDashboard(
       dispatch={dispatch}
       error={error}
       health={null}
-      live
+      live={live}
       midi={midi}
       midiMessages={[]}
       midiError={null}
@@ -1428,6 +1430,18 @@ describe("Dashboard connection configuration panels", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("turns the live controls off with the reason when StagePilot is unreachable, and back on when it returns", () => {
+    const view = renderDashboard(loadedServiceState, { live: false });
+    expect(screen.getByText("Can't reach StagePilot, so these controls are off until it is back.")).toBeInTheDocument();
+    for (const name of ["Start next", "Restart current", "Previous", "Reload service plan", "Stop timer", "Reset position"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    view.unmount();
+    renderDashboard(loadedServiceState, { live: true });
+    expect(screen.queryByText(/Can't reach StagePilot/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start next" })).toBeEnabled();
   });
 });
 

@@ -350,6 +350,31 @@ describe("ProPresenterSetupPanel", () => {
     expect(bar.contains(screen.getByRole("button", { name: "Refresh timers and Looks" }))).toBe(false);
     expect(screen.getByText("Selecting a Look does not change Presentation until you save these settings.")).toBeInTheDocument();
   });
+
+  it("shows one plain alert with Try again when the load failed, and recovers when the load works", async () => {
+    const onRetryLoad = vi.fn();
+    const props = { message: null, onRefreshTimers: vi.fn(), onSave: vi.fn(), onTest: vi.fn(), pendingOperation: null, onRetryLoad } as const;
+    const view = render(
+      <ProPresenterSetupPanel {...props} error="Can't reach StagePilot. Check that it is running, then try again." propresenter={null} />,
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Can't reach StagePilot");
+    expect(screen.queryByText("Loading Presentation configuration…")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetryLoad).toHaveBeenCalledOnce();
+    view.rerender(<ProPresenterSetupPanel {...props} error={null} propresenter={status} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the form and does not offer a load retry when a save failed", () => {
+    render(
+      <ProPresenterSetupPanel error="StagePilot hit an error. Try again." message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} onRetryLoad={vi.fn()} pendingOperation={null} propresenter={status} />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("StagePilot hit an error. Try again.");
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("1025")).toBeInTheDocument();
+  });
 });
 
 describe("Presentation hold-until-saved conformance (guard)", () => {

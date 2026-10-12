@@ -8,6 +8,7 @@ import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
@@ -18,6 +19,7 @@ import { connectionWord } from "./ui/statusWord";
 export function ProPresenterSetupPanel({
   propresenter,
   error,
+  onRetryLoad,
   message,
   pendingOperation,
   onSave,
@@ -28,6 +30,7 @@ export function ProPresenterSetupPanel({
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "save" | "test" | "refresh" | null;
   onSave: (settings: ProPresenterSettingsInput) => void;
@@ -158,7 +161,7 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      {propresenter && disabled && (
+      {propresenter && disabled && !error && (
         <InlineAlert className="mt-4" tone="warning">
           Save these settings to enable Presentation, then restart StagePilot.
         </InlineAlert>
@@ -254,11 +257,7 @@ export function ProPresenterSetupPanel({
 
       {changeCount > 0 && <p className="mt-3 text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
 
-      {(error || message) && (
-        <InlineAlert className="mt-4" tone={error ? "danger" : "success"}>
-          {error ?? message}
-        </InlineAlert>
-      )}
+      <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

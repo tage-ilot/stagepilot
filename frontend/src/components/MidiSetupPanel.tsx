@@ -17,6 +17,7 @@ import { playbackMidiNote } from "./playbackStatus";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { Select } from "./ui/Select";
@@ -50,6 +51,7 @@ export function MidiSetupPanel({
   midi,
   messages,
   error,
+  onRetryLoad,
   message,
   pendingOperation,
   pendingCue,
@@ -69,6 +71,7 @@ export function MidiSetupPanel({
   midi: MidiInputsResponse | null;
   messages: MidiMonitorMessage[];
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "refresh" | "connect" | "disconnect" | null;
   pendingCue: MidiCueName | null;
@@ -359,11 +362,7 @@ export function MidiSetupPanel({
             )}
           </div>
 
-          {(error || message) && (
-            <InlineAlert aria-live="polite" className="mt-3" tone={error ? "danger" : "info"}>
-              {error ?? message}
-            </InlineAlert>
-          )}
+          <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!midi ? onRetryLoad : undefined} />
         </div>
 
         <div className="rounded-ds-lg bg-surface-950/30 p-3">

@@ -36,6 +36,17 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     window.location.reload();
   };
 
+  copyDetails = async () => {
+    const error = this.state.error;
+    const text = error ? `${error.name}: ${error.message}\n${error.stack ?? ""}`.trim() : "";
+    try {
+      await navigator.clipboard.writeText(text);
+      this.setState({ sendMessage: "Error details copied." });
+    } catch {
+      this.setState({ sendMessage: "Could not copy the error details. Reload StagePilot and try again." });
+    }
+  };
+
   sendLogs = async () => {
     this.setState({ sending: true, sendMessage: null });
     const result = await sendDiagnosticsBundle(
@@ -71,6 +82,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
             <>
               <Button disabled={this.state.sending} onClick={() => void this.sendLogs()} size="touch" variant="secondary">
                 {this.state.sending ? "Sending…" : "Send logs to developer"}
+              </Button>
+              <Button onClick={() => void this.copyDetails()} size="touch" variant="secondary">
+                Copy error details
               </Button>
               <Button onClick={this.reload} size="touch" variant="destructive-soft">
                 Reload StagePilot
