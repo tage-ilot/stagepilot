@@ -40,8 +40,11 @@ colors:
   danger-solid: "#e11d48"      # CHANGED: rose-600 for FILLED buttons/badges (was 500). White text 4.7:1
   on-danger: "#ffffff"         # light text on the dark red fill
   on-danger-soft: "#4c0519"    # dark RED (not black) text when a rose fill is light: 8.3:1 on rose-300, 5.8:1 on rose-400
-  info: "#38bdf8"              # informational / neutral action   (sky-400)
-  info-text: "#bae6fd"         #                                  (sky-200)
+  info: "#1dc1c7"              # CHANGED (owner, 2026-10-12): the SECONDARY ACCENT replaces sky for information. Informational text, "Up next", the Reload service plan control, info banners. 8.2:1 on panels, so it works as text AND as a fill
+  info-text: "#77dadd"         # tint 40%: the accent as small text on dark (11.0:1 on panels). The pure accent is for fills, dots, borders and large glyphs
+  info-hover: "#34c7cd"        # tint 10%: hover fill
+  info-active: "#1aaeb3"       # shade 10%: pressed fill
+  on-info: "#020617"           # DARK text on an accent fill (9.1:1). White would be only 2.2:1
   idle: "#64748b"              # disconnected / idle              (slate-500)
   # --- Integration identity (each connected service owns one hue) ---
   integration-services: "#60a5fa"        # blue-400. UI label "Services" (Planning Center today)
@@ -66,8 +69,8 @@ colors:
   live-go-text: "#a7f3d0"
   live-back: "#fdba74"         # Previous: steps the show back
   live-back-text: "#fed7aa"
-  live-reload: "#1d4ed8"       # Reload plan: re-reads the plan, nothing on stage changes (hover fill; border/text use blue-600/blue-200)
-  live-reload-text: "#bfdbfe"
+  live-reload: "#1dc1c7"       # Reload service plan: re-reads the plan, nothing on stage changes. CHANGED to the secondary accent (was blue-700). Hover fill with DARK text (9.1:1)
+  live-reload-text: "#77dadd"
   live-stop: "#e11d48"         # Stop timer, Reset position: halts or rewinds the show. CHANGED: hover fill rose-600 (was rose-500, white text only 3.7:1)
   live-stop-text: "#fecdd3"
   scrim: "rgba(0, 0, 0, 0.70)"                # modal backdrop (3 dialogs; error boundary uses slate-950 @80%)
@@ -415,6 +418,7 @@ that is not a status, a service, or the primary red.
 - **Text on fills (DECIDED rule): light text on dark fills, dark text on light
   fills.** Most of the app is dark, so light text stays the norm.
   - Light fills (amber, emerald, sky-400, fuchsia-400, orange): dark text (`on-light`, `#020617`).
+  - The **teal accent fill** `info`: dark text (`on-info`, 9.1:1); white would be 2.2:1.
   - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
   - Dark red fill (`danger-solid` `#e11d48`, 4.7:1 with white): white text
     (`on-danger`); rose-500 was too light for that (3.7:1).
@@ -433,9 +437,10 @@ that is not a status, a service, or the primary red.
   - `danger-solid` stays for destructive confirms only.
 - **Status colours** are fixed app-wide: `success` = connected/running/ready,
   `warning` = connecting/delayed/needs attention, `danger` = error or
-  destructive, `neutral` = disconnected/idle. Use `*-text` for words and
-  `*-soft` for dots on dark panels. `info` (sky) is for neutral informational
-  actions, not state.
+  destructive, `idle` = disconnected/idle. Use `*-text` for words and
+  `*-soft` for dots on dark panels. `info` is the **secondary accent teal
+  `#1dc1c7`** (owner, 2026-10-12): information, "what comes next", and
+  non-disruptive actions; it is never a state.
 - **Service colours (decided)** tint a service's setup panel. **Playback is
   fuchsia** (MIDI is configured under Playback and has no colour of its own).
   Services is blue, Presentation is orange, Lights is sky. Never reuse these
@@ -453,7 +458,7 @@ that is not a status, a service, or the primary red.
 - **Live controls (decided: keep four colours).** The Manual controls widget
   uses colour to show how much a press changes a running show: **green**
   (Start next, Restart current: moves the show forward), **orange**
-  (Previous: steps back), **blue** (Reload plan: nothing on stage changes),
+  (Previous: steps back), **teal accent** (Reload service plan: nothing on stage changes),
   **red** (Stop timer, Reset position: halts or rewinds). They are outlined
   at rest and fill on hover, with dark text on green and orange fills, white
   on blue and red. The red hover fill is darkened one step (rose-600,
@@ -965,7 +970,36 @@ with the supplied shade and tint scales under `primary-scale`. Mapping:
 - Photo-sampled `flare-*` colours are for washes and glows on the live item
   only, never for text, buttons or status.
 
+## Secondary accent (owner, 2026-10-12): teal `#1dc1c7`
+The secondary accent is **information and "what comes next"**, never state and
+never an action that changes the show. It is bright (8.2:1 on panels), so unlike
+the red it works as text.
+- **Tokens:** `info` `#1dc1c7` (fills, dots, borders, large glyphs), `info-text`
+  tint 40% `#77dadd` (small text, 11.0:1), `info-hover` tint 10% `#34c7cd`,
+  `info-active` shade 10% `#1aaeb3`, `on-info` `#020617` (dark text on an accent
+  fill). It replaces sky (`#38bdf8`) as `info` and blue-700 as `live-reload`.
+- **Uses (decided):** the **Up next** song label (dashboard song list and the
+  Now-playing "Up next" caption), informational text and banners (`InlineAlert`
+  and `PanelAlert` tone info, Remote Access status lines, first-launch
+  configuration kicker, "Update available" kicker and version number), the
+  **Reload service plan** live control, the info badge and status dot.
+- **Recommended extra uses (proposed, not yet built):** the **next song's number
+  chip** beside "Up next"; the **"Send test cue"** result line; the **Activity**
+  row's count badge (neutral grey today); links (`linkButton`, e.g. Playback
+  "Other computer" and learn-more links); the **Update available** button; the
+  note-display toggle glyphs in Lights; the dashboard **intentional spacer**
+  outline; and the **progress** of an update download.
+- **Never:** state (that is green, amber, rose, slate), the one primary action
+  (that is the red), service identity (that is the integration hues), or the
+  retro loading bar (stays blue pixel art).
+- **Collision to resolve:** **Lights' identity colour is sky `#38bdf8`**, which
+  is nearly the same as this teal (hue 198 vs 182, contrast between them 1.03:1).
+  Two different meanings in two near-identical colours breaks the rule that a
+  colour has one job. See the options in the owner question below.
+
 ## Still open
+
+Open (owner): Lights vs the teal accent. Options: (1) Lights moves to a clearly different hue (violet `#a78bfa`); (2) Lights keeps sky and the accent is used only as text and Reload; (3) the accent replaces sky for Lights too and Lights loses its own identity. Recommended: (1).
 
 Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - Release channel lives in **Advanced** in the StagePilot panel.
