@@ -8,7 +8,7 @@ import { StatusDot } from "../StatusDot";
 import type { Tone } from "../types";
 import { Section } from "./Section";
 
-const tones: Tone[] = ["services", "presentation", "playback", "lights", "success", "warning", "danger", "info", "idle"];
+const tones: Tone[] = ["services", "presentation", "playback", "lighting", "success", "warning", "danger", "info", "idle"];
 const words: StatusWord[] = ["Connected", "Connecting", "Not connected", "Error"];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

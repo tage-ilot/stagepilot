@@ -54,7 +54,7 @@ const newCueId = () => {
 
 const songKey = (song: Song) => song.source_song_id ?? song.id;
 
-export function LightsSetupPanel({
+export function LightingSetupPanel({
   connectionStatus,
   lights,
   settings,
@@ -189,23 +189,23 @@ export function LightsSetupPanel({
     }
   };
 
-  const savedLights = settings?.settings.lights ?? lights;
-  const savedOutputName = savedLights?.output_name ?? null;
+  const savedLighting = settings?.settings.lights ?? lights;
+  const savedOutputName = savedLighting?.output_name ?? null;
   // Test cue goes out through the connected (saved) port, so it is only offered
   // while the draft output and channel equal what is saved.
-  const draftDiffersFromSaved = savedLights != null
+  const draftDiffersFromSaved = savedLighting != null
     && (savedOutputName === null
       || outputName !== savedOutputName
-      || channel !== String(savedLights.channel));
-  // Held changes: output, channel and note pulse. Any Lights save reconfigures the plugin
+      || channel !== String(savedLighting.channel));
+  // Held changes: output, channel and note pulse. Any Lighting save reconfigures the plugin
   // (cancels the running timeline, reopens the MIDI port), so none of them saves on its own.
-  const heldOutput = savedLights != null && outputName !== (savedOutputName ?? "");
-  const heldChannel = savedLights != null && channel !== String(savedLights.channel);
-  const heldPulse = savedLights != null && pulseMs !== String(savedLights.pulse_ms);
+  const heldOutput = savedLighting != null && outputName !== (savedOutputName ?? "");
+  const heldChannel = savedLighting != null && channel !== String(savedLighting.channel);
+  const heldPulse = savedLighting != null && pulseMs !== String(savedLighting.pulse_ms);
   const changeCount = Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
-  const attempt = useSaveAttempt("lights-configuration");
+  const attempt = useSaveAttempt("lighting-configuration");
   const pulseNumber = Number(pulseMs);
   const errOutput = attempt.attempted && !outputName ? "Choose an output." : undefined;
   const errPulse = attempt.attempted && !(Number.isInteger(pulseNumber) && pulseNumber >= 10 && pulseNumber <= 2000) ? "Enter a note length from 10 to 2000 ms." : undefined;
@@ -235,18 +235,18 @@ export function LightsSetupPanel({
     : null;
 
   const discard = () => {
-    if (!savedLights) return;
-    setOutputName(savedLights.output_name ?? "");
-    setChannel(String(savedLights.channel));
-    setPulseMs(String(savedLights.pulse_ms));
+    if (!savedLighting) return;
+    setOutputName(savedLighting.output_name ?? "");
+    setChannel(String(savedLighting.channel));
+    setPulseMs(String(savedLighting.pulse_ms));
     setSaveFailed(false);
     attempt.reset();
   };
 
   const save = () => {
-    // A clean Save is a no-op once Lights is enabled.
+    // A clean Save is a no-op once Lighting is enabled.
     if (pendingOperation !== null) return;
-    if (changeCount === 0 && savedLights?.enabled) return;
+    if (changeCount === 0 && savedLighting?.enabled) return;
     if (!parsedSettings) { attempt.refuse(); return; }
     setSaveFailed(false);
     setAutoSavedAt(null);
@@ -256,13 +256,13 @@ export function LightsSetupPanel({
     && !lights?.outputs.some((output) => output.name === outputName);
 
   return (
-    <Panel className="mt-5" id="lights-configuration" variant="setup">
+    <Panel className="mt-5" id="lighting-configuration" variant="setup">
       <SetupPanelHeader
-        closeLabel="Close Lights configuration"
-        description="Send elapsed-time MIDI Note On/Off cues to Lights."
+        closeLabel="Close Lighting configuration"
+        description="Send elapsed-time MIDI Note On/Off cues to Lighting."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
-        title="Lights"
+        title="Lighting"
       />
 
       <PanelAlert className="mt-4" error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
@@ -292,9 +292,9 @@ export function LightsSetupPanel({
       </div>
       <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lights" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
+        <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
-      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lights-save-blocked">{blockedReason}</p>}
+      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 
       <div className="mt-6 border-t border-edge-subtle pt-5">
@@ -305,14 +305,14 @@ export function LightsSetupPanel({
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lights/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lights/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lights/20" : "bg-surface-900"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"
             >
               <span
                 aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lights shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
             <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-info-text" : "text-ink-muted"}>#</span>
@@ -327,7 +327,7 @@ export function LightsSetupPanel({
           <Field label="Test lighting velocity">
             <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
           </Field>
-          <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lights" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         </div>
         {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
       </div>
@@ -340,7 +340,7 @@ export function LightsSetupPanel({
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
             </Select>
           </Field>
-          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lights" variant="tinted">Add lighting cue</Button>
+          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lighting" variant="tinted">Add lighting cue</Button>
         </div>
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
@@ -361,7 +361,7 @@ export function LightsSetupPanel({
               <Field label="Lighting cue label">
                 <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
               </Field>
-              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
+              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} tone="lighting" variant="tinted">Test</Button>
               <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}

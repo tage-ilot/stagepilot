@@ -292,7 +292,7 @@ describe("MIDI API", () => {
   });
 });
 
-describe("Lights API", () => {
+describe("Lighting API", () => {
   it("configures output and sends cue maps and test pulses as JSON", async () => {
     const lights = {
       enabled: true,

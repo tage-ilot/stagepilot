@@ -3,7 +3,7 @@ import type { LiveTone, Tone } from "../types";
 import { Section, StateRow } from "./Section";
 import type { GalleryState } from "./states";
 
-const tones: Tone[] = ["services", "presentation", "playback", "lights", "success", "warning", "danger", "info", "idle"];
+const tones: Tone[] = ["services", "presentation", "playback", "lighting", "success", "warning", "danger", "info", "idle"];
 const liveTones: LiveTone[] = ["go", "back", "reload", "stop"];
 
 /** Real Button per state. Hover/focus/active are driven by the capture tool, never faked with classes. */

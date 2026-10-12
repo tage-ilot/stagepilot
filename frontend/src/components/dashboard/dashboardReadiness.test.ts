@@ -278,7 +278,7 @@ describe("dashboard integration truthfulness", () => {
     });
   });
 
-  it("shows unconfigured Lights as optional without blocking readiness", () => {
+  it("shows unconfigured Lighting as optional without blocking readiness", () => {
     const productionSettings = settings({
       service_source: "planning_center",
       midi_source: "real",
@@ -336,14 +336,14 @@ describe("dashboard integration truthfulness", () => {
     });
 
     expect(checks.find((check) => check.id === "lights")).toMatchObject({
-      label: "Lights MIDI output not connected",
+      label: "Lighting MIDI output not connected",
       required: false,
       status: "disconnected",
     });
     expect(readinessPassed(checks)).toBe(true);
   });
 
-  it("blocks readiness after a configured Lights output becomes unavailable", () => {
+  it("blocks readiness after a configured Lighting output becomes unavailable", () => {
     const configuredSettings = settings({
       service_source: "demo",
       midi_source: "simulated",

@@ -92,7 +92,7 @@ export function buildConnectionCardViews({
   const selectedMidi = midi?.selected_input_name ?? settings?.settings.midi.input_name ?? null;
   const connectedMidi = midi?.inputs.find((input) => input.connected);
   const propresenterEnabled = settings?.settings.propresenter.enabled ?? propresenter?.enabled ?? false;
-  const lightsEnabled = settings?.settings.lights.enabled ?? lights?.enabled ?? false;
+  const lightingEnabled = settings?.settings.lights.enabled ?? lights?.enabled ?? false;
   const lightOutput = lights?.output_name ?? settings?.settings.lights.output_name ?? null;
 
   return {
@@ -189,10 +189,10 @@ export function buildConnectionCardViews({
             configured: true,
             mode: "real",
           },
-    lights: !lightsEnabled
+    lights: !lightingEnabled
       ? {
           status: "disconnected",
-          detail: "Configure a Lights MIDI output",
+          detail: "Configure a Lighting MIDI output",
           configured: false,
           mode: "disabled",
         }
@@ -200,7 +200,7 @@ export function buildConnectionCardViews({
           status: state.lights_status,
           detail: statusDetail(
             state.lights_status,
-            lights?.detail ?? (lightOutput ? `Waiting for ${lightOutput}` : "No Lights output selected"),
+            lights?.detail ?? (lightOutput ? `Waiting for ${lightOutput}` : "No Lighting output selected"),
           ),
           configured: Boolean(lightOutput),
           mode: "real",
@@ -226,7 +226,7 @@ export function buildReadinessChecks({
   if (stateOnly) {
     return [
       ...Object.entries(views).map(([id, view]) => ({
-        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lights" } as Record<string, string>)[id]} ${connectionWord[view.status].toLowerCase()}`,
+        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lighting" } as Record<string, string>)[id]} ${connectionWord[view.status].toLowerCase()}`,
         passed: view.status === "connected", required: true, severity: "info" as const,
         status: view.status === "connecting" ? "disconnected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
@@ -314,21 +314,21 @@ export function buildReadinessChecks({
           : "disconnected",
     });
   }
-  const lightsConfigured = views.lights.configured;
+  const lightingConfigured = views.lights.configured;
   if (views.midi.actionNotice) checks.push({
     id: "playback-order", label: views.midi.actionNotice, passed: false,
     required: true, severity: "blocking", status: "disconnected",
     detail: "Connection is healthy. Discover Song Order in the Playback panel before starting songs.",
   });
-  const lightsRequired = lightsConfigured || views.lights.status === "error";
+  const lightingRequired = lightingConfigured || views.lights.status === "error";
   checks.push({
     id: "lights",
     label: views.lights.status === "connected"
-      ? "Lights MIDI output connected"
-      : "Lights MIDI output not connected",
+      ? "Lighting MIDI output connected"
+      : "Lighting MIDI output not connected",
     passed: views.lights.status === "connected",
-    required: lightsRequired,
-    severity: lightsRequired ? "blocking" : "info",
+    required: lightingRequired,
+    severity: lightingRequired ? "blocking" : "info",
     status: views.lights.status === "error"
       ? "error"
       : views.lights.status === "connected"

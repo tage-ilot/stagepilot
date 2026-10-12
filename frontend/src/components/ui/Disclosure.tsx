@@ -3,7 +3,7 @@ import { useId, useState, type ComponentPropsWithoutRef, type ReactNode } from "
 import { cx } from "./cx";
 
 export type DisclosureVariant = "advanced" | "activity";
-export type DisclosureTone = "services" | "presentation" | "playback" | "lights";
+export type DisclosureTone = "services" | "presentation" | "playback" | "lighting";
 
 export interface DisclosureProps extends Omit<ComponentPropsWithoutRef<"div">, "title" | "children"> {
   variant: DisclosureVariant;
@@ -34,7 +34,7 @@ const advancedTone: Record<DisclosureTone, { row: string; bar: string }> = {
   services: { row: "bg-advanced-services/10 text-advanced-services can-hover:bg-advanced-services/20", bar: "border-advanced-services" },
   presentation: { row: "bg-advanced-presentation/10 text-advanced-presentation can-hover:bg-advanced-presentation/20", bar: "border-advanced-presentation" },
   playback: { row: "bg-advanced-playback/10 text-advanced-playback can-hover:bg-advanced-playback/20", bar: "border-advanced-playback" },
-  lights: { row: "bg-advanced-lights/10 text-advanced-lights can-hover:bg-advanced-lights/20", bar: "border-advanced-lights" },
+  lighting: { row: "bg-advanced-lighting/10 text-advanced-lighting can-hover:bg-advanced-lighting/20", bar: "border-advanced-lighting" },
 };
 
 function summaryText(summary: ReactNode) {

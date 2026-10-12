@@ -46,7 +46,7 @@ const intents: Array<[string, (hook: ReturnType<typeof useStagePilot>) => Promis
   ["testPlanningCenterConnection", (h) => h.testPlanningCenterConnection({}), "testPlanningCenter"],
   ["savePlanningCenter", (h) => h.savePlanningCenter({ app_id: "a", service_type_id: "s" } as never, "UTC"), "updatePlanningCenterSettings"],
   ["saveProPresenter (Save configuration)", (h) => h.saveProPresenter({ host: "h", port: 1, timer_name: "t", request_timeout_seconds: 3 } as never), "updateSettings"],
-  ["saveLights (Save configuration)", (h) => h.saveLights({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }), "updateLightsSettings"],
+  ["saveLighting (Save configuration)", (h) => h.saveLighting({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }), "updateLightsSettings"],
   ["simulateMidi", (h) => h.simulateMidi("next" as never), "simulateMidiCue"],
   ["refreshMidi", (h) => h.refreshMidi(), "refreshMidiInputs"],
 ];
@@ -94,10 +94,10 @@ describe("one API call per intent", () => {
     await waitFor(() => expect(result.current.settings).not.toBeNull());
     m("updateLightsSettings").mockRejectedValueOnce(new Error("offline"));
     const calls = () => m("updateLightsSettings").mock.calls.length;
-    await act(async () => { await result.current.saveLights({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
+    await act(async () => { await result.current.saveLighting({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
     expect(calls()).toBe(1);
-    expect(result.current.lightsError).toBeTruthy();
-    await act(async () => { await result.current.saveLights({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
+    expect(result.current.lightingError).toBeTruthy();
+    await act(async () => { await result.current.saveLighting({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
     expect(m("updateLightsSettings")).toHaveBeenCalledTimes(2);
   });
 });

@@ -24,7 +24,7 @@ const tinted: Record<Tone, string> = {
   services: "border-integration-services/30 bg-integration-services/10 text-integration-services-text can-hover:bg-integration-services/20",
   presentation: "border-integration-presentation/30 bg-integration-presentation/10 text-integration-presentation-text can-hover:bg-integration-presentation/20",
   playback: "border-integration-playback/30 bg-integration-playback/10 text-integration-playback-text can-hover:bg-integration-playback/20",
-  lights: "border-integration-lights/30 bg-integration-lights/10 text-integration-lights-text can-hover:bg-integration-lights/20",
+  lighting: "border-integration-lighting/30 bg-integration-lighting/10 text-integration-lighting-text can-hover:bg-integration-lighting/20",
   success: "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20",
   warning: "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20",
   danger: "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20",

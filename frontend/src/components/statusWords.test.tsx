@@ -20,7 +20,7 @@ describe("status words", () => {
   });
 
   it.each(words)("SetupPanelHeader badge shows the word for %s, never the raw enum, and keeps data-status", (status, word) => {
-    render(<SetupPanelHeader closeLabel="Close" description="d" status={status} title="Lights" />);
+    render(<SetupPanelHeader closeLabel="Close" description="d" status={status} title="Lighting" />);
     const badge = document.querySelector("[data-status-badge]")!;
     expect(badge).toHaveTextContent(new RegExp(`^${word}$`));
     expect(badge).toHaveAttribute("data-status", status);
@@ -40,9 +40,9 @@ describe("status words", () => {
     "StatusCard shows %s as %s in sentence case without a CSS uppercase class and keeps data-status",
     (status, word) => {
       render(
-        <StatusCard accessibleTitle="Lights" active={false} controls="x" detail="Detail" icon={null} onClick={() => undefined} status={status} title="Lights" />,
+        <StatusCard accessibleTitle="Lighting" active={false} controls="x" detail="Detail" icon={null} onClick={() => undefined} status={status} title="Lighting" />,
       );
-      const card = screen.getByRole("button", { name: `Lights ${word}. Detail` });
+      const card = screen.getByRole("button", { name: `Lighting ${word}. Detail` });
       expect(card).toHaveAttribute("data-status", status);
       const label = card.querySelector(".status-card-status-word")!;
       expect(label).toHaveTextContent(new RegExp(`^${word}$`));
