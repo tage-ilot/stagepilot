@@ -28,7 +28,7 @@ colors:
   primary-active: "#b3201a"    # shade 10%. Pressed state of a solid primary button (white text 6.7:1)
   primary-text: "#e3918e"      # tint 50%. Primary used AS TEXT or a thin icon on dark (7.5:1 on panels)
   on-primary: "#ffffff"        # text on a solid primary fill (5.7:1). Dark text is only 3.5:1 on this red, so it is retired
-  on-light: "#020617"          # DARK text on the LIGHT fills (emerald, amber, orange, sky, fuchsia): the old on-primary value, renamed because primary is now a dark-enough red that takes white text
+  on-light: "#020617"          # DARK text on the LIGHT fills (emerald, amber, the Services green, the Presentation orange): the old on-primary value, renamed because primary is now a dark-enough red that takes white text
   # --- Status (meaning never changes between screens) ---
   success: "#34d399"           # connected / running / ready      (emerald-400)
   success-text: "#a7f3d0"      #                                  (emerald-200)
@@ -47,20 +47,28 @@ colors:
   on-info: "#020617"           # DARK text on an accent fill (9.1:1). White would be only 2.2:1
   idle: "#64748b"              # disconnected / idle              (slate-500)
   # --- Integration identity (each connected service owns one hue) ---
-  integration-services: "#60a5fa"        # blue-400. UI label "Services" (Planning Center today)
-  integration-services-text: "#bfdbfe"   # blue-200
-  integration-presentation: "#fdba74"    # orange-300. UI label "Presentation" (ProPresenter today)
-  integration-presentation-text: "#fed7aa"     # orange-200
-  integration-lights: "#38bdf8"          # sky-400
-  integration-lights-text: "#bae6fd"     # sky-200: Lights badge/button text. Was info-text before info became teal; Lights keeps its own sky text
-  integration-playback: "#e879f9"        # fuchsia-400. DECIDED: Playback takes MIDI's old colour; MIDI has none of its own (it is configured under Playback)
-  integration-playback-text: "#f5d0fe"   # fuchsia-200
+  integration-services: "#6bb03c"        # DECIDED (owner, 2026-10-12): green. UI label "Services" (Planning Center today)
+  integration-services-soft: "#6bb03c"   # dots, borders, 10-30% tints (same as the base)
+  integration-services-text: "#72b446"   # small text, 7:1 on panels
+  integration-presentation: "#fe7821"    # DECIDED (owner, 2026-10-12): bright orange. UI label "Presentation" (ProPresenter today)
+  integration-presentation-soft: "#fe7821"
+  integration-presentation-text: "#fe802e"
+  integration-lighting: "#d53367"          # DECIDED (owner, 2026-10-12): pink-red. UI label "Lighting" (was "Lighting"). 3.9:1 on panels: fill/border/dot only. NEAR the error rose: see "Colour collisions"
+  integration-lighting-soft: "#d53367"
+  integration-lighting-text: "#e687a5"
+  integration-playback: "#5d2a9c"        # DECIDED (owner, 2026-10-12): deep purple. MIDI has no colour of its own (configured under Playback). Only 2.0:1 on panels, so use -soft for anything seen on a dark surface; this base is for solid fills with white text (9.2:1)
+  integration-playback-soft: "#7a50ae"   # the base lightened 18% so dots, borders and tints reach 3:1
+  integration-playback-text: "#b199cf"
+  integration-backend: "#c7231d"          # DECIDED (owner, 2026-10-12): the StagePilot status card and its configuration panel. SAME HEX as primary: see "Colour collisions"
+  integration-backend-soft: "#c7231d"
+  integration-backend-text: "#e28d89"
   # DECIDED direction: a muted version of each service colour for the "Advanced" parts of its setup
-  # (30% hue + 70% text-muted; was 50/50, now clearly greyer). All 6.9:1 or better on a panel.
-  advanced-services: "#84a4cc"
-  advanced-presentation: "#b4aaa4"
-  advanced-playback: "#ad96cc"
-  advanced-lights: "#78abcb"
+  # (30% of the hue's -text tint + 70% text-muted). Recomputed for the 2026-10-12 palette: 5.5:1 or better on a panel (all AA).
+  advanced-services: "#8aa896"
+  advanced-presentation: "#b4988f"
+  advanced-playback: "#9da0bf"
+  advanced-lighting: "#ad9bb2"
+  advanced-backend: "#ab9caa"
   # --- Widget borders (white at low opacity, so they work on any surface). DECIDED: three ---
   border-subtle: "rgba(255, 255, 255, 0.06)"  # ~34 uses: quiet dividers, card edges (merges the old 5% and 7%)
   border: "rgba(255, 255, 255, 0.10)"         # 73 uses, THE default
@@ -353,7 +361,7 @@ cinematic glow. Both are accents. Neither takes over.
   stripes, hard 5px offset shadow, `image-rendering: pixelated`, animation in
   `steps()`), and the outlined arcade wordmark (StagePilot Logo with its 1px
   black outline), and the generic pixel-art service icons
-  (checklist, monitor, audio tracks, lights).
+  (checklist, monitor, audio tracks, lighting).
 - **Rule:** pixel styling marks *the app doing something itself* (starting,
   loading, connecting, failing). It is blue for progress, amber when slow, red
   when failed.
@@ -418,7 +426,8 @@ that is not a status, a service, or the primary red.
   destructive button never uses `primary`, and `primary` never carries an error.
 - **Text on fills (DECIDED rule): light text on dark fills, dark text on light
   fills.** Most of the app is dark, so light text stays the norm.
-  - Light fills (amber, emerald, sky-400, fuchsia-400, orange): dark text (`on-light`, `#020617`).
+  - Light fills (amber, emerald, the Services green, the Presentation orange): dark text (`on-light`, `#020617`).
+  - **Identity fills (solid):** Services green 7.6:1 and Presentation orange 7.6:1 take dark text (`on-light`); Playback purple 9.2:1, Lighting pink 4.7:1 and the StagePilot red 5.7:1 take white (`on-primary`).
   - The **teal accent fill** `info`: dark text (`on-info`, 9.1:1); white would be 2.2:1.
   - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
   - Dark red fill (`danger-solid` `#e11d48`, 4.7:1 with white): white text
@@ -434,7 +443,7 @@ that is not a status, a service, or the primary red.
     the primary red. Red now also means primary, so the form rule above (solid + white text = primary; pale text + dot = error) keeps them apart.
   - "Update and Restart" (sky solid) and the two PIN/unlock buttons (sky) become primary red.
   - "Use <plan>" in the Services plan picker (amber solid) becomes a
-    tinted Services (blue) button. Amber is only for warnings.
+    tinted Services (green) button. Amber is only for warnings.
   - `danger-solid` stays for destructive confirms only.
 - **Status colours** are fixed app-wide: `success` = connected/running/ready,
   `warning` = connecting/delayed/needs attention, `danger` = error or
@@ -442,10 +451,15 @@ that is not a status, a service, or the primary red.
   `*-soft` for dots on dark panels. `info` is the **secondary accent teal
   `#1dc1c7`** (owner, 2026-10-12): information, "what comes next", and
   non-disruptive actions; it is never a state.
-- **Service colours (decided)** tint a service's setup panel. **Playback is
-  fuchsia** (MIDI is configured under Playback and has no colour of its own).
-  Services is blue, Presentation is orange, Lights is sky. Never reuse these
-  for status. **Advanced** parts of a service's setup use a muted version of
+- **Connection colours (decided 2026-10-12)** tint a connection's status card
+  icon, setup panel, secondary buttons and badges. **Services is green
+  `#6bb03c`, Presentation is orange `#fe7821`, Playback is deep purple
+  `#5d2a9c`, Lighting is pink-red `#d53367`, and the StagePilot (backend) card
+  and panel are `#c7231d`.** MIDI is configured under Playback and has no colour
+  of its own. Each has three roles: the base (solid fills, rails), `-soft` (dots,
+  borders and 10-30% tints on dark surfaces) and `-text` (small text, 7:1).
+  Playback's base is only 2.0:1 on a panel, so everything seen on a dark surface
+  uses `playback-soft` (the base lightened 18%). Never reuse these for status. **Advanced** parts of a service's setup use a muted version of
   the service colour (`advanced-*`, the hue mixed half-way with `text-muted`)
   so they read as secondary. Decided: mixed 30% hue / 70% grey so the difference from the main colour is easy to see.
 - **Dashboard names (decided): generic, not brand names.** The dashboard says
@@ -655,7 +669,7 @@ A connection may be reachable in more than one way. The ways are shown as a
 **Connection method** select at the top of Basic, so alternates are where the
 user looks, not hidden behind a toggle:
 - **Playback:** `Playback API` (main) or `MIDI` (alternate).
-- **Lights:** `MIDI` (the main method today; a method select appears only when
+- **Lighting:** `MIDI` (the main method today; a method select appears only when
   a second method exists).
 - When only one method exists, show it as a line of text ("Sends cues by MIDI"),
   not a select with one item.
@@ -700,13 +714,13 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 | **Services** | Planning Center (unless signing in to it) | the connection that supplies the service plan |
 | **Presentation** | ProPresenter (unless an API screen needs it) | the connection that shows the countdown |
 | **Playback** | MultiTracks | the connection that tells StagePilot a song started |
-| **Lights** | Lightkey | the connection that receives cues. Describe its output as **MIDI Output to Lighting Controller** (decided) |
-| **MIDI** | (stays) | a connection method: alternate for Playback, main for Lights |
+| **Lighting** | Lighting (until 2026-10-12), Lightkey | the connection that receives cues. Renamed from "Lighting" by the owner on 2026-10-12. Describe its output as **MIDI Output to Lighting Controller** (decided) |
+| **MIDI** | (stays) | a connection method: alternate for Playback, main for Lighting |
 | **Configuration** | settings, setup, production setup | what you edit for a connection (decided) |
 | **Basic / Advanced** | alternate, specific, manual | the two parts of Configuration |
 | **StagePilot** | backend, local API, plugin health | the fifth status card; its panel holds the app's own status and all app-wide configuration |
 | **Service plan** | plan | the day's list of songs (decided) |
-| **Cue** | pulse | a message sent to Lights (decided) |
+| **Cue** | pulse | a message sent to Lighting (decided) |
 | **Note** | pulse | the MIDI note a cue uses, and how long it lasts. Use **Note** wherever the app said "pulse": "Note length (ms)", "Test cue" (decided 2026-10-11) |
 | **People** | remote users | who can sign in remotely |
 | **Connected / Connecting / Not connected / Error** | disconnected | the four status words (sentence case in text, UPPERCASE in badges) |
@@ -764,12 +778,12 @@ width below 480px.
   - **Services:** service type, service plan choice, `Reload service plan`.
   - **Presentation:** which timer or target receives the countdown.
   - **Playback:** connection method, which computer, velocities.
-  - **Lights:** the **MIDI network / output, the MIDI channel and the note
-    pulse** (any Lights save reconfigures the plugin: it cancels the running
+  - **Lighting:** the **MIDI network / output, the MIDI channel and the note
+    pulse** (any Lighting save reconfigures the plugin: it cancels the running
     lighting timeline and reopens the MIDI port).
   - **StagePilot:** port, network access, timezone, log level, release channel,
     PIN requirement and the new PIN (the PIN is never saved per keystroke).
-- **Saved immediately, even during a show (decided):** only Lights cue list
+- **Saved immediately, even during a show (decided):** only Lighting cue list
   edits (cue notes, velocities, labels, elapsed times, add and remove), which
   already use their own endpoints, because operators need to add cues quickly
   during a show. Tests and display preferences (note names vs numbers) change no
@@ -933,19 +947,19 @@ kept because the current code does it.
 **Patterns (see Patterns section)**
 - Wide status cards above 1000px, compact below. Phone/remote loading is a
   spinner instead of the bar.
-- Connection method select (Playback API main / MIDI alternate; Lights shows
+- Connection method select (Playback API main / MIDI alternate; Lighting shows
   MIDI as text). Activity and Advanced rows look different; "Other computer…"
   replaces "Connect a specific computer".
-- Vocabulary: Connection, Services, Presentation, Playback, Lights, MIDI,
+- Vocabulary: Connection, Services, Presentation, Playback, Lighting, MIDI,
   Configuration, Basic / Advanced, StagePilot, Service plan, Cue (not pulse),
   Note (kept), People.
 - StagePilot card and panel hold all app-wide configuration.
 - Save as you go, plus an always-visible `Save configuration` button and a
   five-state save bar. Held until saved: service type / plan choice / Reload
   service plan, Presentation timer target, Playback method / computer /
-  velocities, Lights **MIDI network (output) and channel only**, StagePilot
+  velocities, Lighting **MIDI network (output) and channel only**, StagePilot
   restart-needed items. Everything else applies immediately, including the
-  rest of Lights.
+  rest of Lighting.
 - **Send test cue** runs when pressed, using the saved output. It is disabled
   (greyed, with the reason beside it) while a new MIDI output is selected but
   not saved.
@@ -984,28 +998,52 @@ the red it works as text.
   and `PanelAlert` tone info, Remote Access status lines, first-launch
   configuration kicker, "Update available" kicker and version number), the
   **Reload service plan** live control, the info badge and status dot.
-- **Recommended extra uses (proposed, not yet built):** the **next song's number
+- **Extra uses (decided 2026-10-12, owner: make those real):** the **next song's number
   chip** beside "Up next"; the **"Send test cue"** result line; the **Activity**
   row's count badge (neutral grey today); links (`linkButton`, e.g. Playback
   "Other computer" and learn-more links); the **Update available** button; the
-  note-display toggle glyphs in Lights; the dashboard **intentional spacer**
+  note-display toggle glyphs in Lighting; the dashboard **intentional spacer**
   outline; and the **progress** of an update download.
 - **Never:** state (that is green, amber, rose, slate), the one primary action
   (that is the red), service identity (that is the integration hues), or the
   retro loading bar (stays blue pixel art).
-- **Collision to resolve:** **Lights' identity colour is sky `#38bdf8`**, which
-  is nearly the same as this teal (hue 198 vs 182, contrast between them 1.03:1).
-  Two different meanings in two near-identical colours breaks the rule that a
-  colour has one job. See the options in the owner question below.
+- **Collision resolved (owner, 2026-10-12):** Lighting's identity colour is no
+  longer sky; the teal accent is distinct from every connection colour now.
+
+## Colour collisions to know about (owner palette, 2026-10-12)
+The owner chose these five connection colours. Two of them sit very close to
+other colours that already mean something. They are kept apart **by form and
+placement**, never by hue alone. Contrast between two colours is 1.0 when
+identical.
+- **StagePilot `#c7231d` is the primary red (1.00).** The StagePilot card and
+  panel therefore carry the live-red. Rule: the red *rail and wash* on a card or
+  panel means **live or selected** and appears once per view; a connection tint
+  is a *thin icon-tile tint and a 1px top border*, never a rail or a wash. A
+  StagePilot panel keeps its single solid primary button (`Save configuration`),
+  which is the same red as its tint; that is by design.
+- **Lighting `#d53367` is next to the error rose (`danger-solid` `#e11d48`,
+  1.01) and close to the primary red (1.22).** Rule: Lighting is *tint and dot*
+  only. Error is always pale `danger-text` words with a rose dot and an icon;
+  `Stop timer`/`Reset position` stay rose live controls. A Lighting card in an
+  error state shows the status word `Error`, not a colour change.
+- **Playback `#5d2a9c` is 1.96:1 on a panel.** Always use `playback-soft` on
+  dark surfaces (never the base for text, dots or thin borders).
+- **Services green `#6bb03c` is near `success` `#34d399`** (1.38, hue 96 vs
+  158). Connected = the status dot and word (emerald), identity = the icon-tile
+  tint and panel border (olive green). Do not put a connected dot inside a
+  Services-green fill.
+- **Presentation orange `#fe7821` is near `live-back` `#fdba74` (1.57) and
+  `warning` amber (1.59).** Orange is identity; amber is warning; the Previous
+  live control keeps its own light orange.
 
 ## Still open
 
-Open (owner): Lights vs the teal accent. Options: (1) Lights moves to a clearly different hue (violet `#a78bfa`); (2) Lights keeps sky and the accent is used only as text and Reload; (3) the accent replaces sky for Lights too and Lights loses its own identity. Recommended: (1).
+Resolved (owner, 2026-10-12): Lighting moves to `#d53367`; see "Colour collisions".
 
 Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - Release channel lives in **Advanced** in the StagePilot panel.
 - "Pulse" becomes **Note** everywhere ("Note length (ms)", "Test cue").
-- The Lights output reads **MIDI Output to Lighting Controller**; no vendor name.
+- The Lighting output reads **MIDI Output to Lighting Controller**; no vendor name.
 - Compact status words may go **below the 11px floor**. This is the one
   documented exception (status word, compact cards, 1000px and below). Nothing
   else may.
