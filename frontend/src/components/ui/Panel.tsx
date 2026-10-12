@@ -17,10 +17,10 @@ export interface PanelProps extends ComponentPropsWithoutRef<"section"> {
 // Class strings are written out in full so Tailwind can see them.
 const variants: Record<PanelVariant, string> = {
   default: "bg-surface-panel/[0.94] p-ds-lg",
-  // 120deg coral-to-clear wash, 0% to 36% (DESIGN.md Components > Panel). No !important.
+  // 120deg primary-red-to-clear wash, 0% to 36% (DESIGN.md Components > Panel). No !important.
   setup:
     "bg-surface-panel/[0.94] p-ds-xl bg-[linear-gradient(120deg,var(--tw-gradient-stops))] from-primary/[0.13] from-0% to-transparent to-[36%]",
-  // 135deg coral wash fading out by 42%, plus a coral left rail drawn by ::before (DESIGN.md Components > Live panel).
+  // 135deg primary-red wash fading out by 42%, plus a primary-red left rail drawn by ::before (DESIGN.md Components > Live panel).
   live:
     "relative isolate bg-surface-panel-strong/90 p-ds-lg bg-[linear-gradient(135deg,var(--tw-gradient-stops))] from-primary/10 from-0% to-transparent to-[42%] before:absolute before:inset-y-0 before:left-0 before:-z-10 before:w-[5px] before:rounded-l-ds-xl before:bg-primary before:content-['']",
 };

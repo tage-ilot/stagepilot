@@ -154,7 +154,7 @@ export function SetupChecklist({
         {steps.map((step, index) => {
           const content = (
             <>
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-ds-full text-xs font-black tabular-nums ${step.complete ? "bg-success text-on-primary" : "bg-ink/10 text-ink-muted"}`}>
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-ds-full text-xs font-black tabular-nums ${step.complete ? "bg-success text-on-light" : "bg-ink/10 text-ink-muted"}`}>
                 {step.complete ? "✓" : index + 1}
               </span>
               <span className="min-w-0 text-left">

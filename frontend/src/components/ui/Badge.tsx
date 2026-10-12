@@ -29,8 +29,8 @@ const tinted: Record<Tone, string> = {
 
 // Dark label text gets no shadow; light label text on danger-solid gets text-shadow-label (D5).
 const solid: Partial<Record<Tone, string>> = {
-  success: "border-transparent bg-success text-on-primary",
-  warning: "border-transparent bg-warning text-on-primary",
+  success: "border-transparent bg-success text-on-light",
+  warning: "border-transparent bg-warning text-on-light",
   danger: "border-transparent bg-danger-solid text-on-danger text-shadow-label",
 };
 

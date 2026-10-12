@@ -29,7 +29,7 @@ The `--sp-*` aliases and `stage.*` colours were deleted at lock-in (card 6.1). M
 | --sp-border | rgb(255 255 255 / .09) | border rgba(255,255,255,.10) |
 | --sp-text-muted | #9aa9bb | text-muted #94a3b8 |
 | --sp-text-quiet | #718096 | no direct token; later text ladder migration |
-| --sp-accent-subtle | rgb(255 98 56 / .13) | primary #ff6238; retain existing wash opacity |
+| --sp-accent-subtle | rgb(199 35 29 / .13) | primary #c7231d; retain existing wash opacity |
 | --sp-success | #42dda4 | success #34d399 |
 | --sp-warning | #f6c453 | warning #fbbf24 |
 | --sp-info | #7dd3fc | info #38bdf8 |

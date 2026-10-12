@@ -34,8 +34,8 @@ const tinted: Record<Tone, string> = {
 
 // Rest: transparent on surface-950, light text (label shadow). Go/back flip to dark text on hover/press, so the shadow is removed there.
 const live: Record<LiveTone, string> = {
-  go: "border-live-go/40 text-live-go-text can-hover:border-live-go/70 can-hover:bg-live-go can-hover:text-on-primary can-hover:[text-shadow:none] active:bg-live-go/80 active:text-on-primary active:[text-shadow:none]",
-  back: "border-live-back/40 text-live-back-text can-hover:border-live-back/70 can-hover:bg-live-back can-hover:text-on-primary can-hover:[text-shadow:none] active:bg-live-back/80 active:text-on-primary active:[text-shadow:none]",
+  go: "border-live-go/40 text-live-go-text can-hover:border-live-go/70 can-hover:bg-live-go can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-go/80 active:text-on-light active:[text-shadow:none]",
+  back: "border-live-back/40 text-live-back-text can-hover:border-live-back/70 can-hover:bg-live-back can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-back/80 active:text-on-light active:[text-shadow:none]",
   reload: "border-live-reload/50 text-live-reload-text can-hover:border-live-reload/70 can-hover:bg-live-reload can-hover:text-on-danger active:bg-live-reload/80 active:text-on-danger",
   stop: "border-live-stop/40 text-live-stop-text can-hover:border-live-stop/70 can-hover:bg-live-stop can-hover:text-on-danger active:bg-live-stop/80 active:text-on-danger",
 };
@@ -44,7 +44,7 @@ const base =
   "inline-flex items-center justify-center rounded-ds-lg border text-center font-type-label text-type-label touch-manipulation transition-colors duration-[140ms] motion-reduce:transition-none break-words";
 
 const variants: Record<Exclude<ButtonVariant, "tinted" | "live">, string> = {
-  primary: "border-transparent bg-primary text-on-primary can-hover:bg-primary-hover active:bg-primary-focus",
+  primary: "border-transparent bg-primary text-on-primary text-shadow-label can-hover:bg-primary-hover active:bg-primary-active",
   secondary: "border-edge-medium bg-surface-950 text-ink-body text-shadow-label can-hover:bg-surface-900 active:bg-surface-900",
   destructive: "border-transparent bg-danger-solid text-on-danger text-shadow-label can-hover:bg-danger active:bg-danger",
   "destructive-soft": "border-transparent bg-danger-soft text-on-danger-soft can-hover:bg-danger active:bg-danger",

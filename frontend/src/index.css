@@ -313,7 +313,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 }
 
 .stagepilot-dashboard-grid > .grid-stack-placeholder > .placeholder-content {
-  border: 1px dashed rgb(255 98 56 / 0.72);
+  border: 1px dashed rgb(199 35 29 / 0.72);
   border-radius: 0.75rem;
   background: color-mix(in srgb, var(--ds-primary) 13%, transparent);
 }
@@ -390,7 +390,7 @@ textarea:focus-visible {
   color: var(--ds-ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.06em;
-  text-shadow: 0 0 28px rgb(255 98 56 / 0.12);
+  text-shadow: 0 0 28px rgb(199 35 29 / 0.12);
 }
 
 .current-song-row {

@@ -357,7 +357,7 @@ function SongRow({ song, current, next, hoverWarmup }: { song: Song; current: bo
       <div className="min-w-0">
         <p className="break-words font-medium text-ink [overflow-wrap:anywhere]">{song.title}</p>
         <div className="mt-0.5 flex gap-2 font-type-micro text-type-micro uppercase">
-          {current && <span className="text-primary-hover">Current · live</span>}
+          {current && <span className="text-primary-text">Current · live</span>}
           {next && <span className="text-warning-text">Up next</span>}
           {song.is_generic && <span className="text-warning-text">Generic item</span>}
           {!song.duration_seconds && <span className="text-danger-text">Missing duration</span>}
@@ -919,7 +919,7 @@ export function Dashboard({
                 </div>
                 {canOperate && <button
                   aria-label={pendingPlanId === candidate.id ? `Loading ${candidate.title}` : `Use ${candidate.title}`}
-                  className="shrink-0 touch-manipulation rounded-ds-lg bg-warning px-3 py-2 text-xs font-bold text-on-primary transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-warning-text disabled:cursor-wait disabled:opacity-50 coarse:min-h-ds-touch-target"
+                  className="shrink-0 touch-manipulation rounded-ds-lg bg-warning px-3 py-2 text-xs font-bold text-on-light transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-warning-text disabled:cursor-wait disabled:opacity-50 coarse:min-h-ds-touch-target"
                   disabled={pendingPlanId !== null}
                   onClick={() => selectPlan(candidate.id)}
                   type="button"
@@ -1142,7 +1142,7 @@ export function Dashboard({
           "now-playing": (
           <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-type-kicker text-type-kicker uppercase text-primary">Now playing · live signal</p>
+              <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing · live signal</p>
               <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success/15 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
             <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.current_song?.id ?? "idle"}>{state.current_song?.title ?? "Waiting for first cue"}</h2>
@@ -1153,7 +1153,7 @@ export function Dashboard({
               </div>
               <div className="elapsed-time-block pb-1 text-right">
                 <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
-                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-primary-focus">{formatDuration(timerElapsed)}</p>
+                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-primary-text">{formatDuration(timerElapsed)}</p>
                 <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.current_song?.duration_seconds)}</p>
               </div>
             </div>
