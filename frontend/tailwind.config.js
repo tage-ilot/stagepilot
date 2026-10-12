@@ -69,34 +69,34 @@ export default {
       "ui-monospace"
     ],
     "type-song-title": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-text-strong": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-h1": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-h2": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-body-md": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-body-sm": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-label": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-kicker": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-badge": [
-      "Inter Variable"
+      "Geist Variable"
     ],
     "type-micro": [
-      "Inter Variable"
+      "Geist Variable"
     ]
   },
   "fontSize": {
