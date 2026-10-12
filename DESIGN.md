@@ -886,7 +886,7 @@ Wiring plan (each step was a small PR; status at the final audit):
 | 5 | `stage-800` / `stage-700` defined but never used; `stage-900` only in scrollbar CSS | Decided: delete both unused; `stage-850` -> `card`, `stage-900` -> `scrollbar-track` |
 | 6 | Missing `panel`, `panel-strong`, dialog/toast/popover, scrim, widget borders | Added |
 | 7 | Missing z-index scale (7 layers) with two apparent stacking conflicts | Added table; layering decided: keep as is |
-| 8 | Missing: Inter not loaded (now Geist, bundled); tap-target rule mostly unenforced; no placeholder style; two shadow languages; 3 button recipes | Decided: bundle a font (Geist since 2026-10-11), 44/36px tap targets, placeholder style, new shadow, one panel recipe; the primary is the only solid action colour (it was coral until 2026-10-11) |
+| 8 | Missing: Inter not loaded (now Geist, bundled); tap-target rule mostly unenforced; no placeholder style; two shadow languages; 3 button recipes | Decided: bundle a font (Geist since 2026-10-11), 44/36px tap targets, placeholder style, new shadow, one panel recipe; coral is the only solid primary |
 | 9 | Draft v1 listed `rounded` sm/md as in use; bare `rounded` (4px) is the real odd one | Documented |
 
 | 10 | I said one timer used -0.045em vs -0.06em. Wrong: -0.045em is the song title heading, a different element | Corrected; `song-title` token added |
