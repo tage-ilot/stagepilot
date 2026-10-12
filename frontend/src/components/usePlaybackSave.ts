@@ -37,6 +37,7 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
   const [running, setRunning] = useState(false);
   const [failure, setFailure] = useState<{ key: string; step: "method" | "settings" | "midi"; reason?: string } | null>(null);
   const [autoAt, setAutoAt] = useState<string | null>(null);
+  const inFlight = useRef(false);
   const done = useRef<{ method?: string; settings?: string; midi?: string }>({});
   const knownHost = useRef<{ host: string | null } | null>(null);
 
@@ -55,13 +56,15 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
   }, [hasStatus, host]);
 
   const save = useCallback(async () => {
-    if (running) return false;
+    // The ref closes the gap before React re-renders: a double click or Enter repeat finds it taken.
+    if (inFlight.current) return false;
     if (count === 0) return true;
     setFailure(null);
     if (midi.pending && !midi.valid) {
       setFailure({ key, step: "midi", reason: MIDI_INVALID_REASON });
       return false;
     }
+    inFlight.current = true;
     setRunning(true);
     try {
       if (draft.methodDirty && done.current.method !== draft.method) {
@@ -80,9 +83,10 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
       setAutoAt(null);
       return true;
     } finally {
+      inFlight.current = false;
       setRunning(false);
     }
-  }, [count, draft, key, midi, running, settingsKey]);
+  }, [count, draft, key, midi, settingsKey]);
 
   const discard = useCallback(() => {
     draft.revert();

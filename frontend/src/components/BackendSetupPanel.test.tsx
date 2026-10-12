@@ -460,7 +460,7 @@ describe("Log level, release channel and PIN are held until Save configuration",
     fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "12"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/PIN of at least 4/)).toBeInTheDocument();
+    expect(screen.getByText(/PIN of at least 4 characters before saving/)).toBeInTheDocument();
   });
 
   it("Discard restores log level, release channel, PIN requirement and clears the PIN", () => {

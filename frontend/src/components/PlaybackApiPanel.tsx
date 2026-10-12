@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { openExternalUrl } from "../desktop";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -37,6 +37,8 @@ function HeldRow({ held, id, children }: { held: boolean; id: string; children: 
   );
 }
 
+const SCAN_CANCEL_GUARD_MS = 600;
+
 export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
@@ -68,7 +70,12 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
   const copyDetails = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
   };
-  const connect = () => { if (trimmed && hostOk) playback?.scan(trimmed); };
+  // The scan button turns into Cancel once the scan starts, so the second click of a double click
+  // must not land on Cancel. Clicks on Cancel in the first moments are ignored.
+  const scanClickedAt = useRef(0);
+  const startScan = () => { scanClickedAt.current = Date.now(); playback?.scan(); };
+  const cancelScan = () => { if (Date.now() - scanClickedAt.current < SCAN_CANCEL_GUARD_MS) return; playback?.cancelScan(); };
+  const connect = () => { if (trimmed && hostOk) { scanClickedAt.current = Date.now(); playback?.scan(trimmed); } };
   const tone = status ? playbackBannerTone(status) : "idle";
   const apiOn = draft?.enabled ?? status?.enabled ?? true;
 
@@ -81,8 +88,8 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
 
       <div className="space-y-3">
         {scanning
-          ? <Button className="w-full sm:w-auto" onClick={playback?.cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
-          : <Button className="w-full sm:w-auto" onClick={() => playback?.scan()} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
+          ? <Button className="w-full sm:w-auto" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
+          : <Button className="w-full sm:w-auto" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
         {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
           ? (
             <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">

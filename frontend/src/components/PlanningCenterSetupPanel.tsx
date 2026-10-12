@@ -18,6 +18,7 @@ import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
+import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 
@@ -230,6 +231,10 @@ export function PlanningCenterSetupPanel({
   const changeCount = Object.values(held).filter(Boolean).length;
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
+  const attempt = useSaveAttempt("planning-center-configuration");
+  const errAppId = attempt.attempted && connectionMethod !== "oauth" && !appId.trim() ? "Enter an Application ID." : undefined;
+  const errServiceType = attempt.attempted && !serviceTypeId ? "Choose a service type." : undefined;
+  const errTimezone = attempt.attempted && !timezone.trim() ? "Choose a timezone." : undefined;
   const wasSaving = useRef(false);
   useEffect(() => {
     const saving = pendingOperation === "save";
@@ -257,6 +262,7 @@ export function PlanningCenterSetupPanel({
     setSecret("");
     setRemoveSecret(false);
     setSaveFailed(false);
+    attempt.reset();
   };
   const manualSummary = `${connectionMethod === "oauth" ? "Sign-in" : "App ID and Secret"} · ${settings?.settings.planning_center.app_id?.trim() ? `App ID ${settings.settings.planning_center.app_id.trim()}` : "App ID not set"}`;
 
@@ -266,7 +272,8 @@ export function PlanningCenterSetupPanel({
   });
 
   const save = () => {
-    if (!publicSettings || !valid || busy || (changeCount === 0 && state.plugins.planning_center)) return;
+    if (!publicSettings || busy || (changeCount === 0 && state.plugins.planning_center)) return;
+    if (!valid) { attempt.refuse(); return; }
     setSaveFailed(false);
     onSave(
       {
@@ -420,11 +427,14 @@ export function PlanningCenterSetupPanel({
             <Input
               autoComplete="username"
               disabled={busy}
+              aria-describedby={errAppId ? "planning-center-application-id-error" : undefined}
+              aria-invalid={errAppId ? true : undefined}
               id="planning-center-application-id"
               onChange={(event) => setAppId(event.target.value)}
               value={appId}
             />
             {held.appId && <HeldNote />}
+            {errAppId && <p className="mt-1 text-type-body-sm text-danger-text" id="planning-center-application-id-error" role="alert">{errAppId}</p>}
           </div>
           <Field heldChange={held.secret} label="Secret">
             <Input
@@ -471,7 +481,7 @@ export function PlanningCenterSetupPanel({
           Service plan configuration
         </h3>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Field heldChange={held.serviceType} label="Service type">
+          <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
             <Select
               disabled={busy || serviceTypes.length === 0}
               onChange={(event) => setServiceTypeId(event.target.value)}
@@ -487,7 +497,7 @@ export function PlanningCenterSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field heldChange={held.timezone} label="Timezone">
+          <Field error={errTimezone} heldChange={held.timezone} label="Timezone">
             <Select
               disabled={busy}
               onChange={(event) => {

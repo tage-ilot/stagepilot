@@ -17,6 +17,7 @@ import { Input } from "./ui/Input";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
+import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 
 /** Client-side cooldown (seconds) between manual "send all logs" clicks. */
@@ -220,6 +221,11 @@ export function BackendSetupPanel({
     .filter(Boolean).length;
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
+  const attempt = useSaveAttempt("backend-configuration");
+  const portValid = Number.isInteger(Number(serverPort)) && Number(serverPort) >= 1 && Number(serverPort) <= 65535;
+  const errTimezone = attempt.attempted && !timezone.trim() ? "Enter a timezone." : undefined;
+  const errPort = attempt.attempted && !portValid ? "Enter a port from 1 to 65535." : undefined;
+  const errPin = attempt.attempted && pinEnabled && dashboardPin !== "" && dashboardPin.length < 4 ? "Enter a PIN of at least 4 characters." : undefined;
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const wasPending = useRef(false);
   useEffect(() => {
@@ -254,10 +260,12 @@ export function BackendSetupPanel({
     setPinEnabled(saved.web_dashboard_pin_enabled ?? true);
     setDashboardPin("");
     setSaveFailed(false);
+    attempt.reset();
   };
   const save = () => {
     // A clean Save is a no-op once settings are loaded.
-    if (!parsedSettings || pending) return;
+    if (pending) return;
+    if (!parsedSettings) { attempt.refuse(); return; }
     if (saved !== null && changeCount === 0) return;
     setSaveFailed(false);
     setAutoSavedAt(null);
@@ -326,7 +334,7 @@ export function BackendSetupPanel({
 
       <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Basic</h3>
       <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
-        <Field heldChange={heldTimezone} label="Timezone">
+        <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
           <Input
             disabled={pending}
             onChange={(event) => setTimezone(event.target.value)}
@@ -374,7 +382,7 @@ export function BackendSetupPanel({
             </span>
           </label>
           {pinEnabled && (
-            <Field className="mt-3" heldChange={heldPin} hint="Saved with Save configuration." label="Replace dashboard PIN">
+            <Field className="mt-3" error={errPin} heldChange={heldPin} hint="Saved with Save configuration." label="Replace dashboard PIN">
               <Input
                 autoComplete="new-password"
                 className="font-mono"
@@ -422,7 +430,7 @@ export function BackendSetupPanel({
 
       <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Advanced</h3>
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
-        <Field heldChange={heldPort} label="Server port">
+        <Field error={errPort} heldChange={heldPort} label="Server port">
           <Input
             disabled={pending}
             inputMode="numeric"
