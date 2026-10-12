@@ -57,4 +57,11 @@
   --ds-elevation-overlay: 0 8px 24px rgb(22 13 12 / 0.45), 0 24px 80px rgb(22 13 12 / 0.60);
   --ds-text-shadow-on-dark-text: 0 1px 2px rgb(10 10 12 / 0.55);
   --brand-outline: #000000;
+  --loader-fill-a: #0284c7;
+  --loader-fill-c: #67e8f9;
+  --loader-fill-d: #082f49;
+  --loader-edge-white: #f8fafc;
+  --loader-edge-blue: #0ea5e9;
+  --loader-failed-a: #9f1239;
+  --loader-failed-edge-white: #fff1f2;
 }

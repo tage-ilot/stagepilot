@@ -20,10 +20,11 @@ const forbidden: Array<[string, RegExp]> = [
 const allowList: string[] = [
   // Generated from frontend/scripts/design-tokens.mjs; it is where the literals live.
   "/design-tokens.css",
-  // TODO remove after lockin/dead-styles (PR #139): index.css still holds the wordmark outline #000 and scrollbar hex on main.
-  // Phase 6 PRs are independent and based on main, so this card cannot rebase on 6.1; delete this entry once #139 merges.
-  "/index.css",
 ];
+// index.css has no raw hex (checked below). It still holds rgb() shadows, glows and scrims that no DESIGN.md token covers,
+// so only the rgb()/rgba() rule is waived for it; every other rule applies.
+const cssExemptKinds: Record<string, string[]> = { "/index.css": ["rgb()/rgba() literal"] };
+
 
 function violations(source: string) {
   return forbidden.filter(([, pattern]) => pattern.test(source)).map(([name]) => name);
@@ -83,7 +84,8 @@ describe("tokens only across all of src", () => {
   it("has no violations", () => {
     for (const [file, source] of Object.entries(sources)) {
       if (allowList.some((suffix) => file.endsWith(suffix))) continue;
-      expect(violations(source), file).toEqual([]);
+      const exempt = Object.entries(cssExemptKinds).find(([suffix]) => file.endsWith(suffix))?.[1] ?? [];
+      expect(violations(source).filter((kind) => !exempt.includes(kind)), file).toEqual([]);
     }
   });
 });

@@ -333,7 +333,7 @@ describe("PlanningCenterSetupPanel", () => {
     expect(screen.getByLabelText("Secret")).toHaveValue("");
     expect(screen.getByLabelText("Secret")).toHaveAttribute(
       "placeholder",
-      "Saved securely — leave blank to keep",
+      "Saved securely — leave blank to keep…",
     );
     expect(screen.getByLabelText("Service type")).toHaveValue("sunday");
     expect(screen.getByLabelText("Timezone")).toHaveValue("America/Los_Angeles");

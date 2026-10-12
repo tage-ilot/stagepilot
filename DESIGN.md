@@ -908,3 +908,4 @@ Nothing blocking. Decisions recorded 2026-10-11 (owner):
 - `elevation.overlay` is approved.
 - Save behaviour: explicit save with held markers everywhere (option A); the
   backend split for true save-as-you-go (option C) is later work.
+- Startup/error screen text over the photo may measure as low as 1.1:1 at the brightest patch; owner decided to leave it (2026-10-11).
