@@ -11,8 +11,9 @@ hand-maps the custom elevation/default, overlay, level-1 and label text shadow.
 Colors `text*` -> `ink*`, `border*` -> `edge*`, `panel*` -> `surface-panel*`.
 Thus `text-ink`, `border-edge`, `bg-surface-panel` do not collide with CSS
 recipes. Other colors retain token names. Radius/spacing names use `ds-`;
-typography sizes/families use `type-`. Bare `rounded` is 8px once draft PR #140 merges (`DEFAULT` becomes the `ds-default` token; on main it is still the stock 4px, and no component uses a bare `rounded`);
-`rounded-ds-default` is 8px. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
+typography sizes/families use `type-`. Bare `rounded` is the 8px ds-default token (DEFAULT);
+`rounded-ds-default` is the same 8px. Use `rounded-ds-sm` for an intended 4px.
+Other stock radii (sm..3xl)/spacing/fonts/colors remain untouched. The exporter currently
 omits numeric lineHeight values; generated typography is not used by components
 in this phase, so surface migrations must explicitly apply the DESIGN.md leading.
 CSS colors retain authored rgba precision rather than exporter's hex rounding.
@@ -46,11 +47,12 @@ The actual family name is Inter Variable (the spec's Inter), applied only to the
 existing root stack. Brand and monospace timers are unchanged. Font metrics/glyphs
 are the sole intended visual exception; review separate font-on screenshots.
 
-## UI primitives and review gallery
+## Dormant UI foundation and review gallery
 
-The primitives in `src/components/ui/` are used by the app (they are no longer
-dormant). `SegmentedControl`, `ActionMenu` and `Textarea` have no app user and are
-deleted by draft PR #141 (still present on main until it merges). App Tailwind content includes `src/components/ui/`; only `ui/gallery/` and tests are excluded.
+`src/components/ui/` is deliberately excluded from app Tailwind content while
+primitives are dormant. Nothing in the app imports that folder. Surface migrations
+must include the migrated primitive files in app content when introducing imports.
+This prevents review-only utilities and tests from changing the shipped stylesheet.
 `can-hover:` wraps real `:hover` in `(hover: hover)`; `coarse:` wraps utilities in
 `(pointer: coarse)`. Stock hover behavior and every existing token value are unchanged.
 The fourth Node regression test compiles both variants with Tailwind/PostCSS.

@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProPresenterStatusResponse } from "../types";
+import type { ProPresenterSettingsInput, ProPresenterStatusResponse } from "../types";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 
 const status: ProPresenterStatusResponse = {
@@ -349,5 +349,80 @@ describe("ProPresenterSetupPanel", () => {
     expect(bar.contains(screen.getByRole("button", { name: "Test connection" }))).toBe(false);
     expect(bar.contains(screen.getByRole("button", { name: "Refresh timers and Looks" }))).toBe(false);
     expect(screen.getByText("Selecting a Look does not change Presentation until you save these settings.")).toBeInTheDocument();
+  });
+
+  it("shows one plain alert with Try again when the load failed, and recovers when the load works", async () => {
+    const onRetryLoad = vi.fn();
+    const props = { message: null, onRefreshTimers: vi.fn(), onSave: vi.fn(), onTest: vi.fn(), pendingOperation: null, onRetryLoad } as const;
+    const view = render(
+      <ProPresenterSetupPanel {...props} error="Can't reach StagePilot. Check that it is running, then try again." propresenter={null} />,
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Can't reach StagePilot");
+    expect(screen.queryByText("Loading Presentation configuration…")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetryLoad).toHaveBeenCalledOnce();
+    view.rerender(<ProPresenterSetupPanel {...props} error={null} propresenter={status} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the form and does not offer a load retry when a save failed", () => {
+    render(
+      <ProPresenterSetupPanel error="StagePilot hit an error. Try again." message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} onRetryLoad={vi.fn()} pendingOperation={null} propresenter={status} />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("StagePilot hit an error. Try again.");
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("1025")).toBeInTheDocument();
+  });
+});
+
+describe("Presentation hold-until-saved conformance (guard)", () => {
+  const mount = (extra: { onSave?: (settings: ProPresenterSettingsInput) => void; onDirtyChange?: (dirty: boolean) => void; onTest?: () => void } = {}) => render(
+    <ProPresenterSetupPanel
+      error={null}
+      message={null}
+      onDirtyChange={extra.onDirtyChange}
+      onRefreshTimers={vi.fn()}
+      onSave={extra.onSave ?? vi.fn()}
+      onTest={extra.onTest ?? vi.fn()}
+      pendingOperation={null}
+      propresenter={status}
+    />,
+  );
+  const bar = () => document.querySelector("[data-save-bar]")!;
+  const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
+    { label: "Host", value: "192.0.2.10", saved: "127.0.0.1", payload: { host: "192.0.2.10" } },
+    { label: "Port", value: "1100", saved: "1025", payload: { port: 1100 } },
+    { label: "Timeout (seconds)", value: "7", saved: "3", payload: { request_timeout_seconds: 7 } },
+    { label: "ProPresenter Look", value: "look-worship", saved: "look-default", payload: { look_id: "look-worship" } },
+  ];
+  it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved, payload }) => {
+    const onSave = vi.fn();
+    const onDirtyChange = vi.fn();
+    mount({ onSave, onDirtyChange });
+    const control = screen.getByLabelText(label);
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+    expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining(payload));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(saved);
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("Test connection and Refresh are explicit actions and say they use the saved settings while edits are waiting", () => {
+    const onTest = vi.fn();
+    mount({ onTest });
+    expect(screen.queryByText(/use the saved settings/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "192.0.2.10" } });
+    expect(screen.getByText(/Test connection and Refresh use the saved settings/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(onTest).toHaveBeenCalledOnce();
   });
 });

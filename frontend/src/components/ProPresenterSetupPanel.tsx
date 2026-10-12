@@ -8,30 +8,36 @@ import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
+import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
+import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 
 export function ProPresenterSetupPanel({
   propresenter,
   error,
+  onRetryLoad,
   message,
   pendingOperation,
   onSave,
   onTest,
   onRefreshTimers,
   onClose,
+  onDirtyChange,
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
+  onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "save" | "test" | "refresh" | null;
   onSave: (settings: ProPresenterSettingsInput) => void;
   onTest: () => void;
   onRefreshTimers: () => void;
   onClose?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("1025");
@@ -86,7 +92,15 @@ export function ProPresenterSetupPanel({
     timeout: configuredTimeout !== undefined && timeout.trim() !== String(configuredTimeout),
   };
   const changeCount = Object.values(held).filter(Boolean).length;
+  useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
+  const attempt = useSaveAttempt("propresenter-configuration");
+  const portNumber = Number(port);
+  const timeoutNumber = Number(timeout);
+  const errHost = attempt.attempted && !host.trim() ? "Enter a host." : undefined;
+  const errPort = attempt.attempted && !(Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535) ? "Enter a port from 1 to 65535." : undefined;
+  const errTimer = attempt.attempted && !timerName.trim() ? "Choose a timer." : undefined;
+  const errTimeout = attempt.attempted && !(Number.isFinite(timeoutNumber) && timeoutNumber > 0 && timeoutNumber <= 60) ? "Enter a timeout above 0 and up to 60 seconds." : undefined;
   const wasSaving = useRef(false);
   useEffect(() => {
     const saving = pendingOperation === "save";
@@ -112,11 +126,13 @@ export function ProPresenterSetupPanel({
     setLookId(propresenter.look_id ?? "");
     setTimeout(String(propresenter.request_timeout_seconds));
     setSaveFailed(false);
+    attempt.reset();
   };
 
   const save = () => {
     // Before Presentation is enabled, Save works with no edits (as it did before); afterwards a clean Save is a no-op.
-    if (!parsedSettings || busy || (changeCount === 0 && propresenter?.enabled)) return;
+    if (busy || (changeCount === 0 && propresenter?.enabled)) return;
+    if (!parsedSettings) { attempt.refuse(); return; }
     setSaveFailed(false);
     onSave(parsedSettings);
   };
@@ -145,7 +161,7 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      {propresenter && disabled && (
+      {propresenter && disabled && !error && (
         <InlineAlert className="mt-4" tone="warning">
           Save these settings to enable Presentation, then restart StagePilot.
         </InlineAlert>
@@ -153,14 +169,14 @@ export function ProPresenterSetupPanel({
 
       <h3 className="mt-5 font-semibold text-ink">Basic</h3>
       <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field heldChange={held.host} label="Host">
+        <Field error={errHost} heldChange={held.host} label="Host">
           <Input
             disabled={busy}
             onChange={(event) => setHost(event.target.value)}
             value={host}
           />
         </Field>
-        <Field heldChange={held.port} label="Port">
+        <Field error={errPort} heldChange={held.port} label="Port">
           <Input
             disabled={busy}
             inputMode="numeric"
@@ -168,7 +184,7 @@ export function ProPresenterSetupPanel({
             value={port}
           />
         </Field>
-        <Field heldChange={held.timer} label="Detected timer">
+        <Field error={errTimer} heldChange={held.timer} label="Detected timer">
           <Select
             disabled={busy}
             onChange={(event) => setTimerName(event.target.value)}
@@ -185,7 +201,7 @@ export function ProPresenterSetupPanel({
             ))}
           </Select>
         </Field>
-        <Field heldChange={held.timeout} label="Timeout (seconds)">
+        <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
           <Input
             disabled={busy}
             inputMode="decimal"
@@ -239,11 +255,9 @@ export function ProPresenterSetupPanel({
         </Button>
       </div>
 
-      {(error || message) && (
-        <InlineAlert className="mt-4" tone={error ? "danger" : "success"}>
-          {error ?? message}
-        </InlineAlert>
-      )}
+      {changeCount > 0 && <p className="mt-3 text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
+
+      <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

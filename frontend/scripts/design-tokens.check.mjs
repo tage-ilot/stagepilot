@@ -30,9 +30,16 @@ test("pointer variants generate scoped real hover and coarse target CSS", async 
   assert.ok(coarse.nodes.some((node) => node.prop === "min-height" && node.value === "44px"));
   assert.equal(config.future?.hoverOnlyWhenSupported, undefined);
 });
+test("DEFAULT radius is the ds-default token (8px)", () => {
+  const radius = resolveConfig(config).theme.borderRadius;
+  assert.equal(radius.DEFAULT, "8px");
+  assert.equal(radius.DEFAULT, radius["ds-default"]);
+  assert.equal(radius.DEFAULT, radius["ds-lg"]);
+  assert.doesNotMatch(readFileSync(resolve(frontend, "tailwind.config.js"), "utf8"), /TODO Phase 3/);
+});
 test("compatibility keeps stock radii, spacing, brand; stage colours are gone", () => {
   const theme = resolveConfig(config).theme;
-  assert.equal(theme.borderRadius.DEFAULT, "0.25rem");
+  assert.equal(theme.borderRadius.DEFAULT, "8px");
   assert.equal(theme.borderRadius.lg, "0.5rem");
   assert.equal(theme.borderRadius["2xl"], "1rem");
   assert.equal(theme.borderRadius["ds-default"], "8px");
