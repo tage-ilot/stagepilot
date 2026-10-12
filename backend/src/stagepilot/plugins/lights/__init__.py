@@ -1,4 +1,4 @@
-"""Lights MIDI-output integration exports."""
+"""Lighting MIDI-output integration exports."""
 
 from stagepilot.plugins.lights.client import (
     MidiOutputBackendContract,
