@@ -191,7 +191,8 @@ export default {
     "ds-xl": "12px",
     "ds-2xl": "16px",
     "ds-full": "9999px",
-    "ds-default": "8px"
+    "ds-default": "8px",
+    "DEFAULT": "8px"
   },
   "spacing": {
     "ds-xs": "4px",
@@ -210,7 +211,6 @@ export default {
     "panel": "0 18px 50px rgba(0, 0, 0, 0.22)"
   }
 } },
-  // TODO Phase 3/surfaces: promote ds-default to DEFAULT after migrating bare rounded.
   // ui/** primitives are in the app CSS; tests and the gallery stay out.
   plugins: [function ({ addUtilities, addVariant }) {
     addUtilities({ ".text-shadow-label": { textShadow: "0 1px 2px rgb(10 10 12 / 0.55)" } });
