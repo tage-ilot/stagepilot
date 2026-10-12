@@ -701,7 +701,7 @@ do three different jobs. Rule: **a row's shape says what kind of thing it is.**
    existing "Playback connection type" select in Advanced is promoted to this.
 2. **Extra options = Advanced:** the one tinted row with a one-line summary.
 3. **Read-only information (Recent activity) = Activity:** neutral grey with a
-   dashed top rule and a count badge (`12 events`), no service tone.
+   dashed top rule and a teal count badge (`12 events`), no service tone.
 4. **A one-off value (a specific computer address) is a choice in the field it
    belongs to** ("Other computer…" at the end of the computer select), not a
    separate collapsed row.
