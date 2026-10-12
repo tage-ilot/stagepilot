@@ -17,8 +17,15 @@ to 8080. Address discovery validates the handshake and heartbeat and sends no
 Playback application commands. The copied transport uses only the Python
 standard library; no dependency or MIDI transport implementation was changed.
 
-Receive/reconnect continues with capped 1/2/4/8/15-second backoff. Five seconds
-without a valid heartbeat disconnects even when other messages arrive. Failure
+When Playback is not reachable StagePilot reconnects by itself (Remote Connections
+turned off and on, a network drop, or a Playback restart). It re-probes the manual
+host, else the last known good address, else loopback, once a second with a
+one-second timeout: one cheap probe, no backoff. The full network scan is separate
+and rare: only when auto-scan is on and no address is saved, and at most once every
+45 seconds (probe timeout 3 seconds). A manual host is exclusive: it is probed alone,
+never falls back to scanning, and never to MIDI. Reconnecting does not change the
+saved address or the saved song order. Five seconds without a valid heartbeat
+disconnects even when other messages arrive. Failure
 status includes `Playback unavailable; remote connections may be off`. Playback
 may disable remote connections when it restarts; re-enable them in Playback.
 Find closes the old listener and starts a fresh address search; it does not
@@ -42,7 +49,8 @@ projection still checks heartbeat expiry every 50 ms even without incoming event
 In API mode every MIDI action (including simulated MIDI) is ignored with
 `ignored: MIDI is not the selected connection method`. Song-order validity never
 changes ownership: healthy API with stale/unknown order remains connected and sole
-owner, blocks starts/restarts, and allows API pause/stop outside discovery.
+owner, blocks starts/restarts, and allows API pause/stop outside discovery. Resume and seek need a valid order
+mapped to StagePilot's current song; otherwise they stay monitor-only.
 Discovery suppresses both inputs until exit. Queued work rechecks current ownership
 and ownership generations.
 
@@ -111,9 +119,29 @@ setlist/plan reorder changes; StagePilot does not claim that stronger guarantee.
 | --- | --- |
 | `song.started`, known non-active position, valid order | `dispatch_song_position(N)` |
 | `song.started`, already active position, valid order | `restart_current` |
-| `song.paused`, `song.stopped` outside discovery | `stop_timer`, even while stale |
-| `song.resumed` | Monitor only |
-| selected/changed/ended, section, seek/jump, fade, pad, snapshot and unknown | Monitor only |
+| `song.paused` outside discovery, valid order and current song | `stop_timer_at(position)`: stops and keeps the remaining time |
+| `song.paused`, otherwise (stale order, other song, no position) | `stop_timer`, even while stale |
+| `song.stopped` outside discovery | `stop_timer`, even while stale |
+| `song.resumed`, valid order, Playback song is StagePilot's current song | `resume_timer_at(position)`: countdown continues from the Playback position |
+| `seek`, same conditions | `seek_timer(position)`: remaining time re-applied from the new position; keeps running if running, otherwise only the frozen value changes |
+| First heartbeat after a reconnect, playing, same conditions | `resume_timer_at(position)` (alignment); ignored when Playback is not playing |
+| `song.resumed`/`seek`/reconnect, stale order or a different song | Monitor only |
+| selected/changed/ended, section, jump, fade, pad and unknown | Monitor only |
+
+Stop and pause are the same state: there is one stopped timer status, not a separate
+paused one. A stop (Playback pause or stop, or the manual Stop timer control) keeps the
+remaining seconds and song position instead of blanking them; the dashboard keeps
+its existing stopped wording and shows the frozen remaining time. Reset position
+still clears it. Remaining time is the Planning Center duration minus the Playback
+position, rounded and clamped at 0. A song start at position under two seconds
+(seek to start, then play) is still the existing song-started restart. Heartbeats are
+one second apart, so about one second of timing error is expected.
+
+Consumers: the presentation countdown holds on stop and, on resume or seek, sets the
+remaining seconds and starts it again (seek while stopped only updates the held value).
+Lighting sends nothing while stopped; after a resume or seek it sends only cues that
+are still upcoming from the new position, never a burst of earlier ones. MIDI has no
+distinct pause message, so a MIDI stop is a stop and there is no MIDI resume.
 
 Continuing song changes emit changed then started; changed never double-fires an
 action. Duplicate unchanged heartbeats do not create another start. All actions

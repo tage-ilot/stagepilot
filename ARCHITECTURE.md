@@ -121,9 +121,8 @@ API source. Its copied stdlib WebSocket transport hands typed observations to a
 queueing; immutable mapping/discovery and listener generations prevent suppressed
 or old-connection work from dispatching later. The same action dispatcher used
 by MIDI handles known 1-based song positions, restarts and timer stops. API mode
-keeps the existing MIDI listener as fallback. A connection-only arbiter selects
-one action owner, prefers heartbeat-healthy API after stable failback, projects
-one connected state, and deduplicates cross-source actions. Stale song order
+never starts MIDI (no automatic fallback). A connection-only arbiter reports one
+connected state, ignores MIDI actions in API mode, and deduplicates cross-source actions. Stale song order
 gates API starts without changing ownership. Source switches close and join old
 listeners; native and network MIDI transports are unchanged. The only outbound Playback commands
 are Next/Previous inside an explicitly confirmed, stopped-only, bounded discovery
