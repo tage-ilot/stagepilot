@@ -17,14 +17,26 @@ from .find import (
     SCAN_BLOCK_DETAIL,
     DiscoveryResult,
     DiscoverySource,
+    Probe,
     classify_exception,
     find_playback,
+    probe,
     saved_address_blocked,
 )
 from .normalizer import Heartbeat, Normalizer, PlaybackEvent
 from .ws import WebSocket, WSClosed
 
 _LOG = get_logger("playback")
+
+# Re-probe the saved/last-known-good address (and loopback) this often. One cheap
+# single probe with a short timeout; there is no backoff, so a returning Playback is
+# found within about a second.
+RECONNECT_PROBE_INTERVAL = 1.0
+RECONNECT_PROBE_TIMEOUT = 1.0
+# Full network scan: only when auto-scan is on and no address is saved, and no more
+# often than this (the scan is expensive; the cheap probe runs every second).
+FULL_SCAN_INTERVAL = 45.0
+FULL_SCAN_PROBE_TIMEOUT = 3.0
 
 
 @dataclass(frozen=True)
@@ -99,9 +111,11 @@ class PlaybackClient:
         options: ConnectionOptions | None = None,
         *,
         observer: Observer | None = None,
-        finder: Finder = _find,
+        finder: Finder | None = None,
+        probe_endpoint: Probe = probe,
+        clock: Callable[[], float] = time.monotonic,
         socket_factory: SocketFactory = WebSocket,
-        reconnect_delays: tuple[float, ...] = (1, 2, 4, 8, 15),
+        reconnect_delays: tuple[float, ...] = (RECONNECT_PROBE_INTERVAL,),
         heartbeat_timeout: float = 5.0,
         history_capacity: int = 100,
     ) -> None:
@@ -114,7 +128,13 @@ class PlaybackClient:
             raise ValueError("Playback timeouts and capacities must be positive")
         self.options = options or ConnectionOptions()
         self._observer = observer
-        self._finder = finder
+        self._finder = finder or _find
+        self._custom_finder = finder
+        self._probe_endpoint = probe_endpoint
+        self._clock = clock
+        self._cancel = threading.Event()
+        self._last_good: DiscoveryResult | None = None
+        self._last_scan: float | None = None
         self._socket_factory = socket_factory
         self._delays = reconnect_delays
         self._heartbeat_timeout = heartbeat_timeout
@@ -139,11 +159,15 @@ class PlaybackClient:
         async with self._lifecycle_lock:
             if self._task is None and self.options.enabled:
                 self._stopping.clear()
+                self._cancel.clear()
+                self._last_good = None
+                self._last_scan = None
                 self._task = asyncio.create_task(self._run(), name="playback-receive")
 
     async def stop(self) -> None:
         async with self._lifecycle_lock:
             self._stopping.set()
+            self._cancel.set()
             if self._socket:
                 self._socket.close()
             # Do not cancel to_thread work: wait for its bounded network timeout
@@ -163,6 +187,48 @@ class PlaybackClient:
     async def find(self) -> DiscoveryResult | None:
         return await asyncio.to_thread(self._finder, self.options)
 
+    def _locate(self, options: ConnectionOptions) -> DiscoveryResult | None:
+        """Blocking, bounded, cancellable lookup used for every (re)connect attempt.
+
+        Cheap each second: the manual host, else the last good address, else loopback.
+        The expensive LAN scan is limited to auto-scan with no saved address, at most
+        once per FULL_SCAN_INTERVAL. A manual host never falls back to scanning.
+        """
+        timeout = RECONNECT_PROBE_TIMEOUT
+        cancelled = self._cancel.is_set
+        if options.host_override is not None:
+            return find_playback(
+                host_override=options.host_override,
+                port=options.port,
+                auto_scan=False,
+                timeout=timeout,
+                probe_endpoint=self._probe_endpoint,
+                cancelled=cancelled,
+            )
+        good = self._last_good
+        if good is not None and good.port == options.port and not cancelled():
+            heartbeat = self._probe_endpoint(good.host, good.port, timeout)
+            if heartbeat:
+                return DiscoveryResult(good.host, good.port, good.source, heartbeat)
+        now = self._clock()
+        scan_due = options.auto_scan and (
+            self._last_scan is None or now - self._last_scan >= FULL_SCAN_INTERVAL
+        )
+        if scan_due:
+            self._last_scan = now
+        return find_playback(
+            port=options.port,
+            auto_scan=scan_due,
+            timeout=FULL_SCAN_PROBE_TIMEOUT if scan_due else timeout,
+            probe_endpoint=self._probe_endpoint,
+            cancelled=cancelled,
+        )
+
+    async def _locate_async(self) -> DiscoveryResult | None:
+        if self._custom_finder is not None:
+            return await asyncio.to_thread(self._custom_finder, self.options)
+        return await asyncio.to_thread(self._locate, self.options)
+
     def _publish(self, status: PlaybackStatus, events: tuple[PlaybackEvent, ...] = ()) -> None:
         if status.heartbeat is not None and status.heartbeat is not self._status.heartbeat:
             self._heartbeat_serial += 1
@@ -180,7 +246,7 @@ class PlaybackClient:
             endpoint: DiscoveryResult | None = None
             valid_heartbeat = False
             try:
-                endpoint = await self.find()
+                endpoint = await self._locate_async()
                 if self._stopping.is_set():
                     break
                 if endpoint is None:
@@ -189,6 +255,7 @@ class PlaybackClient:
                     self._socket_factory, endpoint.host, endpoint.port, self._heartbeat_timeout
                 )
                 self._socket = ws
+                self._last_good = endpoint
                 norm = Normalizer(fast_transport=self.options.fast_transport)
                 last_heartbeat = time.monotonic()
                 while not self._stopping.is_set():
