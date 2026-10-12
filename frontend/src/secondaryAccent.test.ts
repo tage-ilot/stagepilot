@@ -20,13 +20,13 @@ describe("secondary accent teal guard", () => {
     expect(color("live-reload-text")).toBe("#77dadd");
   });
 
-  it("Lighting keeps sky for its identity fill and its own text token", () => {
-    expect(color("integration-lighting")).toBe("#38bdf8");
-    expect(color("integration-lighting-text")).toBe("#bae6fd");
+  it("Lighting uses its own pink-red identity and text token, not the info teal", () => {
+    expect(color("integration-lighting")).toBe("#d53367");
+    expect(color("integration-lighting-text")).toBe("#e687a5");
     for (const source of [badgeSource, buttonSource]) {
-      const lights = source.split("\n").find((line) => /^\s*lights:/.test(line))!;
-      expect(lights).toContain("text-integration-lighting-text");
-      expect(lights).not.toContain("text-info-text");
+      const lighting = source.split("\n").find((line) => /^\s*lighting:/.test(line))!;
+      expect(lighting).toContain("text-integration-lighting-text");
+      expect(lighting).not.toContain("text-info-text");
     }
   });
 

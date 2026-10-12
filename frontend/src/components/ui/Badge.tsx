@@ -16,10 +16,11 @@ export interface BadgeProps extends ComponentPropsWithoutRef<"span"> {
 }
 
 const tinted: Record<Tone, string> = {
-  services: "border-integration-services/30 bg-integration-services/10 text-integration-services-text",
-  presentation: "border-integration-presentation/30 bg-integration-presentation/10 text-integration-presentation-text",
-  playback: "border-integration-playback/30 bg-integration-playback/10 text-integration-playback-text",
-  lighting: "border-integration-lighting/30 bg-integration-lighting/10 text-integration-lighting-text",
+  services: "border-integration-services-soft/30 bg-integration-services-soft/10 text-integration-services-text",
+  presentation: "border-integration-presentation-soft/30 bg-integration-presentation-soft/10 text-integration-presentation-text",
+  playback: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text",
+  lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text",
+  backend: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text",
   success: "border-success/30 bg-success/10 text-success-text",
   warning: "border-warning/30 bg-warning/10 text-warning-text",
   danger: "border-danger/30 bg-danger/10 text-danger-text",

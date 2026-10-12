@@ -4,12 +4,25 @@ import { cx } from "./cx";
 
 export type PanelVariant = "default" | "setup" | "live";
 
+export type PanelIdentity = "services" | "presentation" | "playback" | "lighting" | "backend";
+
+// Identity = a 1px top border in the -soft role (never a rail or wash; the setup wash stays primary-derived).
+const identityTop: Record<PanelIdentity, string> = {
+  services: "border-t-integration-services-soft",
+  presentation: "border-t-integration-presentation-soft",
+  playback: "border-t-integration-playback-soft",
+  lighting: "border-t-integration-lighting-soft",
+  backend: "border-t-integration-backend-soft",
+};
+
 export interface PanelProps extends ComponentPropsWithoutRef<"section"> {
   variant?: PanelVariant;
   /** Element to render. Nothing else is polymorphic. */
   as?: "section" | "div" | "article";
   /** Adds overscroll-contain so a scrolling panel never chains scroll to the page. */
   scrollable?: boolean;
+  /** Connection identity: tints the top border only. */
+  tone?: PanelIdentity;
 }
 
 // Fills: the generated colour tokens are opaque; the app draws the panel at 94% (live: 90%) alpha so the
@@ -26,7 +39,7 @@ const variants: Record<PanelVariant, string> = {
 };
 
 export const Panel = forwardRef<HTMLElement, PanelProps>(function Panel(
-  { variant = "default", as = "section", scrollable = false, className, ...rest },
+  { variant = "default", as = "section", scrollable = false, tone, className, ...rest },
   ref,
 ) {
   const Element = as as ElementType;
@@ -39,6 +52,7 @@ export const Panel = forwardRef<HTMLElement, PanelProps>(function Panel(
         "rounded-ds-xl border border-edge shadow-elevation-default",
         variants[variant],
         scrollable && "overscroll-contain",
+        tone && identityTop[tone],
         className,
       )}
       {...rest}

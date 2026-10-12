@@ -141,7 +141,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
       </div>
 
       {status && (
-        <section className="space-y-2 rounded-ds-xl bg-integration-playback/5 p-4" aria-labelledby="song-order-heading">
+        <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
           <h3 id="song-order-heading" className="font-bold text-ink">Song order</h3>
           <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>

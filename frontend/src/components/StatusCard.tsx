@@ -19,7 +19,20 @@ const statusTextStyles: Record<Status, string> = {
   error: "text-danger-text",
 };
 
+type Identity = "services" | "presentation" | "playback" | "lighting" | "backend";
+
+// Identity = thin icon-tile tint only (DESIGN.md Connection colours / Colour collisions). Never a rail or wash.
+// -soft is the role for tints and borders on dark surfaces (Playback base is 2.0:1 there).
+const tileTint: Record<Identity, string> = {
+  services: "border-integration-services-soft/30 bg-integration-services-soft/15",
+  presentation: "border-integration-presentation-soft/30 bg-integration-presentation-soft/15",
+  playback: "border-integration-playback-soft/30 bg-integration-playback-soft/15",
+  lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/15",
+  backend: "border-integration-backend-soft/30 bg-integration-backend-soft/15",
+};
+
 export function StatusCard({
+  tone,
   title,
   accessibleTitle = title,
   status,
@@ -30,6 +43,8 @@ export function StatusCard({
   onClick,
   interactive = true,
 }: {
+  /** Connection identity: tints the icon tile. */
+  tone?: Identity;
   title: string;
   accessibleTitle?: string;
   status: Status;
@@ -47,6 +62,7 @@ export function StatusCard({
       aria-controls={interactive ? controls : undefined}
       aria-expanded={interactive ? active : undefined}
       data-status={status}
+      data-tone={tone}
       className={`status-card group min-w-0 rounded-xl border p-3 text-left touch-manipulation transition-colors duration-150 motion-reduce:transition-none sm:p-4 ${
         active
           ? "border-primary/70"
@@ -66,7 +82,7 @@ export function StatusCard({
         </div>
         <span
           aria-hidden="true"
-          className="status-card-icon grid h-12 w-12 shrink-0 place-items-center rounded-ds-xl border border-edge-subtle bg-edge-subtle text-ink-muted transition-colors can-hover:group-hover:text-ink"
+          className={`status-card-icon grid h-12 w-12 shrink-0 place-items-center rounded-ds-xl border ${tone ? tileTint[tone] : "border-edge-subtle bg-edge-subtle"} text-ink-muted transition-colors can-hover:group-hover:text-ink`}
           data-status-icon-background
           data-status-motion-part="icon"
         >

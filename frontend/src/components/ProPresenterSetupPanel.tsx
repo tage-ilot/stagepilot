@@ -142,7 +142,7 @@ export function ProPresenterSetupPanel({
   const lookDetected = Boolean(propresenter?.looks.some((look) => look.id === lookId));
 
   return (
-    <Panel className="mt-5" id="propresenter-configuration" variant="setup">
+    <Panel className="mt-5" id="propresenter-configuration" tone="presentation" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Presentation configuration"
         description="Send the countdown timer to Presentation, with its configuration kept between StagePilot launches."

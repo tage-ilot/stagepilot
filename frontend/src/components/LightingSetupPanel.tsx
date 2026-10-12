@@ -256,7 +256,7 @@ export function LightingSetupPanel({
     && !lights?.outputs.some((output) => output.name === outputName);
 
   return (
-    <Panel className="mt-5" id="lighting-configuration" variant="setup">
+    <Panel className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lighting configuration"
         description="Send elapsed-time MIDI Note On/Off cues to Lighting."
@@ -305,14 +305,14 @@ export function LightingSetupPanel({
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting/20" : "bg-surface-900"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting-soft/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"
             >
               <span
                 aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
             <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-info-text" : "text-ink-muted"}>#</span>

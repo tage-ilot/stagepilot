@@ -108,7 +108,7 @@ describe("Disclosure", () => {
     expect(document.querySelector("[data-variant='activity']")).not.toHaveAttribute("data-tone");
   });
 
-  it.each(["services", "presentation", "playback", "lighting"] as const)("advanced %s uses its own colour", (tone) => {
+  it.each(["services", "presentation", "playback", "lighting", "backend"] as const)("advanced %s uses its own colour", (tone) => {
     render(<Disclosure variant="advanced" tone={tone} title="A">x</Disclosure>);
     expect(screen.getByRole("button")).toHaveClass(`text-advanced-${tone}`);
     expect(document.querySelector("[data-part='bar']")).toHaveClass(`border-advanced-${tone}`);

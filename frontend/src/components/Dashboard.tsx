@@ -947,6 +947,7 @@ export function Dashboard({
           onClick={() => toggleConnection("planning-center")}
           status={connectionViews.planningCenter.status}
           title="Services"
+          tone="services"
         />
         <StatusCard
           interactive={canConfigure}
@@ -958,6 +959,7 @@ export function Dashboard({
           onClick={() => toggleConnection("midi")}
           status={connectionViews.midi.status}
           title="Playback"
+          tone="playback"
         />
         <StatusCard
           interactive={canConfigure}
@@ -969,6 +971,7 @@ export function Dashboard({
           onClick={() => toggleConnection("propresenter")}
           status={connectionViews.propresenter.status}
           title="Presentation"
+          tone="presentation"
         />
         <StatusCard
           interactive={canConfigure}
@@ -979,6 +982,7 @@ export function Dashboard({
           onClick={() => toggleConnection("lights")}
           status={connectionViews.lights.status}
           title="Lighting"
+          tone="lighting"
         />
         <StatusCard
           interactive={canConfigure}
@@ -990,6 +994,7 @@ export function Dashboard({
           onClick={() => toggleConnection("backend")}
           status={backendStatus}
           title="Backend"
+          tone="backend"
         />
       </section>
 
