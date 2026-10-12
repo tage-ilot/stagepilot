@@ -383,9 +383,9 @@ STAGEPILOT_PROPRESENTER_HEALTH_CHECK_SECONDS=10
 The dashboard can change host, port, timer name, and request timeout. Accepted
 values are persisted to the local settings file and reused after restart.
 
-## Lights MIDI output
+## Lighting MIDI output
 
-The dashboard **Lights** panel is the normal configuration path. Its output
+The dashboard **Lighting** panel is the normal configuration path. Its output
 port, channel, Note On/Off pulse length, and per-song cue maps are stored in the
 ordinary StagePilot settings file. Cue maps use the stable Planning Center
 source song ID when one is available.
