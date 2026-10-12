@@ -52,10 +52,19 @@ test("compatibility keeps stock radii, spacing, brand; stage colours are gone", 
   assert.equal(theme.colors.neutral[500], "#737373");
 });
 test("font is self-hosted with swap", () => {
-  const css = readFileSync(resolve(frontend, "node_modules/@fontsource-variable/inter/index.css"), "utf8");
+  const css = readFileSync(resolve(frontend, "node_modules/@fontsource-variable/geist/index.css"), "utf8");
   assert.match(css, /font-display: swap/);
-  assert.match(css, /font-family: 'Inter Variable'/);
+  assert.match(css, /font-family: 'Geist Variable'/);
   assert.doesNotMatch(css, /https?:/);
+});
+test("app font is Geist and nothing names Inter", () => {
+  const files = ["tailwind.config.js", "src/index.css", "src/main.tsx", "src/components/ui/gallery/main.tsx", "package.json"];
+  for (const f of files) {
+    const text = readFileSync(resolve(frontend, f), "utf8");
+    assert.doesNotMatch(text, /\bInter\b|fontsource-variable\/inter/i, f);
+  }
+  assert.match(readFileSync(resolve(frontend, "tailwind.config.js"), "utf8"), /Geist Variable/);
+  assert.match(readFileSync(resolve(frontend, "src/index.css"), "utf8"), /"Geist Variable"/);
 });
 test("generated output is current; either stale output is rejected", () => {
   const dir = mkdtempSync(resolve(tmpdir(), "sp-tokens-"));

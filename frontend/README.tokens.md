@@ -41,9 +41,9 @@ The `--sp-*` aliases and `stage.*` colours were deleted at lock-in (card 6.1). M
 These exceptions live in generator compatibility maps, not DESIGN.md. New
 code must use normative tokens, not compat variables. Remove aliases at lock-in.
 
-Inter Variable is bundled with font-display: swap and no CDN. Existing Tauri
+Geist Variable is bundled with font-display: swap and no CDN. Existing Tauri
 font-src 'self' data: permits emitted local woff2 assets; no CSP change needed.
-The actual family name is Inter Variable (the spec's Inter), applied only to the
+The actual family name is Geist Variable (the spec's Geist), applied only to the
 existing root stack. Brand and monospace timers are unchanged. Font metrics/glyphs
 are the sole intended visual exception; review separate font-on screenshots.
 
