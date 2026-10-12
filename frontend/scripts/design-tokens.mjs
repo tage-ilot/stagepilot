@@ -57,7 +57,8 @@ let stale = false;
 for (const [path, contents] of [["tailwind.config.js", config], ["src/design-tokens.css", css]]) {
   const target = resolve(frontend, path);
   if (process.argv.includes("--check")) {
-    if (readFileSync(target, "utf8") !== contents) { console.error(`Stale generated tokens: ${path}`); stale = true; }
+    // Windows checkouts may convert line endings (CRLF); compare content, not line endings.
+    if (readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== contents) { console.error(`Stale generated tokens: ${path}`); stale = true; }
   } else writeFileSync(target, contents);
 }
 if (stale) process.exitCode = 1;
