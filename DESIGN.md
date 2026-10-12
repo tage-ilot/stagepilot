@@ -3,7 +3,7 @@ version: alpha
 name: StagePilot
 description: >-
   A dark, high-contrast live-production control surface. Calm slate panels,
-  one hot coral accent for "live / primary", and unmistakable status colors,
+  one deep red accent (#c7231d) for "live / primary", and unmistakable status colors,
   readable at arm's length in a dim booth. Values are AS RENDERED today
   unless marked CHANGED (decided) or OPEN (still needs an answer).
 
@@ -22,10 +22,13 @@ colors:
   text-body: "#cbd5e1"         # slate-300, default panel copy
   text-muted: "#94a3b8"        # slate-400: labels, kickers, hints, placeholders. DECIDED: replaces text-muted (slate-500 #64748b failed AA at 3.4:1). 7:1+ on every surface
   # --- Brand / primary ---
-  primary: "#ff6238"           # coral. LIVE state, primary emphasis, focus-adjacent
-  primary-hover: "#ff805e"
-  primary-focus: "#ff9b7e"     # focus ring colour
-  on-primary: "#020617"        # text on a solid primary fill
+  primary: "#c7231d"           # DECIDED (owner, 2026-10-11): deep red replaces coral. LIVE state, primary emphasis. 3.2:1 on panels, so for fills, rails, dots and borders, never text
+  primary-hover: "#cd3934"     # tint 10%. The lightest tint that keeps white button text at 4.5:1 or better (4.96:1)
+  primary-focus: "#dd7b77"     # tint 40%. Focus ring and focus outlines (6.2:1 on panels)
+  primary-active: "#b3201a"    # shade 10%. Pressed state of a solid primary button (white text 6.7:1)
+  primary-text: "#e3918e"      # tint 50%. Primary used AS TEXT or a thin icon on dark (7.5:1 on panels)
+  on-primary: "#ffffff"        # text on a solid primary fill (5.7:1). Dark text is only 3.5:1 on this red, so it is retired
+  on-light: "#020617"          # DARK text on the LIGHT fills (emerald, amber, orange, sky, fuchsia): the old on-primary value, renamed because primary is now a dark-enough red that takes white text
   # --- Status (meaning never changes between screens) ---
   success: "#34d399"           # connected / running / ready      (emerald-400)
   success-text: "#a7f3d0"      #                                  (emerald-200)
@@ -72,6 +75,16 @@ colors:
   loader-track: "#07101f"
   loader-outline: "#dbeafe"
   loader-fill: "#38bdf8"
+  # --- Film-flare palette sampled from the background photo (owner, 2026-10-11) ---
+  # ONLY for live-item washes, glows and warm shadow tints. Never for text, buttons or status.
+  flare-red: "#c7231d"         # same as primary: the brightest red in the photo
+  flare-ember: "#b63e32"
+  flare-brick: "#8d2620"
+  flare-wine: "#71201b"
+  flare-umber: "#471e1b"
+  flare-night: "#2b1817"
+  flare-orange: "#db7037"
+  flare-gold: "#dcaf50"
 
 typography:
   # DECIDED: Geist (self-hosted variable font via @fontsource-variable/geist, no CDN, so it works offline in the desktop app).
@@ -232,13 +245,13 @@ components:
     height: "{spacing.touch-target}"
   badge-success:
     backgroundColor: "{colors.success}"
-    textColor: "{colors.on-primary}"
+    textColor: "{colors.on-light}"
     typography: "{typography.badge}"
     rounded: "{rounded.full}"
     padding: "6px 12px"
   badge-warning:
     backgroundColor: "{colors.warning}"
-    textColor: "{colors.on-primary}"
+    textColor: "{colors.on-light}"
     typography: "{typography.badge}"
     rounded: "{rounded.full}"
     padding: "6px 12px"
@@ -263,6 +276,25 @@ components:
     textColor: "{colors.text-body}"
     rounded: "{rounded.lg}"
     padding: "{spacing.md}"
+primary-scale:                   # custom section, REFERENCE ONLY (owner supplied, 2026-10-11). Only the five named primary-* tokens above are used by components
+  shade-10: "#b3201a"
+  shade-20: "#9f1c17"
+  shade-30: "#8b1914"
+  shade-40: "#771511"
+  shade-50: "#64120f"
+  shade-60: "#500e0c"
+  shade-70: "#3c0a09"
+  shade-80: "#280706"
+  shade-90: "#140303"
+  tint-10: "#cd3934"
+  tint-20: "#d24f4a"
+  tint-30: "#d86561"
+  tint-40: "#dd7b77"
+  tint-50: "#e3918e"
+  tint-60: "#e9a7a5"
+  tint-70: "#eebdbb"
+  tint-80: "#f4d3d2"
+  tint-90: "#f9e9e8"
 text-shadow:                     # custom section. DECIDED: LIGHT label text only gets a shadow. Dark label text gets none.
   on-dark-text: "0 1px 2px rgb(10 10 12 / 0.55)"     # light text (on dark or tinted buttons): small very-dark-grey shadow (owner: looks great)
 elevation-options:               # custom section: PICK ONE strength for elevation.default / overlay (levels 2-5 scale the three soft layers)
@@ -297,7 +329,7 @@ should feel calm when everything is fine and become impossible to miss when it
 is not.
 
 1. **Calm slate, one hot accent.** Everything is a dark blue-grey panel except
-   the one thing that matters *right now*, which gets coral.
+   the one thing that matters *right now*, which gets the primary red.
 2. **Colour means state.** Green, amber, red are reserved for status, never
    decoration.
 3. **Each service has an identity hue** so a user can tell Playback from
@@ -327,9 +359,9 @@ cinematic glow. Both are accents. Neither takes over.
 
 ### Film flare: where it lives (light and warmth)
 - **Yes:** the photo background, the warm brown-red soft shadow lit from the
-  upper left, the coral wash and left rail on the live item, and the faint
+  upper left, the red wash and left rail on the live item, and the faint
   warm glow behind the timer.
-- **Rule:** coral light means *live or selected*. Glow is earned: it shows on
+- **Rule:** the red light means *live or selected*. Glow is earned: it shows on
   at most one live item per view. Everything else is quiet slate.
 - **No:** glow, neon outlines or gradients on ordinary panels, buttons or text;
   cool grey or pure black shadows; extra film effects (grain overlays, lens
@@ -345,7 +377,7 @@ header and popovers, as today); the same icon + heading + text card repeated
 for everything; a pulsing dot on things that are not live; invented numbers or
 metrics; decorative animation that moves or delays a control; gradient text;
 emoji as icons; nested rounded boxes that add no hierarchy; and any new colour
-that is not a status, a service, or coral.
+that is not a status, a service, or the primary red.
 
 ### Check before shipping a screen
 1. **Does the 8-bit or film touch appear only where the rules above allow?**
@@ -366,24 +398,36 @@ that is not a status, a service, or coral.
   (weight 700) for emphasis. The old cool-white `#f1f5f9` is gone. The old
   `text-quiet` (slate-500, 72 uses, only 3.4:1) is replaced by `text-muted`
   (7:1 or better on every surface).
-- **Primary (`#ff6238`, coral)** marks the live item (now-playing rail,
-  current song row), the layout-save action, and the expanded/selected state.
+- **Primary (`#c7231d`, deep red; replaced coral on 2026-10-11)** marks the live
+  item (now-playing rail, current song row), the layout-save action, and the
+  expanded/selected state. Its family: `primary-hover` `#cd3934` (tint 10%),
+  `primary-focus` `#dd7b77` (tint 40%, focus ring), `primary-active` `#b3201a`
+  (shade 10%, pressed), `primary-text` `#e3918e` (tint 50%, for red used as
+  text). The full 10% to 90% shade and tint scale is kept under
+  `primary-scale` as a reference. **The red alone is 3.2:1 on panels, so it is
+  for fills, rails, borders and dots (3:1 is enough for those); text and thin
+  icons use `primary-text`.**
+- **Red now has two jobs, so they are told apart by form (decided default):**
+  primary is a *solid fill with white text* or a *rail*; errors are pale
+  `danger-text` words with a rose dot and icon; destructive confirms use
+  `danger-solid` (rose `#e11d48`) with a verb that says what is lost. A
+  destructive button never uses `primary`, and `primary` never carries an error.
 - **Text on fills (DECIDED rule): light text on dark fills, dark text on light
   fills.** Most of the app is dark, so light text stays the norm.
-  - Light fills (coral, amber, emerald, sky-400, fuchsia-400): dark text
-    (`on-primary`).
+  - Light fills (amber, emerald, sky-400, fuchsia-400, orange): dark text (`on-light`, `#020617`).
+  - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
   - Dark red fill (`danger-solid` `#e11d48`, 4.7:1 with white): white text
     (`on-danger`); rose-500 was too light for that (3.7:1).
   - Where an **error** colour needs dark text (a light rose fill such as
     rose-300/400), use dark **red** `on-danger-soft` `#4c0519`, never black.
   - **Minimum 4.5:1** for any text, and this file is linted for it.
-- **One solid action colour (DECIDED): coral is the only primary button.**
+- **One solid action colour (DECIDED): the primary red is the only primary button.**
   Every panel's main action (Save, Connect, Unlock, Update and Restart) is
-  coral with dark text. Integration hues are for identity only: tinted
+  primary red with white text. Integration hues are for identity only: tinted
   borders, tinted secondary buttons, panel accents. Consequences in code:
   - "Save general settings" (StagePilot panel, red) and the MIDI save (magenta) become
-    coral. Red means error or destructive; a plain save should not look like one.
-  - "Update and Restart" (sky solid) and the two PIN/unlock buttons (sky) become coral.
+    the primary red. Red now also means primary, so the form rule above (solid + white text = primary; pale text + dot = error) keeps them apart.
+  - "Update and Restart" (sky solid) and the two PIN/unlock buttons (sky) become primary red.
   - "Use <plan>" in the Services plan picker (amber solid) becomes a
     tinted Services (blue) button. Amber is only for warnings.
   - `danger-solid` stays for destructive confirms only.
@@ -414,11 +458,11 @@ that is not a status, a service, or coral.
   at rest and fill on hover, with dark text on green and orange fills, white
   on blue and red. The red hover fill is darkened one step (rose-600,
   4.7:1) because rose-500 with white text was 3.7:1. These do not follow the
-  coral-only primary rule on purpose: they are a severity scale, not "actions".
+  primary-only rule on purpose: they are a severity scale, not "actions".
 - **Widget borders (decided: three)** are white at 6/10/18% opacity so they sit right on any
   surface. `border` (10%) is the default. The old 5% and 7% merged into `border-subtle`; the old 15% and 20% (the least used) merged into `border-medium`.
-- The **retro loading bar** is blue pixel-art, deliberately not coral
-  (decided: keep). Use it lightly; its contrast against the coral/slate UI is
+- The **retro loading bar** is blue pixel-art, deliberately not red
+  (decided: keep). Use it lightly; its contrast against the red/slate UI is
   the point. **Decided: remove the white "scan" bar that sweeps along its
   leading edge** (`.loading-progress-scan` in `index.css`, a `<span>` in
   `App.tsx`). About 20 hardcoded hex values in `index.css`.
@@ -495,7 +539,7 @@ that is not a status, a service, or coral.
   the same idea and replaces `shadow-2xl`. **Decided** (owner approved after review).
 - The old "printed" offset shadow is deleted (decided); `elevation.default` is the only panel shadow.
 - **Strength:** `elevation.default` is level 1 until you pick a stronger level from `elevation-options` (5 levels, each darker). The dialog and toast shadow scales with it.
-- Live panel: 5px coral left rail with a faint glow. Hover on cards raises
+- Live panel: 5px red left rail with a faint glow. Hover on cards raises
   border opacity, not size.
 - Dragging a widget: opacity ~0.78 plus a large drop shadow.
 - Glass: `backdrop-blur-xl` (5 uses) on header/popover chrome.
@@ -532,19 +576,19 @@ add noise without adding hierarchy.
 ## Components
 - **Panel (one recipe, two variants; decided):** `panel` fill, widget border
   border, 12px radius, `elevation.default`. Variant `panel-setup` adds the
-  coral-to-clear 120° wash and 20px padding. The `!important` overrides on
+  red-to-clear 120° wash and 20px padding. The `!important` overrides on
   `.setup-panel` go away when they merge.
 - **Status card:** icon tile + title + status dot and word + detail line.
   Collapses to an icon-only tile in compact mode.
-- **Live (now-playing) panel:** coral rail, 135° coral wash fading out by 42%,
+- **Live (now-playing) panel:** red rail, 135° red wash fading out by 42%,
   oversize tabular timer.
 - **Buttons.** Height: 44px for live controls, 36px for everything else.
-  - *Solid* (primary): coral, dark text.
+  - *Solid* (primary): `primary` red, white text; hover `primary-hover`, pressed `primary-active`, focus ring `primary-focus`.
   - *Tinted* (most of the app): `hue @ 10%` fill, `hue @ 20-30%` border, light
     `hue-200` text, `hue @ 20%` on hover.
   - Disabled: 40% opacity (a few use 50%; normalise to 40%), `cursor-not-allowed`.
   - **Label shadow (decided):** light text on a dark or tinted button gets a small very-dark-grey shadow (`text-shadow.on-dark-text`). **Dark text gets no shadow.** A light shadow under dark text was tried and rejected by the owner because it looks bad (it reads as a blurry halo). If dark labels ever need more punch, change the fill or the text colour, not add a shadow.
-  - Primary = coral (decided). Secondary = tinted in the panel's hue.
+  - Primary = red (decided). Secondary = tinted in the panel's hue.
 - **Inputs (decided):** `surface-950`, widget border, 8px radius, 44px
   tall, `text-muted` placeholder. Native checkboxes (7), `accent-rose-500` on 3.
 - **Badges/pills:** full radius, uppercase, 700 weight, hue at 10-15% fill with
@@ -588,7 +632,7 @@ because the current code does it.
   than usual, red and stopped = failed.
 - The white lead-in line on the bar is removed.
 - **Remote sign-in (PIN or login):** a single centred card with the wordmark,
-  one sentence of purpose, the field(s), and **one coral button**. Errors appear
+  one sentence of purpose, the field(s), and **one primary red button**. Errors appear
   under the field, in `danger-text`, announced to screen readers.
 
 ### Choice fields and menus
@@ -705,7 +749,7 @@ width below 480px.
      button ready to press to confirm.
   3. **Saving:** `Saving…`.
   4. **Waiting (held changes):** amber, `2 changes waiting. Not saved yet.`
-     with `Discard` and a coral **`Save configuration`**. Held changes only take
+     with `Discard` and a primary red **`Save configuration`**. Held changes only take
      effect when this is pressed, **whether or not a show is running** (decided).
   5. **Couldn't save:** red, what failed and `Try again`; the field keeps its
      value.
@@ -791,7 +835,7 @@ a skill check against beta 31 or against this guide.
 4. Name it from the Vocabulary table. Add any new word to the table.
 5. It must work at 320px wide, with mouse hover and with touch (the priority). Do not regress the keyboard and screen-reader support that exists today, but do not gold-plate it.
 6. A new colour is never needed: status colours for state, the service colour
-   for identity, coral for the one primary action.
+   for identity, the primary red for the one primary action.
 
 ## Do's and Don'ts
 - Do use status colours only for state, integration hues only for identity.
@@ -800,7 +844,7 @@ a skill check against beta 31 or against this guide.
 - Do keep error colours reddish, including text on a light error fill.
 - Do put new colours here first, then use the token. No raw hex in components.
 - Do pair state colour with a word or icon (status cards already do).
-- Don't use coral for decoration, or for more than one "live" item per view.
+- Don't use the primary red for decoration, for text (use `primary-text`), or for more than one "live" item per view.
 - Don't add radii, font sizes, shadows or z-indexes not listed here.
 - Don't put a bordered box inside a panel except fields, the Advanced / Activity
   rows and the save bar (see Borders inside panels).
@@ -861,12 +905,12 @@ kept because the current code does it.
 - Three widget borders (6 / 10 / 18%). One warm layered default shadow (old
   shadow deleted); stronger levels 2 to 5 exist for the owner to choose.
 - Light button labels carry a small very-dark-grey text shadow. Dark labels
-  (on coral, amber, emerald, sky fills) carry none: the light shadow under dark
+  (on amber, emerald, sky fills) carry none: the light shadow under dark
   text was tried and rejected.
 - Advanced tones are 30% service colour mixed with 70% `text-muted`.
 - Light text on dark fills, dark text on light fills; error text keeps its
   reddish colour. Contrast minimum 4.5:1 for text.
-- Coral is the only solid primary button. Playback is fuchsia `#e879f9`;
+- The primary red is the only solid primary button. Playback is fuchsia `#e879f9`;
   MIDI is a connection method, not a service colour. Live controls keep four
   severity colours.
 - Geist is bundled (replaced Inter, 2026-10-11). Three tracking steps; one 11px micro size; bare `rounded`
@@ -903,6 +947,23 @@ kept because the current code does it.
 **Process**
 - Documentation-only PR first, then component migrations in small PRs; styling
   and behaviour changes are never mixed in one PR.
+
+## Primary colour change (owner, 2026-10-11)
+Coral `#ff6238` is retired everywhere. The primary is the deep red `#c7231d`,
+with the supplied shade and tint scales under `primary-scale`. Mapping:
+- `primary` coral -> `#c7231d`; `primary-hover` -> tint 10% `#cd3934`;
+  `primary-focus` -> tint 40% `#dd7b77`; new `primary-active` shade 10%
+  `#b3201a`; new `primary-text` tint 50% `#e3918e`.
+- Text on a primary fill is now **white** (5.7:1), not dark (dark would be 3.5:1).
+- The red is 3.2:1 on panels: fill, rail, border and dot only. As text it is
+  `primary-text`.
+- Wash tints that were coral (`rgb(255 98 56 / x)`) become the primary at the
+  same opacity.
+- Red is now both "live/primary" and the error family. Told apart by form:
+  primary = solid fill + white text or a rail; error = pale text + dot + icon;
+  destructive = `danger-solid` rose. Hover/focus/active never swap between them.
+- Photo-sampled `flare-*` colours are for washes and glows on the live item
+  only, never for text, buttons or status.
 
 ## Still open
 
