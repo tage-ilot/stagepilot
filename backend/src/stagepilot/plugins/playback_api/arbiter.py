@@ -2,11 +2,11 @@
 
 import time
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel
 
-from stagepilot.core.actions import ActionDispatcher, ActionOutcome
+from stagepilot.core.actions import ActionDispatcher, ActionOutcome, TimerPositionDispatcher
 from stagepilot.core.events import ActionName
 from stagepilot.core.state import StateStore
 
@@ -143,6 +143,29 @@ class ArbitratedDispatcher:
     async def dispatch_song_position(self, position: int, source: str = "api") -> ActionOutcome:
         return await self._dispatch(source, ("start", position), position=position)
 
+    async def _timer(self, call: tuple[str, float], source: str) -> ActionOutcome:
+        target = cast(TimerPositionDispatcher, self.dispatcher)
+        method = getattr(target, call[0])
+        outcome: ActionOutcome = await method(call[1], source=source)
+        return outcome
+
+    async def resume_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        return await self._dispatch(
+            source, ("resume", None), timer_call=("resume_timer_at", position_seconds)
+        )
+
+    async def seek_timer(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        return await self._dispatch(
+            source, ("seek", None), timer_call=("seek_timer", position_seconds)
+        )
+
+    async def stop_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        return await self._dispatch(
+            source,
+            (ActionName.STOP_TIMER.value, None),
+            timer_call=("stop_timer_at", position_seconds),
+        )
+
     async def _dispatch(
         self,
         source: str,
@@ -150,10 +173,13 @@ class ArbitratedDispatcher:
         *,
         action: ActionName | None = None,
         position: int | None = None,
+        timer_call: tuple[str, float] | None = None,
     ) -> ActionOutcome:
         if self.suppressed():
             return ActionOutcome(False, "ignored: song order discovery active")
         if source == "midi.simulation" and not self.arbiter.allows("playback_api"):
+            if timer_call is not None:
+                return await self._timer(timer_call, source)
             if position is not None:
                 return await self.dispatcher.dispatch_song_position(position, source=source)
             assert action is not None
@@ -173,7 +199,9 @@ class ArbitratedDispatcher:
             return ActionOutcome(False, "ignored: duplicate cross-source Playback action")
         # Reserve before awaiting: simultaneous queues cannot dispatch the same action.
         self.arbiter.remember(origin, key)
-        if position is not None:
+        if timer_call is not None:
+            outcome = await self._timer(timer_call, source)
+        elif position is not None:
             outcome = await self.dispatcher.dispatch_song_position(position, source=source)
         else:
             assert action is not None

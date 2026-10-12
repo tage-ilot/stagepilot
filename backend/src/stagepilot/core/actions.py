@@ -32,3 +32,19 @@ class ActionDispatcher(Protocol):
     ) -> ActionOutcome:
         """Start the exact one-based service-plan song requested by an input."""
         ...
+
+
+class TimerPositionDispatcher(Protocol):
+    """Optional position-aware timer actions (Playback pause/resume/seek)."""
+
+    async def resume_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Continue the current song's countdown from a Playback position."""
+        ...
+
+    async def seek_timer(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Re-apply the remaining time from a new position, keeping run state."""
+        ...
+
+    async def stop_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Stop, freezing the remaining time at an explicit position."""
+        ...

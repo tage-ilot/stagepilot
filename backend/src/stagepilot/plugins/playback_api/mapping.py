@@ -1,8 +1,9 @@
 """Receive-only action mapping; discovery and transport remain separate owners."""
 
 from dataclasses import dataclass
+from typing import cast
 
-from stagepilot.core.actions import ActionDispatcher, ActionOutcome
+from stagepilot.core.actions import ActionDispatcher, ActionOutcome, TimerPositionDispatcher
 from stagepilot.core.events import ActionName
 from stagepilot.core.state import StateStore
 from stagepilot.plugins.playback_api.normalizer import Heartbeat, PlaybackEvent
@@ -21,6 +22,7 @@ class PlaybackMapper:
     def __init__(self, dispatcher: ActionDispatcher, state_store: StateStore) -> None:
         self._dispatcher = dispatcher
         self._state_store = state_store
+        self._timer = cast(TimerPositionDispatcher, dispatcher)
         self.song_order: tuple[int, ...] = ()
         self.captured_version: int | None = None
         self.setlist_id: int | str | None = None
@@ -103,7 +105,13 @@ class PlaybackMapper:
         event = observation.event
         if observation.discovery or self.discovery or observation.generation != self._generation:
             return None
-        if event.type in ("song.paused", "song.stopped"):
+        if event.type == "song.paused":
+            # Stop works even while the saved order is stale; the exact frozen
+            # position is used only when this is provably the current song.
+            if event.position is not None and await self._current_song_is(observation):
+                return await self._timer.stop_timer_at(event.position, source="playback_api")
+            return await self._dispatcher.dispatch(ActionName.STOP_TIMER, source="playback_api")
+        if event.type == "song.stopped":
             return await self._dispatcher.dispatch(ActionName.STOP_TIMER, source="playback_api")
         if (
             event.type == "transport.reverted"
@@ -111,6 +119,8 @@ class PlaybackMapper:
             and not event.playing
         ):
             return await self._dispatcher.dispatch(ActionName.STOP_TIMER, source="playback_api")
+        if event.type in ("song.resumed", "seek", "state.snapshot"):
+            return await self._reapply(observation)
         if event.type != "song.started" or self.stale or self._heartbeat is None:
             return None
         if event.song_id not in self.song_order:
@@ -124,3 +134,28 @@ class PlaybackMapper:
                 ActionName.RESTART_CURRENT, source="playback_api"
             )
         return await self._dispatcher.dispatch_song_position(position, source="playback_api")
+
+    async def _current_song_is(self, observation: Observation) -> bool:
+        """True only for a valid order whose mapped song is StagePilot's current song."""
+        event = observation.event
+        if self.stale or self._heartbeat is None or event.song_id not in self.song_order:
+            return False
+        state = await self._state_store.snapshot()
+        if self.discovery or self.stale or observation.generation != self._generation:
+            return False
+        return state.current_song is not None and state.current_song_index == self.song_order.index(
+            event.song_id
+        )
+
+    async def _reapply(self, observation: Observation) -> ActionOutcome | None:
+        """Resume / seek / reconnect alignment; monitor-only unless mapped and valid."""
+        event = observation.event
+        if event.position is None:
+            return None
+        if event.type == "state.snapshot" and not event.playing:
+            return None  # Reconnected while not playing: nothing to align.
+        if not await self._current_song_is(observation):
+            return None
+        if event.type == "seek":
+            return await self._timer.seek_timer(event.position, source="playback_api")
+        return await self._timer.resume_timer_at(event.position, source="playback_api")
