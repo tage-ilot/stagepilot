@@ -144,6 +144,20 @@ const state: ApplicationState = {
 };
 
 describe("LightsSetupPanel", () => {
+  it("keeps 40 cues in a bounded scroll region and renders a 200-character cue label", () => {
+    const label = "W".repeat(200);
+    const cues = Array.from({ length: 40 }, (_, index) => ({ id: `c${index}`, at_seconds: index * 5, note: 60, velocity: 100, label: index === 0 ? label : `Cue ${index}` }));
+    const many = { ...settings, settings: { ...settings.settings, lights: { ...settings.settings.lights, cue_maps: { "song-1": { song_key: "song-1", song_title: "Holy Forever", cues } } } } };
+    render(
+      <LightsSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={many} state={state} />,
+    );
+    const region = screen.getByTestId("lighting-cue-list");
+    expect(region).toHaveClass("overflow-y-auto", "overscroll-contain");
+    const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Lighting cue label"]'));
+    expect(labels).toHaveLength(40);
+    expect(labels[0]).toHaveValue(label);
+  });
+
   it("shows its single connection method as a line of text, not a select", () => {
     render(
       <LightsSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,

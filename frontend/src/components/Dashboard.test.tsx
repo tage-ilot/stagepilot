@@ -214,6 +214,7 @@ function renderDashboard(
     error = null,
     pendingPlanId = null,
     selectPlan = vi.fn(),
+    dispatch = vi.fn(),
     state = applicationState(serviceLoad),
     settings = productionSettings,
     updater,
@@ -223,6 +224,7 @@ function renderDashboard(
     error?: string | null;
     pendingPlanId?: string | null;
     selectPlan?: (planId: string) => void;
+    dispatch?: () => void;
     state?: ApplicationState;
     settings?: SettingsResponse | null;
     updater?: UpdaterController;
@@ -232,7 +234,7 @@ function renderDashboard(
   return render(
     <Dashboard
       actionMessage={actionMessage}
-      dispatch={vi.fn()}
+      dispatch={dispatch}
       error={error}
       health={null}
       live
@@ -1429,3 +1431,42 @@ describe("Dashboard connection configuration panels", () => {
   });
 });
 
+
+describe("Long content and empty lists", () => {
+  const LONG = "W".repeat(200);
+  const base = loadedPlan.songs[0]!;
+
+  it("wraps a 200-character song title and plan title instead of truncating them", () => {
+    const plan = {
+      ...loadedPlan,
+      title: LONG,
+      songs: [{ ...base, id: "long", title: LONG }],
+    };
+    renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { plan, next_song: plan.songs[0] }) });
+    const row = within(screen.getByRole("list", { name: "Service plan order" })).getByText(LONG);
+    expect(row).not.toHaveClass("truncate");
+    expect(row).toHaveClass("break-words");
+    expect(screen.getByRole("heading", { name: LONG })).toHaveClass("break-words");
+  });
+
+  it("renders 300 songs in the plan list", () => {
+    const songs = Array.from({ length: 300 }, (_, index) => ({ ...base, id: `s${index}`, order: index + 1, title: `Song ${index + 1}` }));
+    renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs } }) });
+    expect(within(screen.getByRole("list", { name: "Service plan order" })).getAllByRole("listitem")).toHaveLength(300);
+  });
+
+  it("shows one sentence and one button when the plan has no songs, and the button reloads the plan", async () => {
+    const dispatch = vi.fn();
+    renderDashboard(loadedServiceState, { dispatch, state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs: [] }, next_song: null }) });
+    expect(screen.getByText("No songs in this service plan yet.")).toBeInTheDocument();
+    const plan = screen.getByText("No songs in this service plan yet.").parentElement as HTMLElement;
+    expect(within(plan).getAllByRole("button")).toHaveLength(1);
+    await userEvent.click(within(plan).getByRole("button", { name: "Reload service plan" }));
+    expect(dispatch).toHaveBeenCalledWith("reload_plan");
+  });
+
+  it("does not show the empty state when the plan has songs", () => {
+    renderDashboard(loadedServiceState);
+    expect(screen.queryByText("No songs in this service plan yet.")).not.toBeInTheDocument();
+  });
+});
