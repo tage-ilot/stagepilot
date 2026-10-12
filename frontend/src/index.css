@@ -66,6 +66,9 @@ body {
 }
 
 .loading-progress-track {
+  /* Containing block for .loading-progress-edge: without it the edge positions against
+     the page and draws a full-height line across the screen. */
+  position: relative;
   height: 18px;
   overflow: hidden;
   border: 3px solid var(--ds-surface-950);
