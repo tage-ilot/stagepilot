@@ -350,7 +350,7 @@ export function BackendSetupPanel({
           </span>
         </label>
         <div className="text-sm text-ink-body">
-          <label className="flex touch-manipulation items-start gap-3">
+          <label className="flex touch-manipulation items-start gap-3 coarse:min-h-ds-touch-target">
             <input
               checked={pinEnabled}
               className="mt-0.5 size-4 accent-primary"

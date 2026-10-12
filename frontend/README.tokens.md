@@ -18,10 +18,7 @@ omits numeric lineHeight values; generated typography is not used by components
 in this phase, so surface migrations must explicitly apply the DESIGN.md leading.
 CSS colors retain authored rgba precision rather than exporter's hex rounding.
 
-`stage.950/900/850` alias background/scrollbar-track/card. Unused stage.800/700
-remain compatibility-only until lock-in. `--sp-bg/text/accent/accent-hover/focus/
-danger` alias design background/ink/primary/primary-hover/primary-focus/danger-soft.
-Motion variables stay in index.css; they are unchanged. No component classes change.
+The `--sp-*` aliases and `stage.*` colours were deleted at lock-in (card 6.1). Motion variables (`--motion-fast`, `--motion-live`, `--ease`) live in index.css. `--brand-outline` (#000) is the one documented literal (wordmark outline).
 
 ## Compatibility mismatch ledger (baseline output wins in this PR)
 

@@ -37,7 +37,7 @@ test("DEFAULT radius is the ds-default token (8px)", () => {
   assert.equal(radius.DEFAULT, radius["ds-lg"]);
   assert.doesNotMatch(readFileSync(resolve(frontend, "tailwind.config.js"), "utf8"), /TODO Phase 3/);
 });
-test("compatibility keeps stock radii, spacing, brand and stage colors", () => {
+test("compatibility keeps stock radii, spacing, brand; stage colours are gone", () => {
   const theme = resolveConfig(config).theme;
   assert.equal(theme.borderRadius.DEFAULT, "8px");
   assert.equal(theme.borderRadius.lg, "0.5rem");
@@ -46,7 +46,7 @@ test("compatibility keeps stock radii, spacing, brand and stage colors", () => {
   assert.equal(theme.spacing["2xl"], undefined);
   assert.equal(theme.spacing["ds-2xl"], "24px");
   assert.equal(theme.fontFamily.brand, undefined);
-  assert.equal(theme.colors.stage[850], "#111923");
+  assert.equal(theme.colors.stage, undefined);
   assert.equal(theme.colors.idle, "#64748b");
   assert.equal(theme.colors.ink, "#f8f4ec");
   assert.equal(theme.colors.neutral[500], "#737373");
