@@ -252,3 +252,35 @@ The project has not yet committed to a secure credential-store implementation,
 a Python sidecar packaging toolchain, remote authentication, or a stable plugin
 distribution ABI. Those decisions require implementation and platform testing;
 the current interfaces should not be presented as compatibility guarantees.
+
+## Timer stop, resume and seek
+
+Stop and pause are the same state. `timer.status = "stopped"` keeps the
+countdown instead of blanking it. `GET /api/state` `timer` fields:
+
+- `status`: `idle | running | stopped | error` (no new status).
+- `duration_seconds`: seconds the current countdown was started with.
+- `started_at`: when it started (running only).
+- `position_seconds` (float | null): song position the countdown started from
+  (running) or was frozen at (stopped).
+- `remaining_seconds` (int | null): seconds left, set only while `stopped`
+  (frozen). While running, the UI derives it from `duration_seconds` and
+  `started_at`. Cleared by Reset position and when a different song is
+  selected.
+
+`StateService` methods (never raise; return `ActionOutcome(False, ...)` with no
+current song, no plan duration or a non-finite position; the caller decides
+whether the saved song order is valid):
+
+- `resume_timer_at(position)`: remaining = song duration minus position,
+  clamped at 0; runs the countdown from there; emits `timer.resumed`.
+- `seek_timer(position)`: re-applies remaining from the new position; keeps
+  running if running, otherwise only updates the frozen values; emits
+  `timer.seeked`.
+- `stop_timer_at(position)`: stops and freezes at an exact Playback position;
+  emits `timer.stop_requested` with the position and remaining seconds.
+- `dispatch(ActionName.STOP_TIMER)` is unchanged and now freezes from elapsed time.
+
+Events carry `TimerPayload` with `duration_seconds` (= remaining), `song`,
+`started_at`, `position_seconds`, `remaining_seconds` and `running`. If
+remaining is 0 on resume, `timer.stop_requested` follows `timer.resumed`.

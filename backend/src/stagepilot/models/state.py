@@ -147,6 +147,13 @@ class TimerState(BaseModel):
     status: TimerStatus = TimerStatus.IDLE
     duration_seconds: int | None = Field(default=None, ge=0)
     started_at: datetime | None = None
+    # Position in the song (seconds) when the countdown was last started
+    # (`running`) or frozen (`stopped`). None when unknown or blanked.
+    position_seconds: float | None = Field(default=None, ge=0)
+    # Seconds left on the countdown at the moment it was stopped. None while
+    # running (the UI derives it from duration_seconds and started_at), after
+    # a reset, or when unknown.
+    remaining_seconds: int | None = Field(default=None, ge=0)
     last_error: str | None = None
 
 
