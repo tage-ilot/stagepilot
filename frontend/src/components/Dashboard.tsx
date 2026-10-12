@@ -351,14 +351,14 @@ function SongRow({ song, current, next, hoverWarmup }: { song: Song; current: bo
       className={`group grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-ink/5 ${current ? "current-song-row" : ""}`}
       {...popoverHoverProps}
     >
-      <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : "bg-ink/5 text-ink-muted group-hover:bg-ink/10"}`}>
+      <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : next ? "bg-info/15 text-info-text group-hover:bg-info/25" : "bg-ink/5 text-ink-muted group-hover:bg-ink/10"}`}>
         {song.order}
       </span>
       <div className="min-w-0">
         <p className="break-words font-medium text-ink [overflow-wrap:anywhere]">{song.title}</p>
         <div className="mt-0.5 flex gap-2 font-type-micro text-type-micro uppercase">
           {current && <span className="text-primary-text">Current · live</span>}
-          {next && <span className="text-warning-text">Up next</span>}
+          {next && <span className="text-info-text">Up next</span>}
           {song.is_generic && <span className="text-warning-text">Generic item</span>}
           {!song.duration_seconds && <span className="text-danger-text">Missing duration</span>}
         </div>
