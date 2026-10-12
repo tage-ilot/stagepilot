@@ -46,7 +46,7 @@ describe("Field", () => {
     expect(screen.getByLabelText("Port")).not.toHaveAttribute("aria-describedby");
   });
 
-  it("shows the held marker and amber border", () => {
+  it("shows the held marker and warning border", () => {
     render(<Field label="Plan" heldChange><Input /></Field>);
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
     const input = screen.getByLabelText("Plan");
