@@ -15,7 +15,7 @@ import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink";
+const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-info active:text-info-active";
 const toneClass = {
   connected: "border-success/30 bg-success/10 text-success-text",
   midi: "border-warning/30 bg-warning/10 text-warning-text",
@@ -27,7 +27,7 @@ const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 
 
-// A checkbox row with the same held marker as Field heldChange (amber dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
+// A checkbox row with the same held marker as Field heldChange (warning dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
 function HeldRow({ held, id, children }: { held: boolean; id: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3">

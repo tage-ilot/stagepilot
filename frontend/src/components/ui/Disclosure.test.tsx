@@ -86,7 +86,7 @@ describe("Disclosure", () => {
   it("renders a tabular-nums count badge for activity and pluralises", () => {
     const { rerender } = render(<Disclosure variant="activity" title="Recent activity" count={12}>x</Disclosure>);
     const badge = screen.getByText("12 events");
-    expect(badge).toHaveClass("tabular-nums");
+    expect(badge).toHaveClass("tabular-nums", "bg-info/15", "text-info-text", "border-info/30");
     rerender(<Disclosure variant="activity" title="Recent activity" count={1}>x</Disclosure>);
     expect(screen.getByText("1 event")).toBeInTheDocument();
     rerender(<Disclosure variant="advanced" tone="services" title="Advanced" count={3}>x</Disclosure>);

@@ -1,6 +1,6 @@
-# Lights and Lightkey MIDI output
+# Lighting and Lightkey MIDI output
 
-StagePilot's **Lights** connection sends short MIDI Note On/Note Off pulses to a
+StagePilot's **Lighting** connection sends short MIDI Note On/Note Off pulses to a
 lighting application. Lightkey is the initial supported and tested target, but
 the transport uses standard MIDI messages rather than a Lightkey-only API.
 
@@ -15,7 +15,7 @@ For the production layout described here:
 On the MacBook, open **Audio MIDI Setup**, show MIDI Studio, open **MIDI Network
 Setup**, and create and enable a session. Allow the iMac to connect. On the
 iMac, open its MIDI Network Setup and connect to the MacBook session. The
-connected session should then appear in StagePilot's **Lights** output list.
+connected session should then appear in StagePilot's **Lighting** output list.
 
 In Lightkey, open **Settings → External Control** and select the network session
 under Input. Add a MIDI trigger to a cue, then use **Send test cue** in StagePilot

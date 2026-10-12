@@ -227,7 +227,7 @@ class SongLightingCueMap(BaseModel):
 
 
 class LightsSettings(BaseModel):
-    """Validated MIDI output and per-song cue timelines for Lights."""
+    """Validated MIDI output and per-song cue timelines for Lighting."""
 
     enabled: bool = False
     transport: MidiTransport = MidiTransport.LOCAL
