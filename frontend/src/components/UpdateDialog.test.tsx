@@ -134,4 +134,20 @@ describe("StagePilot update UI", () => {
     );
     expect(screen.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
   });
+
+  it("indeterminate progress has a reduced-motion alternative (static bar, text still shows state)", () => {
+    render(
+      <UpdateDialog
+        onCancel={vi.fn()}
+        onCloseError={vi.fn()}
+        onConfirm={vi.fn()}
+        onRetry={vi.fn()}
+        returnFocus={createRef()}
+        updater={{ ...confirmation, status: "downloading", progress: { downloadedBytes: 0, totalBytes: null, percentage: null, stage: "downloading" } }}
+      />,
+    );
+    const bar = screen.getByRole("progressbar").firstElementChild as HTMLElement;
+    expect(bar).toHaveClass("animate-pulse", "motion-reduce:animate-none");
+    expect(screen.getByText(/downloaded|Preparing/)).toBeVisible();
+  });
 });

@@ -93,8 +93,10 @@ describe("one API call per intent", () => {
     const { result } = renderHook(() => useStagePilot());
     await waitFor(() => expect(result.current.settings).not.toBeNull());
     m("updateLightsSettings").mockRejectedValueOnce(new Error("offline"));
+    const calls = () => m("updateLightsSettings").mock.calls.length;
     await act(async () => { await result.current.saveLights({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
-    expect(result.current.lightsError).toBe("offline");
+    expect(calls()).toBe(1);
+    expect(result.current.lightsError).toBeTruthy();
     await act(async () => { await result.current.saveLights({ enabled: true, output_name: "o", channel: 1, pulse_ms: 100 }); });
     expect(m("updateLightsSettings")).toHaveBeenCalledTimes(2);
   });

@@ -59,6 +59,7 @@ cargo check --manifest-path desktop/src-tauri/Cargo.toml
 
 Use `ruff format` or `cargo fmt` without `--check` to apply formatting. Frontend
 formatting follows the scripts and configuration committed in that workspace.
+Run `npm --prefix frontend run lint` and `npx --yes @google/design.md@0.4.0 lint DESIGN.md` before pushing frontend changes.
 
 Tests should describe observable behavior, including bounds, timeouts, malformed
 input, reconnects, and failure isolation. Vendor API tests must use mocks and

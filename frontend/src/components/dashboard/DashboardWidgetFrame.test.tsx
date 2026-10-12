@@ -39,4 +39,18 @@ describe("DashboardWidgetFrame", () => {
     expect(screen.getByRole("button", { name: "Move Recent Event Stream earlier" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Move Recent Event Stream later" })).toBeDisabled();
   });
+
+  it("fails safe on touch: the drag handle owns its gesture and every control has a 44px coarse target", () => {
+    render(
+      <DashboardWidgetFrame editing first={false} id="service-plan" label="Service plan" last={false} onMove={vi.fn()}>
+        <div>Service content</div>
+      </DashboardWidgetFrame>,
+    );
+    const handle = screen.getByRole("button", { name: "Drag Service plan to a new dashboard position" });
+    expect(handle).toHaveClass("touch-none", "coarse:h-ds-touch-target");
+    for (const name of ["Move Service plan earlier", "Move Service plan later"]) {
+      const arrow = screen.getByRole("button", { name });
+      expect(arrow).toHaveClass("touch-manipulation", "coarse:h-ds-touch-target", "coarse:w-ds-touch-target", "motion-reduce:transition-none");
+    }
+  });
 });
