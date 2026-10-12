@@ -15,7 +15,7 @@ export interface FieldProps {
 
 /**
  * Label above, control, hint, then error. Wiring uses a small context (simpler than a render prop):
- * Input, Select and Textarea inside a Field pick up id, aria-describedby, aria-invalid and the held border.
+ * Input and Select inside a Field pick up id, aria-describedby, aria-invalid and the held border.
  * Field clones nothing. Place exactly one control inside.
  */
 export function Field({ label, hint, error, heldChange = false, className, children }: FieldProps) {

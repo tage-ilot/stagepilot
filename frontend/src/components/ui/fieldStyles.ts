@@ -1,6 +1,6 @@
 import { cx } from "./cx";
 
-// Shared look for Input, Select and Textarea. Written out in full so Tailwind can see every class.
+// Shared look for Input and Select. Written out in full so Tailwind can see every class.
 export const fieldBase =
   "block w-full min-h-ds-touch-target rounded-ds-lg border bg-surface-950 px-3 py-2.5 font-type-body-md text-type-body-md text-ink placeholder:text-ink-muted touch-manipulation transition-colors duration-[140ms] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40";
 

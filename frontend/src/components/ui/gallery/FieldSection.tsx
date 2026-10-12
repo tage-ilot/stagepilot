@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { Field } from "../Field";
 import { Input } from "../Input";
 import { Select } from "../Select";
-import { Textarea } from "../Textarea";
 import { Section, StateRow } from "./Section";
 import type { GalleryState } from "./states";
 
@@ -38,26 +37,18 @@ function SelectCell({ state, label, option = "Main hall" }: { state: GalleryStat
   );
 }
 
-function TextareaCell({ state, label }: { state: GalleryState; label: string }) {
-  return (
-    <Field label={label} error={state === "error" ? "Notes must be under 500 characters" : undefined}>
-      <Textarea data-gallery-target defaultValue="Doors open at nine." disabled={state === "disabled"} />
-    </Field>
-  );
-}
 
 const noLoading = (state: GalleryState, ui: ReactNode) =>
   state === "loading" ? <p data-gallery-unavailable className="text-sm text-ink-muted">Not applicable: text fields have no loading state.</p> : ui;
 
 export function FieldSection() {
   return (
-    <Section name="field" title="Field, Input, Select, Textarea">
+    <Section name="field" title="Field, Input, Select">
       <StateRow label="input" render={(s) => noLoading(s, <InputCell state={s} label="Service name" />)} />
       <StateRow label="input held change" render={(s) => noLoading(s, <InputCell state={s} label="Service name" held />)} />
       <StateRow label="input long label" render={(s) => noLoading(s, <InputCell state={s} label={longLabel} />)} />
       <StateRow label="select" render={(s) => <SelectCell state={s} label="Lighting output" />} />
       <StateRow label="select long option" render={(s) => <SelectCell state={s} label="Plan" option={longOption} />} />
-      <StateRow label="textarea" render={(s) => noLoading(s, <TextareaCell state={s} label="Notes" />)} />
     </Section>
   );
 }
