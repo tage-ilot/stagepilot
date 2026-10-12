@@ -7,7 +7,7 @@ export interface FieldProps {
   label: ReactNode;
   hint?: ReactNode;
   error?: ReactNode;
-  /** Visual marker only (amber dot, "Not saved yet", amber border). Save logic lives elsewhere. */
+  /** Visual marker only (warning dot, "Not saved yet", warning border). Save logic lives elsewhere. */
   heldChange?: boolean;
   className?: string;
   children: ReactNode;

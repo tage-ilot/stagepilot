@@ -27,7 +27,7 @@ const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 
 
-// A checkbox row with the same held marker as Field heldChange (amber dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
+// A checkbox row with the same held marker as Field heldChange (warning dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
 function HeldRow({ held, id, children }: { held: boolean; id: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3">
