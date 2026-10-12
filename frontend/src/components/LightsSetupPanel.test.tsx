@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ApplicationState,
+  LightingCue,
+  LightsSettingsInput,
   LightsStatusResponse,
   SettingsResponse,
   Song,
@@ -622,5 +624,103 @@ describe("LightsSetupPanel", () => {
       view.rerender(make({ error: "boom" }));
       expect(bar()).toHaveAttribute("data-state", "clean");
     });
+  });
+});
+
+describe("Lights hold-until-saved conformance (guard)", () => {
+  const twoOutputs: LightsStatusResponse = {
+    ...lights,
+    outputs: [
+      { name: "StagePilot to Lightkey", ambiguous: false, selected: true, connected: true },
+      { name: "Other output", ambiguous: false, selected: false, connected: false },
+    ],
+  };
+  type Fn<A extends unknown[]> = (...args: A) => void;
+  const mount = (extra: { onSaveSettings?: Fn<[LightsSettingsInput]>; onSaveCues?: Fn<[Song, LightingCue[]]>; onTest?: Fn<[number, number]>; onDirtyChange?: Fn<[boolean]> } = {}) => render(
+    <LightsSetupPanel
+      error={null}
+      lights={twoOutputs}
+      message={null}
+      onDirtyChange={extra.onDirtyChange}
+      onRefresh={vi.fn()}
+      onSaveCues={extra.onSaveCues ?? vi.fn()}
+      onSaveSettings={extra.onSaveSettings ?? vi.fn()}
+      onTest={extra.onTest ?? vi.fn()}
+      pendingOperation={null}
+      settings={settings}
+      state={state}
+    />,
+  );
+  const bar = () => document.querySelector("[data-save-bar]")!;
+
+  // Held controls: class (a). Every one must be marked, counted, restored by Discard, drive the dirty flag, and not save on change/blur.
+  const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
+    { label: "MIDI Output to Lighting Controller", value: "Other output", saved: "StagePilot to Lightkey", payload: { output_name: "Other output" } },
+    { label: "MIDI channel", value: "5", saved: "3", payload: { channel: 5 } },
+    { label: "Note length (ms)", value: "250", saved: "100", payload: { pulse_ms: 250 } },
+  ];
+  it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved, payload }) => {
+    const onSaveSettings = vi.fn();
+    const onDirtyChange = vi.fn();
+    mount({ onSaveSettings, onDirtyChange });
+    const control = screen.getByLabelText(label);
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    fireEvent.keyDown(control, { key: "Enter" });
+    expect(onSaveSettings).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+    expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSaveSettings).toHaveBeenCalledOnce();
+    expect(onSaveSettings).toHaveBeenCalledWith(expect.objectContaining(payload));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(saved);
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  // Immediate cue controls: class (b), saved on commit through onSaveCues, never counted as a held change.
+  it("cue label, velocity, note and Remove save immediately and never appear as held changes", () => {
+    const onSaveCues = vi.fn();
+    mount({ onSaveCues });
+    const label = screen.getByLabelText("Lighting cue label");
+    fireEvent.change(label, { target: { value: "Bridge" } });
+    fireEvent.blur(label);
+    const velocity = screen.getByLabelText("Lighting cue velocity");
+    fireEvent.change(velocity, { target: { value: "90" } });
+    fireEvent.blur(velocity);
+    fireEvent.change(screen.getByLabelText("Lighting cue note"), { target: { value: "76" } });
+    expect(onSaveCues).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole("button", { name: /^Remove cue at/ }));
+    expect(onSaveCues).toHaveBeenCalledTimes(4);
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+    expect(bar()).toHaveAttribute("data-state", "clean");
+  });
+
+  // Explicit actions: class (c).
+  it("Refresh outputs, Send test cue and the note-display switch are explicit actions that never touch held state", () => {
+    const onTest = vi.fn();
+    mount({ onTest });
+    fireEvent.click(screen.getByRole("button", { name: "Send test cue" }));
+    expect(onTest).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.change(screen.getByLabelText("Test lighting velocity"), { target: { value: "100" } });
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+    expect(bar()).toHaveAttribute("data-state", "clean");
+  });
+
+  it("per-cue Test is disabled with the same reason as Send test cue while the draft output differs from the saved one", () => {
+    const onTest = vi.fn();
+    mount({ onTest });
+    const cueTest = screen.getAllByRole("button", { name: "Test" })[0]!;
+    expect(cueTest).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("MIDI Output to Lighting Controller"), { target: { value: "Other output" } });
+    expect(cueTest).toBeDisabled();
+    expect(cueTest).toHaveAttribute("aria-describedby", screen.getByRole("button", { name: "Send test cue" }).getAttribute("aria-describedby"));
+    fireEvent.click(cueTest);
+    expect(onTest).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getAllByRole("button", { name: "Test" })[0]).toBeEnabled();
   });
 });

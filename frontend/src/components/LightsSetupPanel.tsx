@@ -62,6 +62,7 @@ export function LightsSetupPanel({
   message,
   pendingOperation,
   onClose,
+  onDirtyChange,
   onRefresh,
   onSaveSettings,
   onTest,
@@ -76,6 +77,7 @@ export function LightsSetupPanel({
   message: string | null;
   pendingOperation: "save" | "refresh" | "test" | "save-cues" | null;
   onClose?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onRefresh: () => void;
   onSaveSettings: (settings: LightsSettingsInput) => void;
   onTest: (note: number, velocity: number) => void;
@@ -198,6 +200,7 @@ export function LightsSetupPanel({
   const heldChannel = savedLights != null && channel !== String(savedLights.channel);
   const heldPulse = savedLights != null && pulseMs !== String(savedLights.pulse_ms);
   const changeCount = Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
+  useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const previousOperation = useRef<typeof pendingOperation>(null);
@@ -353,7 +356,7 @@ export function LightsSetupPanel({
               <Field label="Lighting cue label">
                 <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="Verse, chorus, blackout…" value={cue.label} />
               </Field>
-              <Button className="self-end" disabled={lights?.connection_status !== "connected" || pendingOperation !== null} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
+              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} tone="lights" variant="tinted">Test</Button>
               <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}

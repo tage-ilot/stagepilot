@@ -600,6 +600,30 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
   });
 
+  describe("leaving a setup panel with held changes (any panel, not only Playback)", () => {
+    const cases: Array<{ card: RegExp; close: string; field: string; value: string }> = [
+      { card: /^Presentation/, close: "Close Presentation configuration", field: "Host", value: "192.0.2.10" },
+      { card: /^Lights/, close: "Close Lights configuration", field: "Note length (ms)", value: "250" },
+      { card: /^StagePilot/, close: "Close StagePilot configuration", field: "Log level", value: "DEBUG" },
+    ];
+    it.each(cases)("asks before discarding held $field changes; clean panels close without asking", async ({ card, close, field, value }) => {
+      const user = userEvent.setup();
+      renderDashboard(loadedServiceState, { settings: productionSettings });
+      await user.click(screen.getByRole("button", { name: card }));
+      await user.click(screen.getByRole("button", { name: close }));
+      expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: card }));
+      fireEvent.change(screen.getByLabelText(field), { target: { value } });
+      await user.click(screen.getByRole("button", { name: close }));
+      expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Keep editing" }));
+      expect((screen.getByLabelText(field) as HTMLInputElement).value).toBe(value);
+      await user.click(screen.getByRole("button", { name: close }));
+      await user.click(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" }));
+      expect(screen.queryByLabelText(field)).not.toBeInTheDocument();
+    });
+  });
+
   describe("leaving Playback with unsaved changes", () => {
     const apiSettings = { ...productionSettings, settings: { ...productionSettings.settings, integration_modes: { ...productionSettings.settings.integration_modes, midi_source: "playback_api" as const } } };
     const playback = (): PlaybackController => ({

@@ -503,3 +503,41 @@ describe("Log level, release channel and PIN are held until Save configuration",
     expect(bar()).toHaveAttribute("data-state", "auto");
   });
 });
+
+describe("StagePilot hold-until-saved conformance (guard)", () => {
+  const bar = () => document.querySelector("[data-save-bar]")!;
+  const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA"};
+  const build = (over: Record<string, unknown> = {}) => (
+    <BackendSetupPanel
+      state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null}
+      pending={false} onSave={vi.fn()} settings={{settings: savedBase} as unknown as SettingsResponse}
+      {...over}
+    />
+  );
+  const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
+    { label: "Timezone", value: "America/New_York", saved: "America/Los_Angeles", payload: { timezone: "America/New_York" } },
+    { label: "Server port", value: "9000", saved: "8765", payload: { server_port: 9000 } },
+    { label: "Log level", value: "DEBUG", saved: "INFO", payload: { log_level: "DEBUG" } },
+    { label: "Release channel", value: "STABLE", saved: "BETA", payload: { release_channel: "STABLE" } },
+    { label: "Replace dashboard PIN", value: "4321", saved: "", payload: { dashboard_pin: "4321" } },
+  ];
+  it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved }) => {
+    const onSave = vi.fn();
+    const onDirtyChange = vi.fn();
+    render(build({ onSave, onDirtyChange }));
+    const control = screen.getByLabelText(label);
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    fireEvent.keyDown(control, { key: "Enter" });
+    expect(onSave).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+    expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(onSave).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(saved);
+    expect(bar()).toHaveAttribute("data-state", "clean");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+});

@@ -148,6 +148,7 @@ export function BackendSetupPanel({
   health,
   live,
   onClose,
+  onDirtyChange,
   settings,
   error,
   message,
@@ -158,6 +159,7 @@ export function BackendSetupPanel({
   health: HealthResponse | null;
   live: boolean;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   settings: SettingsResponse | null;
   error: string | null;
   message: string | null;
@@ -216,6 +218,7 @@ export function BackendSetupPanel({
   const heldPin = pinEnabled && dashboardPin !== "";
   const changeCount = [heldTimezone, heldPort, heldLan, heldLogLevel, heldChannel, heldPinEnabled, heldPin]
     .filter(Boolean).length;
+  useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const wasPending = useRef(false);
