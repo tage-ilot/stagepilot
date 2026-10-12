@@ -27,7 +27,7 @@ const extend = {
   borderRadius: { ...prefixed(exported.borderRadius, "ds-"), "ds-default": tokens.rounded.lg, DEFAULT: tokens.rounded.lg },
   spacing: prefixed(exported.spacing, "ds-"),
   fontFamily: prefixed(Object.fromEntries(Object.entries(exported.fontFamily).map(
-    ([k, v]) => [k, v.map((font) => font === "Inter" ? "Inter Variable" : font)],
+    ([k, v]) => [k, v.map((font) => font === "Geist" ? "Geist Variable" : font)],
   )), "type-"),
   fontSize: prefixed(exported.fontSize, "type-"),
   boxShadow: {
