@@ -22,7 +22,7 @@ const statusTextStyles: Record<Status, string> = {
 type Identity = "services" | "presentation" | "playback" | "lighting" | "backend";
 
 // Identity = thin icon-tile tint only (DESIGN.md Connection colours / Colour collisions). Never a rail or wash.
-// -soft is the role for tints and borders on dark surfaces (Playback base is 2.0:1 there).
+// -soft is the role for tints and borders on dark surfaces (Playback base and soft are the same slate now).
 const tileTint: Record<Identity, string> = {
   services: "border-integration-services-soft/30 bg-integration-services-soft/15",
   presentation: "border-integration-presentation-soft/30 bg-integration-presentation-soft/15",

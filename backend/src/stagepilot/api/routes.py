@@ -828,7 +828,7 @@ async def update_propresenter_settings(
 async def lights_status(request: Request) -> LightsStatusResponse:
     controller = _runtime(request).lights_controller
     if controller is None:
-        raise HTTPException(status_code=409, detail="The Lights plugin is unavailable.")
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     return _lights_response(await controller.snapshot())
 
 
@@ -836,7 +836,7 @@ async def lights_status(request: Request) -> LightsStatusResponse:
 async def refresh_lighting_outputs(request: Request) -> LightsStatusResponse:
     controller = _runtime(request).lights_controller
     if controller is None:
-        raise HTTPException(status_code=409, detail="The Lights plugin is unavailable.")
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     return _lights_response(await controller.snapshot(refresh=True))
 
 
@@ -848,7 +848,7 @@ async def update_lights_settings(
     runtime = _runtime(request)
     controller = runtime.lights_controller
     if controller is None:
-        raise HTTPException(status_code=409, detail="The Lights plugin is unavailable.")
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     current = runtime.settings_service.effective_runtime_settings().lights
     updated = LightsSettings(
         enabled=settings.enabled,
@@ -878,7 +878,7 @@ async def update_lighting_cue_map(
     runtime = _runtime(request)
     controller = runtime.lights_controller
     if controller is None:
-        raise HTTPException(status_code=409, detail="The Lights plugin is unavailable.")
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     current = runtime.settings_service.effective_runtime_settings().lights
     cue_maps = dict(current.cue_maps)
     if cue_map.cues:
@@ -911,7 +911,7 @@ async def test_lighting_cue(
 ) -> LightsOperationResponse:
     controller = _runtime(request).lights_controller
     if controller is None:
-        raise HTTPException(status_code=409, detail="The Lights plugin is unavailable.")
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     outcome = await controller.test_cue(cue.note, cue.velocity)
     return LightsOperationResponse(
         accepted=outcome.accepted,
