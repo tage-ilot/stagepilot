@@ -27,6 +27,7 @@ describe("StagePilot update UI", () => {
     render(<UpdateAvailableButton onClick={onClick} version="1.2.0" />);
 
     const button = screen.getByRole("button", { name: "Update StagePilot to version 1.2.0" });
+    expect(button).toHaveClass("bg-info/10", "border-info/30", "text-info-text", "can-hover:bg-info/20");
     await user.click(button);
     expect(onClick).toHaveBeenCalledOnce();
   });
@@ -111,6 +112,8 @@ describe("StagePilot update UI", () => {
       />,
     );
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByRole("progressbar")).toHaveClass("bg-info/15");
+    expect(screen.getByRole("progressbar").firstElementChild).toHaveClass("bg-info");
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 
     rerender(

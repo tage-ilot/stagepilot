@@ -12,16 +12,20 @@ export function PanelAlert({
   onRetry,
   className,
   messageTone = "info",
+  dot = false,
 }: {
   error: string | null;
   message: string | null;
   onRetry?: () => void;
   className?: string;
   messageTone?: "info" | "success";
+  /** Informational result line: a small dot of the tone colour before the message (never on errors). */
+  dot?: boolean;
 }) {
   if (!error && !message) return null;
   return (
     <InlineAlert aria-live="polite" className={className} tone={error ? "danger" : messageTone}>
+      {dot && !error && <span aria-hidden="true" data-part="dot" className="mr-2 inline-block size-1.5 rounded-ds-full bg-info align-middle" />}
       <span>{error ?? message}</span>
       {error && onRetry && (
         <Button className="ml-3" onClick={onRetry} size="touch" variant="secondary">Try again</Button>

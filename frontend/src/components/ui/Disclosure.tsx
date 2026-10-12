@@ -94,7 +94,7 @@ export function Disclosure({
         {!advanced && count !== undefined ? (
           <span
             data-part="count"
-            className="rounded-ds-full border border-edge-subtle px-2 py-0.5 text-xs font-bold tabular-nums text-ink-muted"
+            className="rounded-ds-full border border-info/30 bg-info/15 px-2 py-0.5 text-xs font-bold tabular-nums text-info-text"
           >
             {count} {count === 1 ? countNoun : `${countNoun}s`}
           </span>
