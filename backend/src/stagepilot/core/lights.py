@@ -1,4 +1,4 @@
-"""Typed boundary for the Lights MIDI-output integration."""
+"""Typed boundary for the Lighting MIDI-output integration."""
 
 from __future__ import annotations
 
