@@ -572,7 +572,7 @@ async def test_migrated_install_starts_playback_and_retains_midi_alternative(
     async with application(fake, midi=midi, settings_service=service) as (app, client):
         data = (await client.get("/api/v1/playback-api/status")).json()
         assert data["selected"] and data["enabled"] and data["connected"]
-        assert midi.ports  # MIDI stays connected as the automatic fallback.
+        assert not midi.ports  # API mode never starts MIDI by itself.
         stored = json.loads(path.read_text())
         assert stored["schema_version"] == 2
         assert stored["midi"]["channel"] == 9 and stored["midi"]["debounce_ms"] == 321

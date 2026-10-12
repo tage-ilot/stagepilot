@@ -1,4 +1,5 @@
-from dataclasses import dataclass, replace
+import asyncio
+from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,7 +9,7 @@ from stagepilot.core.events import ActionName
 from stagepilot.core.state import StateStore
 from stagepilot.plugins.midi_playback.models import MidiMessage
 from stagepilot.plugins.playback_api.arbiter import ArbitratedDispatcher, PlaybackSourceArbiter
-from stagepilot.plugins.playback_api.normalizer import Heartbeat, PlaybackEvent
+from stagepilot.plugins.playback_api.normalizer import PlaybackEvent
 from test_midi_config_api import FakeMidiBackend
 from test_playback_integration import FakePlayback, application, controller, wait_for
 
@@ -125,15 +126,17 @@ async def test_rejected_action_does_not_poison_failover() -> None:
     assert (await proxy.dispatch_song_position(1, source="midi_playback")).accepted
 
 
-async def test_both_sources_invalid_order_keeps_api_owner_stops_and_monitor() -> None:
+async def _switch(client, source: str) -> None:  # type: ignore[no-untyped-def]
+    saved = (await client.get("/api/v1/settings")).json()["settings"]
+    saved["integration_modes"]["midi_source"] = source
+    assert (await client.put("/api/v1/settings", json=saved)).status_code == 200
+
+
+async def test_api_mode_stale_order_still_stops_and_midi_is_never_started() -> None:
     fake = FakePlayback(index=0)
     midi = FakeMidiBackend(["Playback MIDI"])
     async with application(fake, midi=midi) as (app, client):
         inputs = controller(app)
-        await wait_for(lambda: inputs.arbiter.midi_connected)
-        # Deterministic elapsed stable-heartbeat time; no real-device or long wait.
-        assert inputs.arbiter.stable_since is not None
-        inputs.arbiter.stable_since -= 3
         await wait_for(lambda: inputs.connection.active_source == "playback_api")
         dispatcher = AsyncMock()
         dispatcher.dispatch.return_value = ActionOutcome(True, "accepted")
@@ -148,109 +151,76 @@ async def test_both_sources_invalid_order_keeps_api_owner_stops_and_monitor() ->
         await wait_for(lambda: dispatcher.dispatch.await_count == 1)
         dispatcher.dispatch.assert_awaited_once_with(ActionName.STOP_TIMER, source="playback_api")
         dispatcher.dispatch_song_position.assert_not_awaited()
-        midi.ports[-1].callback(MidiMessage(type="note_on", channel=1, note=112, velocity=1))
-        await wait_for(lambda: bool(inputs.midi and inputs.midi._recent_messages))
-        messages = (await client.get("/api/v1/midi/messages")).json()["messages"]
-        assert messages[0]["detail"] == "ignored: Playback API active"
+        assert inputs.midi is None and not midi.ports and not inputs.arbiter.midi_connected
         status = (await client.get("/api/v1/playback-api/status")).json()
-        state = (await client.get("/api/v1/state")).json()
         assert status["connected"] and status["active_source"] == "playback_api"
         assert status["stale"] and status["reason"].startswith("Connected to Playback")
-        assert state["midi_status"] == "connected"
-        assert (await client.get("/api/v1/playback-api/connection")).json()[
-            "active_source"
-        ] == "playback_api"
+
+
+async def test_api_mode_playback_down_stays_not_connected_without_midi() -> None:
+    fake = FakePlayback(index=0)
+    midi = FakeMidiBackend(["Playback MIDI"])
+    async with application(fake, midi=midi) as (app, client):
+        inputs = controller(app)
+        assert inputs.client is not None
+        await inputs.client.stop()
+        await wait_for(lambda: inputs.connection.active_source == "none")
+        await asyncio.sleep(0.2)
+        status = (await client.get("/api/v1/playback-api/status")).json()
+        assert not status["connected"] and status["active_source"] == "none"
+        assert "MIDI" not in status["reason"] and "backup" not in status["reason"]
+        assert status["reason"].startswith("Not connected")
+        assert not midi.ports and inputs.midi is None
+        assert (await client.get("/api/v1/state")).json()["midi_status"] != "connected"
+        assert inputs._midi_guard() == "ignored: MIDI is not the selected connection method"
+
+
+async def test_api_mode_midi_events_are_never_accepted() -> None:
+    from stagepilot.plugins.playback_api.arbiter import ArbitratedDispatcher
+
+    fake = FakePlayback(index=0)
+    async with application(fake, midi=FakeMidiBackend(["Playback MIDI"])) as (app, _):
+        inputs = controller(app)
+        assert inputs.client is not None
+        await inputs.client.stop()
+        await wait_for(lambda: inputs.connection.active_source == "none")
+        inputs.arbiter.midi_connected = True  # even a forced MIDI signal cannot own in API mode
+        assert inputs.connection.active_source == "none"
+        dispatcher = AsyncMock()
+        proxy = ArbitratedDispatcher(inputs.arbiter, dispatcher, app.state.runtime.state_store)
+        result = await proxy.dispatch_song_position(1, source="midi_playback")
+        assert not result.accepted and "not the selected" in result.message
         dispatcher.dispatch_song_position.assert_not_awaited()
 
 
-async def test_api_drop_midi_starts_despite_stale_api_order_and_no_global_error() -> None:
+async def test_midi_mode_midi_works_and_api_is_ignored() -> None:
     fake = FakePlayback(index=0)
     midi = FakeMidiBackend(["Playback MIDI"])
     async with application(fake, midi=midi) as (app, client):
         inputs = controller(app)
+        await _switch(client, "real")
+        await wait_for(lambda: bool(midi.ports))
+        inputs = controller(app)
         await wait_for(lambda: inputs.arbiter.midi_connected)
-        assert inputs.mapper.stale
-        assert inputs.client is not None
-        await inputs.client.stop()
-        await wait_for(lambda: inputs.connection.active_source == "midi")
+        assert inputs.connection.active_source == "midi"
         midi.ports[-1].callback(MidiMessage(type="note_on", channel=1, note=112, velocity=1))
         await wait_for(lambda: bool(inputs.midi and inputs.midi._recent_messages))
-        status = (await client.get("/api/v1/playback-api/status")).json()
-        state = (await client.get("/api/v1/state")).json()
-        assert status["connected"] and status["active_source"] == "midi"
-        assert status["last_error"] is None and state["midi_status"] == "connected"
-        assert state["current_song_index"] == 0
-        assert (await inputs.health()).last_error is None
+        messages = (await client.get("/api/v1/midi/messages")).json()["messages"]
+        assert "ignored" not in messages[0]["detail"]
+        assert (await client.get("/api/v1/state")).json()["midi_status"] == "connected"
 
 
-async def test_api_events_received_while_midi_owns_are_not_replayed_after_failback() -> None:
-    fake = FakePlayback(index=0)
-    midi = FakeMidiBackend(["Playback MIDI"])
-    async with application(fake, saved=True, midi=midi) as (app, _):
-        inputs = controller(app)
-        await wait_for(lambda: inputs.arbiter.midi_connected)
-        fake.silent = True
-        inputs.arbiter.observe_api(False, False)
-        status = replace(inputs.status, heartbeat=Heartbeat(900, 0, True, False, 8))
-        inputs._observe(inputs._generation, status, (PlaybackEvent("song.started", 1, 900),))
-        assert inputs.connection.active_source == "midi"
-        assert inputs.arbiter.stable_since is not None
-        inputs.arbiter.stable_since -= 3
-        await inputs._publish_connection()
-        assert inputs.arbiter.snapshot().active_source == "playback_api"
-        assert (await app.state.runtime.state_store.snapshot()).current_song_index is None
-        assert any(item.event.type == "song.started" for item in inputs.events)
-
-
-async def test_health_uses_unified_connection_and_find_keeps_midi_open() -> None:
+async def test_runtime_switch_api_to_midi_to_api_starts_and_stops_midi() -> None:
     fake = FakePlayback(index=0)
     midi = FakeMidiBackend(["Playback MIDI"])
     async with application(fake, midi=midi) as (app, client):
+        assert not midi.ports
+        await _switch(client, "real")
+        await wait_for(lambda: bool(midi.ports))
+        await _switch(client, "playback_api")
         inputs = controller(app)
-        await wait_for(lambda: inputs.arbiter.midi_connected)
-        assert (await client.get("/api/v1/health")).json()["status"] == "healthy"
-        port = midi.ports[-1]
-        assert (await client.post("/api/v1/playback-api/find")).status_code == 200
-        await wait_for(lambda: inputs.scan_state != "scanning")
-        assert not port.closed and inputs.arbiter.midi_connected
-        assert (await client.get("/api/v1/health")).json()["status"] == "healthy"
-        assert inputs.client is not None
-        await inputs._stop_selected(keep_midi=True)
-        assert (await client.get("/api/v1/health")).json()["status"] == "healthy"
-        assert inputs.midi is not None
-        await inputs.midi.stop()
-        assert (await client.get("/api/v1/health")).json()["status"] == "degraded"
-        status = (await client.get("/api/v1/playback-api/status")).json()
-        assert not status["connected"] and status["active_source"] == "none"
-        assert (await client.get("/api/v1/state")).json()["midi_status"] == "disconnected"
-
-
-async def test_late_midi_queue_is_discarded_even_after_owner_changes_back() -> None:
-    from stagepilot.plugins.midi_playback.plugin import _QueuedMidiMessage
-
-    fake = FakePlayback(index=0)
-    midi = FakeMidiBackend(["Playback MIDI"])
-    async with application(fake, midi=midi) as (app, _):
-        inputs = controller(app)
-        await wait_for(lambda: inputs.arbiter.midi_connected)
-        inputs.arbiter.observe_api(False, False)
-        assert inputs.midi is not None
-        queued = _QueuedMidiMessage(
-            message=MidiMessage(type="note_on", channel=1, note=112, velocity=1),
-            connection_id=inputs.midi._active_connection_id,
-            simulated=False,
-            ownership_revision=inputs._revision(),
+        await wait_for(lambda: inputs.connection.active_source == "playback_api")
+        assert midi.ports[-1].closed and not inputs.arbiter.midi_connected
+        assert (await client.get("/api/v1/playback-api/status")).json()["active_source"] == (
+            "playback_api"
         )
-        inputs.arbiter.observe_api(True, True)
-        assert inputs.arbiter.stable_since is not None
-        inputs.arbiter.stable_since -= 3
-        assert inputs.arbiter.allows("playback_api")
-        inputs.arbiter.observe_api(False, False)
-        result = await inputs.midi._process_message(queued)
-        assert not result.accepted and "ownership changed" in result.message
-        assert (await app.state.runtime.state_store.snapshot()).current_song_index is None
-        inputs.midi._held_notes.add((1, 112, 1))
-        queued.message = MidiMessage(type="note_off", channel=1, note=112, velocity=0)
-        release = await inputs.midi._process_message(queued)
-        assert not release.accepted and "release" in release.message
-        assert not inputs.midi._held_notes

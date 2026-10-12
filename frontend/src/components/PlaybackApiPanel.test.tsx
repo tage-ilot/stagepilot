@@ -33,7 +33,7 @@ const panel = (playback = controller(), extra: { onDirtyChange?: (dirty: boolean
 describe("Scan Network is always first and never dead", () => {
   it.each([
     ["fresh install, nothing configured", none({ selected: true, settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
-    ["MIDI-selected install", none({ selected: false, enabled: false, active_source: "midi", connected: true, reason: "Connected through MIDI (backup). Find Playback for full control.", settings: { enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
+    ["MIDI-selected install", none({ selected: false, enabled: false, active_source: "midi", connected: true, reason: "Connected through MIDI.", settings: { enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
     ["Playback switched off", none({ enabled: false, settings: { enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
   ])("%s", (_name, status) => {
     const playback = controller({ status });
@@ -510,7 +510,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
 
 const scenarios = [
   { name: "API only", api: true, midi: false, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
-  { name: "MIDI only", api: false, midi: true, active: "midi" as const, reason: "Connected through MIDI (backup). Find Playback for full control." },
+  { name: "MIDI only", api: false, midi: true, active: "midi" as const, reason: "Connected through MIDI." },
   { name: "both", api: true, midi: true, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
   { name: "neither", api: false, midi: false, active: "none" as const, reason: "Not connected. Choose Scan Network to find Playback." },
   { name: "scanning", api: false, midi: false, active: "none" as const, reason: "Looking for Playback…", scanning: true },

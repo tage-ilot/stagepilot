@@ -32,6 +32,8 @@ class PlaybackSourceArbiter:
         self.heartbeat_at: float | None = None
         self.stable_since: float | None = None
         self.midi_connected = False
+        # MIDI may own only when the user chose MIDI; API mode never falls back to it.
+        self.midi_allowed = True
         self.owner: Source = "none"
         self.revision = 0
         self._recent: dict[tuple[str, int | None], tuple[Source, float]] = {}
@@ -55,7 +57,7 @@ class PlaybackSourceArbiter:
         api = self.websocket and self.heartbeat_at is not None and now - self.heartbeat_at < 5
         if not api:
             self.stable_since = None
-        owner: Source = "midi" if self.midi_connected else "none"
+        owner: Source = "midi" if self.midi_connected and self.midi_allowed else "none"
         if api and (
             self.owner == "playback_api"
             or not self.midi_connected
@@ -72,7 +74,7 @@ class PlaybackSourceArbiter:
             self.revision += 1
         reason = {
             "playback_api": "Connected to Playback.",
-            "midi": "Connected through MIDI (backup). Find Playback for full control.",
+            "midi": "Connected through MIDI.",
             "none": "Not connected.",
         }[owner]
         return PlaybackConnection(
@@ -159,6 +161,8 @@ class ArbitratedDispatcher:
             assert action is not None
             return await self.dispatcher.dispatch(action, source=source)
         origin: Source = "playback_api" if source == "playback_api" else "midi"
+        if origin == "midi" and not self.arbiter.midi_allowed:
+            return ActionOutcome(False, "ignored: MIDI is not the selected connection method")
         if not self.arbiter.allows(origin):
             return ActionOutcome(
                 False,

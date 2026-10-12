@@ -171,12 +171,10 @@ class PlaybackInputPlugin(Plugin):
         self._scan_task: asyncio.Task[None] | None = None
         self._scan_cancel = threading.Event()
         self.midi: MidiPlaybackPlugin | None = None
-        if (
-            settings.integration_modes.midi_source is not MidiSource.SIMULATED
-            and settings.midi.enabled
-        ):
+        if settings.integration_modes.midi_source is MidiSource.REAL and settings.midi.enabled:
             self.midi = midi_factory(settings)
         self.arbiter = PlaybackSourceArbiter()
+        self.arbiter.midi_allowed = not self.selected
         self._dispatcher = ArbitratedDispatcher(self.arbiter, dispatcher, state_store)
         self.mapper = PlaybackMapper(self._dispatcher, state_store)
         self._dispatcher.suppressed = lambda: self.mapper.discovery
@@ -255,6 +253,8 @@ class PlaybackInputPlugin(Plugin):
     def _midi_guard(self) -> str | None:
         if self.discovery == "running":
             return "ignored: song order discovery active"
+        if self.selected:
+            return "ignored: MIDI is not the selected connection method"
         if self.arbiter.snapshot().active_source == "playback_api":
             return "ignored: Playback API active"
         return None
@@ -329,8 +329,9 @@ class PlaybackInputPlugin(Plugin):
             await self._start_selected()
 
     async def _start_selected(self) -> None:
+        self.arbiter.midi_allowed = not self.selected
         if (
-            self.settings.integration_modes.midi_source is not MidiSource.SIMULATED
+            self.settings.integration_modes.midi_source is MidiSource.REAL
             and self.settings.midi.enabled
         ):
             if self.midi is None:
@@ -339,9 +340,8 @@ class PlaybackInputPlugin(Plugin):
             try:
                 await self.midi.start()
             except RuntimeError:
-                # Missing native MIDI capability must not stop the API listener.
-                if not self.selected:
-                    raise
+                # MIDI is the selected method here; report its failure.
+                raise
         if self.selected and self.settings.playback_api.enabled:
             self._active = True
             generation = self._generation

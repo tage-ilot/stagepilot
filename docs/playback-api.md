@@ -25,29 +25,26 @@ Find closes the old listener and starts a fresh address search; it does not
 change the saved manual override. Disable/source switching and shutdown close
 the old transport, wait for its bounded thread work, and discard old queued
 observations before starting the next input. MIDI callbacks retain their existing
-connection-generation guards. In Playback API mode, the saved native/network
-MIDI input stays open as an automatic fallback (missing native MIDI capability
-does not prevent the API listener from starting). Explicit `real` mode runs MIDI
-only; `simulated` runs neither live input.
+connection-generation guards. In Playback API mode MIDI is never started:
+there is no automatic MIDI fallback and the saved MIDI settings are left untouched.
+Explicit `real` mode runs MIDI only; `simulated` runs neither live input.
 
 ### One Playback connection and one action owner
 
-The unified connection is successful whenever either live input is connected.
-API health requires WebSocket up and a valid heartbeat less than five seconds
-old; MIDI uses its existing verified input-connected state. API-only owns
-immediately. With MIDI already connected, API takes over after three seconds of
-stable heartbeats (gaps over 1.5 seconds restart that stability interval). A
-disconnect or heartbeat expiry immediately permits MIDI actions; the status
-projection checks expiry/failback every 50 ms even without incoming events.
-MIDI loss does not delay an already healthy API. No suppressed event is replayed.
+The connection follows the selected Connection method and never switches by
+itself. In Playback API mode it is connected only while the WebSocket is up and a
+valid heartbeat is less than five seconds old; when Playback drops, the status
+reads "Not connected. Looking for Playback…" (never a MIDI message) until the API
+reconnects. In MIDI mode MIDI owns and API events are not started. There is no
+automatic MIDI fallback and no "Connected through MIDI (backup)" state; the status
+projection still checks heartbeat expiry every 50 ms even without incoming events.
 
-Once API owns, every MIDI action is ignored and retained in the MIDI monitor as
-`ignored: Playback API active`. Song-order validity never changes ownership:
-healthy API with stale/unknown order remains connected and sole owner, blocks
-starts/restarts from both inputs, and allows API pause/stop outside discovery.
-Stale API order never gates MIDI actions when MIDI actually owns. Discovery
-suppresses both inputs until exit. Queued work rechecks current ownership and
-ownership generations; API events received while MIDI owns are monitor-only.
+In API mode every MIDI action (including simulated MIDI) is ignored with
+`ignored: MIDI is not the selected connection method`. Song-order validity never
+changes ownership: healthy API with stale/unknown order remains connected and sole
+owner, blocks starts/restarts, and allows API pause/stop outside discovery.
+Discovery suppresses both inputs until exit. Queued work rechecks current ownership
+and ownership generations.
 
 A two-second cross-source dedupe window suppresses the same position start or
 restart, or timer-stop action across ownership changes. A legacy unpositioned
@@ -182,7 +179,7 @@ Read full settings at `GET /api/v1/settings`; change
 `playback_api`, `real`, or `simulated`. Source-only/MIDI/Playback updates apply
 without restart and report `restart_required: false`; unrelated integration
 registration changes retain the existing restart requirement. MIDI selection and
-monitor routes remain available for the fallback while API is selected; cue
+monitor routes remain available while API is selected (MIDI itself stays stopped); cue
 simulation still requires explicitly selecting MIDI. No stopped/old controller
 can bypass ownership checks. Both settings
 routes refuse order/capture edits; only completed discovery produces those fields.
