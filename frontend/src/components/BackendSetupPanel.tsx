@@ -340,7 +340,7 @@ export function BackendSetupPanel({
           <Input
             disabled={pending}
             onChange={(event) => setTimezone(event.target.value)}
-            placeholder="America/Los_Angeles"
+            placeholder="For example, America/Los_Angeles…"
             value={timezone}
           />
         </Field>
@@ -393,7 +393,7 @@ export function BackendSetupPanel({
                 maxLength={64}
                 minLength={4}
                 onChange={(event) => setDashboardPin(event.target.value)}
-                placeholder="Leave blank to keep the saved PIN"
+                placeholder="Leave blank to keep the saved PIN…"
                 type="password"
                 value={dashboardPin}
               />

@@ -444,7 +444,7 @@ export function PlanningCenterSetupPanel({
               autoComplete="current-password"
               disabled={busy || removeSecret}
               onChange={(event) => setSecret(event.target.value)}
-              placeholder={status?.planning_center_secret_saved ? "Saved securely — leave blank to keep" : "Enter PAT secret"}
+              placeholder={status?.planning_center_secret_saved ? "Saved securely — leave blank to keep…" : "Enter PAT secret…"}
               type="password"
               value={secret}
             />
@@ -522,7 +522,7 @@ export function PlanningCenterSetupPanel({
             <Input
               disabled={busy}
               onChange={(event) => setTitlePreference(event.target.value)}
-              placeholder="Optional, for example Sunday Morning"
+              placeholder="Optional. For example, Sunday Morning…"
               value={titlePreference}
             />
           </Field>
