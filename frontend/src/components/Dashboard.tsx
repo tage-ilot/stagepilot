@@ -764,11 +764,14 @@ export function Dashboard({
   const elapsedMilliseconds = state.timer.status === "running" && state.timer.started_at
     ? Math.max(0, clockNow - Date.parse(state.timer.started_at))
     : 0;
-  const timerElapsed = Math.min(timerDuration, Math.floor(elapsedMilliseconds / 1_000));
-  const timerRemaining = Math.max(
-    0,
-    timerDuration - Math.ceil(elapsedMilliseconds / 1_000),
-  );
+  // Stop keeps the remaining time: a stopped countdown shows the frozen value instead of blanking.
+  const frozenRemaining = state.timer.status === "stopped" ? state.timer.remaining_seconds ?? null : null;
+  const timerElapsed = frozenRemaining !== null
+    ? Math.max(0, (state.current_song?.duration_seconds ?? timerDuration) - frozenRemaining)
+    : Math.min(timerDuration, Math.floor(elapsedMilliseconds / 1_000));
+  const timerRemaining = frozenRemaining !== null
+    ? frozenRemaining
+    : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
   const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
