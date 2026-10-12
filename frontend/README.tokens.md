@@ -11,9 +11,9 @@ hand-maps the custom elevation/default, overlay, level-1 and label text shadow.
 Colors `text*` -> `ink*`, `border*` -> `edge*`, `panel*` -> `surface-panel*`.
 Thus `text-ink`, `border-edge`, `bg-surface-panel` do not collide with CSS
 recipes. Other colors retain token names. Radius/spacing names use `ds-`;
-typography sizes/families use `type-`. Bare `rounded` remains stock 4px;
-`rounded-ds-default` is 8px. Phase 3 promotes DEFAULT only when its surfaces
-migrate. Stock radii/spacing/fonts/colors remain untouched. The exporter currently
+typography sizes/families use `type-`. Bare `rounded` is the 8px ds-default token (DEFAULT);
+`rounded-ds-default` is the same 8px. Use `rounded-ds-sm` for an intended 4px.
+Other stock radii (sm..3xl)/spacing/fonts/colors remain untouched. The exporter currently
 omits numeric lineHeight values; generated typography is not used by components
 in this phase, so surface migrations must explicitly apply the DESIGN.md leading.
 CSS colors retain authored rgba precision rather than exporter's hex rounding.

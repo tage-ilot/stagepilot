@@ -60,6 +60,7 @@ import type {
 import { restartDesktopBackend, signInWithPlanningCenter } from "../desktop";
 import { describeError } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
+import { useSingleFlight } from "./useSingleFlight";
 
 import { useDashboardAccess } from "../access/AccessContext";
 import { accessGeneration, invalidateAccess, onAccessInvalidated } from "../access/accessState";
@@ -71,6 +72,7 @@ const LIGHTS_MONITOR_INTERVAL = 3_000;
 
 export function useStagePilot() {
   const access = useDashboardAccess();
+  const { claim, release } = useSingleFlight();
   const { canOperate, canConfigure, canActivateServices } = access.capabilities;
   const [state, setState] = useState<ApplicationState | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -397,6 +399,7 @@ export function useStagePilot() {
   const dispatch = useCallback(
     async (action: ActionName) => {
     if (!canOperate) return;
+      if (!claim("action")) return;
       setPendingAction(action);
       setActionMessage(null);
       try {
@@ -408,15 +411,17 @@ export function useStagePilot() {
       } catch (cause) {
         setError(describeError(cause, "Action failed."));
       } finally {
+        release("action");
         setPendingAction(null);
       }
     },
-    [canOperate, applyState],
+    [claim, release, canOperate, applyState],
   );
 
   const selectPlan = useCallback(
     async (planId: string) => {
     if (!canOperate) return;
+      if (!claim("plan")) return;
       setPendingPlanId(planId);
       setActionMessage(null);
       try {
@@ -427,16 +432,18 @@ export function useStagePilot() {
       } catch (cause) {
         setError(describeError(cause, "Service plan selection failed."));
       } finally {
+        release("plan");
         setPendingPlanId(null);
       }
     },
-    [canOperate, applyState],
+    [claim, release, canOperate, applyState],
   );
 
   const saveGeneralSettings = useCallback(
     async (input: GeneralSettingsInput) => {
     if (!canConfigure) return;
       if (!settings) return;
+      if (!claim("settings")) return;
       setPendingSettingsOperation(true);
       setSettingsError(null);
       setSettingsMessage(null);
@@ -468,16 +475,18 @@ export function useStagePilot() {
       } catch (cause) {
         setSettingsError(describeError(cause, "Configuration update failed."));
       } finally {
+        release("settings");
         setPendingSettingsOperation(false);
       }
     },
-    [canConfigure, settings],
+    [claim, release, canConfigure, settings],
   );
 
   const saveMidiSettings = useCallback(
     async (input: MidiSettingsInput) => {
     if (!canConfigure) return false;
       if (!settings) return false;
+      if (!claim("settings")) return false;
       setPendingSettingsOperation(true);
       setSettingsError(null);
       setSettingsMessage(null);
@@ -505,15 +514,17 @@ export function useStagePilot() {
         setSettingsError(describeError(cause, "MIDI configuration update failed."));
         return false;
       } finally {
+        release("settings");
         setPendingSettingsOperation(false);
       }
     },
-    [canConfigure, settings],
+    [claim, release, canConfigure, settings],
   );
 
   const testPlanningCenterConnection = useCallback(
     async (input: PlanningCenterTestInput) => {
     if (!canConfigure) return;
+      if (!claim("pc")) return;
       setPendingPlanningCenterOperation("test");
       setPlanningCenterError(null);
       setPlanningCenterMessage(null);
@@ -526,14 +537,16 @@ export function useStagePilot() {
           describeError(cause, "Services connection test failed."),
         );
       } finally {
+        release("pc");
         setPendingPlanningCenterOperation(null);
       }
     },
-    [canConfigure],
+    [claim, release, canConfigure],
   );
 
   const loadPlanningCenterServiceTypes = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("pc")) return;
     setPendingPlanningCenterOperation("load-types");
     setPlanningCenterError(null);
     setPlanningCenterMessage(null);
@@ -546,9 +559,10 @@ export function useStagePilot() {
         describeError(cause, "Service types could not be loaded."),
       );
     } finally {
+      release("pc");
       setPendingPlanningCenterOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const savePlanningCenter = useCallback(
     async (
@@ -556,6 +570,7 @@ export function useStagePilot() {
       timezone: string,
     ) => {
     if (!canConfigure) return;
+      if (!claim("pc")) return;
       setPendingPlanningCenterOperation("save");
       setPlanningCenterError(null);
       setPlanningCenterMessage(null);
@@ -592,14 +607,16 @@ export function useStagePilot() {
           describeError(cause, "Services configuration could not be saved."),
         );
       } finally {
+        release("pc");
         setPendingPlanningCenterOperation(null);
       }
     },
-    [canConfigure],
+    [claim, release, canConfigure],
   );
 
   const signInPlanningCenterOAuth = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("pc")) return;
     setPendingPlanningCenterOperation("oauth-sign-in");
     setPlanningCenterError(null);
     setPlanningCenterMessage(null);
@@ -617,12 +634,14 @@ export function useStagePilot() {
         describeError(cause, "Planning Center sign-in failed."),
       );
     } finally {
+      release("pc");
       setPendingPlanningCenterOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const disconnectPlanningCenter = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("pc")) return;
     setPendingPlanningCenterOperation("oauth-disconnect");
     setPlanningCenterError(null);
     setPlanningCenterMessage(null);
@@ -635,12 +654,14 @@ export function useStagePilot() {
         describeError(cause, "Could not disconnect from Planning Center."),
       );
     } finally {
+      release("pc");
       setPendingPlanningCenterOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const refreshMidi = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("midi")) return;
     setPendingMidiOperation("refresh");
     setMidiError(null);
     setMidiMessage(null);
@@ -650,12 +671,14 @@ export function useStagePilot() {
     } catch (cause) {
       setMidiError(describeError(cause, "MIDI refresh failed."));
     } finally {
+      release("midi");
       setPendingMidiOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const selectMidi = useCallback(async (inputId: string | null) => {
     if (!canConfigure) return;
+    if (!claim("midi")) return;
     setPendingMidiOperation(inputId === null ? "disconnect" : "connect");
     setMidiError(null);
     setMidiMessage(null);
@@ -667,13 +690,15 @@ export function useStagePilot() {
     } catch (cause) {
       setMidiError(describeError(cause, "MIDI input selection failed."));
     } finally {
+      release("midi");
       setPendingMidiOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const simulateMidi = useCallback(
     async (cue: MidiCueName) => {
     if (!canOperate) return;
+      if (!claim("midicue")) return;
       setPendingMidiCue(cue);
       setMidiError(null);
       setMidiMessage(null);
@@ -686,15 +711,17 @@ export function useStagePilot() {
       } catch (cause) {
         setMidiError(describeError(cause, "MIDI cue simulation failed."));
       } finally {
+        release("midicue");
         setPendingMidiCue(null);
       }
     },
-    [canOperate, applyState, loadMidiMessages],
+    [claim, release, canOperate, applyState, loadMidiMessages],
   );
 
   const saveProPresenter = useCallback(async (input: ProPresenterSettingsInput) => {
     if (!canConfigure) return;
     if (!settings) return;
+    if (!claim("pp")) return;
     setPendingProPresenterOperation("save");
     setProPresenterError(null);
     setProPresenterMessage(null);
@@ -721,12 +748,14 @@ export function useStagePilot() {
         describeError(cause, "Presentation configuration update failed."),
       );
     } finally {
+      release("pp");
       setPendingProPresenterOperation(null);
     }
-  }, [canConfigure, settings]);
+  }, [claim, release, canConfigure, settings]);
 
   const runProPresenterTest = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("pp")) return;
     setPendingProPresenterOperation("test");
     setProPresenterError(null);
     setProPresenterMessage(null);
@@ -740,12 +769,14 @@ export function useStagePilot() {
         describeError(cause, "Presentation connection test failed."),
       );
     } finally {
+      release("pp");
       setPendingProPresenterOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const refreshProPresenter = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("pp")) return;
     setPendingProPresenterOperation("refresh");
     setProPresenterError(null);
     setProPresenterMessage(null);
@@ -759,12 +790,14 @@ export function useStagePilot() {
         describeError(cause, "Presentation timer refresh failed."),
       );
     } finally {
+      release("pp");
       setPendingProPresenterOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const saveLights = useCallback(async (input: LightsSettingsInput) => {
     if (!canConfigure) return;
+    if (!claim("lights")) return;
     setPendingLightsOperation("save");
     setLightsError(null);
     setLightsMessage(null);
@@ -777,12 +810,14 @@ export function useStagePilot() {
     } catch (cause) {
       setLightsError(describeError(cause, "Lights configuration failed."));
     } finally {
+      release("lights");
       setPendingLightsOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const refreshLights = useCallback(async () => {
     if (!canConfigure) return;
+    if (!claim("lights")) return;
     setPendingLightsOperation("refresh");
     setLightsError(null);
     setLightsMessage(null);
@@ -792,12 +827,14 @@ export function useStagePilot() {
     } catch (cause) {
       setLightsError(describeError(cause, "Lights output refresh failed."));
     } finally {
+      release("lights");
       setPendingLightsOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const sendLightingTest = useCallback(async (note: number, velocity: number) => {
     if (!canOperate) return;
+    if (!claim("lights")) return;
     setPendingLightsOperation("test");
     setLightsError(null);
     setLightsMessage(null);
@@ -809,12 +846,14 @@ export function useStagePilot() {
     } catch (cause) {
       setLightsError(describeError(cause, "Lights test cue failed."));
     } finally {
+      release("lights");
       setPendingLightsOperation(null);
     }
-  }, [canOperate]);
+  }, [claim, release, canOperate]);
 
   const saveLightingCues = useCallback(async (song: Song, cues: LightingCue[]) => {
     if (!canConfigure) return;
+    if (!claim("lights")) return;
     setPendingLightsOperation("save-cues");
     setLightsError(null);
     setLightsMessage(null);
@@ -831,12 +870,14 @@ export function useStagePilot() {
     } catch (cause) {
       setLightsError(describeError(cause, "Lighting cue map failed to save."));
     } finally {
+      release("lights");
       setPendingLightsOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const clearAllLightingCues = useCallback(async (songs: Song[]) => {
     if (!canConfigure) return;
+    if (!claim("lights")) return;
     setPendingLightsOperation("save-cues");
     setLightsError(null);
     setLightsMessage(null);
@@ -858,9 +899,10 @@ export function useStagePilot() {
         describeError(cause, "Lighting cue maps failed to clear."),
       );
     } finally {
+      release("lights");
       setPendingLightsOperation(null);
     }
-  }, [canConfigure]);
+  }, [claim, release, canConfigure]);
 
   const activateConfiguredServices = useCallback(async () => {
     if (!canActivateServices) return;
