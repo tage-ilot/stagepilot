@@ -15,7 +15,7 @@ import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-ink";
+const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-info active:text-info-active";
 const toneClass = {
   connected: "border-success/30 bg-success/10 text-success-text",
   backup: "border-warning/30 bg-warning/10 text-warning-text",
