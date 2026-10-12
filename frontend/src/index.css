@@ -743,3 +743,11 @@ textarea:focus-visible {
     scroll-padding-bottom: 6rem;
   }
 }
+
+/* StagePilot (backend) is the same hex as the primary red (DESIGN.md Colour collisions): its selected card
+   must not wear the live/selected red rail and wash. It keeps the neutral card and a 1px backend border. */
+.status-card[data-tone="backend"][aria-expanded="true"] .status-card-surface {
+  border-color: var(--ds-integration-backend-soft);
+  background: var(--ds-surface-panel-strong);
+  box-shadow: var(--ds-elevation-default);
+}

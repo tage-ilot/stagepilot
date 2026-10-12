@@ -189,6 +189,7 @@ export function MidiSetupPanel({
       aria-labelledby="midi-setup-heading"
       className="mt-5"
       id="midi-configuration"
+      tone="playback"
       variant="setup"
     >
       <SetupPanelHeader
@@ -217,7 +218,7 @@ export function MidiSetupPanel({
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
-      <div className="mt-4 rounded-ds-lg bg-integration-playback/5 p-3">
+      <div className="mt-4 rounded-ds-lg bg-integration-playback-soft/5 p-3">
         <div className="mb-4 rounded-ds-lg bg-success/10 p-3">
           <p className="text-sm font-semibold text-success-text">Playback song velocities</p>
           <p className="mt-1 text-xs text-ink-body">
@@ -371,7 +372,7 @@ export function MidiSetupPanel({
               <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">Cue test</p>
               <p className="mt-1 text-xs text-ink-muted">Uses the same fixed-note and velocity action path as hardware input.</p>
             </div>
-            <span className="rounded-ds-full bg-integration-playback/10 px-2.5 py-1 text-xs font-bold tabular-nums text-integration-playback-text">
+            <span className="rounded-ds-full bg-integration-playback-soft/10 px-2.5 py-1 text-xs font-bold tabular-nums text-integration-playback-text">
               Channel {midi?.channel ?? "—"} · Note {midi ? `${midiNoteName(midi.note)} (${midi.note})` : "—"}
             </span>
           </div>
@@ -380,7 +381,7 @@ export function MidiSetupPanel({
               const velocity = midi?.mappings[cue];
               return (
                 <button
-                  className="flex min-h-ds-control touch-manipulation items-center justify-between gap-2 rounded-ds-lg border border-integration-playback/20 bg-integration-playback/[0.06] px-3 py-2 text-left text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target can-hover:border-integration-playback/35 can-hover:bg-integration-playback/[0.12] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex min-h-ds-control touch-manipulation items-center justify-between gap-2 rounded-ds-lg border border-integration-playback-soft/20 bg-integration-playback-soft/[0.06] px-3 py-2 text-left text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target can-hover:border-integration-playback-soft/35 can-hover:bg-integration-playback-soft/[0.12] disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={!enabled || pendingCue !== null || velocity == null}
                   key={cue}
                   onClick={() => onSimulate(cue)}

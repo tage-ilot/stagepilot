@@ -3,7 +3,7 @@ import { chooseLengthCategory, confirmPlanLengths, getLengthCategories, previewP
 import { Dialog } from "./ui/Dialog";
 import type { LengthPreview, PlaybackStatusResponse, PlanningCenterServiceType } from "../types";
 
-const button = "min-h-ds-touch-target touch-manipulation rounded-ds-lg border border-integration-services/30 bg-integration-services/10 px-3 py-2 text-sm font-semibold text-integration-services-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-integration-services/20 disabled:cursor-not-allowed disabled:border-edge disabled:bg-surface-900 disabled:text-ink-muted";
+const button = "min-h-ds-touch-target touch-manipulation rounded-ds-lg border border-integration-services-soft/30 bg-integration-services-soft/10 px-3 py-2 text-sm font-semibold text-integration-services-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-integration-services-soft/20 disabled:cursor-not-allowed disabled:border-edge disabled:bg-surface-900 disabled:text-ink-muted";
 const duration = (n: number | null) => n === null ? "Unknown" : `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 export function lengthUpdateReason(status: PlaybackStatusResponse): string | null {
   if (!status.planning_center_connected) return "Connect Services first.";
@@ -67,7 +67,7 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
         if (e.key === "Escape") { e.preventDefault(); setOpen(false); arrow.current?.focus(); }
         else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) { e.preventDefault(); items[e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus(); }
         else if (e.key === "Tab") setOpen(false);
-      }}>{categories.map(c => <button key={c.id} role="menuitemradio" aria-checked={selected === c.id} tabIndex={-1} className="block min-h-ds-touch-target w-full touch-manipulation break-words rounded-ds-lg p-2 text-left text-sm text-ink can-hover:bg-integration-services/20 focus:bg-integration-services/20" onClick={() => void run(async () => { const next = await chooseLengthCategory(c.id); setSelected(c.id); setPreview(null); onStatus?.(next); setOpen(false); returnFocus.current = "arrow"; })}>{selected === c.id ? "✓ " : ""}{c.name}</button>)}</div>}
+      }}>{categories.map(c => <button key={c.id} role="menuitemradio" aria-checked={selected === c.id} tabIndex={-1} className="block min-h-ds-touch-target w-full touch-manipulation break-words rounded-ds-lg p-2 text-left text-sm text-ink can-hover:bg-integration-services-soft/20 focus:bg-integration-services-soft/20" onClick={() => void run(async () => { const next = await chooseLengthCategory(c.id); setSelected(c.id); setPreview(null); onStatus?.(next); setOpen(false); returnFocus.current = "arrow"; })}>{selected === c.id ? "✓ " : ""}{c.name}</button>)}</div>}
     </div>
     <p id="pc-length-reason" className="break-words text-xs text-ink-muted">{busy ? "Please wait…" : reason ?? "Preview the next upcoming service plan before changing its song times."}</p>
     {error && <p role="alert" className="break-words text-sm text-danger-text">{error}</p>}

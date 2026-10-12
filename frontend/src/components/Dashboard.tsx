@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEventHandler, type Ref, type TouchEventHandler } from "react";
 
 import { LOCAL_CAPABILITIES } from "../access/accessState";
-import lightsIcon from "../assets/lights-icon-purple.png";
+import lightingIcon from "../assets/lights-icon-purple.png";
 import multitracksIcon from "../assets/multitracks-icon.png";
 import planningCenterIcon from "../assets/planning-center-icon.png";
 import propresenterIcon from "../assets/propresenter-icon.png";
@@ -43,7 +43,7 @@ import {
   readinessHasError,
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
-import { LightsSetupPanel } from "./LightsSetupPanel";
+import { LightingSetupPanel } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
@@ -435,9 +435,9 @@ export function Dashboard({
   propresenterMessage = null,
   pendingProPresenterOperation = null,
   lights = null,
-  lightsError = null,
-  lightsMessage = null,
-  pendingLightsOperation = null,
+  lightingError = null,
+  lightingMessage = null,
+  pendingLightingOperation = null,
   dispatch,
   retryLoads = () => undefined,
   selectPlan,
@@ -454,8 +454,8 @@ export function Dashboard({
   saveProPresenter = () => undefined,
   runProPresenterTest = () => undefined,
   refreshProPresenter = () => undefined,
-  saveLights = () => undefined,
-  refreshLights = () => undefined,
+  saveLighting = () => undefined,
+  refreshLighting = () => undefined,
   sendLightingTest = () => undefined,
   saveLightingCues = () => undefined,
   clearAllLightingCues = () => undefined,
@@ -490,9 +490,9 @@ export function Dashboard({
   propresenterMessage?: string | null;
   pendingProPresenterOperation?: "save" | "test" | "refresh" | null;
   lights?: LightsStatusResponse | null;
-  lightsError?: string | null;
-  lightsMessage?: string | null;
-  pendingLightsOperation?: "save" | "refresh" | "test" | "save-cues" | null;
+  lightingError?: string | null;
+  lightingMessage?: string | null;
+  pendingLightingOperation?: "save" | "refresh" | "test" | "save-cues" | null;
   dispatch: (action: ActionName) => void;
   retryLoads?: () => void;
   selectPlan: (planId: string) => void;
@@ -512,8 +512,8 @@ export function Dashboard({
   saveProPresenter?: (settings: ProPresenterSettingsInput) => void;
   runProPresenterTest?: () => void;
   refreshProPresenter?: () => void;
-  saveLights?: (settings: LightsSettingsInput) => void;
-  refreshLights?: () => void;
+  saveLighting?: (settings: LightsSettingsInput) => void;
+  refreshLighting?: () => void;
   sendLightingTest?: (note: number, velocity: number) => void;
   saveLightingCues?: (song: Song, cues: LightingCue[]) => void;
   clearAllLightingCues?: (songs: Song[]) => void;
@@ -947,6 +947,7 @@ export function Dashboard({
           onClick={() => toggleConnection("planning-center")}
           status={connectionViews.planningCenter.status}
           title="Services"
+          tone="services"
         />
         <StatusCard
           interactive={canConfigure}
@@ -958,6 +959,7 @@ export function Dashboard({
           onClick={() => toggleConnection("midi")}
           status={connectionViews.midi.status}
           title="Playback"
+          tone="playback"
         />
         <StatusCard
           interactive={canConfigure}
@@ -969,16 +971,18 @@ export function Dashboard({
           onClick={() => toggleConnection("propresenter")}
           status={connectionViews.propresenter.status}
           title="Presentation"
+          tone="presentation"
         />
         <StatusCard
           interactive={canConfigure}
           active={activeConnection === "lights"}
-          controls="lights-configuration"
+          controls="lighting-configuration"
           detail={connectionViews.lights.detail}
-          icon={connectionIcon(lightsIcon, "lights", true)}
+          icon={connectionIcon(lightingIcon, "lights", true)}
           onClick={() => toggleConnection("lights")}
           status={connectionViews.lights.status}
-          title="Lights"
+          title="Lighting"
+          tone="lighting"
         />
         <StatusCard
           interactive={canConfigure}
@@ -990,6 +994,7 @@ export function Dashboard({
           onClick={() => toggleConnection("backend")}
           status={backendStatus}
           title="Backend"
+          tone="backend"
         />
       </section>
 
@@ -1071,20 +1076,20 @@ export function Dashboard({
       )}
 
       {canConfigure && activeConnection === "lights" && (
-        <LightsSetupPanel
+        <LightingSetupPanel
           onDirtyChange={setPanelDirty}
           connectionStatus={connectionViews.lights.status}
-          error={lightsError}
+          error={lightingError}
           onRetryLoad={retryLoads}
           lights={lights}
-          message={lightsMessage}
+          message={lightingMessage}
           onClearAllCues={clearAllLightingCues}
           onClose={closeConnection}
-          onRefresh={refreshLights}
+          onRefresh={refreshLighting}
           onSaveCues={saveLightingCues}
-          onSaveSettings={saveLights}
+          onSaveSettings={saveLighting}
           onTest={sendLightingTest}
-          pendingOperation={pendingLightsOperation}
+          pendingOperation={pendingLightingOperation}
           settings={settings}
           state={state}
         />

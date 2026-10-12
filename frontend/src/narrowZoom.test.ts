@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import backendPanel from "./components/BackendSetupPanel.tsx?raw";
-import lightsPanel from "./components/LightsSetupPanel.tsx?raw";
+import lightingPanel from "./components/LightingSetupPanel.tsx?raw";
 import toast from "./components/ui/Toast.tsx?raw";
 import lengths from "./components/PlanningCenterLengths.tsx?raw";
 // vitest stubs CSS modules, so read the stylesheet from disk (node types are not in the app tsconfig).
@@ -39,7 +39,7 @@ describe("5.6 narrow screens", () => {
   it("gives the remaining small controls a 44px touch target on coarse pointers", () => {
     expect(backendPanel).toContain("items-start gap-3 coarse:min-h-ds-touch-target");
     expect(lengths).toContain("coarse:min-w-ds-touch-target");
-    expect(lightsPanel).toContain("coarse:after:-inset-y-[9px]");
+    expect(lightingPanel).toContain("coarse:after:-inset-y-[9px]");
   });
 
   it("Toast scrolls inside itself and clears the safe area instead of running off a short screen", () => {

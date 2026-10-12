@@ -9,10 +9,11 @@ import type { Tone } from "./types";
 
 /** The D3 tone table (p2_common). Accent = dot/border colour name, text = light text token. */
 const table: Record<Tone, { accent: string; text: string }> = {
-  services: { accent: "integration-services", text: "integration-services-text" },
-  presentation: { accent: "integration-presentation", text: "integration-presentation-text" },
-  playback: { accent: "integration-playback", text: "integration-playback-text" },
-  lights: { accent: "integration-lights", text: "integration-lights-text" },
+  services: { accent: "integration-services-soft", text: "integration-services-text" },
+  presentation: { accent: "integration-presentation-soft", text: "integration-presentation-text" },
+  playback: { accent: "integration-playback-soft", text: "integration-playback-text" },
+  lighting: { accent: "integration-lighting-soft", text: "integration-lighting-text" },
+  backend: { accent: "integration-backend-soft", text: "integration-backend-text" },
   success: { accent: "success", text: "success-text" },
   warning: { accent: "warning", text: "warning-text" },
   danger: { accent: "danger", text: "danger-text" },
@@ -54,9 +55,9 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
     expect(classes(container.firstElementChild!)).toContain(`bg-${table[tone].accent}`);
   });
 
-  it("special cases hold: lights text is integration-lights-text, idle text is ink-muted, others are *-text", () => {
-    expect(table.lights.text).toBe("integration-lights-text");
+  it("special cases hold: lights text is integration-lighting-text, idle text is ink-muted, others are *-text", () => {
+    expect(table.lighting.text).toBe("integration-lighting-text");
     expect(table.idle.text).toBe("ink-muted");
-    for (const t of tones.filter((x) => x !== "lights" && x !== "idle")) expect(table[t].text.endsWith("-text")).toBe(true);
+    for (const t of tones.filter((x) => x !== "lighting" && x !== "idle")) expect(table[t].text.endsWith("-text")).toBe(true);
   });
 });

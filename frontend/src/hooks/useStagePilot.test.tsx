@@ -662,7 +662,7 @@ describe("useStagePilot", () => {
         lights: {
           ...settings.settings.lights,
           enabled: true,
-          output_name: "StagePilot Lights",
+          output_name: "StagePilot Lighting",
         },
       },
     };
@@ -696,7 +696,7 @@ describe("useStagePilot", () => {
       message: "Lighting output connected.",
       lights: {
         enabled: true,
-        output_name: "StagePilot Lights",
+        output_name: "StagePilot Lighting",
         channel: 1,
         pulse_ms: 100,
         connection_status: "connected",
@@ -722,7 +722,7 @@ describe("useStagePilot", () => {
     });
     expect(mockedUpdateLightsSettings).toHaveBeenCalledWith({
       enabled: true,
-      output_name: "StagePilot Lights",
+      output_name: "StagePilot Lighting",
       channel: 1,
       pulse_ms: 100,
     });
