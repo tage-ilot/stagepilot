@@ -79,6 +79,21 @@ function renderPanel(props: Partial<React.ComponentProps<typeof BackendSetupPane
   );
 }
 
+describe("Status section", () => {
+  // The old "Connection health" block (per-connection name/status/version list) was removed on
+  // purpose: the five status cards already show each connection. Keep Status to identity and endpoints.
+  it("shows the identity and endpoints but no Connection health list", () => {
+    renderPanel();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("API endpoint")).toBeInTheDocument();
+    expect(screen.getByText("WebSocket")).toBeInTheDocument();
+    expect(screen.getByText("Backend version")).toBeInTheDocument();
+    expect(screen.getByText("State revision")).toBeInTheDocument();
+    expect(screen.queryByText(/connection health/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("No connections reported.")).not.toBeInTheDocument();
+  });
+});
+
 describe("Remote Access checkbox", () => {
   it("checking the box enables Remote immediately even with no Operator yet, then shows the bootstrap UI", async () => {
     vi.mocked(api.getRemoteStatus).mockResolvedValue(off);

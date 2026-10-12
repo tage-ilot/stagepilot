@@ -286,7 +286,7 @@ export function BackendSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close StagePilot configuration"
-        description="Shows the runtime identity, local API endpoints, WebSocket state and connection health for this session."
+        description="Shows the runtime identity, local API endpoints and WebSocket state for this session."
         headingId="backend-setup-heading"
         onClose={onClose}
         status={connectionStatus}
@@ -315,24 +315,6 @@ export function BackendSetupPanel({
           <dd className="mt-1 tabular-nums text-ink">{state.revision}</dd>
         </div>
       </dl>
-
-      <div className="mt-5">
-        <p className="text-xs font-bold uppercase tracking-wider text-ink-body">Connection health</p>
-        <div className="mt-3 grid gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(health?.plugins ?? Object.values(state.plugins)).map((plugin) => (
-            <div key={plugin.name}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-ink">{plugin.name}</p>
-                <span className="text-xs capitalize text-ink-muted">{plugin.status}</span>
-              </div>
-              <p className="mt-1 text-xs text-ink-muted">v{plugin.version}{plugin.last_error ? ` · ${plugin.last_error}` : ""}</p>
-            </div>
-          ))}
-          {!health?.plugins.length && !Object.keys(state.plugins).length && (
-            <p className="text-sm text-ink-muted">No connections reported.</p>
-          )}
-        </div>
-      </div>
 
       <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Basic</h3>
       <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
