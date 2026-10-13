@@ -870,3 +870,17 @@ async def test_a_plan_reload_after_the_final_song_keeps_end_of_service(
     await load(bus, make_plan(song("a", "A", 1), song("b", "B", 2), song("c", "C", 3)))
     assert await labels(store) == ("C", None, "C")
     assert (await svc.dispatch(ActionName.START_NEXT)).accepted is False
+
+
+@pytest.mark.asyncio
+async def test_previous_and_next_say_they_only_queued_the_song(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, _, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)
+    previous = await svc.dispatch(ActionName.PREVIOUS)
+    assert previous.message == '"A" is up next. Press Start next to play it.'
+    following = await svc.dispatch(ActionName.NEXT)
+    assert following.message == '"B" is up next. Press Start next to play it.'

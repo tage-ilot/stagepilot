@@ -347,6 +347,11 @@ class StateService:
         )
         return ActionOutcome(True, f'Restarted "{state.current_song.title}".')
 
+    @staticmethod
+    def _up_next_message(title: str) -> str:
+        """Previous / Next start nothing, so say what they did and what happens next."""
+        return f'"{title}" is up next. Press Start next to play it.'
+
     async def _previous(self) -> ActionOutcome:
         state = await self._state_store.snapshot()
         if state.plan is None or not state.plan.songs:
@@ -357,7 +362,7 @@ class StateService:
         self._pending_start_index = target
         await self._select_song(target, ActionName.PREVIOUS)
         await self._set_labels()  # the playing song is untouched; only Up next moves
-        return ActionOutcome(True, f'Selected "{state.plan.songs[target].title}".')
+        return ActionOutcome(True, self._up_next_message(state.plan.songs[target].title))
 
     async def _next(self) -> ActionOutcome:
         state = await self._state_store.snapshot()
@@ -369,7 +374,7 @@ class StateService:
         self._pending_start_index = target
         await self._select_song(target, ActionName.NEXT)
         await self._set_labels()
-        return ActionOutcome(True, f'Selected "{state.plan.songs[target].title}".')
+        return ActionOutcome(True, self._up_next_message(state.plan.songs[target].title))
 
     async def _stop_timer(self) -> ActionOutcome:
         await self._set_last_action(ActionName.STOP_TIMER)
