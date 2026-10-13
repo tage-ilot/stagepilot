@@ -21,9 +21,12 @@ function statusWordSizes(): string[] {
 }
 
 describe("5.6 narrow screens", () => {
-  it("compact status word never goes below the 11px floor and ellipsizes instead of shrinking", () => {
+  it("compact status word: capitalized, never above 11px, never below the owner-accepted 9px, and it ellipsizes instead of overflowing", () => {
     const compact = [...css.matchAll(/\.status-compact [^{}]*status-card-status-word[^{}]*\{([^}]*)\}/g)].map((m) => m[1]!).join("\n");
-    expect(compact).toContain("font-size: 0.6875rem");
+    // 2026-10-13: uppercase is wider than sentence case, so the compact word now steps from 11px down to 9px (0.5625rem),
+    // the exception to the 11px floor the owner accepted for this word.
+    expect(compact).toContain("font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem)");
+    expect(compact).not.toMatch(/font-size:\s*0\.[0-4]\d*rem/);
     expect(compact).toContain("text-overflow: ellipsis");
     expect(compact).toContain("overflow: hidden");
     for (const size of statusWordSizes()) {

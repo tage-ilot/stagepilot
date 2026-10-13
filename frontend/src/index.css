@@ -482,39 +482,16 @@ textarea:focus-visible {
   z-index: 1;
 }
 
+/* Status word: capitalized like the card title and the header pill (owner, 2026-10-13: the status dots are gone, so the
+   word takes their room and grows). Wide cards: the word shares a row with the icon (48px + gap), so the room is
+   100cqw - 50px; the size scales with the card so the widest word, NOT CONNECTED (about 8.7em), always fits, up to 18px. */
 .status-card-status-word {
-  font-size: clamp(0.75rem, 6.2cqw, 1rem);
+  font-size: clamp(0.6875rem, calc((100cqw - 3.5rem) / 8.8), 1.125rem);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
   transition: color 180ms ease;
-}
-
-.status-card[data-status="connected"] .status-card-status-word,
-.status-card[data-status="connecting"] .status-card-status-word,
-.status-card[data-status="error"] .status-card-status-word {
-  font-size: clamp(0.75rem, 7.2cqw, 1rem);
-}
-
-@container (min-width: 8.5rem) {
-  .status-card-status-word {
-    font-size: 0.75rem;
-  }
-
-  .status-card[data-status="connected"] .status-card-status-word,
-  .status-card[data-status="connecting"] .status-card-status-word,
-  .status-card[data-status="error"] .status-card-status-word {
-    font-size: 0.8rem;
-  }
-}
-
-@container (min-width: 10rem) {
-  .status-card-status-word {
-    font-size: 0.85rem;
-  }
-
-  .status-card[data-status="connected"] .status-card-status-word,
-  .status-card[data-status="connecting"] .status-card-status-word,
-  .status-card[data-status="error"] .status-card-status-word {
-    font-size: 1rem;
-  }
 }
 
 .status-card-status {
@@ -657,16 +634,29 @@ textarea:focus-visible {
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
-    /* 11px floor (DESIGN.md): the word ellipsizes when the card is narrow; the full word stays in the card's aria-label and the dot carries the state. */
-    font-size: 0.6875rem;
-    letter-spacing: -0.025em;
+    /* Under the icon the word has the whole card. Uppercase is wider, so the size follows the card width: 11px at most,
+       down to 9px (the owner-accepted exception to the 11px floor for the compact status word); a word that still does
+       not fit ellipsizes, and the full word stays in the card's aria-label. */
+    font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem);
+    letter-spacing: -0.01em;
+    /* "NOT CONNECTED" is the one phrase too wide for a compact card: it wraps to two short lines instead of being cut. */
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
     text-overflow: ellipsis;
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.95);
     transition: none;
   }
 
   .connections-status.status-compact .status-card[data-status] .status-card-status-word {
-    font-size: 0.6875rem;
+    font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem);
+  }
+
+  /* 53px cards (320px screens) have no room for a second line: one line, ellipsized; the full word is in the aria-label. */
+  @media (max-width: 359.98px) {
+    .connections-status.status-compact .status-card-status-word {
+      white-space: nowrap;
+    }
   }
 
   .connections-status.status-compact .status-card-icon {

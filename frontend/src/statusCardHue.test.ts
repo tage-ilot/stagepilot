@@ -37,3 +37,18 @@ describe("open status card hue", () => {
     expect(rule).not.toContain("surface-panel-strong");
   });
 });
+
+describe("status word (owner 2026-10-13: no dot, capitalized, larger)", () => {
+  it("is uppercase and sized from the card width, capped at 18px", () => {
+    const rule = css.match(/\.status-card-status-word \{[^}]*\}/)?.[0] ?? "";
+    expect(rule).toContain("text-transform: uppercase");
+    expect(rule).toContain("white-space: nowrap");
+    expect(rule).toMatch(/font-size: clamp\(0\.6875rem, calc\(\(100cqw - [\d.]+rem\) \/ [\d.]+\), 1\.125rem\)/);
+  });
+
+  it("the compact word steps from 11px down to 9px and NOT CONNECTED may wrap (one line below 360px)", () => {
+    expect(css).toContain("font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem)");
+    expect(css).toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: normal/);
+    expect(css).toMatch(/max-width: 359\.98px\) \{\s*\.connections-status\.status-compact \.status-card-status-word \{\s*white-space: nowrap/);
+  });
+});
