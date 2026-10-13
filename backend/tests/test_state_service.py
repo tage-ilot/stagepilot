@@ -651,3 +651,222 @@ async def test_manual_stop_keeps_remaining_time(
     await stop_event(bus, t0 + timedelta(seconds=30))
     timer = (await store.snapshot()).timer
     assert (timer.status, timer.remaining_seconds) == (TimerStatus.STOPPED, 210)
+
+
+# --- on-screen labels (owner 2026-10-13): "playing" and "up next" describe the show ---
+
+
+async def labels(store: StateStore) -> tuple[str | None, str | None, str | None]:
+    state = await store.snapshot()
+    return (
+        state.playing_song.title if state.playing_song else None,
+        state.up_next_song.title if state.up_next_song else None,
+        state.current_song.title if state.current_song else None,
+    )
+
+
+def three() -> ServicePlan:
+    return make_plan(song("a", "A", 1), song("b", "B", 2), song("c", "C", 3))
+
+
+@pytest.mark.asyncio
+async def test_labels_before_anything_starts(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, _ = service
+    await load(bus, three())
+    assert await labels(store) == (None, "A", None)
+
+
+@pytest.mark.asyncio
+async def test_labels_follow_start_next(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    assert await labels(store) == ("A", "B", "A")
+    await svc.dispatch(ActionName.START_NEXT)
+    assert await labels(store) == ("B", "C", "B")
+    await svc.dispatch(ActionName.START_NEXT)
+    assert await labels(store) == ("C", None, "C")
+
+
+@pytest.mark.asyncio
+async def test_previous_keeps_the_playing_song_and_makes_the_previous_one_up_next(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)  # B plays
+    started: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.SONG_STARTED, started.append)
+
+    outcome = await svc.dispatch(ActionName.PREVIOUS)
+
+    assert outcome.accepted is True
+    # B is still what is playing; A is what the next Start next will play. The cursor moved to A.
+    assert await labels(store) == ("B", "A", "A")
+    assert started == []
+    state = await store.snapshot()
+    assert state.playing_song_index == 1
+    assert state.current_song_index == 0  # Playback / MIDI mapping still use the cursor
+
+
+@pytest.mark.asyncio
+async def test_start_next_after_previous_plays_that_song_and_labels_follow(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.PREVIOUS)
+    await svc.dispatch(ActionName.START_NEXT)
+    assert await labels(store) == ("A", "B", "A")
+
+
+@pytest.mark.asyncio
+async def test_previous_twice_walks_back_one_song_at_a_time(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    for _ in range(3):
+        await svc.dispatch(ActionName.START_NEXT)  # C plays
+    await svc.dispatch(ActionName.PREVIOUS)
+    assert await labels(store) == ("C", "B", "B")
+    await svc.dispatch(ActionName.PREVIOUS)
+    assert await labels(store) == ("C", "A", "A")
+    assert (await svc.dispatch(ActionName.PREVIOUS)).accepted is False  # already first
+    assert await labels(store) == ("C", "A", "A")
+
+
+@pytest.mark.asyncio
+async def test_restart_current_plays_the_cursor_song(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)  # B plays
+    await svc.dispatch(ActionName.PREVIOUS)  # cursor A, B still playing
+    await svc.dispatch(ActionName.RESTART_CURRENT)  # restarts the cursor song: A
+    assert await labels(store) == ("A", "A", "A")
+
+
+@pytest.mark.asyncio
+async def test_next_only_moves_up_next(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)  # A plays
+    await svc.dispatch(ActionName.NEXT)  # cursor B
+    assert await labels(store) == ("A", "B", "B")
+
+
+@pytest.mark.asyncio
+async def test_reset_position_clears_playing_and_points_up_next_at_the_first_song(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.RESET_POSITION)
+    assert await labels(store) == (None, "A", None)
+
+
+@pytest.mark.asyncio
+async def test_playback_position_start_sets_the_labels(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch_song_position(2, source="midi_playback")
+    assert await labels(store) == ("B", "C", "B")
+
+
+@pytest.mark.asyncio
+async def test_a_song_without_a_duration_is_not_reported_as_playing(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, make_plan(song("a", "A", 1, duration_seconds=None), song("b", "B", 2)))
+    outcome = await svc.dispatch(ActionName.START_NEXT)
+    assert outcome.accepted is False
+    assert await labels(store) == (None, "A", "A")  # nothing started; Start next would retry A
+
+
+@pytest.mark.asyncio
+async def test_reloading_the_plan_keeps_the_playing_song_by_id(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)  # B plays
+    await svc.dispatch(ActionName.PREVIOUS)  # cursor A, so the plan reload keeps the cursor on A
+    four = make_plan(song("a", "A", 1), song("b", "B", 2), song("c", "C", 3), song("d", "D", 4))
+    await load(bus, four)
+    # B is found by id in the new plan, so it is still the playing song; Start next still plays A.
+    assert await labels(store) == ("B", "A", "A")
+
+
+@pytest.mark.asyncio
+async def test_reloading_a_plan_where_the_playing_song_is_gone_clears_playing_but_not_up_next(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)  # B plays
+    await svc.dispatch(ActionName.PREVIOUS)  # cursor A
+    await load(bus, make_plan(song("a", "A", 1), song("c", "C", 2)))
+    playing, up_next, _ = await labels(store)
+    assert playing is None
+    assert up_next == "A"
+
+
+@pytest.mark.asyncio
+async def test_a_new_plan_with_no_match_clears_playing(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await load(bus, make_plan(song("x", "X", 1), song("y", "Y", 2), plan_id="plan-2"))
+    assert await labels(store) == (None, "X", None)
+
+
+@pytest.mark.asyncio
+async def test_a_plan_reload_after_previous_does_not_change_what_start_next_plays(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    """Regression: the pending target used to be recomputed as "after the cursor", so a reload
+    after Previous silently moved Start next from A to B."""
+    bus, store, svc = service
+    await load(bus, three())
+    await svc.dispatch(ActionName.START_NEXT)
+    await svc.dispatch(ActionName.START_NEXT)  # B plays
+    await svc.dispatch(ActionName.PREVIOUS)  # Start next will play A
+    four = make_plan(song("a", "A", 1), song("b", "B", 2), song("c", "C", 3), song("d", "D", 4))
+    await load(bus, four)
+    assert (await labels(store))[1] == "A"
+    outcome = await svc.dispatch(ActionName.START_NEXT)
+    assert outcome.message == 'Started "A".'
+
+
+@pytest.mark.asyncio
+async def test_a_plan_reload_after_the_final_song_keeps_end_of_service(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, svc = service
+    await load(bus, three())
+    for _ in range(3):
+        await svc.dispatch(ActionName.START_NEXT)  # C plays, nothing left
+    await load(bus, make_plan(song("a", "A", 1), song("b", "B", 2), song("c", "C", 3)))
+    assert await labels(store) == ("C", None, "C")
+    assert (await svc.dispatch(ActionName.START_NEXT)).accepted is False

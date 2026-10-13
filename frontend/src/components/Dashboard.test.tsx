@@ -179,6 +179,7 @@ function applicationState(
     current_song: null,
     next_song: loadedPlan.songs[0] ?? null,
     current_song_index: null,
+    playing_song: null, playing_song_index: null, up_next_song: null,
     planning_center_status: "connected",
     midi_status: "connected",
     propresenter_status: "connected",
@@ -1393,6 +1394,7 @@ describe("Dashboard connection configuration panels", () => {
         state: applicationState(loadedServiceState, {
           current_song: loadedPlan.songs[0] ?? null,
           current_song_index: 0,
+          playing_song: loadedPlan.songs[0] ?? null, playing_song_index: 0, up_next_song: loadedPlan.songs[1] ?? null,
           timer: {
             status: "running",
             duration_seconds: 336,
@@ -1416,6 +1418,7 @@ describe("Dashboard connection configuration panels", () => {
       state: applicationState(loadedServiceState, {
         current_song: loadedPlan.songs[0] ?? null,
         current_song_index: 0,
+        playing_song: loadedPlan.songs[0] ?? null, playing_song_index: 0, up_next_song: null,
         timer: {
           status: "stopped",
           duration_seconds: 336,
@@ -1445,6 +1448,7 @@ describe("Dashboard connection configuration panels", () => {
           plan: { ...loadedPlan, songs: [shortSong] },
           current_song: shortSong,
           current_song_index: 0,
+          playing_song: shortSong, playing_song_index: 0, up_next_song: null,
           timer: {
             status: "running",
             duration_seconds: 263,
@@ -1499,7 +1503,7 @@ describe("Long content and empty lists", () => {
       { ...base, id: "c", order: 3, title: "Charlie" },
     ];
     renderDashboard(loadedServiceState, {
-      state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs }, current_song: songs[0], current_song_index: 0, next_song: songs[1] }),
+      state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs }, current_song: songs[0], current_song_index: 0, playing_song: songs[0], playing_song_index: 0, up_next_song: songs[1], next_song: songs[1] }),
     });
     const rows = within(screen.getByRole("list", { name: "Service plan order" })).getAllByRole("listitem");
     const upNext = within(rows[1]!).getByText("Up next");
@@ -1513,6 +1517,43 @@ describe("Long content and empty lists", () => {
     expect(within(rows[2]!).queryByText("Up next")).toBeNull();
     expect(within(rows[2]!).getByText("3")).toHaveClass("bg-ink/5", "text-ink-muted");
     expect(within(rows[2]!).getByText("3")).not.toHaveClass("bg-info/15");
+  });
+
+  it("after Previous the playing song keeps Current · live and the previous song is Up next (owner 2026-10-13)", () => {
+    const songs = [
+      { ...base, id: "a", order: 1, title: "Alpha" },
+      { ...base, id: "b", order: 2, title: "Bravo" },
+      { ...base, id: "c", order: 3, title: "Charlie" },
+    ];
+    // Bravo is playing; Previous moved the cursor to Alpha without starting it, so Start next will play Alpha.
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, {
+        plan: { ...loadedPlan, songs },
+        current_song: songs[0], current_song_index: 0, next_song: songs[1],
+        playing_song: songs[1], playing_song_index: 1, up_next_song: songs[0],
+      }),
+    });
+    const rows = within(screen.getByRole("list", { name: "Service plan order" })).getAllByRole("listitem");
+    expect(within(rows[0]!).getByText("Up next")).toBeInTheDocument();
+    expect(within(rows[0]!).queryByText("Current · live")).toBeNull();
+    expect(within(rows[1]!).getByText("Current · live")).toBeInTheDocument();
+    expect(within(rows[1]!).queryByText("Up next")).toBeNull();
+    expect(within(rows[2]!).queryByText("Up next")).toBeNull();
+    // The Now playing panel agrees: it names the playing song and shows the same Up next.
+    expect(screen.getByRole("heading", { level: 2, name: "Bravo" })).toBeInTheDocument();
+    expect(screen.getByText("2 of 3")).toBeInTheDocument();
+  });
+
+  it("labels nothing as playing before the first song starts, and Up next is the first song", () => {
+    const songs = [{ ...base, id: "a", order: 1, title: "Alpha" }, { ...base, id: "b", order: 2, title: "Bravo" }];
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, { plan: { ...loadedPlan, songs }, up_next_song: songs[0] }),
+    });
+    const rows = within(screen.getByRole("list", { name: "Service plan order" })).getAllByRole("listitem");
+    expect(screen.queryByText("Current · live")).toBeNull();
+    expect(within(rows[0]!).getByText("Up next")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for first cue")).toBeInTheDocument();
+    expect(screen.getByText("Not started")).toBeInTheDocument();
   });
 
   it("keeps the Now playing Up next caption muted and its value plain ink", () => {

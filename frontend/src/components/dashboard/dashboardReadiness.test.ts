@@ -38,6 +38,7 @@ const state = (overrides: Partial<ApplicationState> = {}): ApplicationState => (
   current_song: null,
   next_song: null,
   current_song_index: null,
+  playing_song: null, playing_song_index: null, up_next_song: null,
   planning_center_status: "disconnected",
   midi_status: "disconnected",
   propresenter_status: "disconnected",

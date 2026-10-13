@@ -122,6 +122,7 @@ const state: ApplicationState = {
   current_song: song,
   next_song: null,
   current_song_index: 0,
+  playing_song: null, playing_song_index: null, up_next_song: null,
   planning_center_status: "connected",
   midi_status: "connected",
   propresenter_status: "connected",

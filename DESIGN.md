@@ -1071,6 +1071,21 @@ identical.
   `#e11d48`) are unchanged. **Previous** (`live-back` `#e34e1f`) stays orange on
   purpose: moving it to rose would make it look like Stop timer and Reset position.
 
+## Decided (owner, 2026-10-13): "Current · live" and "Up next" describe the show
+**Previous** and **Next** only move the navigation cursor: they select a song and start nothing (the
+timer, ProPresenter and Lighting do not change). The labels used to follow the cursor, so after
+Previous the previous song read "Current · live" while another song was still playing, and the real
+effect (the next Start next plays it) was hidden. Now:
+- **Current · live** (and the Now playing title, position and elapsed) is the song that was actually
+  started, `playing_song`.
+- **Up next** (service plan row and the Now playing caption) is the song the next **Start next** will
+  play, `up_next_song`. After Previous that is the previous song.
+- Before anything starts nothing is live and Up next is the first song. **Reset position** clears the
+  live song. **Restart current** restarts the cursor song and makes it the live one.
+- Playback, MIDI and the Lighting cue editor keep using the cursor (`current_song`,
+  `current_song_index`), unchanged.
+- A service plan reload keeps both the live song and the Start next target by song id.
+
 ## Decided (owner, 2026-10-13): a darker "connected" green
 `success` is now **`#31551d`**. Measured on panels (`#0f1720`), cards and the live panel:
 | Role | Value | Contrast | Used for |

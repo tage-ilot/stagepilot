@@ -12,6 +12,7 @@ function state(overrides: Partial<ApplicationState> = {}): ApplicationState {
     application_status: "running",
     current_song: null,
     current_song_index: null,
+    playing_song: null, playing_song_index: null, up_next_song: null,
     last_action: null,
     last_successful_plan_reload_at: null,
     lights_status: "connected",
