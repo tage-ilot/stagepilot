@@ -5,7 +5,7 @@ Implements the existing Playback configuration window on top of backend arbitrat
 ## UI and contract
 
 - Default panel: Playback API on/off, API-specific connected address, saved manual host override (blank restores automatic local-first/LAN discovery), Find / Scan, recent normalized events.
-- One header connection light and backend `reason` for overall Playback. API-only controls use `sources.playback_api.connected`, never overall `connected`. MIDI fallback remains connected overall while API is offline. Connected MIDI with API ownership says `MIDI connected - standing by (Playback API is in use)`.
+- One header connection light and backend `reason` for overall Playback. API-only controls use `sources.playback_api.connected`, never overall `connected`. There is no MIDI fallback: in API mode, when Playback is offline the status is "Not connected. Looking for Playback…". The stopped timer keeps its existing wording and shows the frozen remaining time.
 - "Alternate connection: MIDI settings" starts collapsed on every mount; source selector and all prior MIDI mapping/input/simulation/monitor controls stay there. MIDI handlers and backend behavior unchanged.
 - Discover Song Order requires the plain-language confirmation dialog. Disconnected/playing/running states disable it and explain why. Only the exact backend `POST /discover-song-order` with `{confirm:true}` is available; no individual transport controls. Status polling continues during this long request; failed HTTP 200 results show `last_error`.
 - Connection health remains green with stale/unknown API order. Separate start-readiness warning/check requires discovery; invalid API order does not block readiness when MIDI actually owns.

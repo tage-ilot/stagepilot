@@ -33,7 +33,9 @@ section discovery, or general text-send method exists.
 - Version-change observation is first in a heartbeat's event batch; integration
   should validate the supplied heartbeat before ALL events in that batch.
   Natural continuing transitions emit ended, changed, then started; changed is
-  monitor-only. First heartbeat after every connection is snapshot-only.
+  monitor-only. The first heartbeat after every connection is a `state.snapshot`;
+  mapping uses it only to align the timer when Playback is playing StagePilot's
+  current song (valid order), otherwise it is monitor-only.
 
 ## Transport and discovery
 
@@ -52,8 +54,10 @@ supports ip/ifconfig and Windows PowerShell with bounded subprocess calls. It
 never guesses networks from DNS, scans the internet, uses cached unrelated hosts,
 or sends Playback commands. Every match requires valid heartbeat plus handshake.
 
-Reconnect uses 1/2/4/8/15-second capped backoff, interruptible at shutdown. A valid
-heartbeat resets backoff. Five seconds without a valid heartbeat disconnects even
+Reconnect re-probes every second (`RECONNECT_PROBE_INTERVAL`, one-second probe
+timeout, no backoff), interruptible at shutdown: the manual host, else the last good
+address, else loopback. The full scan (`FULL_SCAN_INTERVAL`, 45 s, 3 s probe timeout)
+runs only with auto-scan on and no saved address; a manual host never scans. Five seconds without a valid heartbeat disconnects even
 if unrelated messages arrive. Shutdown waits for bounded discovery/socket work,
 not cancellation that abandons worker threads. Reconfigure closes the old listener
 before starting the new one. Mapping trust/revalidation is integration-owned.
