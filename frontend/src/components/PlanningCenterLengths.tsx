@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { chooseLengthCategory, confirmPlanLengths, getLengthCategories, previewPlanLengths, restorePlanLengths } from "../api";
 import { Dialog } from "./ui/Dialog";
+import { STALE_PLAN_NOTICE, STALE_SETLIST_NOTICE } from "./playbackStatus";
 import type { LengthPreview, PlaybackStatusResponse, PlanningCenterServiceType } from "../types";
 
 const button = "min-h-ds-touch-target touch-manipulation rounded-ds-lg border border-integration-services-soft/30 bg-integration-services-soft/10 px-3 py-2 text-sm font-semibold text-integration-services-text transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-integration-services-soft/20 disabled:cursor-not-allowed disabled:border-edge disabled:bg-surface-900 disabled:text-ink-muted";
@@ -11,7 +12,9 @@ export function lengthUpdateReason(status: PlaybackStatusResponse): string | nul
   if (status.discovery === "failed") return "The song scan failed or was cancelled. Scan songs again.";
   if (status.discovery === "running") return "Wait for the song scan to finish.";
   if (!status.captured_at || !status.song_order.length) return "Scan songs first to read the lengths from Playback.";
-  if (status.stale) return "The setlist changed. Scan songs again.";
+  if (status.stale) return STALE_SETLIST_NOTICE;
+  if (status.plan_changed) return STALE_PLAN_NOTICE;
+  if (status.lengths_applied) return "Planning Center already has these lengths. Scan the setlist again for new ones.";
   if (!(status.song_lengths ?? []).some(n => n !== null)) return "The scan has no song lengths. Scan songs again.";
   return status.planning_center_update_reason ?? null;
 }
@@ -32,7 +35,7 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
   const returnFocus = useRef<"arrow" | "main" | null>(null);
   useEffect(() => { if (!busy && returnFocus.current) { (returnFocus.current === "arrow" ? arrow : main).current?.focus(); returnFocus.current = null; } }, [busy, open, preview]);
   const reason = lengthUpdateReason(status);
-  const fingerprint = `${status.captured_at}|${status.stale}|${status.discovery}|${status.playing}|${status.planning_center_connected}`;
+  const fingerprint = `${status.captured_at}|${status.stale}|${status.plan_changed ?? false}|${status.lengths_applied ?? false}|${status.discovery}|${status.playing}|${status.planning_center_connected}`;
   useEffect(() => { generation.current++; setPreview(null); }, [fingerprint]);
   useEffect(() => () => { generation.current++; }, []);
   useEffect(() => setSelected(status.planning_center_update_service_type_id), [status.planning_center_update_service_type_id]);

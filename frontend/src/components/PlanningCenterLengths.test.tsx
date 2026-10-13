@@ -14,7 +14,8 @@ const show = (extra: Partial<PlaybackStatusResponse> = {}) => render(<PlanningCe
 describe("explicit Planning Center split button", () => {
   it.each([
     [{ captured_at: null, song_order: [] }, "Scan songs first to read the lengths from Playback."],
-    [{ stale: true }, "The setlist changed. Scan songs again."],
+    [{ stale: true }, "Your Playback setlist changed. Scan the setlist again before updating Planning Center."],
+    [{ plan_changed: true }, "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center."],
     [{ discovery: "failed" }, "The song scan failed or was cancelled. Scan songs again."],
     [{ song_lengths: [null] }, "The scan has no song lengths. Scan songs again."],
     [{ planning_center_connected: false }, "Connect Services first."],
@@ -67,5 +68,29 @@ describe("explicit Planning Center split button", () => {
   it("preview errors are visible, no write occurs, and retry works", async () => {
     vi.mocked(api.previewPlanLengths).mockRejectedValueOnce(new Error("No upcoming plan in this category.")); show(); fireEvent.click(update()); await screen.findByRole("alert"); expect(api.confirmPlanLengths).not.toHaveBeenCalled();
     fireEvent.click(update()); await screen.findByRole("dialog");
+  });
+});
+
+describe("outdated data closes an open preview and never writes", () => {
+  it("plan change while the confirm dialog is open closes it; the update action is disabled", async () => {
+    const view = show(); fireEvent.click(update()); await screen.findByRole("dialog");
+    view.rerender(<PlanningCenterLengths status={ready({ plan_changed: true, song_lengths: [] })} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); expect(update()).toBeDisabled();
+    expect(api.confirmPlanLengths).not.toHaveBeenCalled();
+  });
+  it("a new scan makes the action available again", async () => {
+    const view = show({ plan_changed: true }); expect(update()).toBeDisabled();
+    view.rerender(<PlanningCenterLengths status={ready({ plan_changed: false, captured_at: "2026-10-07T13:00:00Z" })} />);
+    expect(update()).toBeEnabled();
+  });
+});
+
+describe("after a successful write the update is not offered again", () => {
+  it("lengths_applied disables Update, keeps Restore working, and a new scan brings it back", () => {
+    const view = render(<PlanningCenterLengths status={ready({ lengths_applied: true, planning_center_undo_available: true })} />);
+    expect(update()).toBeDisabled(); expect(screen.getByText(/already has these lengths/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Restore Services times" })).toBeEnabled();
+    view.rerender(<PlanningCenterLengths status={ready({ lengths_applied: false, planning_center_undo_available: true, captured_at: "2026-10-08T12:00:00Z" })} />);
+    expect(update()).toBeEnabled();
   });
 });

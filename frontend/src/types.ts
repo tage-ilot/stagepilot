@@ -354,6 +354,8 @@ export interface PlaybackStatusResponse extends PlaybackConnection {
   captured_version: number | null;
   captured_at: string | null;
   stale: boolean;
+  plan_changed?: boolean;
+  lengths_applied?: boolean;
   settings: PlaybackSettingsInput;
 }
 

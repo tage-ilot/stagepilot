@@ -21,7 +21,7 @@ from stagepilot.core.logging import _redact, get_logger
 from stagepilot.core.plugin import Plugin
 from stagepilot.core.settings import PersistentSettings, SettingsFileError, SettingsService
 from stagepilot.core.state import StateStore
-from stagepilot.models.state import ConnectionStatus, PluginHealth, PluginStatus
+from stagepilot.models.state import ConnectionStatus, PluginHealth, PluginStatus, ServicePlan
 from stagepilot.plugins.midi_playback import MidiPlaybackPlugin
 from stagepilot.plugins.playback_api.arbiter import (
     ArbitratedDispatcher,
@@ -42,7 +42,7 @@ from stagepilot.plugins.playback_api.find import (
 )
 from stagepilot.plugins.playback_api.mapping import Observation, PlaybackMapper
 from stagepilot.plugins.playback_api.normalizer import Heartbeat, PlaybackEvent
-from stagepilot.services.planning_center_lengths import PlanningCenterLengthService
+from stagepilot.services.planning_center_lengths import PlanningCenterLengthService, plan_key
 
 ClientFactory = Callable[[ConnectionOptions, Observer], PlaybackClient]
 MidiFactory = Callable[[Settings], MidiPlaybackPlugin]
@@ -154,6 +154,8 @@ class PlaybackInputPlugin(Plugin):
             dispatcher,
             is_playing=lambda: bool(self.status.heartbeat and self.status.heartbeat.playing),
         )
+        self.planning_center_lengths.plan_current = self.scan_plan_is_current
+        self.planning_center_lengths.on_applied = self.mark_lengths_applied
         self._midi_factory = midi_factory
         self._client_factory = client_factory
         self._scanner = scanner
@@ -429,7 +431,9 @@ class PlaybackInputPlugin(Plugin):
                         update={
                             "planning_center_update_service_type_id": (
                                 saved.planning_center_update_service_type_id
-                            )
+                            ),
+                            "scan_plan_key": saved.scan_plan_key,
+                            "lengths_applied_key": saved.lengths_applied_key,
                         }
                     ),
                 }
@@ -471,6 +475,45 @@ class PlaybackInputPlugin(Plugin):
             self.client = None
             if self._running:
                 await self._start_selected()
+
+    def _scan_key(self, plan: ServicePlan | None) -> str | None:
+        if plan is None:
+            return None
+        config = self.settings.playback_api
+        category = (
+            config.planning_center_update_service_type_id
+            or self.settings.planning_center.service_type_id
+        )
+        return json.dumps([category, plan_key(plan)])
+
+    async def plan_changed(self) -> bool:
+        """True when the loaded plan or update category differs from what was scanned."""
+        saved = self.settings.playback_api.scan_plan_key
+        current = self._scan_key((await self.state_store.snapshot()).plan)
+        return saved is not None and current is not None and saved != current  # unknown != changed
+
+    def _applied_key(self, plan_id: str) -> str | None:
+        captured = self.settings.playback_api.captured_at
+        return json.dumps([captured.isoformat(), plan_id]) if captured else None
+
+    def mark_lengths_applied(self, plan_id: str) -> None:
+        """Remember (persistently) that this scan's lengths were fully written to this plan."""
+        key = self._applied_key(plan_id)
+        if key is None:
+            return
+        config = self.settings.playback_api.model_copy(update={"lengths_applied_key": key})
+        self._service.save(
+            self._service.snapshot().model_copy(update={"playback_api": config}, deep=True)
+        )
+        self.settings.playback_api = config
+
+    async def lengths_applied(self) -> bool:
+        plan = (await self.state_store.snapshot()).plan
+        saved = self.settings.playback_api.lengths_applied_key
+        return bool(plan and saved and saved == self._applied_key(plan.id))
+
+    async def scan_plan_is_current(self) -> bool:
+        return not await self.plan_changed()
 
     def _observe(
         self, generation: int, status: PlaybackStatus, events: tuple[PlaybackEvent, ...]
@@ -827,8 +870,10 @@ class PlaybackInputPlugin(Plugin):
                 if await self._step("previous", version) != expected:
                     raise DiscoveryConflict("Could not restore the original Playback selection.")
             self._check_discovery(version)
+            plan = (await self.state_store.snapshot()).plan
             saved = self.settings.playback_api.model_copy(
                 update={
+                    "scan_plan_key": self._scan_key(plan),
                     "song_order": order,
                     "captured_version": version,
                     "setlist_id": self.status.setlist_id,

@@ -17,8 +17,11 @@ export function validPlaybackHost(host: string): boolean {
 
 // Shared wording: connection health is not song-order/action readiness.
 export const playbackConnectionDetail = (status: PlaybackConnection) => status.reason;
+export const STALE_SETLIST_NOTICE = "Your Playback setlist changed. Scan the setlist again before updating Planning Center.";
+export const STALE_PLAN_NOTICE = "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center.";
 export const playbackOrderNotice = (status: PlaybackStatusResponse) =>
-  status.stale && status.song_order.length > 0 ? "Your Playback setlist changed. Set up song order again."
+  status.stale && status.song_order.length > 0 ? STALE_SETLIST_NOTICE
+    : status.plan_changed && status.song_order.length > 0 ? STALE_PLAN_NOTICE
     : status.song_order.length === 0 ? "Song order isn't set up yet." : null;
 
 export function playbackSongCountMismatch(status: PlaybackStatusResponse): string | null {

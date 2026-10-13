@@ -112,6 +112,8 @@ class PlaybackStatusResponse(BaseModel):
     captured_version: int | None
     captured_at: datetime | None
     stale: bool
+    plan_changed: bool = False
+    lengths_applied: bool = False
     settings: PlaybackSettingsRequest
 
 
@@ -156,6 +158,7 @@ async def status_response(controller: PlaybackInputPlugin) -> PlaybackStatusResp
     state = await controller.state_store.snapshot()
     status = controller.status
     config = controller.settings.playback_api
+    outdated = controller.mapper.stale or await controller.plan_changed()
     heartbeat = status.heartbeat
     connection = controller.connection
     return PlaybackStatusResponse(
@@ -196,8 +199,8 @@ async def status_response(controller: PlaybackInputPlugin) -> PlaybackStatusResp
         discovery_song=controller.discovery_song,
         discovery_total=controller.discovery_total,
         song_order=list(controller.mapper.song_order),
-        song_lengths=config.song_lengths if not controller.mapper.stale else [],
-        lengths_measured_at=config.lengths_measured_at if not controller.mapper.stale else None,
+        song_lengths=config.song_lengths if not outdated else [],
+        lengths_measured_at=config.lengths_measured_at if not outdated else None,
         plan_songs=[
             PlaybackPlanSong(title=song.title, duration_seconds=song.duration_seconds)
             for song in state.plan.songs
@@ -209,6 +212,8 @@ async def status_response(controller: PlaybackInputPlugin) -> PlaybackStatusResp
         captured_version=controller.mapper.captured_version,
         captured_at=config.captured_at,
         stale=controller.mapper.stale,
+        plan_changed=await controller.plan_changed(),
+        lengths_applied=await controller.lengths_applied(),
         settings=PlaybackSettingsRequest(
             enabled=config.enabled,
             host=config.host,
@@ -307,6 +312,7 @@ def scan_signature(controller: PlaybackInputPlugin) -> str:
             config.captured_version,
             config.setlist_id,
             config.planning_center_update_service_type_id,
+            config.scan_plan_key,
         ],
         sort_keys=True,
     )
@@ -327,6 +333,10 @@ async def update_reason(controller: PlaybackInputPlugin) -> str | None:
         return "Scan songs first to read the lengths from Playback."
     if controller.mapper.stale:
         return "The setlist changed. Scan songs again."
+    if await controller.plan_changed():
+        return "The Services plan changed since the scan. Scan songs again."
+    if await controller.lengths_applied():
+        return "Planning Center already has these lengths. Scan songs again for new ones."
     if not any(length is not None for length in config.song_lengths):
         return "The scan has no song lengths. Scan songs again."
     if controller.planning_center_lengths.result.status == "running":
