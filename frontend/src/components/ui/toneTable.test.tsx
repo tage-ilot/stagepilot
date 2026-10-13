@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+// @ts-expect-error node builtin without types
+import { readFileSync } from "node:fs";
+declare const process: { cwd: () => string };
+
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { InlineAlert, type InlineAlertTone } from "./InlineAlert";
@@ -60,5 +64,24 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
     expect(table.lighting.text).toBe("integration-lighting-text");
     expect(table.idle.text).toBe("ink-muted");
     for (const t of tones.filter((x) => x !== "lighting" && x !== "idle")) expect(table[t].text.endsWith("-text")).toBe(true);
+  });
+});
+
+describe("warning and error are the same rose (owner 2026-10-13)", () => {
+  it("warning and danger share one accent and one text token", () => {
+    expect(table.warning.accent).not.toBe(table.danger.accent); // different class names...
+    // ...but the same colours: the tokens file maps both to the same hex.
+    const css = readFileSync(`${process.cwd()}/src/design-tokens.css`, "utf8");
+    const hex = (name: string) => css.match(new RegExp(`--ds-${name}: (#[0-9a-f]{6});`))?.[1];
+    expect(hex("warning")).toBe(hex("danger"));
+    expect(hex("warning-text")).toBe(hex("danger-text"));
+  });
+
+  it("the Previous control stays orange so it is not mistaken for the rose Stop controls", () => {
+    const css = readFileSync(`${process.cwd()}/src/design-tokens.css`, "utf8");
+    const hex = (name: string) => css.match(new RegExp(`--ds-${name}: (#[0-9a-f]{6});`))?.[1];
+    expect(hex("live-back")).toBe("#e34e1f");
+    expect(hex("live-back")).not.toBe(hex("warning"));
+    expect(hex("live-back")).not.toBe(hex("live-stop"));
   });
 });
