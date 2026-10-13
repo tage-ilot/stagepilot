@@ -620,10 +620,11 @@ add noise without adding hierarchy.
   CONNECTED, ERROR), semibold, and grows with the card: it is sized from the card
   width so the longest phrase, NOT CONNECTED, always fits beside the icon, from
   11px on a 181px card up to 18px on a 266px one. In compact mode (1000px and
-  below) the word sits under the icon at 11px down to 9px on the narrowest cards
-  (the owner-accepted exception to the 11px floor), NOT CONNECTED wraps to two
-  short lines, and on 320px screens it is one line that ellipsizes (the full word
-  stays in the card's accessible name). Collapses to an icon-only tile in compact mode.
+  below) the word sits under the icon on ONE line, always (owner, 2026-10-13): it never
+  wraps, never ellipsizes and never overlaps the icon or a neighbour. Its size is the
+  card width minus padding divided by 8.3, at most 11px, so NOT CONNECTED (the widest
+  phrase) fits; that is about 10px on tablets, 8.6px at 480px and 6.5px at 390px, and
+  the owner-accepted exception to the 11px floor. Collapses to an icon-only tile in compact mode.
 - **Live (now-playing) panel:** red rail, 135° red wash fading out by 42%,
   oversize tabular timer.
 - **Buttons.** Height: 44px for live controls, 36px for everything else.

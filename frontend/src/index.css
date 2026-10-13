@@ -634,29 +634,22 @@ textarea:focus-visible {
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
-    /* Under the icon the word has the whole card. Uppercase is wider, so the size follows the card width: 11px at most,
-       down to 9px (the owner-accepted exception to the 11px floor for the compact status word); a word that still does
-       not fit ellipsizes, and the full word stays in the card's aria-label. */
-    font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem);
-    letter-spacing: -0.01em;
-    /* "NOT CONNECTED" is the one phrase too wide for a compact card: it wraps to two short lines instead of being cut. */
-    white-space: normal;
+    /* ONE line, always (owner, 2026-10-13), and nothing may overlap. Under the icon the word has the whole card, minus the
+       card padding. The widest phrase, NOT CONNECTED, is about 8.2em at this tracking, so the size is the room divided by
+       8.3: it is the same on every card, up to 11px. On the narrowest phones that is small; there is no wrapping. */
+    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem);
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    white-space: nowrap;
     text-align: center;
-    line-height: 1.15;
-    text-overflow: ellipsis;
+    line-height: 1.2;
+    text-overflow: clip;
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.95);
     transition: none;
   }
 
   .connections-status.status-compact .status-card[data-status] .status-card-status-word {
-    font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem);
-  }
-
-  /* 53px cards (320px screens) have no room for a second line: one line, ellipsized; the full word is in the aria-label. */
-  @media (max-width: 359.98px) {
-    .connections-status.status-compact .status-card-status-word {
-      white-space: nowrap;
-    }
+    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem);
   }
 
   .connections-status.status-compact .status-card-icon {
