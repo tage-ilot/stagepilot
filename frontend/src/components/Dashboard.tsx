@@ -50,7 +50,7 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
-import { Button, Dialog, Panel, StatusDot, type LiveTone } from "./ui";
+import { Button, Dialog, Panel, type LiveTone } from "./ui";
 import { InlineAlert } from "./ui/InlineAlert";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
@@ -841,10 +841,9 @@ export function Dashboard({
             aria-describedby="system-readiness-popover"
             title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
             aria-expanded={readinessHover.open}
-            className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success/40 bg-surface-950 text-success-text can-hover:bg-surface-900" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
+            className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success-soft bg-success text-ink can-hover:bg-success/85" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
             type="button"
           >
-            <StatusDot tone={ready ? "success" : systemError ? "danger" : "warning"} />
             <span className="min-w-0 text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
           </button>
           <div
@@ -860,7 +859,7 @@ export function Dashboard({
                     key={check.id}
                     title={check.detail}
                   >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${check.status === "connected" ? "bg-success/15 text-success-text" : check.status === "error" ? "bg-danger/15 text-danger-text" : "bg-edge text-ink-muted"}`}>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${check.status === "connected" ? "bg-success-soft/20 text-success-text" : check.status === "error" ? "bg-danger/15 text-danger-text" : "bg-edge text-ink-muted"}`}>
                       {check.status === "connected" ? "✓" : check.status === "error" ? "!" : "—"}
                     </span>
                     <span className={check.status === "connected" ? "text-success-text" : check.status === "error" ? "text-danger-text" : "text-ink-muted"}>
@@ -1151,7 +1150,7 @@ export function Dashboard({
           <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
               <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing · live signal</p>
-              <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success/15 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
+              <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success-soft/20 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
             <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.current_song?.id ?? "idle"}>{state.current_song?.title ?? "Waiting for first cue"}</h2>
             <div className="mt-2 flex items-end justify-between gap-5">

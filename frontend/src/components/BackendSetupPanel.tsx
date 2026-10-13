@@ -126,7 +126,7 @@ export function SendAllLogsButton() {
       {message && (
         <p
           aria-live="polite"
-          className={`w-full text-xs ${status === "error" ? "text-danger-text" : "text-success-text"}`}
+          className={`w-full text-xs ${status === "error" ? "text-danger-text" : "text-integration-backend-text"}`}
         >
           {message}
         </p>
@@ -302,7 +302,7 @@ export function BackendSetupPanel({
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
-          <dd className={`mt-1 font-semibold ${live ? "text-success-text" : "text-danger-text"}`}>
+          <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
             {live ? "Connected" : "Not connected"}
           </dd>
           <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
@@ -330,7 +330,7 @@ export function BackendSetupPanel({
         <label className="flex touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
             checked={lanAccess}
-            className="mt-0.5 size-4 accent-primary"
+            className="mt-0.5 size-4 accent-integration-backend"
             disabled={pending}
             onChange={(event) => setLanAccess(event.target.checked)}
             type="checkbox"
@@ -349,7 +349,7 @@ export function BackendSetupPanel({
           <label className="flex touch-manipulation items-start gap-3 coarse:min-h-ds-touch-target">
             <input
               checked={pinEnabled}
-              className="mt-0.5 size-4 accent-primary"
+              className="mt-0.5 size-4 accent-integration-backend"
               disabled={pending}
               onChange={(event) => {
                 setPinEnabled(event.target.checked);
@@ -390,7 +390,7 @@ export function BackendSetupPanel({
         <label className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
             checked={remote.enabled}
-            className="mt-0.5 size-4 accent-primary"
+            className="mt-0.5 size-4 accent-integration-backend"
             disabled={remote.checkboxBusy}
             onChange={(event) => {
               if (event.target.checked) remote.requestEnable();

@@ -1,6 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cx } from "./cx";
+import { useAccent } from "./accent";
 import { statusTone, type StatusWord } from "./statusWord";
 import { StatusDot } from "./StatusDot";
 import type { Tone } from "./types";
@@ -21,7 +22,7 @@ const tinted: Record<Tone, string> = {
   playback: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text",
   lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text",
   backend: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text",
-  success: "border-success/30 bg-success/10 text-success-text",
+  success: "border-success-soft/40 bg-success-soft/10 text-success-text",
   warning: "border-warning/30 bg-warning/10 text-warning-text",
   danger: "border-danger/30 bg-danger/10 text-danger-text",
   info: "border-info/30 bg-info/10 text-info-text",
@@ -30,7 +31,7 @@ const tinted: Record<Tone, string> = {
 
 // Dark label text gets no shadow; light label text on danger-solid gets text-shadow-label (D5).
 const solid: Partial<Record<Tone, string>> = {
-  success: "border-transparent bg-success text-on-light",
+  success: "border-transparent bg-success text-ink text-shadow-label",
   warning: "border-transparent bg-warning text-on-light",
   danger: "border-transparent bg-danger-solid text-on-danger text-shadow-label",
 };
@@ -40,16 +41,19 @@ const base =
   "inline-flex items-center gap-1.5 rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider";
 
 export function Badge({ tone, emphasis = "tinted", dot = false, className, children, ...rest }: BadgeProps) {
-  const solidLook = emphasis === "solid" ? solid[tone] : undefined;
-  const look = solidLook ?? cx(tinted[tone], "text-shadow-label");
+  const accent = useAccent();
+  // Inside a connection's panel a "good" badge wears the connection's colour instead of green.
+  const effectiveTone: Tone = accent && tone === "success" ? accent : tone;
+  const solidLook = emphasis === "solid" && !(accent && tone === "success") ? solid[tone] : undefined;
+  const look = solidLook ?? cx(tinted[effectiveTone], "text-shadow-label");
   return (
     <span
-      data-tone={tone}
+      data-tone={effectiveTone}
       data-emphasis={solidLook ? "solid" : "tinted"}
       className={cx(base, look, className)}
       {...rest}
     >
-      {dot && <StatusDot tone={tone} />}
+      {dot && <StatusDot tone={effectiveTone} />}
       {children}
     </span>
   );

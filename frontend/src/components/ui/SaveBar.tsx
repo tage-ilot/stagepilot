@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 
+import { accentClasses, useAccent } from "./accent";
 import { Button } from "./Button";
 import { changeCountText } from "./changeCount";
 import { cx } from "./cx";
@@ -26,21 +27,21 @@ export interface SaveBarProps {
 // Class strings are written out in full so Tailwind can see them.
 const edges: Record<SaveBarState["kind"], string> = {
   clean: "border-edge",
-  auto: "border-success/40",
+  auto: "border-success-soft/50",
   saving: "border-edge",
   held: "border-warning/60",
   error: "border-danger/60",
 };
 
-function Check() {
+function Check({ className }: { className?: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 shrink-0 text-success-text" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg aria-hidden="true" viewBox="0 0 16 16" className={cx("h-4 w-4 shrink-0", className ?? "text-success-text")} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 8.5l3.2 3.2L13 4.8" />
     </svg>
   );
 }
 
-function status(state: SaveBarState): { text: ReactNode; note?: string; tone: string } {
+function status(state: SaveBarState, accentText?: string): { text: ReactNode; note?: string; tone: string } {
   switch (state.kind) {
     case "clean":
       return { text: "All changes saved", note: "No changes to save", tone: "text-ink-body" };
@@ -51,7 +52,7 @@ function status(state: SaveBarState): { text: ReactNode; note?: string; tone: st
             Saved automatically at <span className="tabular-nums">{state.at}</span>
           </>
         ),
-        tone: "text-success-text",
+        tone: accentText ?? "text-success-text",
       };
     case "saving":
       return { text: "Saving…", tone: "text-ink-body" };
@@ -79,7 +80,8 @@ export function SaveBar({
   className,
 }: SaveBarProps) {
   const reasonId = useId();
-  const { text, note, tone } = status(state);
+  const accent = useAccent();
+  const { text, note, tone } = status(state, accent ? accentClasses[accent].text : undefined);
   const kind = state.kind;
   const clean = kind === "clean";
   const saving = kind === "saving";
@@ -90,14 +92,15 @@ export function SaveBar({
       data-state={kind}
       data-sticky={stickyOnPhone ? "true" : undefined}
       className={cx(
-        "flex flex-col gap-3 rounded-ds-lg border bg-surface-900 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[481px]:flex-row min-[481px]:items-center min-[481px]:justify-between",
-        edges[kind],
+        "flex flex-col gap-3 rounded-ds-lg border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[481px]:flex-row min-[481px]:items-center min-[481px]:justify-between",
+        // Inside a connection's panel the bar is a deep tint of its colour; warning and error keep their own outline.
+        accent && (kind === "clean" || kind === "auto" || kind === "saving") ? accentClasses[accent].bar : cx(edges[kind], "bg-surface-900"),
         stickyOnPhone && "sticky bottom-0 z-10 lg:static",
         className,
       )}
     >
       <div aria-live="polite" className={cx("flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 break-words font-type-body-md text-type-body-md", tone)}>
-        {kind === "auto" && <Check />}
+        {kind === "auto" && <Check className={accent ? accentClasses[accent].text : undefined} />}
         <span data-save-status className="min-w-0 break-words">{text}</span>
         {note && <span id={reasonId} data-save-reason className="text-ink-muted">{note}</span>}
       </div>

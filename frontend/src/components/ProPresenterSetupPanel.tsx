@@ -269,7 +269,7 @@ export function ProPresenterSetupPanel({
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">Configured timer</dt>
-          <dd className={`mt-1 ${propresenter?.timer_found ? "text-success-text" : "text-warning-text"}`}>
+          <dd className={`mt-1 ${propresenter?.timer_found ? "text-integration-presentation-text" : "text-warning-text"}`}>
             {propresenter?.timer_found ? propresenter.timer_name : "Not found"}
           </dd>
         </div>

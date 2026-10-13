@@ -15,9 +15,9 @@ import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-info-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-info active:text-info-active";
+const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-playback-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-playback active:text-integration-playback-text";
 const toneClass = {
-  connected: "border-success/30 bg-success/10 text-success-text",
+  connected: "border-integration-playback-soft/40 bg-integration-playback-soft/10 text-integration-playback-text",
   midi: "border-warning/30 bg-warning/10 text-warning-text",
   searching: "border-warning/30 bg-warning/10 text-warning-text",
   idle: "border-edge bg-edge-subtle text-ink-body",
@@ -137,7 +137,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
           </div>
         )}
         {playback?.error && <p role="alert" className="text-sm text-danger-text">{playback.error}</p>}
-        {playback?.message && <p role="status" className="text-sm text-info-text">{playback.message}</p>}
+        {playback?.message && <p role="status" className="text-sm text-integration-playback-text">{playback.message}</p>}
       </div>
 
       {status && (
@@ -148,7 +148,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
           {!apiConnected ? <p className="text-sm text-ink-body">Connect to Playback first.</p>
               : status.playing ? <p className="text-sm text-warning-text">Stop Playback to set up song order.</p>
                 : <>
-                  {orderSaved ? <p className="text-sm text-success-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
+                  {orderSaved ? <p className="text-sm text-integration-playback-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
                     : <>{notice && <p className="text-sm text-warning-text">{notice}</p>}
                       <p className="text-sm text-ink-body">StagePilot steps through your Playback songs once to learn the order. Playback must be stopped.</p></>}
                   <Button className={orderSaved ? undefined : "w-full sm:w-auto"} onClick={() => setConfirm(true)} size={orderSaved ? "control" : "touch"} tone="playback" variant={orderSaved ? "tinted" : "primary"}>{orderSaved ? "Set up again" : "Set up song order"}</Button>
@@ -176,15 +176,15 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
 
       <div className="space-y-3 border-t border-edge-subtle pt-4">
         <HeldRow held={Boolean(draft && status && draft.enabled !== status.settings.enabled)} id="held-enabled">
-          <input className="size-4 accent-primary" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
+          <input className="size-4 accent-integration-playback" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
           Connect to Playback automatically
         </HeldRow>
         <HeldRow held={Boolean(draft && status && draft.autoScan !== status.settings.auto_scan)} id="held-auto-scan">
-          <input className="size-4 accent-primary" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.autoScan !== status.settings.auto_scan ? "held-auto-scan" : undefined} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
+          <input className="size-4 accent-integration-playback" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.autoScan !== status.settings.auto_scan ? "held-auto-scan" : undefined} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
           Look for Playback on the network if it isn't on this computer
         </HeldRow>
         <HeldRow held={Boolean(draft && status && draft.fastTransport !== status.settings.fast_transport)} id="held-fast-transport">
-          <input className="size-4 accent-primary" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.fastTransport !== status.settings.fast_transport ? "fast-transport-help held-fast-transport" : "fast-transport-help"} onChange={(event) => draft?.setFastTransport(event.target.checked)} />
+          <input className="size-4 accent-integration-playback" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.fastTransport !== status.settings.fast_transport ? "fast-transport-help held-fast-transport" : "fast-transport-help"} onChange={(event) => draft?.setFastTransport(event.target.checked)} />
           Respond to Play immediately
         </HeldRow>
         <p id="fast-transport-help" className="text-sm text-ink-muted">Reacts to the command instead of waiting up to one second for Playback to report it.</p>

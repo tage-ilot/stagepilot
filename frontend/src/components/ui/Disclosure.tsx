@@ -1,5 +1,6 @@
 import { useId, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
+import { accentClasses, useAccent } from "./accent";
 import { cx } from "./cx";
 
 export type DisclosureVariant = "advanced" | "activity";
@@ -62,6 +63,9 @@ export function Disclosure({
   const bodyId = useId();
   const advanced = variant === "advanced";
   const palette = advanced ? advancedTone[tone ?? "services"] : undefined;
+  // The count badge wears the connection colour inside a connection panel, teal elsewhere.
+  const accent = useAccent();
+  const countLook = accent ? accentClasses[accent].tinted : "border-info/30 bg-info/15 text-info-text";
 
   const toggle = () => {
     if (!controlled) setInner(!open);
@@ -94,7 +98,7 @@ export function Disclosure({
         {!advanced && count !== undefined ? (
           <span
             data-part="count"
-            className="rounded-ds-full border border-info/30 bg-info/15 px-2 py-0.5 text-xs font-bold tabular-nums text-info-text"
+            className={cx("rounded-ds-full border px-2 py-0.5 text-xs font-bold tabular-nums", countLook)}
           >
             {count} {count === 1 ? countNoun : `${countNoun}s`}
           </span>

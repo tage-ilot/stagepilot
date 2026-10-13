@@ -1,5 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ElementType } from "react";
 
+import { AccentContext } from "./accent";
 import { cx } from "./cx";
 
 export type PanelVariant = "default" | "setup" | "live";
@@ -32,10 +33,19 @@ const variants: Record<PanelVariant, string> = {
   default: "bg-surface-panel/[0.94] p-ds-lg",
   // 120deg primary-red-to-clear wash, 0% to 36% (DESIGN.md Components > Panel). No !important.
   setup:
-    "bg-surface-panel/[0.94] p-ds-xl bg-[linear-gradient(120deg,var(--tw-gradient-stops))] from-primary/[0.13] from-0% to-transparent to-[36%]",
+    "bg-surface-panel/[0.94] p-ds-xl bg-[linear-gradient(120deg,var(--tw-gradient-stops))] from-0% to-transparent to-[36%]",
   // 135deg primary-red wash fading out by 42%, plus a primary-red left rail drawn by ::before (DESIGN.md Components > Live panel).
   live:
     "relative isolate bg-surface-panel-strong/90 p-ds-lg bg-[linear-gradient(135deg,var(--tw-gradient-stops))] from-primary/10 from-0% to-transparent to-[42%] before:absolute before:inset-y-0 before:left-0 before:-z-10 before:w-[5px] before:rounded-l-ds-xl before:bg-primary before:content-['']",
+};
+
+// The setup wash is the connection's own colour when the panel has one (DESIGN.md "Accent inside a configuration panel").
+const setupWash: Record<PanelIdentity, string> = {
+  services: "from-integration-services/[0.13]",
+  presentation: "from-integration-presentation/[0.13]",
+  playback: "from-integration-playback/[0.13]",
+  lighting: "from-integration-lighting/[0.13]",
+  backend: "from-integration-backend/[0.13]",
 };
 
 export const Panel = forwardRef<HTMLElement, PanelProps>(function Panel(
@@ -43,7 +53,7 @@ export const Panel = forwardRef<HTMLElement, PanelProps>(function Panel(
   ref,
 ) {
   const Element = as as ElementType;
-  return (
+  const panel = (
     <Element
       ref={ref}
       data-variant={variant}
@@ -53,9 +63,11 @@ export const Panel = forwardRef<HTMLElement, PanelProps>(function Panel(
         variants[variant],
         scrollable && "overscroll-contain",
         tone && identityTop[tone],
+        variant === "setup" && (tone ? setupWash[tone] : "from-primary/[0.13]"),
         className,
       )}
       {...rest}
     />
   );
+  return tone ? <AccentContext.Provider value={tone}>{panel}</AccentContext.Provider> : panel;
 });

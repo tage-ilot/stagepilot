@@ -10,7 +10,7 @@ describe("Badge", () => {
     render(<Badge tone="success">Ready</Badge>);
     const el = screen.getByText("Ready");
     expect(el).toHaveAttribute("data-emphasis", "tinted");
-    expect(el).toHaveClass("bg-success/10", "border-success/30", "text-success-text", "text-shadow-label");
+    expect(el).toHaveClass("bg-success-soft/10", "border-success-soft/40", "text-success-text", "text-shadow-label");
   });
 
   it("has the pill recipe", () => {
@@ -18,14 +18,13 @@ describe("Badge", () => {
     expect(screen.getByText("Info")).toHaveClass("rounded-ds-full", "uppercase", "font-bold", "tracking-wider", "px-3", "py-1.5", "text-type-badge");
   });
 
-  it("solid success and warning use dark text and no shadow", () => {
-    for (const tone of ["success", "warning"] as const) {
-      const { unmount } = render(<Badge tone={tone} emphasis="solid">{tone}</Badge>);
-      const el = screen.getByText(tone);
-      expect(el).toHaveClass(`bg-${tone}`, "text-on-light");
-      expect(el).not.toHaveClass("text-shadow-label");
-      unmount();
-    }
+  it("solid warning uses dark text and no shadow; solid success is the deep green with light text", () => {
+    const warn = render(<Badge tone="warning" emphasis="solid">x</Badge>).container.firstElementChild!;
+    expect(warn).toHaveClass("bg-warning", "text-on-light");
+    expect(warn.className).not.toContain("text-shadow");
+    const ok = render(<Badge tone="success" emphasis="solid">y</Badge>).container.firstElementChild!;
+    expect(ok).toHaveClass("bg-success", "text-ink");
+    expect(ok.className).not.toContain("text-on-light");
   });
 
   it("solid danger uses danger-solid with light text and the label shadow", () => {

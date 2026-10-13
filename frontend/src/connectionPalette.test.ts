@@ -12,7 +12,7 @@ describe("connection palette (DESIGN.md Connection colours)", () => {
   it.each([
     ["services", "#6bb03c", "#6bb03c", "#72b446"],
     ["presentation", "#fe7821", "#fe7821", "#fe802e"],
-    ["playback", "#56677b", "#56677b", "#8f9aa8"],
+    ["playback", "#4b73b0", "#4b73b0", "#8ba5cd"],
     ["lighting", "#d53367", "#d53367", "#e687a5"],
     ["backend", "#c7231d", "#c7231d", "#e28d89"],
   ])("%s has base, -soft and -text tokens", (name, base, soft, text) => {

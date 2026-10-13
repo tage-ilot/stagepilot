@@ -408,7 +408,7 @@ export function PlanningCenterSetupPanel({
                     <p className="mt-2 leading-relaxed">
                       Open Planning Center&apos;s{" "}
                       <a
-                        className="font-semibold text-info-text underline decoration-info/50 underline-offset-2 can-hover:text-info active:text-info-active"
+                        className="font-semibold text-integration-services-text underline decoration-integration-services-soft/50 underline-offset-2 can-hover:text-integration-services active:text-integration-services-text"
                         href="https://api.planningcenteronline.com/personal_access_tokens"
                         onClick={(event) => {
                           event.preventDefault();
@@ -453,7 +453,7 @@ export function PlanningCenterSetupPanel({
           <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-2 self-end rounded-ds-lg bg-surface-900/60 px-3 py-2.5 text-sm text-ink-body">
             <input
               checked={removeSecret}
-              className="accent-primary"
+              className="accent-integration-services"
               disabled={busy || !status?.planning_center_secret_saved}
               onChange={(event) => {
                 setRemoveSecret(event.target.checked);
