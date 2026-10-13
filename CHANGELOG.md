@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+## [1.1.104-beta.34] - 2026-10-13
+
+### Added
+
+- Playback: pausing, seeking and resuming now carry through. A stop (from
+  Playback, StagePilot or MIDI) keeps the remaining time and the song position
+  instead of blanking the countdown; pressing play again, or seeking to a new
+  spot (playing or stopped), continues the countdown from the real Playback
+  position. ProPresenter holds on stop and restarts at the remaining seconds;
+  Lighting sends nothing while stopped and, after a resume or seek, only the
+  cues still ahead (never a burst of earlier ones). A seek to the start followed
+  by play still counts as a fresh start. After a reconnect mid-song the timer
+  re-aligns only if Playback is on StagePilot's current song.
+- The dashboard shows the frozen remaining time while stopped.
+
+### Changed
+
+- Playback reconnects faster: the last working address is re-checked about
+  once a second, with the full network scan only occasionally. The status shows
+  the true state ("Looking for Playback...", "Connected").
+- StagePilot no longer switches to MIDI on its own when Playback drops. MIDI
+  runs only when it is the selected connection method.
+- Colours: deep red primary (`#c7231d`), per-connection colours (Services green,
+  Presentation orange, Playback slate, Lighting pink-red, StagePilot red), a
+  teal accent for Up next and information, warning orange `#e34e1f`. The open
+  status card now wears its own connection's colour. Inter is replaced by Geist.
+- "Lights" is now "Lighting"; "Basic" is now "General configuration".
+- Remote Access: an installation stuck on an older setup is now recovered by the
+  control plane (this part takes effect when the control plane is deployed), and
+  the app explains the situation instead of a generic error.
+
+### Notes
+
+- Not yet tested against a live Playback by hand: play, pause, seek and resume,
+  Remote Connections off and on, and a dropped network are the checks to run.
+- Timing is accurate to about a second (Playback reports once a second).
+
 ## [1.1.104-beta.33] - 2026-10-12
 
 ### Changed
