@@ -78,6 +78,10 @@ class LightsPlugin(Plugin):
                 await self.event_bus.subscribe(EventType.SONG_RESTARTED, self._on_song_event),
                 await self.event_bus.subscribe(EventType.TIMER_STARTED, self._on_timer_started),
                 await self.event_bus.subscribe(
+                    EventType.TIMER_RESUMED, self._on_timer_repositioned
+                ),
+                await self.event_bus.subscribe(EventType.TIMER_SEEKED, self._on_timer_repositioned),
+                await self.event_bus.subscribe(
                     EventType.TIMER_STOP_REQUESTED, self._on_timer_stopped
                 ),
                 await self.event_bus.subscribe(
@@ -225,6 +229,33 @@ class LightsPlugin(Plugin):
             name=f"stagepilot-lights-{song_key}",
         )
 
+    async def _on_timer_repositioned(self, event: StagePilotEvent) -> None:
+        """Resume/seek: restart the timeline at the song position, upcoming cues only."""
+        payload = event.payload
+        if not isinstance(payload, TimerPayload):
+            return
+        await self._cancel_timeline()
+        if not payload.running or payload.position_seconds is None:
+            return  # stopped: send nothing
+        position = max(0.0, payload.position_seconds)
+        song = payload.song or self._pending_song
+        if song is None:
+            return
+        song_key = song.source_song_id or song.id
+        cue_map = self._settings.cue_maps.get(song_key)
+        if not self._settings.enabled or cue_map is None or not cue_map.cues:
+            return
+        total = position + payload.duration_seconds
+        cues = [cue for cue in cue_map.cues if position <= cue.at_seconds <= total]
+        if not cues:
+            return
+        if (self._port is None or self._port.closed) and not await self._connect():
+            return
+        self._timeline_task = asyncio.create_task(
+            self._run_timeline(cues, payload.started_at, position),
+            name=f"stagepilot-lights-{song_key}",
+        )
+
     async def _on_timer_stopped(self, _event: StagePilotEvent) -> None:
         await self._cancel_timeline()
 
@@ -232,13 +263,14 @@ class LightsPlugin(Plugin):
         self,
         cues: list[LightingCue],
         started_at: datetime | None,
+        offset: float = 0.0,
     ) -> None:
         elapsed_before_confirmation = (
             max(0.0, (datetime.now(UTC) - started_at).total_seconds())
             if started_at is not None
             else 0.0
         )
-        started = asyncio.get_running_loop().time() - elapsed_before_confirmation
+        started = asyncio.get_running_loop().time() - elapsed_before_confirmation - offset
         tasks = [
             asyncio.create_task(self._send_at(started, cue), name=f"lighting-cue-{cue.id}")
             for cue in cues

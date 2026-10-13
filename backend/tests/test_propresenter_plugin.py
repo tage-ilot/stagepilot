@@ -146,3 +146,81 @@ async def test_demo_plan_can_drive_real_propresenter_plugin() -> None:
         ]
 
     assert fake.closed
+
+
+async def _pp_runtime_events(fake: FakeProPresenterClient):  # type: ignore[no-untyped-def]
+    from stagepilot.core.events import EventType, TimerPayload, new_event
+    from stagepilot.models.state import Song
+
+    settings = Settings(
+        demo_mode=True,
+        demo=DemoSettings(simulate_propresenter=False),
+        propresenter=ProPresenterSettings(enabled=True, health_check_interval_seconds=300),
+    )
+    app = create_app(settings, propresenter_client_factory=lambda _s: fake)
+    song = Song(id="s", title="T", duration_seconds=281, order=1)
+
+    def ev(kind, remaining, running):  # type: ignore[no-untyped-def]
+        return new_event(
+            kind,
+            source="test",
+            payload=TimerPayload(
+                duration_seconds=remaining,
+                song=song,
+                position_seconds=281 - remaining,
+                remaining_seconds=remaining,
+                running=running,
+            ),
+        )
+
+    return app, EventType, ev
+
+
+@pytest.mark.asyncio
+async def test_stop_holds_then_resume_and_seek_apply_remaining() -> None:
+    fake = FakeProPresenterClient()
+    app, ET, ev = await _pp_runtime_events(fake)
+    async with app.router.lifespan_context(app):
+        bus = app.state.runtime.event_bus
+        fake.calls.clear()
+        await bus.publish(ev(ET.TIMER_STOP_REQUESTED, 100, False))
+        assert fake.calls == [("stop", "timer-uuid")]  # hold: no reset, no duration change
+        fake.calls.clear()
+        await bus.publish(ev(ET.TIMER_RESUMED, 100, True))
+        assert fake.calls == [
+            ("stop", "timer-uuid"),
+            ("set", 100),
+            ("reset", "timer-uuid"),
+            ("start", "timer-uuid"),
+        ]
+        fake.calls.clear()
+        await bus.publish(ev(ET.TIMER_SEEKED, 40, True))
+        assert ("set", 40) in fake.calls and fake.calls[-1] == ("start", "timer-uuid")
+        fake.calls.clear()
+        await bus.publish(ev(ET.TIMER_SEEKED, 0, False))  # seek while stopped / clamp 0
+        assert ("set", 0) in fake.calls and not any(c[0] == "start" for c in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_seek_while_stopped_updates_held_value_without_running() -> None:
+    fake = FakeProPresenterClient()
+    app, ET, ev = await _pp_runtime_events(fake)
+    async with app.router.lifespan_context(app):
+        fake.calls.clear()
+        await app.state.runtime.event_bus.publish(ev(ET.TIMER_SEEKED, 55, False))
+        assert ("set", 55) in fake.calls
+        assert not any(c[0] == "start" for c in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_reposition_failure_is_logged_not_raised() -> None:
+    fake = FakeProPresenterClient()
+
+    async def boom(*_a, **_k):  # type: ignore[no-untyped-def]
+        raise RuntimeError("down")
+
+    app, ET, ev = await _pp_runtime_events(fake)
+    async with app.router.lifespan_context(app):
+        fake.set_timer_duration = boom  # type: ignore[method-assign]
+        await app.state.runtime.event_bus.publish(ev(ET.TIMER_RESUMED, 10, True))
+        assert app.state.runtime is not None

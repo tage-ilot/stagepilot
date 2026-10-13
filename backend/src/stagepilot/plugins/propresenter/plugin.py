@@ -97,6 +97,10 @@ class ProPresenterPlugin(Plugin):
                     EventType.TIMER_RESET_REQUESTED,
                     self._on_timer_reset_requested,
                 ),
+                await self.event_bus.subscribe(
+                    EventType.TIMER_RESUMED, self._on_timer_repositioned
+                ),
+                await self.event_bus.subscribe(EventType.TIMER_SEEKED, self._on_timer_repositioned),
             ]
         )
         await self._probe(raise_errors=False)
@@ -236,6 +240,46 @@ class ProPresenterPlugin(Plugin):
                 ),
             )
         )
+
+    async def _on_timer_repositioned(self, event: StagePilotEvent) -> None:
+        """Apply the remaining seconds after a resume or seek.
+
+        Running: set the countdown to the remaining seconds and start it.
+        Stopped: update the held value without running. Never raises.
+        """
+        payload = event.payload
+        if not isinstance(payload, TimerPayload):
+            return
+        remaining = max(0, payload.remaining_seconds or 0)
+        run = payload.running and remaining > 0
+        try:
+            async with self._operation_lock:
+                try:
+                    await self._reposition_locked(remaining, run)
+                except ProPresenterError:
+                    self._timer = None
+                    await self._probe_locked(raise_errors=True)
+                    await self._reposition_locked(remaining, run)
+        except Exception as exc:
+            detail = self._public_error(exc, "ProPresenter timer update failed.")
+            self._logger.warning("propresenter_reposition_failed", detail=detail)
+            with suppress(Exception):
+                await self._record_operation_error(detail)
+            return
+        state = "running" if run else "held"
+        with suppress(Exception):
+            await self._record_success(
+                f'Countdown timer "{self._settings.timer_name}" is {state} at {remaining}s.'
+            )
+
+    async def _reposition_locked(self, remaining: int, run: bool) -> None:
+        client = self._require_client()
+        timer = await self._require_timer_locked()
+        await client.stop_timer(timer.id.uuid)
+        timer = await client.set_timer_duration(timer, remaining)
+        if run:
+            await client.start_timer(timer.id.uuid)
+        self._timer = timer
 
     async def _on_timer_stop_requested(self, _event: StagePilotEvent) -> None:
         async with self._operation_lock:

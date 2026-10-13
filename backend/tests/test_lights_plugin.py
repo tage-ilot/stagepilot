@@ -287,3 +287,141 @@ async def test_cues_after_confirmed_timer_duration_are_not_scheduled() -> None:
     await plugin.stop()
 
     assert backend.ports[0].messages == []
+
+
+def _notes(backend: FakeOutputBackend) -> list[int]:
+    return [m[2] for p in backend.ports for m in p.messages if m[0] == "note_on"]
+
+
+async def _reposition(
+    bus: EventBus,
+    kind: EventType,
+    position: float,
+    *,
+    running: bool = True,
+    duration: int = 300,
+) -> None:
+    remaining = max(0, round(duration - position))
+    await bus.publish(
+        new_event(
+            kind,
+            source="test",
+            payload=TimerPayload(
+                duration_seconds=remaining,
+                song=worship_song(),
+                position_seconds=position,
+                remaining_seconds=remaining,
+                running=running,
+            ),
+        )
+    )
+
+
+def _plugin(bus: EventBus, backend: FakeOutputBackend, *cues: LightingCue) -> LightsPlugin:
+    return LightsPlugin(bus, StateStore(), lights_settings(*cues), backend_factory=lambda: backend)
+
+
+def _cue(at: float, note: int) -> LightingCue:
+    return LightingCue(at_seconds=at, note=note, velocity=100, label=f"c{note}")
+
+
+@pytest.mark.asyncio
+async def test_resume_skips_past_cues_and_times_upcoming_from_position() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(10, 1), _cue(100, 2), _cue(200, 3))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_RESUMED, 99.95)
+    await asyncio.sleep(0.01)
+    assert _notes(backend) == []  # nothing burst, upcoming cue not yet due
+    await asyncio.sleep(0.2)
+    await plugin.stop()
+    assert _notes(backend) == [2]  # past cue 1 skipped; cue 3 is 100 s away
+
+
+@pytest.mark.asyncio
+async def test_seek_forward_skips_cues_between() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(5, 1), _cue(60, 2), _cue(150, 3))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_SEEKED, 149.95)
+    await asyncio.sleep(0.25)
+    await plugin.stop()
+    assert _notes(backend) == [3]
+
+
+@pytest.mark.asyncio
+async def test_seek_back_replays_only_upcoming_cues_from_new_offset() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(10, 1), _cue(50, 2), _cue(200, 3))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_SEEKED, 9.95)
+    await asyncio.sleep(0.25)
+    await plugin.stop()
+    assert _notes(backend) == [1]
+
+
+@pytest.mark.asyncio
+async def test_seek_while_stopped_sends_nothing_and_cancels_pending() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(1, 1), _cue(20, 2))
+    await plugin.start()
+    await publish_song_start(bus)  # full timeline pending
+    await bus.publish(
+        new_event(
+            EventType.TIMER_STOP_REQUESTED, source="t", payload=TimerPayload(duration_seconds=0)
+        )
+    )
+    await _reposition(bus, EventType.TIMER_SEEKED, 19.95, running=False)
+    await asyncio.sleep(1.3)
+    await plugin.stop()
+    assert _notes(backend) == []
+
+
+@pytest.mark.asyncio
+async def test_seek_to_zero_while_running_replays_full_timeline() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(0, 1), _cue(1, 2))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_SEEKED, 0.0)
+    await asyncio.sleep(1.3)
+    await plugin.stop()
+    assert _notes(backend) == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_cue_exactly_at_position_boundary_is_sent() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(99, 1), _cue(100, 2))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_RESUMED, 100.0)
+    await asyncio.sleep(0.2)
+    await plugin.stop()
+    assert _notes(backend) == [2]
+
+
+@pytest.mark.asyncio
+async def test_position_past_end_is_clamped_and_sends_nothing() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(10, 1), _cue(299, 2))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_SEEKED, 400.0)  # remaining clamps to 0
+    await asyncio.sleep(0.1)
+    await plugin.stop()
+    assert _notes(backend) == []
+
+
+@pytest.mark.asyncio
+async def test_stop_from_stopped_state_is_harmless() -> None:
+    bus, backend = EventBus(), FakeOutputBackend()
+    plugin = _plugin(bus, backend, _cue(1, 1))
+    await plugin.start()
+    await _reposition(bus, EventType.TIMER_RESUMED, 0.0)
+    for _ in range(2):
+        await bus.publish(
+            new_event(
+                EventType.TIMER_STOP_REQUESTED, source="t", payload=TimerPayload(duration_seconds=0)
+            )
+        )
+    await asyncio.sleep(1.3)
+    await plugin.stop()
+    assert _notes(backend) == []
