@@ -223,3 +223,33 @@ def test_named_marker_survives_ui_disable_and_reports_stable_url(tmp_path: Path)
     assert not disabled.enabled
     assert disabled.public_origin == ORIGIN
     assert disabled.port == 18766
+
+
+def test_hostname_conflict_maps_to_recovery_text_without_infrastructure_names() -> None:
+    import httpx
+
+    from stagepilot.api.remote_feature import _enable_error_message
+    from stagepilot.remote_beta_control import _worker_diagnostic
+    from stagepilot.remote_provider import ProviderError
+
+    response = httpx.Response(
+        503,
+        json={
+            "error": "operation incomplete; retry reconciliation",
+            "diagnostic": "hostname ownership conflict",
+        },
+    )
+    assert _worker_diagnostic(response) == "hostname ownership conflict"
+    assert _worker_diagnostic(httpx.Response(503, text="<html>")) is None
+    assert _worker_diagnostic(httpx.Response(503, json={"diagnostic": 5})) is None
+
+    message = _enable_error_message(
+        ProviderError("Hostname ownership conflict; reset may be required")
+    )
+    assert message == (
+        "Your previous Remote setup is still registered. Try again in a minute; "
+        "if it keeps happening, reset Remote Access."
+    )
+    for word in ("tunnel", "cloudflare", "hostname", "dns"):
+        assert word not in message.lower()
+    assert "could not be enabled" in _enable_error_message(ProviderError("other"))

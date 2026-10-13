@@ -26,6 +26,17 @@ from stagepilot.remote_files import (
 from stagepilot.remote_provider import ProviderError
 
 
+def _worker_diagnostic(response: httpx.Response) -> str | None:
+    """Return the Worker's fixed `diagnostic` string, if present (never raw bodies)."""
+
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    value = body.get("diagnostic") if isinstance(body, dict) else None
+    return value if isinstance(value, str) else None
+
+
 class InstallationRevokedError(ProviderError):
     """The installation capability is no longer accepted by the control plane."""
 
@@ -335,6 +346,8 @@ class BetaRemoteControl:
             if response.status_code in {401, 403}:
                 raise InstallationRevokedError("Installation enrollment is expired or revoked")
             if not response.is_success:
+                if _worker_diagnostic(response) == "hostname ownership conflict":
+                    raise ProviderError("Hostname ownership conflict; reset may be required")
                 raise ProviderError(f"Beta control request failed (HTTP {response.status_code})")
             value = response.json()
             if not isinstance(value, dict):
