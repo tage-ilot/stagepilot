@@ -1383,7 +1383,12 @@ export class Registry {
     let tunnel = await this.tunnel(name);
     let record = await this.dns(installation.hostname);
     if (record && (!tunnel || !this.owned(record, name, installation.hostname, tunnel.id))) {
-      throw new Error('hostname ownership conflict');
+      // Only a provably stale resource of an older generation of THIS
+      // installation is replaced; everything else still fails closed.
+      const stale = await this.staleOwnGeneration(installation, record, generation);
+      if (!stale) throw new Error('hostname ownership conflict');
+      await this.removeStale(installation, stale);
+      record = undefined;
     }
     if (!tunnel) {
       await this.cf('POST', this.tunnelsPath(), { name, config_src: 'cloudflare' });
@@ -1454,10 +1459,13 @@ export class Registry {
       const record = await this.dns(installation.hostname);
       if (record) {
         if (!tunnelId || !this.owned(record, name, installation.hostname, tunnelId)) {
-          throw new Error('hostname ownership conflict');
+          const stale = await this.staleOwnGeneration(installation, record, generation);
+          if (!stale) throw new Error('hostname ownership conflict');
+          await this.removeStale(installation, stale);
+        } else {
+          await this.cf('DELETE', `${this.recordsPath()}/${String(record.id)}`);
+          if (await this.dns(installation.hostname)) throw new Error('hostname removal not confirmed');
         }
-        await this.cf('DELETE', `${this.recordsPath()}/${String(record.id)}`);
-        if (await this.dns(installation.hostname)) throw new Error('hostname removal not confirmed');
       }
       if (tunnel) {
         await this.configure(tunnel.id);
@@ -2083,6 +2091,43 @@ export class Registry {
     const matches = rows.filter((row) => row.name === hostname);
     if (matches.length > 1) throw new Error('ambiguous hostname ownership');
     return matches[0];
+  }
+
+  // Returns the stale tunnel/record pair only with full evidence that it
+  // belongs to an older generation of this same installation and nothing is
+  // connected to it. Any doubt returns undefined (caller fails closed).
+  private async staleOwnGeneration(
+    installation: Installation,
+    record: Record<string, unknown>,
+    requestedGeneration: string,
+  ): Promise<{ record: Record<string, unknown>; tunnel: { id: string; name: string } } | undefined> {
+    const comment = record.comment;
+    const prefix = `stagepilot-${installation.id}-`;
+    if (typeof comment !== 'string' || !comment.startsWith(prefix)) return undefined;
+    const oldGeneration = comment.slice(prefix.length);
+    if (!GENERATION.test(oldGeneration) || oldGeneration.toLowerCase() === requestedGeneration.toLowerCase()) {
+      return undefined;
+    }
+    if (record.name !== installation.hostname || record.type !== 'CNAME' || record.proxied !== true) {
+      return undefined;
+    }
+    const tunnel = await this.tunnel(comment);
+    if (!tunnel || record.content !== `${tunnel.id}.cfargotunnel.com`) return undefined;
+    const connections = await this.cf<unknown>('GET', `${this.tunnelsPath()}/${tunnel.id}/connections`);
+    if (!Array.isArray(connections) || connections.length > 0) return undefined;
+    return { record, tunnel };
+  }
+
+  private async removeStale(
+    installation: Installation,
+    stale: { record: Record<string, unknown>; tunnel: { id: string; name: string } },
+  ): Promise<void> {
+    await this.cf('DELETE', `${this.recordsPath()}/${String(stale.record.id)}`);
+    if (await this.dns(installation.hostname)) throw new Error('hostname removal not confirmed');
+    await this.configure(stale.tunnel.id);
+    await this.cf('DELETE', `${this.tunnelsPath()}/${stale.tunnel.id}/connections`);
+    await this.cf('DELETE', `${this.tunnelsPath()}/${stale.tunnel.id}`);
+    if (await this.tunnel(stale.tunnel.name)) throw new Error('tunnel revocation not confirmed');
   }
 
   private owned(record: Record<string, unknown>, name: string, hostname: string, tunnelId: string): boolean {
