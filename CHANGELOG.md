@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.104-beta.34] - 2026-10-13
+## [1.1.104-beta.35] - 2026-10-13
 
 ### Added
 
@@ -35,6 +35,8 @@
 
 ### Notes
 
+- beta.34 was tagged but never published (a new Playback reconnect test raced on
+  the Windows build); beta.35 carries the same changes plus the test fix.
 - Not yet tested against a live Playback by hand: play, pause, seek and resume,
   Remote Connections off and on, and a dropped network are the checks to run.
 - Timing is accurate to about a second (Playback reports once a second).
