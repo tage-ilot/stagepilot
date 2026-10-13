@@ -46,9 +46,10 @@ describe("status word (owner 2026-10-13: no dot, capitalized, larger)", () => {
     expect(rule).toMatch(/font-size: clamp\(0\.6875rem, calc\(\(100cqw - [\d.]+rem\) \/ [\d.]+\), 1\.125rem\)/);
   });
 
-  it("the compact word steps from 11px down to 9px and NOT CONNECTED may wrap (one line below 360px)", () => {
-    expect(css).toContain("font-size: clamp(0.5625rem, calc((100cqw - 0.5rem) / 6.6), 0.6875rem)");
-    expect(css).toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: normal/);
-    expect(css).toMatch(/max-width: 359\.98px\) \{\s*\.connections-status\.status-compact \.status-card-status-word \{\s*white-space: nowrap/);
+  it("the compact word is one line: nowrap, sized from the card (room / 8.3, max 11px), no wrap rule at any width", () => {
+    expect(css).toContain("font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem)");
+    expect(css).toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: nowrap/);
+    expect(css).not.toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: normal/);
+    expect(css).not.toContain("max-width: 359.98px");
   });
 });
