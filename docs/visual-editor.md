@@ -16,6 +16,16 @@ Reachable from the LAN (explicit flag, port 8101, all interfaces):
 
     cd frontend && npm run dev:lan      # http://<host-ip>:8101/
 
+To edit every screen (not just the access gate), run a backend and point the dev
+server at it. The proxy forwards `/api` and `/ws` and is off unless the variable is set:
+
+    # terminal 1: demo backend on loopback (throwaway data dir, default PIN 1234)
+    STAGEPILOT_PORT=18766 STAGEPILOT_SERVICE_SOURCE=demo STAGEPILOT_MIDI_SOURCE=simulated \
+      STAGEPILOT_TIMER_OUTPUT=simulated STAGEPILOT_DATA_DIR=/tmp/sp-editor-demo \
+      uv run --project backend stagepilot
+    # terminal 2:
+    cd frontend && STAGEPILOT_DEV_API_PROXY=http://127.0.0.1:18766 npm run dev:lan
+
 Anyone who can open the LAN URL can use the editor on that checkout, so run it
 only on a trusted network, and on a throwaway branch. The endpoint also requires
 a random per-run token that is embedded in the served page.
