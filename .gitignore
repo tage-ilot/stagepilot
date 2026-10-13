@@ -77,7 +77,6 @@ public_key.*
 *.mobileprovision
 
 # Project-specific tooling/scratch (kept for privacy — do not remove)
-create-new-release.ps1
 tools/multitracks-cues/reports/
 tools/multitracks-cues/dist-sidecar/
 .tools/codex-schema.*/

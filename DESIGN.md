@@ -411,8 +411,9 @@ that is not a status, a service, or the primary red.
   `text-quiet` (slate-500, 72 uses, only 3.4:1) is replaced by `text-muted`
   (7:1 or better on every surface).
 - **Primary (`#c7231d`, deep red; replaced coral on 2026-10-11)** marks the live
-  item (now-playing rail, current song row), the layout-save action, and the
-  expanded/selected state. Its family: `primary-hover` `#cd3934` (tint 10%),
+  item (now-playing rail, current song row) and the layout-save action. (The
+  open status card is NOT primary any more: it wears its own connection colour,
+  see Connection colours.) Its family: `primary-hover` `#cd3934` (tint 10%),
   `primary-focus` `#dd7b77` (tint 40%, focus ring), `primary-active` `#b3201a`
   (shade 10%, pressed), `primary-text` `#e3918e` (tint 50%, for red used as
   text). The full 10% to 90% shade and tint scale is kept under
@@ -460,7 +461,11 @@ that is not a status, a service, or the primary red.
   borders and 10-30% tints on dark surfaces) and `-text` (small text, 7:1).
   Playback is the owner's slate-blue `#3a4e66` lightened 14% to `#56677b`, the
   least that reaches 3:1 on dark surfaces, so one colour serves as fill, dot,
-  border and tint. Never reuse these for status. **Advanced** parts of a service's setup use a muted version of
+  border and tint. **The open status card wears its connection's colour (decided
+  2026-10-13):** 70% border, a 10% wash fading out by 44%, and a 3px left bar in
+  the base colour. The StagePilot card is the one exception: it is the same red as
+  the live item, so it keeps the neutral card with a 1px `#c7231d` border and no wash
+  or bar (see Colour collisions). Never reuse these for status. **Advanced** parts of a service's setup use a muted version of
   the service colour (`advanced-*`, the hue mixed half-way with `text-muted`)
   so they read as secondary. Decided: mixed 30% hue / 70% grey so the difference from the main colour is easy to see.
 - **Dashboard names (decided): generic, not brand names.** The dashboard says
@@ -667,7 +672,7 @@ because the current code does it.
 
 ### Connection method (decided: MIDI is a method, not a brand)
 A connection may be reachable in more than one way. The ways are shown as a
-**Connection method** select at the top of Basic, so alternates are where the
+**Connection method** select at the top of General configuration, so alternates are where the
 user looks, not hidden behind a toggle:
 - **Playback:** `Playback API` (main) or `MIDI` (alternate).
 - **Lighting:** `MIDI` (the main method today; a method select appears only when
@@ -684,8 +689,8 @@ company, so the word stays in the UI.
   one-line summary of what is inside** when closed (for example
   `Port 8080 · Channel 1`), so a user rarely has to open it.
 - Colour: the service's muted `advanced-*` tone for chevron and label; the open
-  area gets a 3px left bar in the same tone. Basic is never inside a collapsed
-  section; Advanced always comes after Basic. Motion: 500ms expand, honouring
+  area gets a 3px left bar in the same tone. General configuration is never inside a collapsed
+  section; Advanced always comes after General configuration. Motion: 500ms expand, honouring
   reduced motion.
 
 ### Telling expandable things apart (decided)
@@ -718,7 +723,7 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 | **Lighting** | Lighting (until 2026-10-12), Lightkey | the connection that receives cues. Renamed from "Lighting" by the owner on 2026-10-12. Describe its output as **MIDI Output to Lighting Controller** (decided) |
 | **MIDI** | (stays) | a connection method: alternate for Playback, main for Lighting |
 | **Configuration** | settings, setup, production setup | what you edit for a connection (decided) |
-| **Basic / Advanced** | alternate, specific, manual | the two parts of Configuration |
+| **General configuration / Advanced** | alternate, specific, manual | the two parts of Configuration |
 | **StagePilot** | backend, local API, plugin health | the fifth status card; its panel holds the app's own status and all app-wide configuration |
 | **Service plan** | plan | the day's list of songs (decided) |
 | **Cue** | pulse | a message sent to Lighting (decided) |
@@ -738,7 +743,7 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 1. **Header:** kicker `Connection configuration` (muted), title = the
    connection name, status badge, close button (44px).
 2. **One sentence** saying what this connection does for the user.
-3. **Connection method** (when more than one), then **Basic**, ordered by how
+3. **Connection method** (when more than one), then **General configuration**, ordered by how
    often they change.
 4. **Advanced** (collapsed, see above).
 5. **Save bar, always last and always in the same place** (see below).
@@ -799,7 +804,7 @@ The fifth card stays in the connections row, as the quick look at the app's
 own health, and its panel replaces a separate app-settings page. **All
 app-wide configuration that is not for one connection lives here.**
 Sections, in order: **Status** (version, running state, connection health:
-read-only), **Basic** (timezone, network access, PIN), **People** (remote
+read-only), **General configuration** (timezone, network access, PIN), **People** (remote
 access and who can sign in), **Advanced** (port, logging, diagnostics).
 New app-wide options go here, never into a connection.
 
@@ -849,7 +854,7 @@ a skill check against beta 31 or against this guide.
 
 ### Rules for adding anything new
 1. Does it belong to a connection? Then it goes in that connection's
-   Configuration, Basic or Advanced. If not, it goes in the StagePilot panel.
+   Configuration, General configuration or Advanced. If not, it goes in the StagePilot panel.
 2. Could it change everything a running show sends or reads? Then it is a held change, saved with `Save configuration`. Everything else saves as you go.
 3. Use an existing pattern from this file. If none fits, add the new pattern
    here first, then build it.
@@ -952,7 +957,7 @@ kept because the current code does it.
   MIDI as text). Activity and Advanced rows look different; "Other computer…"
   replaces "Connect a specific computer".
 - Vocabulary: Connection, Services, Presentation, Playback, Lighting, MIDI,
-  Configuration, Basic / Advanced, StagePilot, Service plan, Cue (not pulse),
+  Configuration, General configuration / Advanced, StagePilot, Service plan, Cue (not pulse),
   Note (kept), People.
 - StagePilot card and panel hold all app-wide configuration.
 - Save as you go, plus an always-visible `Save configuration` button and a

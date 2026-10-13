@@ -128,6 +128,8 @@ export interface ApplicationState {
     status: TimerStatus;
     duration_seconds: number | null;
     started_at: string | null;
+    position_seconds?: number | null;
+    remaining_seconds?: number | null;
     last_error: string | null;
   };
   plugins: Record<string, PluginHealth>;

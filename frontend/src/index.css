@@ -463,10 +463,18 @@ textarea:focus-visible {
   }
 }
 
+/* The open card wears its connection's colour (DESIGN.md Connection colours); no tone falls back to primary. */
+.status-card { --status-card-hue: var(--ds-primary); }
+.status-card[data-tone="services"] { --status-card-hue: var(--ds-integration-services); }
+.status-card[data-tone="presentation"] { --status-card-hue: var(--ds-integration-presentation); }
+.status-card[data-tone="playback"] { --status-card-hue: var(--ds-integration-playback); }
+.status-card[data-tone="lighting"] { --status-card-hue: var(--ds-integration-lighting); }
+.status-card[data-tone="backend"] { --status-card-hue: var(--ds-integration-backend); }
+
 .status-card[aria-expanded="true"] .status-card-surface {
-  border-color: color-mix(in srgb, var(--ds-primary) 70%, transparent);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--ds-primary) 10%, transparent), var(--ds-card) 44%);
-  box-shadow: inset 3px 0 0 var(--ds-primary), var(--ds-elevation-default);
+  border-color: color-mix(in srgb, var(--status-card-hue) 70%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--status-card-hue) 10%, transparent), var(--ds-card) 44%);
+  box-shadow: inset 3px 0 0 var(--status-card-hue), var(--ds-elevation-default);
 }
 
 .status-card-layout {

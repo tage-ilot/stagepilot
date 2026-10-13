@@ -1405,6 +1405,27 @@ describe("Dashboard connection configuration panels", () => {
     }
   });
 
+  it("keeps the frozen remaining time when the timer is stopped, using the existing stopped wording", () => {
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, {
+        current_song: loadedPlan.songs[0] ?? null,
+        current_song_index: 0,
+        timer: {
+          status: "stopped",
+          duration_seconds: 336,
+          started_at: null,
+          position_seconds: 36,
+          remaining_seconds: 300,
+          last_error: null,
+        },
+      }),
+    });
+
+    expect(screen.getByText("Timer stopped")).toBeInTheDocument();
+    expect(screen.getByText("05:00")).toBeInTheDocument();
+    expect(screen.queryByText(/paused/i)).not.toBeInTheDocument();
+  });
+
   it("advances the main countdown immediately instead of lagging ProPresenter", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-13T16:00:00.010Z"));

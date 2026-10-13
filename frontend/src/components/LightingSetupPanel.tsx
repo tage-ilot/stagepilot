@@ -267,7 +267,7 @@ export function LightingSetupPanel({
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
-      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+      <h3 className="mt-5 font-semibold text-ink">General configuration</h3>
       <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-4">
         <Field className="lg:col-span-2" error={errOutput} heldChange={heldOutput} label="MIDI Output to Lighting Controller">

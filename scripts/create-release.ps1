@@ -13,6 +13,8 @@ Set-StrictMode -Version Latest
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
+. (Join-Path $PSScriptRoot "release-helpers.ps1")
+$BetaRepo = "tage-ilot/stagepilot-beta"
 $env:GIT_PAGER = "cat"
 $env:PAGER = "cat"
 
@@ -69,6 +71,11 @@ if ($LASTEXITCODE -ne 0 -or $GitPrefix) {
     throw "Run this command from the StagePilot repository."
 }
 
+$OriginUrl = (git remote get-url origin 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not (Test-BetaOrigin $OriginUrl)) {
+    throw "origin is '$OriginUrl'. This script releases the private beta ($BetaRepo) only; it will not tag or push anything else."
+}
+
 if (-not $env:CARGO_TARGET_DIR -and $GitTopLevel.StartsWith("//")) {
     $env:CARGO_TARGET_DIR = Join-Path $env:LOCALAPPDATA "StagePilot\cargo-target"
     Write-Host "Using local Cargo cache for NAS checkout: $env:CARGO_TARGET_DIR" -ForegroundColor Cyan
@@ -76,41 +83,23 @@ if (-not $env:CARGO_TARGET_DIR -and $GitTopLevel.StartsWith("//")) {
 
 Invoke-Checked "Verify GitHub authentication" { gh auth status }
 
-$RemoteTags = gh api repos/tage-ilot/stagepilot/tags --paginate --jq '.[].name'
+$RemoteTags = @(gh api repos/$BetaRepo/tags --paginate --jq '.[].name')
 if ($LASTEXITCODE -ne 0 -or -not $RemoteTags) {
-    throw "Could not identify the existing StagePilot version tags on GitHub."
+    throw "Could not read the existing StagePilot beta tags on GitHub."
 }
-$StableVersions = @(
-    $RemoteTags |
-        ForEach-Object {
-            if ($_ -match '^v(\d+)\.(\d+)\.(\d+)$') {
-                [pscustomobject]@{
-                    Tag = $_
-                    Version = [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
-                }
-            }
-        }
-)
-if (-not $StableVersions) {
-    throw "GitHub does not contain a stable StagePilot semantic-version tag."
-}
-$LatestGitHubVersion = $StableVersions |
-    Sort-Object -Property Version -Descending |
-    Select-Object -First 1
-$LatestTag = $LatestGitHubVersion.Tag
-$SuggestedTag = "v$($LatestGitHubVersion.Version.Major).$($LatestGitHubVersion.Version.Minor).$($LatestGitHubVersion.Version.Build + 1)"
-Write-Host "`nLatest GitHub version: StagePilot $LatestTag" -ForegroundColor Cyan
+$LatestBeta = Get-LatestBetaTag $RemoteTags
+$Suggested = Get-NextBetaVersion $RemoteTags
+$SuggestedTag = "v$Suggested"
+Write-Host "`nLatest GitHub beta: StagePilot $($LatestBeta.Tag)" -ForegroundColor Cyan
 
 if (-not $Version) {
-    $Version = Read-Host "New StagePilot version (default $SuggestedTag)"
+    $Version = Read-Host "New StagePilot beta version (default $SuggestedTag)"
     if (-not $Version) {
         $Version = $SuggestedTag
     }
 }
 $Version = $Version.Trim().TrimStart("v")
-if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
-    throw "Version '$Version' is not a valid semantic version."
-}
+Assert-BetaVersion $Version $RemoteTags
 
 $Tag = "v$Version"
 $CurrentBranch = (git branch --show-current).Trim()
@@ -155,6 +144,14 @@ if ($TargetBranch -eq "main") {
     if ($LASTEXITCODE -ne 0) {
         throw "The current checkout does not contain the latest origin/main. Reconcile it before releasing to main."
     }
+}
+
+if (-not (Test-ChangelogHasVersion (Join-Path $Root "CHANGELOG.md") $Version)) {
+    throw "CHANGELOG.md has no '## [$Version]' heading. Add the release notes under it, commit them, then run this again (nothing was changed)."
+}
+$Dirty = git status --porcelain
+if ($Dirty) {
+    Write-Host "`nNote: uncommitted changes exist and WILL be included in the release commit." -ForegroundColor Yellow
 }
 
 Write-Host "`nRelease plan" -ForegroundColor Yellow
@@ -260,6 +257,9 @@ if (Test-Path "tools/multitracks-cues/package.json") {
     }
 }
 
+Invoke-Checked "Release workflow runner boundary" { python scripts/validate_workflow_runners.py }
+Invoke-Checked "Beta source export audit" { node scripts/audit_beta_release.mjs source }
+
 Invoke-Checked "Check the release diff" { git --no-pager diff --check }
 
 Write-Host "`nFiles that will be included:" -ForegroundColor Yellow
@@ -288,20 +288,23 @@ Invoke-Checked "Push release commit to origin/$TargetBranch" {
 Invoke-Checked "Create release tag $Tag" { git tag -a $Tag -m "StagePilot $Tag" }
 Invoke-Checked "Push release tag $Tag" { git push origin $Tag }
 
-Write-Host "`nWaiting for the GitHub release workflow..." -ForegroundColor Cyan
+Write-Host "`nTag $Tag is pushed. GitHub builds the Windows, Intel Mac and Apple Silicon packages (about 20-40 minutes)." -ForegroundColor Cyan
 $RunId = $null
 for ($attempt = 0; $attempt -lt 12 -and -not $RunId; $attempt += 1) {
     Start-Sleep -Seconds 5
-    $RunId = gh run list --repo tage-ilot/stagepilot --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
+    $RunId = gh run list --repo $BetaRepo --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
 }
 if (-not $RunId) {
-    throw "The tag was pushed, but the GitHub release workflow was not found. Check GitHub Actions manually."
+    throw "The tag was pushed, but the GitHub release workflow was not found. Check https://github.com/$BetaRepo/actions manually."
 }
+Write-Host "Release run: https://github.com/$BetaRepo/actions/runs/$RunId"
+Write-Host "A background watcher on the Hermes host reports the result to WhatsApp; you do not need to keep this window open." -ForegroundColor Cyan
 
-Invoke-Checked "Build and publish StagePilot $Tag on GitHub" {
-    gh run watch $RunId --repo tage-ilot/stagepilot --interval 15 --exit-status
+if ($env:STAGEPILOT_RELEASE_WATCH -eq "1") {
+    Invoke-Checked "Build and publish StagePilot $Tag on GitHub" {
+        gh run watch $RunId --repo $BetaRepo --interval 30 --exit-status
+    }
+    $ReleaseUrl = gh release view $Tag --repo $BetaRepo --json url --jq '.url'
+    Write-Host "`nStagePilot $Tag is published:" -ForegroundColor Green
+    Write-Host $ReleaseUrl
 }
-
-$ReleaseUrl = gh release view $Tag --repo tage-ilot/stagepilot --json url --jq '.url'
-Write-Host "`nStagePilot $Tag is published:" -ForegroundColor Green
-Write-Host $ReleaseUrl
