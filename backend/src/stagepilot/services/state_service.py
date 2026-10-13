@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from typing import Any
@@ -108,6 +109,135 @@ class StateService:
         """Start an exact one-based song position without changing manual-control semantics."""
         async with self._action_lock:
             return await self._start_song_position(position, source=source)
+
+    async def resume_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Continue the countdown of the current song from a Playback position.
+
+        Safe to call from any input: never raises, rejects when there is no
+        current song or no plan duration. Whether the caller's song order is
+        valid is the caller's decision.
+        """
+        async with self._action_lock:
+            return await self._apply_position(position_seconds, source, resume=True)
+
+    async def seek_timer(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Re-apply the remaining time from a new position.
+
+        Keeps running when the timer is running; when stopped, only updates the
+        frozen remaining time and position.
+        """
+        async with self._action_lock:
+            return await self._apply_position(position_seconds, source, resume=False)
+
+    async def stop_timer_at(self, position_seconds: float, source: str = "api") -> ActionOutcome:
+        """Stop the timer, freezing remaining time from an explicit position."""
+        async with self._action_lock:
+            try:
+                position = self._clean_position(position_seconds)
+            except ValueError as error:
+                return ActionOutcome(False, str(error))
+            state = await self._state_store.snapshot()
+            song = state.current_song
+            if song is None or not song.duration_seconds:
+                return await self._stop_timer()
+            remaining = self._remaining(song.duration_seconds, position)
+
+            def mutation(state: ApplicationState) -> None:
+                state.timer = TimerState(
+                    status=TimerStatus.STOPPED,
+                    duration_seconds=state.timer.duration_seconds,
+                    position_seconds=position,
+                    remaining_seconds=remaining,
+                )
+                state.last_action = ActionName.STOP_TIMER
+
+            await self._state_store.mutate(mutation)
+            await self._event_bus.publish(
+                new_event(
+                    EventType.TIMER_STOP_REQUESTED,
+                    source=source,
+                    payload=TimerPayload(
+                        duration_seconds=remaining,
+                        song=song,
+                        position_seconds=position,
+                        remaining_seconds=remaining,
+                    ),
+                )
+            )
+            return ActionOutcome(True, "Timer stop requested.")
+
+    @staticmethod
+    def _clean_position(position_seconds: float) -> float:
+        try:
+            position = float(position_seconds)
+        except (TypeError, ValueError):
+            raise ValueError("Position must be a number of seconds.") from None
+        if not math.isfinite(position):
+            raise ValueError("Position must be a finite number of seconds.")
+        return max(0.0, position)
+
+    @staticmethod
+    def _remaining(duration: int, position: float) -> int:
+        return max(0, round(duration - position))
+
+    async def _apply_position(
+        self, position_seconds: float, source: str, *, resume: bool
+    ) -> ActionOutcome:
+        try:
+            position = self._clean_position(position_seconds)
+            state = await self._state_store.snapshot()
+            song = state.current_song
+            if song is None:
+                return ActionOutcome(False, "No current song.")
+            if not song.duration_seconds:
+                return ActionOutcome(
+                    False, f'Cannot time "{song.title}": scheduled duration is missing or zero.'
+                )
+            if state.timer.status is TimerStatus.ERROR:
+                return ActionOutcome(False, "The timer is in an error state.")
+            was_running = state.timer.status is TimerStatus.RUNNING
+            remaining = self._remaining(song.duration_seconds, position)
+            running = remaining > 0 and (resume or was_running)
+            now = datetime.now(UTC)
+
+            def mutation(state: ApplicationState) -> None:
+                if running:
+                    state.timer = TimerState(
+                        status=TimerStatus.RUNNING,
+                        duration_seconds=remaining,
+                        started_at=now,
+                        position_seconds=position,
+                    )
+                else:
+                    state.timer = TimerState(
+                        status=TimerStatus.STOPPED,
+                        duration_seconds=state.timer.duration_seconds,
+                        position_seconds=position,
+                        remaining_seconds=remaining,
+                    )
+
+            await self._state_store.mutate(mutation)
+            payload = TimerPayload(
+                duration_seconds=remaining,
+                song=song,
+                started_at=now if running else None,
+                position_seconds=position,
+                remaining_seconds=remaining,
+                running=running,
+            )
+            event_type = EventType.TIMER_RESUMED if resume else EventType.TIMER_SEEKED
+            await self._event_bus.publish(new_event(event_type, source=source, payload=payload))
+            if resume and not running:
+                # Nothing left to count: leave every consumer stopped.
+                await self._event_bus.publish(
+                    new_event(EventType.TIMER_STOP_REQUESTED, source=source, payload=payload)
+                )
+            verb = "Resumed" if resume else "Seeked"
+            return ActionOutcome(True, f'{verb} "{song.title}" at {position:.1f}s.')
+        except ValueError as error:
+            return ActionOutcome(False, str(error))
+        except Exception:  # must never raise into the event loop
+            return ActionOutcome(False, "The timer could not be updated; see recent errors.")
 
     async def _handle_action(self, event: StagePilotEvent) -> None:
         if not isinstance(event.payload, ActionPayload):
@@ -261,6 +391,9 @@ class StateService:
         def mutation(state: ApplicationState) -> None:
             if state.plan is None:
                 return
+            if state.timer.status is TimerStatus.STOPPED and index != state.current_song_index:
+                # A frozen remaining time belongs to the previous song.
+                state.timer = TimerState(status=TimerStatus.STOPPED)
             state.current_song_index = index
             state.current_song = state.plan.songs[index]
             state.next_song = (
@@ -383,15 +516,34 @@ class StateService:
                 status=TimerStatus.RUNNING,
                 duration_seconds=payload.duration_seconds,
                 started_at=payload.started_at or event.timestamp,
+                position_seconds=payload.position_seconds or 0.0,
             )
 
         await self._state_store.mutate(mutation)
 
     async def _handle_timer_stopped(self, event: StagePilotEvent) -> None:
+        payload = event.payload if isinstance(event.payload, TimerPayload) else None
+
         def mutation(state: ApplicationState) -> None:
+            previous = state.timer
+            position = payload.position_seconds if payload else None
+            remaining = payload.remaining_seconds if payload else None
+            if position is None and remaining is None:
+                if previous.status is TimerStatus.RUNNING and previous.started_at is not None:
+                    # Freeze where the countdown stood when it was stopped.
+                    elapsed = max(0.0, (event.timestamp - previous.started_at).total_seconds())
+                    total = previous.duration_seconds or 0
+                    remaining = max(0, round(total - elapsed))
+                    position = (previous.position_seconds or 0.0) + min(elapsed, float(total))
+                elif previous.status is TimerStatus.STOPPED:
+                    # Already frozen (stop_timer_at, or a repeated stop): keep it.
+                    position = previous.position_seconds
+                    remaining = previous.remaining_seconds
             state.timer = TimerState(
                 status=TimerStatus.STOPPED,
-                duration_seconds=state.timer.duration_seconds,
+                duration_seconds=previous.duration_seconds,
+                position_seconds=position,
+                remaining_seconds=remaining,
             )
 
         await self._state_store.mutate(mutation)

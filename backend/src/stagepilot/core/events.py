@@ -35,6 +35,8 @@ class EventType(StrEnum):
     TIMER_STOP_REQUESTED = "timer.stop_requested"
     TIMER_RESET_REQUESTED = "timer.reset_requested"
     TIMER_STARTED = "timer.started"
+    TIMER_RESUMED = "timer.resumed"
+    TIMER_SEEKED = "timer.seeked"
     TIMER_STOPPED = "timer.stopped"
     TIMER_FAILED = "timer.failed"
     CONNECTION_CHANGED = "connection.changed"
@@ -105,6 +107,13 @@ class TimerPayload(BaseModel):
     song: Song | None = None
     started_at: datetime | None = None
     message: str | None = None
+    # Song position (seconds) the countdown starts from (resumed/seeked) or
+    # was frozen at (stopped). None when the emitter does not know it.
+    position_seconds: float | None = Field(default=None, ge=0)
+    # Seconds left at that position (plan duration minus position, clamped at 0).
+    remaining_seconds: int | None = Field(default=None, ge=0)
+    # timer.seeked only: True when the countdown keeps running after the seek.
+    running: bool = False
 
 
 class ConnectionPayload(BaseModel):

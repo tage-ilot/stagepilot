@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -425,3 +425,229 @@ async def test_same_day_stale_load_keeps_plan_and_running_timer(
     assert state.service_load.is_stale is True
     assert state.timer.status is TimerStatus.RUNNING
     assert state.timer.duration_seconds == 240
+
+
+async def start_timer(bus: EventBus, seconds: int, started_at: datetime | None = None) -> None:
+    await bus.publish(
+        new_event(
+            EventType.TIMER_STARTED,
+            source="test",
+            payload=TimerPayload(duration_seconds=seconds, started_at=started_at),
+        )
+    )
+
+
+async def stop_event(bus: EventBus, timestamp: datetime | None = None) -> None:
+    event = new_event(
+        EventType.TIMER_STOPPED, source="test", payload=TimerPayload(duration_seconds=0)
+    )
+    if timestamp is not None:
+        event = event.model_copy(update={"timestamp": timestamp})
+    await bus.publish(event)
+
+
+@pytest.mark.asyncio
+async def test_stop_keeps_remaining_and_position_then_resume_continues(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    t0 = datetime(2026, 7, 12, 9, 0, tzinfo=UTC)
+    await start_timer(bus, 240, t0)
+    await stop_event(bus, t0 + timedelta(seconds=60))
+
+    stopped = (await store.snapshot()).timer
+    assert stopped.status is TimerStatus.STOPPED
+    assert stopped.remaining_seconds == 180
+    assert stopped.position_seconds == 60
+
+    resumed: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.TIMER_RESUMED, resumed.append)
+    outcome = await state_service.resume_timer_at(60.4)
+    running = (await store.snapshot()).timer
+    assert outcome.accepted is True
+    assert running.status is TimerStatus.RUNNING
+    assert running.duration_seconds == 180
+    assert running.position_seconds == pytest.approx(60.4)
+    assert running.remaining_seconds is None
+    payload = resumed[0].payload
+    assert isinstance(payload, TimerPayload)
+    assert payload.remaining_seconds == 180
+    assert payload.duration_seconds == 180
+    assert payload.position_seconds == pytest.approx(60.4)
+    assert payload.running is True
+    assert payload.song is not None and payload.song.title == "Alpha"
+
+
+@pytest.mark.asyncio
+async def test_seek_while_running_reapplies_and_keeps_running(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+    seeked: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.TIMER_SEEKED, seeked.append)
+
+    outcome = await state_service.seek_timer(100)
+
+    timer = (await store.snapshot()).timer
+    assert outcome.accepted is True
+    assert timer.status is TimerStatus.RUNNING
+    assert timer.duration_seconds == 140
+    assert timer.position_seconds == 100
+    payload = seeked[0].payload
+    assert isinstance(payload, TimerPayload)
+    assert (payload.remaining_seconds, payload.position_seconds, payload.running) == (
+        140,
+        100,
+        True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_seek_while_stopped_updates_frozen_remaining_without_running(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+    await stop_event(bus)
+    seeked: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.TIMER_SEEKED, seeked.append)
+
+    await state_service.seek_timer(200)
+
+    timer = (await store.snapshot()).timer
+    assert timer.status is TimerStatus.STOPPED
+    assert timer.remaining_seconds == 40
+    assert timer.position_seconds == 200
+    payload = seeked[0].payload
+    assert isinstance(payload, TimerPayload)
+    assert payload.running is False and payload.remaining_seconds == 40
+
+
+@pytest.mark.asyncio
+async def test_position_past_the_end_clamps_remaining_at_zero(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+
+    await state_service.seek_timer(999)
+    timer = (await store.snapshot()).timer
+    assert timer.status is TimerStatus.STOPPED
+    assert timer.remaining_seconds == 0
+
+    stops: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.TIMER_STOP_REQUESTED, stops.append)
+    await state_service.resume_timer_at(999)
+    timer = (await store.snapshot()).timer
+    assert timer.status is TimerStatus.STOPPED
+    assert timer.remaining_seconds == 0
+    assert len(stops) == 1
+
+
+@pytest.mark.asyncio
+async def test_seek_to_start_then_resume_runs_the_full_duration(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+    await stop_event(bus)
+    await state_service.seek_timer(0)
+    assert (await store.snapshot()).timer.remaining_seconds == 240
+    await state_service.resume_timer_at(0)
+    timer = (await store.snapshot()).timer
+    assert timer.status is TimerStatus.RUNNING and timer.duration_seconds == 240
+    # The "song started" restart path is untouched.
+    restarted: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.SONG_RESTARTED, restarted.append)
+    outcome = await state_service.dispatch(ActionName.RESTART_CURRENT)
+    assert outcome.accepted is True and len(restarted) == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_and_seek_are_rejected_safely_without_song_or_duration(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    assert (await state_service.resume_timer_at(5)).accepted is False
+    assert (await state_service.seek_timer(5)).accepted is False
+    await load(bus, make_plan(song("a", "Alpha", 1, None)))
+    await state_service.dispatch(ActionName.NEXT)
+    assert (await state_service.resume_timer_at(5)).accepted is False
+    assert (await state_service.seek_timer(float("nan"))).accepted is False
+    assert (await state_service.seek_timer(float("inf"))).accepted is False
+    assert (await store.snapshot()).timer.status is TimerStatus.IDLE
+
+
+@pytest.mark.asyncio
+async def test_stop_timer_at_freezes_from_playback_position(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+    stops: list[StagePilotEvent] = []
+    await bus.subscribe(EventType.TIMER_STOP_REQUESTED, stops.append)
+
+    outcome = await state_service.stop_timer_at(90)
+    await stop_event(bus)  # a plugin confirming the stop must not blank the value
+
+    timer = (await store.snapshot()).timer
+    assert outcome.accepted is True
+    assert (timer.status, timer.remaining_seconds, timer.position_seconds) == (
+        TimerStatus.STOPPED,
+        150,
+        90,
+    )
+    payload = stops[0].payload
+    assert isinstance(payload, TimerPayload)
+    assert (payload.remaining_seconds, payload.position_seconds) == (150, 90)
+
+
+@pytest.mark.asyncio
+async def test_reset_position_clears_frozen_remaining_and_new_song_drops_it(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240), song("b", "Beta", 2, 200)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    await start_timer(bus, 240)
+    await stop_event(bus)
+    await state_service.seek_timer(60)
+    assert (await store.snapshot()).timer.remaining_seconds == 180
+
+    await state_service.dispatch(ActionName.NEXT)  # new song while stopped
+    timer = (await store.snapshot()).timer
+    assert timer.status is TimerStatus.STOPPED and timer.remaining_seconds is None
+
+    await state_service.dispatch(ActionName.PREVIOUS)
+    await state_service.seek_timer(60)
+    await state_service.dispatch(ActionName.RESET_POSITION)
+    timer = (await store.snapshot()).timer
+    assert timer.remaining_seconds is None and timer.position_seconds is None
+
+
+@pytest.mark.asyncio
+async def test_manual_stop_keeps_remaining_time(
+    service: tuple[EventBus, StateStore, StateService],
+) -> None:
+    bus, store, state_service = service
+    await load(bus, make_plan(song("a", "Alpha", 1, 240)))
+    await state_service.dispatch(ActionName.START_NEXT)
+    t0 = datetime(2026, 7, 12, 9, 0, tzinfo=UTC)
+    await start_timer(bus, 240, t0)
+    await state_service.dispatch(ActionName.STOP_TIMER)
+    await stop_event(bus, t0 + timedelta(seconds=30))
+    timer = (await store.snapshot()).timer
+    assert (timer.status, timer.remaining_seconds) == (TimerStatus.STOPPED, 210)
