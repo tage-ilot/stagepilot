@@ -270,11 +270,11 @@ describe("Copy Log", () => {
 });
 
 describe("StagePilot panel sections", () => {
-  it("shows Status, Basic, People, Advanced in that order as plain headings", async () => {
+  it("shows Status, General configuration, People, Advanced in that order as plain headings", async () => {
     renderPanel();
     await screen.findByRole("checkbox", {name: /Remote Access/});
     const names = screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent);
-    expect(names).toEqual(["Status", "Basic", "People", "Advanced"]);
+    expect(names).toEqual(["Status", "General configuration", "People", "Advanced"]);
   });
 
   it("puts the restart-needed fields in the right sections and keeps Release channel in Advanced", async () => {
@@ -285,9 +285,9 @@ describe("StagePilot panel sections", () => {
       return heading;
     };
     const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(after(section("Basic"), screen.getByLabelText("Timezone"))).toBe(true);
-    expect(after(section("Basic"), screen.getByRole("checkbox", {name: /local network/}))).toBe(true);
-    expect(after(section("Basic"), screen.getByRole("checkbox", {name: /PIN/}))).toBe(true);
+    expect(after(section("General configuration"), screen.getByLabelText("Timezone"))).toBe(true);
+    expect(after(section("General configuration"), screen.getByRole("checkbox", {name: /local network/}))).toBe(true);
+    expect(after(section("General configuration"), screen.getByRole("checkbox", {name: /PIN/}))).toBe(true);
     expect(after(section("People"), screen.getByRole("checkbox", {name: /Remote Access/}))).toBe(true);
     for (const label of ["Server port", "Log level", "Release channel"]) {
       expect(after(section("Advanced"), screen.getByLabelText(label))).toBe(true);

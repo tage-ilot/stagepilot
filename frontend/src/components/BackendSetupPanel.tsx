@@ -317,7 +317,7 @@ export function BackendSetupPanel({
         </div>
       </dl>
 
-      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Basic</h3>
+      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">General configuration</h3>
       <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
         <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
           <Input
