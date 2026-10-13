@@ -42,7 +42,7 @@ const midiNoteOptions = Array.from({ length: 128 }, (_, note) => ({
 }));
 
 const monitorTone = (message: MidiMonitorMessage) => {
-  if (message.disposition === "dispatched") return "text-success-text";
+  if (message.disposition === "dispatched") return "text-integration-playback-text";
   if (message.disposition === "note_release") return "text-ink-muted";
   return "text-warning-text";
 };
@@ -219,8 +219,8 @@ export function MidiSetupPanel({
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
       <div className="mt-4 rounded-ds-lg bg-integration-playback-soft/5 p-3">
-        <div className="mb-4 rounded-ds-lg bg-success/10 p-3">
-          <p className="text-sm font-semibold text-success-text">Playback song velocities</p>
+        <div className="mb-4 rounded-ds-lg bg-integration-playback-soft/10 p-3">
+          <p className="text-sm font-semibold text-integration-playback-text">Playback song velocities</p>
           <p className="mt-1 text-xs text-ink-body">
             Use the fixed note above and set each song-start cue's velocity to its
             one-based position in this service plan. Velocities 1–99 start that exact
@@ -231,7 +231,7 @@ export function MidiSetupPanel({
               <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
                 {songs.slice(0, 99).map((song, index) => (
                   <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>
-                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-success/15 px-1.5 py-0.5 font-mono font-bold tabular-nums text-success-text">
+                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-integration-playback-soft/20 px-1.5 py-0.5 font-mono font-bold tabular-nums text-integration-playback-text">
                       {index + 1}
                     </span>
                     <span className="truncate">{song.title}</span>
@@ -348,7 +348,7 @@ export function MidiSetupPanel({
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className={`rounded-ds-full px-2.5 py-1 font-bold ${connectedInput ? "bg-success/15 text-success-text" : "bg-edge-subtle text-ink-muted"}`}>
+            <span className={`rounded-ds-full px-2.5 py-1 font-bold ${connectedInput ? "bg-integration-playback-soft/20 text-integration-playback-text" : "bg-edge-subtle text-ink-muted"}`}>
               {playback?.status?.sources.midi.connected && playback.status.active_source === "playback_api" ? `Connected: ${connectedInput?.name ?? "MIDI"} — standing by` : connectedInput ? `Connected: ${connectedInput.name}` : "No input connected"}
             </span>
             {midi?.selected_input_name && !connectedInput && (

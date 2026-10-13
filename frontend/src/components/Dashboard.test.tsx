@@ -588,6 +588,12 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getAllByText("Connected to Playback").length).toBeGreaterThan(0);
     expect(screen.queryByText("Demo integration running")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+    // Owner 2026-10-13: the Ready pill is the deep green with light text and NO status dot.
+    const ready = screen.getByRole("button", { name: /^Ready$/ });
+    expect(ready).toHaveClass("bg-success", "text-ink", "border-success-soft");
+    expect(ready.querySelector("[data-size]")).toBeNull();
+    // ...and none of the five status cards has a dot either.
+    expect(document.querySelectorAll(".connections-status [data-size], .connections-status .status-card-dot")).toHaveLength(0);
     expect(screen.getByText("Lighting MIDI output not connected")).toHaveClass("text-ink-muted");
     expect(screen.getByText("Optional")).toBeInTheDocument();
   });
@@ -1180,7 +1186,7 @@ describe("Dashboard widget layout", () => {
       // Pressed state comes from tokens; no raw white text on the fill (checked here, never pressed in capture).
       // A disabled live control (no current song) drops hover/press styling by design.
       if (!(button as HTMLButtonElement).disabled) {
-        expect(button.className).toContain(tone === "go" || tone === "back" ? "active:text-on-light" : tone === "reload" ? "active:text-on-info" : "active:text-on-danger");
+        expect(button.className).toContain(tone === "go" ? "active:text-ink" : tone === "back" ? "active:text-on-light" : tone === "reload" ? "active:text-on-info" : "active:text-on-danger");
       }
       expect(button.className).not.toMatch(/hover:text-white|slate-|rose-|emerald-/);
     }

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
+import { AccentContext } from "./accent";
 import { cx } from "./cx";
 
 export type DialogLayer = "confirm" | "update" | "fatal" | "boundary";
@@ -105,7 +106,9 @@ export function Dialog({
     if (dismissible && event.target === event.currentTarget) close.current?.();
   };
 
+  // A dialog is outside the connection panel that opened it: it keeps the app colours, not the panel accent.
   return (
+    <AccentContext.Provider value={null}>
     <div
       data-dialog-backdrop
       data-layer={layer}
@@ -150,5 +153,6 @@ export function Dialog({
         )}
       </div>
     </div>
+    </AccentContext.Provider>
   );
 }

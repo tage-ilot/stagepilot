@@ -28,10 +28,11 @@ colors:
   primary-active: "#b3201a"    # shade 10%. Pressed state of a solid primary button (white text 6.7:1)
   primary-text: "#e3918e"      # tint 50%. Primary used AS TEXT or a thin icon on dark (7.5:1 on panels)
   on-primary: "#ffffff"        # text on a solid primary fill (5.7:1). Dark text is only 3.5:1 on this red, so it is retired
-  on-light: "#020617"          # DARK text on the LIGHT fills (emerald, the warning orange, the Services green, the Presentation orange): the old on-primary value, renamed because primary is now a dark-enough red that takes white text
+  on-light: "#020617"          # DARK text on the LIGHT fills (the warning orange, the Services green, the Presentation orange): the old on-primary value, renamed because primary is now a dark-enough red that takes white text
   # --- Status (meaning never changes between screens) ---
-  success: "#34d399"           # connected / running / ready      (emerald-400)
-  success-text: "#a7f3d0"      #                                  (emerald-200)
+  success: "#31551d"           # DECIDED (owner, 2026-10-13): a deep green replaces emerald for connected / running / ready. Only 2.1:1 on panels, so it is a FILL (Ready pill, solid badges, Start next / Restart current on press) with light text (7.8:1). Never a dot or words on a dark surface
+  success-soft: "#417227"      # the same green lifted just enough for 3:1 (3.15:1 on panels): dots, borders, 10-30% tints
+  success-text: "#69b63e"      # the same hue as small text: 7.2:1 on panels, 6.1:1 on its own 20% tint
   warning: "#e34e1f"           # connecting / attention / delayed. CHANGED (owner, 2026-10-12): a red-orange, replacing amber #fbbf24. 4.6:1 on panels; DARK text on it 5.2:1, white only 3.9:1. Also the colour of the Previous live control
   warning-text: "#e97753"      # warning as small text: the base lightened 23% so it keeps 4.5:1 on its own 10-20% tints (6.2:1 on panels)
   danger: "#f43f5e"            # error accent, dots, icons       (rose-500). As text on panels it is 4.4:1, so use danger-soft / danger-text
@@ -56,9 +57,9 @@ colors:
   integration-lighting: "#d53367"          # DECIDED (owner, 2026-10-12): pink-red. UI label "Lighting" (was "Lighting"). 3.9:1 on panels: fill/border/dot only. NEAR the error rose: see "Colour collisions"
   integration-lighting-soft: "#d53367"
   integration-lighting-text: "#e687a5"
-  integration-playback: "#56677b"        # DECIDED (owner, 2026-10-12): the owner's slate-blue #3a4e66 lightened just enough (14% toward white) to reach 3:1 on panels, cards and the live panel (3.1 / 3.05 / 3.4), so it works as a fill, dot, border and tint with no separate lifted copy. White text on it 5.8:1. MIDI has no colour of its own (configured under Playback)
-  integration-playback-soft: "#56677b"   # same as the base
-  integration-playback-text: "#8f9aa8"   # small text: 6.3:1 on panels, 4.5:1 on its own 20% tint
+  integration-playback: "#4b73b0"        # DECIDED (owner, 2026-10-13): the slate-blue made clearly BLUE (hue 216, saturation 40%; was #56677b, hue 212, saturation 18%). 3.8:1 on panels and cards, so it works as a fill, dot, border and tint with no separate lifted copy. White text on it 4.8:1. MIDI has no colour of its own (configured under Playback)
+  integration-playback-soft: "#4b73b0"   # same as the base
+  integration-playback-text: "#8ba5cd"   # small text: 7.2:1 on panels, 5.8:1 on its own 20% tint
   integration-backend: "#c7231d"          # DECIDED (owner, 2026-10-12): the StagePilot status card and its configuration panel. SAME HEX as primary: see "Colour collisions"
   integration-backend-soft: "#c7231d"
   integration-backend-text: "#e28d89"
@@ -66,7 +67,7 @@ colors:
   # (30% of the hue's -text tint + 70% text-muted). Recomputed for the 2026-10-12 palette: 5.5:1 or better on a panel (all AA).
   advanced-services: "#8aa896"
   advanced-presentation: "#b4988f"
-  advanced-playback: "#92a0b3"
+  advanced-playback: "#7e95b6"
   advanced-lighting: "#ad9bb2"
   advanced-backend: "#ab9caa"
   # --- Widget borders (white at low opacity, so they work on any surface). DECIDED: three ---
@@ -74,8 +75,9 @@ colors:
   border: "rgba(255, 255, 255, 0.10)"         # 73 uses, THE default
   border-medium: "rgba(255, 255, 255, 0.18)"  # ~21 uses: secondary button outline, hover (merges the old 15% and 20%; 20% was the least used)
   # --- Live controls (Manual controls widget): outlined, fill on hover. Colour = how much a press changes the show ---
-  live-go: "#34d399"           # Start next, Restart current: moves the show forward
-  live-go-text: "#a7f3d0"
+  live-go: "#31551d"           # Start next, Restart current: moves the show forward. Fill on hover/press with light text (7.8:1)
+  live-go-soft: "#417227"      # the outline at rest (3.15:1)
+  live-go-text: "#69b63e"      # the label at rest (7.2:1)
   live-back: "#e34e1f"         # Previous: steps the show back. CHANGED (owner, 2026-10-12): same colour as `warning`
   live-back-text: "#e97753"
   live-reload: "#1dc1c7"       # Reload service plan: re-reads the plan, nothing on stage changes. CHANGED to the secondary accent (was blue-700). Hover fill with DARK text (9.1:1)
@@ -257,7 +259,7 @@ components:
     height: "{spacing.touch-target}"
   badge-success:
     backgroundColor: "{colors.success}"
-    textColor: "{colors.on-light}"
+    textColor: "{colors.text}"
     typography: "{typography.badge}"
     rounded: "{rounded.full}"
     padding: "6px 12px"
@@ -427,7 +429,7 @@ that is not a status, a service, or the primary red.
   destructive button never uses `primary`, and `primary` never carries an error.
 - **Text on fills (DECIDED rule): light text on dark fills, dark text on light
   fills.** Most of the app is dark, so light text stays the norm.
-  - Light fills (the warning orange 5.2:1, emerald, the Services green, the Presentation orange): dark text (`on-light`, `#020617`). The Playback slate takes white (5.8:1).
+  - Light fills (the warning orange 5.2:1, the Services green, the Presentation orange): dark text (`on-light`, `#020617`). The Playback blue takes white (4.8:1), and so do the deep success green (7.8:1), Lighting and the StagePilot red.
   - **Identity fills (solid):** Services green 7.6:1 and Presentation orange 7.6:1 take dark text (`on-light`); Playback purple 9.2:1, Lighting pink 4.7:1 and the StagePilot red 5.7:1 take white (`on-primary`).
   - The **teal accent fill** `info`: dark text (`on-info`, 9.1:1); white would be 2.2:1.
   - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
@@ -454,18 +456,27 @@ that is not a status, a service, or the primary red.
   non-disruptive actions; it is never a state.
 - **Connection colours (decided 2026-10-12)** tint a connection's status card
   icon, setup panel, secondary buttons and badges. **Services is green
-  `#6bb03c`, Presentation is orange `#fe7821`, Playback is deep purple
-  `#5d2a9c`, Lighting is pink-red `#d53367`, and the StagePilot (backend) card
+  `#6bb03c`, Presentation is orange `#fe7821`, Playback is blue
+  `#4b73b0`, Lighting is pink-red `#d53367`, and the StagePilot (backend) card
   and panel are `#c7231d`.** MIDI is configured under Playback and has no colour
   of its own. Each has three roles: the base (solid fills, rails), `-soft` (dots,
   borders and 10-30% tints on dark surfaces) and `-text` (small text, 7:1).
-  Playback is the owner's slate-blue `#3a4e66` lightened 14% to `#56677b`, the
-  least that reaches 3:1 on dark surfaces, so one colour serves as fill, dot,
-  border and tint. **The open status card wears its connection's colour (decided
+  Playback is a clearly blue `#4b73b0` (it began as the owner's slate-blue
+  `#3a4e66`; the first lift to `#56677b` still read as grey), 3.8:1 on dark
+  surfaces, so one colour serves as fill, dot, border and tint. **The open status card wears its connection's colour (decided
   2026-10-13):** 70% border, a 10% wash fading out by 44%, and a 3px left bar in
   the base colour. The StagePilot card is the one exception: it is the same red as
   the live item, so it keeps the neutral card with a 1px `#c7231d` border and no wash
-  or bar (see Colour collisions). Never reuse these for status. **Advanced** parts of a service's setup use a muted version of
+  or bar (see Colour collisions). Never reuse these for status. **Accent inside a configuration panel (decided
+  2026-10-13):** inside a connection's configuration panel its colour is the only
+  accent. The panel's solid action buttons (*Save configuration*, *Scan*, *Scan
+  again*, *Connect*) are filled with it, tinted buttons, links, checkboxes and
+  badges use it, a "connected" or "saved" message uses it instead of green or
+  teal, the Save bar is a deep tint of it (the accent at 20% over the panel),
+  and the panel wash comes from it. Label colour: dark on Services and
+  Presentation, white on the rest. **Exceptions that keep their own colour:**
+  errors (rose, pale text), warnings (orange), idle grey, the destructive buttons,
+  and everything outside the panel (the header, dialogs, toasts). **Advanced** parts of a service's setup use a muted version of
   the service colour (`advanced-*`, the hue mixed half-way with `text-muted`)
   so they read as secondary. Decided: mixed 30% hue / 70% grey so the difference from the main colour is easy to see.
 - **Dashboard names (decided): generic, not brand names.** The dashboard says
@@ -931,7 +942,7 @@ kept because the current code does it.
 - Three widget borders (6 / 10 / 18%). One warm layered default shadow (old
   shadow deleted); stronger levels 2 to 5 exist for the owner to choose.
 - Light button labels carry a small very-dark-grey text shadow. Dark labels
-  (on warning-orange, emerald, Services-green fills) carry none: the light shadow under dark
+  (on warning-orange and Services-green fills) carry none: the light shadow under dark
   text was tried and rejected.
 - Advanced tones are 30% service colour mixed with 70% `text-muted`.
 - Light text on dark fills, dark text on light fills; error text keeps its
@@ -1032,17 +1043,17 @@ identical.
   only. Error is always pale `danger-text` words with a rose dot and an icon;
   `Stop timer`/`Reset position` stay rose live controls. A Lighting card in an
   error state shows the status word `Error`, not a colour change.
-- **Playback `#56677b` looks like the idle grey.** It is a slate-blue (hue 212,
-  saturation 30%), only 1.22:1 from `idle` `#64748b` (hue 215), the colour of
-  "disconnected". A Playback panel can therefore read as "off". Kept apart by
-  form: idle is always a dot plus the word *Not connected*; Playback is a tile
-  tint, top border and tinted buttons. The Playback **Advanced** tone
-  (`#92a0b3`) is only 1.04:1 from plain `text-muted`, so Advanced rows rely on
-  their chevron, summary line and tinted bar, not on hue.
-- **Services green `#6bb03c` is near `success` `#34d399`** (1.38, hue 96 vs
-  158). Connected = the status dot and word (emerald), identity = the icon-tile
-  tint and panel border (olive green). Do not put a connected dot inside a
-  Services-green fill.
+- **Playback `#4b73b0` is no longer near the idle grey** (`idle` `#64748b`):
+  hue 216 and saturation 40% against hue 215 and 17%. It is still only 1.01:1 in
+  luminance from idle, so idle stays a dot plus the words *Not connected*, and
+  Playback stays a tile tint, top border and tinted buttons. Its **Advanced**
+  tone (`#7e95b6`) is 5.9:1 on panels and clearly blue-grey.
+- **Services green `#6bb03c` and the deep success green `#31551d`** are the same
+  hue (96 vs 98) at very different brightness (2.3:1 apart as fills; the lifted
+  `success-soft` `#417227` is 1.9:1 from Services). Rule: Services is identity only
+  (icon tile, panel border, accent buttons). The success green is never used
+  inside a Services panel at all: there, a "connected" message uses the panel
+  accent (see "Accent inside a configuration panel"). So the two never touch.
 - **Warning `#e34e1f` is between the primary red and the Presentation orange**
   (1.46:1 from the red, 1.47:1 from `#fe7821`; hue 14 vs 2 and 24). Warning is
   always a dot, icon and the words *Connecting*, *Delayed* or *Needs attention*;
@@ -1053,24 +1064,17 @@ identical.
   `#e11d48` (hue 14 vs 347). Error text stays pale rose (`danger-text`) with a
   rose dot; warning text is orange (`warning-text`). Do not rely on colour alone.
 
-## Proposed (owner asked, 2026-10-12): a darker "connected" green
-The owner asked whether a darker green such as `#416E27` or `#31551D` could mark
-connected / good status. Measured on panels, cards and the live panel:
-| Candidate | On panel | As a dot or border (needs 3:1) | As a word (needs 4.5:1) | White on it as a fill |
-| --- | --- | --- | --- | --- |
-| `#416E27` | 2.99:1 | passes after a 2% lift to `#45712b` | needs a 36% lift to `#85a275` | 6.0:1 |
-| `#31551D` | 2.10:1 | needs a 14% lift to `#4e6d3d` (a grey-green) | needs a 44% lift to `#8ca080` | 8.6:1 |
-- **`#416E27` works** as a status dot and fill with a barely visible lift.
-  **`#31551D` does not** as a dot unless it is lifted so far that it stops being
-  dark. Small *words* in either must be lifted a lot (`#85a275`), which reads
-  as a dull grey-green, noticeably weaker than today's `#a7f3d0`.
-- **Same-hue collision with Services:** `#416E27` is hue 98, the Services
-  identity `#6bb03c` is hue 96 (only 2.3:1 apart, and the lifted text is 1.1:1
-  from Services-text). "Services is connected" would put a dark green dot on a
-  light green tile. An emerald-hue alternative of the same darkness is
-  `#216f52` (hue 158, 2.3:1 from Services).
-- **Not applied.** `success` stays `#34d399` until the owner confirms. The
-  guide shows the candidates side by side.
+## Decided (owner, 2026-10-13): a darker "connected" green
+`success` is now **`#31551d`**. Measured on panels (`#0f1720`), cards and the live panel:
+| Role | Value | Contrast | Used for |
+| --- | --- | --- | --- |
+| `success` | `#31551d` | 2.1:1 on panels; light text on it 7.8:1 | fills only: Ready pill, solid badge, Start next / Restart current on press |
+| `success-soft` | `#417227` | 3.15:1 | dots and borders, 10-30% tints |
+| `success-text` | `#69b63e` | 7.2:1 (6.1:1 on its own 20% tint) | the words *Connected*, *Ready*, the live control label at rest |
+Because the base is too dark for a dot, **status dots are removed from the five
+status cards and the header Ready pill** (decided 2026-10-13): the word carries
+the state, with the pill outlined in `success-soft`. Dots stay in the Check system
+list, badges and panels where a word sits beside them.
 
 ## Still open
 

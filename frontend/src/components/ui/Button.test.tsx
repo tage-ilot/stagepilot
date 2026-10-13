@@ -85,12 +85,14 @@ describe("Button", () => {
       const { unmount } = render(<Button variant="live" liveTone={t}>x</Button>);
       const b = screen.getByRole("button");
       expect(shadow(b)).toBe(true);
-      const dark = t === "go" || t === "back" || t === "reload";
+      // go now fills with the deep green and keeps LIGHT text (with the shadow); back and reload fill light and go dark.
+      const dark = t === "back" || t === "reload";
       const darkToken = t === "reload" ? "on-info" : "on-light";
       expect(b.className.includes("can-hover:[text-shadow:none]")).toBe(dark);
       expect(b.className.includes("active:[text-shadow:none]")).toBe(dark);
       expect(b.className.includes(`can-hover:text-${darkToken}`)).toBe(dark);
-      expect(b.className.includes("can-hover:text-on-danger")).toBe(!dark);
+      expect(b.className.includes("can-hover:text-on-danger")).toBe(t === "stop");
+      expect(b.className.includes("can-hover:text-ink")).toBe(t === "go");
       expect(b.className.includes("text-white")).toBe(false);
       unmount();
     }
@@ -151,7 +153,7 @@ describe("Button", () => {
     const b = screen.getByRole("button");
     expect(b).toHaveAttribute("data-tone", t);
     expect(b.className).not.toMatch(stock);
-    expect(b.className).toContain(`border-live-${t}/`);
+    expect(b.className).toContain(t === "go" ? "border-live-go-soft/" : `border-live-${t}/`);
     expect(b.className).toContain(`text-live-${t}-text`);
   });
 });

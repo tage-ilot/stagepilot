@@ -754,8 +754,11 @@ textarea:focus-visible {
 
 /* StagePilot (backend) is the same hex as the primary red (DESIGN.md Colour collisions): its selected card
    must not wear the live/selected red rail and wash. It keeps the neutral card and a 1px backend border. */
-.status-card[data-tone="backend"][aria-expanded="true"] .status-card-surface {
+/* The open card must never look like the hover state (hover is panel-strong on a medium border). It keeps the
+   card colour, a full-strength backend border and a 3px backend bar, but NO red wash. */
+.status-card[data-tone="backend"][aria-expanded="true"] .status-card-surface,
+.status-card[data-tone="backend"][aria-expanded="true"]:hover .status-card-surface {
   border-color: var(--ds-integration-backend-soft);
-  background: var(--ds-surface-panel-strong);
-  box-shadow: var(--ds-elevation-default);
+  background: var(--ds-card);
+  box-shadow: inset 3px 0 0 var(--ds-integration-backend-soft), var(--ds-elevation-default);
 }

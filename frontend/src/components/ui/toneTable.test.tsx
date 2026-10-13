@@ -14,7 +14,7 @@ const table: Record<Tone, { accent: string; text: string }> = {
   playback: { accent: "integration-playback-soft", text: "integration-playback-text" },
   lighting: { accent: "integration-lighting-soft", text: "integration-lighting-text" },
   backend: { accent: "integration-backend-soft", text: "integration-backend-text" },
-  success: { accent: "success", text: "success-text" },
+  success: { accent: "success-soft", text: "success-text" },
   warning: { accent: "warning", text: "warning-text" },
   danger: { accent: "danger", text: "danger-text" },
   info: { accent: "info", text: "info-text" },
@@ -28,7 +28,7 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
   it.each(tones)("Button tinted %s", (tone) => {
     render(<Button variant="tinted" tone={tone}>x</Button>);
     const c = classes(screen.getByRole("button"));
-    expect(c).toContain(`border-${table[tone].accent}/30`);
+    expect(c).toContain(`border-${table[tone].accent}/${tone === "success" ? 40 : 30}`);
     expect(c).toContain(`bg-${table[tone].accent}/10`);
     expect(textClasses(screen.getByRole("button"))).toEqual([`text-${table[tone].text}`]);
   });
@@ -36,7 +36,7 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
   it.each(tones)("Badge tinted %s", (tone) => {
     const { container } = render(<Badge tone={tone}>x</Badge>);
     const el = container.firstElementChild!;
-    expect(classes(el)).toContain(`border-${table[tone].accent}/30`);
+    expect(classes(el)).toContain(`border-${table[tone].accent}/${tone === "success" ? 40 : 30}`);
     expect(classes(el)).toContain(`bg-${table[tone].accent}/10`);
     expect(textClasses(el)).toEqual([`text-${table[tone].text}`]);
   });
@@ -44,7 +44,8 @@ describe("tone table: every primitive uses the same accent and text tokens", () 
   it.each(["warning", "danger", "success", "info"] as InlineAlertTone[])("InlineAlert %s", (tone) => {
     const { container } = render(<InlineAlert tone={tone}>x</InlineAlert>);
     const el = container.firstElementChild!;
-    expect(classes(el)).toContain(`border-${table[tone].accent}/30`);
+    // The deep green reads weakly, so its outline is a touch stronger (40%) than the other tones (30%).
+    expect(classes(el)).toContain(`border-${table[tone].accent}/${tone === "success" ? 40 : 30}`);
     expect(classes(el)).toContain(`bg-${table[tone].accent}/10`);
     expect(textClasses(el)).toEqual([`text-${table[tone].text}`]);
   });

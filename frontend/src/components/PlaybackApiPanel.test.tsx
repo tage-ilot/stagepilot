@@ -57,10 +57,10 @@ describe("Scan Network is always first and never dead", () => {
     expect(screen.queryByText(/Scanning/)).not.toBeInTheDocument();
   });
 
-  it("link buttons are teal, underlined, with a 44px target", async () => {
+  it("link buttons use the Playback colour, underlined, with a 44px target", async () => {
     const playback = controller({ status: none({ scan: scanOf("not_found"), reason: "Couldn't find Playback." }) });
     render(<PlaybackApiPanel playback={playback} />);
-    expect(screen.getByRole("button", { name: "Enter address instead" })).toHaveClass("text-info-text", "underline", "min-h-ds-touch-target", "can-hover:text-info");
+    expect(screen.getByRole("button", { name: "Enter address instead" })).toHaveClass("text-integration-playback-text", "underline", "min-h-ds-touch-target", "can-hover:text-integration-playback");
   });
 
   it("not found: plain checklist, Scan again and Enter address instead; never a stuck spinner", async () => {

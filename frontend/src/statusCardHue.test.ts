@@ -26,9 +26,14 @@ describe("open status card hue", () => {
     expect(css).toContain(".status-card { --status-card-hue: var(--ds-primary); }");
   });
 
-  it("keeps the StagePilot card neutral with a 1px backend border (same hex as the live red)", () => {
-    const rule = css.match(/\.status-card\[data-tone="backend"\]\[aria-expanded="true"\] \.status-card-surface \{[^}]*\}/)?.[0] ?? "";
+  it("the StagePilot open card never looks like hover: card colour, backend border, 3px bar, no wash, same on hover", () => {
+    const rule = css.match(/\.status-card\[data-tone="backend"\]\[aria-expanded="true"\] \.status-card-surface,\s*\.status-card\[data-tone="backend"\]\[aria-expanded="true"\]:hover \.status-card-surface \{[^}]*\}/)?.[0] ?? "";
+    expect(rule).not.toBe("");
     expect(rule).toContain("border-color: var(--ds-integration-backend-soft)");
+    expect(rule).toContain("background: var(--ds-card)");
+    expect(rule).toContain("inset 3px 0 0 var(--ds-integration-backend-soft)");
     expect(rule).not.toContain("linear-gradient");
+    // hover paints panel-strong; the open rule must not use it, or the card would look hovered while open
+    expect(rule).not.toContain("surface-panel-strong");
   });
 });

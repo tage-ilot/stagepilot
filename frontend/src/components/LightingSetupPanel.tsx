@@ -301,7 +301,7 @@ export function LightingSetupPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold text-ink">Test cue</h3>
           <div className="flex items-center gap-2" aria-label="MIDI note display">
-            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-info-text" : "text-ink-muted"}>♪</span>
+            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
@@ -315,7 +315,7 @@ export function LightingSetupPanel({
                 className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
-            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-info-text" : "text-ink-muted"}>#</span>
+            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
           </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">

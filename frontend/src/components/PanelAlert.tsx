@@ -1,4 +1,5 @@
 import { Button } from "./ui/Button";
+import { accentClasses, useAccent } from "./ui/accent";
 import { InlineAlert } from "./ui/InlineAlert";
 
 /**
@@ -22,10 +23,11 @@ export function PanelAlert({
   /** Informational result line: a small dot of the tone colour before the message (never on errors). */
   dot?: boolean;
 }) {
+  const accent = useAccent();
   if (!error && !message) return null;
   return (
     <InlineAlert aria-live="polite" className={className} tone={error ? "danger" : messageTone}>
-      {dot && !error && <span aria-hidden="true" data-part="dot" className="mr-2 inline-block size-1.5 rounded-ds-full bg-info align-middle" />}
+      {dot && !error && <span aria-hidden="true" data-part="dot" className={`mr-2 inline-block size-1.5 rounded-ds-full align-middle ${accent ? accentClasses[accent].dot : "bg-info"}`} />}
       <span>{error ?? message}</span>
       {error && onRetry && (
         <Button className="ml-3" onClick={onRetry} size="touch" variant="secondary">Try again</Button>

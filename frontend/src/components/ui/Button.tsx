@@ -1,5 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 
+import { accentClasses, useAccent } from "./accent";
 import { cx } from "./cx";
 import type { LiveTone, Tone } from "./types";
 
@@ -26,7 +27,7 @@ const tinted: Record<Tone, string> = {
   playback: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text can-hover:bg-integration-playback-soft/20",
   lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text can-hover:bg-integration-lighting-soft/20",
   backend: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text can-hover:bg-integration-backend-soft/20",
-  success: "border-success/30 bg-success/10 text-success-text can-hover:bg-success/20",
+  success: "border-success-soft/40 bg-success-soft/10 text-success-text can-hover:bg-success-soft/20",
   warning: "border-warning/30 bg-warning/10 text-warning-text can-hover:bg-warning/20",
   danger: "border-danger/30 bg-danger/10 text-danger-text can-hover:bg-danger/20",
   info: "border-info/30 bg-info/10 text-info-text can-hover:bg-info/20",
@@ -35,7 +36,7 @@ const tinted: Record<Tone, string> = {
 
 // Rest: transparent on surface-950, light text (label shadow). Go, back and reload flip to dark text on hover/press (on-light, on-info), so the shadow is removed there.
 const live: Record<LiveTone, string> = {
-  go: "border-live-go/40 text-live-go-text can-hover:border-live-go/70 can-hover:bg-live-go can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-go/80 active:text-on-light active:[text-shadow:none]",
+  go: "border-live-go-soft/60 text-live-go-text can-hover:border-live-go-soft can-hover:bg-live-go can-hover:text-ink active:bg-live-go/80 active:text-ink",
   back: "border-live-back/40 text-live-back-text can-hover:border-live-back/70 can-hover:bg-live-back can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-back/80 active:text-on-light active:[text-shadow:none]",
   reload: "border-live-reload/50 text-live-reload-text can-hover:border-live-reload/70 can-hover:bg-live-reload can-hover:text-on-info can-hover:[text-shadow:none] active:bg-live-reload/80 active:text-on-info active:[text-shadow:none]",
   stop: "border-live-stop/40 text-live-stop-text can-hover:border-live-stop/70 can-hover:bg-live-stop can-hover:text-on-danger active:bg-live-stop/80 active:text-on-danger",
@@ -69,13 +70,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
+  const accent = useAccent();
   const isLive = variant === "live";
-  const resolvedTone = variant === "tinted" ? (tone ?? "info") : undefined;
+  // Inside a connection's panel the primary red and the default teal become that connection's colour. Only the
+  // default tone is swapped: an explicit tone (warning, danger, another connection) always wins.
+  const resolvedTone = variant === "tinted" ? (tone ?? (accent ?? "info")) : undefined;
+  const accented = accent && variant === "primary";
   const inert = Boolean(disabled) || loading;
 
   let look: string;
   if (isLive) look = cx("bg-surface-950 px-4 py-2.5 min-h-ds-touch-target text-shadow-label", liveTone && live[liveTone]);
   else if (variant === "tinted") look = cx("text-shadow-label", tinted[resolvedTone!]);
+  else if (accented) look = cx("text-shadow-label", accentClasses[accent].solid);
   else look = variants[variant];
 
   // Hover/press styling is dropped while inert so a disabled or busy control never looks live.

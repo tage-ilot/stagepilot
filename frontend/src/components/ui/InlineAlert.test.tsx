@@ -13,7 +13,8 @@ describe("InlineAlert", () => {
     render(<InlineAlert tone={tone}>Message</InlineAlert>);
     const el = screen.getByRole(role);
     expect(el).toHaveAttribute("data-tone", tone);
-    expect(el).toHaveClass("rounded-ds-lg", "border", `bg-${tone}/10`, `border-${tone}/30`);
+    const edge = tone === "success" ? "success-soft" : tone;
+    expect(el).toHaveClass("rounded-ds-lg", "border", `bg-${edge}/10`, `border-${edge}/${tone === "success" ? 40 : 30}`);
   });
 
   it("appends className last", () => {

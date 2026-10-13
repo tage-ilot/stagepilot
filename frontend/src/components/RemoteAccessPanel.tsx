@@ -89,13 +89,13 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
 
   return <div aria-label="Remote Access" className="space-y-4">
     <p className="text-sm text-ink-body">Securely view or operate this StagePilot from another device. Local operation continues if Remote disconnects.</p>
-    <p role="status" className="text-sm text-info-text">{status ? labels[status.state] : "Checking Remote Access…"}</p>
+    <p role="status" className="text-sm text-integration-backend-text">{status ? labels[status.state] : "Checking Remote Access…"}</p>
     {status?.state === "enabling" && <p className="text-sm text-ink-muted">
       Check for a system password prompt (Keychain/Credential Manager) and enter it — this can take a moment.
     </p>}
     {status?.temporary_url ?
       <p className="text-sm text-warning-text">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</p> :
-      <p className="text-sm text-info-text">Stable Remote link: this installation keeps the same address after reconnecting.</p>}
+      <p className="text-sm text-integration-backend-text">Stable Remote link: this installation keeps the same address after reconnecting.</p>}
     {status && !status.available && <p className="text-sm text-ink-body">Remote Access is unavailable on this installation. Local StagePilot is unaffected.</p>}
     {status?.provisioned && !status.credential_available && credentialWarning && <p className="text-sm text-warning-text">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</p>}
     {status?.permanently_revoked && <div role="group" aria-label="Reset installation identity" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
@@ -112,7 +112,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
     {status?.state === "reconnecting" && <p className="text-sm text-ink-body">Reconnecting. Check here for the current link once connected.</p>}
 
     {url && <div className="flex flex-wrap items-center gap-3">
-      <output aria-label="Remote URL" className="break-all text-sm text-info-text">{url}</output>
+      <output aria-label="Remote URL" className="break-all text-sm text-integration-backend-text">{url}</output>
       <Button variant="secondary" type="button" onClick={() => {
         if (!navigator.clipboard) { control.setError("Copy unavailable. Select and copy the link above."); return; }
         void navigator.clipboard.writeText(url).then(() => control.setNotice("Link copied."), () => control.setError("Copy unavailable. Select and copy the link above."));
@@ -184,7 +184,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         {edit && <Button variant="secondary" type="button" onClick={() => {setEdit(null); setPassword("");}}>Cancel</Button>}
       </form>
     </>}
-    {notice && <p role="status" className="text-sm text-info-text">{notice}</p>}
+    {notice && <p role="status" className="text-sm text-integration-backend-text">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
   </div>;
 }
