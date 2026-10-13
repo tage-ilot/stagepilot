@@ -912,7 +912,7 @@ wheels = [
 
 [[package]]
 name = "stagepilot"
-version = "1.1.104b33"
+version = "1.1.104b34"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
