@@ -114,14 +114,16 @@ async def test_drop_and_return_reconnects_with_fast_delays() -> None:
         finder.point_to(pb)
         client = make_client(finder, rec)
         await client.start()
-        await until(lambda: pb.connections >= 1)
+        # The server counts the socket before the client publishes its first status; wait for the
+        # status itself (a slow Windows runner exposed the empty-list race).
+        await until(lambda: bool(rec.statuses) and rec.last.connected)
         pb.go_offline()  # Playback quits / Remote Connections off
-        await until(lambda: not rec.last.connected)
+        await until(lambda: bool(rec.statuses) and not rec.last.connected)
         probes = finder.calls
         await asyncio.sleep(0.1)
         assert finder.calls > probes  # client keeps probing while it is away
         pb.come_back()  # ...and returns
-        await until(lambda: rec.last.connected)
+        await until(lambda: bool(rec.statuses) and rec.last.connected)
         assert pb.connections >= 1
         assert rec.types.count("state.snapshot") >= 2  # every connect is a fresh snapshot
         await client.stop()
@@ -137,7 +139,7 @@ async def test_host_change_follows_the_finder() -> None:
         await until(lambda: bool(rec.statuses) and rec.last.connected and rec.last.port == a.port)
         finder.point_to(b)
         a.drop()
-        await until(lambda: rec.last.connected and rec.last.port == b.port)
+        await until(lambda: bool(rec.statuses) and rec.last.connected and rec.last.port == b.port)
         assert rec.last.heartbeat is not None and rec.last.heartbeat.song_id == 2
         await client.stop()
 
@@ -166,5 +168,7 @@ async def test_stall_keeps_socket_open_until_heartbeat_timeout() -> None:
         pb.stall()
         pb.tick(5)  # nothing is sent
         assert pb.connections == 1
-        await until(lambda: not rec.last.connected)  # 0.3 s heartbeat timeout fires
+        await until(
+            lambda: bool(rec.statuses) and not rec.last.connected
+        )  # 0.3 s heartbeat timeout fires
         await client.stop()
