@@ -34,12 +34,12 @@ export function playbackSongCountMismatch(status: PlaybackStatusResponse): strin
     : `${counts} Service plan song${extra === 1 ? "" : "s"} ${range} ${extra === 1 ? "has" : "have"} no Playback song.`;
 }
 
-export type BannerTone = "connected" | "searching" | "backup" | "idle";
+export type BannerTone = "connected" | "searching" | "midi" | "idle";
 // The sentence always comes from the backend `reason`; only the colour is chosen here.
 export const playbackBannerTone = (status: PlaybackConnection & { scan?: { state: string } }): BannerTone =>
   status.scan?.state === "scanning" ? "searching"
     : status.active_source === "playback_api" ? "connected"
-      : status.active_source === "midi" ? "backup" : "idle";
+      : status.active_source === "midi" ? "midi" : "idle";
 
 export const playbackMidiNote = (status: PlaybackConnection) =>
   status.sources.midi.connected
