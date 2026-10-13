@@ -167,7 +167,7 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+      <h3 className="mt-5 font-semibold text-ink">General configuration</h3>
       <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field error={errHost} heldChange={held.host} label="Host">
           <Input

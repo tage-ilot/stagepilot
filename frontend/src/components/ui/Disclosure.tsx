@@ -22,8 +22,8 @@ export interface DisclosureProps extends Omit<ComponentPropsWithoutRef<"div">, "
   children: ReactNode;
 }
 
-// Composition rule (DESIGN.md "Collapsible sections"): Basic content is never inside a Disclosure and
-// Advanced always comes AFTER Basic. The caller composes that order; this component does not enforce it.
+// Composition rule (DESIGN.md "Collapsible sections"): General configuration content is never inside a Disclosure and
+// Advanced always comes AFTER General configuration. The caller composes that order; this component does not enforce it.
 //
 // Collapsed body: the inner wrapper is `inert`, which removes it from the tab order and the accessibility
 // tree at once, with no timing dependence on transitionend. (Chosen over `hidden`-after-transition.)

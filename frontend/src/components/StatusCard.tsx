@@ -21,7 +21,7 @@ const statusTextStyles: Record<Status, string> = {
 
 type Identity = "services" | "presentation" | "playback" | "lighting" | "backend";
 
-// Identity = thin icon-tile tint only (DESIGN.md Connection colours / Colour collisions). Never a rail or wash.
+// Identity tints the icon tile always, and the OPEN card's border, wash and left bar (index.css, data-tone). Never a rail or wash on a closed card.
 // -soft is the role for tints and borders on dark surfaces (Playback base and soft are the same slate now).
 const tileTint: Record<Identity, string> = {
   services: "border-integration-services-soft/30 bg-integration-services-soft/15",
@@ -43,7 +43,7 @@ export function StatusCard({
   onClick,
   interactive = true,
 }: {
-  /** Connection identity: tints the icon tile. */
+  /** Connection identity: tints the icon tile and the open card. */
   tone?: Identity;
   title: string;
   accessibleTitle?: string;
@@ -65,7 +65,7 @@ export function StatusCard({
       data-tone={tone}
       className={`status-card group min-w-0 rounded-xl border p-3 text-left touch-manipulation transition-colors duration-150 motion-reduce:transition-none sm:p-4 ${
         active
-          ? "border-primary/70"
+          ? "border-edge-medium"
           : "border-edge-subtle"
       }`}
       onClick={interactive ? onClick : undefined}

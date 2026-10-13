@@ -202,7 +202,7 @@ export function MidiSetupPanel({
         title="Playback"
       />
 
-      <h3 className="mt-5 font-semibold text-ink">Basic</h3>
+      <h3 className="mt-5 font-semibold text-ink">General configuration</h3>
       <Field className="mt-3 sm:max-w-md" heldChange={draft.methodDirty} label="Connection method">
         <Select
           disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
