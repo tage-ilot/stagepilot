@@ -152,14 +152,14 @@ body {
 div:has(> .loading-progress-track--delayed) > .loading-spinner-circular {
   border-top-color: var(--ds-warning);
   border-right-color: var(--ds-warning);
-  box-shadow: 0 0 20px rgb(244 63 94 / 22%);
+  box-shadow: 0 0 20px rgb(255 0 0 / 22%);
 }
 
 div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   border-color: var(--ds-surface-950);
   border-top-color: var(--ds-danger-soft);
   border-right-color: var(--ds-danger-soft);
-  box-shadow: 0 0 20px rgb(244 63 94 / 24%);
+  box-shadow: 0 0 20px rgb(255 0 0 / 24%);
   animation: none;
 }
 
@@ -229,7 +229,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   box-shadow:
     5px 5px 0 var(--ds-surface-950),
     0 0 0 1px var(--ds-warning),
-    0 0 20px rgb(244 63 94 / 22%);
+    0 0 20px rgb(255 0 0 / 22%);
 }
 
 .loading-progress-track--failed {
@@ -237,7 +237,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   box-shadow:
     5px 5px 0 var(--ds-surface-950),
     0 0 0 1px var(--ds-danger-soft),
-    0 0 20px rgb(244 63 94 / 24%);
+    0 0 20px rgb(255 0 0 / 24%);
 }
 
 .loading-progress-track--failed .loading-progress-fill {
