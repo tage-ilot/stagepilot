@@ -212,21 +212,25 @@ test("macOS lifecycle CI generates bundled Help before Cargo compilation", () =>
   );
 });
 
-test("release automation suggests the next published patch and confirms with YES", () => {
+test("beta release automation targets only the beta repo, suggests the next beta and confirms with YES", () => {
   const releaseScript = read("scripts/create-release.ps1");
-  assert.match(
-    releaseScript,
-    /gh api repos\/tage-ilot\/stagepilot\/tags --paginate --jq '\.\[\]\.name'/,
-  );
-  assert.match(releaseScript, /Sort-Object -Property Version -Descending/);
-  assert.match(
-    releaseScript,
-    /\$LatestGitHubVersion\.Version\.Build \+ 1/,
-  );
-  assert.match(releaseScript, /New StagePilot version \(default \$SuggestedTag\)/);
+  const helpers = read("scripts/release-helpers.ps1");
+  assert.match(releaseScript, /\$BetaRepo = "tage-ilot\/stagepilot-beta"/);
+  assert.match(releaseScript, /gh api repos\/\$BetaRepo\/tags --paginate --jq '\.\[\]\.name'/);
+  assert.doesNotMatch(releaseScript, /repos\/tage-ilot\/stagepilot\//);
+  assert.doesNotMatch(releaseScript, /--repo tage-ilot\/stagepilot\b(?!-beta)/);
+  assert.match(releaseScript, /Test-BetaOrigin \$OriginUrl/);
+  assert.match(releaseScript, /Assert-BetaVersion \$Version \$RemoteTags/);
+  assert.match(releaseScript, /Test-ChangelogHasVersion/);
+  assert.match(releaseScript, /audit_beta_release\.mjs source/);
+  assert.match(releaseScript, /validate_workflow_runners\.py/);
+  assert.match(releaseScript, /New StagePilot beta version \(default \$SuggestedTag\)/);
   assert.match(releaseScript, /Type YES to begin the unattended release/);
   assert.match(releaseScript, /ToUpperInvariant\(\) -ne "YES"/);
-  assert.doesNotMatch(releaseScript, /Type RELEASE \$Tag TO \$TargetBranch/);
+  assert.match(releaseScript, /STAGEPILOT_RELEASE_WATCH/);
+  assert.match(helpers, /\^v\(\\d\+\)\\\.\(\\d\+\)\\\.\(\\d\+\)-beta\\\.\(\\d\+\)\$/);
+  assert.match(helpers, /tage-ilot\/stagepilot-beta/);
+  assert.match(read("create-new-release.ps1"), /scripts\\create-release\.ps1/);
 });
 
 test("macOS final-artifact verifier rejects hardened sidecars and starts packaged backends", () => {

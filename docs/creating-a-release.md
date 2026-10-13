@@ -6,11 +6,15 @@ From the repository root in PowerShell, run:
 .\create-new-release.ps1
 ```
 
-The command reads the latest StagePilot version tag from GitHub and suggests
-the next patch version. Existing tags from an unsuccessful release are included,
-so the suggested version is never already occupied. Press Enter to accept that
-version or type a different semantic version. The destination defaults to
-`main`; another branch may be selected when needed. It then:
+The command reads the beta tags (`vX.Y.Z-beta.N`) from `tage-ilot/stagepilot-beta`
+and suggests the next beta number. Existing tags from an unsuccessful release are
+included, so the suggested version is never already occupied. Press Enter to accept
+that version or type a different beta version; stable versions and versions that
+are not newer than the latest beta tag are refused. The destination defaults to
+`main`; another branch may be selected when needed. It first checks that `origin`
+is the beta repository (it will not tag or push anything else) and that
+`CHANGELOG.md` already has a `## [VERSION]` heading, before it changes anything.
+It then:
 
 1. Shows the release title, source branch, destination branch, and current changes.
 2. Requires one final typed confirmation: `YES`.
@@ -20,27 +24,30 @@ version or type a different semantic version. The destination defaults to
 6. Displays the release diff without opening an interactive pager.
 7. Commits and pushes all intended changes to the confirmed destination.
 8. Creates and pushes the version tag.
-9. Waits for GitHub to build the Intel Mac, Apple Silicon Mac, and Windows packages.
-10. Prints the published GitHub release URL.
+9. Finds the GitHub release run and prints its URL. It does NOT sit and watch the
+   build (20-40 minutes): the Hermes host's `stagepilot-release-watch` job polls
+   the run with plain `gh` calls (no model) and sends one WhatsApp message when the
+   release is published or when a job fails, with the failing step and log tail.
+   To watch in this window instead, set `STAGEPILOT_RELEASE_WATCH=1` first.
 
 After the release plan is confirmed, no further input is required.
 
 You may supply the version directly:
 
 ```powershell
-.\create-new-release.ps1 1.1.43
+.\create-new-release.ps1 1.1.104-beta.34
 ```
 
 For an unattended invocation after reviewing the working tree, add `-Yes`:
 
 ```powershell
-.\create-new-release.ps1 1.1.43 -Yes
+.\create-new-release.ps1 1.1.104-beta.34 -Yes
 ```
 
 `-Yes` uses `main` by default. To publish the release commit to another branch:
 
 ```powershell
-.\create-new-release.ps1 1.1.43 -TargetBranch release/test -Yes
+.\create-new-release.ps1 1.1.104-beta.34 -TargetBranch release/test -Yes
 ```
 
 The release stops immediately if a test fails, the tag already exists, GitHub
@@ -49,7 +56,8 @@ or generated/sensitive files are staged. A failure before confirmation makes
 no changes; a later validation failure leaves changes local without committing,
 tagging, or pushing.
 
-This helper targets the main repository and must not be used unchanged for the
-private beta. Private-beta releases use the exact versions, repository boundary,
-asset audit, broker allowlist, and manual gates in
+This helper is for the private beta repository only (`tage-ilot/stagepilot-beta`).
+The helper functions are tested with `pwsh -NoProfile -File scripts/release-helpers.test.ps1`.
+Private-beta releases use the exact versions, repository boundary,
+asset audit, and manual gates in
 [`private-beta-release-and-acceptance.md`](private-beta-release-and-acceptance.md).
