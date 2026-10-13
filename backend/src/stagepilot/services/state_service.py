@@ -40,6 +40,13 @@ from stagepilot.models.state import (
 )
 
 
+class _Keep:
+    """Sentinel: leave the playing song as it is."""
+
+
+_KEEP = _Keep()
+
+
 class StateService:
     """Apply domain events to state and execute all navigation actions consistently."""
 
@@ -274,10 +281,12 @@ class StateService:
         await self._select_song(target, ActionName.START_NEXT)
         if not song.duration_seconds:
             self._pending_start_index = target
+            await self._set_labels()
             message = f'Cannot start "{song.title}": scheduled duration is missing or zero.'
             await self._set_timer_error(message)
             return ActionOutcome(False, message)
         self._pending_start_index = target + 1
+        await self._set_labels(playing=target)
         await self._event_bus.publish(
             new_event(
                 EventType.SONG_STARTED,
@@ -303,11 +312,13 @@ class StateService:
         await self._select_song(target, ActionName.START_NEXT)
         if not song.duration_seconds:
             self._pending_start_index = target
+            await self._set_labels()
             message = f'Cannot start "{song.title}": scheduled duration is missing or zero.'
             await self._set_timer_error(message)
             return ActionOutcome(False, message)
 
         self._pending_start_index = target + 1
+        await self._set_labels(playing=target)
         await self._event_bus.publish(
             new_event(
                 EventType.SONG_STARTED,
@@ -326,6 +337,7 @@ class StateService:
             await self._set_timer_error(message)
             return ActionOutcome(False, message)
         await self._set_last_action(ActionName.RESTART_CURRENT)
+        await self._set_labels(playing=state.current_song_index)
         await self._event_bus.publish(
             new_event(
                 EventType.SONG_RESTARTED,
@@ -344,6 +356,7 @@ class StateService:
         target = state.current_song_index - 1
         self._pending_start_index = target
         await self._select_song(target, ActionName.PREVIOUS)
+        await self._set_labels()  # the playing song is untouched; only Up next moves
         return ActionOutcome(True, f'Selected "{state.plan.songs[target].title}".')
 
     async def _next(self) -> ActionOutcome:
@@ -355,6 +368,7 @@ class StateService:
             return ActionOutcome(False, "Already at the final song.")
         self._pending_start_index = target
         await self._select_song(target, ActionName.NEXT)
+        await self._set_labels()
         return ActionOutcome(True, f'Selected "{state.plan.songs[target].title}".')
 
     async def _stop_timer(self) -> ActionOutcome:
@@ -385,7 +399,28 @@ class StateService:
             state.last_action = ActionName.RESET_POSITION
 
         await self._state_store.mutate(mutation)
+        await self._set_labels(playing=None)
         return ActionOutcome(True, "Service position and timer reset.")
+
+    async def _set_labels(self, *, playing: int | None | _Keep = _KEEP) -> None:
+        """Derive the on-screen labels: the song really playing and the song Start next will play.
+
+        `playing` is the index of the song that was just started, None to clear it (reset or a
+        new plan), or left as it was. Up next is always the song at `_pending_start_index`. The
+        navigation cursor is never touched here.
+        """
+
+        def mutation(state: ApplicationState) -> None:
+            songs = state.plan.songs if state.plan else []
+            index = state.playing_song_index if isinstance(playing, _Keep) else playing
+            if index is not None and index >= len(songs):
+                index = None
+            state.playing_song_index = index
+            state.playing_song = songs[index] if index is not None else None
+            pending = self._pending_start_index
+            state.up_next_song = songs[pending] if 0 <= pending < len(songs) else None
+
+        await self._state_store.mutate(mutation)
 
     async def _select_song(self, index: int, action: ActionName) -> None:
         def mutation(state: ApplicationState) -> None:
@@ -417,7 +452,22 @@ class StateService:
         incoming = event.payload.plan
         previous = await self._state_store.snapshot()
         preserved_index = self._safe_match(previous.plan, previous.current_song_index, incoming)
-        self._pending_start_index = 0 if preserved_index is None else preserved_index + 1
+        playing_index = self._safe_match(previous.plan, previous.playing_song_index, incoming)
+        # Start next keeps playing the same song across a reload. That is the song after the cursor
+        # normally, but after Previous it is the cursor song itself, so follow the pending target by
+        # id (never by position) and only fall back to "after the cursor" when it cannot be found.
+        old_songs = previous.plan.songs if previous.plan else []
+        pending_index = (
+            self._safe_match(previous.plan, self._pending_start_index, incoming)
+            if 0 <= self._pending_start_index < len(old_songs)
+            else None  # past the final song: nothing to follow
+        )
+        if preserved_index is None:
+            self._pending_start_index = 0
+        elif pending_index is not None:
+            self._pending_start_index = pending_index
+        else:
+            self._pending_start_index = preserved_index + 1
 
         def mutation(state: ApplicationState) -> None:
             state.plan = incoming
@@ -436,6 +486,7 @@ class StateService:
                 )
 
         await self._state_store.mutate(mutation)
+        await self._set_labels(playing=playing_index)
 
     async def _handle_service_load_changed(self, event: StagePilotEvent) -> None:
         if not isinstance(event.payload, ServiceLoadPayload):
@@ -470,6 +521,9 @@ class StateService:
                 state.current_song = None
                 state.next_song = None
                 state.current_song_index = None
+                state.playing_song = None
+                state.playing_song_index = None
+                state.up_next_song = None
                 state.timer = TimerState(status=TimerStatus.STOPPED)
                 self._pending_start_index = 0
             state.service_load = ServiceLoadState(

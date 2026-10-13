@@ -760,14 +760,14 @@ export function Dashboard({
     activity.splice(10);
   }
   const midiDetail = connectionViews.midi.detail;
-  const timerDuration = state.timer.duration_seconds ?? state.current_song?.duration_seconds ?? 0;
+  const timerDuration = state.timer.duration_seconds ?? state.playing_song?.duration_seconds ?? 0;
   const elapsedMilliseconds = state.timer.status === "running" && state.timer.started_at
     ? Math.max(0, clockNow - Date.parse(state.timer.started_at))
     : 0;
   // Stop keeps the remaining time: a stopped countdown shows the frozen value instead of blanking.
   const frozenRemaining = state.timer.status === "stopped" ? state.timer.remaining_seconds ?? null : null;
   const timerElapsed = frozenRemaining !== null
-    ? Math.max(0, (state.current_song?.duration_seconds ?? timerDuration) - frozenRemaining)
+    ? Math.max(0, (state.playing_song?.duration_seconds ?? timerDuration) - frozenRemaining)
     : Math.min(timerDuration, Math.floor(elapsedMilliseconds / 1_000));
   const timerRemaining = frozenRemaining !== null
     ? frozenRemaining
@@ -1141,7 +1141,7 @@ export function Dashboard({
           )}
           <ol aria-label="Service plan order" className="min-h-0 flex-1 overflow-hidden" data-autosize-content>
             {servicePlanEntries.map((entry) => entry.kind === "song"
-              ? <SongRow key={`song-${entry.song.id}`} song={entry.song} current={entry.song.id === state.current_song?.id} next={entry.song.id === state.next_song?.id} hoverWarmup={hoverPreviewWarmupRef.current} />
+              ? <SongRow key={`song-${entry.song.id}`} song={entry.song} current={entry.song.id === state.playing_song?.id} next={entry.song.id === state.up_next_song?.id} hoverWarmup={hoverPreviewWarmupRef.current} />
               : <ReferenceItemRow key={`reference-${entry.item.item_id}`} item={entry.item} hoverWarmup={hoverPreviewWarmupRef.current} />)}
           </ol>
         </Panel>
@@ -1152,7 +1152,7 @@ export function Dashboard({
               <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing · live signal</p>
               <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success-soft/20 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
-            <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.current_song?.id ?? "idle"}>{state.current_song?.title ?? "Waiting for first cue"}</h2>
+            <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.playing_song?.id ?? "idle"}>{state.playing_song?.title ?? "Waiting for first cue"}</h2>
             <div className="mt-2 flex items-end justify-between gap-5">
               <div>
                 <p className="text-sm text-ink-muted">Time remaining</p>
@@ -1161,12 +1161,12 @@ export function Dashboard({
               <div className="elapsed-time-block pb-1 text-right">
                 <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
                 <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-primary-text">{formatDuration(timerElapsed)}</p>
-                <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.current_song?.duration_seconds)}</p>
+                <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.playing_song?.duration_seconds)}</p>
               </div>
             </div>
             <div className="now-playing-metadata mt-7 grid grid-cols-2 gap-4 border-t border-edge-subtle pt-4 text-sm">
-              <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{state.current_song_index == null ? "Not started" : `${state.current_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
-              <div><p className="text-xs text-ink-muted">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.next_song?.title ?? "End of service"}</p></div>
+              <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{state.playing_song_index == null ? "Not started" : `${state.playing_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
+              <div><p className="text-xs text-ink-muted">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.up_next_song?.title ?? "End of service"}</p></div>
               <div><p className="text-xs text-ink-muted">Countdown started</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{formatTime(state.timer.started_at)}</p></div>
               <div><p className="text-xs text-ink-muted">Last action</p><p className="mt-1 font-semibold capitalize text-ink-body">{state.last_action?.replaceAll("_", " ") ?? "None"}</p></div>
             </div>

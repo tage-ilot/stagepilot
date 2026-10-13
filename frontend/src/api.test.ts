@@ -125,6 +125,7 @@ describe("selectPlanningCenterPlan", () => {
         current_song: null,
         next_song: null,
         current_song_index: null,
+        playing_song: null, playing_song_index: null, up_next_song: null,
         planning_center_status: "connected",
         midi_status: "connected",
         propresenter_status: "connected",

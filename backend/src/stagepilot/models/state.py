@@ -184,9 +184,17 @@ class ApplicationState(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     application_status: ApplicationStatus = ApplicationStatus.STARTING
     plan: ServicePlan | None = None
+    # The navigation CURSOR: Previous / Next move it without starting anything, and Playback and
+    # MIDI map against it.
     current_song: Song | None = None
     next_song: Song | None = None
     current_song_index: int | None = Field(default=None, ge=0)
+    # What the screen should say (service plan labels, Now playing, Up next): the song actually
+    # started (its timer, ProPresenter and lights ran) and the song the next Start next will play.
+    # They differ from the cursor after Previous.
+    playing_song: Song | None = None
+    playing_song_index: int | None = Field(default=None, ge=0)
+    up_next_song: Song | None = None
     planning_center_status: ConnectionStatus = ConnectionStatus.DISCONNECTED
     midi_status: ConnectionStatus = ConnectionStatus.DISCONNECTED
     propresenter_status: ConnectionStatus = ConnectionStatus.DISCONNECTED

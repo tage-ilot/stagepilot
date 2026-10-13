@@ -30,7 +30,7 @@ export const playbackSettings: SettingsResponse = {
 
 export const playbackState: ApplicationState = {
   revision: 1, updated_at: "2026-01-01T00:00:00Z", application_status: "running",
-  plan: null, current_song: null, next_song: null, current_song_index: null,
+  plan: null, current_song: null, next_song: null, current_song_index: null, playing_song: null, playing_song_index: null, up_next_song: null,
   planning_center_status: "connected", midi_status: "connected", propresenter_status: "connected", lights_status: "disconnected",
   service_load: { status: "loaded", target_date: "2026-01-01", candidates: [], skipped_items: [], message: null, is_stale: false, last_attempt_at: null },
   timer: { status: "idle", duration_seconds: null, started_at: null, last_error: null },

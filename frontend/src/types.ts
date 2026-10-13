@@ -116,9 +116,14 @@ export interface ApplicationState {
   updated_at: string;
   application_status: ApplicationStatus;
   plan: ServicePlan | null;
+  /** The navigation cursor (Previous / Next move it without starting anything). */
   current_song: Song | null;
   next_song: Song | null;
   current_song_index: number | null;
+  /** What the screen says: the song actually started, and the song the next Start next will play. */
+  playing_song: Song | null;
+  playing_song_index: number | null;
+  up_next_song: Song | null;
   planning_center_status: ConnectionStatus;
   midi_status: ConnectionStatus;
   propresenter_status: ConnectionStatus;
