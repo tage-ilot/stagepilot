@@ -52,7 +52,7 @@ NOT_FOUND_REASON = (
     "Couldn't find Playback. Check that Playback is open, Remote Connections is on, "
     "and both computers are on the same network."
 )
-UNREACHABLE_REASON = "Playback isn't reachable. In Playback, turn on Remote Connections."
+UNREACHABLE_REASON = "Looking for Playback… If it stays offline, turn on Remote Connections."
 
 
 def default_scanner(**kwargs: object) -> list[ScanCandidate] | ScanReport:
