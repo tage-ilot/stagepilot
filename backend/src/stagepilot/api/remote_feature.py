@@ -127,6 +127,11 @@ def _enable_error_message(exc: ProviderError) -> str:
             "Your previous Remote Access setup could not be restored and needs to be "
             "reset. This is safe and won't affect local StagePilot."
         )
+    if "Hostname ownership conflict" in text:
+        return (
+            "Your previous Remote setup is still registered. Try again in a minute; "
+            "if it keeps happening, reset Remote Access."
+        )
     if "not trusted" in text:
         return "Remote Access is unavailable on this installation."
     return (
