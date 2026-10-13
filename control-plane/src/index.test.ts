@@ -94,7 +94,8 @@ class FakeCloudflare {
     } else if (url.pathname.endsWith('/token')) {
       result = `installation-only-token-${parts.at(-2)}`;
     } else if (url.pathname.endsWith('/connections')) {
-      result = {};
+      const live = this.tunnels.get(parts.at(-2) ?? '')?.liveConnections;
+      result = method === 'GET' ? (live ? [{ id: 'conn-1' }] : []) : {};
     } else if (method === 'DELETE' && url.pathname.includes('/cfd_tunnel/')) {
       this.tunnels.delete(parts.at(-1) ?? '');
       result = {};
@@ -989,6 +990,146 @@ describe('private-beta control plane', () => {
     expect(provider.createCount).toBe(0);
     expect(provider.records.size).toBe(1);
     expect((await json(response)).error).not.toContain('foreign.cfargotunnel.com');
+  });
+
+  describe('stale older-generation resources of the same installation', () => {
+    const oldGeneration = '88888888-8888-4888-8888-888888888888';
+    const newGeneration = '99999999-9999-4999-8999-999999999999';
+    const oldTunnelId = '11111111-1111-4111-8111-111111111111';
+
+    function seed(installation: Record<string, unknown>, over: {
+      comment?: string; record?: Record<string, unknown>; tunnel?: Record<string, unknown> | null; second?: boolean;
+    } = {}): void {
+      const name = over.comment ?? `stagepilot-${String(installation.installationId)}-${oldGeneration}`;
+      if (over.tunnel !== null) {
+        provider.tunnels.set(oldTunnelId, {
+          id: oldTunnelId, name, config_src: 'cloudflare', deleted_at: null, ...over.tunnel,
+        });
+        if (over.second) {
+          provider.tunnels.set('22222222-2222-4222-8222-222222222222', {
+            id: '22222222-2222-4222-8222-222222222222', name, config_src: 'cloudflare', deleted_at: null,
+          });
+        }
+      }
+      provider.records.set('stale', {
+        id: 'stale', name: installation.hostname, type: 'CNAME', proxied: true,
+        content: `${oldTunnelId}.cfargotunnel.com`, comment: name, ...over.record,
+      });
+    }
+
+    const provisionRequest = (installation: Record<string, unknown>, generation = newGeneration): Request => request(
+      installationPath(installation, 'provision'), 'POST', String(installation.installationCredential), { generation },
+    );
+
+    it('replaces the stale pair on provision, in order, without leaking provider data', async () => {
+      const installation = await enroll(registry, 'stale-provision');
+      seed(installation);
+      provider.fetch.mockClear();
+      const response = await registry.fetch(provisionRequest(installation));
+      expect(response.status).toBe(200);
+      const text = JSON.stringify(await json(response));
+      expect(text).not.toContain('provider-secret-never-returned');
+      expect(text).not.toContain(oldGeneration);
+      expect(provider.tunnels.has(oldTunnelId)).toBe(false);
+      expect(provider.tunnels.size).toBe(1);
+      expect(provider.records.size).toBe(1);
+      expect([...provider.records.values()][0].comment).toContain(newGeneration);
+      const calls = provider.fetch.mock.calls.map(([u, i]) => `${(i as RequestInit | undefined)?.method ?? 'GET'} ${new URL(String(u)).pathname.split('/').slice(-2).join('/')}`);
+      const recordDelete = calls.findIndex((c) => c === 'DELETE dns_records/stale');
+      const connDelete = calls.findIndex((c) => c === `DELETE ${oldTunnelId}/connections`);
+      const tunnelDelete = calls.findIndex((c) => c === `DELETE cfd_tunnel/${oldTunnelId}`);
+      expect(recordDelete).toBeGreaterThanOrEqual(0);
+      expect(connDelete).toBeGreaterThan(recordDelete);
+      expect(tunnelDelete).toBeGreaterThan(connDelete);
+      expect(calls.length).toBeLessThan(40);
+    });
+
+    it('replaces the stale pair on reconcile of a wedged enabling installation', async () => {
+      const installation = await enroll(registry, 'stale-reconcile');
+      seed(installation, { tunnel: { liveConnections: true } });
+      const failed = await registry.fetch(provisionRequest(installation));
+      expect(failed.status).toBe(503);
+      expect(provider.tunnels.has(oldTunnelId)).toBe(true);
+      provider.tunnels.get(oldTunnelId)!.liveConnections = false;
+      const recovered = await registry.fetch(request(
+        installationPath(installation, 'reconcile'), 'POST', String(installation.installationCredential),
+      ));
+      expect(recovered.status).toBe(200);
+      expect((await json(recovered)).phase).toBe('provisioned');
+      expect(provider.tunnels.has(oldTunnelId)).toBe(false);
+      expect(provider.records.size).toBe(1);
+    });
+
+    it('converges after a lost response mid-replacement', async () => {
+      const installation = await enroll(registry, 'stale-lost');
+      seed(installation);
+      // Simulate the record deletion having succeeded but the tunnel delete lost.
+      provider.records.delete('stale');
+      const response = await registry.fetch(provisionRequest(installation));
+      expect(response.status).toBe(200);
+      expect((await json(response)).phase).toBe('provisioned');
+      const again = await registry.fetch(request(
+        installationPath(installation, 'reconcile'), 'POST', String(installation.installationCredential),
+      ));
+      expect(again.status).toBe(200);
+      expect(provider.records.size).toBe(1);
+    });
+
+    it('disable removes a stale same-installation pair', async () => {
+      const installation = await enroll(registry, 'stale-disable');
+      const wedged = await registry.fetch(provisionRequest(installation));
+      expect(wedged.status).toBe(200);
+      provider.records.clear();
+      provider.tunnels.clear();
+      seed(installation);
+      const disable = await registry.fetch(request(
+        installationPath(installation, 'revoke'), 'POST', String(installation.installationCredential),
+      ));
+      expect(disable.status).toBe(200);
+      expect(provider.records.size).toBe(0);
+      expect(provider.tunnels.size).toBe(0);
+    });
+
+    const refusals: Array<[string, (i: Record<string, unknown>) => Parameters<typeof seed>[1]]> = [
+      ['missing comment', () => ({ record: { comment: undefined } })],
+      ['malformed comment', () => ({ comment: 'stagepilot-garbage' })],
+      ['different installation id', () => ({ comment: `stagepilot-deadbeef-${oldGeneration}` })],
+      ['same generation but record points elsewhere', (i) => ({ comment: `stagepilot-${String(i.installationId)}-${newGeneration}`, record: { content: 'other.cfargotunnel.com' } })],
+      ['unproxied record', () => ({ record: { proxied: false } })],
+      ['non-CNAME record', () => ({ record: { type: 'A' } })],
+      ['content mismatch', () => ({ record: { content: 'other.cfargotunnel.com' } })],
+      ['tunnel missing', () => ({ tunnel: null })],
+      ['duplicate tunnels', () => ({ second: true })],
+      ['locally managed tunnel', () => ({ tunnel: { config_src: 'local' } })],
+      ['live connections', () => ({ tunnel: { liveConnections: true } })],
+    ];
+    for (const [label, build] of refusals) {
+      it(`fails closed: ${label}`, async () => {
+        const installation = await enroll(registry, `stale-refuse-${label.replace(/[^a-z]/gi, '-')}-request`);
+        const over = build(installation);
+        seed(installation, over);
+        const before = [provider.tunnels.size, provider.records.size];
+        const response = await registry.fetch(provisionRequest(installation));
+        expect(response.status).toBe(503);
+        expect(provider.createCount).toBe(0);
+        expect([provider.tunnels.size, provider.records.size]).toEqual(before);
+        expect(JSON.stringify(await json(response))).not.toContain('cfargotunnel.com');
+      });
+    }
+
+    it('disable also refuses a stale pair with live connections', async () => {
+      const installation = await enroll(registry, 'stale-disable-live');
+      await registry.fetch(provisionRequest(installation));
+      provider.records.clear();
+      provider.tunnels.clear();
+      seed(installation, { tunnel: { liveConnections: true } });
+      const disable = await registry.fetch(request(
+        installationPath(installation, 'revoke'), 'POST', String(installation.installationCredential),
+      ));
+      expect(disable.status).toBe(503);
+      expect(provider.records.size).toBe(1);
+      expect(provider.tunnels.size).toBe(1);
+    });
   });
 
   it('reprovisions the same hostname with a new generation after disable -> re-enable', async () => {

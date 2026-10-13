@@ -102,6 +102,14 @@ exact generated hostname, exact tunnel target, proxied state, and exact tunnel
 name in the record comment. Ambiguous, foreign, locally managed, or malformed
 resources fail closed and are never adopted or deleted.
 
+Stale older generation: a record and tunnel left by an earlier generation of the
+SAME installation are replaced (record, then connections, then tunnel, each read
+back) on provision, reconcile and disable only when all hold: proxied CNAME on
+this installation's exact hostname; comment `stagepilot-<this installation
+id>-<UUID>` with a different generation; content exactly `<tunnelId>.cfargotunnel.com`
+for the single cloudflare-managed tunnel of exactly that name; and zero live
+connections. Anything else still fails closed with `hostname ownership conflict`.
+
 Provision first journals `desiredEnabled=true` and `enabling`, then reconciles the
 exact tunnel name before any create. It writes and reads back the dedicated
 loopback ingress plus deny-all catch-all, creates and reads back the exact DNS
