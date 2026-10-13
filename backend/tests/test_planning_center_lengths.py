@@ -429,3 +429,74 @@ async def test_different_loaded_plan_does_not_reload_or_switch() -> None:
     rig.dispatcher.dispatch.assert_not_awaited()
     loaded = (await rig.state.snapshot()).plan
     assert loaded is not None and loaded.id == "other"
+
+
+async def test_applied_marker_only_after_a_complete_write_and_failed_write_allows_retry() -> None:
+    rig = Rig(count=2)
+    applied: list[str] = []
+    rig.service.on_applied = applied.append
+    rig.failures["1"] = 500
+    await rig.update(rig.plan, [101, 101])
+    assert rig.service.result.status in ("partial", "failed")
+    assert applied == []  # A failed or partial write keeps the explicit retry available.
+    del rig.failures["1"]
+    await rig.update(rig.plan, [101, 101])
+    assert applied == ["plan"]  # The retry completed, so now it is marked applied.
+
+
+async def test_nothing_to_change_does_not_mark_applied() -> None:
+    rig = Rig(count=1)
+    applied: list[str] = []
+    rig.service.on_applied = applied.append
+    await rig.update(rig.plan, [100])
+    assert applied == []
+
+
+async def test_applied_marker_survives_restart_reload_and_undo_until_new_scan(
+    tmp_path: Path,
+) -> None:
+    fake = FakePlayback(index=0)
+    service = SettingsService(
+        SettingsFileStore(tmp_path / "s.json"), MemoryCredentialStore(), environ={}
+    )
+    async with application(fake, settings_service=service) as (app, client):
+        inputs = controller(app)
+        await client.post("/api/v1/playback-api/discover-song-order", json={"confirm": True})
+        assert not await inputs.lengths_applied()
+        plan = (await app.state.runtime.state_store.snapshot()).plan
+        assert plan is not None
+        inputs.mark_lengths_applied(plan.id)
+        data = (await client.get("/api/v1/playback-api/status")).json()
+        assert data["lengths_applied"] and not data["stale"]
+        from stagepilot.models.state import ConnectionStatus as CS
+
+        def connect(state: ApplicationState) -> None:
+            state.planning_center_status = CS.CONNECTED
+
+        await app.state.runtime.state_store.mutate(connect)
+        reason = (await client.get("/api/v1/playback-api/status")).json()
+        assert "already has these lengths" in reason["planning_center_update_reason"]
+        assert (
+            await client.post("/api/v1/playback-api/planning-center-lengths/preview")
+        ).status_code == 409
+        # Reloading the plan alone does not bring the prompt back (same plan id).
+        await app.state.runtime.state_store.mutate(lambda s: None)
+        assert (await client.get("/api/v1/playback-api/status")).json()["lengths_applied"]
+        # Undo/Restore does not clear the marker.
+        assert (
+            await client.post(
+                "/api/v1/playback-api/planning-center-lengths/restore", json={"confirm": True}
+            )
+        ).status_code == 200
+        assert (await client.get("/api/v1/playback-api/status")).json()["lengths_applied"]
+    # Restart: the marker is persisted with the scan's captured_at and plan id.
+    service2 = SettingsService(
+        SettingsFileStore(tmp_path / "s.json"), MemoryCredentialStore(), environ={}
+    )
+    async with application(FakePlayback(index=0), settings_service=service2) as (app, client):
+        assert (await client.get("/api/v1/playback-api/status")).json()["lengths_applied"]
+        # A new successful scan (new captured_at) brings the action back.
+        data = (
+            await client.post("/api/v1/playback-api/discover-song-order", json={"confirm": True})
+        ).json()
+        assert not data["lengths_applied"] and not data["stale"]

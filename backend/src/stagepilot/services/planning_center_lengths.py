@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Literal
@@ -58,6 +59,15 @@ class LengthUpdateResult(BaseModel):
     reload: Literal["not_needed", "verified", "deferred", "failed", "different_plan"] = "not_needed"
 
 
+def plan_key(plan: ServicePlan) -> str:
+    """Identity of the plan the scanned lengths were measured for (not its durations)."""
+    return json.dumps([plan.service_type_id, plan.id, [song.id for song in plan.songs]])
+
+
+async def _always_current() -> bool:
+    return True
+
+
 def duration(value: int | None) -> str:
     if value is None:
         return "unknown"
@@ -100,6 +110,10 @@ class PlanningCenterLengthService:
         )
         self._target_label = ""
         self.write_allowed: Callable[[], bool] = lambda: not self.is_playing()
+        # False once the loaded plan differs from the one the lengths were measured for.
+        self.plan_current: Callable[[], Awaitable[bool]] = _always_current
+        # Called with the plan id after a complete, successful write of every changed item.
+        self.on_applied: Callable[[str], None] = lambda _plan_id: None
 
     @property
     def undo_available(self) -> bool:
@@ -224,6 +238,7 @@ class PlanningCenterLengthService:
             preview, candidates, saved_signature, created = self._preview
             if (
                 token != preview.token
+                or not await self.plan_current()
                 or signature != saved_signature
                 or time.monotonic() - created > 300
                 or not self.write_allowed()
@@ -236,6 +251,13 @@ class PlanningCenterLengthService:
                 items=[r.model_copy() for r in preview.items if r.status == "skipped"],
             )
             await self._apply(candidates, restore=False)
+            if (
+                candidates
+                and self.result.status == "done"
+                and not any(item.status == "failed" for item in self.result.items)
+            ):
+                with suppress(Exception):  # Never turn a finished write into an error.
+                    self.on_applied(candidates[0].plan_id)
 
     async def restore(self) -> None:
         async with self._lock:
@@ -277,7 +299,7 @@ class PlanningCenterLengthService:
                         raise PlanningCenterConfigurationError(
                             "Playback started; stop it before changing plan times."
                         )
-                    if not restore and not self.write_allowed():
+                    if not restore and not (self.write_allowed() and await self.plan_current()):
                         raise PlanningCenterConfigurationError(
                             "The scan or Playback changed; preview again."
                         )

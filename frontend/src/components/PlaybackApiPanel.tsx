@@ -59,7 +59,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
     ...candidates.map((candidate) => ({ host: candidate.host, label: `${candidate.name} (${candidate.host})` })),
     ...(savedHost && !candidates.some((candidate) => candidate.host === savedHost) ? [{ host: savedHost, label: `${savedHost} (saved)` }] : []),
   ];
-  const orderSaved = Boolean(status?.song_order.length) && !status?.stale;
+  const orderSaved = Boolean(status?.song_order.length) && !status?.stale && !status?.plan_changed;
   const notice = status ? playbackOrderNotice(status) : null;
   const mismatch = status && orderSaved ? playbackSongCountMismatch(status) : null;
   // A dialog never outlives the state that allowed it (e.g. Playback started playing).

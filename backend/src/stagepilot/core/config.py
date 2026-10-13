@@ -129,6 +129,8 @@ class PlaybackApiSettings(BaseModel):
     song_order: list[StrictInt] = Field(default_factory=list, max_length=200)
     captured_version: StrictInt | None = None
     setlist_id: StrictInt | str | None = None
+    scan_plan_key: str | None = None
+    lengths_applied_key: str | None = None
     captured_at: datetime | None = None
     song_lengths: list[float | None] = Field(default_factory=list, max_length=200)
     discovery_duration_seconds: float | None = Field(default=None, gt=0)

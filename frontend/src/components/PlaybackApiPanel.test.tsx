@@ -221,7 +221,7 @@ describe("Song order card", () => {
 
   it("stale: warning message with the same one button; saved: confirmation count", () => {
     const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ stale: true }) })} />);
-    expect(screen.getByText("Your Playback setlist changed. Set up song order again.")).toBeVisible();
+    expect(screen.getByText("Your Playback setlist changed. Scan the setlist again before updating Planning Center.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Set up song order" })).toBeEnabled();
     view.rerender(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
     expect(screen.getByText("Song order saved (2 songs)")).toBeVisible();
@@ -807,5 +807,41 @@ describe("Scan diagnostics", () => {
     expect(screen.getByText("Couldn't connect")).toBeInTheDocument();
     expect(screen.getByText("Tried one address in 0.2s.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Local Network settings" })).toBeNull();
+  });
+});
+
+describe("outdated scan removes the Planning Center update and asks for a new scan", () => {
+  const measured = { planning_center_connected: true, captured_at: "2026-10-07T12:00:00Z", song_lengths: [268, 240], discovery: "done" as const };
+  const NOTICE_SETLIST = "Your Playback setlist changed. Scan the setlist again before updating Planning Center.";
+  const NOTICE_PLAN = "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center.";
+  const updateButton = () => screen.getByRole("button", { name: "Update Services" });
+
+  it("current scan: no notice, update enabled", () => {
+    panel(controller({ status: playbackStatus(measured) }));
+    expect(screen.queryByText(NOTICE_SETLIST)).not.toBeInTheDocument();
+    expect(screen.queryByText(NOTICE_PLAN)).not.toBeInTheDocument();
+    expect(updateButton()).toBeEnabled();
+  });
+
+  it.each([
+    ["heartbeat or event song not in the scan, or Playback setlist version change, or setlist.loaded with another ID (backend reports stale)", { stale: true, song_lengths: [] }, NOTICE_SETLIST],
+    ["Planning Center plan or service type changed since the scan", { plan_changed: true, song_lengths: [] }, NOTICE_PLAN],
+    ["app restarted with a saved scan, then reconnected to a different setlist (stale on reconnect)", { stale: true, song_lengths: [] }, NOTICE_SETLIST],
+  ])("%s", (_name, extra, notice) => {
+    const playback = controller({ status: playbackStatus({ ...measured, ...extra }) });
+    panel(playback);
+    expect(screen.getAllByText(notice).length).toBeGreaterThan(0);
+    expect(updateButton()).toBeDisabled();
+    fireEvent.click(updateButton());
+    expect(screen.queryByRole("dialog", { name: "Update Services?" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Set up song order" }).length).toBeGreaterThan(0);
+  });
+
+  it("a fresh scan restores the update action without a restart", () => {
+    const view = panel(controller({ status: playbackStatus({ ...measured, stale: true, song_lengths: [] }) }));
+    expect(updateButton()).toBeDisabled();
+    view.rerender(<MidiSetupPanel playback={controller({ status: playbackStatus(measured) })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={playbackSettings} onSaveSettings={vi.fn()} />);
+    expect(screen.queryByText(NOTICE_SETLIST)).not.toBeInTheDocument();
+    expect(updateButton()).toBeEnabled();
   });
 });
