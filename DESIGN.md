@@ -615,8 +615,15 @@ add noise without adding hierarchy.
   border, 12px radius, `elevation.default`. Variant `panel-setup` adds the
   red-to-clear 120° wash and 20px padding. The `!important` overrides on
   `.setup-panel` go away when they merge.
-- **Status card:** icon tile + title + status dot and word + detail line.
-  Collapses to an icon-only tile in compact mode.
+- **Status card:** icon tile + title + status word + detail line. No status dot
+  (removed 2026-10-13). The word is **capitalized** (CONNECTED, CONNECTING, NOT
+  CONNECTED, ERROR), semibold, and grows with the card: it is sized from the card
+  width so the longest phrase, NOT CONNECTED, always fits beside the icon, from
+  11px on a 181px card up to 18px on a 266px one. In compact mode (1000px and
+  below) the word sits under the icon at 11px down to 9px on the narrowest cards
+  (the owner-accepted exception to the 11px floor), NOT CONNECTED wraps to two
+  short lines, and on 320px screens it is one line that ellipsizes (the full word
+  stays in the card's accessible name). Collapses to an icon-only tile in compact mode.
 - **Live (now-playing) panel:** red rail, 135° red wash fading out by 42%,
   oversize tabular timer.
 - **Buttons.** Height: 44px for live controls, 36px for everything else.

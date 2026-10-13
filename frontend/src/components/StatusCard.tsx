@@ -68,7 +68,7 @@ export function StatusCard({
         <div className="status-card-copy min-w-0">
           <p className="status-card-title whitespace-nowrap text-type-micro font-semibold uppercase tracking-[0.14em] text-ink-muted transition-colors can-hover:group-hover:text-ink-body" title={title}>{title}</p>
           <div className="status-card-status mt-2 flex min-w-0 items-center gap-1 xl:gap-2" data-status-motion-part="status">
-            <span className={`status-card-status-word whitespace-nowrap font-semibold ${statusTextStyles[status]}`}>{connectionWord[status]}</span>
+            <span className={`status-card-status-word ${statusTextStyles[status]}`}>{connectionWord[status]}</span>
           </div>
         </div>
         <span
