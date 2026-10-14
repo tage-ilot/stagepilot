@@ -290,6 +290,7 @@ async def health(request: Request) -> HealthResponse:
         version=runtime.settings.version,
         application_status=state.application_status,
         plugins=plugins,
+        started_at=runtime.started_at,
     )
 
 

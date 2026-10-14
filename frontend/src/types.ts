@@ -149,6 +149,8 @@ export interface HealthResponse {
   version: string;
   application_status: ApplicationStatus;
   plugins: PluginHealth[];
+  /** When this backend process started (UTC ISO). Older backends omit it. */
+  started_at?: string | null;
 }
 
 export type ServiceSource = "demo" | "planning_center";

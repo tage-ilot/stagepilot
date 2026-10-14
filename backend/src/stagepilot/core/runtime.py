@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from stagepilot.core.config import Settings
 from stagepilot.core.event_bus import EventBus
@@ -34,3 +35,5 @@ class Runtime:
     planning_center: PlanningCenterPlugin | None = None
     planning_center_oauth: PlanningCenterOAuthService | None = None
     playback_input: PlaybackInputPlugin | None = None
+    # When this process started (UTC), for the StagePilot panel's "Running since". Read-only.
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))

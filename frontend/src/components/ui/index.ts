@@ -11,6 +11,8 @@ export { Select } from "./Select";
 export type { SelectProps } from "./Select";
 export { Panel } from "./Panel";
 export { SectionLabel } from "./SectionLabel";
+export { ConnectionMethod } from "./ConnectionMethod";
+export type { ConnectionMethodOption, ConnectionMethodProps } from "./ConnectionMethod";
 export type { PanelProps, PanelVariant } from "./Panel";
 export { StatusDot } from "./StatusDot";
 export type { StatusDotProps } from "./StatusDot";

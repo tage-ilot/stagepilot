@@ -13,6 +13,7 @@ import type {
 import { ButtonSpinner, RemoteAccessPanel } from "./RemoteAccessPanel";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
+import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { PanelAlert } from "./PanelAlert";
@@ -182,6 +183,7 @@ export function BackendSetupPanel({
   const [dashboardPin, setDashboardPin] = useState("");
   const [releaseChannel, setReleaseChannel] = useState<GeneralSettingsInput["release_channel"]>("BETA");
   const remote = useRemoteAccess();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Each draft follows its own saved value.
   const savedSettings = settings?.settings ?? null;
@@ -233,6 +235,19 @@ export function BackendSetupPanel({
   const errTimezone = attempt.attempted && !timezone.trim() ? "Enter a timezone." : undefined;
   const errPort = attempt.attempted && !portValid ? "Enter a port from 1 to 65535." : undefined;
   const errPin = attempt.attempted && pinEnabled && dashboardPin !== "" && dashboardPin.length < 4 ? "Enter a PIN of at least 4 characters." : undefined;
+  // A problem or a waiting change inside Advanced must never hide behind the closed row.
+  const advancedHeld = [heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
+  useEffect(() => { if (errPort) setAdvancedOpen(true); }, [errPort]);
+  const advancedSummary = advancedHeld > 0
+    ? `${advancedHeld} ${advancedHeld === 1 ? "change" : "changes"} waiting`
+    : `Port ${serverPort} · Logging ${logLevel.toLowerCase()}`;
+  const timezoneChoices = useMemo(() => {
+    const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+    // Browsers leave "UTC" out of this list, so add it: a studio on UTC must be able to pick it.
+    const known = ["UTC", ...(zones.length > 0 ? zones : ["America/Los_Angeles"])].filter((zone, at, all) => all.indexOf(zone) === at);
+    // The saved zone is always choosable, even if the browser's list does not carry it.
+    return timezone && !known.includes(timezone) ? [timezone, ...known] : known;
+  }, [timezone]);
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const wasPending = useRef(false);
   useEffect(() => {
@@ -278,6 +293,14 @@ export function BackendSetupPanel({
     setAutoSavedAt(null);
     onSave(parsedSettings);
   };
+  const connectionStatuses = [
+    state.planning_center_status, state.midi_status, state.propresenter_status, state.lights_status,
+    live ? "connected" : "disconnected",
+  ];
+  const connectedCount = connectionStatuses.filter((value) => value === "connected").length;
+  const runningSince = health?.started_at
+    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(health.started_at))
+    : null;
   const connectionStatus = live
     ? "connected"
     : state.application_status === "error" ? "error" : "disconnected";
@@ -300,56 +323,61 @@ export function BackendSetupPanel({
       />
 
       <SectionLabel>Status</SectionLabel>
-      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
         <div className={factCard}>
-          <dt className={factLabel}>API endpoint</dt>
-          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
+          <dt className={factLabel}>Version</dt>
+          <dd className="mt-1 font-semibold text-ink">{health ? health.version : "Loading"}</dd>
         </div>
         <div className={factCard}>
-          <dt className={factLabel}>WebSocket</dt>
-          <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
-            {live ? "Connected" : "Not connected"}
+          <dt className={factLabel}>Running since</dt>
+          <dd className="mt-1 font-semibold tabular-nums text-ink">{runningSince ?? "Not reported"}</dd>
+        </div>
+        <div className={factCard}>
+          <dt className={factLabel}>Connections</dt>
+          <dd className="mt-1 font-semibold text-ink">
+            {connectedCount} of {connectionStatuses.length} connected
           </dd>
-          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
-        </div>
-        <div className={factCard}>
-          <dt className={factLabel}>Backend version</dt>
-          <dd className="mt-1 font-semibold text-ink">{health ? `v${health.version}` : "Loading"}</dd>
-        </div>
-        <div className={factCard}>
-          <dt className={factLabel}>State revision</dt>
-          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
         </div>
       </dl>
+      <Disclosure className="mt-3" title="Connection details" variant="activity">
+        <dl className="grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt className={factLabel}>API endpoint</dt>
+            <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
+          </div>
+          <div>
+            <dt className={factLabel}>WebSocket</dt>
+            <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
+              {live ? "Connected" : "Not connected"}
+            </dd>
+            <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
+          </div>
+          <div>
+            <dt className={factLabel}>State revision</dt>
+            <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
+          </div>
+        </dl>
+      </Disclosure>
 
       <SectionLabel>General configuration</SectionLabel>
-      <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
+      <div className="mt-3 space-y-4">
         <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
-          <Input
-            disabled={pending}
-            onChange={(event) => setTimezone(event.target.value)}
-            placeholder="For example, America/Los_Angeles…"
-            value={timezone}
-          />
+          <Select disabled={pending} onChange={(event) => setTimezone(event.target.value)} value={timezone}>
+            {timezoneChoices.map((zone) => (
+              <option key={zone} value={zone}>{zone}</option>
+            ))}
+          </Select>
         </Field>
-        <label className="flex touch-manipulation items-start gap-3 text-sm text-ink-body">
-          <input
-            checked={lanAccess}
-            className="mt-0.5 size-4 accent-integration-backend"
-            disabled={pending}
-            onChange={(event) => setLanAccess(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            <span className="block font-semibold text-ink">
-              Allow dashboard access from this local network
-            </span>
-            {heldLan && <HeldMarker />}
-            <span className="mt-1 block text-xs text-ink-muted">
-              Other devices can open http://&lt;this-computer&apos;s-IP&gt;:{serverPort}.
-            </span>
-          </span>
-        </label>
+        <Field
+          heldChange={heldLan}
+          hint={lanAccess ? `Other devices can open http://<this-computer's-IP>:${serverPort}.` : undefined}
+          label="Network access"
+        >
+          <Select disabled={pending} onChange={(event) => setLanAccess(event.target.value === "network")} value={lanAccess ? "network" : "local"}>
+            <option value="local">This computer only</option>
+            <option value="network">Other devices on this local network</option>
+          </Select>
+        </Field>
         <div className="text-sm text-ink-body">
           <label className="flex touch-manipulation items-start gap-3 coarse:min-h-ds-touch-target">
             <input
@@ -391,6 +419,7 @@ export function BackendSetupPanel({
       </div>
 
       <SectionLabel>People</SectionLabel>
+      <p className="mt-2 text-sm text-ink-body">Let people sign in from a phone or another computer.</p>
       <div className="mt-3 space-y-4">
         <label className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
@@ -418,44 +447,54 @@ export function BackendSetupPanel({
         {remote.panelOpen && <RemoteAccessPanel control={remote} />}
       </div>
 
-      <SectionLabel>Advanced</SectionLabel>
-      <div className="mt-3 grid gap-4 sm:grid-cols-3">
-        <Field error={errPort} heldChange={heldPort} label="Server port">
-          <Input
-            disabled={pending}
-            inputMode="numeric"
-            onChange={(event) => setServerPort(event.target.value)}
-            value={serverPort}
-          />
-        </Field>
-        <Field heldChange={heldLogLevel} label="Log level">
-          <Select
-            disabled={pending}
-            onChange={(event) => {
-              const value = event.target.value as GeneralSettingsInput["log_level"];
-              setLogLevel(value);
-            }}
-            value={logLevel}
-          >
-            {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
-              <option key={level} value={level}>{level}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field heldChange={heldChannel} label="Release channel">
-          <Select
-            disabled={pending}
-            onChange={(event) => {
-              const value = event.target.value as GeneralSettingsInput["release_channel"];
-              setReleaseChannel(value);
-            }}
-            value={releaseChannel}
-          >
-            {(["STABLE", "BETA"] as const).map((channel) => (
-              <option key={channel} value={channel}>{channel}</option>
-            ))}
-          </Select>
-        </Field>
+      <div className="mt-6">
+        <Disclosure
+          onOpenChange={setAdvancedOpen}
+          open={advancedOpen}
+          summary={advancedSummary}
+          title="Advanced"
+          tone="backend"
+          variant="advanced"
+        >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field error={errPort} heldChange={heldPort} label="Server port">
+            <Input
+              disabled={pending}
+              inputMode="numeric"
+              onChange={(event) => setServerPort(event.target.value)}
+              value={serverPort}
+            />
+          </Field>
+          <Field heldChange={heldLogLevel} label="Log level">
+            <Select
+              disabled={pending}
+              onChange={(event) => {
+                const value = event.target.value as GeneralSettingsInput["log_level"];
+                setLogLevel(value);
+              }}
+              value={logLevel}
+            >
+              {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
+                <option key={level} value={level}>{level}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field heldChange={heldChannel} label="Release channel">
+            <Select
+              disabled={pending}
+              onChange={(event) => {
+                const value = event.target.value as GeneralSettingsInput["release_channel"];
+                setReleaseChannel(value);
+              }}
+              value={releaseChannel}
+            >
+              {(["STABLE", "BETA"] as const).map((channel) => (
+                <option key={channel} value={channel}>{channel}</option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        </Disclosure>
       </div>
 
       <p className="mt-4 text-xs text-ink-muted">
