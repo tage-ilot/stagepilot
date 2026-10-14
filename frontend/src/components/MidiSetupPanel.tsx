@@ -206,7 +206,6 @@ export function MidiSetupPanel({
 
       <SectionLabel>General configuration</SectionLabel>
       <ConnectionMethod
-        alternateNotice="Using the alternate method. If Playback API is available again, switch back here."
         disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
         heldChange={draft.methodDirty}
         onChange={(value) => draft.setMethod(value === "real" ? "real" : value === "simulated" ? "simulated" : "playback_api")}

@@ -36,7 +36,7 @@ export interface AccentClasses {
   bar: string;
   /** The banner (InlineAlert) look for success / info messages. */
   banner: string;
-  /** A chosen option in the Connection method control: a tinted chip with an accent outline. */
+  /** The chosen option in the Connection method control: the connection colour as a 45% fill with a solid outline. */
   chip: string;
 }
 
@@ -52,7 +52,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     checkbox: "accent-integration-services",
     bar: "border-integration-services-soft/50 bg-integration-services-soft/[0.22]",
     banner: "border-integration-services-soft/40 bg-integration-services-soft/10 text-integration-services-text",
-    chip: "border-integration-services-soft bg-integration-services-soft/25",
+    chip: "border-integration-services-soft bg-integration-services-soft/45",
   },
   presentation: {
     solid: "border-transparent bg-integration-presentation text-on-light can-hover:bg-integration-presentation/85 active:bg-integration-presentation/75",
@@ -65,7 +65,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     checkbox: "accent-integration-presentation",
     bar: "border-integration-presentation-soft/50 bg-integration-presentation-soft/[0.22]",
     banner: "border-integration-presentation-soft/40 bg-integration-presentation-soft/10 text-integration-presentation-text",
-    chip: "border-integration-presentation-soft bg-integration-presentation-soft/25",
+    chip: "border-integration-presentation-soft bg-integration-presentation-soft/45",
   },
   playback: {
     solid: "border-transparent bg-integration-playback text-on-primary text-shadow-label can-hover:bg-integration-playback/85 active:bg-integration-playback/75",
@@ -78,7 +78,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     checkbox: "accent-integration-playback",
     bar: "border-integration-playback-soft/50 bg-integration-playback-soft/[0.22]",
     banner: "border-integration-playback-soft/40 bg-integration-playback-soft/10 text-integration-playback-text",
-    chip: "border-integration-playback-soft bg-integration-playback-soft/25",
+    chip: "border-integration-playback-soft bg-integration-playback-soft/45",
   },
   lighting: {
     solid: "border-transparent bg-integration-lighting text-on-primary text-shadow-label can-hover:bg-integration-lighting/85 active:bg-integration-lighting/75",
@@ -91,7 +91,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     checkbox: "accent-integration-lighting",
     bar: "border-integration-lighting-soft/50 bg-integration-lighting-soft/[0.22]",
     banner: "border-integration-lighting-soft/40 bg-integration-lighting-soft/10 text-integration-lighting-text",
-    chip: "border-integration-lighting-soft bg-integration-lighting-soft/25",
+    chip: "border-integration-lighting-soft bg-integration-lighting-soft/45",
   },
   backend: {
     solid: "border-transparent bg-integration-backend text-on-primary text-shadow-label can-hover:bg-integration-backend/85 active:bg-integration-backend/75",
@@ -104,6 +104,6 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     checkbox: "accent-integration-backend",
     bar: "border-integration-backend-soft/50 bg-integration-backend-soft/[0.22]",
     banner: "border-integration-backend-soft/40 bg-integration-backend-soft/10 text-integration-backend-text",
-    chip: "border-integration-backend-soft bg-integration-backend-soft/25",
+    chip: "border-integration-backend-soft bg-integration-backend-soft/45",
   },
 };

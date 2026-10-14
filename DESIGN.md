@@ -720,11 +720,12 @@ do three different jobs. Rule: **a row's shape says what kind of thing it is.**
    `ConnectionMethod` and **used by every connection that has more than one way to connect, now
    and in future** (decided 2026-10-14, replacing the earlier select): two or more options
    side by side, each a bold name over a tiny uppercase **PRIMARY** or **ALTERNATE**
-   (`Playback API / PRIMARY`, `MIDI / ALTERNATE`). The chosen primary wears the connection's
-   colour; a chosen alternate is a lighter slate chip, the header badge says so
-   (`Connected · MIDI`), and a neutral notice under the control says how to switch back. It
-   is a radio group (arrow keys, one label, 44px targets). Do not build a second method picker;
-   add options to this one. A change is held until Save configuration, like every other field.
+   (`Playback API / PRIMARY`, `MIDI / ALTERNATE`). **Whichever option is chosen, primary or
+   alternate, wears the connection's tint** (an outline and a 45% fill; the primary red outside a
+   panel), so the toggle itself says which is active. **There is no "how to switch back"
+   notice**: the toggle is that. The header badge still says `Connected · MIDI` when the
+   alternate is in use. It is a radio group (arrow keys, one label, 44px targets). Do not build a
+   second method picker; add options to this one. A change is held until Save configuration.
 2. **Extra options = Advanced:** the one tinted row with a one-line summary.
 3. **Read-only information (Recent activity) = Activity:** flat and neutral, with a
    dashed top rule and a neutral grey count pill (`12 events`) (the pill takes the connection colour inside a connection panel), no fill, no box.
@@ -780,7 +781,7 @@ Header, then **Status**: three cards (**Version**, **Running since**, **Connecti
 connected**) and one quiet **Connection details** row beneath them holding the API endpoint, the
 WebSocket and the state revision (it is for support, not for operating). **General configuration**:
 **Timezone** and **Network access** are full-width selects (`This computer only` / `Other devices on
-this local network`), then the PIN. **People**: one sentence, then Remote Access. **Advanced** is a
+this local network`), then the PIN. **People**: one sentence, then Remote Access; once it is on, the signed-in people are listed and **Add a person** opens the email, password and role fields only when pressed (Cancel folds them away again; the very first Operator keeps its form open because it is the only step). **Advanced** is a
 collapsed row with a one-line summary (`Port 8765 · Logging info`); it holds Server port, Log level
 and Release channel, opens by itself when its port is invalid, and says `N changes waiting` while
 one is held. The save bar follows; support logs sit below it.

@@ -10,7 +10,6 @@ const options = [
   { value: "api", label: "Playback API", role: "primary" as const },
   { value: "midi", label: "MIDI", role: "alternate" as const },
 ];
-const notice = "Using the alternate method. If Playback API is available again, switch back here.";
 
 describe("ConnectionMethod (the template for every connection that has more than one way to connect)", () => {
   it("is a labelled radio group: each option is a name over PRIMARY or ALTERNATE", () => {
@@ -40,29 +39,36 @@ describe("ConnectionMethod (the template for every connection that has more than
     expect(onChange).toHaveBeenCalledWith("midi");
   });
 
-  it("shows the notice only while an alternate is chosen", () => {
-    const { rerender } = render(<ConnectionMethod alternateNotice={notice} onChange={() => {}} options={options} value="api" />);
-    expect(screen.queryByText(notice)).toBeNull();
-    rerender(<ConnectionMethod alternateNotice={notice} onChange={() => {}} options={options} value="midi" />);
-    expect(screen.getByText(notice)).toHaveAttribute("data-alternate-notice");
+  it("has no notice: the toggle itself says which way is active", () => {
+    render(<ConnectionMethod onChange={() => {}} options={options} value="midi" />);
+    expect(document.querySelector("[data-alternate-notice]")).toBeNull();
+    expect(screen.queryByText(/switch back/i)).toBeNull();
   });
 
-  it("styles the chosen alternate as a lighter slate chip and the chosen primary in the primary colour", () => {
-    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="midi" />);
-    expect(screen.getByRole("radio", { name: /^MIDI/ }).closest("label")).toHaveClass("bg-ink-muted/15", "border-edge-medium");
-    expect(screen.getByRole("radio", { name: /^Playback API/ }).closest("label")).not.toHaveClass("bg-primary/20");
-    rerender(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
-    expect(screen.getByRole("radio", { name: /^Playback API/ }).closest("label")).toHaveClass("bg-primary/20");
+  it("the chosen option wears the same tint whether it is the primary or the alternate", () => {
+    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
+    const chip = (name: RegExp) => screen.getByRole("radio", { name }).closest("label")!;
+    expect(chip(/^Playback API/)).toHaveClass("bg-primary/45", "border-primary");
+    expect(chip(/^MIDI/)).not.toHaveClass("bg-primary/45");
+    rerender(<ConnectionMethod onChange={() => {}} options={options} value="midi" />);
+    expect(chip(/^MIDI/)).toHaveClass("bg-primary/45", "border-primary");
+    expect(chip(/^Playback API/)).not.toHaveClass("bg-primary/45");
+    expect(chip(/^MIDI/).className).not.toMatch(/bg-ink-muted/);
   });
 
-  it("the chosen primary wears the connection colour inside a connection panel", () => {
-    render(
+  it("inside a connection panel the chosen option wears that connection's tint, primary or alternate", () => {
+    const { rerender } = render(
       <Panel tone="playback" variant="setup">
         <ConnectionMethod onChange={() => {}} options={options} value="api" />
       </Panel>,
     );
-    const chip = screen.getByRole("radio", { name: /^Playback API/ }).closest("label")!;
-    for (const cls of accentClasses.playback.chip.split(" ")) expect(chip).toHaveClass(cls);
+    for (const cls of accentClasses.playback.chip.split(" ")) expect(screen.getByRole("radio", { name: /^Playback API/ }).closest("label")).toHaveClass(cls);
+    rerender(
+      <Panel tone="playback" variant="setup">
+        <ConnectionMethod onChange={() => {}} options={options} value="midi" />
+      </Panel>,
+    );
+    for (const cls of accentClasses.playback.chip.split(" ")) expect(screen.getByRole("radio", { name: /^MIDI/ }).closest("label")).toHaveClass(cls);
   });
 
   it("marks a held change with Not saved yet and a warning border", () => {

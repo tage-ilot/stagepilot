@@ -69,6 +69,89 @@ describe("Remote Access", () => {
     await waitFor(() => expect(api.updateRemoteUser).toHaveBeenCalledWith(operator.id, {password: "replacement-password"}));
   });
 
+  describe("Add a person", () => {
+    const connected = {...off, enabled: true, state: "connected" as const, needs_operator: false, url: "https://test.trycloudflare.com"};
+    const setup = () => {
+      vi.mocked(api.getRemoteStatus).mockResolvedValue(connected);
+      vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
+    };
+
+    it("keeps the sign-in fields folded away until the button is pressed", async () => {
+      setup();
+      render(<Harness />);
+      expect(await screen.findByRole("button", {name: "Add a person"})).toBeEnabled();
+      expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", {name: "Add user"})).not.toBeInTheDocument();
+    });
+
+    it("opens the email, password and role fields, and hides the button while they are open", async () => {
+      setup();
+      render(<Harness />);
+      fireEvent.click(await screen.findByRole("button", {name: "Add a person"}));
+      expect(screen.getByLabelText("Email")).toBeVisible();
+      expect(screen.getByLabelText("Password")).toBeVisible();
+      expect(screen.getByLabelText("New user role")).toBeVisible();
+      expect(screen.getByRole("button", {name: "Add user"})).toBeInTheDocument();
+      expect(screen.queryByRole("button", {name: "Add a person"})).not.toBeInTheDocument();
+    });
+
+    it("Cancel folds it away again and clears what was typed", async () => {
+      setup();
+      render(<Harness />);
+      fireEvent.click(await screen.findByRole("button", {name: "Add a person"}));
+      fireEvent.change(screen.getByLabelText("Email"), {target: {value: "new@example.test"}});
+      fireEvent.change(screen.getByLabelText("Password"), {target: {value: "long-test-password"}});
+      fireEvent.click(screen.getByRole("button", {name: "Cancel"}));
+      expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", {name: "Add a person"}));
+      expect(screen.getByLabelText("Email")).toHaveValue("");
+      expect(screen.getByLabelText("Password")).toHaveValue("");
+    });
+
+    it("adds the person with the chosen role, then folds the form away", async () => {
+      setup();
+      vi.mocked(api.createRemoteUser).mockResolvedValue({id: "two", email: "new@example.test", role: "Operator", enabled: true});
+      render(<Harness />);
+      fireEvent.click(await screen.findByRole("button", {name: "Add a person"}));
+      fireEvent.change(screen.getByLabelText("Email"), {target: {value: "new@example.test"}});
+      fireEvent.change(screen.getByLabelText("Password"), {target: {value: "long-test-password"}});
+      fireEvent.change(screen.getByLabelText("New user role"), {target: {value: "Operator"}});
+      fireEvent.click(screen.getByRole("button", {name: "Add user"}));
+      await waitFor(() => expect(api.createRemoteUser).toHaveBeenCalledWith("new@example.test", "long-test-password", "Operator"));
+      await waitFor(() => expect(screen.queryByLabelText("Email")).not.toBeInTheDocument());
+      expect(screen.getByRole("button", {name: "Add a person"})).toBeInTheDocument();
+    });
+
+    it("keeps the form open with what was typed when adding fails", async () => {
+      setup();
+      vi.mocked(api.createRemoteUser).mockRejectedValue(new Error("no"));
+      render(<Harness />);
+      fireEvent.click(await screen.findByRole("button", {name: "Add a person"}));
+      fireEvent.change(screen.getByLabelText("Email"), {target: {value: "new@example.test"}});
+      fireEvent.change(screen.getByLabelText("Password"), {target: {value: "long-test-password"}});
+      fireEvent.click(screen.getByRole("button", {name: "Add user"}));
+      await waitFor(() => expect(api.createRemoteUser).toHaveBeenCalledTimes(1));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email")).toHaveValue("new@example.test");
+    });
+
+    it("hides the button while a password is being changed, and the first-Operator form stays open", async () => {
+      setup();
+      render(<Harness />);
+      fireEvent.click(await screen.findByRole("button", {name: `Change password for ${operator.email}`}));
+      expect(screen.queryByRole("button", {name: "Add a person"})).not.toBeInTheDocument();
+      expect(screen.getByLabelText(`New password for ${operator.email}`)).toBeVisible();
+    });
+
+    it("never offers it on the first-Operator step: that form is already the only thing to fill", async () => {
+      vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: true});
+      render(<Harness />);
+      expect(await screen.findByRole("button", {name: "Create Operator"})).toBeInTheDocument();
+      expect(screen.queryByRole("button", {name: "Add a person"})).not.toBeInTheDocument();
+    });
+  });
+
   it("renders deliberate Viewer read-only without admin requests", () => {
     render(<AccessContext.Provider value={{...DESKTOP_ACCESS, mode: "remote", capabilities: {...DESKTOP_ACCESS.capabilities, canConfigure: false, canOperate: false}}}>
       <Harness />

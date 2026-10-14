@@ -341,12 +341,13 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(radio("Playback API")).toHaveAccessibleName("Playback API Primary");
     expect(radio("MIDI")).toHaveAccessibleName("MIDI Alternate");
     expect(document.querySelector("[data-alternate-notice]")).toBeNull();
+    expect(screen.queryByText(/switch back here/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Alternate connection: MIDI settings/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
   });
 
-  it("switching the method swaps the fields as a view, shows the alternate notice and calls nothing", async () => {
+  it("switching the method swaps the fields as a view and calls nothing", async () => {
     const playback = controller();
     const user = userEvent.setup();
     panel(playback);
