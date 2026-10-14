@@ -648,7 +648,7 @@ describe("Dashboard Planning Center plan states", () => {
 
     it("asks 'Discard unsaved changes?' when closing a dirty panel; Keep editing stays, Discard closes", async () => {
       const user = await openPlayback();
-      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByLabelText("Automatically Connect"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
       await user.click(screen.getByRole("button", { name: "Keep editing" }));
@@ -660,7 +660,7 @@ describe("Dashboard Planning Center plan states", () => {
 
     it("discard dialog focuses Discard, ignores Escape and backdrop clicks, and is a dialog with the same name", async () => {
       const user = await openPlayback();
-      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByLabelText("Automatically Connect"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       const dialog = screen.getByRole("dialog", { name: "Discard unsaved changes?" });
       await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" })).toHaveFocus());
@@ -673,7 +673,7 @@ describe("Dashboard Planning Center plan states", () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       await openPlayback();
-      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByLabelText("Automatically Connect"));
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" })).toHaveFocus());
       await user.tab({ shift: true });
@@ -689,7 +689,7 @@ describe("Dashboard Planning Center plan states", () => {
       await user.click(screen.getByRole("button", { name: "Close MIDI / Playback configuration" }));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /^MIDI \/ Playback/ }));
-      await user.click(screen.getByLabelText("Connect to Playback automatically"));
+      await user.click(screen.getByLabelText("Automatically Connect"));
       await user.click(screen.getByRole("button", { name: /^Presentation/ }));
       expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     });

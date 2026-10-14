@@ -396,7 +396,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
       save: vi.fn(async () => { order.push("save"); return true; }),
     });
     const Host = () => { const draft = usePlaybackDraft(playback, "real"); const save = usePlaybackSave(draft, playback, noMidi); return <>
-      <button onClick={() => { draft.setMethod("playback_api"); draft.setFastTransport(!draft.fastTransport); }} type="button">edit</button>
+      <button onClick={() => { draft.setMethod("playback_api"); draft.setAutoScan(!draft.autoScan); }} type="button">edit</button>
       <button onClick={() => void save.save()} type="button">go</button></>; };
     render(<Host />);
     await userEvent.click(screen.getByRole("button", { name: "edit" }));
@@ -460,13 +460,13 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn(async () => { order.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Respond to Play immediately"));
+    await user.click(screen.getByLabelText("Playback Network Scan"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("3\u00a0changes waiting. Not saved yet.");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(order).toEqual(["selectSource", "playbackSave", "saveMidi"]);
-    expect(playback.save).toHaveBeenCalledExactlyOnceWith({ ...base.status!.settings, fast_transport: false });
+    expect(playback.save).toHaveBeenCalledExactlyOnceWith({ ...base.status!.settings, auto_scan: false });
     expect(JSON.stringify((onSaveSettings.mock.calls as unknown as unknown[][])[0]![0])).toBe(JSON.stringify({ ...validMidi.settings.midi, enabled: true, channel: 5, note: validMidi.settings.midi.note, debounce_ms: validMidi.settings.midi.debounce_ms, mappings: validMidi.settings.midi.mappings }));
   });
 
@@ -479,7 +479,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn().mockImplementationOnce(async () => { calls.push("saveMidi"); return false; }).mockImplementation(async () => { calls.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Respond to Play immediately"));
+    await user.click(screen.getByLabelText("Playback Network Scan"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
@@ -604,7 +604,7 @@ function Harness({ save, onDirty }: { save: PlaybackController["save"]; onDirty?
 
 describe("Save configuration bar (Playback)", () => {
   afterEach(() => vi.useRealTimers());
-  const toggle = () => screen.getByLabelText("Connect to Playback automatically");
+  const toggle = () => screen.getByLabelText("Automatically Connect");
   const saveButton = () => screen.getByRole("button", { name: "Save configuration" });
   const state = () => document.querySelector("[data-save-bar]")!.getAttribute("data-state");
   const statusText = () => document.querySelector("[data-save-status]")!.textContent;
@@ -627,11 +627,11 @@ describe("Save configuration bar (Playback)", () => {
     expect(state()).toBe("held");
     expect(statusText()).toBe("1\u00a0change waiting. Not saved yet.");
     expect(toggle()).toHaveAccessibleDescription("Not saved yet");
-    fireEvent.click(screen.getByLabelText("Respond to Play immediately"));
+    fireEvent.click(screen.getByLabelText("Playback Network Scan"));
     expect(statusText()).toBe("2\u00a0changes waiting. Not saved yet.");
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(toggle()).toBeChecked();
-    expect(screen.getByLabelText("Respond to Play immediately")).toBeChecked();
+    expect(screen.getByLabelText("Playback Network Scan")).toBeChecked();
     expect(state()).toBe("clean");
     expect(document.querySelector("[data-held-marker]")).toBeNull();
   });
@@ -678,31 +678,18 @@ describe("Save configuration bar (Playback)", () => {
   it("sends every visible setting once, byte-identical to the old Save settings payload (auto-scan)", async () => {
     const save = vi.fn().mockResolvedValue(true);
     render(<Harness save={save} />);
-    fireEvent.click(screen.getByLabelText(/Look for Playback on the network/));
+    fireEvent.click(screen.getByLabelText(/Playback Network Scan/));
     await act(async () => { fireEvent.click(saveButton()); });
     expect(save).toHaveBeenCalledExactlyOnceWith({ enabled: true, host: null, port: 8080, auto_scan: false, fast_transport: true });
     expect(JSON.stringify(save.mock.calls[0]![0])).toBe('{"enabled":true,"host":null,"port":8080,"auto_scan":false,"fast_transport":true}');
   });
 
-  it("fast transport saves through the bar and is clean afterwards", async () => {
-    const save = vi.fn().mockResolvedValue(true);
-    render(<Harness save={save} />);
-    const fast = screen.getByRole("checkbox", { name: /Respond to Play immediately/ });
-    expect(fast).toBeChecked();
-    expect(fast).toHaveAccessibleDescription("Reacts to the command instead of waiting up to one second for Playback to report it.");
-    fireEvent.click(fast);
-    await act(async () => { fireEvent.click(saveButton()); });
-    expect(save).toHaveBeenCalledExactlyOnceWith({ enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: false });
-    expect(fast).not.toBeChecked();
-    expect(state()).toBe("clean");
-  });
-
   it("Discard never saves", () => {
     const save = vi.fn();
     render(<Harness save={save} />);
-    fireEvent.click(screen.getByLabelText(/Respond to Play immediately/));
+    fireEvent.click(screen.getByLabelText(/Playback Network Scan/));
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(screen.getByLabelText(/Respond to Play immediately/)).toBeChecked();
+    expect(screen.getByLabelText(/Playback Network Scan/)).toBeChecked();
     expect(save).not.toHaveBeenCalled();
   });
 
@@ -731,7 +718,7 @@ describe("Save configuration bar (Playback)", () => {
   it("reports dirtiness upward so leaving can ask first", () => {
     const onDirtyChange = vi.fn();
     panel(controller(), { onDirtyChange });
-    fireEvent.click(screen.getByLabelText("Connect to Playback automatically"));
+    fireEvent.click(screen.getByLabelText("Automatically Connect"));
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);

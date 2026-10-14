@@ -15,10 +15,8 @@ export interface PlaybackDraft {
   applyMethod: () => Promise<boolean>;
   enabled: boolean;
   autoScan: boolean;
-  fastTransport: boolean;
   setEnabled: (value: boolean) => void;
   setAutoScan: (value: boolean) => void;
-  setFastTransport: (value: boolean) => void;
   /** Playback settings (not the method) differ from the saved ones. */
   settingsDirty: boolean;
   /** Number of Playback settings that differ from the saved values. */
@@ -37,8 +35,6 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
   const status = playback?.status ?? null;
   const savedEnabled = status?.settings.enabled ?? true;
   const savedAutoScan = status?.settings.auto_scan ?? true;
-  const savedFastTransport = status?.settings.fast_transport ?? true;
-  const [fastTransport, setFastTransportState] = useState(savedFastTransport);
   const [enabled, setEnabledState] = useState(savedEnabled);
   const [autoScan, setAutoScanState] = useState(savedAutoScan);
   const [method, setMethodState] = useState<PlaybackMethod>(savedMethod);
@@ -48,17 +44,14 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
   useEffect(() => setMethodState(savedMethod), [savedMethod]);
   useEffect(() => setEnabledState(savedEnabled), [savedEnabled]);
   useEffect(() => setAutoScanState(savedAutoScan), [savedAutoScan]);
-  useEffect(() => setFastTransportState(savedFastTransport), [savedFastTransport]);
 
   const methodDirty = method !== savedMethod;
-  const settingsCount = Number(enabled !== savedEnabled) + Number(autoScan !== savedAutoScan) + Number(fastTransport !== savedFastTransport);
+  const settingsCount = Number(enabled !== savedEnabled) + Number(autoScan !== savedAutoScan);
   const settingsDirty = settingsCount > 0;
   const dirty = settingsDirty || methodDirty;
   const setMethod = useCallback((value: PlaybackMethod) => { setError(null); setMethodState(value); }, []);
   const setEnabled = useCallback((value: boolean) => { setError(null); setEnabledState(value); }, []);
   const setAutoScan = useCallback((value: boolean) => { setError(null); setAutoScanState(value); }, []);
-
-  const setFastTransport = useCallback((value: boolean) => { setError(null); setFastTransportState(value); }, []);
 
   const applyMethod = useCallback(async () => {
     if (!methodDirty || method === "simulated") return true;
@@ -79,23 +72,22 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
     setError(null);
     setSaving(true);
     try {
-      const ok = await playback.save({ ...status.settings, enabled, auto_scan: autoScan, fast_transport: fastTransport });
+      const ok = await playback.save({ ...status.settings, enabled, auto_scan: autoScan, fast_transport: true });
       if (!ok) setError("Your configuration was not saved. Your changes are still here; try again.");
       return ok;
     } finally {
       setSaving(false);
     }
-  }, [autoScan, enabled, fastTransport, playback, status]);
+  }, [autoScan, enabled, playback, status]);
 
   const revert = useCallback(() => {
     setMethodState(savedMethod);
     setEnabledState(savedEnabled);
     setAutoScanState(savedAutoScan);
-    setFastTransportState(savedFastTransport);
     setError(null);
-  }, [savedAutoScan, savedEnabled, savedFastTransport, savedMethod]);
+  }, [savedAutoScan, savedEnabled, savedMethod]);
 
-  return { method, methodDirty, setMethod, applyMethod, enabled, autoScan, fastTransport, setEnabled, setAutoScan, setFastTransport, settingsDirty, settingsCount, applySettings, dirty, saving, error, revert };
+  return { method, methodDirty, setMethod, applyMethod, enabled, autoScan, setEnabled, setAutoScan, settingsDirty, settingsCount, applySettings, dirty, saving, error, revert };
 }
 
 export function PlaybackSaveBar({ save }: { save: PlaybackSave }) {
