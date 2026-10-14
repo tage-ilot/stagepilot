@@ -58,15 +58,16 @@ def connector_fixture(tmp_path: Path) -> tuple[Connector, DesiredRemote]:
 
 
 def wait_connected(connector: Connector) -> None:
-    deadline = time.monotonic() + 5
-    for _ in range(100):
+    # A real clock deadline, not a loop count: after a deliberate crash the connector waits out its
+    # 1-2 second restart backoff, and a loaded CI runner (macOS Intel) needs more than 5 seconds.
+    deadline = time.monotonic() + 30
+    while True:
         connector.step()
         if json.loads(connector.status.read_text())["state"] == "connected":
             return
         if time.monotonic() > deadline:
-            break
+            raise AssertionError("Local substitute connector did not recover")
         time.sleep(0.05)
-    raise AssertionError("Local substitute connector did not recover")
 
 
 @posix_child_process
