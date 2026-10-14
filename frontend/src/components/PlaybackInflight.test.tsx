@@ -21,7 +21,7 @@ function Host({ playback, midi = noMidi }: { playback: PlaybackController; midi?
   return (
     <>
       <PlaybackApiPanel playback={playback} draft={draft} />
-      <button onClick={() => { draft.setMethod("playback_api"); draft.setFastTransport(!draft.fastTransport); }} type="button">edit</button>
+      <button onClick={() => { draft.setMethod("playback_api"); draft.setAutoScan(!draft.autoScan); }} type="button">edit</button>
       <PlaybackSaveBar save={bar} />
     </>
   );

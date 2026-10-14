@@ -184,12 +184,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
           <input className="size-4 accent-integration-playback" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.autoScan !== status.settings.auto_scan ? "held-auto-scan" : undefined} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
           Playback Network Scan
         </HeldRow>
-        <HeldRow held={Boolean(draft && status && draft.fastTransport !== status.settings.fast_transport)} id="held-fast-transport">
-          <input className="size-4 accent-integration-playback" type="checkbox" checked={draft?.fastTransport ?? status?.settings.fast_transport ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.fastTransport !== status.settings.fast_transport ? "fast-transport-help held-fast-transport" : "fast-transport-help"} onChange={(event) => draft?.setFastTransport(event.target.checked)} />
-          Live Activity
-        </HeldRow>
         </div>
-        <p id="fast-transport-help" className="mt-3 text-sm text-ink-muted">Reacts to the command instead of waiting up to one second for Playback to report it.</p>
       </div>
 
       <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>

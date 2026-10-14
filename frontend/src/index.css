@@ -804,7 +804,7 @@ textarea:focus-visible {
   }
 }
 
-/* Playback API switches: all three on one line when they fit, otherwise one per line (never two + one). */
+/* Playback API switches: both on one line when they fit, otherwise one per line. */
 .playback-toggles {
   container-type: inline-size;
 }
@@ -819,9 +819,9 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-@container (min-width: 40rem) {
+@container (min-width: 32rem) {
   .playback-toggles-row {
-    grid-template-columns: repeat(3, max-content);
+    grid-template-columns: repeat(2, max-content);
     justify-content: start;
   }
 }
