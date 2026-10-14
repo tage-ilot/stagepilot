@@ -219,8 +219,8 @@ export function MidiSetupPanel({
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
-      <div className="mt-4 rounded-ds-lg bg-integration-playback-soft/5 p-3">
-        <Disclosure className="mb-4" summary="Song order and velocity map" title="Playback song velocities" tone="playback" variant="advanced">
+      <div className="mt-4">
+        <Disclosure summary="Song order and velocity map" title="Playback song velocities" tone="playback" variant="advanced">
         <div className="mt-2 rounded-ds-lg bg-integration-playback-soft/10 p-3">
           <p className="mt-1 text-xs text-ink-body">
             Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
@@ -247,7 +247,6 @@ export function MidiSetupPanel({
             <p className="mt-2 text-xs text-warning-text">Load a service plan to see its song-to-velocity map.</p>
           )}
         </div>
-        </Disclosure>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field heldChange={midiView && Boolean(savedMidi) && channel !== String(savedMidi!.channel)} label="MIDI channel">
             <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setChannel(event.target.value)} value={channel} />
@@ -286,6 +285,12 @@ export function MidiSetupPanel({
           ))}
         </div>
         <p className="mt-3 text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
+        {midi && !enabled && (
+          <InlineAlert className="mt-3" tone="warning">
+            Save the MIDI settings above, then restart StagePilot to discover and connect the input device.
+          </InlineAlert>
+        )}
+        </Disclosure>
       </div>
 
       {(settingsError || settingsMessage) && (
@@ -300,12 +305,6 @@ export function MidiSetupPanel({
             <p className="rounded-ds-lg bg-edge-subtle px-3 py-3 text-sm text-ink-muted">
               Loading MIDI configuration…
             </p>
-          )}
-
-          {midi && !enabled && (
-            <InlineAlert tone="warning">
-              Save the MIDI settings above, then restart StagePilot to discover and connect the input device.
-            </InlineAlert>
           )}
 
           <label className="mt-3 block text-xs font-bold uppercase tracking-wider text-ink-muted" htmlFor="midi-input">
