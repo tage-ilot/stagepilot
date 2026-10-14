@@ -92,7 +92,8 @@ describe("warning and error are the same pure red #ff0000 (owner 2026-10-13)", (
     for (const name of ["danger", "danger-solid", "warning"]) expect(hex(name)).toBe("#ff0000");
     // Text and the light fill are lighter reds (readable), still red: R high, G and B equal and low.
     for (const name of ["danger-soft", "danger-text", "warning-text"]) {
-      const [, r, g, b] = hex(name)!.match(/#(..)(..)(..)/)!.map((h, i) => (i ? parseInt(h, 16) : 0)) as number[];
+      const channels = hex(name)!.slice(1).match(/../g)!.map((h: string) => parseInt(h, 16));
+      const [r, g, b] = channels as [number, number, number];
       expect(r).toBe(255);
       expect(g).toBe(b);
       expect(g).toBeLessThan(0x60);
@@ -100,7 +101,7 @@ describe("warning and error are the same pure red #ff0000 (owner 2026-10-13)", (
     // No rose / pink error hexes in the generated tokens or the stylesheet. Stop timer and Reset position
     // (live-stop, #e11d48 / #fecdd3) are live controls, not errors, so they are the one place rose remains.
     const index = readFileSync(`${process.cwd()}/src/index.css`, "utf8");
-    const withoutLiveStop = css.split("\n").filter((l) => !l.includes("live-stop")).join("\n").toLowerCase();
+    const withoutLiveStop = css.split("\n").filter((l: string) => !l.includes("live-stop")).join("\n").toLowerCase();
     for (const rose of ["#f43f5e", "#fb7185", "#fecdd3", "#9f1239", "#4c0519", "244 63 94", "251 113 133"]) {
       expect(withoutLiveStop).not.toContain(rose);
       expect(index.toLowerCase()).not.toContain(rose);
