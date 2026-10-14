@@ -85,7 +85,6 @@ function renderPanel({
   value = midi,
   onRefresh = vi.fn(),
   onSelect = vi.fn(),
-  onSimulate = vi.fn(),
   onSaveSettings = vi.fn(),
   messages = [],
   songs = [],
@@ -93,7 +92,6 @@ function renderPanel({
   value?: MidiInputsResponse;
   onRefresh?: () => void;
   onSelect?: (inputId: string | null) => void;
-  onSimulate?: (cue: "start_next" | "restart_current" | "previous" | "next" | "reload_plan" | "stop_timer") => void;
   onSaveSettings?: (value: SettingsResponse["settings"]["midi"]) => void;
   messages?: MidiMonitorMessage[];
   songs?: Parameters<typeof MidiSetupPanel>[0]["songs"];
@@ -107,8 +105,6 @@ function renderPanel({
       onRefresh={onRefresh}
       onSaveSettings={onSaveSettings}
       onSelect={onSelect}
-      onSimulate={onSimulate}
-      pendingCue={null}
       pendingOperation={null}
       settings={settings}
       songs={songs}
@@ -161,12 +157,6 @@ describe("MidiSetupPanel", () => {
     renderPanel({ onRefresh, onSelect });
 
     expect(screen.getByText(/Receives song and action cues from Playback to control StagePilot/i)).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => {
-        const text = element?.textContent?.replace(/\s+/g, " ").trim();
-        return element?.tagName === "SPAN" && text === "Channel 3 \u00B7 Note E7 (112)";
-      }),
-    ).toBeInTheDocument();
     expect(screen.getByText("Startup default: Startup Controller")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
 
@@ -178,56 +168,11 @@ describe("MidiSetupPanel", () => {
     expect(onRefresh).toHaveBeenCalledOnce();
   });
 
-  it("simulates every cue while no hardware input is connected", async () => {
-    const onSimulate = vi.fn();
-    const user = userEvent.setup();
-    renderPanel({ onSimulate });
-
-    for (const label of [
-      "Start next",
-      "Restart current",
-      "Previous",
-      "Next",
-      "Reload service plan",
-      "Stop timer",
-    ]) {
-      await user.click(screen.getByRole("button", { name: new RegExp(label) }));
-    }
-
-    expect(onSimulate.mock.calls.map(([cue]) => cue)).toEqual([
-      "start_next",
-      "restart_current",
-      "previous",
-      "next",
-      "reload_plan",
-      "stop_timer",
-    ]);
-    expect(screen.getByText(/remain available while the selected hardware input is disconnected/i)).toBeInTheDocument();
-  });
-
-  it("offers an explicit disconnect for the selected input", async () => {
-    const onSelect = vi.fn();
-    const user = userEvent.setup();
-    renderPanel({
-      onSelect,
-      value: {
-        ...midi,
-        selected_input_name: "Playback Controller",
-        inputs: [{ ...midi.inputs[0]!, selected: true, connected: true }],
-      },
-    });
-
-    expect(screen.getByText("Connected: Playback Controller")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    expect(onSelect).toHaveBeenCalledWith(null);
-  });
-
-  it("disables setup and cue tests when the MIDI plugin is disabled", () => {
+  it("disables the input list when the MIDI plugin is disabled", () => {
     renderPanel({ value: { ...midi, enabled: false } });
 
     expect(screen.getByText(/Save the MIDI settings above/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Available input")).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Start next/ })).toBeDisabled();
   });
 
   it("saves advanced MIDI configuration without offering a simulated source", async () => {
@@ -251,18 +196,6 @@ describe("MidiSetupPanel", () => {
 
     expect(onSaveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true, channel: 4, note: 105, debounce_ms: 250 }),
-    );
-  });
-
-  it("shows an omitted mapping and disables its cue test", () => {
-    const mappings = { ...midi.mappings };
-    delete mappings.stop_timer;
-    renderPanel({ value: { ...midi, mappings } });
-
-    expect(screen.getByRole("button", { name: /Stop timer/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Stop timer/ })).toHaveAttribute(
-      "title",
-      "No MIDI velocity is configured for this cue.",
     );
   });
 

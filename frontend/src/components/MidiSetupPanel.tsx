@@ -56,10 +56,8 @@ export function MidiSetupPanel({
   onRetryLoad,
   message,
   pendingOperation,
-  pendingCue,
   onRefresh,
   onSelect,
-  onSimulate,
   onClose,
   onDirtyChange,
   settings,
@@ -76,10 +74,8 @@ export function MidiSetupPanel({
   onRetryLoad?: () => void;
   message: string | null;
   pendingOperation: "refresh" | "connect" | "disconnect" | null;
-  pendingCue: MidiCueName | null;
   onRefresh: () => void;
   onSelect: (inputId: string | null) => void;
-  onSimulate: (cue: MidiCueName) => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   settings: SettingsResponse | null;
@@ -187,7 +183,7 @@ export function MidiSetupPanel({
 
   return (
     <Panel
-      aria-busy={controlsPending || pendingCue !== null}
+      aria-busy={controlsPending}
       aria-labelledby="midi-setup-heading"
       className="mt-5"
       id="midi-configuration"
@@ -299,7 +295,7 @@ export function MidiSetupPanel({
         </InlineAlert>
       )}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="mt-4">
         <div>
           {!midi && !error && (
             <p className="rounded-ds-lg bg-edge-subtle px-3 py-3 text-sm text-ink-muted">
@@ -365,38 +361,6 @@ export function MidiSetupPanel({
           <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!midi ? onRetryLoad : undefined} />
         </div>
 
-        <div className="rounded-ds-lg bg-surface-950/30 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">Cue test</p>
-              <p className="mt-1 text-xs text-ink-muted">Update the fixed-note and velocity actions or leave them as defaults</p>
-            </div>
-            <span className="rounded-ds-full bg-integration-playback-soft/10 px-2.5 py-1 text-xs font-bold tabular-nums text-integration-playback-text">
-              Channel {midi?.channel ?? "—"} · Note {midi ? `${midiNoteName(midi.note)} (${midi.note})` : "—"}
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {cues.map(([cue, label]) => {
-              const velocity = midi?.mappings[cue];
-              return (
-                <button
-                  className="flex min-h-ds-control touch-manipulation items-center justify-between gap-2 rounded-ds-lg border border-integration-playback-soft/20 bg-integration-playback-soft/[0.06] px-3 py-2 text-left text-sm text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target can-hover:border-integration-playback-soft/35 can-hover:bg-integration-playback-soft/[0.12] disabled:cursor-not-allowed disabled:opacity-40"
-                  disabled={!enabled || pendingCue !== null || velocity == null}
-                  key={cue}
-                  onClick={() => onSimulate(cue)}
-                  title={velocity == null ? "No MIDI velocity is configured for this cue." : undefined}
-                  type="button"
-                >
-                  <span>{pendingCue === cue ? "Sending…" : label}</span>
-                  <span className="font-mono text-xs tabular-nums text-integration-playback-text">{velocity == null ? "—" : `v${velocity}`}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-ink-muted">
-            Cue tests remain available while the selected hardware input is disconnected.
-          </p>
-        </div>
       </div>
 
       <div className="mt-4 overflow-hidden rounded-ds-lg bg-surface-950/30">

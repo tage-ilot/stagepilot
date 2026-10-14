@@ -246,7 +246,6 @@ function renderDashboard(
       midiError={null}
       midiMessage={null}
       pendingAction={null}
-      pendingMidiCue={null}
       pendingMidiOperation={null}
       pendingPlanId={pendingPlanId}
       propresenter={propresenter}
@@ -254,7 +253,6 @@ function renderDashboard(
       selectMidi={vi.fn()}
       selectPlan={selectPlan}
       settings={settings}
-      simulateMidi={vi.fn()}
       state={state}
       updater={updater}
       playback={playback}
