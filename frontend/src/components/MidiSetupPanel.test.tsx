@@ -175,6 +175,27 @@ describe("MidiSetupPanel", () => {
     expect(screen.getByLabelText("Available input")).toBeDisabled();
   });
 
+  it("the MIDI method tints the panel blue-violet but the Playback title keeps the Playback blue", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const panel = document.getElementById("midi-configuration")!;
+    const title = screen.getByRole("heading", { name: "Playback" });
+    expect(title).toHaveClass("text-integration-playback-soft");
+    await user.click(screen.getByRole("radio", { name: /^Playback API/ }));
+    expect(panel.className).toContain("border-t-integration-playback-soft");
+    expect(panel.className).toContain("from-integration-playback/[0.13]");
+    expect(title).toHaveClass("text-integration-playback-soft");
+    await user.click(screen.getByRole("radio", { name: /^MIDI/ }));
+    // The panel's own look (top border, background wash, title) never changes hue with the method.
+    expect(panel.className).toContain("border-t-integration-playback-soft");
+    expect(panel.className).toContain("from-integration-playback/[0.13]");
+    expect(panel.className).not.toContain("integration-playback-midi");
+    expect(title).toHaveClass("text-integration-playback-soft");
+    expect(title).not.toHaveClass("text-integration-playback-midi-soft");
+    // Only the controls inside take the blue-violet accent.
+    expect(screen.getByRole("button", { name: "Refresh inputs" })).toHaveClass("text-integration-playback-midi-text");
+  });
+
   it("saves advanced MIDI configuration without offering a simulated source", async () => {
     const onSaveSettings = vi.fn();
     const user = userEvent.setup();

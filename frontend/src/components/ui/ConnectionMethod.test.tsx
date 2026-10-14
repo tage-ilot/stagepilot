@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -45,30 +45,64 @@ describe("ConnectionMethod (the template for every connection that has more than
     expect(screen.queryByText(/switch back/i)).toBeNull();
   });
 
-  it("the chosen option wears the same tint whether it is the primary or the alternate", () => {
+  const pill = () => document.querySelector("[data-method-pill]") as HTMLElement;
+  const selected = (name: RegExp) => screen.getByRole("radio", { name }).closest("label")!;
+
+  it("the chosen highlight is one box that wears the same tint whether primary or alternate", () => {
     const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
-    const chip = (name: RegExp) => screen.getByRole("radio", { name }).closest("label")!;
-    expect(chip(/^Playback API/)).toHaveClass("bg-primary/45", "border-primary");
-    expect(chip(/^MIDI/)).not.toHaveClass("bg-primary/45");
+    expect(selected(/^Playback API/)).toHaveAttribute("data-selected", "true");
+    expect(document.querySelectorAll("[data-method-pill]")).toHaveLength(1);
+    expect(pill()).toHaveClass("bg-primary/45", "border-primary");
     rerender(<ConnectionMethod onChange={() => {}} options={options} value="midi" />);
-    expect(chip(/^MIDI/)).toHaveClass("bg-primary/45", "border-primary");
-    expect(chip(/^Playback API/)).not.toHaveClass("bg-primary/45");
-    expect(chip(/^MIDI/).className).not.toMatch(/bg-ink-muted/);
+    expect(selected(/^MIDI/)).toHaveAttribute("data-selected", "true");
+    expect(selected(/^Playback API/)).toHaveAttribute("data-selected", "false");
+    expect(document.querySelectorAll("[data-method-pill]")).toHaveLength(1);
+    expect(pill()).toHaveClass("bg-primary/45", "border-primary");
+    expect(pill().className).not.toMatch(/bg-ink-muted/);
   });
 
-  it("inside a connection panel the chosen option wears that connection's tint, primary or alternate", () => {
+  it("the box is the same element after a change, so it can slide instead of disappearing", async () => {
+    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
+    const before = pill();
+    // The slide is switched on one frame after mount, so the first paint never animates.
+    await waitFor(() => expect(pill().className).toContain("duration-[220ms]"));
+    rerender(<ConnectionMethod onChange={() => {}} options={options} value="midi" />);
+    expect(pill()).toBe(before);
+    expect(pill().className).toContain("duration-[220ms]");
+    expect(pill().className).toContain("motion-reduce:transition-none");
+  });
+
+  it("inside a connection panel the chosen box wears that connection's tint, primary or alternate", () => {
     const { rerender } = render(
       <Panel tone="playback" variant="setup">
         <ConnectionMethod onChange={() => {}} options={options} value="api" />
       </Panel>,
     );
-    for (const cls of accentClasses.playback.chip.split(" ")) expect(screen.getByRole("radio", { name: /^Playback API/ }).closest("label")).toHaveClass(cls);
+    for (const cls of accentClasses.playback.chip.split(" ")) expect(pill()).toHaveClass(cls);
     rerender(
       <Panel tone="playback" variant="setup">
         <ConnectionMethod onChange={() => {}} options={options} value="midi" />
       </Panel>,
     );
-    for (const cls of accentClasses.playback.chip.split(" ")) expect(screen.getByRole("radio", { name: /^MIDI/ }).closest("label")).toHaveClass(cls);
+    for (const cls of accentClasses.playback.chip.split(" ")) expect(pill()).toHaveClass(cls);
+  });
+
+  it("an option with its own chip class gives the box that tint only while it is chosen", () => {
+    const tinted = [options[0]!, { ...options[1]!, chip: "border-integration-playback-midi bg-integration-playback-midi/45" }];
+    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={tinted} value="api" />);
+    expect(pill()).toHaveClass("bg-primary/45");
+    rerender(<ConnectionMethod onChange={() => {}} options={tinted} value="midi" />);
+    expect(pill()).toHaveClass("bg-integration-playback-midi/45", "border-integration-playback-midi");
+    expect(pill()).not.toHaveClass("bg-primary/45");
+  });
+
+  it("the label row is as tall as the Not saved yet marker, so the switch does not move when a change is held", () => {
+    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
+    const legend = () => document.querySelector("legend")!;
+    expect(legend()).toHaveClass("min-h-[18px]");
+    rerender(<ConnectionMethod heldChange onChange={() => {}} options={options} value="api" />);
+    expect(legend()).toHaveClass("min-h-[18px]");
+    expect(document.querySelector("[data-held-marker]")).toHaveClass("mt-6");
   });
 
   it("marks a held change with Not saved yet and a warning border", () => {

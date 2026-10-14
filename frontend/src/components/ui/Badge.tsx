@@ -20,6 +20,7 @@ const tinted: Record<Tone, string> = {
   services: "border-integration-services-soft/30 bg-integration-services-soft/10 text-integration-services-text",
   presentation: "border-integration-presentation-soft/30 bg-integration-presentation-soft/10 text-integration-presentation-text",
   playback: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text",
+  midi: "border-integration-playback-midi-soft/30 bg-integration-playback-midi-soft/10 text-integration-playback-midi-text",
   lighting: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text",
   backend: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text",
   success: "border-success-soft/40 bg-success-soft/10 text-success-text",

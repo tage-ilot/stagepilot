@@ -16,6 +16,7 @@ const table: Record<Tone, { accent: string; text: string }> = {
   services: { accent: "integration-services-soft", text: "integration-services-text" },
   presentation: { accent: "integration-presentation-soft", text: "integration-presentation-text" },
   playback: { accent: "integration-playback-soft", text: "integration-playback-text" },
+  midi: { accent: "integration-playback-midi-soft", text: "integration-playback-midi-text" },
   lighting: { accent: "integration-lighting-soft", text: "integration-lighting-text" },
   backend: { accent: "integration-backend-soft", text: "integration-backend-text" },
   success: { accent: "success-soft", text: "success-text" },

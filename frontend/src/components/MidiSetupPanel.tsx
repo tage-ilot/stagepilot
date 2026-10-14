@@ -44,7 +44,7 @@ const midiNoteOptions = Array.from({ length: 128 }, (_, note) => ({
 }));
 
 const monitorTone = (message: MidiMonitorMessage) => {
-  if (message.disposition === "dispatched") return "text-integration-playback-text";
+  if (message.disposition === "dispatched") return "text-integration-playback-midi-text";
   if (message.disposition === "note_release") return "text-ink-muted";
   return "text-warning-text";
 };
@@ -145,6 +145,8 @@ export function MidiSetupPanel({
   }, [channel, debounce, note, settings, velocities]);
 
   const midiView = draft.method !== "playback_api";
+  // The whole panel wears the chosen method: the Playback blue, or the blue-violet of MIDI.
+  const accent = midiView ? "midi" : "playback";
   const savedMidi = settings?.settings.midi;
   const midiCount = !savedMidi ? 0
     : Number(channel !== String(savedMidi.channel))
@@ -189,6 +191,7 @@ export function MidiSetupPanel({
       aria-labelledby="midi-setup-heading"
       className="mt-5"
       id="midi-configuration"
+      accent={accent}
       tone="playback"
       variant="setup"
     >
@@ -208,7 +211,7 @@ export function MidiSetupPanel({
         onChange={(value) => draft.setMethod(value === "real" ? "real" : "playback_api")}
         options={[
           { value: "playback_api", label: "Playback API", role: "primary" },
-          { value: "real", label: "MIDI", role: "alternate" },
+          { value: "real", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
         ]}
         value={draft.method}
       />
@@ -217,8 +220,8 @@ export function MidiSetupPanel({
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
       <div className="mt-4">
-        <Disclosure summary="Song order and velocity map" title="Playback song velocities" tone="playback" variant="advanced">
-        <div className="mt-2 rounded-ds-lg bg-integration-playback-soft/10 p-3">
+        <Disclosure summary="Song order and velocity map" title="Playback song velocities" tone="midi" variant="advanced">
+        <div className="mt-2 rounded-ds-lg bg-integration-playback-midi-soft/10 p-3">
           <p className="mt-1 text-xs text-ink-body">
             Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
           </p>
@@ -227,7 +230,7 @@ export function MidiSetupPanel({
               <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
                 {songs.slice(0, 99).map((song, index) => (
                   <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>
-                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-integration-playback-soft/20 px-1.5 py-0.5 font-mono font-bold tabular-nums text-integration-playback-text">
+                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-integration-playback-midi-soft/20 px-1.5 py-0.5 font-mono font-bold tabular-nums text-integration-playback-midi-text">
                       {index + 1}
                     </span>
                     <span className="truncate">{song.title}</span>
@@ -323,7 +326,7 @@ export function MidiSetupPanel({
               ))}
             </Select>
             </div>
-            <Button disabled={controlsPending} onClick={onRefresh} tone="playback" variant="tinted">
+            <Button disabled={controlsPending} onClick={onRefresh} tone="midi" variant="tinted">
               {pendingOperation === "refresh" ? "Refreshing…" : "Refresh inputs"}
             </Button>
             <Button
@@ -336,7 +339,7 @@ export function MidiSetupPanel({
             <Button
               disabled={!enabled || controlsPending || !midi?.selected_input_name}
               onClick={() => onSelect(null)}
-              tone="playback"
+              tone="midi"
               variant="tinted"
             >
               {pendingOperation === "disconnect" ? "Disconnecting…" : "Disconnect"}
@@ -344,7 +347,7 @@ export function MidiSetupPanel({
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className={`rounded-ds-full px-2.5 py-1 font-bold ${connectedInput ? "bg-integration-playback-soft/20 text-integration-playback-text" : "bg-edge-subtle text-ink-muted"}`}>
+            <span className={`rounded-ds-full px-2.5 py-1 font-bold ${connectedInput ? "bg-integration-playback-midi-soft/20 text-integration-playback-midi-text" : "bg-edge-subtle text-ink-muted"}`}>
               {playback?.status?.sources.midi.connected && playback.status.active_source === "playback_api" ? `Connected: ${connectedInput?.name ?? "MIDI"} — standing by` : connectedInput ? `Connected: ${connectedInput.name}` : "No input connected"}
             </span>
             {midi?.selected_input_name && !connectedInput && (

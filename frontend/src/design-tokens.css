@@ -46,12 +46,16 @@
   --ds-integration-playback: #4b73b0;
   --ds-integration-playback-soft: #4b73b0;
   --ds-integration-playback-text: #8ba5cd;
+  --ds-integration-playback-midi: #7761b8;
+  --ds-integration-playback-midi-soft: #7761b8;
+  --ds-integration-playback-midi-text: #a69ad2;
   --ds-integration-backend: #c7231d;
   --ds-integration-backend-soft: #c7231d;
   --ds-integration-backend-text: #e28d89;
   --ds-advanced-services: #8aa896;
   --ds-advanced-presentation: #b4988f;
   --ds-advanced-playback: #7e95b6;
+  --ds-advanced-playback-midi: #938cbb;
   --ds-advanced-lighting: #ad9bb2;
   --ds-advanced-backend: #ab9caa;
   --ds-edge-subtle: rgba(255, 255, 255, 0.06);

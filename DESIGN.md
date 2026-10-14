@@ -60,6 +60,9 @@ colors:
   integration-playback: "#4b73b0"        # DECIDED (owner, 2026-10-13): the slate-blue made clearly BLUE (hue 216, saturation 40%; was #56677b, hue 212, saturation 18%). 3.8:1 on panels and cards, so it works as a fill, dot, border and tint with no separate lifted copy. White text on it 4.8:1. MIDI has no colour of its own (configured under Playback)
   integration-playback-soft: "#4b73b0"   # same as the base
   integration-playback-text: "#8ba5cd"   # small text: 7.2:1 on panels, 5.8:1 on its own 20% tint
+  integration-playback-midi: "#7761b8"        # DECIDED (owner, 2026-10-14): the MIDI method inside the Playback panel wears a blue-violet halfway between the Playback blue and magenta (OKLCH hue -101 to -67, same lightness)
+  integration-playback-midi-soft: "#7761b8"   # same as the base
+  integration-playback-midi-text: "#a69ad2"
   integration-backend: "#c7231d"          # DECIDED (owner, 2026-10-12): the StagePilot status card and its configuration panel. SAME HEX as primary: see "Colour collisions"
   integration-backend-soft: "#c7231d"
   integration-backend-text: "#e28d89"
@@ -68,6 +71,7 @@ colors:
   advanced-services: "#8aa896"
   advanced-presentation: "#b4988f"
   advanced-playback: "#7e95b6"
+  advanced-playback-midi: "#938cbb"       # the MIDI method inside the Playback panel (owner, 2026-10-14): same recipe, hue moved halfway to magenta
   advanced-lighting: "#ad9bb2"
   advanced-backend: "#ab9caa"
   # --- Widget borders (white at low opacity, so they work on any surface). DECIDED: three ---
