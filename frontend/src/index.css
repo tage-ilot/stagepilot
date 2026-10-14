@@ -766,3 +766,40 @@ textarea:focus-visible {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Services: OAuth sign-in takes the wide column, Manual API Connection the narrow one (about a quarter), stacking when the panel is compact. */
+.pco-connect {
+  container-type: inline-size;
+}
+
+.pco-connect-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@container (min-width: 40rem) {
+  .pco-connect-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr);
+  }
+}
+
+.pco-manual {
+  container-type: inline-size;
+}
+
+.manual-connection-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 32rem) {
+  .manual-connection-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The collapsed-row summary would truncate in the narrow Manual API column; hide it there so nothing is cut off. */
+@container (max-width: 30rem) {
+  .pco-manual [data-part="summary"] {
+    display: none;
+  }
+}

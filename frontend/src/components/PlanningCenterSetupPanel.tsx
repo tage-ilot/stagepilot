@@ -313,61 +313,60 @@ export function PlanningCenterSetupPanel({
       />
 
 
-      {oauthNeedsReconnect && (
-        <InlineAlert className="mt-4 px-4 py-3" tone="warning">
-          <p className="font-semibold">Your Services connection has expired</p>
-          <p className="mt-1">
-            Sign in again to keep loading your Service plan from Planning Center.
-          </p>
-          <Button
-            className="mt-3"
-            disabled={busy || !onSignInOAuth}
-            onClick={onSignInOAuth}
-            tone="warning"
-            variant="tinted"
-          >
-            {pendingOperation === "oauth-sign-in" ? "Reconnecting…" : "Reconnect to Planning Center"}
-          </Button>
-        </InlineAlert>
-      )}
+      <div className="pco-connect mt-4">
+        <div className="pco-connect-grid grid gap-4">
+        <div className="min-w-0">
+        {oauthNeedsReconnect && (
+          <InlineAlert className="px-4 py-3" tone="warning">
+            <p className="font-semibold">Your Services connection has expired</p>
+            <p className="mt-1">
+              Sign in again to keep loading your Service plan from Planning Center.
+            </p>
+            <Button
+              className="mt-3"
+              disabled={busy || !onSignInOAuth}
+              onClick={onSignInOAuth}
+              tone="warning"
+              variant="tinted"
+            >
+              {pendingOperation === "oauth-sign-in" ? "Reconnecting…" : "Reconnect to Planning Center"}
+            </Button>
+          </InlineAlert>
+        )}
 
-      {connectionMethod === "oauth" && oauthConnected && !oauthNeedsReconnect && (
-        <InlineAlert className="mt-4 px-4 py-3" tone="success">
-          <p className="font-semibold">Connected to Planning Center</p>
-          <p className="mt-1">
-            Signed in with Planning Center. Your credentials never leave Planning Center&apos;s servers.
-          </p>
-          <Button
-            className="mt-3"
-            disabled={busy || !onDisconnectOAuth}
-            onClick={onDisconnectOAuth}
-            variant="secondary"
-          >
-            {pendingOperation === "oauth-disconnect" ? "Disconnecting…" : "Disconnect"}
-          </Button>
-        </InlineAlert>
-      )}
+        {connectionMethod === "oauth" && oauthConnected && !oauthNeedsReconnect && (
+          <InlineAlert className="px-4 py-3" tone="success">
+            <p className="font-semibold">Connected to Planning Center</p>
+            <p className="mt-1">
+              Signed in with Planning Center. Your credentials never leave Planning Center&apos;s servers.
+            </p>
+            <Button
+              className="mt-3"
+              disabled={busy || !onDisconnectOAuth}
+              onClick={onDisconnectOAuth}
+              variant="secondary"
+            >
+              {pendingOperation === "oauth-disconnect" ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </InlineAlert>
+        )}
 
-      {!(connectionMethod === "oauth" && oauthConnected) && !oauthNeedsReconnect && (
-        <InlineAlert className="mt-4 px-4 py-3" tone="info">
-          <p className="font-semibold">Sign in with Planning Center</p>
-          <p className="mt-1">
-            The fastest way to connect: sign in with your Planning Center account, no App ID or
-            Secret required.
-          </p>
-          <Button
-            className="mt-3"
-            disabled={busy || !onSignInOAuth}
-            onClick={onSignInOAuth}
-            variant="primary"
-          >
-            {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Sign in with Planning Center"}
-          </Button>
-        </InlineAlert>
-      )}
-
+        {!(connectionMethod === "oauth" && oauthConnected) && !oauthNeedsReconnect && (
+          <InlineAlert className="px-4 py-3" tone="info">
+            <p className="font-semibold">Sign in with Planning Center</p>
+            <Button
+              className="mt-3"
+              disabled={busy || !onSignInOAuth}
+              onClick={onSignInOAuth}
+              variant="primary"
+            >
+              {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center OAuth"}
+            </Button>
+          </InlineAlert>
+        )}
+        </div>
+      <div className="pco-manual min-w-0">
       <Disclosure
-        className="mt-5"
         onOpenChange={setManualConnectionOpen}
         open={manualConnectionOpen}
         summary={manualSummary}
@@ -375,7 +374,7 @@ export function PlanningCenterSetupPanel({
         tone="services"
         variant="advanced"
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="manual-connection-fields grid gap-4">
           <div className="text-sm text-ink-body">
             <div className="mb-1.5 flex items-center gap-1.5">
               <label
@@ -478,6 +477,9 @@ export function PlanningCenterSetupPanel({
           </div>
         )}
       </Disclosure>
+      </div>
+        </div>
+      </div>
 
       <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted">

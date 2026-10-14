@@ -519,7 +519,7 @@ describe("PlanningCenterSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onSignInOAuth });
 
-    const button = screen.getByRole("button", { name: "Sign in with Planning Center" });
+    const button = screen.getByRole("button", { name: "Planning Center OAuth" });
     await user.click(button);
 
     expect(onSignInOAuth).toHaveBeenCalledTimes(1);
@@ -543,7 +543,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     expect(screen.getByText("Connected to Planning Center")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Sign in with Planning Center" }),
+      screen.queryByRole("button", { name: "Planning Center OAuth" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
   });
@@ -720,7 +720,7 @@ describe("PlanningCenterSetupPanel SaveBar", () => {
     renderPanel();
     const reload = screen.getByRole("button", { name: "Load today’s service plan" });
     expect(bar().contains(reload)).toBe(false);
-    expect(bar().contains(screen.getByRole("button", { name: "Sign in with Planning Center" }))).toBe(false);
+    expect(bar().contains(screen.getByRole("button", { name: "Planning Center OAuth" }))).toBe(false);
   });
 });
 

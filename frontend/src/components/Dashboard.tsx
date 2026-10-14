@@ -18,7 +18,6 @@ import type {
   LightingCue,
   LightsSettingsInput,
   LightsStatusResponse,
-  MidiCueName,
   MidiInputsResponse,
   MidiMonitorMessage,
   MidiSettingsInput,
@@ -429,7 +428,6 @@ export function Dashboard({
   midiError,
   midiMessage,
   pendingMidiOperation,
-  pendingMidiCue,
   propresenter = null,
   propresenterError = null,
   propresenterMessage = null,
@@ -450,7 +448,6 @@ export function Dashboard({
   disconnectPlanningCenter = () => undefined,
   refreshMidi,
   selectMidi,
-  simulateMidi,
   saveProPresenter = () => undefined,
   runProPresenterTest = () => undefined,
   refreshProPresenter = () => undefined,
@@ -484,7 +481,6 @@ export function Dashboard({
   midiError: string | null;
   midiMessage: string | null;
   pendingMidiOperation: "refresh" | "connect" | "disconnect" | null;
-  pendingMidiCue: MidiCueName | null;
   propresenter?: ProPresenterStatusResponse | null;
   propresenterError?: string | null;
   propresenterMessage?: string | null;
@@ -508,7 +504,6 @@ export function Dashboard({
   disconnectPlanningCenter?: () => void;
   refreshMidi: () => void;
   selectMidi: (inputId: string | null) => void;
-  simulateMidi: (cue: MidiCueName) => void;
   saveProPresenter?: (settings: ProPresenterSettingsInput) => void;
   runProPresenterTest?: () => void;
   refreshProPresenter?: () => void;
@@ -1036,9 +1031,7 @@ export function Dashboard({
           onDirtyChange={setPanelDirty}
           onRefresh={refreshMidi}
           onSelect={selectMidi}
-          onSimulate={simulateMidi}
           onSaveSettings={saveMidiSettings}
-          pendingCue={pendingMidiCue}
           pendingOperation={pendingMidiOperation}
           pendingSettingsSave={pendingSettingsOperation}
           settings={settings}

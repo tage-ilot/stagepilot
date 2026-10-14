@@ -26,7 +26,7 @@ const controller = (overrides: Partial<PlaybackController> = {}): PlaybackContro
 });
 const panel = (playback = controller(), extra: { onDirtyChange?: (dirty: boolean) => void } = {}) => render(<MidiSetupPanel
   playback={playback} midi={null} messages={[]} error={null} message={null}
-  pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()}
+  pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()}
   settings={playbackSettings} onSaveSettings={vi.fn()} {...extra}
 />);
 
@@ -418,7 +418,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeEnabled();
   });
 
-  const midiPanel = (playback: PlaybackController, onSaveSettings: (v: never) => unknown) => render(<MidiSetupPanel playback={playback} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={validMidi} onSaveSettings={onSaveSettings as never} />);
+  const midiPanel = (playback: PlaybackController, onSaveSettings: (v: never) => unknown) => render(<MidiSetupPanel playback={playback} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={validMidi} onSaveSettings={onSaveSettings as never} />);
 
   it("a failing selectSource in the MIDI view leaves the MIDI save uncalled", async () => {
     const playback = controller({ selectSource: vi.fn().mockResolvedValue(false) });
@@ -504,7 +504,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
 
   it("opens on the saved alternate method and appends it to the header badge only then", () => {
     const saved = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "real" as const } } };
-    const view = render(<MidiSetupPanel playback={controller({ status: midiStatus() })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={saved} onSaveSettings={vi.fn()} />);
+    const view = render(<MidiSetupPanel playback={controller({ status: midiStatus() })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={saved} onSaveSettings={vi.fn()} />);
     expect(chosen()).toHaveAttribute("value", "real");
     expect(screen.getByLabelText("MIDI channel")).toBeVisible();
     expect(view.container.querySelector("[data-setup-panel-header]")).toHaveTextContent("MIDI · Alternate");
@@ -515,7 +515,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
 
   it("shows the legacy simulation source as a disabled option and still opens on it", () => {
     const sim = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "simulated" as const } } };
-    render(<MidiSetupPanel playback={controller()} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={sim} onSaveSettings={vi.fn()} />);
+    render(<MidiSetupPanel playback={controller()} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={sim} onSaveSettings={vi.fn()} />);
     expect(chosen()).toHaveAttribute("value", "simulated");
     expect(radio("Simulation (legacy)")).toBeDisabled();
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
@@ -848,7 +848,7 @@ describe("outdated scan removes the Planning Center update and asks for a new sc
   it("a fresh scan restores the update action without a restart", () => {
     const view = panel(controller({ status: playbackStatus({ ...measured, stale: true, song_lengths: [] }) }));
     expect(updateButton()).toBeDisabled();
-    view.rerender(<MidiSetupPanel playback={controller({ status: playbackStatus(measured) })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={playbackSettings} onSaveSettings={vi.fn()} />);
+    view.rerender(<MidiSetupPanel playback={controller({ status: playbackStatus(measured) })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={playbackSettings} onSaveSettings={vi.fn()} />);
     expect(screen.queryByText(NOTICE_SETLIST)).not.toBeInTheDocument();
     expect(updateButton()).toBeEnabled();
   });
