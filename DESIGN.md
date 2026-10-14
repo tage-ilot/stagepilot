@@ -78,8 +78,9 @@ colors:
   live-go: "#31551d"           # Start next, Restart current: moves the show forward. Fill on hover/press with light text (7.8:1)
   live-go-soft: "#417227"      # the outline at rest (3.15:1)
   live-go-text: "#69b63e"      # the label at rest (7.2:1)
-  live-back: "#e34e1f"         # Previous: steps the show back. Orange (owner, 2026-10-12). It no longer matches `warning` (that is pure red now, 2026-10-13); it stays orange so it is not mistaken for Stop timer / Reset position, which are rose
-  live-back-text: "#e97753"
+  live-back: "#2d487c"         # Previous: steps the show back. DARK BLUE (owner, 2026-10-13), same lightness as Start next green (OKLCH L 0.41), hue 262; Reload is teal, Stop/Reset rose, so it stays distinct
+  live-back-soft: "#3c61a6"      # the outline at rest
+  live-back-text: "#689cfe"
   live-reload: "#1dc1c7"       # Reload service plan: re-reads the plan, nothing on stage changes. CHANGED to the secondary accent (was blue-700). Hover fill with DARK text (9.1:1)
   live-reload-text: "#77dadd"
   live-stop: "#e11d48"         # Stop timer, Reset position: halts or rewinds the show. CHANGED: hover fill rose-600 (was rose-500, white text only 3.7:1)
@@ -1095,7 +1096,7 @@ identical.
   (Backend, Start), Lighting `#d53367` or the Presentation orange. They are told apart by words
   and icon, not hue: warning is *Connecting*, *Delayed*, *Needs attention*, *Not saved yet*; error
   is *Error* and the failed-action message. Filled destructive buttons use `danger-solid`
-  `#ff0000`, the same red, with white text (4.0:1, bold, label shadow). **Previous** (`live-back` `#e34e1f`) stays orange so it is
+  `#ff0000`, the same red, with white text (4.0:1, bold, label shadow). **Previous** (`live-back` `#2d487c`) is dark blue, the same lightness as Start next's green, so it is
   not mistaken for the red Stop controls.
 
 ## Decided (owner, 2026-10-13): "Current · live" and "Up next" describe the show

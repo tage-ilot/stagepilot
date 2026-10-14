@@ -160,7 +160,7 @@ describe("MidiSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onRefresh, onSelect });
 
-    expect(screen.getByText(/kept between StagePilot launches/i)).toBeInTheDocument();
+    expect(screen.getByText(/Receives song and action cues from Playback to control StagePilot/i)).toBeInTheDocument();
     expect(
       screen.getByText((_, element) => {
         const text = element?.textContent?.replace(/\s+/g, " ").trim();

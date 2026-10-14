@@ -1187,7 +1187,7 @@ describe("Dashboard widget layout", () => {
       // Pressed state comes from tokens; no raw white text on the fill (checked here, never pressed in capture).
       // A disabled live control (no current song) drops hover/press styling by design.
       if (!(button as HTMLButtonElement).disabled) {
-        expect(button.className).toContain(tone === "go" ? "active:text-ink" : tone === "back" ? "active:text-on-light" : tone === "reload" ? "active:text-on-info" : "active:text-on-danger");
+        expect(button.className).toContain(tone === "go" ? "active:text-ink" : tone === "back" ? "active:text-ink" : tone === "reload" ? "active:text-on-info" : "active:text-on-danger");
       }
       expect(button.className).not.toMatch(/hover:text-white|slate-|rose-|emerald-/);
     }
@@ -1430,7 +1430,7 @@ describe("Dashboard connection configuration panels", () => {
       }),
     });
 
-    expect(screen.getByText("Timer stopped")).toBeInTheDocument();
+    expect(screen.queryByText(/^Timer /)).not.toBeInTheDocument();
     expect(screen.getByText("05:00")).toBeInTheDocument();
     expect(screen.queryByText(/paused/i)).not.toBeInTheDocument();
   });

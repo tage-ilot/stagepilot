@@ -1150,7 +1150,6 @@ export function Dashboard({
           <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
               <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing</p>
-              <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success-soft/20 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
             <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.playing_song?.id ?? "idle"}>{state.playing_song?.title ?? "Waiting for first cue"}</h2>
             <div className="mt-2 flex items-end justify-between gap-5">

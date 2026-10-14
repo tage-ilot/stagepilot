@@ -77,10 +77,10 @@ describe("warning and error are the same pure red #ff0000 (owner 2026-10-13)", (
     expect(hex("warning-text")).toBe(hex("danger-text"));
   });
 
-  it("the Previous control stays orange so it is not mistaken for the Stop controls", () => {
+  it("the Previous control is dark blue so it is not mistaken for the Stop controls", () => {
     const css = readFileSync(`${process.cwd()}/src/design-tokens.css`, "utf8");
     const hex = (name: string) => css.match(new RegExp(`--ds-${name}: (#[0-9a-f]{6});`))?.[1];
-    expect(hex("live-back")).toBe("#e34e1f");
+    expect(hex("live-back")).toBe("#2d487c");
     expect(hex("live-back")).not.toBe(hex("warning"));
     expect(hex("live-back")).not.toBe(hex("live-stop"));
   });

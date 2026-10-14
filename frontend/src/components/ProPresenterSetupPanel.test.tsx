@@ -226,13 +226,13 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("3");
   });
 
-  it("shows the anatomy copy: kicker, Presentation title, one sentence, General configuration heading and a visible Look label", () => {
+  it("shows the anatomy copy: kicker, Presentation title, one sentence and a visible Look label", () => {
     render(
       <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={status} />,
     );
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Presentation" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "General configuration" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "General configuration" })).not.toBeInTheDocument();
     const look = screen.getByRole("combobox", { name: "ProPresenter Look" });
     expect(document.querySelector(`label[for="${look.id}"]`)).toHaveTextContent(/^ProPresenter Look$/);
   });

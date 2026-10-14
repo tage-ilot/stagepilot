@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SectionLabel } from "./ui/SectionLabel";
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import { openExternalUrl } from "../desktop";
 import type {
@@ -306,14 +305,13 @@ export function PlanningCenterSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close Services configuration"
-        description="Sign in with Planning Center, or manage a manual connection, to keep the Service plan updated."
+        description="Sign in with Planning Center and manage the Service plan."
         headingId="planning-center-setup-heading"
         onClose={onClose}
         status={status?.connection_status ?? state.planning_center_status}
         title="Services"
       />
 
-      <SectionLabel>General configuration</SectionLabel>
 
       {oauthNeedsReconnect && (
         <InlineAlert className="mt-4 px-4 py-3" tone="warning">
@@ -481,11 +479,11 @@ export function PlanningCenterSetupPanel({
         )}
       </Disclosure>
 
-      <div className="mt-5 border-t border-edge-subtle pt-4">
+      <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted">
           Service plan configuration
         </h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="service-plan-fields mt-4 grid gap-4">
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
             <Select
               disabled={busy || serviceTypes.length === 0}

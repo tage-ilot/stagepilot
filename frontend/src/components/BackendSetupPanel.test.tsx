@@ -307,12 +307,12 @@ describe("Copy Log", () => {
 });
 
 describe("StagePilot panel sections", () => {
-  it("shows Status, General configuration, People as headings, then Advanced as a collapsed row", async () => {
+  it("shows Status and People as headings (General configuration heading removed), then Advanced as a collapsed row", async () => {
     renderPanel();
     await screen.findByRole("checkbox", {name: /Remote Access/});
     const names = screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent);
     // Advanced is a collapsed row (a button with a summary), the guide's layout, so it is not a heading.
-    expect(names).toEqual(["Status", "General configuration", "People"]);
+    expect(names).toEqual(["Status", "People"]);
     expect(screen.getByRole("button", {name: /^Advanced/})).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -321,7 +321,7 @@ describe("StagePilot panel sections", () => {
     await screen.findByRole("checkbox", {name: /Remote Access/});
     const section = (name: string) => name === "Advanced"
       ? screen.getByRole("button", {name: /^Advanced/})
-      : screen.getByRole("heading", {name});
+      : screen.getByRole("heading", {name: name === "General configuration" ? "Status" : name});
     const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(after(section("General configuration"), screen.getByLabelText("Timezone"))).toBe(true);
     expect(after(section("General configuration"), screen.getByLabelText("Network access"))).toBe(true);

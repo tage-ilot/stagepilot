@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SectionLabel } from "./ui/SectionLabel";
 import type {
   ProPresenterSettingsInput,
   ProPresenterStatusResponse,
@@ -168,7 +167,6 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      <SectionLabel>General configuration</SectionLabel>
       <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field error={errHost} heldChange={held.host} label="Host">
           <Input
