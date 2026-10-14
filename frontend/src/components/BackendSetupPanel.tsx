@@ -293,14 +293,6 @@ export function BackendSetupPanel({
     setAutoSavedAt(null);
     onSave(parsedSettings);
   };
-  const connectionStatuses = [
-    state.planning_center_status, state.midi_status, state.propresenter_status, state.lights_status,
-    live ? "connected" : "disconnected",
-  ];
-  const connectedCount = connectionStatuses.filter((value) => value === "connected").length;
-  const runningSince = health?.started_at
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(health.started_at))
-    : null;
   const connectionStatus = live
     ? "connected"
     : state.application_status === "error" ? "error" : "disconnected";
@@ -315,7 +307,7 @@ export function BackendSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close StagePilot configuration"
-        description="Shows the runtime identity, local API endpoints and WebSocket state for this session."
+        kicker="Backend configuration"
         headingId="backend-setup-heading"
         onClose={onClose}
         status={connectionStatus}
@@ -323,41 +315,29 @@ export function BackendSetupPanel({
       />
 
       <SectionLabel>Status</SectionLabel>
-      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+      <div className="backend-status-wrap">
+      <dl className="backend-status mt-3 grid gap-3 text-sm">
         <div className={factCard}>
           <dt className={factLabel}>Version</dt>
           <dd className="mt-1 font-semibold text-ink">{health ? health.version : "Loading"}</dd>
         </div>
         <div className={factCard}>
-          <dt className={factLabel}>Running since</dt>
-          <dd className="mt-1 font-semibold tabular-nums text-ink">{runningSince ?? "Not reported"}</dd>
+          <dt className={factLabel}>API endpoint</dt>
+          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
         </div>
         <div className={factCard}>
-          <dt className={factLabel}>Connections</dt>
-          <dd className="mt-1 font-semibold text-ink">
-            {connectedCount} of {connectionStatuses.length} connected
+          <dt className={factLabel}>WebSocket</dt>
+          <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
+            {live ? "Connected" : "Not connected"}
           </dd>
+          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
+        </div>
+        <div className={factCard}>
+          <dt className={factLabel}>State revision</dt>
+          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
         </div>
       </dl>
-      <Disclosure className="mt-3" title="Connection details" variant="activity">
-        <dl className="grid gap-3 text-sm sm:grid-cols-3">
-          <div>
-            <dt className={factLabel}>API endpoint</dt>
-            <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
-          </div>
-          <div>
-            <dt className={factLabel}>WebSocket</dt>
-            <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
-              {live ? "Connected" : "Not connected"}
-            </dd>
-            <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
-          </div>
-          <div>
-            <dt className={factLabel}>State revision</dt>
-            <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
-          </div>
-        </dl>
-      </Disclosure>
+      </div>
 
       <div className="mt-3 space-y-4">
         <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
