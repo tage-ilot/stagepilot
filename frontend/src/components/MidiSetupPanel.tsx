@@ -225,9 +225,7 @@ export function MidiSetupPanel({
         <div className="mb-4 rounded-ds-lg bg-integration-playback-soft/10 p-3">
           <p className="text-sm font-semibold text-integration-playback-text">Playback song velocities</p>
           <p className="mt-1 text-xs text-ink-body">
-            Use the fixed note above and set each song-start cue's velocity to its
-            one-based position in this service plan. Velocities 1–99 start that exact
-            song; 100–127 remain reserved for action cues.
+            Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
           </p>
           {songs.length > 0 ? (
             <>
@@ -373,7 +371,7 @@ export function MidiSetupPanel({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">Cue test</p>
-              <p className="mt-1 text-xs text-ink-muted">Uses the same fixed-note and velocity action path as hardware input.</p>
+              <p className="mt-1 text-xs text-ink-muted">Update the fixed-note and velocity actions or leave them as defaults</p>
             </div>
             <span className="rounded-ds-full bg-integration-playback-soft/10 px-2.5 py-1 text-xs font-bold tabular-nums text-integration-playback-text">
               Channel {midi?.channel ?? "—"} · Note {midi ? `${midiNoteName(midi.note)} (${midi.note})` : "—"}
