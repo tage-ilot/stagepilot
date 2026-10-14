@@ -1,6 +1,8 @@
 import type { ConnectionStatus } from "../types";
 import { Badge, StatusBadge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import { accentClasses, useAccent } from "./ui/accent";
+import { cx } from "./ui/cx";
 import { connectionWord } from "./ui/statusWord";
 
 type SetupPanelStatus = ConnectionStatus | "loading";
@@ -23,6 +25,7 @@ export function SetupPanelHeader({
   /** Extra badge after the status word, e.g. the saved alternate connection method. */
   statusDetail?: string;
 }) {
+  const accent = useAccent();
   // Text and close share row one; below 480px the badge drops to row two, above it sits between them.
   return (
     <div
@@ -30,13 +33,13 @@ export function SetupPanelHeader({
       data-setup-panel-header
     >
       <div className="col-start-1 row-start-1 min-w-0">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-ink-muted">
+        <p className="font-type-kicker text-type-kicker uppercase text-ink-muted">
           Connection configuration
         </p>
-        <h2 className="mt-1 text-lg font-semibold text-ink" id={headingId}>
+        <h2 className={cx("mt-1 text-xl font-bold", accent ? accentClasses[accent].title : "text-ink")} id={headingId}>
           {title}
         </h2>
-        <p className="mt-1 max-w-3xl text-sm text-ink-muted">{description}</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p>
       </div>
       {statusDetail ? (
         <div

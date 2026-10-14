@@ -86,7 +86,7 @@ describe("Disclosure", () => {
   it("renders a tabular-nums count badge for activity and pluralises", () => {
     const { rerender } = render(<Disclosure variant="activity" title="Recent activity" count={12}>x</Disclosure>);
     const badge = screen.getByText("12 events");
-    expect(badge).toHaveClass("tabular-nums", "bg-info/15", "text-info-text", "border-info/30");
+    expect(badge).toHaveClass("tabular-nums", "bg-ink-muted/15", "text-ink-body", "border-transparent");
     rerender(<Disclosure variant="activity" title="Recent activity" count={1}>x</Disclosure>);
     expect(screen.getByText("1 event")).toBeInTheDocument();
     rerender(<Disclosure variant="advanced" tone="services" title="Advanced" count={3}>x</Disclosure>);
@@ -103,7 +103,9 @@ describe("Disclosure", () => {
     const rule = document.querySelector("[data-part='rule']");
     expect(rule).toHaveClass("border-t", "border-dashed", "border-edge-subtle");
     expect(document.querySelector("[data-part='bar']")).toBeNull();
-    expect(screen.getByRole("button")).toHaveClass("text-ink-muted", "border-edge-subtle");
+    // The Activity row is flat like the style guide: no fill, no box, a dashed rule above it.
+    expect(screen.getByRole("button")).toHaveClass("text-ink-body", "border-transparent", "bg-transparent");
+    expect(document.querySelector("[data-variant='activity']")).toHaveClass("border-t", "border-dashed");
     expect(screen.getByRole("button").className).not.toMatch(/advanced-/);
     expect(document.querySelector("[data-variant='activity']")).not.toHaveAttribute("data-tone");
   });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { SectionLabel } from "./ui/SectionLabel";
 import { apiOrigin, websocketUrl } from "../api";
 import { copyDiagnosticsLog, sendDiagnosticsBundle } from "../diagnostics";
 import { useRemoteAccess } from "../hooks/useRemoteAccess";
@@ -143,6 +144,10 @@ function HeldMarker() {
     </span>
   );
 }
+
+// Status facts are small bordered cards, like the style guide (a recessed well on the panel).
+const factCard = "rounded-ds-lg border border-edge-subtle bg-surface-950/40 px-3 py-2.5";
+const factLabel = "font-type-kicker text-type-kicker uppercase text-ink-muted";
 
 export function BackendSetupPanel({
   state,
@@ -294,30 +299,30 @@ export function BackendSetupPanel({
         title="StagePilot"
       />
 
-      <h3 className="mt-5 font-semibold text-ink">Status</h3>
-      <dl className="mt-3 grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">API endpoint</dt>
+      <SectionLabel>Status</SectionLabel>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <div className={factCard}>
+          <dt className={factLabel}>API endpoint</dt>
           <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">WebSocket</dt>
+        <div className={factCard}>
+          <dt className={factLabel}>WebSocket</dt>
           <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
             {live ? "Connected" : "Not connected"}
           </dd>
           <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Backend version</dt>
-          <dd className="mt-1 text-ink">{health ? `v${health.version}` : "Loading"}</dd>
+        <div className={factCard}>
+          <dt className={factLabel}>Backend version</dt>
+          <dd className="mt-1 font-semibold text-ink">{health ? `v${health.version}` : "Loading"}</dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">State revision</dt>
-          <dd className="mt-1 tabular-nums text-ink">{state.revision}</dd>
+        <div className={factCard}>
+          <dt className={factLabel}>State revision</dt>
+          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
         </div>
       </dl>
 
-      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">General configuration</h3>
+      <SectionLabel>General configuration</SectionLabel>
       <div className="mt-3 grid gap-x-4 gap-y-4 lg:grid-cols-3">
         <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
           <Input
@@ -385,7 +390,7 @@ export function BackendSetupPanel({
         </div>
       </div>
 
-      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">People</h3>
+      <SectionLabel>People</SectionLabel>
       <div className="mt-3 space-y-4">
         <label className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 text-sm text-ink-body">
           <input
@@ -413,7 +418,7 @@ export function BackendSetupPanel({
         {remote.panelOpen && <RemoteAccessPanel control={remote} />}
       </div>
 
-      <h3 className="mt-5 border-t border-edge-subtle pt-4 font-semibold text-ink">Advanced</h3>
+      <SectionLabel>Advanced</SectionLabel>
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
         <Field error={errPort} heldChange={heldPort} label="Server port">
           <Input

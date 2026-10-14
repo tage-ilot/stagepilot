@@ -93,6 +93,16 @@ describe("Status section", () => {
     expect(screen.queryByText(/connection health/i)).not.toBeInTheDocument();
     expect(screen.queryByText("No connections reported.")).not.toBeInTheDocument();
   });
+
+  it("draws each fact as a small bordered card, like the style guide, under a kicker-style heading", () => {
+    renderPanel();
+    expect(screen.getByRole("heading", { level: 3, name: "Status" })).toHaveClass("uppercase", "text-ink-muted");
+    for (const label of ["API endpoint", "WebSocket", "Backend version", "State revision"]) {
+      const card = screen.getByText(label).parentElement!;
+      expect(card).toHaveClass("rounded-ds-lg", "border", "border-edge-subtle", "bg-surface-950/40");
+      expect(screen.getByText(label)).toHaveClass("uppercase", "text-ink-muted");
+    }
+  });
 });
 
 describe("Remote Access checkbox", () => {
