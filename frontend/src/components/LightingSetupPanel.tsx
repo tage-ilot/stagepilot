@@ -267,9 +267,9 @@ export function LightingSetupPanel({
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
-      <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
-      <div className="mt-3 grid gap-4 lg:grid-cols-4">
-        <Field className="lg:col-span-2" error={errOutput} heldChange={heldOutput} label="MIDI Output to Lighting Controller">
+      <div className="lighting-output mt-4">
+      <div className="lighting-output-fields grid gap-4">
+        <Field error={errOutput} heldChange={heldOutput} label="MIDI Output">
           <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
             <option value="">Choose an output</option>
             {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
@@ -289,17 +289,15 @@ export function LightingSetupPanel({
           <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
         </Field>
       </div>
+      </div>
       <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
-      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
-      <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
-
-      <div className="mt-6 border-t border-edge-subtle pt-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold text-ink">Test cue</h3>
-          <div className="flex items-center gap-2" aria-label="MIDI note display">
+      <div className="mt-5 border-t border-edge-subtle pt-4">
+        <div aria-label="Test cue" className="flex flex-wrap items-end gap-x-4 gap-y-3" role="group">
+          <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
+          <div className="flex items-center gap-2 pb-1.5" aria-label="MIDI note display">
             <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
             <button
               aria-checked={noteDisplayMode === "numeric"}
@@ -316,22 +314,24 @@ export function LightingSetupPanel({
             </button>
             <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
           </div>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
-          <Field label="Test lighting note">
-            <Select aria-label="Test lighting note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+          <div className="min-w-40 flex-1">
+          <Field label="Note">
+            <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
               {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
             </Select>
           </Field>
-          <Field label="Test lighting velocity">
-            <Input aria-label="Test lighting velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+          </div>
+          <div className="w-28">
+          <Field label="Velocity">
+            <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
           </Field>
+          </div>
           <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         </div>
         {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
       </div>
 
-      <div className="mt-6 border-t border-edge-subtle pt-5">
+      <div className="mt-5 border-t border-edge-subtle pt-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field className="min-w-64" label="Song lighting timeline">
             <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
@@ -372,6 +372,9 @@ export function LightingSetupPanel({
           <Button disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</Button>
         </div>
       </div>
+
+      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
+      <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
     </Panel>
   );
 }

@@ -186,11 +186,11 @@ describe("LightingSetupPanel", () => {
     expect(toggle.className).not.toContain("info");
   });
 
-  it("shows its single connection method as a line of text, not a select", () => {
+  it("has no connection-method select and no stray \"Sends cues by MIDI\" line", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
-    expect(screen.getByText("Sends cues by MIDI").tagName).toBe("P");
+    expect(screen.queryByText("Sends cues by MIDI")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Connection method")).not.toBeInTheDocument();
   });
 
@@ -365,9 +365,9 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Test lighting note"), "76");
-    await user.clear(screen.getByLabelText("Test lighting velocity"));
-    await user.type(screen.getByLabelText("Test lighting velocity"), "115");
+    await user.selectOptions(screen.getByLabelText("Note"), "76");
+    await user.clear(screen.getByLabelText("Velocity"));
+    await user.type(screen.getByLabelText("Velocity"), "115");
     await user.click(screen.getByRole("button", { name: "Send test cue" }));
 
     expect(onTest).toHaveBeenCalledWith(76, 115);
@@ -418,7 +418,7 @@ describe("LightingSetupPanel", () => {
       const onTest = vi.fn();
       const user = userEvent.setup();
       render(panel(onTest, settings));
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       const button = screen.getByRole("button", { name: "Send test cue" });
       expect(button).toBeDisabled();
       expect(button).toHaveAccessibleDescription(reason);
@@ -455,7 +455,7 @@ describe("LightingSetupPanel", () => {
       // saved output is missing from the list but still selected: draft equals saved
       expect(screen.getByRole("option", { name: /StagePilot to Lightkey \(currently unavailable\)/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeEnabled();
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
     });
 
@@ -463,13 +463,13 @@ describe("LightingSetupPanel", () => {
       const onTest = vi.fn();
       const user = userEvent.setup();
       const { rerender } = render(panel(onTest, settings));
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       expect(screen.getByRole("button", { name: "Send test cue" })).toBeDisabled();
       rerender(panel(onTest, withSaved("Other MIDI port", 3)));
       const button = screen.getByRole("button", { name: "Send test cue" });
       expect(button).toBeEnabled();
       expect(button).not.toHaveAttribute("aria-describedby");
-      await user.selectOptions(screen.getByLabelText("Test lighting note"), "76");
+      await user.selectOptions(screen.getByLabelText("Note"), "76");
       await user.click(button);
       expect(onTest).toHaveBeenCalledWith(76, 127);
     });
@@ -494,7 +494,7 @@ describe("LightingSetupPanel", () => {
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lighting" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "General configuration" })).not.toBeInTheDocument();
-    for (const name of ["Test lighting note", "Test lighting velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
+    for (const name of ["Note", "Velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
       const control = screen.getByLabelText(name);
       const visible = document.querySelector(`label[for="${control.id}"]`);
       expect(visible, name).not.toBeNull();
@@ -541,7 +541,7 @@ describe("LightingSetupPanel", () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       expect(bar()).toHaveTextContent("1 change waiting. Not saved yet.");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
@@ -606,7 +606,7 @@ describe("LightingSetupPanel", () => {
       const user = userEvent.setup();
       const onSaveSettings = vi.fn();
       render(make({ onSaveSettings }));
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       const payload = onSaveSettings.mock.calls[0]?.[0];
@@ -625,12 +625,12 @@ describe("LightingSetupPanel", () => {
     it("Discard restores the saved output, channel and note length", async () => {
       const user = userEvent.setup();
       render(make());
-      await user.selectOptions(screen.getByLabelText("MIDI Output to Lighting Controller"), "Other MIDI port");
+      await user.selectOptions(screen.getByLabelText("MIDI Output"), "Other MIDI port");
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       await user.clear(screen.getByLabelText("Note length (ms)"));
       await user.type(screen.getByLabelText("Note length (ms)"), "250");
       await user.click(screen.getByRole("button", { name: "Discard" }));
-      expect(screen.getByLabelText("MIDI Output to Lighting Controller")).toHaveValue("StagePilot to Lightkey");
+      expect(screen.getByLabelText("MIDI Output")).toHaveValue("StagePilot to Lightkey");
       expect(screen.getByLabelText("MIDI channel")).toHaveValue("3");
       expect(screen.getByLabelText("Note length (ms)")).toHaveValue(100);
       expect(bar()).toHaveAttribute("data-state", "clean");
@@ -697,7 +697,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
 
   // Held controls: class (a). Every one must be marked, counted, restored by Discard, drive the dirty flag, and not save on change/blur.
   const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
-    { label: "MIDI Output to Lighting Controller", value: "Other output", saved: "StagePilot to Lightkey", payload: { output_name: "Other output" } },
+    { label: "MIDI Output", value: "Other output", saved: "StagePilot to Lightkey", payload: { output_name: "Other output" } },
     { label: "MIDI channel", value: "5", saved: "3", payload: { channel: 5 } },
     { label: "Note length (ms)", value: "250", saved: "100", payload: { pulse_ms: 250 } },
   ];
@@ -747,7 +747,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send test cue" }));
     expect(onTest).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("switch"));
-    fireEvent.change(screen.getByLabelText("Test lighting velocity"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Velocity"), { target: { value: "100" } });
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
     expect(bar()).toHaveAttribute("data-state", "clean");
   });
@@ -757,7 +757,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
     mount({ onTest });
     const cueTest = screen.getAllByRole("button", { name: "Test" })[0]!;
     expect(cueTest).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("MIDI Output to Lighting Controller"), { target: { value: "Other output" } });
+    fireEvent.change(screen.getByLabelText("MIDI Output"), { target: { value: "Other output" } });
     expect(cueTest).toBeDisabled();
     expect(cueTest).toHaveAttribute("aria-describedby", screen.getByRole("button", { name: "Send test cue" }).getAttribute("aria-describedby"));
     fireEvent.click(cueTest);

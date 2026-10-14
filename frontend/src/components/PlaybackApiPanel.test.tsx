@@ -329,7 +329,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
   const group = () => screen.getByRole("radiogroup", { name: "Connection method" });
   // A radio's accessible name is its label text, so a screen reader hears "Playback API Primary".
   const radio = (name: string) => within(group()).getByRole("radio", { name: new RegExp(`^${name.replace(/[()]/g, "\\$&")}`) });
-  const names = { playback_api: "Playback API", real: "MIDI", simulated: "Simulation (legacy)" } as const;
+  const names = { playback_api: "Playback API", real: "MIDI" } as const;
   const chosen = () => within(group()).getAllByRole("radio").find((r) => (r as HTMLInputElement).checked) as HTMLInputElement;
   const chooseMethod = async (user: ReturnType<typeof userEvent.setup>, value: keyof typeof names) => { await user.click(radio(names[value])); };
 
@@ -513,11 +513,12 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(document.querySelector("[data-setup-panel-header]")).not.toHaveTextContent("alternate");
   });
 
-  it("shows the legacy simulation source as a disabled option and still opens on it", () => {
+  it("an install saved with the old simulated source opens on Playback API and offers no Simulation option", () => {
     const sim = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "simulated" as const } } };
     render(<MidiSetupPanel playback={controller()} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={sim} onSaveSettings={vi.fn()} />);
-    expect(chosen()).toHaveAttribute("value", "simulated");
-    expect(radio("Simulation (legacy)")).toBeDisabled();
+    expect(chosen()).toHaveAttribute("value", "playback_api");
+    expect(screen.queryByText(/Simulation/)).not.toBeInTheDocument();
+    expect(within(group()).getAllByRole("radio")).toHaveLength(2);
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
   });
 });

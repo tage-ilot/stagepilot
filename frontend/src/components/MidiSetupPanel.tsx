@@ -87,7 +87,9 @@ export function MidiSetupPanel({
   songs?: Song[];
   playback?: PlaybackController;
 }) {
-  const savedMethod: PlaybackMethod = settings?.settings.integration_modes.midi_source ?? "playback_api";
+  // An install saved with the old simulated MIDI source opens on Playback API; the option no longer exists.
+  const rawMethod = settings?.settings.integration_modes.midi_source;
+  const savedMethod: PlaybackMethod = rawMethod === "real" ? "real" : "playback_api";
   const draft = usePlaybackDraft(playback, savedMethod);
   const [candidateId, setCandidateId] = useState("");
   const [channel, setChannel] = useState("1");
@@ -203,11 +205,10 @@ export function MidiSetupPanel({
       <ConnectionMethod
         disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
         heldChange={draft.methodDirty}
-        onChange={(value) => draft.setMethod(value === "real" ? "real" : value === "simulated" ? "simulated" : "playback_api")}
+        onChange={(value) => draft.setMethod(value === "real" ? "real" : "playback_api")}
         options={[
           { value: "playback_api", label: "Playback API", role: "primary" },
           { value: "real", label: "MIDI", role: "alternate" },
-          ...(savedMethod === "simulated" ? [{ value: "simulated", label: "Simulation (legacy)", role: "alternate" as const, disabled: true }] : []),
         ]}
         value={draft.method}
       />
