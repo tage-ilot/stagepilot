@@ -57,9 +57,6 @@ beforeEach(() => {
   vi.mocked(desktop.setRemoteAutostart).mockResolvedValue();
 });
 
-const health = {status: "healthy", version: "1.1.104-beta.36", application_status: "running", plugins: []} as unknown as NonNullable<React.ComponentProps<typeof BackendSetupPanel>["health"]>;
-const baseState = state;
-
 const saved = {
   timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false,
   web_dashboard_pin_enabled: true, release_channel: "BETA",
@@ -84,25 +81,29 @@ function renderPanel(props: Partial<React.ComponentProps<typeof BackendSetupPane
 }
 
 describe("Status section", () => {
-  // The old "Connection health" block (per-connection name/status/version list) was removed on
-  // purpose: the five status cards already show each connection. Keep Status to identity and endpoints.
-  it("shows Version, Running since and Connections as cards; the endpoints sit one row down", () => {
+  // Status is four boxes: Version, API endpoint, WebSocket and State revision (owner, 2026-10-14). Running since,
+  // Connections and the collapsed Connection details row are gone.
+  it("shows Version, API endpoint, WebSocket and State revision as the four status boxes", () => {
     renderPanel();
     expect(screen.getByText("Status")).toBeInTheDocument();
-    for (const label of ["Version", "Running since", "Connections"]) expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByText(/\d of 5 connected/)).toBeInTheDocument();
-    // The endpoints and revision moved into a collapsed "Connection details" row (Activity look).
-    const details = screen.getByRole("button", {name: /Connection details/});
-    expect(details).toHaveAttribute("aria-expanded", "false");
-    for (const label of ["API endpoint", "WebSocket", "State revision"]) expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.queryByText(/connection health/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("No connections reported.")).not.toBeInTheDocument();
+    for (const label of ["Version", "API endpoint", "WebSocket", "State revision"]) expect(screen.getByText(label)).toBeInTheDocument();
+    for (const gone of ["Running since", "Connections", "Connection details"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: /Connection details/})).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d of 5 connected/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".backend-status > div")).toHaveLength(4);
   });
 
-  it("draws the three facts as small bordered cards, like the style guide, under a kicker-style heading", () => {
+  it("says Backend configuration above the title and drops the runtime-identity sentence", () => {
+    renderPanel();
+    expect(screen.getByText("Backend configuration")).toBeInTheDocument();
+    expect(screen.queryByText("Connection configuration")).not.toBeInTheDocument();
+    expect(screen.queryByText(/runtime identity/i)).not.toBeInTheDocument();
+  });
+
+  it("draws the four facts as small bordered cards, like the style guide, under a kicker-style heading", () => {
     renderPanel();
     expect(screen.getByRole("heading", {level: 3, name: "Status"})).toHaveClass("uppercase", "text-ink-muted");
-    for (const label of ["Version", "Running since", "Connections"]) {
+    for (const label of ["Version", "API endpoint", "WebSocket", "State revision"]) {
       const card = screen.getByText(label).parentElement!;
       expect(card).toHaveClass("rounded-ds-lg", "border", "border-edge-subtle", "bg-surface-950/40");
       expect(screen.getByText(label)).toHaveClass("uppercase", "text-ink-muted");
@@ -115,19 +116,6 @@ describe("Status section", () => {
     expect(options).toContain("UTC");
     expect(options).toContain("Pacific/Chatham");
     expect(new Set(options).size).toBe(options.length);
-  });
-
-  it("says Not reported when an older backend sends no start time, and the time when it does", () => {
-    const {unmount} = renderPanel({health: {...health, started_at: null}});
-    expect(screen.getByText("Running since").parentElement).toHaveTextContent("Not reported");
-    unmount();
-    renderPanel({health: {...health, started_at: "2026-10-14T08:02:00Z"}});
-    expect(screen.getByText("Running since").parentElement!.textContent).toMatch(/\d{1,2}:02/);
-  });
-
-  it("counts connected connections from the live status of each one", () => {
-    renderPanel({state: {...baseState, planning_center_status: "connected", midi_status: "connected", propresenter_status: "disconnected", lights_status: "disconnected"}, live: true});
-    expect(screen.getByText("3 of 5 connected")).toBeInTheDocument();
   });
 });
 

@@ -10,6 +10,7 @@ type SetupPanelStatus = ConnectionStatus | "loading";
 export function SetupPanelHeader({
   title,
   description,
+  kicker,
   status,
   closeLabel,
   headingId,
@@ -17,7 +18,10 @@ export function SetupPanelHeader({
   statusDetail,
 }: {
   title: string;
-  description: string;
+  /** The sentence under the title; omit it to show none. */
+  description?: string;
+  /** The small line above the title. Default: "Connection configuration". */
+  kicker?: string;
   status: SetupPanelStatus;
   closeLabel: string;
   headingId?: string;
@@ -34,12 +38,12 @@ export function SetupPanelHeader({
     >
       <div className="col-start-1 row-start-1 min-w-0">
         <p className="font-type-kicker text-type-kicker uppercase text-ink-muted">
-          Connection configuration
+          {kicker ?? "Connection configuration"}
         </p>
         <h2 className={cx("mt-1 text-xl font-bold", accent ? accentClasses[accent].title : "text-ink")} id={headingId}>
           {title}
         </h2>
-        <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p>
+        {description ? <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p> : null}
       </div>
       {statusDetail ? (
         <div

@@ -294,28 +294,9 @@ export function LightingSetupPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
-      <div className="lighting-test mt-5 border-t border-edge-subtle pt-4">
-        <div aria-label="Test cue" className="lighting-test-row flex flex-wrap items-end gap-x-4 gap-y-3" role="group">
-          <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
-          <div className="w-44 flex-none">
-          <Field label="Note">
-            <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
-              {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-            </Select>
-          </Field>
-          </div>
-          <div className="w-28">
-          <Field label="Velocity">
-            <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-          </Field>
-          </div>
-          <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
-        </div>
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
-      </div>
-
       <div className="mt-5 border-t border-edge-subtle pt-5">
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+        <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
           <Field className="w-full sm:w-80" label="Song lighting timeline">
             <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
@@ -340,7 +321,25 @@ export function LightingSetupPanel({
             <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
           </div>
           <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lighting" variant="tinted">Add Cue</Button>
+          </div>
+          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
+            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
+            <div className="w-28 flex-none">
+              <Field label="Note">
+                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div className="w-28 flex-none">
+              <Field label="Velocity">
+                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+              </Field>
+            </div>
+            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          </div>
         </div>
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         <div className="mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain" data-testid="lighting-cue-list">
