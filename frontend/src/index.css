@@ -822,3 +822,18 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Lighting: MIDI Output, MIDI channel and Note length share one line when the panel is medium wide, otherwise stack (never 2 + 1). */
+.lighting-output {
+  container-type: inline-size;
+}
+
+.lighting-output-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 30rem) {
+  .lighting-output-fields {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
