@@ -40,7 +40,7 @@ export function SetupPanelHeader({
         <p className="font-type-kicker text-type-kicker uppercase text-ink-muted">
           {kicker ?? "Connection configuration"}
         </p>
-        <h2 className={cx("mt-1 text-xl font-bold", accent ? accentClasses[accent].title : "text-ink")} id={headingId}>
+        <h2 className={cx("mt-1 text-xl font-bold", accent ? accentClasses[accent === "midi" ? "playback" : accent].title : "text-ink")} id={headingId}>
           {title}
         </h2>
         {description ? <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p> : null}
@@ -54,7 +54,7 @@ export function SetupPanelHeader({
           data-status-badge
           status={connectionWord[status]}
         />
-          <Badge tone="playback">{statusDetail}</Badge>
+          <Badge tone={accent === "midi" ? "midi" : "playback"}>{statusDetail}</Badge>
         </div>
       ) : (
       <StatusBadge

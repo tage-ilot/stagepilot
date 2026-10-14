@@ -96,6 +96,15 @@ describe("ConnectionMethod (the template for every connection that has more than
     expect(pill()).not.toHaveClass("bg-primary/45");
   });
 
+  it("the label row is as tall as the Not saved yet marker, so the switch does not move when a change is held", () => {
+    const { rerender } = render(<ConnectionMethod onChange={() => {}} options={options} value="api" />);
+    const legend = () => document.querySelector("legend")!;
+    expect(legend()).toHaveClass("min-h-[18px]");
+    rerender(<ConnectionMethod heldChange onChange={() => {}} options={options} value="api" />);
+    expect(legend()).toHaveClass("min-h-[18px]");
+    expect(document.querySelector("[data-held-marker]")).toHaveClass("mt-6");
+  });
+
   it("marks a held change with Not saved yet and a warning border", () => {
     render(<ConnectionMethod heldChange onChange={() => {}} options={options} value="midi" />);
     expect(document.querySelector("[data-held-marker]")).toHaveTextContent("Not saved yet");

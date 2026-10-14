@@ -77,7 +77,8 @@ export function ConnectionMethod<T extends string = string>({
   return (
     <fieldset className={cx("min-w-0", className)} data-connection-method data-state={heldChange ? "held" : "default"} disabled={disabled}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <legend className="mt-6 p-0 font-type-kicker text-type-kicker uppercase text-ink-muted">{label}</legend>
+        {/* min-h matches the 18px "Not saved yet" marker, so the header row (and the switch below it) never moves when that marker appears. */}
+        <legend className="mt-6 min-h-[18px] p-0 font-type-kicker text-type-kicker uppercase text-ink-muted">{label}</legend>
         {heldChange && (
           <span id={heldId} data-held-marker className="mt-6 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text">
             <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />

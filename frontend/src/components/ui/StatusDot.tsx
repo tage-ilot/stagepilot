@@ -15,6 +15,7 @@ const dotTone: Record<Tone, string> = {
   services: "bg-integration-services-soft",
   presentation: "bg-integration-presentation-soft",
   playback: "bg-integration-playback-soft",
+  midi: "bg-integration-playback-midi-soft",
   lighting: "bg-integration-lighting-soft",
   backend: "bg-integration-backend-soft",
   success: "bg-success-soft",
