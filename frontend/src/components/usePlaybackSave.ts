@@ -42,7 +42,7 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
   const knownHost = useRef<{ host: string | null } | null>(null);
 
   const count = (draft.methodDirty ? 1 : 0) + draft.settingsCount + midi.count;
-  const settingsKey = `${draft.enabled}|${draft.autoScan}`;
+  const settingsKey = `${draft.enabled}`;
   const key = `${draft.method}|${settingsKey}|${midi.snapshot}`;
 
   // Scan and Connect save the computer by themselves; the bar then says so, with the time.

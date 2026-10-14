@@ -86,58 +86,83 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
         {status?.scan.state === "scanning" && <p className="mt-1 text-sm tabular-nums opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
       </div>
 
-      <div className="space-y-3">
-        {scanning
-          ? <Button className="w-full sm:w-auto" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
-          : <Button className="w-full sm:w-auto" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
-        {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
-          ? (
-            <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
-              <p className="font-semibold">macOS is blocking StagePilot's local-network access</p>
-              <ol className="mt-2 list-decimal pl-5 space-y-1">
-                <li>Quit StagePilot.</li>
-                <li>Open System Settings &gt; Privacy &amp; Security &gt; Local Network.</li>
-                <li>Turn StagePilot off and on again (if it is not listed, run Scan Network once and click Allow when macOS asks).</li>
-                <li>Reopen StagePilot and scan again.</li>
-              </ol>
-              <div className="mt-2 flex flex-wrap gap-3">
-                <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
-                {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
+      <div className="playback-connect">
+        <div className="playback-connect-grid">
+        <div className="min-w-0 space-y-3">
+          {scanning
+            ? <Button className="w-full sm:w-auto" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
+            : <Button className="w-full sm:w-auto" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
+          {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
+            ? (
+              <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
+                <p className="font-semibold">macOS is blocking StagePilot's local-network access</p>
+                <ol className="mt-2 list-decimal pl-5 space-y-1">
+                  <li>Quit StagePilot.</li>
+                  <li>Open System Settings &gt; Privacy &amp; Security &gt; Local Network.</li>
+                  <li>Turn StagePilot off and on again (if it is not listed, run Scan Network once and click Allow when macOS asks).</li>
+                  <li>Reopen StagePilot and scan again.</li>
+                </ol>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
+                  {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
+                  {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
+                </div>
+              </InlineAlert>
+            )
+            : scan.error_class
+            ? (
+              <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
+                <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't scan the network"}</p>
+                <p className="mt-1">{scan.reason}</p>
+                <p className="mt-1 text-xs text-ink-muted">{scanSummary(scan)}</p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {scan.settings_url && <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
+                  {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
+                  {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
+                </div>
+              </InlineAlert>
+            )
+            : (
+              <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
+                <p className="font-semibold">Couldn't find Playback</p>
+                <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
+                {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
+                <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>
               </div>
-            </InlineAlert>
-          )
-          : scan.error_class
-          ? (
-            <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
-              <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't scan the network"}</p>
-              <p className="mt-1">{scan.reason}</p>
-              <p className="mt-1 text-xs text-ink-muted">{scanSummary(scan)}</p>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {scan.settings_url && <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
-                {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
-              </div>
-            </InlineAlert>
-          )
-          : (
-            <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
-              <p className="font-semibold">Couldn't find Playback</p>
-              <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
-              {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
-              <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>
+            ))}
+          {scan?.state === "found" && scan.candidates.length > 1 && !scanning && (
+            <div className="rounded-ds-lg bg-edge-subtle p-3" role="group" aria-label="Choose which Playback">
+              <p className="text-sm font-semibold text-ink">Choose which Playback</p>
+              <ul className="mt-2 grid gap-2">{scan.candidates.map((candidate) => (
+                <li key={candidate.host}><Button className="w-full justify-start text-left" onClick={() => playback?.scan(candidate.host)} tone="playback" variant="tinted">{candidate.name} <span className="ml-1.5 text-xs text-ink-muted">{candidate.host}</span></Button></li>
+              ))}</ul>
             </div>
-          ))}
-        {scan?.state === "found" && scan.candidates.length > 1 && !scanning && (
-          <div className="rounded-ds-lg bg-edge-subtle p-3" role="group" aria-label="Choose which Playback">
-            <p className="text-sm font-semibold text-ink">Choose which Playback</p>
-            <ul className="mt-2 grid gap-2">{scan.candidates.map((candidate) => (
-              <li key={candidate.host}><Button className="w-full justify-start text-left" onClick={() => playback?.scan(candidate.host)} tone="playback" variant="tinted">{candidate.name} <span className="ml-1.5 text-xs text-ink-muted">{candidate.host}</span></Button></li>
-            ))}</ul>
-          </div>
-        )}
-        {playback?.error && <p role="alert" className="text-sm text-danger-text">{playback.error}</p>}
-        {playback?.message && <p role="status" className="text-sm text-integration-playback-text">{playback.message}</p>}
+          )}
+          {playback?.error && <p role="alert" className="text-sm text-danger-text">{playback.error}</p>}
+          {playback?.message && <p role="status" className="text-sm text-integration-playback-text">{playback.message}</p>}
+        </div>
+
+        <div className="min-w-0 space-y-3">
+          <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
+            <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Playback host">
+              <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer…" onChange={(event) => setChoice(event.target.value)}>
+                {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
+                <option value={OTHER_COMPUTER}>Other computer…</option>
+              </Select>
+            </Field>
+            {other && <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
+              <Input value={host} placeholder="For example, 192.0.2.10…" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
+            </Field>}
+            {choice && <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>}
+            {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
+            {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
+          </form>
+          <HeldRow held={Boolean(draft && status && draft.enabled !== status.settings.enabled)} id="held-enabled">
+            <input className="size-4 accent-integration-playback" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
+            Automatically Connect
+          </HeldRow>
+        </div>
+        </div>
       </div>
 
       {status && (
@@ -174,33 +199,6 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
         }
       />
 
-      <div className="playback-toggles border-t border-edge-subtle pt-4">
-        <div className="playback-toggles-row">
-        <HeldRow held={Boolean(draft && status && draft.enabled !== status.settings.enabled)} id="held-enabled">
-          <input className="size-4 accent-integration-playback" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
-          Automatically Connect
-        </HeldRow>
-        <HeldRow held={Boolean(draft && status && draft.autoScan !== status.settings.auto_scan)} id="held-auto-scan">
-          <input className="size-4 accent-integration-playback" type="checkbox" checked={draft?.autoScan ?? true} disabled={!status || !draft} aria-describedby={draft && status && draft.autoScan !== status.settings.auto_scan ? "held-auto-scan" : undefined} onChange={(event) => draft?.setAutoScan(event.target.checked)} />
-          Playback Network Scan
-        </HeldRow>
-        </div>
-      </div>
-
-      <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
-        <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer">
-          <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer…" onChange={(event) => setChoice(event.target.value)}>
-            {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
-            <option value={OTHER_COMPUTER}>Other computer…</option>
-          </Select>
-        </Field>
-        {other && <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
-          <Input value={host} placeholder="For example, 192.0.2.10…" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
-        </Field>}
-        {choice && <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>}
-        {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
-        {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
-      </form>
 
       <Disclosure title="Recent activity" variant="activity" count={playback?.events.length ?? 0}>
         {!playback?.events.length ? <p className="text-sm text-ink-muted">Nothing yet.</p> : <ul className="max-h-56 overflow-auto overscroll-contain text-sm text-ink-body" aria-label="Recent activity">
