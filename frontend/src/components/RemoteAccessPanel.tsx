@@ -56,6 +56,8 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<RemoteUser["role"]>("Viewer");
   const [edit, setEdit] = useState<RemoteUser | null>(null);
+  // The sign-in form for another person stays folded away until "Add a person" is pressed.
+  const [adding, setAdding] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [regenBusy, setRegenBusy] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
@@ -79,9 +81,9 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       } else if (edit) {
         await updateRemoteUser(edit.id, {password}); setEdit(null);
       } else {
-        await createRemoteUser(email, password, role); setEmail("");
+        await createRemoteUser(email, password, role); setEmail(""); setAdding(false);
       }
-    }, edit?.email === access.user?.email);
+    }, edit?.email === access.user?.email).catch(() => undefined); // run() already shows the error; do not also throw
   };
   const url = status?.state === "connected" ? safeUrl(status.url) : null;
   const operators = users.filter((user) => user.enabled && user.role === "Operator").length;
@@ -170,7 +172,12 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         </li>;
       })}</ul>}
       {operators === 1 && <p className="text-sm text-warning-text">Last Operator protection is active. Add or enable another Operator before changing or deleting the remaining Operator.</p>}
-      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+      {!bootstrap && !edit && !adding && (
+        <div>
+          <Button disabled={busy} onClick={() => setAdding(true)} type="button" variant="tinted">Add a person</Button>
+        </div>
+      )}
+      {(bootstrap || edit || adding) && <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         {!edit && <Field label="Email">
           <Input type="email" autoComplete="off" required maxLength={254} disabled={busy} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>}
@@ -181,8 +188,8 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
           <Select disabled={busy} value={role} onChange={(e) => setRole(e.target.value as RemoteUser["role"])}><option>Viewer</option><option>Operator</option></Select>
         </Field>}
         <Button variant="primary" disabled={busy} type="submit">{bootstrap ? "Create Operator" : edit ? "Save password" : "Add user"}</Button>
-        {edit && <Button variant="secondary" type="button" onClick={() => {setEdit(null); setPassword("");}}>Cancel</Button>}
-      </form>
+        {(edit || adding) && <Button variant="secondary" type="button" onClick={() => {setEdit(null); setAdding(false); setEmail(""); setPassword("");}}>Cancel</Button>}
+      </form>}
     </>}
     {notice && <p role="status" className="text-sm text-integration-backend-text">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
