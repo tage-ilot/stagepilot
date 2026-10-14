@@ -85,7 +85,7 @@ describe("Scan Network is always first and never dead", () => {
 
 describe("Computer select with Other computer…", () => {
   const user = () => userEvent.setup();
-  const computer = () => screen.getByLabelText("Computer");
+  const computer = () => screen.getByLabelText("Playback host");
   const withHosts = (host: string | null, candidates: { name: string; host: string }[] = []) => controller({ status: none({
     scan: scanOf(candidates.length ? "found" : "idle", { candidates }),
     settings: { enabled: true, host, port: 8080, auto_scan: true, fast_transport: true },
@@ -396,7 +396,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
       save: vi.fn(async () => { order.push("save"); return true; }),
     });
     const Host = () => { const draft = usePlaybackDraft(playback, "real"); const save = usePlaybackSave(draft, playback, noMidi); return <>
-      <button onClick={() => { draft.setMethod("playback_api"); draft.setAutoScan(!draft.autoScan); }} type="button">edit</button>
+      <button onClick={() => { draft.setMethod("playback_api"); draft.setEnabled(!draft.enabled); }} type="button">edit</button>
       <button onClick={() => void save.save()} type="button">go</button></>; };
     render(<Host />);
     await userEvent.click(screen.getByRole("button", { name: "edit" }));
@@ -460,13 +460,13 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn(async () => { order.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Playback Network Scan"));
+    await user.click(screen.getByLabelText("Automatically Connect"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("3\u00a0changes waiting. Not saved yet.");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(order).toEqual(["selectSource", "playbackSave", "saveMidi"]);
-    expect(playback.save).toHaveBeenCalledExactlyOnceWith({ ...base.status!.settings, auto_scan: false });
+    expect(playback.save).toHaveBeenCalledExactlyOnceWith({ ...base.status!.settings, enabled: false });
     expect(JSON.stringify((onSaveSettings.mock.calls as unknown as unknown[][])[0]![0])).toBe(JSON.stringify({ ...validMidi.settings.midi, enabled: true, channel: 5, note: validMidi.settings.midi.note, debounce_ms: validMidi.settings.midi.debounce_ms, mappings: validMidi.settings.midi.mappings }));
   });
 
@@ -479,7 +479,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn().mockImplementationOnce(async () => { calls.push("saveMidi"); return false; }).mockImplementation(async () => { calls.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Playback Network Scan"));
+    await user.click(screen.getByLabelText("Automatically Connect"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
@@ -627,11 +627,9 @@ describe("Save configuration bar (Playback)", () => {
     expect(state()).toBe("held");
     expect(statusText()).toBe("1\u00a0change waiting. Not saved yet.");
     expect(toggle()).toHaveAccessibleDescription("Not saved yet");
-    fireEvent.click(screen.getByLabelText("Playback Network Scan"));
-    expect(statusText()).toBe("2\u00a0changes waiting. Not saved yet.");
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(toggle()).toBeChecked();
-    expect(screen.getByLabelText("Playback Network Scan")).toBeChecked();
+    expect(screen.getByLabelText("Automatically Connect")).toBeChecked();
     expect(state()).toBe("clean");
     expect(document.querySelector("[data-held-marker]")).toBeNull();
   });
@@ -675,21 +673,21 @@ describe("Save configuration bar (Playback)", () => {
     expect(state()).toBe("held");
   });
 
-  it("sends every visible setting once, byte-identical to the old Save settings payload (auto-scan)", async () => {
+  it("always sends network scan on and fast transport on, byte-identical to the old payload", async () => {
     const save = vi.fn().mockResolvedValue(true);
     render(<Harness save={save} />);
-    fireEvent.click(screen.getByLabelText(/Playback Network Scan/));
+    expect(screen.queryByLabelText(/Playback Network Scan/)).not.toBeInTheDocument();
+    fireEvent.click(toggle());
     await act(async () => { fireEvent.click(saveButton()); });
-    expect(save).toHaveBeenCalledExactlyOnceWith({ enabled: true, host: null, port: 8080, auto_scan: false, fast_transport: true });
-    expect(JSON.stringify(save.mock.calls[0]![0])).toBe('{"enabled":true,"host":null,"port":8080,"auto_scan":false,"fast_transport":true}');
+    expect(JSON.stringify(save.mock.calls[0]![0])).toBe('{"enabled":false,"host":null,"port":8080,"auto_scan":true,"fast_transport":true}');
   });
 
   it("Discard never saves", () => {
     const save = vi.fn();
     render(<Harness save={save} />);
-    fireEvent.click(screen.getByLabelText(/Playback Network Scan/));
+    fireEvent.click(screen.getByLabelText("Automatically Connect"));
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(screen.getByLabelText(/Playback Network Scan/)).toBeChecked();
+    expect(screen.getByLabelText("Automatically Connect")).toBeChecked();
     expect(save).not.toHaveBeenCalled();
   });
 

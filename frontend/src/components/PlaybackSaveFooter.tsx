@@ -14,9 +14,7 @@ export interface PlaybackDraft {
   /** Writes the chosen method (selectSource) when it differs from the saved one. True when nothing is left to apply. */
   applyMethod: () => Promise<boolean>;
   enabled: boolean;
-  autoScan: boolean;
   setEnabled: (value: boolean) => void;
-  setAutoScan: (value: boolean) => void;
   /** Playback settings (not the method) differ from the saved ones. */
   settingsDirty: boolean;
   /** Number of Playback settings that differ from the saved values. */
@@ -34,24 +32,20 @@ export interface PlaybackDraft {
 export function usePlaybackDraft(playback?: PlaybackController, savedMethod: PlaybackMethod = "playback_api"): PlaybackDraft {
   const status = playback?.status ?? null;
   const savedEnabled = status?.settings.enabled ?? true;
-  const savedAutoScan = status?.settings.auto_scan ?? true;
   const [enabled, setEnabledState] = useState(savedEnabled);
-  const [autoScan, setAutoScanState] = useState(savedAutoScan);
   const [method, setMethodState] = useState<PlaybackMethod>(savedMethod);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => setMethodState(savedMethod), [savedMethod]);
   useEffect(() => setEnabledState(savedEnabled), [savedEnabled]);
-  useEffect(() => setAutoScanState(savedAutoScan), [savedAutoScan]);
 
   const methodDirty = method !== savedMethod;
-  const settingsCount = Number(enabled !== savedEnabled) + Number(autoScan !== savedAutoScan);
+  const settingsCount = Number(enabled !== savedEnabled);
   const settingsDirty = settingsCount > 0;
   const dirty = settingsDirty || methodDirty;
   const setMethod = useCallback((value: PlaybackMethod) => { setError(null); setMethodState(value); }, []);
   const setEnabled = useCallback((value: boolean) => { setError(null); setEnabledState(value); }, []);
-  const setAutoScan = useCallback((value: boolean) => { setError(null); setAutoScanState(value); }, []);
 
   const applyMethod = useCallback(async () => {
     if (!methodDirty || method === "simulated") return true;
@@ -72,22 +66,21 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
     setError(null);
     setSaving(true);
     try {
-      const ok = await playback.save({ ...status.settings, enabled, auto_scan: autoScan, fast_transport: true });
+      const ok = await playback.save({ ...status.settings, enabled, auto_scan: true, fast_transport: true });
       if (!ok) setError("Your configuration was not saved. Your changes are still here; try again.");
       return ok;
     } finally {
       setSaving(false);
     }
-  }, [autoScan, enabled, playback, status]);
+  }, [enabled, playback, status]);
 
   const revert = useCallback(() => {
     setMethodState(savedMethod);
     setEnabledState(savedEnabled);
-    setAutoScanState(savedAutoScan);
     setError(null);
-  }, [savedAutoScan, savedEnabled, savedMethod]);
+  }, [savedEnabled, savedMethod]);
 
-  return { method, methodDirty, setMethod, applyMethod, enabled, autoScan, setEnabled, setAutoScan, settingsDirty, settingsCount, applySettings, dirty, saving, error, revert };
+  return { method, methodDirty, setMethod, applyMethod, enabled, setEnabled, settingsDirty, settingsCount, applySettings, dirty, saving, error, revert };
 }
 
 export function PlaybackSaveBar({ save }: { save: PlaybackSave }) {
