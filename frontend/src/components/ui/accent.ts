@@ -24,6 +24,8 @@ export interface AccentClasses {
   tintedHover: string;
   /** Small readable text. */
   text: string;
+  /** The panel title: the connection colour itself (large bold text needs only 3:1). Backend uses its pale tint. */
+  title: string;
   /** Link hover / pressed text. */
   textHover: string;
   /** A dot. */
@@ -42,6 +44,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     tinted: "border-integration-services-soft/30 bg-integration-services-soft/10 text-integration-services-text",
     tintedHover: "can-hover:bg-integration-services-soft/20",
     text: "text-integration-services-text",
+    title: "text-integration-services-soft",
     textHover: "can-hover:text-integration-services-text",
     dot: "bg-integration-services-soft",
     checkbox: "accent-integration-services",
@@ -53,6 +56,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     tinted: "border-integration-presentation-soft/30 bg-integration-presentation-soft/10 text-integration-presentation-text",
     tintedHover: "can-hover:bg-integration-presentation-soft/20",
     text: "text-integration-presentation-text",
+    title: "text-integration-presentation-soft",
     textHover: "can-hover:text-integration-presentation-text",
     dot: "bg-integration-presentation-soft",
     checkbox: "accent-integration-presentation",
@@ -64,6 +68,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     tinted: "border-integration-playback-soft/30 bg-integration-playback-soft/10 text-integration-playback-text",
     tintedHover: "can-hover:bg-integration-playback-soft/20",
     text: "text-integration-playback-text",
+    title: "text-integration-playback-soft",
     textHover: "can-hover:text-integration-playback-text",
     dot: "bg-integration-playback-soft",
     checkbox: "accent-integration-playback",
@@ -75,6 +80,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     tinted: "border-integration-lighting-soft/30 bg-integration-lighting-soft/10 text-integration-lighting-text",
     tintedHover: "can-hover:bg-integration-lighting-soft/20",
     text: "text-integration-lighting-text",
+    title: "text-integration-lighting-soft",
     textHover: "can-hover:text-integration-lighting-text",
     dot: "bg-integration-lighting-soft",
     checkbox: "accent-integration-lighting",
@@ -86,6 +92,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     tinted: "border-integration-backend-soft/30 bg-integration-backend-soft/10 text-integration-backend-text",
     tintedHover: "can-hover:bg-integration-backend-soft/20",
     text: "text-integration-backend-text",
+    title: "text-integration-backend-text",
     textHover: "can-hover:text-integration-backend-text",
     dot: "bg-integration-backend-soft",
     checkbox: "accent-integration-backend",

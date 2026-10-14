@@ -723,8 +723,8 @@ do three different jobs. Rule: **a row's shape says what kind of thing it is.**
    (`Connected · MIDI`) and a neutral banner explains how to switch back. The
    existing "Playback connection type" select in Advanced is promoted to this.
 2. **Extra options = Advanced:** the one tinted row with a one-line summary.
-3. **Read-only information (Recent activity) = Activity:** neutral grey with a
-   dashed top rule and a teal count badge (`12 events`), no service tone.
+3. **Read-only information (Recent activity) = Activity:** flat and neutral, with a
+   dashed top rule and a neutral grey count pill (`12 events`) (the pill takes the connection colour inside a connection panel), no fill, no box.
 4. **A one-off value (a specific computer address) is a choice in the field it
    belongs to** ("Other computer…" at the end of the computer select), not a
    separate collapsed row.
@@ -756,6 +756,21 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 - Destructive buttons name what is lost (`Delete layout`); the safe option is
   on the left.
 - A control is **disabled with a reason shown nearby**, never silently greyed.
+
+### Panels read like the style guide (decided 2026-10-14)
+The owner preferred the guide's StagePilot and Playback panels to the app's. The app now follows them:
+- **Header:** the kicker `Connection configuration` (11px, 800, uppercase, 0.18em, muted); the **title is
+  larger (20px) and bold, in the connection's own colour** (Services, Presentation, Playback and Lighting
+  use their `-soft` colour, which is 3:1 or more for large bold text; **StagePilot uses its pale `-text`
+  tint**, because its red is the primary red at only 3.2:1); the one-sentence description in body grey.
+- **Section names** (Status, General configuration, People, Advanced, Connection method) are **kickers**:
+  11px, uppercase, tracked, muted, not bold sentences. They are still real headings. One shared
+  `SectionLabel` draws them.
+- **StagePilot Status facts** are **small recessed bordered cards** (`border-subtle`, a 40% darker well,
+  8px radius), four across, each a kicker label over a bold value. This is the one place Status facts
+  are boxed, because each is a separate value to scan.
+- **Recent activity** is **flat**: no box and no fill, a dashed rule above it, a neutral grey count pill
+  (`12 events`). Advanced stays the one tinted, bordered row, so the two still read as different jobs.
 
 ### Configuration panel anatomy (every connection looks the same)
 1. **Header:** kicker `Connection configuration` (muted), title = the

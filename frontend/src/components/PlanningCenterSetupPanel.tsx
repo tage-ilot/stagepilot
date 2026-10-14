@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { SectionLabel } from "./ui/SectionLabel";
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import { openExternalUrl } from "../desktop";
 import type {
@@ -312,7 +313,7 @@ export function PlanningCenterSetupPanel({
         title="Services"
       />
 
-      <h3 className="mt-5 font-semibold text-ink">General configuration</h3>
+      <SectionLabel>General configuration</SectionLabel>
 
       {oauthNeedsReconnect && (
         <InlineAlert className="mt-4 px-4 py-3" tone="warning">

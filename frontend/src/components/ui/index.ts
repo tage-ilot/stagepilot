@@ -10,6 +10,7 @@ export type { InputProps } from "./Input";
 export { Select } from "./Select";
 export type { SelectProps } from "./Select";
 export { Panel } from "./Panel";
+export { SectionLabel } from "./SectionLabel";
 export type { PanelProps, PanelVariant } from "./Panel";
 export { StatusDot } from "./StatusDot";
 export type { StatusDotProps } from "./StatusDot";

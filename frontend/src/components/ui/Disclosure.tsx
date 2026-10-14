@@ -65,7 +65,7 @@ export function Disclosure({
   const palette = advanced ? advancedTone[tone ?? "services"] : undefined;
   // The count badge wears the connection colour inside a connection panel, teal elsewhere.
   const accent = useAccent();
-  const countLook = accent ? accentClasses[accent].tinted : "border-info/30 bg-info/15 text-info-text";
+  const countLook = accent ? accentClasses[accent].tinted : "border-transparent bg-ink-muted/15 text-ink-body";
 
   const toggle = () => {
     if (!controlled) setInner(!open);
@@ -73,7 +73,7 @@ export function Disclosure({
   };
 
   return (
-    <div data-variant={variant} data-tone={advanced ? (tone ?? "services") : undefined} data-state={open ? "open" : "closed"} className={cx("min-w-0", className)} {...rest}>
+    <div data-variant={variant} data-tone={advanced ? (tone ?? "services") : undefined} data-state={open ? "open" : "closed"} className={cx("min-w-0", !advanced && "border-t border-dashed border-edge-subtle pt-2", className)} {...rest}>
       <button
         type="button"
         aria-expanded={open}
@@ -83,7 +83,7 @@ export function Disclosure({
           "flex min-h-ds-touch-target w-full touch-manipulation items-center gap-3 rounded-ds-lg border px-3 text-left font-type-body-md text-sm font-semibold transition-colors motion-reduce:transition-none",
           advanced
             ? cx("border-edge", palette?.row)
-            : "border-edge-subtle bg-surface-900/40 text-ink-muted can-hover:bg-surface-900/70 can-hover:text-ink-body",
+            : "border-transparent bg-transparent px-1 text-ink-body can-hover:bg-surface-900/40 can-hover:text-ink",
         )}
       >
         <svg
