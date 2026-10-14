@@ -359,7 +359,6 @@ export function BackendSetupPanel({
         </dl>
       </Disclosure>
 
-      <SectionLabel>General configuration</SectionLabel>
       <div className="mt-3 space-y-4">
         <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
           <Select disabled={pending} onChange={(event) => setTimezone(event.target.value)} value={timezone}>

@@ -37,7 +37,7 @@ const tinted: Record<Tone, string> = {
 // Rest: transparent on surface-950, light text (label shadow). Go, back and reload flip to dark text on hover/press (on-light, on-info), so the shadow is removed there.
 const live: Record<LiveTone, string> = {
   go: "border-live-go-soft/60 text-live-go-text can-hover:border-live-go-soft can-hover:bg-live-go can-hover:text-ink active:bg-live-go/80 active:text-ink",
-  back: "border-live-back/40 text-live-back-text can-hover:border-live-back/70 can-hover:bg-live-back can-hover:text-on-light can-hover:[text-shadow:none] active:bg-live-back/80 active:text-on-light active:[text-shadow:none]",
+  back: "border-live-back-soft/60 text-live-back-text can-hover:border-live-back-soft can-hover:bg-live-back can-hover:text-ink active:bg-live-back/80 active:text-ink",
   reload: "border-live-reload/50 text-live-reload-text can-hover:border-live-reload/70 can-hover:bg-live-reload can-hover:text-on-info can-hover:[text-shadow:none] active:bg-live-reload/80 active:text-on-info active:[text-shadow:none]",
   stop: "border-live-stop/40 text-live-stop-text can-hover:border-live-stop/70 can-hover:bg-live-stop can-hover:text-on-danger active:bg-live-stop/80 active:text-on-danger",
 };

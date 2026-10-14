@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConnectionMethod } from "./ui/ConnectionMethod";
-import { SectionLabel } from "./ui/SectionLabel";
+import { Disclosure } from "./ui/Disclosure";
 import type {
   MidiCueName,
   MidiInputsResponse,
@@ -196,7 +196,7 @@ export function MidiSetupPanel({
     >
       <SetupPanelHeader
         closeLabel="Close MIDI / Playback configuration"
-        description="Choose how StagePilot receives song and action cues from Playback, kept between StagePilot launches."
+        description="Receives song and action cues from Playback to control StagePilot."
         headingId="midi-setup-heading"
         onClose={onClose}
         status={connectionStatus}
@@ -204,7 +204,6 @@ export function MidiSetupPanel({
         title="Playback"
       />
 
-      <SectionLabel>General configuration</SectionLabel>
       <ConnectionMethod
         disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
         heldChange={draft.methodDirty}
@@ -221,8 +220,8 @@ export function MidiSetupPanel({
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
       <div className="mt-4 rounded-ds-lg bg-integration-playback-soft/5 p-3">
-        <div className="mb-4 rounded-ds-lg bg-integration-playback-soft/10 p-3">
-          <p className="text-sm font-semibold text-integration-playback-text">Playback song velocities</p>
+        <Disclosure className="mb-4" summary="Song order and velocity map" title="Playback song velocities" tone="playback" variant="advanced">
+        <div className="mt-2 rounded-ds-lg bg-integration-playback-soft/10 p-3">
           <p className="mt-1 text-xs text-ink-body">
             Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
           </p>
@@ -248,6 +247,7 @@ export function MidiSetupPanel({
             <p className="mt-2 text-xs text-warning-text">Load a service plan to see its song-to-velocity map.</p>
           )}
         </div>
+        </Disclosure>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field heldChange={midiView && Boolean(savedMidi) && channel !== String(savedMidi!.channel)} label="MIDI channel">
             <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setChannel(event.target.value)} value={channel} />

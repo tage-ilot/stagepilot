@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { SectionLabel } from "./ui/SectionLabel";
 import type {
   ApplicationState,
   LightingCue,
@@ -268,7 +267,6 @@ export function LightingSetupPanel({
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
-      <SectionLabel>General configuration</SectionLabel>
       <p className="mt-2 text-sm text-ink-body">Sends cues by MIDI</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-4">
         <Field className="lg:col-span-2" error={errOutput} heldChange={heldOutput} label="MIDI Output to Lighting Controller">

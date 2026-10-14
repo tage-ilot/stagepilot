@@ -745,3 +745,24 @@ textarea:focus-visible {
   background: var(--ds-card);
   box-shadow: inset 3px 0 0 var(--ds-integration-backend-soft), var(--ds-elevation-default);
 }
+
+/* Service plan configuration: the four fields sit in 1, 2 or 4 columns, never 3 + 1. Driven by the panel's own width. */
+.service-plan-section {
+  container-type: inline-size;
+}
+
+.service-plan-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 28rem) {
+  .service-plan-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 56rem) {
+  .service-plan-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

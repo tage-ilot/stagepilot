@@ -475,7 +475,7 @@ describe("LightingSetupPanel", () => {
     });
   });
 
-  it("shows the kicker, one sentence, a General configuration heading and a visible label equal to each former aria-label-only control", () => {
+  it("shows the kicker, one sentence, a visible label equal to each former aria-label-only control", () => {
     render(
       <LightingSetupPanel
         error={null}
@@ -493,7 +493,7 @@ describe("LightingSetupPanel", () => {
 
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lighting" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "General configuration" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "General configuration" })).not.toBeInTheDocument();
     for (const name of ["Test lighting note", "Test lighting velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
       const control = screen.getByLabelText(name);
       const visible = document.querySelector(`label[for="${control.id}"]`);
