@@ -38,9 +38,9 @@ colors:
   danger: "#ff0000"            # error accent, dots, icons, borders, glows. CHANGED (owner, 2026-10-13): pure red 255,0,0 (was rose-500). As small text on panels it is 4.5:1, so text uses danger-text
   danger-soft: "#ff3b3b"       # hover / lighter edge of the pure red
   danger-text: "#ff4d4d"       # error text on dark panels, 5.4:1 (pure red text would be 4.4:1 on cards)
-  danger-solid: "#ee0000"      # FILLED buttons/badges: pure red darkened 7% so white text is 4.5:1 (on #ff0000 it is only 4.0:1)
+  danger-solid: "#ff0000"      # FILLED buttons/badges ("Error action", Delete): the SAME pure red, owner 2026-10-13. White text on it is 4.0:1 (bold, with the label shadow); dark text would be 5.1:1 but the system keeps white on red fills
   on-danger: "#ffffff"         # light text on the dark red fill
-  on-danger-soft: "#4c0519"    # dark RED (not black) text when a rose fill is light: 8.3:1 on rose-300, 5.8:1 on rose-400
+  on-danger-soft: "#3d0000"    # dark RED (not black) text on the light red fill: 5.0:1 on danger-soft
   info: "#1dc1c7"              # CHANGED (owner, 2026-10-12): the SECONDARY ACCENT replaces sky for information. Informational text, "Up next", the Reload service plan control, info banners. 8.2:1 on panels, so it works as text AND as a fill
   info-text: "#77dadd"         # tint 40%: the accent as small text on dark (11.0:1 on panels). The pure accent is for fills, dots, borders and large glyphs
   info-hover: "#34c7cd"        # tint 10%: hover fill
@@ -425,7 +425,7 @@ that is not a status, a service, or the primary red.
 - **Red now has two jobs, so they are told apart by form (decided default):**
   primary is a *solid fill with white text* or a *rail*; errors are pale
   `danger-text` words with a red dot and icon; destructive confirms use
-  `danger-solid` (red `#ee0000`) with a verb that says what is lost. A
+  `danger-solid` (red `#ff0000`) with a verb that says what is lost. A
   destructive button never uses `primary`, and `primary` never carries an error.
 - **Text on fills (DECIDED rule): light text on dark fills, dark text on light
   fills.** Most of the app is dark, so light text stays the norm.
@@ -434,7 +434,7 @@ that is not a status, a service, or the primary red.
   - The **teal accent fill** `info`: dark text (`on-info`, 9.1:1); white would be 2.2:1.
   - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
   - Dark red fill (`danger-solid` `#e11d48`, 4.7:1 with white): white text
-    (`on-danger`); rose-500 was too light for that (3.7:1).
+    (`on-danger`); it is the same pure red as the error colour (4.0:1).
   - Where an **error** colour needs dark text (a light red fill such as
     red-300/400), use dark **red** `on-danger-soft` `#4c0519`, never black.
   - **Minimum 4.5:1** for any text, and this file is linted for it.
@@ -493,8 +493,7 @@ that is not a status, a service, or the primary red.
   (Previous: steps back), **teal accent** (Reload service plan: nothing on stage changes),
   **red** (Stop timer, Reset position: halts or rewinds). They are outlined
   at rest and fill on hover, with dark text on green and orange fills, white
-  on blue and red. The red hover fill is darkened one step (rose-600,
-  4.7:1) because rose-500 with white text was 3.7:1. These do not follow the
+  on blue and red. The red hover fill is the pure red (4.0:1 with white). These do not follow the
   primary-only rule on purpose: they are a severity scale, not "actions".
 - **Widget borders (decided: three)** are white at 6/10/18% opacity so they sit right on any
   surface. `border` (10%) is the default. The old 5% and 7% merged into `border-subtle`; the old 15% and 20% (the least used) merged into `border-medium`.
@@ -643,7 +642,7 @@ add noise without adding hierarchy.
 - **Dialogs:** `fixed inset-0`, `scrim`, centred `surface-950` card, 12px
   radius, `elevation.overlay`. Actions are 44px.
 - **Toasts:** fixed bottom corner (left = global error, right = crash-loop),
-  16px radius, rose border, `elevation.overlay`.
+  16px radius, red border, `elevation.overlay`.
 - **Focus:** 2px `primary-focus` outline, 3px offset, global
   (`:focus-visible`). Never remove.
 - **Icons:** no icon library; service icons are PNGs in `assets/`.
@@ -1046,7 +1045,7 @@ identical.
   is a *thin icon-tile tint and a 1px top border*, never a rail or a wash. A
   StagePilot panel keeps its single solid primary button (`Save configuration`),
   which is the same red as its tint; that is by design.
-- **Lighting `#d53367` is next to the error red (`danger-solid` `#ee0000`,
+- **Lighting `#d53367` is next to the error red (`danger-solid` `#ff0000`,
   1.01) and close to the primary red (1.22).** Rule: Lighting is *tint and dot*
   only. Error is always `danger-text` words with a red dot and an icon;
   `Stop timer`/`Reset position` stay rose-coloured live controls (a different red from the error red). A Lighting card in an
@@ -1067,7 +1066,7 @@ identical.
   (Backend, Start), Lighting `#d53367` or the Presentation orange. They are told apart by words
   and icon, not hue: warning is *Connecting*, *Delayed*, *Needs attention*, *Not saved yet*; error
   is *Error* and the failed-action message. Filled destructive buttons use `danger-solid`
-  `#ee0000` so white text keeps 4.5:1. **Previous** (`live-back` `#e34e1f`) stays orange so it is
+  `#ff0000`, the same red, with white text (4.0:1, bold, label shadow). **Previous** (`live-back` `#e34e1f`) stays orange so it is
   not mistaken for the red Stop controls.
 
 ## Decided (owner, 2026-10-13): "Current · live" and "Up next" describe the show

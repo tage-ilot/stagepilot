@@ -7,7 +7,7 @@ export type ToastTone = "danger" | "warning";
 export type ToastSide = "left" | "right";
 
 export interface ToastProps {
-  /** Default danger (rose border). */
+  /** Default danger (red border). */
   tone?: ToastTone;
   /** DESIGN.md Toasts: left = global error, right = crash-loop. */
   side: ToastSide;
