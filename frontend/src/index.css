@@ -803,3 +803,25 @@ textarea:focus-visible {
     display: none;
   }
 }
+
+/* Playback API switches: all three on one line when they fit, otherwise one per line (never two + one). */
+.playback-toggles {
+  container-type: inline-size;
+}
+
+.playback-toggles-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem 1.5rem;
+}
+
+.playback-toggles-row label {
+  white-space: nowrap;
+}
+
+@container (min-width: 40rem) {
+  .playback-toggles-row {
+    grid-template-columns: repeat(3, max-content);
+    justify-content: start;
+  }
+}
