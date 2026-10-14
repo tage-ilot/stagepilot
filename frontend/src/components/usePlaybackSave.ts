@@ -31,19 +31,20 @@ export interface PlaybackSave {
 
 const timeText = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-// One Save configuration for the whole Playback panel. Order: method, Playback settings, MIDI settings.
+// One Save configuration for the whole Playback panel. Order: method, Playback settings, song arrangement, MIDI settings.
 // The first failure stops the save; steps that already succeeded are not repeated on retry.
 export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackController | undefined, midi: PlaybackMidiStep): PlaybackSave {
   const [running, setRunning] = useState(false);
-  const [failure, setFailure] = useState<{ key: string; step: "method" | "settings" | "midi"; reason?: string } | null>(null);
+  const [failure, setFailure] = useState<{ key: string; step: "method" | "settings" | "arrangement" | "midi"; reason?: string } | null>(null);
   const [autoAt, setAutoAt] = useState<string | null>(null);
   const inFlight = useRef(false);
-  const done = useRef<{ method?: string; settings?: string; midi?: string }>({});
+  const done = useRef<{ method?: string; settings?: string; arrangement?: string; midi?: string }>({});
   const knownHost = useRef<{ host: string | null } | null>(null);
 
-  const count = (draft.methodDirty ? 1 : 0) + draft.settingsCount + midi.count;
+  const count = (draft.methodDirty ? 1 : 0) + draft.settingsCount + draft.arrangementCount + midi.count;
   const settingsKey = `${draft.enabled}|${draft.autoScan}|${draft.fastTransport}`;
-  const key = `${draft.method}|${settingsKey}|${midi.snapshot}`;
+  const arrangementKey = JSON.stringify([[...draft.skippedPlanSongs].sort(), [...draft.skippedPlaybackSongs].sort((a, b) => a - b)]);
+  const key = `${draft.method}|${settingsKey}|${arrangementKey}|${midi.snapshot}`;
 
   // Scan and Connect save the computer by themselves; the bar then says so, with the time.
   const host = playback?.status?.settings.host;
@@ -75,6 +76,10 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
         if (!(await draft.applySettings())) { setFailure({ key, step: "settings" }); return false; }
         done.current.settings = settingsKey;
       }
+      if (draft.arrangementDirty && done.current.arrangement !== arrangementKey) {
+        if (!(await draft.applyArrangement())) { setFailure({ key, step: "arrangement" }); return false; }
+        done.current.arrangement = arrangementKey;
+      }
       if (midi.pending && done.current.midi !== midi.snapshot) {
         if (!(await midi.apply())) { setFailure({ key, step: "midi" }); return false; }
         done.current.midi = midi.snapshot;
@@ -86,7 +91,7 @@ export function usePlaybackSave(draft: PlaybackDraft, playback: PlaybackControll
       inFlight.current = false;
       setRunning(false);
     }
-  }, [count, draft, key, midi, settingsKey]);
+  }, [arrangementKey, count, draft, key, midi, settingsKey]);
 
   const discard = useCallback(() => {
     draft.revert();

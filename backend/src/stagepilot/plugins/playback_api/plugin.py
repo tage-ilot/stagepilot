@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from stagepilot.core.actions import ActionDispatcher
-from stagepilot.core.config import MidiSource, Settings
+from stagepilot.core.config import MidiSource, PlaybackApiSettings, Settings
 from stagepilot.core.event_bus import EventBus
 from stagepilot.core.events import ConnectionPayload, EventType, new_event
 from stagepilot.core.logging import _redact, get_logger
@@ -190,6 +190,7 @@ class PlaybackInputPlugin(Plugin):
             self.mapper.install_order(
                 tuple(saved.song_order), saved.captured_version, saved.setlist_id
             )
+            self.mapper.set_skips(tuple(saved.skipped_song_ids), tuple(saved.skipped_plan_song_ids))
         self.client: PlaybackClient | None = None
         self._queue: asyncio.Queue[tuple[int, Observation | ConnectionPayload]] = asyncio.Queue(64)
         self._history: deque[MonitorEntry] = deque(maxlen=100)
@@ -442,6 +443,40 @@ class PlaybackInputPlugin(Plugin):
             ConnectionOptions(config.enabled, config.host, config.port, config.auto_scan)
             self._service.save(settings)
             await self._reconfigure(self._service.effective_runtime_settings())
+
+    async def save_arrangement(
+        self, skipped_song_ids: list[int], skipped_plan_song_ids: list[str]
+    ) -> None:
+        """Save which songs are skipped. The order of either list is never touched."""
+        async with self._lifecycle:
+            if (
+                self.discovery == "running"
+                or self.planning_center_lengths.result.status == "running"
+            ):
+                raise DiscoveryConflict(
+                    "Wait for song discovery or Planning Center changes to finish."
+                )
+            current = self._service.snapshot()
+            plan = (await self.state_store.snapshot()).plan
+            if not current.playback_api.song_order:
+                raise ValueError("Scan songs first, then choose which songs to skip.")
+            if plan is None and skipped_plan_song_ids:
+                raise ValueError("Load a service plan before skipping one of its songs.")
+            if plan is not None and not set(skipped_plan_song_ids) <= {s.id for s in plan.songs}:
+                raise ValueError("A skipped song is not in the loaded service plan.")
+            updated = PlaybackApiSettings.model_validate(
+                {
+                    **current.playback_api.model_dump(),
+                    "skipped_song_ids": skipped_song_ids,
+                    "skipped_plan_song_ids": skipped_plan_song_ids,
+                }
+            )
+            # Skips change which plan song each measured length belongs to, so a previous
+            # Planning Center write no longer describes this arrangement.
+            updated = updated.model_copy(update={"lengths_applied_key": None})
+            self._service.save(current.model_copy(update={"playback_api": updated}, deep=True))
+            self.settings.playback_api = updated
+            self.mapper.set_skips(tuple(skipped_song_ids), tuple(skipped_plan_song_ids))
 
     async def reconfigure(self, settings: Settings) -> None:
         async with self._lifecycle:
@@ -888,6 +923,7 @@ class PlaybackInputPlugin(Plugin):
             )
             self.settings.playback_api = saved
             self.mapper.install_order(tuple(order), version, saved.setlist_id)
+            self.mapper.set_skips((), tuple(saved.skipped_plan_song_ids))
             self.mapper.observe(self._heartbeat, ())
             self.discovery = "done"
         except asyncio.CancelledError:

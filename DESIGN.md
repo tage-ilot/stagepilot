@@ -776,6 +776,21 @@ The owner preferred the guide's StagePilot and Playback panels to the app's. The
 - **Recent activity** is **flat**: no box and no fill, a dashed rule above it, a neutral grey count pill
   (`12 events`). Advanced stays the one tinted, bordered row, so the two still read as different jobs.
 
+### Song arrangement (decided 2026-10-14)
+Playback songs and service-plan songs are shown as **linked pairs**, and **nothing can be reordered**: each
+side can only **skip** a song, and the Nth song left on one side pairs with the Nth left on the other, so a
+crossed pairing cannot exist. Left column **Service plan**, right column **Playback**, a numbered link
+between them. A skipped plan song reads `No track`; a skipped Playback song reads `Not in this service`.
+Both are dashed, struck through and keep their switch. The only control is the shared **Switch** (a real
+`role="switch"` checkbox, 44px row) with the single word **Skip** beside it, in the **bottom right** of every
+box, aligned across the pair. Skips are a held change saved by Save configuration. Playback's lengths show
+`N s apart` beside each pair (green within 30 s, red past 120 s with `Probably a different song`, a hint
+only, never an automatic change). If a skipped plan song disappears from the loaded plan, cues are held back
+and the panel offers `Forget it`. The panel decides by **its own width**: under 35rem each pair stacks (plan
+box, vertical link, Playback box) with the plan box kept left and the Playback box kept right by a gap of
+`clamp(1.25rem, 12cqw, 2.75rem)` on the opposite side, and the space between pairs larger than inside one.
+A skipped Playback song never touches the service timer.
+
 ### StagePilot panel layout (decided 2026-10-14, from the guide the owner liked)
 Header, then **Status**: three cards (**Version**, **Running since**, **Connections: N of 5
 connected**) and one quiet **Connection details** row beneath them holding the API endpoint, the

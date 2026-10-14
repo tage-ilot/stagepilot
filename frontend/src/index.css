@@ -745,3 +745,88 @@ textarea:focus-visible {
   background: var(--ds-card);
   box-shadow: inset 3px 0 0 var(--ds-integration-backend-soft), var(--ds-elevation-default);
 }
+
+/* Song arrangement (Playback song order). The panel decides by its OWN width, not the window's, so it stacks
+   in a squished window as well as on a phone. Wide: plan | link | Playback on one row. Narrow: each pair stacks,
+   the plan box keeps left and the Playback box keeps right so the two sides still read. */
+.song-arrangement {
+  container-type: inline-size;
+}
+
+.arr-cols,
+.arr-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4rem minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.arr-link {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.arr-link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--ds-integration-playback-soft);
+}
+
+.arr-link[data-none]::before {
+  height: 0;
+  background: none;
+  border-top: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
+}
+
+@container (max-width: 35rem) {
+  .arr-cols {
+    display: none;
+  }
+
+  .arr-line {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arr-list {
+    row-gap: 5rem;
+  }
+
+  .arr-link {
+    height: 2.75rem;
+  }
+
+  .arr-link::before {
+    left: 50%;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    height: auto;
+  }
+
+  .arr-link[data-none]::before {
+    width: 0;
+    border-top: 0;
+    border-left: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
+  }
+
+  .arr-spacer {
+    display: none;
+  }
+
+  .arr-line[data-lone] .arr-link {
+    display: none;
+  }
+
+  .arr-plan {
+    margin-right: clamp(1.25rem, 12cqw, 2.75rem);
+  }
+
+  .arr-pb {
+    margin-left: clamp(1.25rem, 12cqw, 2.75rem);
+  }
+}

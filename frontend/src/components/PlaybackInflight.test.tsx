@@ -10,7 +10,7 @@ import { usePlaybackSave, type PlaybackMidiStep } from "./usePlaybackSave";
 
 const noMidi: PlaybackMidiStep = { pending: false, count: 0, valid: true, snapshot: "", apply: async () => true, revert: () => undefined };
 const controller = (overrides: Partial<PlaybackController> = {}): PlaybackController => ({
-  status: playbackStatus(), events: [], error: null, message: null, pending: null,
+  status: playbackStatus(), events: [], error: null, message: null, pending: null, saveArrangement: vi.fn(async () => true),
   save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(), ...overrides,
 });
 const deferred = <T,>() => { let resolve!: (v: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; };

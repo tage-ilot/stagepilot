@@ -349,7 +349,12 @@ export interface PlaybackStatusResponse extends PlaybackConnection {
   discovery_total?: number;
   song_lengths?: (number | null)[];
   lengths_measured_at?: string | null;
-  plan_songs?: { title: string; duration_seconds: number | null }[];
+  plan_songs?: { id: string; title: string; duration_seconds: number | null }[];
+  /** Songs left out of the pairing. Order never changes; see playbackArrangement.ts. */
+  skipped_song_ids?: number[];
+  skipped_plan_song_ids?: string[];
+  /** False when a saved skip names a plan song the loaded plan no longer has. */
+  arrangement_current?: boolean;
   song_count: number;
   plan_song_count: number;
   song_order: number[];

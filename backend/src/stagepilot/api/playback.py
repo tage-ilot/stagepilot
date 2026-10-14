@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from stagepilot.api.remote_retry import RemoteRetryRoute
 from stagepilot.core.config import MidiSource, PlaybackApiSettings
@@ -20,6 +20,7 @@ from stagepilot.plugins.planning_center.errors import (
 )
 from stagepilot.plugins.planning_center.models import PlanningCenterServiceType
 from stagepilot.plugins.playback_api.arbiter import PlaybackConnection, Source, SourceStatus
+from stagepilot.plugins.playback_api.arrangement import align_lengths
 from stagepilot.plugins.playback_api.client import ConnectionOptions
 from stagepilot.plugins.playback_api.normalizer import PlaybackEvent
 from stagepilot.plugins.playback_api.plugin import (
@@ -73,6 +74,7 @@ class FindRequest(BaseModel):
 
 
 class PlaybackPlanSong(BaseModel):
+    id: str
     title: str
     duration_seconds: int | None
 
@@ -102,6 +104,11 @@ class PlaybackStatusResponse(BaseModel):
     discovery_total: int
     song_order: list[int]
     song_lengths: list[float | None]
+    skipped_song_ids: list[int]
+    skipped_plan_song_ids: list[str]
+    # False when a saved skip names a plan song the loaded plan no longer has; cues are then
+    # held back (see arrangement.plan_index_for) until the arrangement is reviewed.
+    arrangement_current: bool = True
     discovery_duration_seconds: float | None
     planning_center_update_service_type_id: str | None
     planning_center_update_reason: str | None
@@ -200,9 +207,16 @@ async def status_response(controller: PlaybackInputPlugin) -> PlaybackStatusResp
         discovery_total=controller.discovery_total,
         song_order=list(controller.mapper.song_order),
         song_lengths=config.song_lengths if not outdated else [],
+        skipped_song_ids=list(config.skipped_song_ids),
+        skipped_plan_song_ids=list(config.skipped_plan_song_ids),
+        arrangement_current=not config.skipped_plan_song_ids
+        or (
+            state.plan is not None
+            and set(config.skipped_plan_song_ids) <= {song.id for song in state.plan.songs}
+        ),
         lengths_measured_at=config.lengths_measured_at if not outdated else None,
         plan_songs=[
-            PlaybackPlanSong(title=song.title, duration_seconds=song.duration_seconds)
+            PlaybackPlanSong(id=song.id, title=song.title, duration_seconds=song.duration_seconds)
             for song in state.plan.songs
         ]
         if state.plan
@@ -245,6 +259,33 @@ async def events(request: Request) -> PlaybackEventsResponse:
             for item in _controller(request).events
         ]
     )
+
+
+class ArrangementRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    skipped_song_ids: list[StrictInt] = Field(default_factory=list, max_length=200)
+    skipped_plan_song_ids: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.put("/arrangement", response_model=PlaybackStatusResponse)
+async def arrangement(payload: ArrangementRequest, request: Request) -> PlaybackStatusResponse:
+    """Choose which songs to skip. Neither list is ever reordered."""
+    controller = _controller(request)
+    if len(set(payload.skipped_song_ids)) != len(payload.skipped_song_ids) or len(
+        set(payload.skipped_plan_song_ids)
+    ) != len(payload.skipped_plan_song_ids):
+        raise HTTPException(422, "Skipped songs must be unique.")
+    if not set(payload.skipped_song_ids) <= set(controller.mapper.song_order):
+        raise HTTPException(422, "A skipped Playback song is not in the scanned song order.")
+    try:
+        await controller.save_arrangement(payload.skipped_song_ids, payload.skipped_plan_song_ids)
+    except SettingsFileError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except DiscoveryConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return await status_response(controller)
 
 
 @router.post("/find", response_model=PlaybackStatusResponse)
@@ -308,6 +349,8 @@ def scan_signature(controller: PlaybackInputPlugin) -> str:
         [
             config.song_order,
             config.song_lengths,
+            config.skipped_song_ids,
+            config.skipped_plan_song_ids,
             str(config.captured_at),
             config.captured_version,
             config.setlist_id,
@@ -416,8 +459,18 @@ async def preview_lengths(request: Request) -> LengthPreview:
     if not category:
         raise HTTPException(409, "Choose a Planning Center category first.")
     try:
+        plan = (await controller.state_store.snapshot()).plan
+        lengths = config.song_lengths
+        if plan is not None and (config.skipped_song_ids or config.skipped_plan_song_ids):
+            lengths = align_lengths(
+                [song.id for song in plan.songs],
+                config.song_order,
+                config.song_lengths,
+                config.skipped_plan_song_ids,
+                config.skipped_song_ids,
+            )
         return await controller.planning_center_lengths.preview(
-            category, config.song_lengths, scan_signature(controller)
+            category, lengths, scan_signature(controller)
         )
     except Exception as exc:
         raise preview_error(exc) from None

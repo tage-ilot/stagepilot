@@ -21,7 +21,7 @@ const none = (overrides = {}) => playbackStatus({
   ...overrides,
 });
 const controller = (overrides: Partial<PlaybackController> = {}): PlaybackController => ({
-  status: playbackStatus(), events: [], error: null, message: null, pending: null,
+  status: playbackStatus(), events: [], error: null, message: null, pending: null, saveArrangement: vi.fn(async () => true),
   save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(), ...overrides,
 });
 const panel = (playback = controller(), extra: { onDirtyChange?: (dirty: boolean) => void } = {}) => render(<MidiSetupPanel
@@ -270,11 +270,11 @@ describe("Song order card", () => {
   it("reuses the count mismatch line alongside length rows, including while playing", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus({
       playing: true, song_count: 2, plan_song_count: 1, song_lengths: [180, 202],
-      plan_songs: [{ title: "Plan title", duration_seconds: 180 }],
+      plan_songs: [{ id: "p1", title: "Plan title", duration_seconds: 180 }],
     }) })} />);
     expect(screen.getAllByText("Playback has 2 songs, this service plan has 1. Playback song 2 is ignored.")).toHaveLength(1);
-    expect(screen.getByRole("group", { name: "Song lengths" })).toBeVisible();
-    expect(screen.getByText("1. Plan title")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Song arrangement" })).toBeVisible();
+    expect(screen.getByText("Plan title")).toBeVisible();
   });
 });
 
