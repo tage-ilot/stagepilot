@@ -208,7 +208,7 @@ export function MidiSetupPanel({
         onChange={(value) => draft.setMethod(value === "real" ? "real" : "playback_api")}
         options={[
           { value: "playback_api", label: "Playback API", role: "primary" },
-          { value: "real", label: "MIDI", role: "alternate" },
+          { value: "real", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
         ]}
         value={draft.method}
       />

@@ -50,6 +50,8 @@ export default {
     "integration-playback": "#4b73b0",
     "integration-playback-soft": "#4b73b0",
     "integration-playback-text": "#8ba5cd",
+    "integration-playback-midi": "#7761b8",
+    "integration-playback-midi-text": "#a69ad2",
     "integration-backend": "#c7231d",
     "integration-backend-soft": "#c7231d",
     "integration-backend-text": "#e28d89",
