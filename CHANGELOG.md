@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [1.1.104-beta.36] - 2026-10-13
+
+### Changed
+
+- Success is a deeper green (`#31551D` fills, brighter green words) and the
+  status dots are gone from the connection cards and from "Ready" in the
+  header; the status word on each card is now capitalized and larger. In the
+  compact layout the word always stays on one line and never overlaps the icon
+  or a neighbouring card (it gets smaller on narrow screens instead of
+  wrapping).
+- Errors and warnings are now one pure red (`#ff0000`), so they cannot be
+  confused with the deep-red primary, Lighting or Presentation colours.
+- Playback is a clearer blue.
+- Inside a connection's configuration panel its own colour is the only accent:
+  Save configuration, Scan and Connect buttons, the "Changes saved" bar and
+  connected messages all use it. Errors stay red and dialogs keep the app
+  colours.
+- The Backend card no longer keeps its hover look after it is clicked.
+- Previous and Next now say what they did: `"Song" is up next. Press Start
+  next to play it.`
+
+### Fixed
+
+- Previous only selects the earlier song and starts nothing, but the service
+  plan then marked it "Current · live". "Current · live" now follows the song
+  that is really playing and "Up next" follows the song Start next will play,
+  in the service plan and in Now playing.
+- Reloading the service plan after Previous silently changed which song Start
+  next would play; it now keeps the same song.
+- Playback: a notice, and no stale Planning Center length update, when
+  Playback's song lengths are outdated or already applied.
+
+### Added
+
+- Developers: an optional dev-only visual text and colour editor for the web
+  frontend (`docs/visual-editor.md`). It is not part of the packaged app.
+
+### Notes
+
+- Remote Access recovery of an older stuck installation still needs the
+  control plane to be deployed; that has not been done.
+- Not yet tested against a live Playback by hand: play, pause, seek and resume.
+
 ## [1.1.104-beta.35] - 2026-10-13
 
 ### Added
