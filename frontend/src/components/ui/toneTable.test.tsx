@@ -102,7 +102,7 @@ describe("warning and error are the same pure red #ff0000 (owner 2026-10-13)", (
     // (live-stop, #e11d48 / #fecdd3) are live controls, not errors, so they are the one place rose remains.
     const index = readFileSync(`${process.cwd()}/src/index.css`, "utf8");
     const withoutLiveStop = css.split("\n").filter((l: string) => !l.includes("live-stop")).join("\n").toLowerCase();
-    for (const rose of ["#f43f5e", "#fb7185", "#fecdd3", "#9f1239", "#4c0519", "244 63 94", "251 113 133"]) {
+    for (const rose of ["#f43f5e", "#fb7185", "#fecdd3", "#9f1239", "#4c0519", "244 63 94", "251 113 133", "76 5 25", "159 18 57"]) {
       expect(withoutLiveStop).not.toContain(rose);
       expect(index.toLowerCase()).not.toContain(rose);
     }
