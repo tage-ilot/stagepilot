@@ -294,27 +294,10 @@ export function LightingSetupPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
-      <div className="mt-5 border-t border-edge-subtle pt-4">
-        <div aria-label="Test cue" className="flex flex-wrap items-end gap-x-4 gap-y-3" role="group">
+      <div className="lighting-test mt-5 border-t border-edge-subtle pt-4">
+        <div aria-label="Test cue" className="lighting-test-row flex flex-wrap items-end gap-x-4 gap-y-3" role="group">
           <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
-          <div className="flex items-center gap-2 pb-1.5" aria-label="MIDI note display">
-            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
-            <button
-              aria-checked={noteDisplayMode === "numeric"}
-              aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting-soft/20" : "bg-surface-900"}`}
-              onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
-              role="switch"
-              type="button"
-            >
-              <span
-                aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
-              />
-            </button>
-            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
-          </div>
-          <div className="min-w-40 flex-1">
+          <div className="w-44 flex-none">
           <Field label="Note">
             <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
               {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
@@ -332,14 +315,31 @@ export function LightingSetupPanel({
       </div>
 
       <div className="mt-5 border-t border-edge-subtle pt-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <Field className="min-w-64" label="Song lighting timeline">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          <Field className="w-full sm:w-80" label="Song lighting timeline">
             <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
             </Select>
           </Field>
-          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lighting" variant="tinted">Add lighting cue</Button>
+          <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
+            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
+            <button
+              aria-checked={noteDisplayMode === "numeric"}
+              aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting-soft/20" : "bg-surface-900"}`}
+              onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
+              role="switch"
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+              />
+            </button>
+            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
+          </div>
+          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lighting" variant="tinted">Add Cue</Button>
         </div>
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 

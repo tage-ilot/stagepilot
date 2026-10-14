@@ -837,3 +837,20 @@ textarea:focus-visible {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* Lighting test cue: about half the section when the window is widest, growing as the section narrows (never pinned at
+   half) up to 3/4 of the section, and only then does Send test cue drop to its own line. The four items need about 38rem
+   on one line; the row is the larger of half the section and that, capped at 3/4. Full width on a phone. */
+.lighting-test {
+  container-type: inline-size;
+}
+
+.lighting-test-row {
+  width: min(75cqw, max(50cqw, 38rem));
+}
+
+@container (max-width: 32rem) {
+  .lighting-test-row {
+    width: 100%;
+  }
+}
