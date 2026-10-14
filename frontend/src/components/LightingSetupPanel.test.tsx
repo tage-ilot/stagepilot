@@ -305,7 +305,7 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add lighting cue" }));
+    await user.click(screen.getByRole("button", { name: "Add Cue" }));
     expect(onSaveCues).toHaveBeenLastCalledWith(song, [
       expect.objectContaining({ at_seconds: 0, note: 60, velocity: 127 }),
       expect.objectContaining({ at_seconds: 65, note: 72, velocity: 110 }),
