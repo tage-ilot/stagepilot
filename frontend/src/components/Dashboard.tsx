@@ -1149,7 +1149,7 @@ export function Dashboard({
           "now-playing": (
           <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing · live signal</p>
+              <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing</p>
               <span className={`rounded-ds-full px-2.5 py-1 font-type-micro text-type-micro uppercase ${state.timer.status === "running" ? "bg-success-soft/20 text-success-text" : state.timer.status === "error" ? "bg-danger/15 text-danger-text" : "bg-ink/5 text-ink-muted"}`}>Timer {state.timer.status}</span>
             </div>
             <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.playing_song?.id ?? "idle"}>{state.playing_song?.title ?? "Waiting for first cue"}</h2>
@@ -1192,7 +1192,7 @@ export function Dashboard({
           ) : null,
           events: (
         <Panel className="flex h-full min-h-0 flex-col overflow-hidden !p-0">
-          <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Recent event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
+          <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
             {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}
