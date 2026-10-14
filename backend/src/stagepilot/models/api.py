@@ -25,6 +25,8 @@ class HealthResponse(BaseModel):
     version: str
     application_status: ApplicationStatus
     plugins: list[PluginHealth]
+    # When this backend process started (UTC). Read-only; shown as "Running since".
+    started_at: datetime | None = None
 
 
 class SettingsResponse(BaseModel):

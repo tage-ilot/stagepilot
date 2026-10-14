@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api";
 import * as desktop from "../desktop";
@@ -57,6 +57,9 @@ beforeEach(() => {
   vi.mocked(desktop.setRemoteAutostart).mockResolvedValue();
 });
 
+const health = {status: "healthy", version: "1.1.104-beta.36", application_status: "running", plugins: []} as unknown as NonNullable<React.ComponentProps<typeof BackendSetupPanel>["health"]>;
+const baseState = state;
+
 const saved = {
   timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false,
   web_dashboard_pin_enabled: true, release_channel: "BETA",
@@ -83,25 +86,48 @@ function renderPanel(props: Partial<React.ComponentProps<typeof BackendSetupPane
 describe("Status section", () => {
   // The old "Connection health" block (per-connection name/status/version list) was removed on
   // purpose: the five status cards already show each connection. Keep Status to identity and endpoints.
-  it("shows the identity and endpoints but no Connection health list", () => {
+  it("shows Version, Running since and Connections as cards; the endpoints sit one row down", () => {
     renderPanel();
     expect(screen.getByText("Status")).toBeInTheDocument();
-    expect(screen.getByText("API endpoint")).toBeInTheDocument();
-    expect(screen.getByText("WebSocket")).toBeInTheDocument();
-    expect(screen.getByText("Backend version")).toBeInTheDocument();
-    expect(screen.getByText("State revision")).toBeInTheDocument();
+    for (const label of ["Version", "Running since", "Connections"]) expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByText(/\d of 5 connected/)).toBeInTheDocument();
+    // The endpoints and revision moved into a collapsed "Connection details" row (Activity look).
+    const details = screen.getByRole("button", {name: /Connection details/});
+    expect(details).toHaveAttribute("aria-expanded", "false");
+    for (const label of ["API endpoint", "WebSocket", "State revision"]) expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByText(/connection health/i)).not.toBeInTheDocument();
     expect(screen.queryByText("No connections reported.")).not.toBeInTheDocument();
   });
 
-  it("draws each fact as a small bordered card, like the style guide, under a kicker-style heading", () => {
+  it("draws the three facts as small bordered cards, like the style guide, under a kicker-style heading", () => {
     renderPanel();
-    expect(screen.getByRole("heading", { level: 3, name: "Status" })).toHaveClass("uppercase", "text-ink-muted");
-    for (const label of ["API endpoint", "WebSocket", "Backend version", "State revision"]) {
+    expect(screen.getByRole("heading", {level: 3, name: "Status"})).toHaveClass("uppercase", "text-ink-muted");
+    for (const label of ["Version", "Running since", "Connections"]) {
       const card = screen.getByText(label).parentElement!;
       expect(card).toHaveClass("rounded-ds-lg", "border", "border-edge-subtle", "bg-surface-950/40");
       expect(screen.getByText(label)).toHaveClass("uppercase", "text-ink-muted");
     }
+  });
+
+  it("offers UTC and the saved zone in the Timezone list, even though browsers omit UTC", () => {
+    renderPanel({settings: {settings: {...saved, timezone: "Pacific/Chatham"}} as unknown as SettingsResponse});
+    const options = within(screen.getByLabelText("Timezone")).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+    expect(options).toContain("UTC");
+    expect(options).toContain("Pacific/Chatham");
+    expect(new Set(options).size).toBe(options.length);
+  });
+
+  it("says Not reported when an older backend sends no start time, and the time when it does", () => {
+    const {unmount} = renderPanel({health: {...health, started_at: null}});
+    expect(screen.getByText("Running since").parentElement).toHaveTextContent("Not reported");
+    unmount();
+    renderPanel({health: {...health, started_at: "2026-10-14T08:02:00Z"}});
+    expect(screen.getByText("Running since").parentElement!.textContent).toMatch(/\d{1,2}:02/);
+  });
+
+  it("counts connected connections from the live status of each one", () => {
+    renderPanel({state: {...baseState, planning_center_status: "connected", midi_status: "connected", propresenter_status: "disconnected", lights_status: "disconnected"}, live: true});
+    expect(screen.getByText("3 of 5 connected")).toBeInTheDocument();
   });
 });
 
@@ -281,23 +307,24 @@ describe("Copy Log", () => {
 });
 
 describe("StagePilot panel sections", () => {
-  it("shows Status, General configuration, People, Advanced in that order as plain headings", async () => {
+  it("shows Status, General configuration, People as headings, then Advanced as a collapsed row", async () => {
     renderPanel();
     await screen.findByRole("checkbox", {name: /Remote Access/});
     const names = screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent);
-    expect(names).toEqual(["Status", "General configuration", "People", "Advanced"]);
+    // Advanced is a collapsed row (a button with a summary), the guide's layout, so it is not a heading.
+    expect(names).toEqual(["Status", "General configuration", "People"]);
+    expect(screen.getByRole("button", {name: /^Advanced/})).toHaveAttribute("aria-expanded", "false");
   });
 
   it("puts the restart-needed fields in the right sections and keeps Release channel in Advanced", async () => {
     renderPanel();
     await screen.findByRole("checkbox", {name: /Remote Access/});
-    const section = (name: string) => {
-      const heading = screen.getByRole("heading", {name});
-      return heading;
-    };
+    const section = (name: string) => name === "Advanced"
+      ? screen.getByRole("button", {name: /^Advanced/})
+      : screen.getByRole("heading", {name});
     const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(after(section("General configuration"), screen.getByLabelText("Timezone"))).toBe(true);
-    expect(after(section("General configuration"), screen.getByRole("checkbox", {name: /local network/}))).toBe(true);
+    expect(after(section("General configuration"), screen.getByLabelText("Network access"))).toBe(true);
     expect(after(section("General configuration"), screen.getByRole("checkbox", {name: /PIN/}))).toBe(true);
     expect(after(section("People"), screen.getByRole("checkbox", {name: /Remote Access/}))).toBe(true);
     for (const label of ["Server port", "Log level", "Release channel"]) {
@@ -368,7 +395,7 @@ describe("Save configuration SaveBar", () => {
     withSettings();
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     expect(bar()).toHaveAttribute("data-state", "held");
     expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
@@ -380,9 +407,9 @@ describe("Save configuration SaveBar", () => {
   it("sends a payload byte-identical to the old save for the same edits", () => {
     const onSave = vi.fn();
     withSettings({onSave});
-    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: " UTC "}});
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     const expected = {
       timezone: "UTC", log_level: "INFO", server_port: 9000, lan_access: true,
@@ -404,11 +431,11 @@ describe("Save configuration SaveBar", () => {
     withSettings();
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /local network/}));
+    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     fireEvent.click(screen.getByRole("button", {name: "Discard"}));
     expect(screen.getByLabelText("Server port")).toHaveValue("8765");
     expect(screen.getByLabelText("Timezone")).toHaveValue("America/Los_Angeles");
-    expect(screen.getByRole("checkbox", {name: /local network/})).not.toBeChecked();
+    expect(screen.getByLabelText("Network access")).toHaveValue("local");
     expect(bar()).toHaveAttribute("data-state", "clean");
   });
 

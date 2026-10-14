@@ -121,10 +121,10 @@ describe("MidiSetupPanel", () => {
     renderPanel({});
     expect(document.getElementById("midi-configuration")).toHaveAttribute("data-variant", "setup");
     expect(document.getElementById("midi-configuration")!.className).not.toContain("setup-panel");
-    for (const name of ["Connection method", "MIDI channel", "Fixed note", "Debounce (ms)"]) {
+    expect(screen.getByRole("radiogroup", { name: "Connection method" })).toBeInTheDocument();
+    for (const name of ["MIDI channel", "Fixed note", "Debounce (ms)"]) {
       expect(screen.getByLabelText(name).closest("[data-field]")).not.toBeNull();
     }
-    expect(screen.getByLabelText("Connection method").tagName).toBe("SELECT");
     expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
   });
   it("shows the loaded service plan song-to-velocity map", () => {

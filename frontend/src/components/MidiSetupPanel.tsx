@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { SectionLabel } from "./ui/SectionLabel";
 import type {
   MidiCueName,
@@ -199,22 +200,23 @@ export function MidiSetupPanel({
         headingId="midi-setup-heading"
         onClose={onClose}
         status={connectionStatus}
-        statusDetail={savedMethod === "real" ? "MIDI (alternate)" : undefined}
+        statusDetail={savedMethod === "real" ? "MIDI · Alternate" : undefined}
         title="Playback"
       />
 
       <SectionLabel>General configuration</SectionLabel>
-      <Field className="mt-3 sm:max-w-md" heldChange={draft.methodDirty} label="Connection method">
-        <Select
-          disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
-          onChange={(event) => draft.setMethod(event.target.value === "real" ? "real" : event.target.value === "simulated" ? "simulated" : "playback_api")}
-          value={draft.method}
-        >
-          <option value="playback_api">Playback API (main)</option>
-          <option value="real">MIDI (alternate)</option>
-          {savedMethod === "simulated" && <option value="simulated" disabled>Simulation (legacy)</option>}
-        </Select>
-      </Field>
+      <ConnectionMethod
+        alternateNotice="Using the alternate method. If Playback API is available again, switch back here."
+        disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
+        heldChange={draft.methodDirty}
+        onChange={(value) => draft.setMethod(value === "real" ? "real" : value === "simulated" ? "simulated" : "playback_api")}
+        options={[
+          { value: "playback_api", label: "Playback API", role: "primary" },
+          { value: "real", label: "MIDI", role: "alternate" },
+          ...(savedMethod === "simulated" ? [{ value: "simulated", label: "Simulation (legacy)", role: "alternate" as const, disabled: true }] : []),
+        ]}
+        value={draft.method}
+      />
       {draft.method === "playback_api" && <PlaybackApiPanel playback={playback} draft={draft} />}
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}

@@ -505,3 +505,14 @@ def test_websocket_sends_initial_and_updated_full_state() -> None:
     assert initial["data"]["plan"]["title"] == "Sunday Worship — Demo"
     assert updated["type"] == "state.snapshot"
     assert updated["data"]["current_song"]["title"] == "Battle Belongs"
+
+
+def test_health_reports_when_the_backend_started() -> None:
+    """The StagePilot panel shows Running since: a read-only UTC timestamp of the process start."""
+    from datetime import UTC, datetime
+
+    with TestClient(create_app(Settings(demo_mode=True))) as client:
+        started = client.get("/api/v1/health").json()["started_at"]
+    parsed = datetime.fromisoformat(started)
+    assert parsed.tzinfo is not None
+    assert 0 <= (datetime.now(UTC) - parsed).total_seconds() < 120

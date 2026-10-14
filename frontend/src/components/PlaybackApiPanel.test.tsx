@@ -322,33 +322,40 @@ describe("Main view has no jargon", () => {
   });
 });
 
-describe("Connection method select (Playback API main / MIDI alternate)", () => {
+describe("Connection method control (Playback API primary / MIDI alternate)", () => {
   const validMidi = { ...playbackSettings, settings: { ...playbackSettings.settings, midi: { ...playbackSettings.settings.midi, mappings: { start_next: 100, restart_current: 101, previous: 102, next: 103, reload_plan: 104, stop_timer: 105 } } } };
   const midiStatus = () => playbackStatus({ sources: { playback_api: { connected: false, reason: "Playback is not connected." }, midi: { connected: true, reason: "MIDI is connected." } } });
-  const method = () => screen.getByLabelText("Connection method");
+  // The Connection method control is the shared ConnectionMethod radio group (DESIGN.md "Connection method").
+  const group = () => screen.getByRole("radiogroup", { name: "Connection method" });
+  // A radio's accessible name is its label text, so a screen reader hears "Playback API Primary".
+  const radio = (name: string) => within(group()).getByRole("radio", { name: new RegExp(`^${name.replace(/[()]/g, "\\$&")}`) });
+  const names = { playback_api: "Playback API", real: "MIDI", simulated: "Simulation (legacy)" } as const;
+  const chosen = () => within(group()).getAllByRole("radio").find((r) => (r as HTMLInputElement).checked) as HTMLInputElement;
+  const chooseMethod = async (user: ReturnType<typeof userEvent.setup>, value: keyof typeof names) => { await user.click(radio(names[value])); };
 
-  it("opens on the saved method with one labelled Field + Select and the two options", () => {
+  it("opens on the saved method with the two-option Connection method control", () => {
     panel();
-    expect(method().tagName).toBe("SELECT");
-    expect(method()).toHaveValue("playback_api");
-    expect(screen.getByRole("option", { name: "Playback API (main)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "MIDI (alternate)" })).toBeInTheDocument();
+    expect(group()).toBeInTheDocument();
+    expect(chosen()).toHaveAttribute("value", "playback_api");
+    // Two options, each a name over PRIMARY / ALTERNATE (the guide's template).
+    expect(radio("Playback API")).toHaveAccessibleName("Playback API Primary");
+    expect(radio("MIDI")).toHaveAccessibleName("MIDI Alternate");
+    expect(document.querySelector("[data-alternate-notice]")).toBeNull();
     expect(screen.queryByRole("button", { name: /Alternate connection: MIDI settings/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Connection method" })).not.toBeInTheDocument();
   });
 
-  it("switching the select swaps the fields as a view and calls nothing", async () => {
+  it("switching the method swaps the fields as a view, shows the alternate notice and calls nothing", async () => {
     const playback = controller();
     const user = userEvent.setup();
     panel(playback);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     expect(playback.selectSource).not.toHaveBeenCalled();
     expect(playback.save).not.toHaveBeenCalled();
     expect(screen.getByLabelText("MIDI channel")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Scan Network" })).not.toBeInTheDocument();
-    await user.selectOptions(method(), "playback_api");
+    await chooseMethod(user, "playback_api");
     expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("aria-disabled", "true");
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
@@ -358,11 +365,11 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const onDirtyChange = vi.fn();
     const user = userEvent.setup();
     panel(controller(), { onDirtyChange });
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Discard" }));
-    expect(method()).toHaveValue("playback_api");
+    expect(chosen()).toHaveAttribute("value", "playback_api");
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
@@ -374,7 +381,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     });
     const user = userEvent.setup();
     panel(playback);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(order).toEqual(["selectSource"]);
     expect(playback.selectSource).toHaveBeenCalledWith("real");
@@ -401,11 +408,11 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const playback = controller({ selectSource: vi.fn().mockResolvedValue(false), save: vi.fn().mockResolvedValue(true) });
     const user = userEvent.setup();
     panel(playback);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(playback.selectSource).toHaveBeenCalledTimes(1);
     expect(playback.save).not.toHaveBeenCalled();
-    expect(method()).toHaveValue("real");
+    expect(chosen()).toHaveAttribute("value", "real");
     expect(screen.getByRole("alert")).toHaveTextContent(/not saved/);
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeEnabled();
   });
@@ -417,12 +424,12 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const onSaveSettings = vi.fn();
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(playback.selectSource).toHaveBeenCalledWith("real");
     expect(onSaveSettings).not.toHaveBeenCalled();
-    expect(method()).toHaveValue("real");
+    expect(chosen()).toHaveAttribute("value", "real");
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "error");
   });
 
@@ -435,7 +442,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const onSaveSettings = vi.fn(async () => { order.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(order).toEqual(["selectSource", "saveMidi"]);
@@ -453,7 +460,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
     await user.click(screen.getByLabelText("Respond to Play immediately"));
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("3\u00a0changes waiting. Not saved yet.");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
@@ -472,7 +479,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
     await user.click(screen.getByLabelText("Respond to Play immediately"));
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(calls).toEqual(["selectSource", "playbackSave", "saveMidi"]);
@@ -486,7 +493,7 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
     const onSaveSettings = vi.fn();
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.selectOptions(method(), "real");
+    await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "99" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(playback.selectSource).not.toHaveBeenCalled();
@@ -497,9 +504,9 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
   it("opens on the saved alternate method and appends it to the header badge only then", () => {
     const saved = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "real" as const } } };
     const view = render(<MidiSetupPanel playback={controller({ status: midiStatus() })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={saved} onSaveSettings={vi.fn()} />);
-    expect(method()).toHaveValue("real");
+    expect(chosen()).toHaveAttribute("value", "real");
     expect(screen.getByLabelText("MIDI channel")).toBeVisible();
-    expect(view.container.querySelector("[data-setup-panel-header]")).toHaveTextContent("MIDI (alternate)");
+    expect(view.container.querySelector("[data-setup-panel-header]")).toHaveTextContent("MIDI · Alternate");
     view.unmount();
     panel();
     expect(document.querySelector("[data-setup-panel-header]")).not.toHaveTextContent("alternate");
@@ -508,8 +515,8 @@ describe("Connection method select (Playback API main / MIDI alternate)", () => 
   it("shows the legacy simulation source as a disabled option and still opens on it", () => {
     const sim = { ...playbackSettings, settings: { ...playbackSettings.settings, integration_modes: { ...playbackSettings.settings.integration_modes, midi_source: "simulated" as const } } };
     render(<MidiSetupPanel playback={controller()} midi={null} messages={[]} error={null} message={null} pendingOperation={null} pendingCue={null} onRefresh={vi.fn()} onSelect={vi.fn()} onSimulate={vi.fn()} settings={sim} onSaveSettings={vi.fn()} />);
-    expect(method()).toHaveValue("simulated");
-    expect(screen.getByRole("option", { name: "Simulation (legacy)" })).toBeDisabled();
+    expect(chosen()).toHaveAttribute("value", "simulated");
+    expect(radio("Simulation (legacy)")).toBeDisabled();
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
   });
 });
@@ -532,7 +539,7 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     // One banner, one sentence: exactly the backend text.
     expect(screen.getByTestId("playback-banner")).toHaveTextContent(reason);
     expect(screen.getAllByText(reason)).toHaveLength(1);
-    await userEvent.setup().selectOptions(screen.getByLabelText("Connection method"), "real");
+    await userEvent.setup().click(screen.getByRole("radio", { name: /^MIDI/ }));
     // MIDI detail in the alternate connection section never says the opposite of the banner.
     const advanced = document.getElementById("playback-midi-method") as HTMLElement;
     if (midi) expect(advanced).toHaveTextContent(/MIDI is connected/);
@@ -711,7 +718,7 @@ describe("Save configuration bar (Playback)", () => {
   it("counts MIDI field edits in the same bar, with no separate MIDI notice", async () => {
     const user = userEvent.setup();
     panel();
-    await user.selectOptions(screen.getByLabelText("Connection method"), "real");
+    await user.click(screen.getByRole("radio", { name: /^MIDI/ }));
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("1\u00a0change waiting. Not saved yet.");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("2\u00a0changes waiting. Not saved yet.");
