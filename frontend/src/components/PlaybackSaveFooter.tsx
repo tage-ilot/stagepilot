@@ -4,7 +4,7 @@ import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { SaveBar } from "./ui/SaveBar";
 import type { PlaybackSave } from "./usePlaybackSave";
 
-export type PlaybackMethod = "playback_api" | "real" | "simulated";
+export type PlaybackMethod = "playback_api" | "real";
 
 export interface PlaybackDraft {
   /** Connection method shown in the panel. A view switch held in the draft; only a save applies it. */
@@ -48,7 +48,7 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
   const setEnabled = useCallback((value: boolean) => { setError(null); setEnabledState(value); }, []);
 
   const applyMethod = useCallback(async () => {
-    if (!methodDirty || method === "simulated") return true;
+    if (!methodDirty) return true;
     if (!playback) return false;
     setError(null);
     setSaving(true);
