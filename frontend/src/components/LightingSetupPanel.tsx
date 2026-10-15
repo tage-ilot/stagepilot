@@ -26,9 +26,12 @@ import { Input } from "./ui/Input";
 import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
+import { Disclosure } from "./ui/Disclosure";
+import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
 import { LightingTimeline } from "./LightingTimeline";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
@@ -75,6 +78,8 @@ export interface LightingPanelActions {
   onUndoCapture: (songKey: string, cueId: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
 }
+
+export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
 
 export function LightingSetupPanel({
   connectionStatus,
@@ -190,6 +195,9 @@ export function LightingSetupPanel({
   const [clock, setClock] = useState(() => Date.now());
   const playingSong = state.playing_song ?? state.current_song;
   const timerRunning = state.timer?.status === "running" && Boolean(state.timer?.started_at);
+  // The whole song-timeline group (song picker, cue board, timeline, cue list) folds away for people who do not use it. It starts
+  // open and then stays however the user leaves it, across restarts (owner, 2026-10-15).
+  const [timelineOpen, setTimelineOpen] = usePersistedFlag(LIGHTING_TIMELINE_OPEN_KEY, true);
   const selectedSongRunning = timerRunning && selectedSong !== null
     && playingSong !== null && playingSong !== undefined && songKey(playingSong) === songKey(selectedSong);
   useEffect(() => {
@@ -350,6 +358,10 @@ export function LightingSetupPanel({
   };
 
   const shownCues = method === "osc" ? oscCues : cues;
+  const cueTotal = Object.values(settings?.settings.lights.cue_maps ?? {}).reduce(
+    (total, map) => total + (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)),
+    0,
+  );
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = method === "osc"
     ? oscCues.filter((cue) => cue.address !== "").map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || cue.address, color: cue.color ?? null }))
@@ -512,10 +524,61 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
+      {/* Test cue checks the connection, so it stays visible when the song timeline below is folded away. */}
       <div className="mt-5 border-t border-edge-subtle pt-5">
+          {method === "midi" && (
+          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
+            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
+            <div className="w-28 flex-none">
+              <Field label="Note">
+                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div className="w-28 flex-none">
+              <Field label="Velocity">
+                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+              </Field>
+            </div>
+            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          </div>
+          )}
+        {method === "osc" && (
+          <div aria-label="OSC test cue" className="lighting-osc-test grid gap-3" role="group">
+            <h3 className="font-semibold text-ink">Test cue</h3>
+            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
+              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
+            </Field>
+            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
+            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
+            <div>
+              <Button
+                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
+                tone="lighting"
+                variant="tinted"
+              >
+                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
+              </Button>
+            </div>
+          </div>
+        )}
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
+      </div>
+
+      <Disclosure
+        className="mt-5"
+        onOpenChange={setTimelineOpen}
+        open={timelineOpen}
+        summary={cueTotal === 0 ? "No cues yet" : `${cueTotal} cue${cueTotal === 1 ? "" : "s"}`}
+        title="Song lighting timeline"
+        variant="activity"
+      >
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
-          <Field className="w-full sm:w-80" label="Song lighting timeline">
+          <Field className="w-full sm:w-80" label="Song">
             <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
@@ -542,47 +605,7 @@ export function LightingSetupPanel({
           )}
           <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} tone="lighting" variant="tinted">Add cue</Button>
           </div>
-          {method === "midi" && (
-          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
-            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
-            <div className="w-28 flex-none">
-              <Field label="Note">
-                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
-                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-                </Select>
-              </Field>
-            </div>
-            <div className="w-28 flex-none">
-              <Field label="Velocity">
-                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-              </Field>
-            </div>
-            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
-          </div>
-          )}
         </div>
-        {method === "osc" && (
-          <div aria-label="OSC test cue" className="lighting-osc-test mt-4 grid gap-3" role="group">
-            <h3 className="font-semibold text-ink">Test cue</h3>
-            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
-              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
-            </Field>
-            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
-            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
-            <div>
-              <Button
-                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
-                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
-                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-                tone="lighting"
-                variant="tinted"
-              >
-                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         {onSavePads && (
@@ -612,14 +635,16 @@ export function LightingSetupPanel({
           />
         )}
 
-        {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) and the
-            user can see where the scrolling area starts and ends. */}
-        <div
-          aria-label={(method === "osc" ? oscCues.length : cues.length) > 0 ? "Lighting cues, scrollable" : undefined}
-          className={`mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain ${(method === "osc" ? oscCues.length : cues.length) > 0 ? "scroll-region scroll-region-y rounded-ds-lg p-3" : ""}`}
+        {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
+            over any edge that has more to see, so the user can tell where the scrolling area starts and ends. */}
+        <ScrollRegion
+          aria-label={shownCues.length > 0 ? "Lighting cues, scrollable" : undefined}
+          className="grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain p-3"
           data-testid="lighting-cue-list"
-          role={(method === "osc" ? oscCues.length : cues.length) > 0 ? "region" : undefined}
-          tabIndex={(method === "osc" ? oscCues.length : cues.length) > 0 ? 0 : undefined}
+          frameClassName="mt-3 rounded-ds-lg"
+          framed={shownCues.length > 0}
+          role={shownCues.length > 0 ? "region" : undefined}
+          tabIndex={shownCues.length > 0 ? 0 : undefined}
         >
           {method === "osc" && oscCues.map((cue) => (
             <OscCueRow
@@ -639,8 +664,8 @@ export function LightingSetupPanel({
           <>
           {cues.map((cue) => (
             <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
-              <Field label="Cue elapsed time">
-                <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
+              <Field label="Elapsed time">
+                <Input aria-label="Elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
               </Field>
               <Field label="Lighting cue note">
                 <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
@@ -650,8 +675,8 @@ export function LightingSetupPanel({
               <Field label="Lighting cue velocity">
                 <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
               </Field>
-              <Field label="Lighting cue label">
-                <Input aria-label="Lighting cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
+              <Field label="Cue label">
+                <Input aria-label="Cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
               </Field>
               <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} tone="lighting" variant="tinted">Test</Button>
               <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
@@ -660,13 +685,13 @@ export function LightingSetupPanel({
           </>
           )}
           {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
-        </div>
+        </ScrollRegion>
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>
           <Button disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</Button>
         </div>
-      </div>
+      </Disclosure>
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

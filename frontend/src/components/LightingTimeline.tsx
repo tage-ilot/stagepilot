@@ -14,6 +14,7 @@ import {
 } from "./lightingTimelineMath";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
+import { ScrollRegion } from "./ui/ScrollRegion";
 
 const ZOOMS = [0, 6, 12, 24] as const; // pixels per second; 0 = fit the width
 const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of squeezing
@@ -121,7 +122,7 @@ export function LightingTimeline({
           <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} tone="lighting" variant="tinted">+</Button>
         </div>
       </div>
-      <div className="scroll-region scroll-region-x mt-2 overflow-x-auto overscroll-x-contain rounded-ds-lg" data-testid="lighting-timeline-scroll" tabIndex={-1}>
+      <ScrollRegion axis="x" className="overflow-x-auto overscroll-x-contain" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>
         <div className="relative px-3 pb-3" style={trackStyle}>
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
             {ticks.map((tick) => (
@@ -176,7 +177,7 @@ export function LightingTimeline({
             })}
           </div>
         </div>
-      </div>
+      </ScrollRegion>
       {!markers.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
       {selected && (
         <div aria-label="Selected cue" className="mt-2 flex flex-wrap items-center gap-2 rounded-ds-lg border border-edge-medium bg-surface-panel p-2" data-testid="lighting-marker-popover" role="group">
