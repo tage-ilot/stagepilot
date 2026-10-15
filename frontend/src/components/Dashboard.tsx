@@ -7,6 +7,7 @@ import multitracksIcon from "../assets/multitracks-icon.png";
 import planningCenterIcon from "../assets/planning-center-icon.png";
 import propresenterIcon from "../assets/propresenter-icon.png";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
+import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import type {
   AccessCapabilities,
@@ -65,7 +66,7 @@ type HeaderNotification = {
   tone: "error" | "info";
 };
 
-const NOTIFICATION_DURATION_MS = 6_000;
+const NOTIFICATION_DURATION_MS = 5_000;
 const MAX_NOTIFICATION_QUEUE = 2;
 // Retain the first-launch implementation for possible future use while keeping
 // it disabled in every production configuration state.
@@ -709,7 +710,9 @@ export function Dashboard({
       update: updater?.successMessage ?? null,
     };
     if (pending.length) {
-      setNotificationQueue((current) => [...current, ...pending].slice(-MAX_NOTIFICATION_QUEUE));
+      // A new notice shows right away, replacing whichever one is on screen (owner, 2026-10-15). Notices that arrive together
+      // play one after another, each for at most NOTIFICATION_DURATION_MS.
+      setNotificationQueue(pending.slice(-MAX_NOTIFICATION_QUEUE));
     }
   }, [actionMessage, error, serviceLoad.status, serviceNotification, updater?.successMessage]);
 
@@ -844,31 +847,10 @@ export function Dashboard({
             />
           )}
         </div>
-        <div className="app-header-status relative -translate-y-[11px] flex h-9 min-w-[2rem] flex-1 items-center justify-end" data-message={notification ? "true" : "false"}>
-          <div aria-atomic="true" aria-live="polite" className="sr-only" role="status">{notification?.message ?? ""}</div>
-          <div
-            aria-hidden="true"
-            className={`header-message ${notification ? "is-shown" : ""} ${notification?.tone === "error" ? "text-danger-text" : "text-info-text"}`}
-            data-testid="header-message"
-            data-tone={notification?.tone ?? "none"}
-          >
-            <span className={`header-message-text ${notification?.tone === "error" ? "bg-danger/10" : "bg-info/10"}`}>{notification?.message ?? ""}</span>
-          </div>
-        <div
-          className="header-chip-wrap relative z-40 min-w-0 max-w-full"
-          ref={readinessHover.containerRef}
-          {...readinessHover.hoverProps}
-        >
-          <button
-            aria-describedby="system-readiness-popover"
-            title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
-            aria-expanded={readinessHover.open}
-            className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success-soft bg-success text-ink can-hover:bg-success/85" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
-            type="button"
-          >
-            <span aria-hidden="true" className={`header-chip-dot h-2.5 w-2.5 shrink-0 rounded-full ${ready ? "bg-ink" : systemError ? "bg-danger-text" : "bg-warning-text"}`} />
-            <span className="header-chip-label min-w-0 truncate text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
-          </button>
+        <HeaderStatusChip
+          expanded={readinessHover.open}
+          notice={notification ? { id: notification.id, message: notification.message, tone: notification.tone === "error" ? "error" : "info" } : null}
+          popover={(
           <div
             className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] motion-reduce:transition-none ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
             id="system-readiness-popover"
@@ -898,8 +880,13 @@ export function Dashboard({
               </ul>
             </div>
           </div>
-        </div>
-        </div>
+          )}
+          statusClass={ready ? "border-success-soft bg-success text-ink" : "border-danger-solid bg-danger-solid text-on-danger"}
+          statusLabel={!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
+          title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
+          wrapProps={readinessHover.hoverProps}
+          wrapRef={readinessHover.containerRef}
+        />
       </header>
 
 

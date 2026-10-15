@@ -846,122 +846,151 @@ textarea:focus-visible {
 
 /* ---- Dashboard header (owner, 2026-10-15) ------------------------------------------------------------------------------------
    One row at every width. The logo is the first thing on it and never moves; everything else lives in .app-header-status to its
-   right, the only part that gives way. That slot is a size container, so what it shows depends on the room it really has:
-   - Roomy (17rem or more): the status pill and a message share the slot. A message makes the pill fade out while the message
-     grows out of the pill's end toward the logo, then they swap back when the message goes.
-   - Cramped: the pill stays where it is and the message floats just under the header (nothing reflows).
-   - Very narrow (under 8rem, a bit less than the pill itself): the pill becomes a status dot; its words stay available to screen readers. */
-.app-header-status {
-  container-type: inline-size;
+   right, the only part that gives way. The status pill (.header-chip) is a single element: when a message arrives it grows to the
+   message's size, takes its colours and swaps its words; when the message ends it shrinks back. If the slot is too small for even
+   the pill, the pill disappears (no dot) and the message appears just under the header instead. */
+.header-chip {
+  border-radius: 9999px;
+  transition:
+    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 240ms ease-out,
+    border-color 240ms ease-out,
+    color 240ms ease-out;
 }
 
-.header-message {
+/* A taller message (it wrapped to a second line) gets a rounder-rectangle corner than a full pill would give. */
+.header-chip[data-state="message"] {
+  border-radius: 1.125rem;
+}
+
+.header-chip-pane {
+  display: block;
+  white-space: nowrap;
+  text-align: center;
+  padding: 0.375rem 0.75rem;
+  transition: opacity 200ms ease-out, transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.header-chip-note {
   position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  max-width: 100%;
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  line-height: 1.25rem;
+  white-space: normal;
+  opacity: 0;
+  transform: translateY(0.35rem);
+  pointer-events: none;
+}
+
+.header-chip[data-state="message"] .header-chip-status {
+  opacity: 0;
+  transform: translateY(-0.35rem);
+}
+
+.header-chip[data-state="message"] .header-chip-note {
+  opacity: 1;
+  transform: translateY(0);
+  /* The words arrive once the pill has mostly grown. */
+  transition-delay: 120ms, 120ms;
+}
+
+/* A notice that replaces another one: the new words slide in while the pill resizes. */
+.header-chip-note-text {
+  display: block;
+  animation: header-note-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes header-note-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-chip-note-text {
+    animation: none;
+  }
+}
+
+/* Never visible; they exist so the chip knows how wide each of its two states is. */
+.header-chip-probe {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+}
+
+.header-chip-probe-status,
+.header-chip-probe-note {
+  display: inline-block;
+}
+
+.header-chip-probe-status::after,
+.header-chip-probe-note::after {
+  content: attr(data-text);
+}
+
+.header-chip-probe-note {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  line-height: 1.25rem;
+  white-space: normal;
+  width: max-content;
+}
+
+/* Too small for even the pill: it steps aside. */
+.header-chip-wrap[data-fits="false"] {
+  display: none;
+}
+
+/* The fallback message (only when the pill had to step aside): just under the header, on a solid surface. */
+.header-message {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 2rem));
+  z-index: 30;
   pointer-events: none;
   visibility: hidden;
-  clip-path: inset(0 0 0 100%);
   opacity: 0;
-  transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1) 60ms, opacity 200ms ease-out 60ms, visibility 0s linear 340ms;
+  transform: translateY(-0.35rem);
+  transition: opacity 200ms ease-out, transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 280ms;
 }
 
 .header-message.is-shown {
   pointer-events: auto;
   visibility: visible;
-  clip-path: inset(0 0 0 0);
   opacity: 1;
-  transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1) 60ms, opacity 200ms ease-out 60ms, visibility 0s;
+  transform: translateY(0);
+  transition: opacity 200ms ease-out, transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
 }
 
 .header-message-text {
   display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   border-radius: theme("borderRadius.ds-lg");
-  border: 1px solid currentColor;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  background-color: var(--ds-surface-950);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
-}
-
-/* The message's border takes its tone from the text colour set on .header-message, softened. */
-.header-message-text {
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
-}
-
-.header-chip-wrap {
-  transition: opacity 180ms ease-out, visibility 0s linear 0s;
-}
-
-@container (min-width: 17rem) {
-  .app-header-status[data-message="true"] .header-chip-wrap {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition: opacity 160ms ease-out, visibility 0s linear 160ms;
-  }
-}
-
-@container (max-width: 16.999rem) {
-  /* Not enough room beside the logo: the message floats under the header, solid so it reads over the page below it. */
-  .header-message {
-    top: calc(100% + 0.5rem);
-    right: 0;
-    height: auto;
-    width: max-content;
-    max-width: min(24rem, calc(100vw - 2rem));
-    z-index: 30;
-    clip-path: inset(0 0 100% 0);
-  }
-
-  .header-message.is-shown {
-    clip-path: inset(0 0 0 0);
-  }
-
-  .header-message-text {
-    background-color: var(--ds-surface-950);
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
-  }
-}
-
-@container (max-width: 7.999rem) {
-  .header-chip-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
-  .header-chip-wrap > button {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-}
-
-@container (min-width: 8rem) {
-  .header-chip-dot {
-    display: none;
-  }
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .header-chip,
+  .header-chip-pane,
   .header-message,
-  .header-message.is-shown,
-  .header-chip-wrap,
-  .app-header-status[data-message="true"] .header-chip-wrap {
+  .header-message.is-shown {
     transition: none;
   }
 }

@@ -770,11 +770,11 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 - A control is **disabled with a reason shown nearby**, never silently greyed.
 
 ### The dashboard header (decided 2026-10-15)
-One row at every window width, with the **logo first and never moving**: it is not in a grid and nothing re-flows around it. Everything else lives in one status slot to its right (`.app-header-status`, a size container), which is the only part that gives way:
-- **Roomy (17rem or more):** the status pill and a message share the slot. When an info or error message arrives, the pill fades out and the message grows out of the pill's end (a 280ms clip reveal, no motion under `prefers-reduced-motion`), then they swap back when it goes (6 seconds).
-- **Cramped:** the pill stays put and the message floats just under the header on a solid surface, so nothing reflows.
-- **Very narrow (under 8rem):** the pill becomes a status dot; the words stay available to screen readers.
-- The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`.
+One row at every window width, with the **logo first and never moving**: no grid, nothing re-flows around it. Everything else is one status pill (`HeaderStatusChip`) in a slot to its right:
+- **The pill is the notification.** At rest it says Ready (success green) or Check system / Error (error red). When a message arrives the same pill grows to the message's size, turns info blue (or error red for an error) and swaps its words; when the message ends it shrinks back. Both the status words and the message use the bold Geist Pixel Square (`font-pixel`).
+- **A new message shows right away**, replacing the one on screen (the words slide in and the pill resizes if the new text is a different length). Messages that arrive together play in turn. Each lasts 5 seconds at most.
+- **Too small for even the pill:** the pill disappears (never a dot) and the message appears just under the header on a solid surface.
+- The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`. Reduced motion turns the animation off.
 
 ### Scrolling boxes (decided 2026-10-15)
 

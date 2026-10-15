@@ -430,20 +430,22 @@ describe("Dashboard Planning Center plan states", () => {
     const header = screen.getByRole("banner");
     expect(header).toContainElement(notification);
     expect(notification).toHaveTextContent("Service position and timer reset.");
-    const drawn = within(header).getByTestId("header-message");
-    expect(drawn).toHaveClass("is-shown");
-    expect(drawn).toHaveTextContent("Service position and timer reset.");
-    expect(drawn.closest(".app-header-status")).toHaveAttribute("data-message", "true");
+    // The status pill itself turns into the message: same element, info colours, the message's words.
+    const chip = within(header).getByTestId("header-chip");
+    expect(chip).toHaveAttribute("data-state", "message");
+    expect(chip).toHaveClass("bg-info", "text-on-info", "font-pixel");
+    expect(within(header).getByTestId("header-message")).toHaveTextContent("Service position and timer reset.");
   });
 
   it("keeps the same reserved header slot when no notification is visible", () => {
     renderDashboard(loadedServiceState);
 
     const header = screen.getByRole("banner");
-    const drawn = within(header).getByTestId("header-message");
-    expect(drawn).not.toHaveClass("is-shown");
+    const chip = within(header).getByTestId("header-chip");
+    // Ready: the pill rests green, in the pixel font, and it is the same pill that carries messages.
+    expect(chip).toHaveAttribute("data-state", "status");
+    expect(chip).toHaveClass("bg-success", "font-pixel");
     expect(header.querySelector('[role="status"]')).toHaveTextContent("");
-    expect(drawn.closest(".app-header-status")).toHaveAttribute("data-message", "false");
   });
 
   it("queues simultaneous action and Planning Center notifications in the header", () => {
@@ -468,7 +470,7 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(screen.getByTestId("header-message")).not.toHaveClass("is-shown");
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("data-state", "status");
       expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
@@ -498,7 +500,7 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(screen.getByTestId("header-message")).not.toHaveClass("is-shown");
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("data-state", "status");
       expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
@@ -510,9 +512,10 @@ describe("Dashboard Planning Center plan states", () => {
     renderDashboard(loadedServiceState, { error: "Backend unavailable." });
 
     expect(screen.getByRole("status")).toHaveTextContent("Backend unavailable.");
-    const drawn = screen.getByTestId("header-message");
-    expect(drawn).toHaveAttribute("data-tone", "error");
-    expect(drawn).toHaveClass("text-danger-text");
+    expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
+    const chip = screen.getByTestId("header-chip");
+    expect(chip).toHaveAttribute("data-state", "message");
+    expect(chip).toHaveClass("bg-danger-solid", "text-on-danger");
   });
 
   describe("header layout (owner, 2026-10-15)", () => {
@@ -539,26 +542,32 @@ describe("Dashboard Planning Center plan states", () => {
       expect(header.lastElementChild).toBe(slot);
     });
 
-    it("keeps the logo, the status pill and the message in the header's own slot, with a screen-reader copy of the message", () => {
+    it("keeps the pill, the message and a screen-reader copy in the header's own slot", () => {
       renderDashboard(loadedServiceState, { actionMessage: "Service position and timer reset." });
       const { slot, chip } = parts();
       expect(slot.contains(chip)).toBe(true);
-      expect(slot.contains(screen.getByTestId("header-message"))).toBe(true);
+      expect(slot.contains(screen.getByTestId("header-chip"))).toBe(true);
       expect(slot.querySelector('[role="status"]')).toHaveClass("sr-only");
     });
 
-    it("turns the status pill into a status dot with its words kept for screen readers (stylesheet rules)", async () => {
-      renderDashboard(loadedServiceState);
-      const chip = parts().chip.querySelector("button")!;
-      expect(chip.querySelector(".header-chip-dot")).toBeInTheDocument();
-      expect(chip.querySelector(".header-chip-label")).toHaveTextContent(/Check system|Ready|Live status|Error/);
+    it("is green when Ready and red when not; blue for an info message, red for an error message; no dot anywhere", () => {
+      const ready = renderDashboard(loadedServiceState);
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-success");
+      expect(screen.getByTestId("header-chip").querySelector(".header-chip-dot")).toBeNull();
+      ready.unmount();
+      renderDashboard({ ...loadedServiceState, is_stale: true });
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-danger-solid");
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
+    });
+
+    it("steps aside, instead of shrinking to a dot, when the slot is too small (stylesheet rules)", async () => {
       const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
       const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
-      expect(css).toMatch(/\.app-header-status \{\s*container-type: inline-size;/);
-      expect(css).toMatch(/@container \(max-width: 7\.999rem\) \{\s*\.header-chip-label \{\s*position: absolute;/);
-      // Roomy: the message replaces the pill. Cramped: the message floats under the header so nothing reflows.
-      expect(css).toMatch(/@container \(min-width: 17rem\) \{\s*\.app-header-status\[data-message="true"\] \.header-chip-wrap \{\s*opacity: 0;/);
-      expect(css).toMatch(/@container \(max-width: 16\.999rem\) \{(?:\s|\/\*[\s\S]*?\*\/)*\.header-message \{\s*top: calc\(100% \+ 0\.5rem\);/);
+      expect(css).toMatch(/\.header-chip-wrap\[data-fits="false"\] \{\s*display: none;/);
+      expect(css).not.toMatch(/header-chip-dot/);
+      // The pill animates its size, and the words slide in when one message replaces another.
+      expect(css).toMatch(/\.header-chip \{[^}]*transition:\s*width 360ms/);
+      expect(css).toMatch(/\.header-chip-note-text \{\s*display: block;\s*animation: header-note-in/);
     });
   });
 
