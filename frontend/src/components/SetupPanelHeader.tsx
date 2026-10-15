@@ -45,25 +45,16 @@ export function SetupPanelHeader({
         </h2>
         {description ? <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p> : null}
       </div>
-      {statusDetail ? (
-        <div
-          className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:self-center"
-        >
-        <StatusBadge
-          data-status={status}
-          data-status-badge
-          status={connectionWord[status]}
-        />
-          <Badge tone={accent === "midi" ? "midi" : "playback"}>{statusDetail}</Badge>
-        </div>
-      ) : (
-      <StatusBadge
-        className="col-span-2 row-start-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:self-center"
-        data-status={status}
-        data-status-badge
-        status={connectionWord[status]}
-      />
-      )}
+      {/* The status pill always sits directly left of the close button, centred on its 44px height, on every connection page
+          (owner, 2026-10-14). It used to centre on the title block, so it moved with the description. An extra badge, such as the
+          saved alternate method, goes before the pill so the pill stays next to the close button. */}
+      <div
+        className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:h-ds-touch-target min-[480px]:flex-nowrap min-[480px]:justify-self-end"
+        data-status-slot
+      >
+        {statusDetail ? <Badge tone={accent === "midi" ? "midi" : "playback"}>{statusDetail}</Badge> : null}
+        <StatusBadge data-status={status} data-status-badge status={connectionWord[status]} />
+      </div>
       {onClose && (
         <Button
           aria-label={closeLabel}

@@ -90,7 +90,8 @@ describe("a restored custom layout is not overwritten during startup sizing", ()
     Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
       configurable: true,
       get() {
-        return this.className?.includes("widget-autosize-target") ? 2000 : 0;
+        // 200px of content needs 8 rows: the saved 11 rows are taller than needed and must be kept, not auto-fit down to 8.
+        return this.className?.includes("widget-autosize-target") ? 200 : 0;
       },
     });
   });
@@ -113,6 +114,23 @@ describe("a restored custom layout is not overwritten during startup sizing", ()
 
     const restored = loadDashboardLayout(durableStorage);
     expect(restored.desktop.find((item) => item.id === "service-plan")?.h).toBe(11);
+  });
+
+  it("raises a saved height that would cut the content off (owner 2026-10-14), but never lowers a taller one", async () => {
+    const custom = createDefaultDashboardLayout();
+    custom.desktop = custom.desktop.map((item) => (
+      item.id === "service-plan" ? { ...item, h: 3, minH: 1 } : item
+    ));
+    durableStorage.setItem(DASHBOARD_LAYOUT_KEY, JSON.stringify(custom));
+
+    render(<DashboardGrid widgets={widgets} />);
+    await vi.advanceTimersByTimeAsync(600);
+
+    const restored = loadDashboardLayout(durableStorage);
+    const height = restored.desktop.find((item) => item.id === "service-plan")?.h ?? 0;
+    // Raised from the 3 rows that cut the content off to what it needs (about 8-9 rows for 200px), well under the 11 kept above.
+    expect(height).toBeGreaterThanOrEqual(8);
+    expect(height).toBeLessThan(11);
   });
 
   it("keeps the restored height after the widget content changes", async () => {

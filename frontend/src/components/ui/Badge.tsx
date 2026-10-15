@@ -14,6 +14,8 @@ export interface BadgeProps extends ComponentPropsWithoutRef<"span"> {
   emphasis?: BadgeEmphasis;
   /** Leading status dot in the same tone. */
   dot?: boolean;
+  /** Keep the real status colour (green for success) inside a connection panel instead of the connection's accent. */
+  ignoreAccent?: boolean;
 }
 
 const tinted: Record<Tone, string> = {
@@ -41,8 +43,9 @@ const solid: Partial<Record<Tone, string>> = {
 const base =
   "inline-flex items-center gap-1.5 rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider";
 
-export function Badge({ tone, emphasis = "tinted", dot = false, className, children, ...rest }: BadgeProps) {
-  const accent = useAccent();
+export function Badge({ tone, emphasis = "tinted", dot = false, ignoreAccent = false, className, children, ...rest }: BadgeProps) {
+  const panelAccent = useAccent();
+  const accent = ignoreAccent ? null : panelAccent;
   // Inside a connection's panel a "good" badge wears the connection's colour instead of green.
   const effectiveTone: Tone = accent && tone === "success" ? accent : tone;
   const solidLook = emphasis === "solid" && !(accent && tone === "success") ? solid[tone] : undefined;
@@ -54,7 +57,7 @@ export function Badge({ tone, emphasis = "tinted", dot = false, className, child
       className={cx(base, look, className)}
       {...rest}
     >
-      {dot && <StatusDot tone={effectiveTone} />}
+      {dot && <StatusDot tone={effectiveTone} ignoreAccent={ignoreAccent} />}
       {children}
     </span>
   );
@@ -67,7 +70,7 @@ export interface StatusBadgeProps extends Omit<BadgeProps, "tone" | "children" |
 /** Sentence case in the DOM (what assistive tech reads); the `uppercase` class does the capitals. */
 export function StatusBadge({ status, ...rest }: StatusBadgeProps) {
   return (
-    <Badge tone={statusTone[status]} dot data-status={status} {...rest}>
+    <Badge tone={statusTone[status]} dot ignoreAccent data-status={status} {...rest}>
       {status}
     </Badge>
   );

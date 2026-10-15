@@ -9,6 +9,8 @@ export interface StatusDotProps extends Omit<ComponentPropsWithoutRef<"span">, "
   size?: "sm" | "md";
   /** Makes the dot meaningful to assistive tech. Without it the dot is decorative; a word must carry the status. */
   label?: string;
+  /** Keep the real status colour inside a connection panel instead of taking the connection's accent. */
+  ignoreAccent?: boolean;
 }
 
 const dotTone: Record<Tone, string> = {
@@ -28,9 +30,9 @@ const dotTone: Record<Tone, string> = {
 const sizes = { sm: "size-2", md: "size-2.5" } as const;
 
 /** Static by design: no pulse or animation, so a dot never fakes liveness. */
-export function StatusDot({ tone: requested, size = "sm", label, className, ...rest }: StatusDotProps) {
+export function StatusDot({ tone: requested, size = "sm", label, ignoreAccent = false, className, ...rest }: StatusDotProps) {
   const accent = useAccent();
-  const tone: Tone = accent && requested === "success" ? accent : requested;
+  const tone: Tone = accent && !ignoreAccent && requested === "success" ? accent : requested;
   const a11y = label ? { role: "img", "aria-label": label } : { "aria-hidden": true as const };
   return (
     <span
