@@ -145,10 +145,10 @@ describe("Internet access (Connection Access switch)", () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: true, web_dashboard_pin_enabled: true});
 
-    // Enabled, but still no Operator: the bootstrap form is a required next step and sits under People.
+    // Enabled, but still no Operator: the bootstrap form is a required next step and sits under Remote access.
     expect(await screen.findByRole("heading", {name: "Create first Operator"})).toBeInTheDocument();
     expect(screen.getByText(/Remote Access is running\. Create the first Operator/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", {name: "People"})).toBeInTheDocument();
+    expect(screen.getByRole("heading", {name: "Remote access"})).toBeInTheDocument();
 
     // Creating the first Operator must NOT call setRemoteEnabled again (it's already enabled) -- only bootstrapRemote itself.
     vi.mocked(api.bootstrapRemote).mockResolvedValue(operator);
@@ -173,7 +173,7 @@ describe("Internet access (Connection Access switch)", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("leaving Internet asks first, then turns Remote off and collapses People", async () => {
+  it("leaving Internet asks first, then turns Remote off and collapses Remote access", async () => {
     vi.mocked(api.getRemoteStatus).mockResolvedValue(on);
     vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
     vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
@@ -185,7 +185,7 @@ describe("Internet access (Connection Access switch)", () => {
     renderPanel({settings: withLan(true), onSave});
     const radio = await internet();
     await waitFor(() => expect(radio).toBeChecked());
-    expect(screen.getByRole("heading", {name: "People"})).toBeInTheDocument();
+    expect(screen.getByRole("heading", {name: "Remote access"})).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", {name: "Host"}));
     expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe("Internet access (Connection Access switch)", () => {
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(false));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
     await waitFor(() => expect(screen.getByRole("radio", {name: "Host"})).toBeChecked());
-    expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Remote Access", {selector: "div"})).not.toBeInTheDocument();
     // Going back to Host also takes the local network away again, in the same flow.
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
@@ -321,7 +321,7 @@ describe("StagePilot panel sections", () => {
   it("shows Status as the only heading while Internet is off, then Connection Access, then Advanced as a collapsed row", async () => {
     renderPanel({settings: settingsResponse});
     await screen.findByRole("radio", {name: "Internet"});
-    // People now lives under Connection Access and only when Internet is chosen. Advanced is a collapsed row, not a heading.
+    // Remote access (the old People section) lives under Connection Access and only when Internet is chosen. Advanced is a collapsed row, not a heading.
     expect(screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent)).toEqual(["Status"]);
     expect(screen.getByRole("button", {name: /^Advanced/})).toHaveAttribute("aria-expanded", "false");
   });
@@ -347,12 +347,43 @@ describe("StagePilot panel sections", () => {
     expect(screen.queryByText("This computer only")).not.toBeInTheDocument();
   });
 
-  it("the Remote panel and People stay closed while Internet is off", async () => {
+  it("the Remote panel stays closed while Internet is off", async () => {
     renderPanel({settings: settingsResponse});
     await screen.findByRole("radio", {name: "Internet"});
     expect(document.getElementById("remote-access-inline")).toBeNull();
     expect(screen.queryByRole("heading", {name: "Create first Operator"})).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
+  });
+});
+
+describe("Remote access section (owner 2026-10-14)", () => {
+  it("is titled Remote access, drops the 'Let people sign in' sentence, and keeps the link and the people in two separate groups", async () => {
+    vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
+    vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
+    renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse});
+    expect(await screen.findByRole("heading", {name: "Remote access"})).toBeInTheDocument();
+    expect(screen.queryByText(/Let people sign in from a phone/)).not.toBeInTheDocument();
+
+    const link = await screen.findByRole("group", {name: "Remote link"});
+    const people = screen.getByRole("group", {name: "Remote users"});
+    expect(link).not.toContainElement(people);
+    expect(people).not.toContainElement(link);
+
+    // Group one: the link and its status.
+    expect(within(link).getByText(/Securely view or operate this StagePilot from another device/)).toBeInTheDocument();
+    expect(within(link).getByText("Connected")).toBeInTheDocument();
+    expect(within(link).getByText(/Stable Remote link|Temporary Remote link/)).toBeInTheDocument();
+    expect(within(link).getByRole("button", {name: "Copy link"})).toBeInTheDocument();
+    expect(within(link).getByRole("button", {name: "Regenerate Remote link"})).toBeInTheDocument();
+    expect(within(link).queryByText(/Viewers are read-only/)).not.toBeInTheDocument();
+
+    // Group two: the people, with the shorter sentence.
+    expect(within(people).getByText("Viewers are read-only. Operators can control StagePilot.")).toBeInTheDocument();
+    expect(screen.queryByText(/manage users\. Keep at least one/)).not.toBeInTheDocument();
+    expect(within(people).getByText(/operator@example\.test · Enabled/)).toBeInTheDocument();
+    expect(within(people).getByRole("button", {name: "Delete operator@example.test"})).toBeInTheDocument();
+    expect(within(people).getByRole("button", {name: "Add a person"})).toBeInTheDocument();
+    expect(within(people).queryByRole("button", {name: "Copy link"})).not.toBeInTheDocument();
   });
 });
 
@@ -439,25 +470,25 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
     expect(screen.getByRole("radio", {name: "Host"})).toBeChecked();
   });
 
-  describe("the PIN and People appear only when they apply", () => {
-    it("Host: no PIN field, no People", () => {
+  describe("the PIN and Remote access appear only when they apply", () => {
+    it("Host: no PIN field, no Remote access", () => {
       withLan(false);
       expect(screen.queryByLabelText("Replace dashboard PIN")).not.toBeInTheDocument();
-      expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
     });
 
-    it("Local network: the PIN field, still no People", () => {
+    it("Local network: the PIN field, still no Remote access", () => {
       withLan(true);
       expect(screen.getByLabelText("Replace dashboard PIN")).toHaveAttribute("type", "password");
       expect(screen.getByText(/The initial PIN is 1234/)).toBeInTheDocument();
-      expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
     });
 
-    it("Internet: the PIN field (the local network is on too) and People, both directly under the switch and above Advanced", async () => {
+    it("Internet: the PIN field (the local network is on too) and Remote access, both directly under the switch and above Advanced", async () => {
       vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
       vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
       withLan(true);
-      const people = await screen.findByRole("heading", {name: "People"});
+      const people = await screen.findByRole("heading", {name: "Remote access"});
       const pin = screen.getByLabelText("Replace dashboard PIN");
       const order = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       expect(order(screen.getByRole("radiogroup", {name: "Connection Access"}), pin)).toBe(true);
