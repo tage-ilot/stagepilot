@@ -230,4 +230,47 @@ describe("a fresh install's first render matches clicking Reset Layout", () => {
     expect(resetHeight).toBe(freshHeight);
     existing.unmount();
   });
+
+  // Where each widget sits, from the layout that was just saved (what a returning user would get next launch).
+  const placements = () => Object.fromEntries(
+    loadDashboardLayout(durableStorage).desktop.map(({ id, x, w }) => [id, { x, w }]),
+  );
+
+  it("puts Manual controls, then Event stream, under Now playing at Now playing's width, for a new user and after Reset layout (owner, 2026-10-15)", async () => {
+    // The default arrangement itself.
+    const defaults = createDefaultDashboardLayout().desktop;
+    const column = (id: string) => defaults.find((item) => item.id === id)!;
+    expect(column("now-playing").y).toBe(0);
+    expect(column("manual-controls").y).toBeGreaterThanOrEqual(column("now-playing").y + column("now-playing").h);
+    expect(column("events").y).toBeGreaterThanOrEqual(column("manual-controls").y + column("manual-controls").h);
+    for (const id of ["manual-controls", "events"]) {
+      expect(column(id).x).toBe(column("now-playing").x);
+      expect(column(id).w).toBe(column("now-playing").w);
+    }
+
+    // A brand-new user, after the fit pass has resized the widgets to their content.
+    expect(durableStorage.getItem(DASHBOARD_LAYOUT_KEY)).toBeNull();
+    const fresh = render(<DashboardGrid widgets={widgets} />);
+    await settleFit();
+    const freshPlacements = placements();
+    const nowPlaying = freshPlacements["now-playing"]!;
+    expect(freshPlacements["manual-controls"]).toEqual(nowPlaying);
+    expect(freshPlacements["events"]).toEqual(nowPlaying);
+    fresh.unmount();
+
+    // A user who had moved things, who then clicks Reset layout, gets exactly the same placements.
+    durableStorage.setItem(DASHBOARD_LAYOUT_KEY, JSON.stringify({
+      ...createDefaultDashboardLayout(),
+      desktop: createDefaultDashboardLayout().desktop.map((item) => (
+        item.id === "events" ? { ...item, x: 0, y: 40, w: 8 } : item.id === "manual-controls" ? { ...item, x: 0, y: 30 } : item
+      )),
+    }));
+    const existing = render(<DashboardGrid widgets={widgets} />);
+    await settleFit();
+    fireEvent.click(screen.getByRole("button", { name: "Edit layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset layout" }));
+    await settleFit();
+    expect(placements()).toEqual(freshPlacements);
+    existing.unmount();
+  });
 });

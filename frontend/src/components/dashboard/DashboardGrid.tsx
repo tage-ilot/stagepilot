@@ -300,13 +300,16 @@ export function DashboardGrid({
       activeGrid.update(element, { h: contentRows(target, node) });
     }
     activeGrid.batchUpdate(false);
-    activeGrid.compact("compact");
+    // Gravity only (settle): the full "compact" repack is first-fit in reading order, so once Service plan and Now playing are sized
+    // to their content it slid Manual controls out from under Now playing and left it beside Service plan. A new user's first
+    // layout and a reset must both keep the default arrangement: Manual controls, then Event stream, stacked under Now playing.
+    settle(activeGrid);
     if (targetMode === "mobile") {
       saveMobileHeightsResult();
     } else {
       saveGridResult();
     }
-  }, [saveGridResult, saveMobileHeightsResult]);
+  }, [saveGridResult, saveMobileHeightsResult, settle]);
 
   useEffect(() => {
     const grid = gridRef.current;
