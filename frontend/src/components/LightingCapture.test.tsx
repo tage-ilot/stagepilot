@@ -256,7 +256,10 @@ describe("LightingTimeline", () => {
     const scroll = screen.getByTestId("lighting-timeline-scroll");
     expect(scroll.className).toContain("overflow-x-auto");
     // The scrolling box is drawn as an obvious bordered region with an edge glow (owner, 2026-10-15).
-    expect(scroll).toHaveClass("scroll-region", "scroll-region-x");
+    // The frame carries the border; the scroller sits inside it with an edge fade overlay on top (owner, 2026-10-15).
+    expect(scroll.parentElement).toHaveClass("scroll-region");
+    expect(scroll.parentElement).toHaveAttribute("data-axis", "x");
+    expect(scroll.parentElement?.querySelectorAll(".scroll-fade")).toHaveLength(2);
     expect(scroll.className).not.toContain("border-edge-subtle");
   });
 });

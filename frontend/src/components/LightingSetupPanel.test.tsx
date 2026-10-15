@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ApplicationState,
@@ -163,13 +163,78 @@ describe("LightingSetupPanel", () => {
     const region = screen.getByTestId("lighting-cue-list");
     expect(region).toHaveClass("overflow-y-auto", "overscroll-contain");
     // A box that scrolls is an obvious bordered region (owner, 2026-10-15): bordered, edge glows, focusable and named.
-    expect(region).toHaveClass("scroll-region", "scroll-region-y");
+    const frame = region.parentElement!;
+    expect(frame).toHaveClass("scroll-region");
+    expect(frame).toHaveAttribute("data-axis", "y");
+    // The fade is an overlay ABOVE the scroller's contents (inputs and all), ignores the pointer, and is hidden at the ends.
+    const fades = Array.from(frame.querySelectorAll<HTMLElement>(".scroll-fade"));
+    expect(fades.map((fade) => fade.dataset.edge)).toEqual(["start", "end"]);
+    for (const fade of fades) {
+      expect(fade).toHaveAttribute("aria-hidden", "true");
+      expect(region.contains(fade)).toBe(false);
+      expect(frame.lastElementChild === fade || frame.children.length === 3).toBe(true);
+    }
+    expect(fades[0]).toHaveAttribute("data-visible", "false");
     expect(region).toHaveAttribute("role", "region");
     expect(region).toHaveAttribute("aria-label", "Lighting cues, scrollable");
     expect(region).toHaveAttribute("tabindex", "0");
-    const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Lighting cue label"]'));
+    const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Cue label"]'));
     expect(labels).toHaveLength(40);
     expect(labels[0]).toHaveValue(label);
+  });
+
+  it("labels the cue fields Elapsed time and Cue label", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(screen.getAllByLabelText("Elapsed time").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Cue label").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Cue elapsed time")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Lighting cue label")).not.toBeInTheDocument();
+  });
+
+  describe("Song lighting timeline group", () => {
+    const KEY = "stagepilot.lighting.timeline-open";
+    const mount = () => render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const header = () => screen.getByRole("button", { name: /^Song lighting timeline/ });
+    beforeEach(() => window.localStorage.removeItem(KEY));
+
+    it("starts open and holds the song picker, the cue board, the timeline and the cue list together", () => {
+      mount();
+      expect(header()).toHaveAttribute("aria-expanded", "true");
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      const body = header().parentElement!.querySelector("[data-part=region]")!;
+      expect(within(body as HTMLElement).getByLabelText("Song")).toBeInTheDocument();
+      expect(body.contains(screen.getByTestId("lighting-cue-list"))).toBe(true);
+      expect(body.contains(screen.getByTestId("lighting-timeline"))).toBe(true);
+    });
+
+    it("collapses on click, saves the choice, and keeps the Test cue controls visible", async () => {
+      const user = userEvent.setup();
+      mount();
+      await user.click(header());
+      expect(header()).toHaveAttribute("aria-expanded", "false");
+      expect(window.localStorage.getItem(KEY)).toBe("false");
+      const body = header().parentElement!.querySelector("[data-part=region]")!;
+      expect(body.contains(screen.getByRole("group", { name: "Test cue" }))).toBe(false);
+      await user.click(header());
+      expect(header()).toHaveAttribute("aria-expanded", "true");
+      expect(window.localStorage.getItem(KEY)).toBe("true");
+    });
+
+    it("opens the way it was left after a restart", () => {
+      window.localStorage.setItem(KEY, "false");
+      mount();
+      expect(header()).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("shows how many cues are saved while closed", async () => {
+      window.localStorage.setItem(KEY, "false");
+      mount();
+      expect(header()).toHaveTextContent(/\d+ cues?|No cues yet/);
+    });
   });
 
   it("keeps one short subtitle whichever connection method is chosen", async () => {
@@ -194,7 +259,9 @@ describe("LightingSetupPanel", () => {
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={empty} state={state} />,
     );
     const region = screen.getByTestId("lighting-cue-list");
-    expect(region).not.toHaveClass("scroll-region");
+    expect(region.parentElement).not.toHaveClass("scroll-region");
+    // Nothing to scroll: no frame is drawn, so no fade overlay is a sibling of the list.
+    expect(Array.from(region.parentElement?.children ?? []).some((node) => node.classList.contains("scroll-fade"))).toBe(false);
     expect(region).not.toHaveAttribute("role");
     expect(region).not.toHaveAttribute("tabindex");
   });
@@ -279,7 +346,7 @@ describe("LightingSetupPanel", () => {
     expect(screen.getByDisplayValue("First chorus")).toBeInTheDocument();
     expect(screen.getAllByRole("option", { name: "C4" })).toHaveLength(2);
 
-    const label = screen.getByLabelText("Lighting cue label");
+    const label = screen.getByLabelText("Cue label");
     await user.clear(label);
     await user.type(label, "Chorus wash");
     await user.tab();
@@ -537,7 +604,7 @@ describe("LightingSetupPanel", () => {
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lighting" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "General configuration" })).not.toBeInTheDocument();
-    for (const name of ["Note", "Velocity", "Cue elapsed time", "Lighting cue note", "Lighting cue velocity", "Lighting cue label"]) {
+    for (const name of ["Note", "Velocity", "Elapsed time", "Lighting cue note", "Lighting cue velocity", "Cue label"]) {
       const control = screen.getByLabelText(name);
       const visible = document.querySelector(`label[for="${control.id}"]`);
       expect(visible, name).not.toBeNull();
@@ -769,7 +836,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
   it("cue label, velocity, note and Remove save immediately and never appear as held changes", () => {
     const onSaveCues = vi.fn();
     mount({ onSaveCues });
-    const label = screen.getByLabelText("Lighting cue label");
+    const label = screen.getByLabelText("Cue label");
     fireEvent.change(label, { target: { value: "Bridge" } });
     fireEvent.blur(label);
     const velocity = screen.getByLabelText("Lighting cue velocity");

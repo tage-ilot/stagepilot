@@ -769,6 +769,14 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
   on the left.
 - A control is **disabled with a reason shown nearby**, never silently greyed.
 
+### Scrolling boxes (decided 2026-10-15)
+
+A box that scrolls on its own (the Lighting cue list, the timeline) is drawn as an obvious region so people know there is more to see:
+- Use `ScrollRegion` (`components/ui/ScrollRegion.tsx`). It draws a 1px `ink-muted` border, rounded corners and `surface-950` fill around the scroller.
+- A light fade (`ink-muted` to transparent, 18px) lies **on top of the content, inputs included**, along any edge that has more to reach, and is hidden at the ends. It is an overlay that ignores the pointer. A dark shadow is not used: it cannot be seen on `surface-950`.
+- The scroller stays focusable and named when it has content (`role="region"`, `tabIndex=0`, an `aria-label`). An empty list is not framed.
+- Collapsing a group of controls that people may not use (the Lighting song timeline, Remote access) uses `Disclosure variant="activity"` with its open state saved by `usePersistedFlag`, starting open.
+
 ### Panels read like the style guide (decided 2026-10-14)
 The owner preferred the guide's StagePilot and Playback panels to the app's. The app now follows them:
 - **Header:** the kicker `Connection configuration` (11px, 800, uppercase, 0.18em, muted); the **title is
