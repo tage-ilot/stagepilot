@@ -881,7 +881,7 @@ export function Dashboard({
             </div>
           </div>
           )}
-          statusClass={ready ? "bg-success text-ink" : "bg-danger-deep text-on-danger"}
+          statusClass={ready ? "border-success-soft text-success-text" : "border-danger-soft text-danger-text"}
           statusLabel={!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
           title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
           wrapProps={readinessHover.hoverProps}
