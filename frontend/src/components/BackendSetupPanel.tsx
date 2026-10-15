@@ -434,8 +434,7 @@ export function BackendSetupPanel({
         )}
         {access === "internet" && remote.panelOpen && (
           <div className="mt-4" data-access-people>
-            <SectionLabel>People</SectionLabel>
-            <p className="mt-2 text-sm text-ink-body">Let people sign in from a phone or another computer.</p>
+            <SectionLabel>Remote access</SectionLabel>
             <div className="mt-3"><RemoteAccessPanel control={remote} /></div>
           </div>
         )}

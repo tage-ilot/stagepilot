@@ -89,7 +89,12 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
   const operators = users.filter((user) => user.enabled && user.role === "Operator").length;
   if (!canManage) return <div aria-label="Remote Access"><p className="text-sm text-ink-body">Read-only access. An Operator manages Remote Access.</p></div>;
 
+  // Remote Access is two separate groups (owner, 2026-10-14): the link and its status, then the people who can use it.
+  const showPeople = Boolean(status?.needs_operator && !local) || bootstrap || Boolean(status && !status.needs_operator);
+  const group = "space-y-4 rounded-ds-lg border border-edge-subtle bg-surface-950/40 p-4";
+
   return <div aria-label="Remote Access" className="space-y-4">
+    <div aria-label="Remote link" className={group} data-remote-group="link" role="group">
     <p className="text-sm text-ink-body">Securely view or operate this StagePilot from another device. Local operation continues if Remote disconnects.</p>
     <p role="status" className="text-sm text-integration-backend-text">{status ? labels[status.state] : "Checking Remote Access…"}</p>
     {status?.state === "enabling" && <p className="text-sm text-ink-muted">
@@ -142,13 +147,15 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         <Button variant="secondary" type="button" onClick={cancelDisable}>Cancel</Button>
       </div>
     </div>}
+    </div>
+    {showPeople && <div aria-label="Remote users" className={group} data-remote-group="people" role="group">
     {status?.needs_operator && !local && <p className="text-sm text-ink-body">Create the first Operator from local StagePilot.</p>}
     {bootstrap && <>
       <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">Create first Operator</h3>
       <p className="text-sm text-warning-text">Remote Access is running. Create the first Operator to allow sign-in.</p>
     </>}
     {(bootstrap || status && !status.needs_operator) && <>
-      <p className="text-sm text-ink-body">Viewers are read-only. Operators can control StagePilot and manage users. Keep at least one enabled Operator. User changes revoke that user's sessions.</p>
+      <p className="text-sm text-ink-body">Viewers are read-only. Operators can control StagePilot.</p>
       {!bootstrap && <ul className="divide-y divide-edge-subtle">{users.map((user) => {
         const last = user.enabled && user.role === "Operator" && operators <= 1;
         const self = user.email === access.user?.email;
@@ -191,6 +198,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         {(edit || adding) && <Button variant="secondary" type="button" onClick={() => {setEdit(null); setAdding(false); setEmail(""); setPassword("");}}>Cancel</Button>}
       </form>}
     </>}
+    </div>}
     {notice && <p role="status" className="text-sm text-integration-backend-text">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
   </div>;
