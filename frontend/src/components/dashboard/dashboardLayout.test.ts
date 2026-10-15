@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   createDefaultDashboardLayout,
-  createSpacer,
   dashboardModeForWidth,
   migrateDashboardOrder,
   moveDashboardItem,
@@ -90,10 +89,21 @@ describe("dashboard layout model", () => {
     expect(parsed?.tablet[0]).toMatchObject({ x: 0, w: 6 });
   });
 
-  it("creates unique explicit spacers and rejects duplicate IDs", () => {
-    const spacer = createSpacer([], "spacer-test");
-    expect(spacer).toMatchObject({ id: "spacer-test", kind: "spacer", w: 2, h: 3 });
-    expect(() => createSpacer(["spacer-test"], "spacer-test")).toThrow(/already exists/);
+  it("drops spacers saved by older versions instead of rejecting the whole layout", () => {
+    const valid = createDefaultDashboardLayout();
+    const spacer = { id: "spacer-old", kind: "spacer", x: 0, y: 40, w: 2, h: 3, minW: 1, minH: 1 };
+    const parsed = parseDashboardLayout({
+      ...valid,
+      desktop: [...valid.desktop, spacer],
+      tablet: [...valid.tablet, spacer],
+      mobileOrder: [...valid.mobileOrder, "spacer-old"],
+      mobileHeights: { ...valid.mobileHeights, "spacer-old": 3 },
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.desktop.map(({ id }) => id).sort()).toEqual(valid.desktop.map(({ id }) => id).sort());
+    expect(parsed!.tablet.some(({ kind }) => (kind as string) === "spacer")).toBe(false);
+    expect(parsed!.mobileOrder).toEqual(valid.mobileOrder);
+    expect(parsed!.mobileHeights).not.toHaveProperty("spacer-old");
   });
 
   it("moves items deterministically without losing any widget", () => {

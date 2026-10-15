@@ -12,7 +12,6 @@ import "gridstack/dist/gridstack.min.css";
 
 import {
   createDefaultDashboardLayout,
-  createSpacer,
   dashboardModeForWidth,
   moveDashboardItem,
   orderedLayoutItems,
@@ -27,17 +26,12 @@ import {
   type DashboardLayoutItem,
   type DashboardLayoutMode,
   type DashboardLayoutState,
-  type DashboardSpacerId,
   type DashboardWidgetId,
 } from "./dashboardLayoutTypes";
 import { DASHBOARD_WIDGETS } from "./dashboardWidgetRegistry";
 import { DashboardLayoutToolbar } from "./DashboardLayoutToolbar";
-import { DashboardSpacer } from "./DashboardSpacer";
 import { DashboardWidgetFrame } from "./DashboardWidgetFrame";
 import { CELL_HEIGHT, CONTENT_FIT, contentRows, fitWidgetToContent } from "./contentFit";
-
-const bottom = (items: DashboardLayoutItem[]) =>
-  items.reduce((maximum, item) => Math.max(maximum, item.y + item.h), 0);
 
 // Fallback height used before the real content-fit measurement pass has
 // run for a widget on mobile (e.g. right after Reset Layout, or the very
@@ -52,23 +46,21 @@ const mobileItems = (layout: DashboardLayoutState): DashboardLayoutItem[] => {
   return layout.mobileOrder.map((id) => {
     const source = desktopById.get(id);
     const measured = layout.mobileHeights?.[id];
-    const h = source?.kind === "spacer"
-      ? Math.max(1, Math.min(source.h, 4))
-      // The Recent Event Stream keeps its own bounded height + internal
-      // scroll on every layout mode (never content-measured/auto-fit),
-      // matching desktop/tablet behavior.
-      : id === "events"
-        ? mobileFallbackHeight(source)
-        : measured ?? mobileFallbackHeight(source);
+    // The Recent Event Stream keeps its own bounded height + internal
+    // scroll on every layout mode (never content-measured/auto-fit),
+    // matching desktop/tablet behavior.
+    const h = id === "events"
+      ? mobileFallbackHeight(source)
+      : measured ?? mobileFallbackHeight(source);
     const item: DashboardLayoutItem = {
       id,
-      kind: source?.kind ?? "widget",
+      kind: "widget",
       x: 0,
       y,
       w: 1,
       h,
       minW: 1,
-      minH: source?.kind === "spacer" ? 1 : Math.min(source?.minH ?? 7, h),
+      minH: Math.min(source?.minH ?? 7, h),
       maxW: 1,
     };
     y += h;
@@ -113,6 +105,7 @@ export function DashboardGrid({
   const [announcement, setAnnouncement] = useState("");
   const gridElement = useRef<HTMLDivElement>(null);
   const gridRef = useRef<GridStack | null>(null);
+  const settleRef = useRef<(grid: GridStack) => void>(() => undefined);
   // A valid saved desktop/tablet layout already includes the user's measured
   // and manually resized geometry. Neither the startup fit nor later content
   // mutations should overwrite it. Defaults and migrated layouts still need
@@ -210,6 +203,12 @@ export function DashboardGrid({
     }
   }, [saveGridResult]);
 
+  // Gravity is off on desktop: only the one-column mobile layout is pulled together after a change.
+  const settle = useCallback((target: GridStack) => {
+    if (modeRef.current === "mobile") target.compact("compact");
+  }, []);
+  settleRef.current = settle;
+
   useEffect(() => {
     const handleResize = () => setMode(dashboardModeForWidth(window.innerWidth));
     window.addEventListener("resize", handleResize);
@@ -225,7 +224,9 @@ export function DashboardGrid({
       disableDrag: true,
       disableResize: true,
       draggable: { handle: ".dashboard-widget-handle" },
-      float: false,
+      // Widgets stay exactly where they are dropped (owner, 2026-10-14); the grid only stops them overlapping, by moving the one in
+      // the way. Pulling everything upward happens only on "Compact layout" and in the single-column mobile layout.
+      float: modeRef.current !== "mobile",
       margin: 10,
       resizable: { handles: "se" },
     }, gridElement.current);
@@ -238,12 +239,12 @@ export function DashboardGrid({
     };
     // While the handle is dragged, keep every content-fit widget at the height its content needs for the width it has now.
     const keepContentFit = (_event: Event, element?: GridItemHTMLElement) => {
-      if (element && fitWidgetToContent(initializedGrid, element)) initializedGrid.compact("compact");
+      if (element && fitWidgetToContent(initializedGrid, element)) settleRef.current(initializedGrid);
     };
     const stop = (_event?: Event, element?: GridItemHTMLElement) => {
       if (element) fitWidgetToContent(initializedGrid, element);
       setInteractingId(null);
-      initializedGrid.compact("compact");
+      settleRef.current(initializedGrid);
       window.requestAnimationFrame(saveGridResult);
     };
     initializedGrid.on("dragstart", start);
@@ -264,6 +265,7 @@ export function DashboardGrid({
     if (!grid) return;
     const desiredIds = new Set(items.map(({ id }) => id));
     grid.batchUpdate();
+    grid.float(mode !== "mobile");
     grid.column(DASHBOARD_COLUMNS[mode], "none");
     for (const element of grid.getGridItems()) {
       if (!desiredIds.has(element.getAttribute("gs-id") as DashboardItemId)) {
@@ -288,7 +290,7 @@ export function DashboardGrid({
     activeGrid.batchUpdate();
     for (const element of activeGrid.getGridItems()) {
       const id = element.getAttribute("gs-id") as DashboardItemId | null;
-      if (!id || id === "events" || id.startsWith("spacer-")) continue;
+      if (!id || id === "events") continue;
       const target = element.querySelector<HTMLElement>(".widget-autosize-target");
       const node = element.gridstackNode;
       if (!target || !node) continue;
@@ -337,7 +339,7 @@ export function DashboardGrid({
         let changed = false;
         for (const element of activeGrid.getGridItems()) changed = fitWidgetToContent(activeGrid, element) || changed;
         if (changed) {
-          activeGrid.compact("compact");
+          settle(activeGrid);
           saveGridResult();
         }
       });
@@ -346,7 +348,7 @@ export function DashboardGrid({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [items, mode, saveGridResult]);
+  }, [items, mode, saveGridResult, settle]);
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -360,7 +362,7 @@ export function DashboardGrid({
     const observed = grid.getGridItems().flatMap((element) => {
       const id = element.getAttribute("gs-id") as DashboardItemId | null;
       const target = element.querySelector<HTMLElement>(".widget-autosize-target");
-      if (!id || id === "events" || id.startsWith("spacer-") || !target) return [];
+      if (!id || id === "events" || !target) return [];
       widths.set(target, target.getBoundingClientRect().width);
       return [{ element, target }];
     });
@@ -372,7 +374,7 @@ export function DashboardGrid({
       // Content-fit widgets follow their content in every mode and for saved layouts too; only mobile keeps its own path.
       if (activeGrid && node && modeRef.current !== "mobile" && CONTENT_FIT[element.getAttribute("gs-id") as DashboardItemId]) {
         if (fitWidgetToContent(activeGrid, element)) {
-          activeGrid.compact("compact");
+          settle(activeGrid);
           saveGridResult();
         }
         return;
@@ -385,7 +387,7 @@ export function DashboardGrid({
       const rows = contentRows(target, node);
       if (rows === node.h) return;
       activeGrid.update(element, { h: rows });
-      activeGrid.compact("compact");
+      settle(activeGrid);
       if (modeRef.current === "mobile") {
         saveMobileHeightsResult();
       } else {
@@ -437,7 +439,7 @@ export function DashboardGrid({
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, [interactingId, mode, saveGridResult, saveMobileHeightsResult]);
+  }, [interactingId, mode, saveGridResult, saveMobileHeightsResult, settle]);
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -464,44 +466,8 @@ export function DashboardGrid({
       });
       window.setTimeout(() => compactGrid(false), 0);
     }
-    setAnnouncement(`${id.startsWith("spacer-") ? "Spacer" : DASHBOARD_WIDGETS[id as DashboardWidgetId].title} moved ${offset < 0 ? "earlier" : "later"}`);
+    setAnnouncement(`${DASHBOARD_WIDGETS[id].title} moved ${offset < 0 ? "earlier" : "later"}`);
   }, [commitLayout, compactGrid]);
-
-  const addSpacer = useCallback(() => {
-    const current = layoutRef.current;
-    const spacer = createSpacer([
-      ...current.desktop.map(({ id }) => id),
-      ...current.tablet.map(({ id }) => id),
-    ]);
-    const desktop = { ...spacer, y: bottom(current.desktop) };
-    const tablet = {
-      ...spacer,
-      y: bottom(current.tablet),
-      w: Math.min(spacer.w, DASHBOARD_COLUMNS.tablet),
-    };
-    commitLayout({
-      ...current,
-      desktop: [...current.desktop, desktop],
-      tablet: [...current.tablet, tablet],
-      mobileOrder: [...current.mobileOrder, spacer.id],
-    });
-    setAnnouncement("Dashboard spacer added");
-  }, [commitLayout]);
-
-  const removeSpacer = useCallback((id: DashboardSpacerId) => {
-    const element = gridElement.current?.querySelector<GridItemHTMLElement>(
-      `[gs-id="${CSS.escape(id)}"]`,
-    );
-    if (element && gridRef.current) gridRef.current.removeWidget(element, false);
-    const current = layoutRef.current;
-    commitLayout({
-      ...current,
-      desktop: current.desktop.filter((item) => item.id !== id),
-      tablet: current.tablet.filter((item) => item.id !== id),
-      mobileOrder: current.mobileOrder.filter((itemId) => itemId !== id),
-    });
-    setAnnouncement("Dashboard spacer removed");
-  }, [commitLayout]);
 
   const resetLayout = useCallback(() => {
     commitLayout(createDefaultDashboardLayout());
@@ -531,9 +497,7 @@ export function DashboardGrid({
       >
         {items.map((item) => {
           const index = orderedIds.indexOf(item.id);
-          const label = item.kind === "widget"
-            ? DASHBOARD_WIDGETS[item.id as DashboardWidgetId].title
-            : "Dashboard spacer";
+          const label = DASHBOARD_WIDGETS[item.id].title;
           return (
             <div
               className={`grid-stack-item ${interactingId === item.id ? "dashboard-grid-item-interacting" : ""}`}
@@ -542,33 +506,16 @@ export function DashboardGrid({
               {...itemAttributes(item)}
             >
               <div className="grid-stack-item-content">
-                {item.kind === "spacer" ? (
-                  <DashboardWidgetFrame
-                    editing={editing}
-                    first={index === 0}
-                    id={item.id}
-                    label={label}
-                    last={index === orderedIds.length - 1}
-                    onMove={moveItem}
-                  >
-                    <DashboardSpacer
-                      editing={editing}
-                      id={item.id as DashboardSpacerId}
-                      onRemove={removeSpacer}
-                    />
-                  </DashboardWidgetFrame>
-                ) : (
-                  <DashboardWidgetFrame
-                    editing={editing}
-                    first={index === 0}
-                    id={item.id}
-                    label={label}
-                    last={index === orderedIds.length - 1}
-                    onMove={moveItem}
-                  >
-                    {widgets[item.id as DashboardWidgetId]}
-                  </DashboardWidgetFrame>
-                )}
+                <DashboardWidgetFrame
+                  editing={editing}
+                  first={index === 0}
+                  id={item.id}
+                  label={label}
+                  last={index === orderedIds.length - 1}
+                  onMove={moveItem}
+                >
+                  {widgets[item.id]}
+                </DashboardWidgetFrame>
               </div>
             </div>
           );
@@ -577,7 +524,6 @@ export function DashboardGrid({
       {canEditLayout && <DashboardLayoutToolbar
         editing={editing}
         eventsHidden={eventsHidden}
-        onAddSpacer={addSpacer}
         onCompact={() => compactGrid(true)}
         onDone={() => setEditing(false)}
         onEdit={() => setEditing(true)}
