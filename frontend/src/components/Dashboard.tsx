@@ -533,6 +533,16 @@ export function Dashboard({
   const [notificationQueue, setNotificationQueue] = useState<HeaderNotification[]>([]);
   const [statusCompact, setStatusCompact] = useState(() => window.innerWidth <= 1_000);
   const [statusMotionPhase, setStatusMotionPhase] = useState<"idle" | "preparing" | "moving">("idle");
+  // The logo is pinned to the window's left edge, so it needs the scrollbar's width to cancel the centred dashboard exactly.
+  useEffect(() => {
+    const root = document.documentElement;
+    const measure = () => root.style.setProperty("--scrollbar-w", `${window.innerWidth - root.clientWidth}px`);
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(root);
+    return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
+  }, []);
   const readinessHover = useDelayedHover();
   const hoverPreviewWarmupRef = useRef<HoverPreviewWarmupState>(createHoverPreviewWarmupState());
   const notificationId = useRef(0);
@@ -838,7 +848,7 @@ export function Dashboard({
           under the header so nothing reflows. The pill shrinks to a status dot on very narrow screens. See .app-header in index.css. */}
       <header className="app-header relative z-20 mb-5 flex items-center gap-3">
         <div className="app-header-brand flex min-w-0 flex-wrap items-center gap-y-2">
-          <h1 className="relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
+          <h1 className="app-logo relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
               onClick={updater.openConfirmation}

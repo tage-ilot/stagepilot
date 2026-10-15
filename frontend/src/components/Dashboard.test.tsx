@@ -531,6 +531,18 @@ describe("Dashboard Planning Center plan states", () => {
       };
     };
 
+    it("pins the logo 32px inside the background image at every width, including windows wider than the image (stylesheet rule)", async () => {
+      renderDashboard(loadedServiceState);
+      expect(parts().logo).toHaveClass("app-logo");
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      // 32px in from the left edge of the 1700px background image: it cancels the page padding and the dashboard's centring (1680px),
+      // then adds the image's own centring offset (1700px), so on a wide window it follows the image instead of the window edge.
+      expect(css).toMatch(/\.app-logo \{\s*margin-left: calc\(2rem - var\(--page-pad\) - max\(0px, \(var\(--page-w\) - 1680px\) \/ 2\) \+ max\(0px, \(var\(--page-w\) - 1700px\) \/ 2\)\);/);
+      expect(css).toMatch(/\.app-header \{\s*--page-pad: 1rem;/);
+      expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.app-header \{\s*--page-pad: 2rem;/);
+    });
+
     it("is a single row with the logo first, on every width: no grid that re-flows or wraps the logo", () => {
       renderDashboard(loadedServiceState);
       const { header, brand, slot, logo } = parts();

@@ -844,6 +844,54 @@ textarea:focus-visible {
   background: linear-gradient(to left, theme("colors.ink-muted"), transparent);
 }
 
+/* The logo sits 32px in from the left edge of the BACKGROUND IMAGE (owner, 2026-10-15), the same place at every width. The image is
+   1700px wide and centred on the page (body), so on a window wider than that the logo moves with the image and never ends up in
+   the black beside it; on a narrower window the image fills the window and this is 32px from the window edge. The margin cancels
+   the page padding (16, 24 or 32px) and the dashboard's own centring (1680px), then adds the image's offset (1700px).
+   --scrollbar-w is set by the Dashboard so a visible scrollbar doesn't throw the centring off. */
+.app-header {
+  --page-pad: 1rem;
+  --page-w: calc(100vw - var(--scrollbar-w, 0px));
+}
+
+@media (min-width: 640px) {
+  .app-header {
+    --page-pad: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-header {
+    --page-pad: 2rem;
+  }
+}
+
+.app-logo {
+  margin-left: calc(2rem - var(--page-pad) - max(0px, (var(--page-w) - 1680px) / 2) + max(0px, (var(--page-w) - 1700px) / 2));
+}
+
+/* The status checks at the bottom of a configuration (Services): four across for as long as their words fit, then two, then one.
+   It follows the panel's own width, not the window's. The columns are never narrower than their widest text. */
+.status-checks-box {
+  container-type: inline-size;
+}
+
+.status-checks {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 23rem) {
+  .status-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 30rem) {
+  .status-checks {
+    grid-template-columns: repeat(4, minmax(max-content, 1fr));
+  }
+}
+
 /* ---- Dashboard header (owner, 2026-10-15) ------------------------------------------------------------------------------------
    One row at every width. The logo is the first thing on it and never moves; everything else lives in .app-header-status to its
    right, the only part that gives way. The status pill (.header-chip) is a single element: when a message arrives it grows to the
@@ -1070,7 +1118,7 @@ textarea:focus-visible {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@container (min-width: 32rem) {
+@container (min-width: 30rem) {
   .manual-connection-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
