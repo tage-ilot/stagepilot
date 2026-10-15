@@ -78,3 +78,77 @@ export const padForShortcut = (pads: LightingPad[], key: string): LightingPad | 
 /** Describes a pad's payload in one short line, for the pad tooltip and the editor list. */
 export const describePad = (pad: LightingPad) =>
   pad.method === "osc" ? (pad.address ?? "") : `MIDI note ${pad.note ?? 0}, velocity ${pad.velocity}`;
+
+/** Longest a marker label is drawn, in px, and the least it needs to be readable. */
+export const MARKER_LABEL_MAX_PX = 112;
+const MARKER_LABEL_CHAR_PX = 7;
+const MARKER_LABEL_PAD_PX = 14;
+/** Clear space kept between the end of a label and the next marker line. */
+const MARKER_LABEL_GAP_PX = 10;
+/** Rows a label can sit on. More cues than this that all overlap share the last row and are shortened. */
+export const MARKER_LABEL_ROWS = 3;
+
+/** How wide a label is drawn: its text (about 7 px a character), capped. */
+export const markerLabelWidth = (label: string): number =>
+  Math.min(MARKER_LABEL_MAX_PX, Math.max(0, label.length) * MARKER_LABEL_CHAR_PX + MARKER_LABEL_PAD_PX);
+
+export interface MarkerLabelPlacement {
+  /** 0 is the top row; each row below sits one label height lower. */
+  row: number;
+  /** Width the label may use before it would run into the next label on its row, in px. */
+  width: number;
+}
+
+/**
+ * Stacks marker labels so close cues stay readable (the owner's capture flow drops cues a few seconds apart on a four-minute
+ * song). Markers are taken left to right; each label goes on the first row where the label before it has already ended, and
+ * when every row is busy it shares the last row and is shortened to the gap. Returns a placement per marker id.
+ */
+export const placeMarkerLabels = (
+  markers: { id: string; label: string; at: number }[],
+  trackWidth: number,
+  songLength: number,
+): Map<string, MarkerLabelPlacement> => {
+  const placements = new Map<string, MarkerLabelPlacement>();
+  if (trackWidth <= 0 || songLength <= 0) {
+    for (const marker of markers) placements.set(marker.id, { row: 0, width: markerLabelWidth(marker.label) });
+    return placements;
+  }
+  // Labels start 8 px to the right of the marker line (see the component), so the line's x is the start of the claim.
+  const sorted = [...markers].sort((left, right) => left.at - right.at || left.id.localeCompare(right.id));
+  const rowEnds: number[] = Array.from({ length: MARKER_LABEL_ROWS }, () => Number.NEGATIVE_INFINITY);
+  const lastOnRow: (string | null)[] = Array.from({ length: MARKER_LABEL_ROWS }, () => null);
+  for (const marker of sorted) {
+    const x = (marker.at / songLength) * trackWidth;
+    const wanted = markerLabelWidth(marker.label);
+    let row = rowEnds.findIndex((end) => end <= x);
+    if (row === -1) {
+      // Every row is busy: share the one whose label ends soonest, and cut that earlier label short at this marker.
+      row = rowEnds.indexOf(Math.min(...rowEnds));
+      const earlier = lastOnRow[row];
+      const earlierPlacement = earlier ? placements.get(earlier) : undefined;
+      if (earlier && earlierPlacement) {
+        const earlierX = (sorted.find((item) => item.id === earlier)!.at / songLength) * trackWidth;
+        placements.set(earlier, { row: earlierPlacement.row, width: Math.max(0, Math.min(earlierPlacement.width, x - earlierX - 4)) });
+      }
+    }
+    placements.set(marker.id, { row, width: wanted });
+    rowEnds[row] = x + wanted;
+    lastOnRow[row] = marker.id;
+  }
+  // A marker's line runs from its own label row down, so it crosses the labels on that row and below it. Stop every label short of
+  // the next later marker whose line would cross it (a marker on a row further down starts below the label and crosses nothing).
+  for (const marker of sorted) {
+    const mine = placements.get(marker.id)!;
+    const x = (marker.at / songLength) * trackWidth;
+    for (const other of sorted) {
+      if (other.at <= marker.at) continue;
+      const theirs = placements.get(other.id)!;
+      if (theirs.row > mine.row) continue;
+      const gap = (other.at / songLength) * trackWidth - x - MARKER_LABEL_GAP_PX;
+      if (gap < mine.width) mine.width = Math.max(0, gap);
+      break;
+    }
+  }
+  return placements;
+};

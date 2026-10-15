@@ -3,9 +3,11 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
+  MARKER_LABEL_ROWS,
   neutralPad,
   nudgeCueTime,
   padColorClasses,
+  placeMarkerLabels,
   rulerStep,
   timeFromTrackOffset,
   type TimelineMarker,
@@ -34,6 +36,7 @@ export function LightingTimeline({
   const [zoomIndex, setZoomIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; at: number } | null>(null);
+  const [trackWidth, setTrackWidth] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const markerRefs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -47,10 +50,23 @@ export function LightingTimeline({
   const step = rulerStep(length);
   const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, index) => index * step);
 
+  // The width the labels have to share. jsdom (the tests) has no ResizeObserver, so fall back to one read.
+  useEffect(() => {
+    const node = trackRef.current;
+    if (!node) return;
+    const measure = () => setTrackWidth(node.getBoundingClientRect().width);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [zoomIndex]);
+
   useEffect(() => {
     if (selectedId && !markers.some((marker) => marker.id === selectedId)) setSelectedId(null);
   }, [markers, selectedId]);
 
+  const labelPlacements = placeMarkerLabels(markers.map((marker) => ({ id: marker.id, label: marker.label, at: marker.at })), trackWidth, length);
   const percent = (at: number) => `${Math.min(100, Math.max(0, (at / length) * 100))}%`;
   const selected = markers.find((marker) => marker.id === selectedId) ?? null;
 
@@ -109,15 +125,16 @@ export function LightingTimeline({
         <div className="relative px-3 pb-3" style={trackStyle}>
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
             {ticks.map((tick) => (
-              <span className="absolute top-0 -translate-x-1/2 text-type-body-sm tabular-nums text-ink-muted" key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
+              <span className={`absolute top-0 text-type-body-sm tabular-nums text-ink-muted ${tick === 0 ? "" : "-translate-x-1/2"}`} key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
             ))}
           </div>
           <div
             aria-label={`Lighting cues, 0 to ${formatElapsed(length)}`}
-            className="relative mt-2 h-14"
+            className="relative mt-2"
             data-testid="lighting-timeline-track"
             ref={trackRef}
             role="group"
+            style={{ height: `${MARKER_LABEL_ROWS * 20 + 20}px` }}
           >
             {playhead !== null && (
               <div
@@ -135,7 +152,7 @@ export function LightingTimeline({
                 <button
                   aria-label={`${marker.label || "Cue"} at ${formatElapsed(at)}`}
                   aria-pressed={isSelected}
-                  className={`absolute top-0 flex h-full w-4 -translate-x-1/2 cursor-grab touch-none items-start justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${drag?.id === marker.id ? "cursor-grabbing" : ""}`}
+                  className={`absolute flex w-4 -translate-x-1/2 cursor-grab touch-none items-start justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${drag?.id === marker.id ? "cursor-grabbing" : ""}`}
                   data-testid="lighting-marker"
                   aria-disabled={disabled || undefined}
                   key={marker.id}
@@ -145,11 +162,15 @@ export function LightingTimeline({
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
                   ref={(node) => { if (node) markerRefs.current.set(marker.id, node); else markerRefs.current.delete(marker.id); }}
-                  style={{ left: percent(at) }}
+                  style={{ left: percent(at), top: `${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px`, height: `calc(100% - ${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px)` }}
                   type="button"
                 >
                   <span className={`block h-full w-1 rounded-ds-full ${colors?.marker ?? neutralPad.marker} ${isSelected ? "outline outline-2 outline-ink" : ""}`} />
-                  <span className="pointer-events-none absolute left-2 top-0 max-w-[7rem] truncate text-type-body-sm text-ink-body">{marker.label}</span>
+                  <span
+                    className="pointer-events-none absolute left-[14px] top-0 truncate text-type-body-sm text-ink-body"
+                    data-label-row={labelPlacements.get(marker.id)?.row ?? 0}
+                    style={{ maxWidth: `${labelPlacements.get(marker.id)?.width ?? 112}px` }}
+                  >{marker.label}</span>
                 </button>
               );
             })}

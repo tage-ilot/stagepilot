@@ -11,6 +11,10 @@ import {
   padIsActive,
   padIsDimmed,
   snapTenths,
+  MARKER_LABEL_MAX_PX,
+  MARKER_LABEL_ROWS,
+  markerLabelWidth,
+  placeMarkerLabels,
   timeFromTrackOffset,
 } from "./lightingTimelineMath";
 
@@ -87,5 +91,68 @@ describe("pad rules", () => {
     expect(padForShortcut(list, "3")).toBeNull();
     expect(padForShortcut(list, "0")).toBeNull();
     expect(padForShortcut(list, "x")).toBeNull();
+  });
+});
+
+describe("marker label placement", () => {
+  const m = (id: string, label: string, at: number) => ({ id, label, at });
+
+  it("sizes a label by its text and caps it", () => {
+    expect(markerLabelWidth("Hi")).toBeLessThan(markerLabelWidth("Chorus wash"));
+    expect(markerLabelWidth("A very long cue name that goes on")).toBe(MARKER_LABEL_MAX_PX);
+  });
+
+  it("keeps far-apart labels on the top row", () => {
+    const placed = placeMarkerLabels([m("a", "Chorus wash", 10), m("b", "Blackout", 200)], 1200, 280);
+    expect(placed.get("a")?.row).toBe(0);
+    expect(placed.get("b")?.row).toBe(0);
+  });
+
+  it("drops a label to the next row when it would run into the one before it (cues 4 s apart on a 4:41 song)", () => {
+    const placed = placeMarkerLabels([m("a", "Chorus wash", 8.2), m("b", "Blackout", 12.2)], 1285, 281);
+    expect(placed.get("a")?.row).toBe(0);
+    expect(placed.get("b")?.row).toBe(1);
+  });
+
+  it("reuses the top row once the earlier label has ended", () => {
+    const placed = placeMarkerLabels([m("a", "Chorus wash", 8), m("b", "Blackout", 12), m("c", "Strobe", 100)], 1285, 281);
+    expect([placed.get("a")?.row, placed.get("b")?.row, placed.get("c")?.row]).toEqual([0, 1, 0]);
+  });
+
+  it("when every row is busy, the last label shares a row and the earlier one is cut short at it", () => {
+    const cues = Array.from({ length: MARKER_LABEL_ROWS + 1 }, (_, i) => m(`c${i}`, "Chorus wash", 10 + i));
+    const placed = placeMarkerLabels(cues, 1285, 281);
+    const rows = cues.map((cue) => placed.get(cue.id)!.row);
+    expect(Math.max(...rows)).toBe(MARKER_LABEL_ROWS - 1);
+    expect(new Set(rows).size).toBe(MARKER_LABEL_ROWS);
+    const shortened = cues.filter((cue) => placed.get(cue.id)!.width < markerLabelWidth("Chorus wash"));
+    expect(shortened.length).toBeGreaterThan(0);
+    for (const cue of cues) expect(placed.get(cue.id)!.width).toBeGreaterThanOrEqual(0);
+  });
+
+  it("stops a label short of a later marker line that would cross it, but not of one that starts on a row below", () => {
+    // Two cues 13 px apart: Blackout is on the top row and the next marker line would run through its text.
+    const crossing = placeMarkerLabels([m("a", "Blackout", 100), m("b", "Chorus wash", 100 + (13 / 1285) * 281)], 1285, 281);
+    expect(crossing.get("a")?.row).toBe(0);
+    expect(crossing.get("b")?.row).toBe(1);
+    // b's line starts on row 1, below a's label on row 0, so a's label is NOT cut for b.
+    expect(crossing.get("a")?.width).toBe(markerLabelWidth("Blackout"));
+    // A later marker that lands on a row at or above a label does cut it: A (row 0), B (row 1, long name), then C back on row 0.
+    const px = (pixels: number) => (pixels / 1285) * 281;
+    const cut = placeMarkerLabels([m("a", "Chorus wash", px(0)), m("b", "Chorus wash", px(20)), m("c", "X", px(95))], 1285, 281);
+    expect([cut.get("a")?.row, cut.get("b")?.row, cut.get("c")?.row]).toEqual([0, 1, 0]);
+    expect(cut.get("b")?.width).toBeCloseTo(95 - 20 - 10, 5);
+    expect(cut.get("b")?.width).toBeLessThan(markerLabelWidth("Chorus wash"));
+  });
+
+  it("does not depend on the order the cues are given in", () => {
+    const a = placeMarkerLabels([m("a", "One", 8), m("b", "Two", 12)], 1285, 281);
+    const b = placeMarkerLabels([m("b", "Two", 12), m("a", "One", 8)], 1285, 281);
+    expect([...a.entries()]).toEqual([...b.entries()].sort(([x], [y]) => x.localeCompare(y)));
+  });
+
+  it("is safe before the track has been measured", () => {
+    const placed = placeMarkerLabels([m("a", "One", 8)], 0, 281);
+    expect(placed.get("a")).toEqual({ row: 0, width: markerLabelWidth("One") });
   });
 });
