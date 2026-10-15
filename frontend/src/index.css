@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Geist Pixel Square (SIL Open Font License, see assets/fonts/GEIST-OFL-LICENSE.txt): the connection status words on the
+   status cards and the Manual controls buttons (owner, 2026-10-14). Bundled, never fetched from a CDN. */
+@font-face {
+  font-family: "Geist Pixel Square";
+  src: url("./assets/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
 @font-face {
   font-family: "StagePilot Logo";
   src: url("./assets/logo-font.ttf") format("truetype");
@@ -52,6 +62,17 @@ body {
 /* The desktop titlebar provides this headroom in Tauri; the browser does not. */
 #root > .stagepilot-dashboard:first-child {
   padding-top: 4rem;
+}
+
+/* Geist Pixel Square has one weight (regular). "Bold" is a 0.05em outline in the text colour: the pixel steps stay crisp
+   and the counters of O, D, e and a stay open (0.07em starts to close them on the small button text, 0.09em blobs). The
+   outline scales with the font size, so the compact status cards stay balanced. Browser fake bold is off so the two never stack. */
+.font-pixel {
+  font-family: "Geist Pixel Square", ui-monospace, monospace;
+  font-size: 1rem;
+  font-weight: 400;
+  font-synthesis: none;
+  -webkit-text-stroke: 0.05em currentColor;
 }
 
 .font-brand {
@@ -486,9 +507,12 @@ textarea:focus-visible {
    word takes their room and grows). Wide cards: the word shares a row with the icon (48px + gap), so the room is
    100cqw - 50px; the size scales with the card so the widest word, NOT CONNECTED (about 8.7em), always fits, up to 18px. */
 .status-card-status-word {
-  font-size: clamp(0.6875rem, calc((100cqw - 3.5rem) / 8.8), 1.125rem);
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-family: "Geist Pixel Square", ui-monospace, monospace;
+  font-size: clamp(0.75rem, calc((100cqw - 3.5rem) / 8.45), 1.375rem);
+  font-weight: 400;
+  font-synthesis: none;
+  -webkit-text-stroke: 0.07em currentColor; /* the status word is larger than the button text, so it carries a heavier outline */
+  letter-spacing: 0.01em;
   text-transform: uppercase;
   white-space: nowrap;
   transition: color 180ms ease;
@@ -637,9 +661,9 @@ textarea:focus-visible {
     /* ONE line, always (owner, 2026-10-13), and nothing may overlap. Under the icon the word has the whole card, minus the
        card padding. The widest phrase, NOT CONNECTED, is about 8.2em at this tracking, so the size is the room divided by
        8.3: it is the same on every card, up to 11px. On the narrowest phones that is small; there is no wrapping. */
-    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem);
+    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 7.95), 0.8125rem);
     letter-spacing: -0.03em;
-    font-weight: 600;
+    font-weight: 400;
     white-space: nowrap;
     text-align: center;
     line-height: 1.2;
@@ -649,7 +673,7 @@ textarea:focus-visible {
   }
 
   .connections-status.status-compact .status-card[data-status] .status-card-status-word {
-    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem);
+    font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 7.95), 0.8125rem);
   }
 
   .connections-status.status-compact .status-card-icon {

@@ -24,8 +24,8 @@ describe("5.6 narrow screens", () => {
   it("compact status word: capitalized, ONE line, sized from the card so NOT CONNECTED fits, never wraps or ellipsizes", () => {
     const compact = [...css.matchAll(/\.status-compact [^{}]*status-card-status-word[^{}]*\{([^}]*)\}/g)].map((m) => m[1]!).join("\n");
     // 2026-10-13 (owner): NOT CONNECTED is never more than one line, even compact, and nothing overlaps. The size follows the
-    // card width (room / 8.3, at most 11px); on phones that is small. The floor is only a guard against a zero-width card.
-    expect(compact).toContain("font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem)");
+    // card width (room / 7.95, at most 13px); on phones that is small. The floor is only a guard against a zero-width card.
+    expect(compact).toContain("font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 7.95), 0.8125rem)");
     expect(compact).toContain("white-space: nowrap");
     expect(compact).not.toContain("white-space: normal");
     expect(compact).not.toContain("text-overflow: ellipsis");

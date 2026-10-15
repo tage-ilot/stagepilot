@@ -39,15 +39,19 @@ describe("open status card hue", () => {
 });
 
 describe("status word (owner 2026-10-13: no dot, capitalized, larger)", () => {
-  it("is uppercase and sized from the card width, capped at 18px", () => {
+  it("is uppercase and sized from the card width, capped at 22px", () => {
     const rule = css.match(/\.status-card-status-word \{[^}]*\}/)?.[0] ?? "";
     expect(rule).toContain("text-transform: uppercase");
     expect(rule).toContain("white-space: nowrap");
-    expect(rule).toMatch(/font-size: clamp\(0\.6875rem, calc\(\(100cqw - [\d.]+rem\) \/ [\d.]+\), 1\.125rem\)/);
+    expect(rule).toMatch(/font-size: clamp\(0\.75rem, calc\(\(100cqw - [\d.]+rem\) \/ [\d.]+\), 1\.375rem\)/);
+    // Geist Pixel Square, bold by outline (owner, 2026-10-14): one weight in the file, so the heavier look is a stroke.
+    expect(rule).toContain('font-family: "Geist Pixel Square"');
+    expect(rule).toContain("-webkit-text-stroke: 0.07em currentColor");
+    expect(rule).toContain("font-synthesis: none");
   });
 
-  it("the compact word is one line: nowrap, sized from the card (room / 8.3, max 11px), no wrap rule at any width", () => {
-    expect(css).toContain("font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 8.3), 0.6875rem)");
+  it("the compact word is one line: nowrap, sized from the card (room / 7.95, max 13px), no wrap rule at any width", () => {
+    expect(css).toContain("font-size: clamp(0.3125rem, calc((100cqw - 0.4rem) / 7.95), 0.8125rem)");
     expect(css).toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: nowrap/);
     expect(css).not.toMatch(/\.status-compact \.status-card-status-word \{[^}]*white-space: normal/);
     expect(css).not.toContain("max-width: 359.98px");
