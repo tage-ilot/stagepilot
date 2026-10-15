@@ -439,6 +439,9 @@ textarea:focus-visible {
 
 .status-card-title {
   max-height: 1.4rem;
+  /* 2px higher than its natural spot (owner, 2026-10-14); relative offset, so the status word and icon below do not move. */
+  position: relative;
+  top: -2px;
 }
 
 .connections-status:not(.status-motion-ready) .status-card,

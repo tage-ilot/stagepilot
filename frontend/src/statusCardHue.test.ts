@@ -38,6 +38,14 @@ describe("open status card hue", () => {
   });
 });
 
+describe("status card title (owner 2026-10-14)", () => {
+  it("sits 2px higher than its natural spot, by a relative offset so nothing below it moves", () => {
+    const rule = css.match(/\.status-card-title \{[^}]*\}/)?.[0] ?? "";
+    expect(rule).toContain("position: relative");
+    expect(rule).toContain("top: -2px");
+  });
+});
+
 describe("status word (owner 2026-10-13: no dot, capitalized, larger)", () => {
   it("is uppercase and sized from the card width, capped at 22px", () => {
     const rule = css.match(/\.status-card-status-word \{[^}]*\}/)?.[0] ?? "";
