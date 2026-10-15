@@ -407,6 +407,29 @@ describe("Remote access section (owner 2026-10-14)", () => {
   });
 });
 
+describe("Server port restart prompt (owner 2026-10-14)", () => {
+  it("drops the 'dashboard remembers the saved server port' footnote", () => {
+    renderPanel({settings: settingsResponse});
+    expect(screen.queryByText(/remembers the saved server port/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Environment variables may still override/)).not.toBeInTheDocument();
+  });
+
+  it("tells the user to restart as soon as the port is changed, and not before", () => {
+    renderPanel({settings: settingsResponse});
+    fireEvent.click(screen.getByRole("button", {name: /^Advanced/}));
+    expect(screen.queryByText("Takes effect after you restart StagePilot.")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    expect(screen.getByText("Takes effect after you restart StagePilot.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "8765"}});
+    expect(screen.queryByText("Takes effect after you restart StagePilot.")).not.toBeInTheDocument();
+  });
+
+  it("still shows the restart message after the port is saved", () => {
+    renderPanel({settings: settingsResponse, message: "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes."});
+    expect(screen.getByText(/Restart StagePilot and reload the dashboard/)).toBeInTheDocument();
+  });
+});
+
 describe("Remote access collapses and remembers it (owner 2026-10-14)", () => {
   const KEY = "stagepilot.backend.remote-access-open";
   const on = {...off, enabled: true, state: "connected" as const, needs_operator: false, url: "https://test.trycloudflare.com"};

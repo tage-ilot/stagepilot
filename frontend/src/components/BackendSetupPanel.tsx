@@ -404,7 +404,7 @@ export function BackendSetupPanel({
               ))}
             </Select>
           </Field>
-          <Field error={errPort} heldChange={heldPort} label="Server port">
+          <Field error={errPort} heldChange={heldPort} hint={heldPort ? "Takes effect after you restart StagePilot." : undefined} label="Server port">
             <Input
               disabled={pending}
               inputMode="numeric"
@@ -513,11 +513,6 @@ export function BackendSetupPanel({
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 
       <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!settings ? onRetryLoad : undefined} />
-
-      <p className="mt-4 text-xs text-ink-muted">
-        The dashboard remembers the saved server port for its next launch. Environment variables may still override these values for development.
-      </p>
-
 
       <SendAllLogsButton />
     </Panel>
