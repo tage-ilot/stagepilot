@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SectionLabel } from "./ui/SectionLabel";
 import { apiOrigin, websocketUrl } from "../api";
 import { copyDiagnosticsLog, sendDiagnosticsBundle } from "../diagnostics";
+import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { useRemoteAccess } from "../hooks/useRemoteAccess";
 import type {
   ApplicationState,
@@ -140,6 +140,9 @@ export function SendAllLogsButton() {
 
 type AccessChoice = "host" | "network" | "internet";
 
+export const REMOTE_ACCESS_OPEN_KEY = "stagepilot.backend.remote-access-open";
+const remoteStateWord = { off: "Off", enabling: "Enabling…", connected: "Connected", reconnecting: "Reconnecting…", error: "Connection unavailable" } as const;
+
 // Status facts are small bordered cards, like the style guide (a recessed well on the panel).
 const factCard = "rounded-ds-lg border border-edge-subtle bg-surface-950/40 px-3 py-2.5";
 const factLabel = "font-type-kicker text-type-kicker uppercase text-ink-muted";
@@ -175,6 +178,8 @@ export function BackendSetupPanel({
   const [dashboardPin, setDashboardPin] = useState("");
   const [releaseChannel, setReleaseChannel] = useState<GeneralSettingsInput["release_channel"]>("BETA");
   const remote = useRemoteAccess();
+  // The Remote access section starts open and then stays however the user leaves it, across restarts (owner, 2026-10-14).
+  const [remoteOpenSaved, setRemoteOpenSaved] = usePersistedFlag(REMOTE_ACCESS_OPEN_KEY, true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Each draft follows its own saved value.
@@ -485,8 +490,17 @@ export function BackendSetupPanel({
         )}
         {access === "internet" && remote.panelOpen && (
           <div className="mt-4" data-access-people>
-            <SectionLabel>Remote access</SectionLabel>
-            <div className="mt-3"><RemoteAccessPanel control={remote} /></div>
+            {/* A pending "turn Remote Access off?" question must never hide inside a folded section, so it opens the section for as
+                long as it is asked, without changing the saved choice. */}
+            <Disclosure
+              onOpenChange={setRemoteOpenSaved}
+              open={remoteOpenSaved || remote.confirmDisable}
+              summary={remote.bootstrap ? "Create the first Operator" : remote.status ? remoteStateWord[remote.status.state] : undefined}
+              title="Remote access"
+              variant="activity"
+            >
+              <RemoteAccessPanel control={remote} />
+            </Disclosure>
           </div>
         )}
         {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
