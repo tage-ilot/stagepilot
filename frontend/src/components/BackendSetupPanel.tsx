@@ -410,23 +410,26 @@ export function BackendSetupPanel({
           </p>
         )}
         {showAccessPin && (
-          <div className="mt-3 flex flex-wrap items-end gap-3" data-access-pin>
-            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} hint="Required to open the dashboard from another device. The initial PIN is 1234. Replacing it signs out every open dashboard." label="Replace dashboard PIN">
-              <Input
-                autoComplete="new-password"
-                className="font-mono"
-                disabled={pending}
-                inputMode="numeric"
-                maxLength={64}
-                minLength={4}
-                onChange={(event) => setDashboardPin(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
-                placeholder="Leave blank to keep the saved PIN…"
-                type="password"
-                value={dashboardPin}
-              />
+          <div className="mt-3" data-access-pin>
+            {/* The label sits above; the small input and its Save PIN button share one row directly below it. */}
+            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} label="Replace dashboard PIN">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  autoComplete="new-password"
+                  className="!w-28 font-mono"
+                  disabled={pending}
+                  inputMode="numeric"
+                  maxLength={64}
+                  minLength={4}
+                  onChange={(event) => setDashboardPin(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
+                  type="password"
+                  value={dashboardPin}
+                />
+                <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
+              </div>
             </Field>
-            <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
+            <p className="mt-2 max-w-3xl text-xs text-ink-muted">The initial PIN is 1234. Replacing it signs out every open dashboard.</p>
           </div>
         )}
         {access === "internet" && remote.panelOpen && (
