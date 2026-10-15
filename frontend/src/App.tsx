@@ -177,11 +177,6 @@ function StagePilotApp() {
               >
                 <span className="loading-progress-scan" />
               </div>
-              <span
-                aria-hidden="true"
-                className="loading-progress-edge"
-                style={{ "--progress": startupProgress.value / 100 } as CSSProperties}
-              />
             </div>
             <p className="mt-6 text-lg font-semibold text-ink">
               {progressHeadline}

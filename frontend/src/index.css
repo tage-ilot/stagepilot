@@ -87,8 +87,6 @@ body {
 }
 
 .loading-progress-track {
-  /* Containing block for .loading-progress-edge: without it the edge positions against
-     the page and draws a full-height line across the screen. */
   position: relative;
   height: 18px;
   overflow: hidden;
@@ -134,18 +132,6 @@ body {
   clip-path: inset(0 calc((1 - var(--progress, 1)) * 100%) 0 0);
   image-rendering: pixelated;
   transition: clip-path 140ms linear;
-}
-
-/* Leading edge (white then blue, 4px each) that followed the fill in beta 31. */
-.loading-progress-edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--progress, 1) * 100%);
-  width: 4px;
-  background: var(--loader-edge-white);
-  box-shadow: 4px 0 0 var(--loader-edge-blue);
-  transition: left 140ms linear;
 }
 
 /* Small circular loading spinner, shown instead of the bar on phone/tablet
@@ -235,8 +221,7 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-progress-fill,
-  .loading-progress-edge {
+  .loading-progress-fill {
     transition: none;
   }
 
@@ -276,11 +261,6 @@ div:has(> .loading-progress-track--failed) > .loading-spinner-circular {
   box-shadow:
     inset 0 3px 0 rgb(255 255 255 / 25%),
     inset 0 -3px 0 rgb(61 0 0 / 80%);
-}
-
-.loading-progress-track--failed .loading-progress-edge {
-  background: var(--loader-failed-edge-white);
-  box-shadow: 4px 0 0 var(--ds-danger-solid);
 }
 
 .loading-progress-track--failed .loading-progress-scan,
@@ -916,4 +896,16 @@ textarea:focus-visible {
   .backend-status {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* Playback API: the status message sits to the right of the Scan Network button, and drops under it when the half is too narrow. */
+.playback-scan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.playback-scan-row > [data-testid="playback-banner"] {
+  flex: 1 1 14rem;
 }

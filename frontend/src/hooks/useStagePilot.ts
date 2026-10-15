@@ -58,7 +58,7 @@ import type {
   StateEnvelope,
 } from "../types";
 import { restartDesktopBackend, signInWithPlanningCenter } from "../desktop";
-import { describeError } from "../errorText";
+import { describeError, OFFLINE_SENTENCE } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
 import { useSingleFlight } from "./useSingleFlight";
 
@@ -395,6 +395,40 @@ export function useStagePilot() {
     void loadLighting();
     void loadPlanningCenterStatus();
   }, [loadSettings, loadMidiInputs, loadProPresenter, loadLighting, loadPlanningCenterStatus]);
+
+  // After a restart the panel loads can run before the backend is up, fail with "Can't reach StagePilot", and then nothing
+  // asked again: only the Try again button did (owner, 2026-10-14). Retry them automatically instead: at once when the live
+  // connection comes back, and with a short growing delay (0.5s, 1s, 2s, 4s, then every 5s) for as long as one of them
+  // still says StagePilot cannot be reached. Other errors (a refused save, a server error) are never retried here.
+  const offlineLoadFailed = [settingsError, midiError, propresenterError, lightingError, planningCenterError].includes(OFFLINE_SENTENCE);
+  const retryLoadsRef = useRef(retryLoads);
+  retryLoadsRef.current = retryLoads;
+  const offlineLoadFailedRef = useRef(offlineLoadFailed);
+  offlineLoadFailedRef.current = offlineLoadFailed;
+
+  useEffect(() => {
+    if (live && offlineLoadFailedRef.current) retryLoadsRef.current();
+  }, [live]);
+
+  useEffect(() => {
+    if (!offlineLoadFailed) return;
+    let cancelled = false;
+    let attempt = 0;
+    let timer: number | undefined;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+        retryLoadsRef.current();
+        attempt += 1;
+        schedule();
+      }, Math.min(500 * 2 ** attempt, 5_000));
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [offlineLoadFailed]);
 
   const dispatch = useCallback(
     async (action: ActionName) => {

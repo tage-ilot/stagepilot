@@ -87,7 +87,7 @@ describe("StagePilot pre-dashboard loading screen fits narrow (mobile/tablet) vi
     expect(fill.style.getPropertyValue("--progress")).not.toBe("");
     expect(fill.style.transform).toBe("");
     expect(fill.style.width).toBe("");
-    expect(bar.querySelector(".loading-progress-edge")).not.toBeNull();
+    expect(bar.querySelector(".loading-progress-edge")).toBeNull();
     const spinner = document.querySelector(".loading-spinner-circular");
     expect(spinner).not.toBeNull();
     expect(spinner?.className).toContain("loading-spinner-circular--mobile-only");

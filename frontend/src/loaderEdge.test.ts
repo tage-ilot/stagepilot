@@ -14,12 +14,10 @@ function rule(selector: string): string {
   return match[1]!;
 }
 
-describe("loading bar leading edge", () => {
-  // Regression: .loading-progress-edge is position:absolute with top:0/bottom:0. If the track is not
-  // positioned, the edge resolves against the page and draws a full-height line across the screen as the
-  // bar fills. The track must be its containing block.
-  it("the track is the containing block for the absolutely positioned edge", () => {
-    expect(rule(".loading-progress-edge")).toMatch(/position:\s*absolute/);
+describe("loading bar leading edge (removed, owner 2026-10-14)", () => {
+  // The white and cyan blocks that led the fill are gone. The track stays positioned for the striped scan overlay.
+  it("has no leading edge element or style any more", () => {
+    expect(css).not.toContain("loading-progress-edge");
     expect(rule(".loading-progress-track")).toMatch(/position:\s*relative/);
   });
 });
