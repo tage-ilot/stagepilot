@@ -12,7 +12,7 @@ import {
   padForShortcut,
   padIsActive,
   padIsDimmed,
-} from "./lightingTimeline";
+} from "./lightingTimelineMath";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";

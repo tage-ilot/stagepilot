@@ -13,10 +13,10 @@ import type {
 } from "../types";
 import { LightingSetupPanel } from "./LightingSetupPanel";
 import { LightingTimeline } from "./LightingTimeline";
-import type { TimelineMarker } from "./lightingTimeline";
+import type { TimelineMarker } from "./lightingTimelineMath";
 
 const song: Song = { id: "item-1", source_song_id: "song-1", title: "Holy Forever", duration_seconds: 200, order: 1, is_generic: false };
-const base = { osc_preset: "lightkey" as const, osc_host: "127.0.0.1", osc_port: 21600, enabled: true, output_name: "Out", channel: 1, pulse_ms: 100 };
+const base = { osc_host: "127.0.0.1", osc_port: 21600, enabled: true, output_name: "Out", channel: 1, pulse_ms: 100 };
 const lightsFor = (method: "osc" | "midi"): LightsStatusResponse => ({
   ...base, method, connection_status: "connected", detail: null, outputs: [], last_cue: null, last_osc_cue: null, last_cue_at: null,
 });

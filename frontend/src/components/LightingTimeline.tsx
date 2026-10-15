@@ -9,7 +9,7 @@ import {
   rulerStep,
   timeFromTrackOffset,
   type TimelineMarker,
-} from "./lightingTimeline";
+} from "./lightingTimelineMath";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 

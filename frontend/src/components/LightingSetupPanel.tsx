@@ -8,7 +8,6 @@ import type {
   LightingPad,
   OscArgument,
   OscLightingCue,
-  OscPreset,
   LightsSettingsInput,
   LightsStatusResponse,
   ConnectionStatus,
@@ -32,16 +31,14 @@ import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
 import { LightingTimeline } from "./LightingTimeline";
-import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimeline";
+import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
-  defaultOscPort,
   formatElapsed,
   parseElapsed,
   newOscCue,
   oscAddressError,
   oscHostError,
   oscPortError,
-  oscPresetInfo,
   parseOscArguments,
   type OscArgumentDraft,
 } from "./lightingOsc";
@@ -121,7 +118,6 @@ export function LightingSetupPanel({
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
   const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
   const [method, setMethod] = useState<LightingMethod>("osc");
-  const [oscPreset, setOscPreset] = useState<OscPreset>("lightkey");
   const [oscHost, setOscHost] = useState("127.0.0.1");
   const [oscPort, setOscPort] = useState("21600");
   const [oscTestAddress, setOscTestAddress] = useState("");
@@ -147,15 +143,11 @@ export function LightingSetupPanel({
   const syncedChannel = syncSource ? String(syncSource.channel) : null;
   const syncedPulse = syncSource ? String(syncSource.pulse_ms) : null;
   const syncedMethod = syncSource ? (syncSource.method ?? "midi") : null;
-  const syncedPreset = syncSource ? (syncSource.osc_preset ?? "lightkey") : null;
   const syncedHost = syncSource ? (syncSource.osc_host ?? "127.0.0.1") : null;
   const syncedPort = syncSource ? String(syncSource.osc_port ?? 21600) : null;
   useEffect(() => {
     if (syncedMethod !== null) setMethod(syncedMethod);
   }, [syncedMethod]);
-  useEffect(() => {
-    if (syncedPreset !== null) setOscPreset(syncedPreset);
-  }, [syncedPreset]);
   useEffect(() => {
     if (syncedHost !== null) setOscHost(syncedHost);
   }, [syncedHost]);
@@ -263,7 +255,6 @@ export function LightingSetupPanel({
 
   const parsedSettings = useMemo<LightsSettingsInput | null>(() => {
     const osc = {
-      osc_preset: oscPreset,
       osc_host: oscHost.trim(),
       osc_port: Number(oscPort),
     };
@@ -291,7 +282,7 @@ export function LightingSetupPanel({
       pulse_ms: parsedPulse,
       ...osc,
     };
-  }, [channel, method, oscHost, oscPort, oscPreset, outputName, pulseMs, syncSource]);
+  }, [channel, method, oscHost, oscPort, outputName, pulseMs, syncSource]);
 
   const persistCues = (nextCues: LightingCue[]) => {
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
@@ -369,10 +360,9 @@ export function LightingSetupPanel({
   // Test cue goes out through the connected (saved) port, so it is only offered
   // while the draft output and channel equal what is saved.
   const heldMethod = savedLighting != null && method !== savedMethod;
-  const heldPreset = savedLighting != null && oscPreset !== (savedLighting.osc_preset ?? "lightkey");
   const heldHost = savedLighting != null && oscHost !== (savedLighting.osc_host ?? "127.0.0.1");
   const heldPort = savedLighting != null && oscPort !== String(savedLighting.osc_port ?? 21600);
-  const oscDraftDiffers = heldMethod || heldPreset || heldHost || heldPort;
+  const oscDraftDiffers = heldMethod || heldHost || heldPort;
   const draftDiffersFromSaved = method === "osc"
     ? oscDraftDiffers
     : savedLighting != null
@@ -386,7 +376,7 @@ export function LightingSetupPanel({
   const heldChannel = savedLighting != null && channel !== String(savedLighting.channel);
   const heldPulse = savedLighting != null && pulseMs !== String(savedLighting.pulse_ms);
   const changeCount = method === "osc"
-    ? Number(heldMethod) + Number(heldPreset) + Number(heldHost) + Number(heldPort)
+    ? Number(heldMethod) + Number(heldHost) + Number(heldPort)
     : Number(heldMethod) + Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -424,7 +414,6 @@ export function LightingSetupPanel({
   const discard = () => {
     if (!savedLighting) return;
     setMethod(savedLighting.method ?? "midi");
-    setOscPreset(savedLighting.osc_preset ?? "lightkey");
     setOscHost(savedLighting.osc_host ?? "127.0.0.1");
     setOscPort(String(savedLighting.osc_port ?? 21600));
     setOutputName(savedLighting.output_name ?? "");
@@ -446,12 +435,6 @@ export function LightingSetupPanel({
   };
   const oscTestParsed = parseOscArguments(oscTestArgs);
   const oscTestAddressError = oscAddressError(oscTestAddress);
-  const applyPreset = (preset: OscPreset) => {
-    const info = oscPresetInfo(preset);
-    setOscPreset(preset);
-    setOscPort(defaultOscPort(preset));
-    if (info.host) setOscHost(info.host);
-  };
   const currentOutputMissing = outputName
     && !lights?.outputs.some((output) => output.name === outputName);
 
@@ -483,13 +466,11 @@ export function LightingSetupPanel({
         <>
           <OscConnectionFields
             attempted={attempt.attempted}
-            held={{ preset: heldPreset, host: heldHost, port: heldPort }}
+            held={{ host: heldHost, port: heldPort }}
             host={oscHost}
             onHost={setOscHost}
             onPort={setOscPort}
-            onPreset={applyPreset}
             port={oscPort}
-            preset={oscPreset}
           />
           <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="osc-status">
             {savedMethod === "osc" && lights?.connection_status === "error"
@@ -641,7 +622,6 @@ export function LightingSetupPanel({
               onCommit={(next) => persistOscCues(oscCues.map((item) => item.id === next.id ? next : item))}
               onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
               onTest={(address, args) => onTestOsc?.(address, args)}
-              preset={oscPreset}
               songDuration={selectedSong?.duration_seconds ?? null}
               testDisabledReason={draftDiffersFromSaved}
               testReasonId={testReasonId}

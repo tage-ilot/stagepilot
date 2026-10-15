@@ -5,10 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApplicationState, LightsStatusResponse, SettingsResponse, Song } from "../types";
 import { LightingSetupPanel } from "./LightingSetupPanel";
 import {
-  defaultOscPort,
   oscAddressError,
   oscPortError,
-  oscPresets,
   parseOscArgument,
   parseOscArguments,
 } from "./lightingOsc";
@@ -16,7 +14,6 @@ import {
 const song: Song = { id: "item-1", source_song_id: "song-1", title: "Holy Forever", duration_seconds: 336, order: 1, is_generic: false };
 
 const baseLights = {
-  osc_preset: "lightkey" as const,
   osc_host: "127.0.0.1",
   osc_port: 21600,
   enabled: true,
@@ -111,14 +108,6 @@ describe("OSC helpers", () => {
     expect(typeof parseOscArgument({ type: "int", text: "99999999999" })).toBe("string");
     expect(parseOscArguments([{ type: "int", text: "1" }, { type: "float", text: "x" }]).error).toBe("Enter a number.");
   });
-
-  it("presets: Lightkey is 21600 on localhost, unverified ports stay empty, no em dashes", () => {
-    expect(defaultOscPort("lightkey")).toBe("21600");
-    expect(oscPresets.find((p) => p.value === "lightkey")?.host).toBe("127.0.0.1");
-    expect(defaultOscPort("grandma")).toBe("");
-    expect(defaultOscPort("custom")).toBe("");
-    for (const preset of oscPresets) expect(preset.pattern).not.toContain("—");
-  });
 });
 
 describe("LightingSetupPanel OSC", () => {
@@ -134,40 +123,36 @@ describe("LightingSetupPanel OSC", () => {
     expect(screen.queryByLabelText("MIDI Output")).not.toBeInTheDocument();
   });
 
-  it("a preset fills its default port and helper text, and stays overridable", async () => {
-    const user = userEvent.setup();
+  it("has no Preset option: the port is typed in, with no guessed default, and nothing is offered as a quick action", async () => {
     mount();
-    await user.selectOptions(screen.getByLabelText("Preset"), "qlc_plus");
-    expect(screen.getByLabelText("UDP port")).toHaveValue("7700");
-    expect(screen.getByText(/\/universe-1\/dmx\/channel-1/)).toBeInTheDocument();
-    await user.clear(screen.getByLabelText("UDP port"));
-    await user.type(screen.getByLabelText("UDP port"), "7711");
-    expect(screen.getByLabelText("UDP port")).toHaveValue("7711");
-    await user.selectOptions(screen.getByLabelText("Preset"), "grandma");
-    expect(screen.getByLabelText("UDP port")).toHaveValue("");
-    await user.selectOptions(screen.getByLabelText("Preset"), "lightkey");
-    expect(screen.getByLabelText("UDP port")).toHaveValue("21600");
-    expect(screen.getByLabelText("Host or IP address")).toHaveValue("127.0.0.1");
+    expect(screen.queryByLabelText("Preset")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Action")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Fill from an action/)).not.toBeInTheDocument();
+    for (const guess of [/Chamsys/i, /QLC\+/, /ETC Eos/i, /GrandMA/i, /Resolume/i, /Playback 1 go/, /Executor 201/]) {
+      expect(screen.queryByText(guess)).not.toBeInTheDocument();
+    }
+    expect(screen.getByLabelText("UDP port")).toBeInTheDocument();
+    expect(screen.getByText(/Enter the port your lighting app listens for OSC on/)).toBeInTheDocument();
   });
 
   it("saves the OSC settings with the method", async () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn();
     mount({ onSaveSettings });
-    await user.selectOptions(screen.getByLabelText("Preset"), "chamsys");
     await user.clear(screen.getByLabelText("Host or IP address"));
     await user.type(screen.getByLabelText("Host or IP address"), "192.168.4.50");
+    await user.clear(screen.getByLabelText("UDP port"));
+    await user.type(screen.getByLabelText("UDP port"), "8000");
     await user.click(screen.getByRole("button", { name: /Save/ }));
-    expect(onSaveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true, method: "osc", osc_preset: "chamsys", osc_host: "192.168.4.50", osc_port: 8000 }),
-    );
+    expect(onSaveSettings).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, method: "osc", osc_host: "192.168.4.50", osc_port: 8000 }));
+    expect(onSaveSettings.mock.calls[0]?.[0]).not.toHaveProperty("osc_preset");
   });
 
   it("refuses to save an empty or invalid port", async () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn();
     mount({ onSaveSettings });
-    await user.selectOptions(screen.getByLabelText("Preset"), "grandma");
+    await user.clear(screen.getByLabelText("UDP port"));
     await user.click(screen.getByRole("button", { name: /Save/ }));
     expect(onSaveSettings).not.toHaveBeenCalled();
     expect(screen.getByText(/UDP port from 1 to 65535/)).toBeInTheDocument();

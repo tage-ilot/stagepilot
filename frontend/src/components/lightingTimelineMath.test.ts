@@ -12,7 +12,7 @@ import {
   padIsDimmed,
   snapTenths,
   timeFromTrackOffset,
-} from "./lightingTimeline";
+} from "./lightingTimelineMath";
 
 const pad = (id: string, method: "osc" | "midi"): LightingPad => ({
   id, label: id, color: null, method, address: method === "osc" ? "/a" : null, args: [], note: method === "midi" ? 1 : null, velocity: 127,
