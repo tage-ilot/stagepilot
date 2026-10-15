@@ -8,6 +8,8 @@ import type {
   DashboardAccess,
   HealthResponse,
   LengthPreview,
+  LightingCaptureResponse,
+  LightingPad,
   LightsOperationResponse,
   LightsSettingsInput,
   LightsStatusResponse,
@@ -324,4 +326,29 @@ export const testOscLightingCue = (address: string, args: OscArgument[]) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address, args }),
+  });
+
+export const updateLightingPads = (pads: LightingPad[]) =>
+  requestJson<LightsOperationResponse>("/api/v1/lights/pads", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pads }),
+  });
+
+/** Fires the pad. With `capture`, the backend also adds the cue to the song at `at_seconds`. */
+export const captureLightingPad = (
+  padId: string,
+  capture?: { song_key: string; song_title: string; at_seconds: number },
+) =>
+  requestJson<LightingCaptureResponse>("/api/v1/lights/capture", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pad_id: padId, ...capture }),
+  });
+
+export const undoLightingCapture = (songKey: string, cueId: string) =>
+  requestJson<LightsOperationResponse>("/api/v1/lights/capture/undo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ song_key: songKey, cue_id: cueId }),
   });

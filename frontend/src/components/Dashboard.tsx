@@ -17,6 +17,7 @@ import type {
   HealthResponse,
   LightingCue,
   LightingMethod,
+  LightingPad,
   OscArgument,
   OscLightingCue,
   LightsSettingsInput,
@@ -45,7 +46,7 @@ import {
   readinessHasError,
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
-import { LightingSetupPanel } from "./LightingSetupPanel";
+import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
@@ -459,6 +460,9 @@ export function Dashboard({
   sendLightingTest = () => undefined,
   sendOscLightingTest = () => undefined,
   saveLightingCues = () => undefined,
+  saveLightingPads,
+  pressLightingPad,
+  undoLightingCapture,
   clearAllLightingCues = () => undefined,
   updater,
 }: {
@@ -516,6 +520,9 @@ export function Dashboard({
   sendLightingTest?: (note: number, velocity: number) => void;
   sendOscLightingTest?: (address: string, args: OscArgument[]) => void;
   saveLightingCues?: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod) => void;
+  saveLightingPads?: (pads: LightingPad[]) => Promise<boolean>;
+  pressLightingPad?: LightingPanelActions["onPressPad"];
+  undoLightingCapture?: LightingPanelActions["onUndoCapture"];
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
   updater?: UpdaterController;
 }) {
@@ -1101,6 +1108,9 @@ export function Dashboard({
           onClose={closeConnection}
           onRefresh={refreshLighting}
           onSaveCues={saveLightingCues}
+          onPressPad={pressLightingPad}
+          onSavePads={saveLightingPads}
+          onUndoCapture={undoLightingCapture}
           onSaveSettings={saveLighting}
           onTest={sendLightingTest}
           onTestOsc={sendOscLightingTest}

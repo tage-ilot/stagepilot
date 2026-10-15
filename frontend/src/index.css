@@ -895,6 +895,39 @@ textarea:focus-visible {
   }
 }
 
+/* Lighting cue board: pads wrap by the board's own width, never by the viewport. */
+.lighting-board {
+  container-type: inline-size;
+}
+
+.lighting-pads {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+}
+
+.lighting-pad-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 36rem) {
+  .lighting-pad-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Lighting timeline: the track keeps a minimum width and scrolls sideways inside its box. */
+.lighting-timeline {
+  container-type: inline-size;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lighting-timeline *,
+  .lighting-board * {
+    scroll-behavior: auto;
+    transition: none;
+    animation: none;
+  }
+}
+
 /* Lighting test cue: a compact group (heading, Note, Velocity, button) pushed to the right of the timeline controls.
    The toolbar wraps in reverse, so when both cannot share a line the Test cue group moves ABOVE the timeline selector. */
 .lighting-test {

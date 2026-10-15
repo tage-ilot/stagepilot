@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from stagepilot.core.config import (
     LightingCue,
     LightingMethod,
+    LightingPad,
     OscArgument,
     OscLightingCue,
     OscPreset,
@@ -330,6 +332,45 @@ class LightsOperationResponse(BaseModel):
     accepted: bool
     message: str
     lights: LightsStatusResponse
+
+
+class LightingPadsRequest(BaseModel):
+    """Replaces the whole cue board (create, edit, rename, reorder and delete in one save)."""
+
+    pads: list[LightingPad] = Field(default_factory=list, max_length=64)
+
+    @model_validator(mode="after")
+    def pad_ids_are_unique(self) -> LightingPadsRequest:
+        ids = [pad.id for pad in self.pads]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Every lighting pad must have a unique ID.")
+        return self
+
+
+class LightingCaptureRequest(BaseModel):
+    """Fires a pad and, when ``song_key`` and ``at_seconds`` are given, adds it to the song."""
+
+    pad_id: UUID
+    song_key: str | None = Field(default=None, min_length=1, max_length=256)
+    song_title: str | None = Field(default=None, min_length=1, max_length=500)
+    at_seconds: float | None = Field(default=None, ge=0, le=86_399)
+
+    @model_validator(mode="after")
+    def capture_is_complete(self) -> LightingCaptureRequest:
+        capturing = (self.song_key, self.song_title, self.at_seconds)
+        if any(item is not None for item in capturing) and any(item is None for item in capturing):
+            raise ValueError("A capture needs song_key, song_title and at_seconds together.")
+        return self
+
+
+class LightingCaptureResponse(LightsOperationResponse):
+    cue_id: UUID | None = None
+    at_seconds: float | None = None
+
+
+class LightingCaptureUndoRequest(BaseModel):
+    song_key: str = Field(min_length=1, max_length=256)
+    cue_id: UUID
 
 
 class StateEnvelope(BaseModel):

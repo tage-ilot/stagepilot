@@ -97,6 +97,55 @@ cues from the old timeline. A restart creates one fresh timeline at elapsed
 The large dashboard clock counts down the scheduled remaining time. The smaller
 clock counts elapsed time up from the same start timestamp.
 
+## Cue board, live capture and the timeline
+
+Cues are easiest to set while the song is running in practice. Under **Song
+lighting timeline** the panel has a **Cue board** and a visual **Timeline**; the
+cue rows below stay the precise editor and always match the timeline.
+
+### Cue board
+
+A pad is a saved, reusable cue: a name, an optional colour and the payload for
+one method (an OSC address with typed arguments, or a MIDI note and velocity).
+Choose **Edit pads** to add, edit, rename, reorder and delete pads. Pads are
+global (shared by every song) and saved in settings, so they survive restarts.
+
+A pad belongs to the method it was made under. When the other method is on
+screen, the pad stays on the board, dimmed and disabled, and is not deleted.
+Only the saved method fires, as everywhere else in Lighting.
+
+### Live capture
+
+While the selected song's timer is running, pressing a pad (click, tap, or keys
+1-9 while the board has focus) does two things:
+
+1. fires the cue at once through the saved method, and
+2. adds a cue to the song's timeline at the current elapsed time, rounded to
+   0.1 s. The cue takes the pad's name, colour and payload. A short note such as
+   "Added at 01:12" confirms it.
+
+**Preview only** turns the second step off, so pads can be tested without
+writing to the song. **Undo last capture** removes the most recent capture. With
+no song running, a press only fires and the board says nothing was added.
+
+Cue times are kept to 0.1 s. Existing whole-second cue maps load unchanged.
+
+### Timeline
+
+A horizontal bar covers the song's scheduled length, with a time ruler, one
+marker per cue (coloured from its pad) and a playhead while the timer runs.
+Drag a marker to move it (it snaps to 0.1 s and stays inside the song), or focus
+it and press the left or right arrow to move it 0.1 s (Shift: 1 s). Click or
+press Enter to open the small editor to set an exact time or delete the cue.
+Markers for the method that is not on screen are not drawn; those cues stay
+saved. On narrow widths the bar scrolls sideways, and **Zoom** changes its scale.
+
+### Saving and restarts
+
+Captures, undo and cue-map saves are serialized on the backend, so a capture
+and a timer restart cannot overwrite each other's cues. The scheduler is
+unchanged: a cue added mid-song takes effect at the next timer start.
+
 ## Why MIDI Clock is not used for `mm:ss`
 
 Playback MIDI Clock carries musical tempo pulses while tracks are playing. It
