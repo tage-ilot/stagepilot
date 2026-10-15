@@ -12,7 +12,6 @@ from stagepilot.core.config import (
     LightingMethod,
     OscArgument,
     OscLightingCue,
-    OscPreset,
     SongLightingCueMap,
     validate_osc_address,
 )
@@ -279,7 +278,6 @@ class LightingOutputResponse(BaseModel):
 class LightsStatusResponse(BaseModel):
     enabled: bool
     method: LightingMethod = LightingMethod.OSC
-    osc_preset: OscPreset = OscPreset.LIGHTKEY
     osc_host: str = "127.0.0.1"
     osc_port: int = Field(default=21_600, ge=1, le=65_535)
     output_name: str | None = Field(default=None, max_length=512)
@@ -297,7 +295,6 @@ class LightsSettingsRequest(BaseModel):
     enabled: bool = True
     # A request without a method is a pre-OSC client and means MIDI.
     method: LightingMethod = LightingMethod.MIDI
-    osc_preset: OscPreset | None = None
     osc_host: str | None = Field(default=None, min_length=1, max_length=253)
     osc_port: int | None = Field(default=None, ge=1, le=65_535)
     output_name: str | None = Field(default=None, max_length=512)

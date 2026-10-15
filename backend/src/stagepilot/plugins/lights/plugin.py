@@ -167,7 +167,6 @@ class LightsPlugin(Plugin):
         return LightsSnapshot(
             enabled=self._settings.enabled,
             method=self._settings.method,
-            osc_preset=self._settings.osc_preset,
             osc_host=self._settings.osc_host,
             osc_port=self._settings.osc_port,
             output_name=self._settings.output_name,

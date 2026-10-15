@@ -217,7 +217,6 @@ export interface LightingCue {
 }
 
 export type LightingMethod = "osc" | "midi";
-export type OscPreset = "lightkey" | "qlc_plus" | "chamsys" | "etc_eos" | "grandma" | "resolume" | "custom";
 export type OscArgumentType = "int" | "float" | "string" | "bool";
 
 export interface OscArgument {
@@ -251,7 +250,6 @@ export interface LightsSettings {
   enabled: boolean;
   /** Older backends omit the OSC fields; a missing method means MIDI. */
   method?: LightingMethod;
-  osc_preset?: OscPreset;
   osc_host?: string;
   osc_port?: number;
   output_name: string | null;
@@ -271,7 +269,6 @@ export interface LightsStatusResponse {
   enabled: boolean;
   /** Older backends omit the OSC fields; a missing method means MIDI. */
   method?: LightingMethod;
-  osc_preset?: OscPreset;
   osc_host?: string;
   osc_port?: number;
   output_name: string | null;
@@ -288,7 +285,7 @@ export interface LightsStatusResponse {
 export type LightsSettingsInput = Pick<
   LightsSettings,
   "enabled" | "output_name" | "channel" | "pulse_ms"
-> & Partial<Pick<LightsSettings, "method" | "osc_preset" | "osc_host" | "osc_port">>;
+> & Partial<Pick<LightsSettings, "method" | "osc_host" | "osc_port">>;
 
 export interface LightsOperationResponse {
   accepted: boolean;

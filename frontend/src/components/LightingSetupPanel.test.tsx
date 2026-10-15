@@ -30,7 +30,6 @@ const song: Song = {
 const lights: LightsStatusResponse = {
   enabled: true,
   method: "midi",
-  osc_preset: "lightkey",
   osc_host: "127.0.0.1",
   osc_port: 21600,
   output_name: "StagePilot to Lightkey",
@@ -82,8 +81,7 @@ const settings: SettingsResponse = {
     lights: {
       enabled: true,
       method: "midi",
-      osc_preset: "lightkey",
-      osc_host: "127.0.0.1",
+          osc_host: "127.0.0.1",
       osc_port: 21600,
       output_name: "StagePilot to Lightkey",
       channel: 3,
@@ -582,7 +580,7 @@ describe("LightingSetupPanel", () => {
       expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       expect(onSaveSettings).toHaveBeenCalledTimes(1);
-      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250, osc_host: "127.0.0.1", osc_port: 21600 });
     });
 
     it("blocks Save with a reason while Note length is out of range", async () => {
@@ -623,8 +621,8 @@ describe("LightingSetupPanel", () => {
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       const payload = onSaveSettings.mock.calls[0]?.[0];
-      expect(payload).toEqual({ enabled: true, method: "midi", output_name: "Other MIDI port", channel: 5, pulse_ms: 100, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
-      expect(JSON.stringify(payload)).toBe('{"enabled":true,"method":"midi","output_name":"Other MIDI port","channel":5,"pulse_ms":100,"osc_preset":"lightkey","osc_host":"127.0.0.1","osc_port":21600}');
+      expect(payload).toEqual({ enabled: true, method: "midi", output_name: "Other MIDI port", channel: 5, pulse_ms: 100, osc_host: "127.0.0.1", osc_port: 21600 });
+      expect(JSON.stringify(payload)).toBe('{"enabled":true,"method":"midi","output_name":"Other MIDI port","channel":5,"pulse_ms":100,"osc_host":"127.0.0.1","osc_port":21600}');
     });
 
     it("a clean Save does nothing once Lighting is enabled", async () => {
@@ -661,7 +659,7 @@ describe("LightingSetupPanel", () => {
       expect(bar()).toHaveAttribute("data-state", "error");
       expect(screen.getByText("Couldn't save")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Try again" }));
-      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 5, pulse_ms: 100, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 5, pulse_ms: 100, osc_host: "127.0.0.1", osc_port: 21600 });
     });
 
     it("shows Saved automatically only after a cue save, and keeps Refresh and Send test cue as actions", () => {

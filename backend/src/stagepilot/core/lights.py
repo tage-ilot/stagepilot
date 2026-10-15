@@ -14,7 +14,6 @@ from stagepilot.core.config import (
     LightsSettings,
     OscArgument,
     OscLightingCue,
-    OscPreset,
     SongLightingCueMap,
 )
 from stagepilot.models.state import ConnectionStatus
@@ -30,7 +29,6 @@ class LightingOutputSummary(BaseModel):
 class LightsSnapshot(BaseModel):
     enabled: bool
     method: LightingMethod = LightingMethod.OSC
-    osc_preset: OscPreset = OscPreset.LIGHTKEY
     osc_host: str = "127.0.0.1"
     osc_port: int = 21_600
     output_name: str | None = None

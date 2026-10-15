@@ -222,7 +222,6 @@ def _lights_response(snapshot: LightsSnapshot) -> LightsStatusResponse:
     return LightsStatusResponse(
         enabled=snapshot.enabled,
         method=snapshot.method,
-        osc_preset=snapshot.osc_preset,
         osc_host=snapshot.osc_host,
         osc_port=snapshot.osc_port,
         output_name=snapshot.output_name,
@@ -872,7 +871,6 @@ async def update_lights_settings(
             output_name=settings.output_name,
             channel=settings.channel,
             pulse_ms=settings.pulse_ms,
-            osc_preset=settings.osc_preset or current.osc_preset,
             osc_host=settings.osc_host or current.osc_host,
             osc_port=settings.osc_port or current.osc_port,
             cue_maps=current.cue_maps,
