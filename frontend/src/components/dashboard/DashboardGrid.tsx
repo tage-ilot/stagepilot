@@ -203,7 +203,8 @@ export function DashboardGrid({
     }
   }, [saveGridResult]);
 
-  // Gravity is off on desktop: only the one-column mobile layout is pulled together after a change.
+  // Gravity is built into the grid (float: false). Only the one-column mobile layout is also repacked in reading order, which
+  // would shuffle desktop widgets sideways.
   const settle = useCallback((target: GridStack) => {
     if (modeRef.current === "mobile") target.compact("compact");
   }, []);
@@ -224,9 +225,10 @@ export function DashboardGrid({
       disableDrag: true,
       disableResize: true,
       draggable: { handle: ".dashboard-widget-handle" },
-      // Widgets stay exactly where they are dropped (owner, 2026-10-14); the grid only stops them overlapping, by moving the one in
-      // the way. Pulling everything upward happens only on "Compact layout" and in the single-column mobile layout.
-      float: modeRef.current !== "mobile",
+      // Upward gravity (owner, 2026-10-14): a widget keeps the column it is dropped in, but always rises until it meets another
+      // widget, so empty space never opens above it. It only stays lower when nothing can fit beside what is already there. A
+      // widget that is dropped on another pushes it aside instead of overlapping.
+      float: false,
       margin: 10,
       resizable: { handles: "se" },
     }, gridElement.current);
@@ -265,7 +267,7 @@ export function DashboardGrid({
     if (!grid) return;
     const desiredIds = new Set(items.map(({ id }) => id));
     grid.batchUpdate();
-    grid.float(mode !== "mobile");
+    grid.float(false);
     grid.column(DASHBOARD_COLUMNS[mode], "none");
     for (const element of grid.getGridItems()) {
       if (!desiredIds.has(element.getAttribute("gs-id") as DashboardItemId)) {
