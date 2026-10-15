@@ -96,7 +96,7 @@ export default {
       "StagePilot Logo"
     ],
     "type-display-timer": [
-      "ui-monospace"
+      "Geist Mono"
     ],
     "type-song-title": [
       "Geist Variable"
