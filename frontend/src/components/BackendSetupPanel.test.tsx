@@ -154,7 +154,7 @@ describe("Internet access (Connection Access switch)", () => {
     // Enabled, but still no Operator: the bootstrap form is a required next step and sits under Remote access.
     expect(await screen.findByRole("heading", {name: "Create first Operator"})).toBeInTheDocument();
     expect(screen.getByText(/Remote Access is running\. Create the first Operator/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", {name: "Remote access"})).toBeInTheDocument();
+    expect(screen.getByRole("button", {name: /^Remote access/})).toBeInTheDocument();
 
     // Creating the first Operator must NOT call setRemoteEnabled again (it's already enabled) -- only bootstrapRemote itself.
     vi.mocked(api.bootstrapRemote).mockResolvedValue(operator);
@@ -191,7 +191,7 @@ describe("Internet access (Connection Access switch)", () => {
     renderPanel({settings: withLan(true), onSave});
     const radio = await internet();
     await waitFor(() => expect(radio).toBeChecked());
-    expect(screen.getByRole("heading", {name: "Remote access"})).toBeInTheDocument();
+    expect(screen.getByRole("button", {name: /^Remote access/})).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", {name: "Host"}));
     expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
@@ -201,7 +201,7 @@ describe("Internet access (Connection Access switch)", () => {
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(false));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
     await waitFor(() => expect(screen.getByRole("radio", {name: "Host"})).toBeChecked());
-    expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: /^Remote access/})).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Remote Access", {selector: "div"})).not.toBeInTheDocument();
     // Going back to Host also takes the local network away again, in the same flow.
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
@@ -372,7 +372,7 @@ describe("StagePilot panel sections", () => {
     await screen.findByRole("radio", {name: "Internet"});
     expect(document.getElementById("remote-access-inline")).toBeNull();
     expect(screen.queryByRole("heading", {name: "Create first Operator"})).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: /^Remote access/})).not.toBeInTheDocument();
   });
 });
 
@@ -381,7 +381,7 @@ describe("Remote access section (owner 2026-10-14)", () => {
     vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
     vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
     renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse});
-    expect(await screen.findByRole("heading", {name: "Remote access"})).toBeInTheDocument();
+    expect(await screen.findByRole("button", {name: /^Remote access/})).toBeInTheDocument();
     expect(screen.queryByText(/Let people sign in from a phone/)).not.toBeInTheDocument();
 
     const link = await screen.findByRole("group", {name: "Remote link"});
@@ -404,6 +404,99 @@ describe("Remote access section (owner 2026-10-14)", () => {
     expect(within(people).getByRole("button", {name: "Delete operator@example.test"})).toBeInTheDocument();
     expect(within(people).getByRole("button", {name: "Add a person"})).toBeInTheDocument();
     expect(within(people).queryByRole("button", {name: "Copy link"})).not.toBeInTheDocument();
+  });
+});
+
+describe("Server port restart prompt (owner 2026-10-14)", () => {
+  it("drops the 'dashboard remembers the saved server port' footnote", () => {
+    renderPanel({settings: settingsResponse});
+    expect(screen.queryByText(/remembers the saved server port/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Environment variables may still override/)).not.toBeInTheDocument();
+  });
+
+  it("tells the user to restart as soon as the port is changed, and not before", () => {
+    renderPanel({settings: settingsResponse});
+    fireEvent.click(screen.getByRole("button", {name: /^Advanced/}));
+    expect(screen.queryByText("Takes effect after you restart StagePilot.")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
+    expect(screen.getByText("Takes effect after you restart StagePilot.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "8765"}});
+    expect(screen.queryByText("Takes effect after you restart StagePilot.")).not.toBeInTheDocument();
+  });
+
+  it("still shows the restart message after the port is saved", () => {
+    renderPanel({settings: settingsResponse, message: "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes."});
+    expect(screen.getByText(/Restart StagePilot and reload the dashboard/)).toBeInTheDocument();
+  });
+});
+
+describe("Remote access collapses and remembers it (owner 2026-10-14)", () => {
+  const KEY = "stagepilot.backend.remote-access-open";
+  const on = {...off, enabled: true, state: "connected" as const, needs_operator: false, url: "https://test.trycloudflare.com"};
+  const open = () => renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse});
+  const toggle = () => screen.getByRole("button", {name: /^Remote access/});
+  beforeEach(() => {
+    window.localStorage.removeItem(KEY);
+    vi.mocked(api.getRemoteStatus).mockResolvedValue(on);
+    vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
+  });
+
+  it("starts expanded the first time, with nothing saved yet", async () => {
+    open();
+    await screen.findByRole("button", {name: /^Remote access/});
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    expect(await screen.findByRole("group", {name: "Remote link"})).toBeInTheDocument();
+  });
+
+  it("collapses on click, shows the state on the closed row, and saves the choice", async () => {
+    open();
+    await screen.findByRole("group", {name: "Remote link"});
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    expect(window.localStorage.getItem(KEY)).toBe("false");
+    expect(toggle()).toHaveTextContent("Connected");
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(window.localStorage.getItem(KEY)).toBe("true");
+  });
+
+  it("opens the way it was left after a restart (a fresh mount), collapsed or expanded", async () => {
+    window.localStorage.setItem(KEY, "false");
+    open();
+    await screen.findByRole("button", {name: /^Remote access/});
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    cleanup();
+    window.localStorage.setItem(KEY, "true");
+    open();
+    await screen.findByRole("button", {name: /^Remote access/});
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens by itself to ask whether to turn Remote Access off, without changing the saved choice", async () => {
+    window.localStorage.setItem(KEY, "false");
+    open();
+    await screen.findByRole("button", {name: /^Remote access/});
+    await waitFor(() => expect(screen.getByRole("radio", {name: "Internet"})).toBeChecked());
+    fireEvent.click(screen.getByRole("radio", {name: "Host"}));
+    expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(window.localStorage.getItem(KEY)).toBe("false");
+    fireEvent.click(screen.getByRole("button", {name: "Cancel"}));
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("still works when storage is unavailable: starts expanded and the choice lasts for the session", async () => {
+    const original = Storage.prototype.getItem;
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    open();
+    await screen.findByRole("button", {name: /^Remote access/});
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    vi.restoreAllMocks();
+    Storage.prototype.getItem = original;
   });
 });
 
@@ -494,21 +587,21 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
     it("Host: no PIN field, no Remote access", () => {
       withLan(false);
       expect(screen.queryByLabelText("Access PIN")).not.toBeInTheDocument();
-      expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", {name: /^Remote access/})).not.toBeInTheDocument();
     });
 
     it("Local network: the PIN field, still no Remote access", () => {
       withLan(true);
       expect(screen.getByLabelText("Access PIN")).toHaveAttribute("type", "password");
       expect(screen.getByText(/The initial PIN is 1234/)).toBeInTheDocument();
-      expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", {name: /^Remote access/})).not.toBeInTheDocument();
     });
 
     it("Internet: the PIN field (the local network is on too) and Remote access, both directly under the switch, after Advanced", async () => {
       vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
       vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
       withLan(true);
-      const people = await screen.findByRole("heading", {name: "Remote access"});
+      const people = await screen.findByRole("button", {name: /^Remote access/});
       const pin = screen.getByLabelText("Access PIN");
       const order = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       expect(order(screen.getByRole("radiogroup", {name: "Connection Access"}), pin)).toBe(true);
