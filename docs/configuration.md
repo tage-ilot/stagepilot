@@ -89,7 +89,7 @@ Reconnect revalidates its first snapshot rather than invalidating by itself.
 remains explicitly selectable with `integration_modes.midi_source: real`. In
 default API mode MIDI is never started and there is no automatic MIDI fallback; MIDI
 runs only when selected. Playback is connected only while the API WebSocket is up
-with a heartbeat within five seconds; otherwise the status reads "Not connected.
+with a heartbeat within five seconds; otherwise the status reads "Disconnected.
 Looking for Playback…". Healthy API without a valid song order still owns but
 suppresses starts/restarts.
 Ignored MIDI actions remain visible as `ignored: Playback API active`. A

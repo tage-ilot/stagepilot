@@ -169,7 +169,7 @@ async def test_api_mode_playback_down_stays_not_connected_without_midi() -> None
         status = (await client.get("/api/v1/playback-api/status")).json()
         assert not status["connected"] and status["active_source"] == "none"
         assert "MIDI" not in status["reason"] and "backup" not in status["reason"]
-        assert status["reason"].startswith("Not connected")
+        assert status["reason"].startswith("Disconnected")
         assert not midi.ports and inputs.midi is None
         assert (await client.get("/api/v1/state")).json()["midi_status"] != "connected"
         assert inputs._midi_guard() == "ignored: MIDI is not the selected connection method"

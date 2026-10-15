@@ -194,7 +194,7 @@ standalone settings page, per standing rule.
 
 Proposed layout:
 - Primary, prominent "Sign in with Planning Center" button at the top of
-  the panel when not connected (or when the OAuth connection has expired
+  the panel when disconnected (or when the OAuth connection has expired
   per §5).
 - Once connected via OAuth: show connected-account/org display name (if
   available from PCO's API) and a "Disconnect" action, no App ID/Secret

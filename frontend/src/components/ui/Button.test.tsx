@@ -80,6 +80,16 @@ describe("Button", () => {
     }
   });
 
+  it("live (Manual controls) buttons use the Geist Pixel Square font", () => {
+    for (const t of liveTones) {
+      const { unmount } = render(<Button variant="live" liveTone={t}>x</Button>);
+      expect(screen.getByRole("button")).toHaveClass("font-pixel");
+      unmount();
+    }
+    render(<Button variant="primary">x</Button>);
+    expect(screen.getByRole("button")).not.toHaveClass("font-pixel");
+  });
+
   it("live: light text keeps the shadow; dark hover text (go, back, reload on-info) removes it; stop keeps it", () => {
     for (const t of liveTones) {
       const { unmount } = render(<Button variant="live" liveTone={t}>x</Button>);

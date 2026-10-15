@@ -9,9 +9,9 @@ import type { ConnectionStatus } from "../types";
 const words: Array<[ConnectionStatus | "loading", string]> = [
   ["connected", "Connected"],
   ["connecting", "Connecting"],
-  ["disconnected", "Not connected"],
+  ["disconnected", "Disconnected"],
   ["error", "Error"],
-  ["loading", "Not connected"],
+  ["loading", "Disconnected"],
 ];
 
 describe("status words", () => {

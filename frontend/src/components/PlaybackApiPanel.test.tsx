@@ -16,8 +16,8 @@ import { buildConnectionCardViews, buildReadinessChecks } from "./dashboard/dash
 const noMidi: PlaybackMidiStep = { pending: false, count: 0, valid: true, snapshot: "", apply: async () => true, revert: () => undefined };
 const scanOf = (state: "idle" | "scanning" | "found" | "not_found", extra = {}) => ({ state, candidates: [], reason: null, current: 0, total: 0, ...extra });
 const none = (overrides = {}) => playbackStatus({
-  connected: false, active_source: "none", reason: "Not connected. Choose Scan Network to find Playback.",
-  sources: { playback_api: { connected: false, reason: "Playback is not connected." }, midi: { connected: false, reason: "MIDI is not connected." } },
+  connected: false, active_source: "none", reason: "Disconnected. Choose Scan Network to find Playback.",
+  sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: false, reason: "MIDI is disconnected." } },
   ...overrides,
 });
 const controller = (overrides: Partial<PlaybackController> = {}): PlaybackController => ({
@@ -177,7 +177,7 @@ describe("validPlaybackHost", () => {
 });
 
 describe("Song order card", () => {
-  it("not connected: explanation instead of a dead button", () => {
+  it("disconnected: explanation instead of a dead button", () => {
     render(<PlaybackApiPanel playback={controller({ status: none() })} />);
     expect(screen.getByText("Connect to Playback first.")).toBeVisible();
     expect(screen.queryByRole("button", { name: /song order/i })).not.toBeInTheDocument();
@@ -324,7 +324,7 @@ describe("Main view has no jargon", () => {
 
 describe("Connection method control (Playback API primary / MIDI alternate)", () => {
   const validMidi = { ...playbackSettings, settings: { ...playbackSettings.settings, midi: { ...playbackSettings.settings.midi, mappings: { start_next: 100, restart_current: 101, previous: 102, next: 103, reload_plan: 104, stop_timer: 105 } } } };
-  const midiStatus = () => playbackStatus({ sources: { playback_api: { connected: false, reason: "Playback is not connected." }, midi: { connected: true, reason: "MIDI is connected." } } });
+  const midiStatus = () => playbackStatus({ sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: true, reason: "MIDI is connected." } } });
   // The Connection method control is the shared ConnectionMethod radio group (DESIGN.md "Connection method").
   const group = () => screen.getByRole("radiogroup", { name: "Connection method" });
   // A radio's accessible name is its label text, so a screen reader hears "Playback API Primary".
@@ -527,7 +527,7 @@ const scenarios = [
   { name: "API only", api: true, midi: false, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
   { name: "MIDI only", api: false, midi: true, active: "midi" as const, reason: "Connected through MIDI." },
   { name: "both", api: true, midi: true, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
-  { name: "neither", api: false, midi: false, active: "none" as const, reason: "Not connected. Choose Scan Network to find Playback." },
+  { name: "neither", api: false, midi: false, active: "none" as const, reason: "Disconnected. Choose Scan Network to find Playback." },
   { name: "scanning", api: false, midi: false, active: "none" as const, reason: "Looking for Playback…", scanning: true },
 ];
 describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI settings never contradict", () => {
@@ -535,7 +535,7 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     const connected = api || midi;
     const status = playbackStatus({
       connected, active_source: active, reason, scan: scanOf(scanning ? "scanning" : "idle"),
-      sources: { playback_api: { connected: api, reason: api ? "Playback is connected." : "Playback is not connected." }, midi: { connected: midi, reason: midi ? "MIDI is connected." : "MIDI is not connected." } },
+      sources: { playback_api: { connected: api, reason: api ? "Playback is connected." : "Playback is disconnected." }, midi: { connected: midi, reason: midi ? "MIDI is connected." : "MIDI is disconnected." } },
     });
     panel(controller({ status }));
     // One banner, one sentence: exactly the backend text.
@@ -569,7 +569,7 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
 
 describe("No dead primary button without a visible fix", () => {
   const states = [
-    ["not connected", none()],
+    ["disconnected", none()],
     ["scanning", none({ scan: scanOf("scanning") })],
     ["not found", none({ scan: scanOf("not_found") })],
     ["connected, no order", playbackStatus({ song_order: [], stale: true })],

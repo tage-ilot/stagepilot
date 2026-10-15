@@ -1,11 +1,11 @@
 import type { Tone } from "./types";
 
-export type StatusWord = "Connected" | "Connecting" | "Not connected" | "Error";
+export type StatusWord = "Connected" | "Connecting" | "Disconnected" | "Error";
 
 export const statusTone: Record<StatusWord, Tone> = {
   Connected: "success",
   Connecting: "warning",
-  "Not connected": "idle",
+  "Disconnected": "idle",
   Error: "danger",
 };
 
@@ -15,7 +15,7 @@ export type ConnectionState = "connected" | "connecting" | "disconnected" | "err
 export const connectionWord: Record<ConnectionState, StatusWord> = {
   connected: "Connected",
   connecting: "Connecting",
-  disconnected: "Not connected",
+  disconnected: "Disconnected",
   error: "Error",
-  loading: "Not connected",
+  loading: "Disconnected",
 };

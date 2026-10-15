@@ -6,7 +6,7 @@ export const playbackStatus = (overrides: Partial<PlaybackStatusResponse> = {}):
   scan: { state: "idle", candidates: [], reason: null, current: 0, total: 0 },
   sources: {
     playback_api: { connected: true, reason: "Playback is connected." },
-    midi: { connected: false, reason: "MIDI is not connected." },
+    midi: { connected: false, reason: "MIDI is disconnected." },
   },
   host: "192.0.2.10", port: 8080, source: "lan", last_error: null,
   playing: false, setlist_cloud_version: 1, discovery: "done", progress: 0,

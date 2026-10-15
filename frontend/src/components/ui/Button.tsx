@@ -80,7 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const inert = Boolean(disabled) || loading;
 
   let look: string;
-  if (isLive) look = cx("bg-surface-950 px-4 py-2.5 min-h-ds-touch-target text-shadow-label", liveTone && live[liveTone]);
+  if (isLive) look = cx("bg-surface-950 px-4 py-2.5 min-h-ds-touch-target font-pixel text-shadow-label", liveTone && live[liveTone]);
   else if (variant === "tinted") look = cx("text-shadow-label", tinted[resolvedTone!]);
   else if (accented) look = cx("text-shadow-label", accentClasses[accent].solid);
   else look = variants[variant];

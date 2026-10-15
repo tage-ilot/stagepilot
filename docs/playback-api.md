@@ -41,7 +41,7 @@ Explicit `real` mode runs MIDI only; `simulated` runs neither live input.
 The connection follows the selected Connection method and never switches by
 itself. In Playback API mode it is connected only while the WebSocket is up and a
 valid heartbeat is less than five seconds old; when Playback drops, the status
-reads "Not connected. Looking for Playback…" (never a MIDI message) until the API
+reads "Disconnected. Looking for Playback…" (never a MIDI message) until the API
 reconnects. In MIDI mode MIDI owns and API events are not started. There is no
 automatic MIDI fallback and no "Connected through MIDI (backup)" state; the status
 projection still checks heartbeat expiry every 50 ms even without incoming events.
