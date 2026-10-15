@@ -829,8 +829,12 @@ export function Dashboard({
 
   return (
     <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
-      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_minmax(0,auto)] sm:gap-4">
-        <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-y-1 sm:col-span-1">
+      {/* One row at every width (owner, 2026-10-15). The logo never moves: it is always first, always on this row. Everything else
+          lives in the status slot to its right, which is the only part that gives way. The status pill turns into a message when
+          one arrives (it grows out of the pill's end), or, when the logo leaves too little room beside it, the message floats just
+          under the header so nothing reflows. The pill shrinks to a status dot on very narrow screens. See .app-header in index.css. */}
+      <header className="app-header relative mb-5 flex items-center gap-3">
+        <div className="app-header-brand flex min-w-0 flex-wrap items-center gap-y-2">
           <h1 className="relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
@@ -840,21 +844,18 @@ export function Dashboard({
             />
           )}
         </div>
-        <div
-          aria-atomic="true"
-          aria-live="polite"
-          className={`col-span-1 row-start-2 min-w-0 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:justify-self-end ${notification ? "" : "hidden sm:block"}`}
-        >
+        <div className="app-header-status relative -translate-y-[11px] flex h-9 min-w-[2rem] flex-1 items-center justify-end" data-message={notification ? "true" : "false"}>
+          <div aria-atomic="true" aria-live="polite" className="sr-only" role="status">{notification?.message ?? ""}</div>
           <div
-            className={`ml-auto h-9 w-fit max-w-full truncate rounded-ds-lg border px-4 py-2 text-center text-sm transition-opacity ${notification ? `opacity-100 ${notification.tone === "error" ? "border-danger/25 bg-danger/10 text-danger-text" : "border-info/20 bg-info/10 text-info-text"}` : "invisible border-transparent opacity-0"}`}
-            role="status"
-            title={notification?.message}
+            aria-hidden="true"
+            className={`header-message ${notification ? "is-shown" : ""} ${notification?.tone === "error" ? "text-danger-text" : "text-info-text"}`}
+            data-testid="header-message"
+            data-tone={notification?.tone ?? "none"}
           >
-            {notification?.message ?? "\u00A0"}
+            <span className={`header-message-text ${notification?.tone === "error" ? "bg-danger/10" : "bg-info/10"}`}>{notification?.message ?? ""}</span>
           </div>
-        </div>
         <div
-          className="relative z-40 col-start-2 row-start-2 min-w-0 max-w-full justify-self-end sm:col-start-3 sm:row-start-1"
+          className="header-chip-wrap relative z-40 min-w-0 max-w-full"
           ref={readinessHover.containerRef}
           {...readinessHover.hoverProps}
         >
@@ -865,7 +866,8 @@ export function Dashboard({
             className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success-soft bg-success text-ink can-hover:bg-success/85" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
             type="button"
           >
-            <span className="min-w-0 text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
+            <span aria-hidden="true" className={`header-chip-dot h-2.5 w-2.5 shrink-0 rounded-full ${ready ? "bg-ink" : systemError ? "bg-danger-text" : "bg-warning-text"}`} />
+            <span className="header-chip-label min-w-0 truncate text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
           </button>
           <div
             className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] motion-reduce:transition-none ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
@@ -896,6 +898,7 @@ export function Dashboard({
               </ul>
             </div>
           </div>
+        </div>
         </div>
       </header>
 

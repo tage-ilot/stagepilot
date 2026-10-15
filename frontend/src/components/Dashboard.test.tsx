@@ -425,19 +425,25 @@ describe("Dashboard Planning Center plan states", () => {
       actionMessage: "Service position and timer reset.",
     });
 
+    // The message is announced through a live region and drawn in the status slot, which sits in the header.
     const notification = screen.getByRole("status");
     const header = screen.getByRole("banner");
     expect(header).toContainElement(notification);
     expect(notification).toHaveTextContent("Service position and timer reset.");
-    expect(notification).toHaveClass("h-9", "w-fit", "max-w-full", "truncate");
+    const drawn = within(header).getByTestId("header-message");
+    expect(drawn).toHaveClass("is-shown");
+    expect(drawn).toHaveTextContent("Service position and timer reset.");
+    expect(drawn.closest(".app-header-status")).toHaveAttribute("data-message", "true");
   });
 
   it("keeps the same reserved header slot when no notification is visible", () => {
     renderDashboard(loadedServiceState);
 
     const header = screen.getByRole("banner");
-    const notification = header.querySelector('[role="status"]');
-    expect(notification).toHaveClass("h-9", "invisible");
+    const drawn = within(header).getByTestId("header-message");
+    expect(drawn).not.toHaveClass("is-shown");
+    expect(header.querySelector('[role="status"]')).toHaveTextContent("");
+    expect(drawn.closest(".app-header-status")).toHaveAttribute("data-message", "false");
   });
 
   it("queues simultaneous action and Planning Center notifications in the header", () => {
@@ -462,7 +468,8 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(notification).toHaveClass("invisible");
+      expect(screen.getByTestId("header-message")).not.toHaveClass("is-shown");
+      expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -491,7 +498,8 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(notification).toHaveClass("invisible");
+      expect(screen.getByTestId("header-message")).not.toHaveClass("is-shown");
+      expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -501,7 +509,57 @@ describe("Dashboard Planning Center plan states", () => {
   it("shows errors in the same header slot with error styling", () => {
     renderDashboard(loadedServiceState, { error: "Backend unavailable." });
 
-    expect(screen.getByRole("status")).toHaveClass("border-danger/25");
+    expect(screen.getByRole("status")).toHaveTextContent("Backend unavailable.");
+    const drawn = screen.getByTestId("header-message");
+    expect(drawn).toHaveAttribute("data-tone", "error");
+    expect(drawn).toHaveClass("text-danger-text");
+  });
+
+  describe("header layout (owner, 2026-10-15)", () => {
+    const parts = () => {
+      const header = screen.getByRole("banner");
+      return {
+        header,
+        logo: within(header).getByRole("heading", { name: "StagePilot" }),
+        brand: header.querySelector(".app-header-brand")!,
+        slot: header.querySelector(".app-header-status")!,
+        chip: header.querySelector(".header-chip-wrap")!,
+      };
+    };
+
+    it("is a single row with the logo first, on every width: no grid that re-flows or wraps the logo", () => {
+      renderDashboard(loadedServiceState);
+      const { header, brand, slot, logo } = parts();
+      expect(header).toHaveClass("flex", "items-center");
+      expect(header.className).not.toMatch(/\bgrid\b|grid-cols|flex-wrap|sm:col-|row-start/);
+      expect(header.firstElementChild).toBe(brand);
+      expect(brand.contains(logo)).toBe(true);
+      expect(brand).toHaveClass("min-w-0"); // the Update button may wrap inside the brand; the logo itself never moves
+      expect(slot).toHaveClass("flex-1");
+      expect(header.lastElementChild).toBe(slot);
+    });
+
+    it("keeps the logo, the status pill and the message in the header's own slot, with a screen-reader copy of the message", () => {
+      renderDashboard(loadedServiceState, { actionMessage: "Service position and timer reset." });
+      const { slot, chip } = parts();
+      expect(slot.contains(chip)).toBe(true);
+      expect(slot.contains(screen.getByTestId("header-message"))).toBe(true);
+      expect(slot.querySelector('[role="status"]')).toHaveClass("sr-only");
+    });
+
+    it("turns the status pill into a status dot with its words kept for screen readers (stylesheet rules)", async () => {
+      renderDashboard(loadedServiceState);
+      const chip = parts().chip.querySelector("button")!;
+      expect(chip.querySelector(".header-chip-dot")).toBeInTheDocument();
+      expect(chip.querySelector(".header-chip-label")).toHaveTextContent(/Check system|Ready|Live status|Error/);
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.app-header-status \{\s*container-type: inline-size;/);
+      expect(css).toMatch(/@container \(max-width: 7\.999rem\) \{\s*\.header-chip-label \{\s*position: absolute;/);
+      // Roomy: the message replaces the pill. Cramped: the message floats under the header so nothing reflows.
+      expect(css).toMatch(/@container \(min-width: 17rem\) \{\s*\.app-header-status\[data-message="true"\] \.header-chip-wrap \{\s*opacity: 0;/);
+      expect(css).toMatch(/@container \(max-width: 16\.999rem\) \{(?:\s|\/\*[\s\S]*?\*\/)*\.header-message \{\s*top: calc\(100% \+ 0\.5rem\);/);
+    });
   });
 
   it("renders ambiguous candidates and sends the selected plan ID", async () => {

@@ -844,6 +844,128 @@ textarea:focus-visible {
   background: linear-gradient(to left, theme("colors.ink-muted"), transparent);
 }
 
+/* ---- Dashboard header (owner, 2026-10-15) ------------------------------------------------------------------------------------
+   One row at every width. The logo is the first thing on it and never moves; everything else lives in .app-header-status to its
+   right, the only part that gives way. That slot is a size container, so what it shows depends on the room it really has:
+   - Roomy (17rem or more): the status pill and a message share the slot. A message makes the pill fade out while the message
+     grows out of the pill's end toward the logo, then they swap back when the message goes.
+   - Cramped: the pill stays where it is and the message floats just under the header (nothing reflows).
+   - Very narrow (under 8rem, a bit less than the pill itself): the pill becomes a status dot; its words stay available to screen readers. */
+.app-header-status {
+  container-type: inline-size;
+}
+
+.header-message {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  visibility: hidden;
+  clip-path: inset(0 0 0 100%);
+  opacity: 0;
+  transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1) 60ms, opacity 200ms ease-out 60ms, visibility 0s linear 340ms;
+}
+
+.header-message.is-shown {
+  pointer-events: auto;
+  visibility: visible;
+  clip-path: inset(0 0 0 0);
+  opacity: 1;
+  transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1) 60ms, opacity 200ms ease-out 60ms, visibility 0s;
+}
+
+.header-message-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: theme("borderRadius.ds-lg");
+  border: 1px solid currentColor;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* The message's border takes its tone from the text colour set on .header-message, softened. */
+.header-message-text {
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.header-chip-wrap {
+  transition: opacity 180ms ease-out, visibility 0s linear 0s;
+}
+
+@container (min-width: 17rem) {
+  .app-header-status[data-message="true"] .header-chip-wrap {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 160ms ease-out, visibility 0s linear 160ms;
+  }
+}
+
+@container (max-width: 16.999rem) {
+  /* Not enough room beside the logo: the message floats under the header, solid so it reads over the page below it. */
+  .header-message {
+    top: calc(100% + 0.5rem);
+    right: 0;
+    height: auto;
+    width: max-content;
+    max-width: min(24rem, calc(100vw - 2rem));
+    z-index: 30;
+    clip-path: inset(0 0 100% 0);
+  }
+
+  .header-message.is-shown {
+    clip-path: inset(0 0 0 0);
+  }
+
+  .header-message-text {
+    background-color: var(--ds-surface-950);
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  }
+}
+
+@container (max-width: 7.999rem) {
+  .header-chip-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .header-chip-wrap > button {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+@container (min-width: 8rem) {
+  .header-chip-dot {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-message,
+  .header-message.is-shown,
+  .header-chip-wrap,
+  .app-header-status[data-message="true"] .header-chip-wrap {
+    transition: none;
+  }
+}
+
 /* Phones and tablets: a focused field is never hidden under the sticky save bar. */
 @media (max-width: 1023.98px) {
   html {

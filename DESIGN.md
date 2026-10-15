@@ -769,6 +769,13 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
   on the left.
 - A control is **disabled with a reason shown nearby**, never silently greyed.
 
+### The dashboard header (decided 2026-10-15)
+One row at every window width, with the **logo first and never moving**: it is not in a grid and nothing re-flows around it. Everything else lives in one status slot to its right (`.app-header-status`, a size container), which is the only part that gives way:
+- **Roomy (17rem or more):** the status pill and a message share the slot. When an info or error message arrives, the pill fades out and the message grows out of the pill's end (a 280ms clip reveal, no motion under `prefers-reduced-motion`), then they swap back when it goes (6 seconds).
+- **Cramped:** the pill stays put and the message floats just under the header on a solid surface, so nothing reflows.
+- **Very narrow (under 8rem):** the pill becomes a status dot; the words stay available to screen readers.
+- The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`.
+
 ### Scrolling boxes (decided 2026-10-15)
 
 A box that scrolls on its own (the Lighting cue list, the timeline) is drawn as an obvious region so people know there is more to see:
