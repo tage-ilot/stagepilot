@@ -34,7 +34,7 @@ const NOTICE_CLASS = {
   // The pill is always the widgets' dark surface; the message's colour is carried by its text and border. Info is the blue of the
   // Previous button (live-back), errors are the error red.
   info: "border-live-back-soft text-live-back-text",
-  error: "border-danger-soft text-danger-text",
+  error: "border-danger-edge text-danger-pill",
 } as const;
 
 /**
@@ -89,7 +89,7 @@ export function HeaderStatusChip({ statusClass, statusLabel, notice, title, expa
   const noteTone = (shown ?? { tone: "info" as const }).tone;
 
   return (
-    <div className="app-header-status relative -translate-y-[3px] flex h-9 min-w-0 flex-1 items-center justify-end" ref={slotRef}>
+    <div className="app-header-status relative -top-[3px] flex h-9 min-w-0 flex-1 items-center justify-end" ref={slotRef}>
       <div aria-atomic="true" aria-live="polite" className="sr-only" role="status">{notice?.message ?? ""}</div>
       <div className="header-chip-wrap relative z-40 max-w-full" data-fits={fits ? "true" : "false"} ref={wrapRef} {...wrapProps}>
         <button
@@ -115,7 +115,7 @@ export function HeaderStatusChip({ statusClass, statusLabel, notice, title, expa
       </span>
       {/* Only when the pill had to step aside: the message appears just under the header. */}
       <div aria-hidden="true" className={`header-message ${notice && !fits ? "is-shown" : ""}`} data-testid="header-message-float">
-        <span className={`header-message-text bg-surface-950 font-pixel !text-type-badge ${noteTone === "error" ? "border-danger-soft text-danger-text" : "border-live-back-soft text-live-back-text"}`}>{shown?.message ?? ""}</span>
+        <span className={`header-message-text bg-surface-950 font-pixel !text-type-badge ${noteTone === "error" ? "border-danger-edge text-danger-pill" : "border-live-back-soft text-live-back-text"}`}>{shown?.message ?? ""}</span>
       </div>
     </div>
   );

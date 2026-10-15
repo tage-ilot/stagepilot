@@ -226,13 +226,14 @@ export function buildReadinessChecks({
 }): ReadinessCheck[] {
   if (stateOnly) {
     return [
-      ...Object.entries(views).map(([id, view]) => ({
-        id, label: `${({ planningCenter: "Services", midi: "MIDI", propresenter: "Presentation", lights: "Lighting" } as Record<string, string>)[id]} ${connectionWord[view.status].toLowerCase()}`,
+      // Lighting is optional and has its own card; it is not part of the system check (owner, 2026-10-15).
+      ...Object.entries(views).filter(([id]) => id !== "lights").map(([id, view]) => ({
+        id, label: `${({ planningCenter: "Services", midi: "Playback", propresenter: "Presentation" } as Record<string, string>)[id]} ${connectionWord[view.status].toLowerCase()}`,
         passed: view.status === "connected", required: true, severity: "info" as const,
         status: view.status === "connecting" ? "disconnected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
       })),
-      { id: "backend", label: live ? "Live state connected" : "Live state disconnected",
+      { id: "backend", label: live ? "StagePilot connected" : "StagePilot disconnected",
         passed: live, required: true, severity: "info", status: live ? "connected" : "disconnected" },
     ];
   }
@@ -247,6 +248,8 @@ export function buildReadinessChecks({
   );
   const durationReady = Boolean(servicePlanReady && plan?.songs.length)
     && plan!.songs.every((song) => Boolean(song.duration_seconds));
+  // The entry names the saved connection method: "Playback API connected" or "Playback MIDI disconnected".
+  const playbackLabel = settings?.settings.integration_modes.midi_source === "playback_api" ? "Playback API" : "Playback MIDI";
   const checks: ReadinessCheck[] = [
     {
       id: "planning-center",
@@ -282,7 +285,7 @@ export function buildReadinessChecks({
     },
     {
       id: "midi",
-      label: views.midi.status === "connected" ? "Playback connected" : "Playback disconnected",
+      label: `${playbackLabel} ${views.midi.status === "connected" ? "connected" : "disconnected"}`,
       passed: views.midi.status === "connected",
       required: true,
       severity: "blocking",
@@ -304,7 +307,7 @@ export function buildReadinessChecks({
   if (views.propresenter.mode === "real" && views.propresenter.configured) {
     checks.push({
       id: "propresenter-timer",
-      label: propresenter?.timer_found ? "ProPresenter timer found" : "ProPresenter timer not found",
+      label: propresenter?.timer_found ? "Presentation timer found" : "Presentation timer not found",
       passed: Boolean(propresenter?.timer_found),
       required: true,
       severity: "blocking",
@@ -315,28 +318,10 @@ export function buildReadinessChecks({
           : "disconnected",
     });
   }
-  const lightingConfigured = views.lights.configured;
-  const lightingLabel = (settings?.settings.lights.method ?? "midi") === "osc" ? "Lighting OSC output" : "Lighting MIDI output";
   if (views.midi.actionNotice) checks.push({
     id: "playback-order", label: views.midi.actionNotice, passed: false,
     required: true, severity: "blocking", status: "disconnected",
     detail: "Connection is healthy. Discover Song Order in the Playback panel before starting songs.",
-  });
-  const lightingRequired = lightingConfigured || views.lights.status === "error";
-  checks.push({
-    id: "lights",
-    label: views.lights.status === "connected"
-      ? `${lightingLabel} ${lightingLabel.includes("OSC") ? "ready" : "connected"}`
-      : `${lightingLabel} disconnected`,
-    passed: views.lights.status === "connected",
-    required: lightingRequired,
-    severity: lightingRequired ? "blocking" : "info",
-    status: views.lights.status === "error"
-      ? "error"
-      : views.lights.status === "connected"
-        ? "connected"
-        : "disconnected",
-    detail: views.lights.detail,
   });
   checks.push({
     id: "backend",

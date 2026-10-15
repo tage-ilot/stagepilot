@@ -836,7 +836,7 @@ export function Dashboard({
           lives in the status slot to its right, which is the only part that gives way. The status pill turns into a message when
           one arrives (it grows out of the pill's end), or, when the logo leaves too little room beside it, the message floats just
           under the header so nothing reflows. The pill shrinks to a status dot on very narrow screens. See .app-header in index.css. */}
-      <header className="app-header relative mb-5 flex items-center gap-3">
+      <header className="app-header relative z-20 mb-5 flex items-center gap-3">
         <div className="app-header-brand flex min-w-0 flex-wrap items-center gap-y-2">
           <h1 className="relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
@@ -881,7 +881,7 @@ export function Dashboard({
             </div>
           </div>
           )}
-          statusClass={ready ? "border-success-soft text-success-text" : "border-danger-soft text-danger-text"}
+          statusClass={ready ? "border-success-soft text-success-text" : "border-danger-edge text-danger-pill"}
           statusLabel={!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
           title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
           wrapProps={readinessHover.hoverProps}

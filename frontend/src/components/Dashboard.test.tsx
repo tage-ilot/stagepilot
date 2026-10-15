@@ -516,7 +516,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
     const chip = screen.getByTestId("header-chip");
     expect(chip).toHaveAttribute("data-state", "message");
-    expect(chip).toHaveClass("bg-surface-950", "border-danger-soft", "text-danger-text");
+    expect(chip).toHaveClass("bg-surface-950", "border-danger-edge", "text-danger-pill");
   });
 
   describe("header layout (owner, 2026-10-15)", () => {
@@ -557,7 +557,7 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.getByTestId("header-chip").querySelector(".header-chip-dot")).toBeNull();
       ready.unmount();
       renderDashboard({ ...loadedServiceState, is_stale: true });
-      expect(screen.getByTestId("header-chip")).toHaveClass("bg-surface-950", "text-danger-text");
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-surface-950", "text-danger-pill");
       expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
     });
 
@@ -664,8 +664,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(ready.querySelector("[data-size]")).toBeNull();
     // ...and none of the five status cards has a dot either.
     expect(document.querySelectorAll(".connections-status [data-size], .connections-status .status-card-dot")).toHaveLength(0);
-    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
-    expect(screen.getByText("Optional")).toBeInTheDocument();
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
   });
 
   it("keeps MIDI setup closed until its connection card is clicked", async () => {
@@ -793,7 +792,8 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Services disconnected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
-    expect(screen.getByText("Playback disconnected")).toBeInTheDocument();
+    // No saved settings here, so Playback reads as the MIDI method; the entry names whichever method is saved.
+    expect(screen.getByText("Playback MIDI disconnected")).toBeInTheDocument();
     expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
   });
 
@@ -833,7 +833,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lighting MIDI output disconnected")).toBeInTheDocument();
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s plan loaded")).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s service")).not.toBeInTheDocument();
   });
@@ -1211,29 +1211,18 @@ describe("Dashboard widget layout", () => {
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
   });
 
-  it("blocks readiness when a configured Lighting output disconnects", () => {
+  it("a configured Lighting output that disconnects is not part of the system check (it has its own card)", () => {
     const configuredlightssettings: SettingsResponse = {
       ...productionSettings,
-      settings: {
-        ...productionSettings.settings,
-        lights: {
-          ...productionSettings.settings.lights,
-          enabled: true,
-          output_name: "StagePilot to Lightkey",
-        },
-      },
+      settings: { ...productionSettings.settings, lights: { ...productionSettings.settings.lights, enabled: true, output_name: "StagePilot to Lightkey" } },
     };
 
     renderDashboard(loadedServiceState, {
       settings: configuredlightssettings,
-      state: applicationState(loadedServiceState, {
-        lights_status: "disconnected",
-        plugins: {},
-      }),
+      state: applicationState(loadedServiceState, { lights_status: "disconnected", plugins: {} }),
     });
 
-    expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 
