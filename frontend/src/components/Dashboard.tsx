@@ -761,6 +761,20 @@ export function Dashboard({
     : 0;
   // Stop keeps the remaining time: a stopped countdown shows the frozen value instead of blanking.
   const frozenRemaining = state.timer.status === "stopped" ? state.timer.remaining_seconds ?? null : null;
+  // The Now playing rail sweeps to the live colour from its top end while the countdown runs. A CSS animation cannot be removed
+  // smoothly (it would snap to blue), so for one moment after a stop data-settling plays the blue sweeping down the same way.
+  const nowPlayingRail = useRef<HTMLElement>(null);
+  const previousTimerStatus = useRef(state.timer.status);
+  useEffect(() => {
+    const was = previousTimerStatus.current;
+    previousTimerStatus.current = state.timer.status;
+    const panel = nowPlayingRail.current;
+    if (!panel || was !== "running" || state.timer.status === "running") return;
+    panel.dataset.settling = "true";
+    const done = window.setTimeout(() => { delete panel.dataset.settling; }, 950);
+    return () => window.clearTimeout(done);
+  }, [state.timer.status]);
+
   const timerElapsed = frozenRemaining !== null
     ? Math.max(0, (state.playing_song?.duration_seconds ?? timerDuration) - frozenRemaining)
     : Math.min(timerDuration, Math.floor(elapsedMilliseconds / 1_000));
@@ -1114,7 +1128,7 @@ export function Dashboard({
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div className="min-w-0 max-w-full">
               <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
-              <h2 className="font-pixel mt-1 break-words text-lg text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
+              <h2 className="font-pixel mt-1 break-words !text-[1.125rem] text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
               </p>
@@ -1140,9 +1154,9 @@ export function Dashboard({
         </Panel>
           ),
           "now-playing": (
-          <Panel variant="live" className="widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
+          <Panel ref={nowPlayingRail} variant="live" data-timer={state.timer.status} className="now-playing-panel widget-autosize-target h-full min-h-0 overflow-hidden !p-5 [container-type:inline-size] sm:!p-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-type-kicker text-type-kicker uppercase text-primary-text">Now playing</p>
+              <p className="font-type-kicker text-type-kicker uppercase now-playing-tint text-live-back-text">Now playing</p>
             </div>
             <h2 className="live-title-transition mt-7 min-h-9 text-[clamp(2rem,3.2vw,3.65rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink" key={state.playing_song?.id ?? "idle"}>{state.playing_song?.title ?? "Waiting for first cue"}</h2>
             <div className="mt-2 flex items-end justify-between gap-5">
@@ -1152,7 +1166,7 @@ export function Dashboard({
               </div>
               <div className="elapsed-time-block pb-1 text-right">
                 <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
-                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums text-primary-text">{formatDuration(timerElapsed)}</p>
+                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums now-playing-tint text-live-back-text">{formatDuration(timerElapsed)}</p>
                 <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.playing_song?.duration_seconds)}</p>
               </div>
             </div>

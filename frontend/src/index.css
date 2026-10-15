@@ -909,3 +909,118 @@ textarea:focus-visible {
 .playback-scan-row > [data-testid="playback-banner"] {
   flex: 1 1 14rem;
 }
+
+/* Now playing rail (owner, 2026-10-14). At rest (idle, paused, stopped, ended) the rail is the dark blue of Previous. When the
+   countdown starts the live colour (--ds-primary, the rail's original colour) sweeps down the bar from its top end, then a
+   lighter band keeps travelling down it, like it is alive to the music. When the countdown stops the blue sweeps down the same
+   way and the rail stays blue. Every change starts at the top, so none of them fades the whole bar at once. The Dashboard only
+   sets data-timer and, for one moment after a stop, data-settling.
+   Three registered percentages place the fronts: --rail-rise (live colour over blue), --rail-fall (blue over live colour) and
+   --rail-wave (the lighter band). -20% means "not on the bar yet", 120% means "has passed the whole bar". */
+@property --rail-rise {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -20%;
+}
+
+@property --rail-fall {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -20%;
+}
+
+@property --rail-wave {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -40%;
+}
+
+.now-playing-panel.now-playing-panel::before {
+  background-color: var(--ds-live-back);
+  background-image:
+    linear-gradient(
+      180deg,
+      transparent calc(var(--rail-wave) - 32%),
+      color-mix(in srgb, var(--ds-primary) 58%, var(--ds-primary-focus)) var(--rail-wave),
+      transparent calc(var(--rail-wave) + 32%)
+    ),
+    linear-gradient(180deg, var(--ds-live-back) calc(var(--rail-fall) - 18%), transparent calc(var(--rail-fall) + 18%)),
+    linear-gradient(180deg, var(--ds-primary) calc(var(--rail-rise) - 18%), var(--ds-live-back) calc(var(--rail-rise) + 18%));
+}
+
+.now-playing-panel.now-playing-panel[data-timer="running"]::before {
+  animation:
+    now-playing-rise 900ms ease-out both,
+    now-playing-wave 3.4s linear 900ms infinite;
+}
+
+.now-playing-panel.now-playing-panel[data-settling="true"]::before {
+  --rail-rise: 120%;
+  animation: now-playing-fall 900ms ease-in-out both;
+}
+
+@keyframes now-playing-rise {
+  from {
+    --rail-rise: -20%;
+  }
+
+  to {
+    --rail-rise: 120%;
+  }
+}
+
+@keyframes now-playing-wave {
+  from {
+    --rail-wave: -40%;
+  }
+
+  to {
+    --rail-wave: 140%;
+  }
+}
+
+@keyframes now-playing-fall {
+  from {
+    --rail-fall: -20%;
+  }
+
+  to {
+    --rail-fall: 120%;
+  }
+}
+
+.now-playing-panel .now-playing-tint {
+  color: var(--ds-live-back-text);
+  transition: color 700ms ease-out;
+}
+
+.now-playing-panel[data-timer="running"] .now-playing-tint {
+  color: var(--ds-primary-text);
+}
+
+.now-playing-panel.now-playing-panel {
+  --tw-gradient-from: color-mix(in srgb, var(--ds-live-back-soft) 18%, transparent) var(--tw-gradient-from-position);
+  transition: --tw-gradient-from 700ms ease-out;
+}
+
+.now-playing-panel.now-playing-panel[data-timer="running"] {
+  --tw-gradient-from: color-mix(in srgb, var(--ds-primary) 10%, transparent) var(--tw-gradient-from-position);
+}
+
+/* Reduced motion: nothing sweeps or fades. A running countdown simply shows the live colour, a stopped one the blue. */
+@media (prefers-reduced-motion: reduce) {
+  .now-playing-panel.now-playing-panel[data-timer="running"]::before {
+    animation: none;
+    background-image: none;
+    background-color: var(--ds-primary);
+  }
+
+  .now-playing-panel.now-playing-panel[data-settling="true"]::before {
+    animation: none;
+    background-image: none;
+  }
+
+  .now-playing-panel .now-playing-tint {
+    transition: none;
+  }
+}

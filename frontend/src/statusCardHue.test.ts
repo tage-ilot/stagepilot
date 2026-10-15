@@ -38,6 +38,32 @@ describe("open status card hue", () => {
   });
 });
 
+describe("Now playing rail (owner 2026-10-14)", () => {
+  it("rests on the Previous blue; the live colour sweeps down from the top when the timer runs, a lighter band keeps travelling, and the blue sweeps back down on stop", () => {
+    expect(css).toMatch(/\.now-playing-panel\.now-playing-panel::before \{\s*background-color: var\(--ds-live-back\)/);
+    // Every front is a registered percentage animated top to bottom, so no change fades the whole bar at once.
+    for (const prop of ["--rail-rise", "--rail-fall", "--rail-wave"]) {
+      expect(css).toMatch(new RegExp(`@property ${prop} \\{\\s*syntax: "<percentage>"`));
+    }
+    expect(css).toMatch(/\[data-timer="running"\]::before \{\s*animation:\s*now-playing-rise [\d.]+ms ease-out both,\s*now-playing-wave [\d.]+s linear [\d.]+ms infinite/);
+    expect(css).toMatch(/\[data-settling="true"\]::before \{\s*--rail-rise: 120%;\s*animation: now-playing-fall/);
+    expect(css.match(/@keyframes now-playing-rise \{[\s\S]*?\n\}\n\n\}?/)![0]).toContain("--rail-rise");
+    expect(css).toContain("linear-gradient(180deg, var(--ds-primary) calc(var(--rail-rise)");
+    expect(css).toContain("var(--ds-primary-focus)");
+    expect(css).not.toMatch(/@keyframes now-playing-(rise|settle|pulse) \{\s*(from|0%)[^}]*background-color/);
+    // Reduced motion: a running timer shows the live colour without sweeping.
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.now-playing-panel\.now-playing-panel\[data-timer="running"\]::before \{\s*animation: none;\s*background-image: none;\s*background-color: var\(--ds-primary\)/);
+  });
+
+  it("the label and elapsed time follow the rail (blue at rest, the live tint while running), and the plan title is 18px", () => {
+    const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
+    expect(src).toContain('now-playing-tint text-live-back-text">Now playing</p>');
+    expect(src).toMatch(/now-playing-tint text-live-back-text">\{formatDuration\(timerElapsed\)\}/);
+    expect(css).toMatch(/\[data-timer="running"\] \.now-playing-tint \{\s*color: var\(--ds-primary-text\)/);
+    expect(src).toContain('font-pixel mt-1 break-words !text-[1.125rem]');
+  });
+});
+
 describe("Manual controls grid (owner 2026-10-14)", () => {
   const columnsAt = (minWidth: string) => {
     const block = css.match(new RegExp(`@container \\(min-width: ${minWidth}\\) \\{\\s*\\.manual-controls-grid \\{\\s*grid-template-columns: repeat\\((\\d), minmax\\(0, 1fr\\)\\)`));
