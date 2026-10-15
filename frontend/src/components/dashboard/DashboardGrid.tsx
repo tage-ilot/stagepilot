@@ -34,38 +34,7 @@ import { DASHBOARD_WIDGETS } from "./dashboardWidgetRegistry";
 import { DashboardLayoutToolbar } from "./DashboardLayoutToolbar";
 import { DashboardSpacer } from "./DashboardSpacer";
 import { DashboardWidgetFrame } from "./DashboardWidgetFrame";
-
-const CELL_HEIGHT = 28;
-const GRID_ITEM_VERTICAL_INSET = 10;
-
-const contentRows = (
-  target: HTMLElement,
-  constraints: { minH?: number; maxH?: number },
-) => {
-  const previousHeight = target.style.height;
-  const previousMaxHeight = target.style.maxHeight;
-  const previousOverflow = target.style.overflow;
-  target.style.height = "auto";
-  target.style.maxHeight = "none";
-  target.style.overflow = "visible";
-
-  let naturalHeight = target.scrollHeight;
-  for (const child of target.querySelectorAll<HTMLElement>(
-    ".overflow-auto, [data-autosize-content]",
-  )) {
-    naturalHeight += Math.max(0, child.scrollHeight - child.clientHeight);
-  }
-
-  target.style.height = previousHeight;
-  target.style.maxHeight = previousMaxHeight;
-  target.style.overflow = previousOverflow;
-
-  const rows = Math.max(
-    constraints.minH ?? 1,
-    Math.ceil((naturalHeight + GRID_ITEM_VERTICAL_INSET) / CELL_HEIGHT),
-  );
-  return constraints.maxH ? Math.min(rows, constraints.maxH) : rows;
-};
+import { CELL_HEIGHT, CONTENT_FIT, contentRows, fitWidgetToContent } from "./contentFit";
 
 const bottom = (items: DashboardLayoutItem[]) =>
   items.reduce((maximum, item) => Math.max(maximum, item.y + item.h), 0);
@@ -267,13 +236,19 @@ export function DashboardGrid({
     const start = (_event: Event, element: GridItemHTMLElement) => {
       setInteractingId(element.getAttribute("gs-id") as DashboardItemId | null);
     };
-    const stop = () => {
+    // While the handle is dragged, keep every content-fit widget at the height its content needs for the width it has now.
+    const keepContentFit = (_event: Event, element?: GridItemHTMLElement) => {
+      if (element && fitWidgetToContent(initializedGrid, element)) initializedGrid.compact("compact");
+    };
+    const stop = (_event?: Event, element?: GridItemHTMLElement) => {
+      if (element) fitWidgetToContent(initializedGrid, element);
       setInteractingId(null);
       initializedGrid.compact("compact");
       window.requestAnimationFrame(saveGridResult);
     };
     initializedGrid.on("dragstart", start);
     initializedGrid.on("resizestart", start);
+    initializedGrid.on("resize", keepContentFit);
     initializedGrid.on("dragstop", stop);
     initializedGrid.on("resizestop", stop);
 
@@ -349,6 +324,30 @@ export function DashboardGrid({
     };
   }, [items, mode, fitLoadedWidgetsToContent]);
 
+  // A saved layout skips the startup fit, so apply the content-fit rule to Now playing, Manual controls and Service plan once the
+  // fonts are in, and again whenever the set of widgets or the layout mode changes.
+  useEffect(() => {
+    if (mode === "mobile") return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const fontsReady = document.fonts?.ready ?? Promise.resolve();
+      void fontsReady.then(() => {
+        const activeGrid = gridRef.current;
+        if (cancelled || !activeGrid) return;
+        let changed = false;
+        for (const element of activeGrid.getGridItems()) changed = fitWidgetToContent(activeGrid, element) || changed;
+        if (changed) {
+          activeGrid.compact("compact");
+          saveGridResult();
+        }
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [items, mode, saveGridResult]);
+
   useEffect(() => {
     const grid = gridRef.current;
     if (
@@ -370,6 +369,14 @@ export function DashboardGrid({
       timers.delete(target);
       const activeGrid = gridRef.current;
       const node = element.gridstackNode;
+      // Content-fit widgets follow their content in every mode and for saved layouts too; only mobile keeps its own path.
+      if (activeGrid && node && modeRef.current !== "mobile" && CONTENT_FIT[element.getAttribute("gs-id") as DashboardItemId]) {
+        if (fitWidgetToContent(activeGrid, element)) {
+          activeGrid.compact("compact");
+          saveGridResult();
+        }
+        return;
+      }
       if (
         !activeGrid || !node
         || preserveSavedSizing.current.has(modeRef.current)

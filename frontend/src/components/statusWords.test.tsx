@@ -36,6 +36,22 @@ describe("status words", () => {
     expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("grid-cols-[minmax(0,1fr)_auto]");
   });
 
+  it("keeps the status pill in one fixed slot beside the close button, centred on its height, with or without a description or extra badge", () => {
+    const { rerender } = render(<SetupPanelHeader closeLabel="Close" headingId="h" status="connected" title="Lighting" onClose={() => undefined} />);
+    const slot = () => document.querySelector("[data-status-slot]")!;
+    const base = slot().className;
+    for (const klass of ["min-[480px]:col-start-2", "min-[480px]:row-start-1", "min-[480px]:h-ds-touch-target", "min-[480px]:justify-self-end"]) {
+      expect(base).toContain(klass);
+    }
+    expect(slot().querySelector("[data-status-badge]")).toHaveTextContent("Connected");
+    rerender(<SetupPanelHeader closeLabel="Close" description="A long sentence about this page." headingId="h" status="disconnected" title="Lighting" onClose={() => undefined} />);
+    expect(slot().className).toBe(base);
+    rerender(<SetupPanelHeader closeLabel="Close" headingId="h" status="connected" statusDetail="MIDI · Alternate" title="Playback" onClose={() => undefined} />);
+    expect(slot().className).toBe(base);
+    // The extra badge sits before the pill, so the pill stays next to the close button.
+    expect([...slot().children].map((child) => child.textContent)).toEqual(["MIDI · Alternate", "Connected"]);
+  });
+
   it.each(words.filter(([status]) => status !== "loading") as Array<[ConnectionStatus, string]>)(
     "StatusCard shows %s as %s in sentence case without a CSS uppercase class and keeps data-status",
     (status, word) => {
