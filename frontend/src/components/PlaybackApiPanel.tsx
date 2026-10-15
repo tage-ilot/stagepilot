@@ -124,7 +124,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
             )
             : (
               <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
-                <p className="font-semibold">Couldn't find Playback</p>
+                <p className="font-semibold">Make sure:</p>
                 <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
                 {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
                 <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>
