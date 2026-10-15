@@ -612,7 +612,15 @@ export function LightingSetupPanel({
           />
         )}
 
-        <div className="mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain" data-testid="lighting-cue-list">
+        {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) and the
+            user can see where the scrolling area starts and ends. */}
+        <div
+          aria-label={(method === "osc" ? oscCues.length : cues.length) > 0 ? "Lighting cues, scrollable" : undefined}
+          className={`mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain ${(method === "osc" ? oscCues.length : cues.length) > 0 ? "scroll-region scroll-region-y rounded-ds-lg p-3" : ""}`}
+          data-testid="lighting-cue-list"
+          role={(method === "osc" ? oscCues.length : cues.length) > 0 ? "region" : undefined}
+          tabIndex={(method === "osc" ? oscCues.length : cues.length) > 0 ? 0 : undefined}
+        >
           {method === "osc" && oscCues.map((cue) => (
             <OscCueRow
               canTest={savedMethod === "osc" && !draftDiffersFromSaved}
