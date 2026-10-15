@@ -775,7 +775,8 @@ A box that scrolls on its own (the Lighting cue list, the timeline) is drawn as 
 - Use `ScrollRegion` (`components/ui/ScrollRegion.tsx`). It draws a 1px `ink-muted` border, rounded corners and `surface-950` fill around the scroller.
 - A light fade (`ink-muted` to transparent, 18px) lies **on top of the content, inputs included**, along any edge that has more to reach, and is hidden at the ends. It is an overlay that ignores the pointer. A dark shadow is not used: it cannot be seen on `surface-950`.
 - The scroller stays focusable and named when it has content (`role="region"`, `tabIndex=0`, an `aria-label`). An empty list is not framed.
-- Collapsing a group of controls that people may not use (the Lighting song timeline, Remote access) uses `Disclosure variant="activity"` with its open state saved by `usePersistedFlag`, starting open.
+- Collapsing a group of controls that people may not use (Remote access) uses `Disclosure variant="activity"` with its open state saved by `usePersistedFlag`, starting open.
+- A **major** optional section (the Lighting song timeline) uses `Disclosure variant="feature"` (decided 2026-10-15): a card with a 5px rail, a 70% border and a soft wash in the connection's colour that fades to the right; a two-line header (bold title, then a detail line that is shown open or closed and says what is inside, for example `16 cues on 2 of 4 songs · 2 pads · Battle Belongs 04:41`); a small tag at the right (the active method); and the body under a rule. Everything in the section, including its Test cue controls, folds away with it. It sits next to the Save bar, which is a flat full tint with no rail, so the two read as different things in one family.
 
 ### Panels read like the style guide (decided 2026-10-14)
 The owner preferred the guide's StagePilot and Playback panels to the app's. The app now follows them:

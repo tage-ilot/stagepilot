@@ -989,9 +989,6 @@ textarea:focus-visible {
 
 /* Lighting test cue: a compact group (heading, Note, Velocity, button) pushed to the right of the timeline controls.
    The toolbar wraps in reverse, so when both cannot share a line the Test cue group moves ABOVE the timeline selector. */
-.lighting-test {
-  margin-left: auto;
-}
 
 /* Backend status: four boxes in 1, 2 or 4 columns (never 3 + 1), following the panel's own width. */
 .backend-status-wrap {
