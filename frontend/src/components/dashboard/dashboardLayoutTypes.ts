@@ -6,13 +6,12 @@ export const DASHBOARD_WIDGET_IDS = [
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
-export type DashboardSpacerId = `spacer-${string}`;
-export type DashboardItemId = DashboardWidgetId | DashboardSpacerId;
+export type DashboardItemId = DashboardWidgetId;
 export type DashboardLayoutMode = "desktop" | "tablet" | "mobile";
 
 export type DashboardLayoutItem = {
   id: DashboardItemId;
-  kind: "widget" | "spacer";
+  kind: "widget";
   x: number;
   y: number;
   w: number;

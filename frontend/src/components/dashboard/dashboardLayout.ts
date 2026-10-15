@@ -5,7 +5,6 @@ import {
   type DashboardLayoutItem,
   type DashboardLayoutMode,
   type DashboardLayoutState,
-  type DashboardSpacerId,
   type DashboardWidgetId,
 } from "./dashboardLayoutTypes";
 import { DASHBOARD_WIDGETS } from "./dashboardWidgetRegistry";
@@ -16,8 +15,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const isDashboardWidgetId = (value: unknown): value is DashboardWidgetId =>
   typeof value === "string" && DASHBOARD_WIDGET_IDS.includes(value as DashboardWidgetId);
 
-export const isDashboardSpacerId = (value: unknown): value is DashboardSpacerId =>
+// Spacers were removed (owner, 2026-10-14): widgets can sit anywhere on the grid. Older saved layouts may still carry them, so
+// loading drops them silently instead of treating the whole layout as invalid.
+const isLegacySpacerId = (value: unknown): boolean =>
   typeof value === "string" && /^spacer-[a-zA-Z0-9_-]+$/.test(value);
+const withoutLegacySpacers = (value: unknown): unknown =>
+  Array.isArray(value) ? value.filter((item) => !isLegacySpacerId(isRecord(item) ? item.id : item)) : value;
 
 export const dashboardModeForWidth = (width: number): DashboardLayoutMode =>
   width < 1024 ? "mobile" : "desktop";
@@ -51,10 +54,7 @@ const normalizeItem = (
   if (!isRecord(value)) return null;
   const id = value.id;
   const kind = value.kind;
-  if (
-    !(kind === "widget" && isDashboardWidgetId(id))
-    && !(kind === "spacer" && isDashboardSpacerId(id))
-  ) return null;
+  if (!(kind === "widget" && isDashboardWidgetId(id))) return null;
   if (
     !validInteger(value.x)
     || !validInteger(value.y)
@@ -62,10 +62,7 @@ const normalizeItem = (
     || !validInteger(value.h, 1)
   ) return null;
 
-  const definition = kind === "widget"
-    ? DASHBOARD_WIDGETS[id as DashboardWidgetId]
-    : null;
-  const constraints = definition?.[mode];
+  const constraints = DASHBOARD_WIDGETS[id][mode];
   const minW = Math.min(constraints?.minW ?? 1, columns);
   const minH = constraints?.minH ?? 1;
   const maxW = Math.min(constraints?.maxW ?? columns, columns);
@@ -122,12 +119,12 @@ const validMobileHeights = (
 
 export const parseDashboardLayout = (value: unknown): DashboardLayoutState | null => {
   if (!isRecord(value) || value.version !== 2) return null;
-  const desktop = validItems(value.desktop, DASHBOARD_COLUMNS.desktop, "desktop");
-  const tablet = validItems(value.tablet, DASHBOARD_COLUMNS.tablet, "tablet");
+  const desktop = validItems(withoutLegacySpacers(value.desktop), DASHBOARD_COLUMNS.desktop, "desktop");
+  const tablet = validItems(withoutLegacySpacers(value.tablet), DASHBOARD_COLUMNS.tablet, "tablet");
   if (!desktop || !tablet || !Array.isArray(value.mobileOrder)) return null;
-  const mobileOrder = value.mobileOrder.filter((id) => id !== "readiness");
+  const mobileOrder = (withoutLegacySpacers(value.mobileOrder) as unknown[]).filter((id) => id !== "readiness");
   if (
-    mobileOrder.some((id) => !isDashboardWidgetId(id) && !isDashboardSpacerId(id))
+    mobileOrder.some((id) => !isDashboardWidgetId(id))
     || new Set(mobileOrder).size !== mobileOrder.length
     || !DASHBOARD_WIDGET_IDS.every((id) => mobileOrder.includes(id))
   ) return null;
@@ -209,12 +206,4 @@ export const moveDashboardItem = (
   ordered[index] = { ...left, x: right.x, y: right.y };
   ordered[target] = { ...right, ...leftPosition };
   return ordered;
-};
-
-export const createSpacer = (
-  existing: DashboardItemId[],
-  id = `spacer-${crypto.randomUUID()}` as DashboardSpacerId,
-): DashboardLayoutItem => {
-  if (existing.includes(id)) throw new Error(`Dashboard item ${id} already exists.`);
-  return { id, kind: "spacer", x: 0, y: 0, w: 2, h: 3, minW: 1, minH: 1 };
 };

@@ -47,7 +47,7 @@ describe("dashboard content-fit widgets (owner 2026-10-14)", () => {
     expect(short.node).toMatchObject({ h: 12, minH: 12 });
   });
 
-  it("leaves Recent Events and spacers alone", () => {
+  it("leaves Recent Events alone", () => {
     const events = widget("events", { h: 12, minH: 7 }, 900);
     expect(fitWidgetToContent(events.grid, events.element)).toBe(false);
     expect(events.update).not.toHaveBeenCalled();

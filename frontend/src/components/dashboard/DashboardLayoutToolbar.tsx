@@ -1,7 +1,6 @@
 export function DashboardLayoutToolbar({
   editing,
   eventsHidden,
-  onAddSpacer,
   onCompact,
   onDone,
   onEdit,
@@ -10,7 +9,6 @@ export function DashboardLayoutToolbar({
 }: {
   editing: boolean;
   eventsHidden: boolean;
-  onAddSpacer: () => void;
   onCompact: () => void;
   onDone: () => void;
   onEdit: () => void;
@@ -40,9 +38,6 @@ export function DashboardLayoutToolbar({
       <span className="mr-auto text-xs font-bold uppercase tracking-[0.18em] text-primary-text">
         Layout editing
       </span>
-      <button className="touch-manipulation rounded-ds-lg border border-edge-medium bg-surface-950 px-3 py-2 text-xs font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-surface-900 coarse:min-h-ds-touch-target" onClick={onAddSpacer} type="button">
-        Add spacer
-      </button>
       <button className="touch-manipulation rounded-ds-lg border border-edge-medium bg-surface-950 px-3 py-2 text-xs font-semibold text-ink-body transition-colors duration-[140ms] motion-reduce:transition-none can-hover:bg-surface-900 coarse:min-h-ds-touch-target" onClick={onToggleEventsHidden} type="button">
         {eventsHidden ? "Show event stream" : "Hide event stream"}
       </button>
