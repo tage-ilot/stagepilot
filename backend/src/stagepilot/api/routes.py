@@ -8,9 +8,17 @@ from typing import Literal, NoReturn, cast
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import ValidationError
 
 from stagepilot.api.remote_retry import RemoteRetryRoute
-from stagepilot.core.config import LightsSettings, MidiSource, ProPresenterSettings, Settings
+from stagepilot.core.config import (
+    LightingMethod,
+    LightsSettings,
+    MidiSource,
+    ProPresenterSettings,
+    Settings,
+    SongLightingCueMap,
+)
 from stagepilot.core.events import (
     ActionName,
     EventType,
@@ -32,6 +40,7 @@ from stagepilot.models.api import (
     HealthResponse,
     LightingCueMapRequest,
     LightingCueTestRequest,
+    LightingOscCueTestRequest,
     LightingOutputResponse,
     LightsOperationResponse,
     LightsSettingsRequest,
@@ -212,6 +221,10 @@ def _propresenter_response(snapshot: ProPresenterSnapshot) -> ProPresenterStatus
 def _lights_response(snapshot: LightsSnapshot) -> LightsStatusResponse:
     return LightsStatusResponse(
         enabled=snapshot.enabled,
+        method=snapshot.method,
+        osc_preset=snapshot.osc_preset,
+        osc_host=snapshot.osc_host,
+        osc_port=snapshot.osc_port,
         output_name=snapshot.output_name,
         channel=snapshot.channel,
         pulse_ms=snapshot.pulse_ms,
@@ -227,6 +240,7 @@ def _lights_response(snapshot: LightsSnapshot) -> LightsStatusResponse:
             for output in snapshot.outputs
         ],
         last_cue=snapshot.last_cue,
+        last_osc_cue=snapshot.last_osc_cue,
         last_cue_at=snapshot.last_cue_at,
     )
 
@@ -851,13 +865,20 @@ async def update_lights_settings(
     if controller is None:
         raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     current = runtime.settings_service.effective_runtime_settings().lights
-    updated = LightsSettings(
-        enabled=settings.enabled,
-        output_name=settings.output_name,
-        channel=settings.channel,
-        pulse_ms=settings.pulse_ms,
-        cue_maps=current.cue_maps,
-    )
+    try:
+        updated = LightsSettings(
+            enabled=settings.enabled,
+            method=settings.method,
+            output_name=settings.output_name,
+            channel=settings.channel,
+            pulse_ms=settings.pulse_ms,
+            osc_preset=settings.osc_preset or current.osc_preset,
+            osc_host=settings.osc_host or current.osc_host,
+            osc_port=settings.osc_port or current.osc_port,
+            cue_maps=current.cue_maps,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from exc
     try:
         runtime.settings_service.persist_lights(updated)
     except SettingsFileError as exc:
@@ -882,8 +903,21 @@ async def update_lighting_cue_map(
         raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     current = runtime.settings_service.effective_runtime_settings().lights
     cue_maps = dict(current.cue_maps)
-    if cue_map.cues:
-        cue_maps[cue_map.song_key] = cue_map
+    existing = cue_maps.get(cue_map.song_key)
+    # Replace only the submitted method's cues; the other method's cues are kept.
+    is_midi = cue_map.method is LightingMethod.MIDI
+    merged = SongLightingCueMap(
+        song_key=cue_map.song_key,
+        song_title=cue_map.song_title,
+        cues=cue_map.cues
+        if cue_map.method is LightingMethod.MIDI
+        else (existing.cues if existing else []),
+        osc_cues=cue_map.osc_cues
+        if cue_map.method is LightingMethod.OSC
+        else (existing.osc_cues if existing else []),
+    )
+    if merged.cues or merged.osc_cues:
+        cue_maps[cue_map.song_key] = merged
     else:
         cue_maps.pop(cue_map.song_key, None)
     updated = current.model_copy(update={"cue_maps": cue_maps}, deep=True)
@@ -892,10 +926,11 @@ async def update_lighting_cue_map(
     except SettingsFileError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     runtime.settings.lights = updated
-    await controller.replace_cue_map(cue_map)
+    await controller.replace_cue_map(merged)
+    count = len(cue_map.cues if is_midi else cue_map.osc_cues)
     message = (
-        f'Saved {len(cue_map.cues)} lighting cues for "{cue_map.song_title}".'
-        if cue_map.cues
+        f'Saved {count} lighting cues for "{cue_map.song_title}".'
+        if count
         else f'Removed the lighting cue map for "{cue_map.song_title}".'
     )
     return LightsOperationResponse(
@@ -914,6 +949,22 @@ async def test_lighting_cue(
     if controller is None:
         raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     outcome = await controller.test_cue(cue.note, cue.velocity)
+    return LightsOperationResponse(
+        accepted=outcome.accepted,
+        message=outcome.message,
+        lights=_lights_response(await controller.snapshot()),
+    )
+
+
+@router.post("/lights/test-osc", response_model=LightsOperationResponse)
+async def test_lighting_osc_cue(
+    cue: LightingOscCueTestRequest,
+    request: Request,
+) -> LightsOperationResponse:
+    controller = _runtime(request).lights_controller
+    if controller is None:
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
+    outcome = await controller.test_osc_cue(cue.address, cue.args)
     return LightsOperationResponse(
         accepted=outcome.accepted,
         message=outcome.message,

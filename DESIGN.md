@@ -63,6 +63,9 @@ colors:
   integration-playback-midi: "#7761b8"        # DECIDED (owner, 2026-10-14): the MIDI method inside the Playback panel wears a blue-violet halfway between the Playback blue and magenta (OKLCH hue -101 to -67, same lightness)
   integration-playback-midi-soft: "#7761b8"   # same as the base
   integration-playback-midi-text: "#a69ad2"
+  integration-lighting-osc: "#2f9e8f"         # DECIDED (owner, 2026-10-15): the OSC method inside the Lighting panel wears a teal, clearly apart from the MIDI blue-violet (integration-playback-midi) and the Lighting pink-red
+  integration-lighting-osc-soft: "#2f9e8f"    # same as the base
+  integration-lighting-osc-text: "#7fcdc1"
   integration-backend: "#c7231d"          # DECIDED (owner, 2026-10-12): the StagePilot status card and its configuration panel. SAME HEX as primary: see "Colour collisions"
   integration-backend-soft: "#c7231d"
   integration-backend-text: "#e28d89"

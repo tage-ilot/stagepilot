@@ -56,7 +56,11 @@ from stagepilot.planning_center_oauth import (
     proactive_refresh_loop,
 )
 from stagepilot.plugins.demo import DemoPlugin
-from stagepilot.plugins.lights import LightsPlugin, MidiOutputBackendFactory
+from stagepilot.plugins.lights import (
+    LightsPlugin,
+    MidiOutputBackendFactory,
+    OscOutputBackendFactory,
+)
 from stagepilot.plugins.midi_playback import MidiBackendFactory, MidiPlaybackPlugin
 from stagepilot.plugins.planning_center import (
     PlanningCenterClientFactory,
@@ -136,6 +140,7 @@ def create_app(
     midi_backend_factory: MidiBackendFactory | None = None,
     playback_client_factory: ClientFactory = default_client,
     lights_backend_factory: MidiOutputBackendFactory | None = None,
+    lights_osc_backend_factory: OscOutputBackendFactory | None = None,
     propresenter_client_factory: ProPresenterClientFactory | None = None,
     settings_service: SettingsService | None = None,
     dashboard_auth_enforced: bool | None = None,
@@ -201,6 +206,7 @@ def create_app(
         state_store,
         resolved_settings.lights,
         backend_factory=lights_backend_factory,
+        osc_backend_factory=lights_osc_backend_factory,
     )
     plugin_manager.register(lights_plugin)
     resolved_plan_cache_store = plan_cache_store or (

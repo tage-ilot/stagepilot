@@ -1084,3 +1084,37 @@ textarea:focus-visible {
     transition: none;
   }
 }
+
+/* Lighting OSC: preset, host and port share one line when the panel is medium wide, otherwise stack. */
+.lighting-osc-connection {
+  container-type: inline-size;
+}
+
+.lighting-osc-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 30rem) {
+  .lighting-osc-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 0.75fr);
+  }
+}
+
+/* An OSC cue: time and label, then action and address, wrapping with the panel's own width. */
+.lighting-osc-cue {
+  container-type: inline-size;
+}
+
+.lighting-osc-cue-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 34rem) {
+  .lighting-osc-cue-fields {
+    grid-template-columns: 7rem minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .lighting-osc-cue-fields .lighting-osc-address {
+    grid-column: 1 / -1;
+  }
+}

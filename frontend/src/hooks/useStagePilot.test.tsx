@@ -832,6 +832,10 @@ describe("useStagePilot", () => {
     });
     expect(mockedUpdateLightsSettings).toHaveBeenCalledWith({
       enabled: true,
+      method: "midi",
+      osc_preset: undefined,
+      osc_host: undefined,
+      osc_port: undefined,
       output_name: "StagePilot Lighting",
       channel: 1,
       pulse_ms: 100,

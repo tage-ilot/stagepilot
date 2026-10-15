@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ApplicationState,
   LightingCue,
+  LightingMethod,
+  OscLightingCue,
   LightsSettingsInput,
   LightsStatusResponse,
   SettingsResponse,
@@ -27,6 +29,10 @@ const song: Song = {
 
 const lights: LightsStatusResponse = {
   enabled: true,
+  method: "midi",
+  osc_preset: "lightkey",
+  osc_host: "127.0.0.1",
+  osc_port: 21600,
   output_name: "StagePilot to Lightkey",
   channel: 3,
   pulse_ms: 100,
@@ -75,6 +81,10 @@ const settings: SettingsResponse = {
     },
     lights: {
       enabled: true,
+      method: "midi",
+      osc_preset: "lightkey",
+      osc_host: "127.0.0.1",
+      osc_port: 21600,
       output_name: "StagePilot to Lightkey",
       channel: 3,
       pulse_ms: 100,
@@ -186,12 +196,14 @@ describe("LightingSetupPanel", () => {
     expect(toggle.className).not.toContain("info");
   });
 
-  it("has no connection-method select and no stray \"Sends cues by MIDI\" line", () => {
+  it("has the shared Connection method switch (OSC primary, MIDI alternate) and no stray \"Sends cues by MIDI\" line", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
     expect(screen.queryByText("Sends cues by MIDI")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Connection method")).not.toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Connection method" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /OSC/ })).toHaveAttribute("value", "osc");
+    expect(screen.getByRole("radio", { name: /MIDI/ })).toBeChecked();
   });
 
   it("uses the dashboard connection status while detail data is still loading", () => {
@@ -246,6 +258,7 @@ describe("LightingSetupPanel", () => {
     expect(onSaveCues).toHaveBeenCalledWith(
       song,
       [expect.objectContaining({ at_seconds: 65, note: 72, velocity: 110, label: "Chorus wash" })],
+      "midi",
     );
     expect(screen.queryByRole("button", { name: "Save song lighting cues" })).not.toBeInTheDocument();
   });
@@ -305,16 +318,16 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add Cue" }));
+    await user.click(screen.getByRole("button", { name: "Add cue" }));
     expect(onSaveCues).toHaveBeenLastCalledWith(song, [
       expect.objectContaining({ at_seconds: 0, note: 60, velocity: 127 }),
       expect.objectContaining({ at_seconds: 65, note: 72, velocity: 110 }),
-    ]);
+    ], "midi");
 
     await user.click(screen.getByRole("button", { name: "Remove cue at 01:05" }));
     expect(onSaveCues).toHaveBeenLastCalledWith(song, [
       expect.objectContaining({ at_seconds: 0, note: 60, velocity: 127 }),
-    ]);
+    ], "midi");
   });
 
   it("requires confirmation before clearing all cues", async () => {
@@ -344,7 +357,7 @@ describe("LightingSetupPanel", () => {
     expect(onSaveCues).not.toHaveBeenCalled();
 
     await user.click(clearAll);
-    expect(onSaveCues).toHaveBeenCalledWith(song, []);
+    expect(onSaveCues).toHaveBeenCalledWith(song, [], "midi");
   });
 
   it("sends an explicit Note On/Off compatibility test", async () => {
@@ -569,7 +582,7 @@ describe("LightingSetupPanel", () => {
       expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       expect(onSaveSettings).toHaveBeenCalledTimes(1);
-      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250 });
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 3, pulse_ms: 250, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
     });
 
     it("blocks Save with a reason while Note length is out of range", async () => {
@@ -610,8 +623,8 @@ describe("LightingSetupPanel", () => {
       await user.selectOptions(screen.getByLabelText("MIDI channel"), "5");
       await user.click(screen.getByRole("button", { name: "Save configuration" }));
       const payload = onSaveSettings.mock.calls[0]?.[0];
-      expect(payload).toEqual({ enabled: true, output_name: "Other MIDI port", channel: 5, pulse_ms: 100 });
-      expect(JSON.stringify(payload)).toBe('{"enabled":true,"output_name":"Other MIDI port","channel":5,"pulse_ms":100}');
+      expect(payload).toEqual({ enabled: true, method: "midi", output_name: "Other MIDI port", channel: 5, pulse_ms: 100, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
+      expect(JSON.stringify(payload)).toBe('{"enabled":true,"method":"midi","output_name":"Other MIDI port","channel":5,"pulse_ms":100,"osc_preset":"lightkey","osc_host":"127.0.0.1","osc_port":21600}');
     });
 
     it("a clean Save does nothing once Lighting is enabled", async () => {
@@ -648,7 +661,7 @@ describe("LightingSetupPanel", () => {
       expect(bar()).toHaveAttribute("data-state", "error");
       expect(screen.getByText("Couldn't save")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Try again" }));
-      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, output_name: "StagePilot to Lightkey", channel: 5, pulse_ms: 100 });
+      expect(onSaveSettings).toHaveBeenCalledWith({ enabled: true, method: "midi", output_name: "StagePilot to Lightkey", channel: 5, pulse_ms: 100, osc_preset: "lightkey", osc_host: "127.0.0.1", osc_port: 21600 });
     });
 
     it("shows Saved automatically only after a cue save, and keeps Refresh and Send test cue as actions", () => {
@@ -678,7 +691,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
     ],
   };
   type Fn<A extends unknown[]> = (...args: A) => void;
-  const mount = (extra: { onSaveSettings?: Fn<[LightsSettingsInput]>; onSaveCues?: Fn<[Song, LightingCue[]]>; onTest?: Fn<[number, number]>; onDirtyChange?: Fn<[boolean]> } = {}) => render(
+  const mount = (extra: { onSaveSettings?: Fn<[LightsSettingsInput]>; onSaveCues?: Fn<[Song, LightingCue[] | OscLightingCue[], LightingMethod]>; onTest?: Fn<[number, number]>; onDirtyChange?: Fn<[boolean]> } = {}) => render(
     <LightingSetupPanel
       error={null}
       lights={twoOutputs}

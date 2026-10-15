@@ -5,9 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-from stagepilot.core.config import LightingCue, SongLightingCueMap
+from stagepilot.core.config import (
+    LightingCue,
+    LightingMethod,
+    OscArgument,
+    OscLightingCue,
+    OscPreset,
+    SongLightingCueMap,
+    validate_osc_address,
+)
 from stagepilot.core.events import ActionName
 from stagepilot.core.midi import MidiCueName, MidiMessageDisposition
 from stagepilot.core.settings import PersistentPlanningCenterSettings, PersistentSettings
@@ -270,6 +278,10 @@ class LightingOutputResponse(BaseModel):
 
 class LightsStatusResponse(BaseModel):
     enabled: bool
+    method: LightingMethod = LightingMethod.OSC
+    osc_preset: OscPreset = OscPreset.LIGHTKEY
+    osc_host: str = "127.0.0.1"
+    osc_port: int = Field(default=21_600, ge=1, le=65_535)
     output_name: str | None = Field(default=None, max_length=512)
     channel: int = Field(ge=1, le=15)
     pulse_ms: int = Field(ge=10, le=2_000)
@@ -277,11 +289,17 @@ class LightsStatusResponse(BaseModel):
     detail: str | None = None
     outputs: list[LightingOutputResponse] = Field(default_factory=list)
     last_cue: LightingCue | None = None
+    last_osc_cue: OscLightingCue | None = None
     last_cue_at: datetime | None = None
 
 
 class LightsSettingsRequest(BaseModel):
     enabled: bool = True
+    # A request without a method is a pre-OSC client and means MIDI.
+    method: LightingMethod = LightingMethod.MIDI
+    osc_preset: OscPreset | None = None
+    osc_host: str | None = Field(default=None, min_length=1, max_length=253)
+    osc_port: int | None = Field(default=None, ge=1, le=65_535)
     output_name: str | None = Field(default=None, max_length=512)
     channel: int = Field(default=1, ge=1, le=15)
     pulse_ms: int = Field(default=100, ge=10, le=2_000)
@@ -292,8 +310,20 @@ class LightingCueTestRequest(BaseModel):
     velocity: int = Field(default=127, ge=1, le=127)
 
 
+class LightingOscCueTestRequest(BaseModel):
+    address: str = Field(min_length=1, max_length=256)
+    args: list[OscArgument] = Field(default_factory=list, max_length=16)
+
+    @field_validator("address")
+    @classmethod
+    def address_is_valid(cls, value: str) -> str:
+        return validate_osc_address(value.strip())
+
+
 class LightingCueMapRequest(SongLightingCueMap):
-    pass
+    """Replaces only ``method``'s cue list; the other method's cues are kept untouched."""
+
+    method: LightingMethod = LightingMethod.MIDI
 
 
 class LightsOperationResponse(BaseModel):

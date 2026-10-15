@@ -3,6 +3,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   ApplicationState,
   LightingCue,
+  LightingMethod,
+  OscArgument,
+  OscLightingCue,
+  OscPreset,
   LightsSettingsInput,
   LightsStatusResponse,
   ConnectionStatus,
@@ -22,6 +26,18 @@ import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
+import { ConnectionMethod } from "./ui/ConnectionMethod";
+import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import {
+  defaultOscPort,
+  newOscCue,
+  oscAddressError,
+  oscHostError,
+  oscPortError,
+  oscPresetInfo,
+  parseOscArguments,
+  type OscArgumentDraft,
+} from "./lightingOsc";
 
 const midiNoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
 const midiNoteName = (note: number) =>
@@ -68,6 +84,7 @@ export function LightingSetupPanel({
   onRefresh,
   onSaveSettings,
   onTest,
+  onTestOsc,
   onSaveCues,
   onClearAllCues,
 }: {
@@ -84,12 +101,20 @@ export function LightingSetupPanel({
   onRefresh: () => void;
   onSaveSettings: (settings: LightsSettingsInput) => void;
   onTest: (note: number, velocity: number) => void;
-  onSaveCues: (song: Song, cues: LightingCue[]) => void;
-  onClearAllCues?: (songs: Song[]) => void;
+  onTestOsc?: (address: string, args: OscArgument[]) => void;
+  onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod) => void;
+  onClearAllCues?: (songs: Song[], method: LightingMethod) => void;
 }) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
   const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
+  const [method, setMethod] = useState<LightingMethod>("osc");
+  const [oscPreset, setOscPreset] = useState<OscPreset>("lightkey");
+  const [oscHost, setOscHost] = useState("127.0.0.1");
+  const [oscPort, setOscPort] = useState("21600");
+  const [oscTestAddress, setOscTestAddress] = useState("");
+  const [oscTestArgs, setOscTestArgs] = useState<OscArgumentDraft[]>([]);
+  const [oscCues, setOscCues] = useState<OscLightingCue[]>([]);
   const [outputName, setOutputName] = useState("");
   const [channel, setChannel] = useState("1");
   const [pulseMs, setPulseMs] = useState("100");
@@ -109,6 +134,22 @@ export function LightingSetupPanel({
   const syncedOutput = syncSource ? (syncSource.output_name ?? "") : null;
   const syncedChannel = syncSource ? String(syncSource.channel) : null;
   const syncedPulse = syncSource ? String(syncSource.pulse_ms) : null;
+  const syncedMethod = syncSource ? (syncSource.method ?? "midi") : null;
+  const syncedPreset = syncSource ? (syncSource.osc_preset ?? "lightkey") : null;
+  const syncedHost = syncSource ? (syncSource.osc_host ?? "127.0.0.1") : null;
+  const syncedPort = syncSource ? String(syncSource.osc_port ?? 21600) : null;
+  useEffect(() => {
+    if (syncedMethod !== null) setMethod(syncedMethod);
+  }, [syncedMethod]);
+  useEffect(() => {
+    if (syncedPreset !== null) setOscPreset(syncedPreset);
+  }, [syncedPreset]);
+  useEffect(() => {
+    if (syncedHost !== null) setOscHost(syncedHost);
+  }, [syncedHost]);
+  useEffect(() => {
+    if (syncedPort !== null) setOscPort(syncedPort);
+  }, [syncedPort]);
   useEffect(() => {
     if (syncedOutput !== null) setOutputName(syncedOutput);
   }, [syncedOutput]);
@@ -132,9 +173,26 @@ export function LightingSetupPanel({
 
   useEffect(() => {
     setCues(savedCueMap?.cues.map((cue) => ({ ...cue })) ?? []);
+    setOscCues(savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? []);
   }, [savedCueMap, selectedSongKey]);
 
   const parsedSettings = useMemo<LightsSettingsInput | null>(() => {
+    const osc = {
+      osc_preset: oscPreset,
+      osc_host: oscHost.trim(),
+      osc_port: Number(oscPort),
+    };
+    if (method === "osc") {
+      if (oscHostError(oscHost) || oscPortError(oscPort)) return null;
+      return {
+        enabled: true,
+        method,
+        output_name: syncSource?.output_name ?? null,
+        channel: syncSource?.channel ?? 1,
+        pulse_ms: syncSource?.pulse_ms ?? 100,
+        ...osc,
+      };
+    }
     const parsedChannel = Number(channel);
     const parsedPulse = Number(pulseMs);
     if (!outputName) return null;
@@ -142,16 +200,24 @@ export function LightingSetupPanel({
     if (!Number.isInteger(parsedPulse) || parsedPulse < 10 || parsedPulse > 2_000) return null;
     return {
       enabled: true,
+      method,
       output_name: outputName,
       channel: parsedChannel,
       pulse_ms: parsedPulse,
+      ...osc,
     };
-  }, [channel, outputName, pulseMs]);
+  }, [channel, method, oscHost, oscPort, oscPreset, outputName, pulseMs, syncSource]);
 
   const persistCues = (nextCues: LightingCue[]) => {
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setCues(sortedCues);
-    if (selectedSong) onSaveCues(selectedSong, sortedCues);
+    if (selectedSong) onSaveCues(selectedSong, sortedCues, "midi");
+  };
+
+  const persistOscCues = (nextCues: OscLightingCue[]) => {
+    const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
+    setOscCues(sortedCues);
+    if (selectedSong) onSaveCues(selectedSong, sortedCues, "osc");
   };
 
   const updateCue = (id: string, update: Partial<LightingCue>, save = false) => {
@@ -173,41 +239,61 @@ export function LightingSetupPanel({
     ]);
   };
 
+  const addOscCue = () => {
+    persistOscCuesLocal([...oscCues, newOscCue(newCueId())]);
+  };
+  // A new OSC cue has no address yet, so it is only shown; it saves once its address is valid.
+  const persistOscCuesLocal = (next: OscLightingCue[]) => setOscCues(next);
+
   const clearSelectedSongCues = () => {
-    if (!selectedSong || !cues.length) return;
+    if (!selectedSong || !shownCues.length) return;
     if (confirmClearSelectedLightingCues(selectedSong.title)) {
-      persistCues([]);
+      if (method === "osc") persistOscCues([]);
+      else persistCues([]);
     }
   };
 
   const clearEverySongCues = () => {
     if (!songs.length) return;
     if (confirmClearAllLightingCues(songs.map((song) => song.title), state.plan?.title ?? null)) {
-      setCues([]);
-      if (onClearAllCues) onClearAllCues(songs);
-      else songs.forEach((song) => onSaveCues(song, []));
+      if (method === "osc") setOscCues([]);
+      else setCues([]);
+      if (onClearAllCues) onClearAllCues(songs, method);
+      else songs.forEach((song) => onSaveCues(song, [], method));
     }
   };
 
+  const shownCues = method === "osc" ? oscCues : cues;
   const savedLighting = settings?.settings.lights ?? lights;
+  const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
   const savedOutputName = savedLighting?.output_name ?? null;
   // Test cue goes out through the connected (saved) port, so it is only offered
   // while the draft output and channel equal what is saved.
-  const draftDiffersFromSaved = savedLighting != null
-    && (savedOutputName === null
-      || outputName !== savedOutputName
-      || channel !== String(savedLighting.channel));
+  const heldMethod = savedLighting != null && method !== savedMethod;
+  const heldPreset = savedLighting != null && oscPreset !== (savedLighting.osc_preset ?? "lightkey");
+  const heldHost = savedLighting != null && oscHost !== (savedLighting.osc_host ?? "127.0.0.1");
+  const heldPort = savedLighting != null && oscPort !== String(savedLighting.osc_port ?? 21600);
+  const oscDraftDiffers = heldMethod || heldPreset || heldHost || heldPort;
+  const draftDiffersFromSaved = method === "osc"
+    ? oscDraftDiffers
+    : savedLighting != null
+      && (heldMethod
+        || savedOutputName === null
+        || outputName !== savedOutputName
+        || channel !== String(savedLighting.channel));
   // Held changes: output, channel and note pulse. Any Lighting save reconfigures the plugin
   // (cancels the running timeline, reopens the MIDI port), so none of them saves on its own.
   const heldOutput = savedLighting != null && outputName !== (savedOutputName ?? "");
   const heldChannel = savedLighting != null && channel !== String(savedLighting.channel);
   const heldPulse = savedLighting != null && pulseMs !== String(savedLighting.pulse_ms);
-  const changeCount = Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
+  const changeCount = method === "osc"
+    ? Number(heldMethod) + Number(heldPreset) + Number(heldHost) + Number(heldPort)
+    : Number(heldMethod) + Number(heldOutput) + Number(heldChannel) + Number(heldPulse);
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const attempt = useSaveAttempt("lighting-configuration");
   const pulseNumber = Number(pulseMs);
-  const errOutput = attempt.attempted && !outputName ? "Choose an output." : undefined;
+  const errOutput = method === "midi" && attempt.attempted && !outputName ? "Choose an output." : undefined;
   const errPulse = attempt.attempted && !(Number.isInteger(pulseNumber) && pulseNumber >= 10 && pulseNumber <= 2000) ? "Enter a note length from 10 to 2000 ms." : undefined;
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   const previousOperation = useRef<typeof pendingOperation>(null);
@@ -231,11 +317,17 @@ export function LightingSetupPanel({
           ? { kind: "auto", at: autoSavedAt }
           : { kind: "clean" };
   const blockedReason = changeCount > 0 && parsedSettings === null
-    ? "Choose an output, a channel from 1 to 15 and a note length from 10 to 2000 ms before saving."
+    ? method === "osc"
+      ? "Enter a host and a UDP port from 1 to 65535 before saving."
+      : "Choose an output, a channel from 1 to 15 and a note length from 10 to 2000 ms before saving."
     : null;
 
   const discard = () => {
     if (!savedLighting) return;
+    setMethod(savedLighting.method ?? "midi");
+    setOscPreset(savedLighting.osc_preset ?? "lightkey");
+    setOscHost(savedLighting.osc_host ?? "127.0.0.1");
+    setOscPort(String(savedLighting.osc_port ?? 21600));
     setOutputName(savedLighting.output_name ?? "");
     setChannel(String(savedLighting.channel));
     setPulseMs(String(savedLighting.pulse_ms));
@@ -247,10 +339,19 @@ export function LightingSetupPanel({
     // A clean Save is a no-op once Lighting is enabled.
     if (pendingOperation !== null) return;
     if (changeCount === 0 && savedLighting?.enabled) return;
+    if (!parsedSettings && method === "osc") { attempt.refuse(); return; }
     if (!parsedSettings) { attempt.refuse(); return; }
     setSaveFailed(false);
     setAutoSavedAt(null);
     onSaveSettings(parsedSettings);
+  };
+  const oscTestParsed = parseOscArguments(oscTestArgs);
+  const oscTestAddressError = oscAddressError(oscTestAddress);
+  const applyPreset = (preset: OscPreset) => {
+    const info = oscPresetInfo(preset);
+    setOscPreset(preset);
+    setOscPort(defaultOscPort(preset));
+    if (info.host) setOscHost(info.host);
   };
   const currentOutputMissing = outputName
     && !lights?.outputs.some((output) => output.name === outputName);
@@ -259,14 +360,49 @@ export function LightingSetupPanel({
     <Panel className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lighting configuration"
-        description="Send elapsed-time MIDI Note On/Off cues to Lighting."
+        description={method === "osc" ? "Send elapsed-time OSC messages to Lighting." : "Send elapsed-time MIDI Note On/Off cues to Lighting."}
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
+        statusDetail={savedMethod === "midi" ? "MIDI · Alternate" : undefined}
         title="Lighting"
+      />
+
+      <ConnectionMethod
+        disabled={!lights && !settings}
+        heldChange={heldMethod}
+        onChange={(value) => setMethod(value === "midi" ? "midi" : "osc")}
+        options={[
+          { value: "osc", label: "OSC", role: "primary", chip: "border-integration-lighting-osc bg-integration-lighting-osc/45" },
+          { value: "midi", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
+        ]}
+        value={method}
       />
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
+      {method === "osc" ? (
+        <>
+          <OscConnectionFields
+            attempted={attempt.attempted}
+            held={{ preset: heldPreset, host: heldHost, port: heldPort }}
+            host={oscHost}
+            onHost={setOscHost}
+            onPort={setOscPort}
+            onPreset={applyPreset}
+            port={oscPort}
+            preset={oscPreset}
+          />
+          <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="osc-status">
+            {savedMethod === "osc" && lights?.connection_status === "error"
+              ? lights.detail
+              : savedMethod === "osc" && lights?.last_osc_cue
+                ? `Last sent: ${lights.last_osc_cue.address}. UDP does not confirm delivery.`
+                : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
+          </p>
+          {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
+        </>
+      ) : (
+        <>
       <div className="lighting-output mt-4">
       <div className="lighting-output-fields grid gap-4">
         <Field error={errOutput} heldChange={heldOutput} label="MIDI Output">
@@ -294,6 +430,8 @@ export function LightingSetupPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
+        </>
+      )}
       <div className="mt-5 border-t border-edge-subtle pt-5">
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
@@ -303,6 +441,7 @@ export function LightingSetupPanel({
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
             </Select>
           </Field>
+          {method === "midi" && (
           <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
             <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
             <button
@@ -320,8 +459,10 @@ export function LightingSetupPanel({
             </button>
             <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
           </div>
-          <Button disabled={!selectedSong || pendingOperation !== null} onClick={addCue} tone="lighting" variant="tinted">Add Cue</Button>
+          )}
+          <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} tone="lighting" variant="tinted">Add cue</Button>
           </div>
+          {method === "midi" && (
           <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
             <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
             <div className="w-28 flex-none">
@@ -338,11 +479,50 @@ export function LightingSetupPanel({
             </div>
             <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
           </div>
+          )}
         </div>
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>Save the new output first. Test cue sends to the saved output.</p>}
-        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
+        {method === "osc" && (
+          <div aria-label="OSC test cue" className="lighting-osc-test mt-4 grid gap-3" role="group">
+            <h3 className="font-semibold text-ink">Test cue</h3>
+            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
+              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
+            </Field>
+            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
+            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
+            <div>
+              <Button
+                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
+                tone="lighting"
+                variant="tinted"
+              >
+                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
+              </Button>
+            </div>
+          </div>
+        )}
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
+        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         <div className="mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain" data-testid="lighting-cue-list">
+          {method === "osc" && oscCues.map((cue) => (
+            <OscCueRow
+              canTest={savedMethod === "osc" && !draftDiffersFromSaved}
+              cue={cue}
+              disabled={pendingOperation !== null}
+              key={cue.id}
+              onCommit={(next) => persistOscCues(oscCues.map((item) => item.id === next.id ? next : item))}
+              onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
+              onTest={(address, args) => onTestOsc?.(address, args)}
+              preset={oscPreset}
+              songDuration={selectedSong?.duration_seconds ?? null}
+              testDisabledReason={draftDiffersFromSaved}
+              testReasonId={testReasonId}
+            />
+          ))}
+          {method === "midi" && (
+          <>
           {cues.map((cue) => (
             <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
               <Field label="Cue elapsed time">
@@ -363,11 +543,13 @@ export function LightingSetupPanel({
               <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}
-          {!cues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">No lighting cues saved for this song.</p>}
+          </>
+          )}
+          {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
         </div>
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button disabled={!cues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>
+          <Button disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>
           <Button disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</Button>
         </div>
       </div>
