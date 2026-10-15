@@ -70,7 +70,7 @@ export interface StatusBadgeProps extends Omit<BadgeProps, "tone" | "children" |
 /** Sentence case in the DOM (what assistive tech reads); the `uppercase` class does the capitals. */
 export function StatusBadge({ status, ...rest }: StatusBadgeProps) {
   return (
-    <Badge tone={statusTone[status]} dot ignoreAccent data-status={status} {...rest}>
+    <Badge tone={statusTone[status]} dot ignoreAccent data-status={status} {...rest} className={cx("font-pixel !text-type-badge", rest.className)}>
       {status}
     </Badge>
   );

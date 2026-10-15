@@ -64,6 +64,11 @@ describe("StatusBadge", () => {
     expect(el.textContent).toBe(word);
   });
 
+  it("is set in the bold Geist Pixel Square, whatever the tone", () => {
+    render(<><StatusBadge status="Connected" /><StatusBadge status="Error" /></>);
+    for (const word of ["Connected", "Error"]) expect(screen.getByText(word)).toHaveClass("font-pixel");
+  });
+
   it("keeps its own status colours inside a connection panel, while an ordinary success badge takes the connection's accent", () => {
     render(
       <AccentContext.Provider value="playback">
