@@ -4,6 +4,7 @@ import type { LightingPad } from "../types";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
+  describePad,
   elapsedSince,
   movePad,
   nudgeCueTime,
@@ -91,6 +92,20 @@ describe("pad rules", () => {
     expect(padForShortcut(list, "3")).toBeNull();
     expect(padForShortcut(list, "0")).toBeNull();
     expect(padForShortcut(list, "x")).toBeNull();
+  });
+});
+
+describe("pad captions", () => {
+  const pad = (over: Partial<LightingPad>): LightingPad => ({ id: "p", label: "P", color: null, method: "midi", address: null, args: [], note: 60, velocity: 100, ...over });
+
+  it("shows a MIDI pad's note and velocity in a caption short enough to fit a small pad without cutting the velocity", () => {
+    const caption = describePad(pad({ note: 127, velocity: 127 }));
+    expect(caption).toBe("Note 127 · Vel 127");
+    expect(caption.length).toBeLessThanOrEqual(18);
+  });
+
+  it("shows an OSC pad's address", () => {
+    expect(describePad(pad({ method: "osc", address: "/lightkey/chorus", note: null }))).toBe("/lightkey/chorus");
   });
 });
 

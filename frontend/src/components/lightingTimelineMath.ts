@@ -77,7 +77,7 @@ export const padForShortcut = (pads: LightingPad[], key: string): LightingPad | 
 
 /** Describes a pad's payload in one short line, for the pad tooltip and the editor list. */
 export const describePad = (pad: LightingPad) =>
-  pad.method === "osc" ? (pad.address ?? "") : `MIDI note ${pad.note ?? 0}, velocity ${pad.velocity}`;
+  pad.method === "osc" ? (pad.address ?? "") : `Note ${pad.note ?? 0} · Vel ${pad.velocity}`;
 
 /** Longest a marker label is drawn, in px, and the least it needs to be readable. */
 export const MARKER_LABEL_MAX_PX = 112;

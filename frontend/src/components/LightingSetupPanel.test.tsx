@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -170,6 +170,22 @@ describe("LightingSetupPanel", () => {
     const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Lighting cue label"]'));
     expect(labels).toHaveLength(40);
     expect(labels[0]).toHaveValue(label);
+  });
+
+  it("keeps one short subtitle whichever connection method is chosen", async () => {
+    const user = userEvent.setup();
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const subtitle = "Sends timed cues to your lighting software.";
+    expect(screen.getByText(subtitle)).toBeInTheDocument();
+    const group = screen.getByRole("radiogroup", { name: "Connection method" });
+    for (const name of [/MIDI/, /OSC/, /MIDI/]) {
+      await user.click(within(group).getByRole("radio", { name }));
+      expect(screen.getByText(subtitle)).toBeInTheDocument();
+    }
+    expect(screen.queryByText(/Note On\/Off/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Send elapsed-time/)).not.toBeInTheDocument();
   });
 
   it("draws no scroll box around an empty cue list", () => {
