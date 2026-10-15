@@ -31,8 +31,9 @@ interface Measured {
 }
 
 const NOTICE_CLASS = {
-  info: "border-info bg-info text-on-info",
-  error: "border-danger-solid bg-danger-solid text-on-danger",
+  // Info is the dark blue of the Previous button (live-back); errors are the error red. White text on both.
+  info: "bg-live-back text-on-primary",
+  error: "bg-danger-solid text-on-danger",
 } as const;
 
 /**
@@ -93,7 +94,7 @@ export function HeaderStatusChip({ statusClass, statusLabel, notice, title, expa
         <button
           aria-describedby="system-readiness-popover"
           aria-expanded={expanded}
-          className={`header-chip relative block cursor-help touch-manipulation overflow-hidden border font-pixel !text-type-badge uppercase tracking-wider text-shadow-label coarse:min-h-ds-touch-target ${messageInChip ? NOTICE_CLASS[noteTone] : statusClass}`}
+          className={`header-chip relative block cursor-help touch-manipulation overflow-hidden border border-on-primary/70 font-pixel !text-type-badge uppercase tracking-wider text-shadow-label coarse:min-h-ds-touch-target ${messageInChip ? NOTICE_CLASS[noteTone] : statusClass}`}
           data-state={messageInChip ? "message" : "status"}
           data-testid="header-chip"
           style={width === undefined ? undefined : { width, height }}
@@ -111,8 +112,8 @@ export function HeaderStatusChip({ statusClass, statusLabel, notice, title, expa
         <span className="header-chip-probe-note" data-text={shown?.message ?? ""} ref={noteProbe} />
       </span>
       {/* Only when the pill had to step aside: the message appears just under the header. */}
-      <div aria-hidden="true" className={`header-message ${notice && !fits ? "is-shown" : ""} ${noteTone === "error" ? "text-danger-text" : "text-info-text"}`} data-testid="header-message-float">
-        <span className="header-message-text">{shown?.message ?? ""}</span>
+      <div aria-hidden="true" className={`header-message ${notice && !fits ? "is-shown" : ""}`} data-testid="header-message-float">
+        <span className={`header-message-text font-pixel !text-type-badge border-on-primary/70 ${noteTone === "error" ? "bg-danger-solid text-on-danger" : "bg-live-back text-on-primary"}`}>{shown?.message ?? ""}</span>
       </div>
     </div>
   );

@@ -771,7 +771,7 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 
 ### The dashboard header (decided 2026-10-15)
 One row at every window width, with the **logo first and never moving**: no grid, nothing re-flows around it. Everything else is one status pill (`HeaderStatusChip`) in a slot to its right:
-- **The pill is the notification.** At rest it says Ready (success green) or Check system / Error (error red). When a message arrives the same pill grows to the message's size, turns info blue (or error red for an error) and swaps its words; when the message ends it shrinks back. Both the status words and the message use the bold Geist Pixel Square (`font-pixel`).
+- **The pill is the notification.** At rest it says Ready (the connected deep green `success`) or Check system / Error (the error red `danger-solid`, never the old orange), always with a thin white outline (`border-on-primary/70`) and white text. When a message arrives the same pill grows to the message's size, turns the dark blue of the Previous button (`live-back`, not the light teal `info`) for an info message or the error red for an error, and swaps its words; when the message ends it shrinks back. Both the status words and the message use the bold Geist Pixel Square (`font-pixel`).
 - **A new message shows right away**, replacing the one on screen (the words slide in and the pill resizes if the new text is a different length). Messages that arrive together play in turn. Each lasts 5 seconds at most.
 - **Too small for even the pill:** the pill disappears (never a dot) and the message appears just under the header on a solid surface.
 - The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`. Reduced motion turns the animation off.

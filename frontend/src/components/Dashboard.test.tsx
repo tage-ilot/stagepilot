@@ -433,7 +433,8 @@ describe("Dashboard Planning Center plan states", () => {
     // The status pill itself turns into the message: same element, info colours, the message's words.
     const chip = within(header).getByTestId("header-chip");
     expect(chip).toHaveAttribute("data-state", "message");
-    expect(chip).toHaveClass("bg-info", "text-on-info", "font-pixel");
+    // The dark blue of the Previous button, white text, and the white outline every state has.
+    expect(chip).toHaveClass("bg-live-back", "text-on-primary", "font-pixel", "border-on-primary/70");
     expect(within(header).getByTestId("header-message")).toHaveTextContent("Service position and timer reset.");
   });
 
@@ -656,7 +657,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
     // Owner 2026-10-13: the Ready pill is the deep green with light text and NO status dot.
     const ready = screen.getByRole("button", { name: /^Ready$/ });
-    expect(ready).toHaveClass("bg-success", "text-ink", "border-success-soft");
+    expect(ready).toHaveClass("bg-success", "text-ink", "border-on-primary/70");
     expect(ready.querySelector("[data-size]")).toBeNull();
     // ...and none of the five status cards has a dot either.
     expect(document.querySelectorAll(".connections-status [data-size], .connections-status .status-card-dot")).toHaveLength(0);

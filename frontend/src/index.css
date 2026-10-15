@@ -978,11 +978,11 @@ textarea:focus-visible {
 .header-message-text {
   display: block;
   border-radius: theme("borderRadius.ds-lg");
-  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
-  background-color: var(--ds-surface-950);
+  border: 1px solid;
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
   line-height: 1.25rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
 }
 
