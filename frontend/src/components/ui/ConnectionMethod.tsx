@@ -7,8 +7,9 @@ export interface ConnectionMethodOption<T extends string = string> {
   value: T;
   /** The name of the way to connect: "Playback API", "MIDI". */
   label: string;
-  /** Primary is the normal way, alternate the fallback. Only the word under the name differs. */
-  role: "primary" | "alternate";
+  /** Primary is the normal way, alternate the fallback. Only the word under the name differs. Leave it out for a plain
+   * switch whose options are not ranked (Backend: Host, Local network, Internet), and the second line is not drawn. */
+  role?: "primary" | "alternate";
   /** Greyed out and not choosable (for example a legacy value that is only shown). */
   disabled?: boolean;
   /** Optional own tint for the chosen look, as a full Tailwind class string (for example the MIDI method's blue-violet). */
@@ -130,15 +131,17 @@ export function ConnectionMethod<T extends string = string>({
                 className="absolute inset-0 size-full cursor-[inherit] opacity-0"
                 disabled={disabled || option.disabled}
                 name={uid}
-                aria-labelledby={`${uid}-${option.value}-name ${uid}-${option.value}-role`}
+                aria-labelledby={option.role ? `${uid}-${option.value}-name ${uid}-${option.value}-role` : `${uid}-${option.value}-name`}
                 onChange={() => onChange(option.value)}
                 type="radio"
                 value={option.value}
               />
               <span className="font-type-text-strong text-type-text-strong" id={`${uid}-${option.value}-name`}>{option.label}</span>
-              <span id={`${uid}-${option.value}-role`} className="font-type-badge text-[0.6875rem] uppercase tracking-[0.1em] text-ink-muted">
-                {roleWord[option.role]}
-              </span>
+              {option.role && (
+                <span id={`${uid}-${option.value}-role`} className="font-type-badge text-[0.6875rem] uppercase tracking-[0.1em] text-ink-muted">
+                  {roleWord[option.role]}
+                </span>
+              )}
             </label>
           );
         })}

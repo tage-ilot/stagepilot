@@ -495,16 +495,27 @@ export function useStagePilot() {
             : {}),
           onboarding: { general_completed: true },
         });
-        const accessResponse = await updateDashboardAccess(
-          web_dashboard_pin_enabled
-            ?? settings.settings.web_dashboard_pin_enabled
-            ?? true,
-          web_dashboard_pin,
-        );
+        // Changing the dashboard PIN (or whether one is required) signs every open dashboard out, so only call that endpoint when
+        // one of those really changes. Choosing the Connection Access option saves on every click and must not sign you out.
+        const savedPinEnabled = settings.settings.web_dashboard_pin_enabled ?? true;
+        const accessChanged = Boolean(web_dashboard_pin)
+          || (web_dashboard_pin_enabled !== undefined && web_dashboard_pin_enabled !== savedPinEnabled);
+        const accessResponse = accessChanged
+          ? await updateDashboardAccess(web_dashboard_pin_enabled ?? savedPinEnabled, web_dashboard_pin)
+          : response;
         setSettings(accessResponse);
         rememberServerPort(response.settings.server_port);
+        // Who can reach StagePilot is decided when the backend starts, so a Connection Access change restarts the desktop
+        // backend straight away and reloads (owner, 2026-10-14: the choice must be available immediately, with no extra step).
+        const accessReachChanged = generalSettings.lan_access !== settings.settings.lan_access;
+        if (accessReachChanged && response.restart_required && await restartDesktopBackend()) {
+          window.location.reload();
+          return;
+        }
         setSettingsMessage(
-          "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes.",
+          accessReachChanged
+            ? "Connection access saved. Restart StagePilot to apply it."
+            : "General configuration saved. Restart StagePilot and reload the dashboard to apply startup changes.",
         );
       } catch (cause) {
         setSettingsError(describeError(cause, "Configuration update failed."));

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import backendPanel from "./components/BackendSetupPanel.tsx?raw";
 import lightingPanel from "./components/LightingSetupPanel.tsx?raw";
 import toast from "./components/ui/Toast.tsx?raw";
+import connectionMethod from "./components/ui/ConnectionMethod.tsx?raw";
 import lengths from "./components/PlanningCenterLengths.tsx?raw";
 // vitest stubs CSS modules, so read the stylesheet from disk (node types are not in the app tsconfig).
 // @ts-expect-error node builtin without types
@@ -41,7 +42,9 @@ describe("5.6 narrow screens", () => {
   });
 
   it("gives the remaining small controls a 44px touch target on coarse pointers", () => {
-    expect(backendPanel).toContain("items-start gap-3 coarse:min-h-ds-touch-target");
+    // The Backend panel no longer has a checkbox row; its Connection Access options are 44px touch targets already.
+    expect(backendPanel).toContain("<ConnectionMethod");
+    expect(connectionMethod).toContain("min-h-ds-touch-target");
     expect(lengths).toContain("coarse:min-w-ds-touch-target");
     expect(lightingPanel).toContain("coarse:after:-inset-y-[9px]");
   });

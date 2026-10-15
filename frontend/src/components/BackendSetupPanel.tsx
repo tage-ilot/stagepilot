@@ -13,6 +13,7 @@ import type {
 import { ButtonSpinner, RemoteAccessPanel } from "./RemoteAccessPanel";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
+import { ConnectionMethod, type ConnectionMethodOption } from "./ui/ConnectionMethod";
 import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
@@ -137,14 +138,7 @@ export function SendAllLogsButton() {
   );
 }
 
-function HeldMarker() {
-  return (
-    <span className="mt-1 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
-      <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
-      Not saved yet
-    </span>
-  );
-}
+type AccessChoice = "host" | "network" | "internet";
 
 // Status facts are small bordered cards, like the style guide (a recessed well on the panel).
 const factCard = "rounded-ds-lg border border-edge-subtle bg-surface-950/40 px-3 py-2.5";
@@ -178,8 +172,6 @@ export function BackendSetupPanel({
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [logLevel, setLogLevel] = useState<GeneralSettingsInput["log_level"]>("INFO");
   const [serverPort, setServerPort] = useState("8765");
-  const [lanAccess, setLanAccess] = useState(false);
-  const [pinEnabled, setPinEnabled] = useState(true);
   const [dashboardPin, setDashboardPin] = useState("");
   const [releaseChannel, setReleaseChannel] = useState<GeneralSettingsInput["release_channel"]>("BETA");
   const remote = useRemoteAccess();
@@ -190,51 +182,43 @@ export function BackendSetupPanel({
   const syncedTimezone = savedSettings?.timezone ?? null;
   const syncedLogLevel = savedSettings?.log_level ?? null;
   const syncedPort = savedSettings ? String(savedSettings.server_port) : null;
-  const syncedLan = savedSettings ? (savedSettings.lan_access ?? false) : null;
-  const syncedPinEnabled = savedSettings ? (savedSettings.web_dashboard_pin_enabled ?? true) : null;
   const syncedChannel = savedSettings ? (savedSettings.release_channel ?? "BETA") : null;
   useEffect(() => { if (syncedTimezone !== null) setTimezone(syncedTimezone); }, [syncedTimezone]);
   useEffect(() => { if (syncedLogLevel !== null) setLogLevel(syncedLogLevel); }, [syncedLogLevel]);
   useEffect(() => { if (syncedPort !== null) setServerPort(syncedPort); }, [syncedPort]);
-  useEffect(() => { if (syncedLan !== null) setLanAccess(syncedLan); }, [syncedLan]);
-  useEffect(() => { if (syncedPinEnabled !== null) setPinEnabled(syncedPinEnabled); }, [syncedPinEnabled]);
   useEffect(() => { if (syncedChannel !== null) setReleaseChannel(syncedChannel); }, [syncedChannel]);
 
   const parsedSettings = useMemo<GeneralSettingsInput | null>(() => {
     const parsedPort = Number(serverPort);
     if (!timezone.trim()) return null;
     if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return null;
-    if (pinEnabled && dashboardPin && dashboardPin.length < 4) return null;
     return {
       timezone: timezone.trim(),
       log_level: logLevel,
       server_port: parsedPort,
-      lan_access: lanAccess,
-      web_dashboard_pin_enabled: pinEnabled,
+      // Network access is saved the moment it is chosen (Connection Access below), never held for this button.
+      lan_access: savedSettings?.lan_access ?? false,
+      // The dashboard PIN is always required (owner, 2026-10-14); only its value can be replaced.
+      web_dashboard_pin_enabled: true,
       release_channel: releaseChannel,
-      ...(pinEnabled && dashboardPin ? { web_dashboard_pin: dashboardPin } : {}),
     };
-  }, [dashboardPin, lanAccess, logLevel, pinEnabled, releaseChannel, serverPort, timezone]);
+  }, [logLevel, releaseChannel, savedSettings, serverPort, timezone]);
   // Every field here is held until Save configuration. PUT /settings rewrites the whole settings
   // file, may reconfigure the MIDI port, and reports restart_required; the PIN endpoint signs out
   // every dashboard session (backend/src/stagepilot/api/dashboard_auth.py).
   const saved = settings?.settings ?? null;
   const heldTimezone = saved !== null && timezone !== saved.timezone;
   const heldPort = saved !== null && serverPort !== String(saved.server_port);
-  const heldLan = saved !== null && lanAccess !== (saved.lan_access ?? false);
   const heldLogLevel = saved !== null && logLevel !== saved.log_level;
   const heldChannel = saved !== null && releaseChannel !== (saved.release_channel ?? "BETA");
-  const heldPinEnabled = saved !== null && pinEnabled !== (saved.web_dashboard_pin_enabled ?? true);
-  const heldPin = pinEnabled && dashboardPin !== "";
-  const changeCount = [heldTimezone, heldPort, heldLan, heldLogLevel, heldChannel, heldPinEnabled, heldPin]
-    .filter(Boolean).length;
+  const changeCount = [heldTimezone, heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const attempt = useSaveAttempt("backend-configuration");
   const portValid = Number.isInteger(Number(serverPort)) && Number(serverPort) >= 1 && Number(serverPort) <= 65535;
   const errTimezone = attempt.attempted && !timezone.trim() ? "Enter a timezone." : undefined;
   const errPort = attempt.attempted && !portValid ? "Enter a port from 1 to 65535." : undefined;
-  const errPin = attempt.attempted && pinEnabled && dashboardPin !== "" && dashboardPin.length < 4 ? "Enter a PIN of at least 4 characters." : undefined;
+  const pinTooShort = dashboardPin !== "" && dashboardPin.length < 4;
   // A problem or a waiting change inside Advanced must never hide behind the closed row.
   const advancedHeld = [heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
   useEffect(() => { if (errPort) setAdvancedOpen(true); }, [errPort]);
@@ -270,17 +254,14 @@ export function BackendSetupPanel({
           ? { kind: "auto", at: autoSavedAt }
           : { kind: "clean" };
   const blockedReason = parsedSettings === null
-    ? "Enter a timezone, a port from 1 to 65535 and a PIN of at least 4 characters before saving."
+    ? "Enter a timezone and a port from 1 to 65535 before saving."
     : null;
   const discard = () => {
     if (!saved) return;
     setTimezone(saved.timezone);
     setServerPort(String(saved.server_port));
-    setLanAccess(saved.lan_access ?? false);
     setLogLevel(saved.log_level);
     setReleaseChannel(saved.release_channel ?? "BETA");
-    setPinEnabled(saved.web_dashboard_pin_enabled ?? true);
-    setDashboardPin("");
     setSaveFailed(false);
     attempt.reset();
   };
@@ -293,6 +274,65 @@ export function BackendSetupPanel({
     setAutoSavedAt(null);
     onSave(parsedSettings);
   };
+  // ---- Connection Access (owner, 2026-10-14): Host / Local network / Internet in one switch that saves the moment it is chosen.
+  // Host = this computer only. Local network = other devices on the network. Internet = Remote Access on, and the local
+  // network stays available too. The choice is read from what is really saved/running, so it can never show something untrue.
+  const savedLan = saved?.lan_access ?? false;
+  // The backend reports the address it is listening on right now, which only follows a saved change after it restarts (the
+  // desktop app does that straight away). Until then the option just chosen stays shown, with a note, instead of snapping back.
+  const [chosenLan, setChosenLan] = useState<boolean | null>(null);
+  useEffect(() => { if (chosenLan !== null && chosenLan === savedLan) setChosenLan(null); }, [chosenLan, savedLan]);
+  useEffect(() => { if (saveFailed) setChosenLan(null); }, [saveFailed]);
+  const shownLan = chosenLan ?? savedLan;
+  const needsRestart = chosenLan !== null && chosenLan !== savedLan;
+  const access: AccessChoice = remote.enabled ? "internet" : shownLan ? "network" : "host";
+  const accessPayload = (overrides: { lan_access?: boolean; web_dashboard_pin?: string } = {}): GeneralSettingsInput | null => saved === null ? null : ({
+    // Only the access fields change here: anything else the page is holding (timezone, port...) stays held, not saved by accident.
+    timezone: saved.timezone,
+    log_level: saved.log_level,
+    server_port: saved.server_port,
+    lan_access: overrides.lan_access ?? savedLan,
+    web_dashboard_pin_enabled: true,
+    release_channel: saved.release_channel ?? "BETA",
+    ...(overrides.web_dashboard_pin ? { web_dashboard_pin: overrides.web_dashboard_pin } : {}),
+  });
+  const saveLan = (lan: boolean) => {
+    const payload = accessPayload({ lan_access: lan });
+    if (payload && !pending && lan !== shownLan) { setSaveFailed(false); setChosenLan(lan); onSave(payload); }
+  };
+  // Internet needs the local network too, and leaving Internet may need a different network setting. Both wait for Remote
+  // Access to finish switching (or for the disable confirmation), so a half-finished change is never saved.
+  const afterRemote = useRef<{ when: "enabled" | "disabled"; lan: boolean } | null>(null);
+  useEffect(() => {
+    const pendingStep = afterRemote.current;
+    if (!pendingStep || remote.checkboxBusy || remote.confirmDisable) return;
+    if (pendingStep.when === "enabled") {
+      if (remote.enabled) { afterRemote.current = null; saveLan(pendingStep.lan); }
+      else if (remote.error) afterRemote.current = null; // turning Internet on failed: change nothing else
+    } else if (!remote.enabled) {
+      afterRemote.current = null;
+      saveLan(pendingStep.lan);
+    } else {
+      afterRemote.current = null; // the disable confirmation was cancelled
+    }
+  });
+  const chooseAccess = (next: AccessChoice) => {
+    if (next === access || pending || remote.checkboxBusy) return;
+    if (next === "internet") { afterRemote.current = { when: "enabled", lan: true }; remote.requestEnable(); return; }
+    if (access === "internet") { afterRemote.current = { when: "disabled", lan: next === "network" }; remote.requestDisable(); return; }
+    saveLan(next === "network");
+  };
+  const showAccessPin = access !== "host";
+  const savePin = () => {
+    const payload = accessPayload({ web_dashboard_pin: dashboardPin });
+    if (payload && !pending && dashboardPin.length >= 4) { setSaveFailed(false); onSave(payload); }
+  };
+  const accessOptions: ConnectionMethodOption<AccessChoice>[] = [
+    { value: "host", label: "Host" },
+    { value: "network", label: "Local network" },
+    { value: "internet", label: "Internet" },
+  ];
+
   const connectionStatus = live
     ? "connected"
     : state.application_status === "error" ? "error" : "disconnected";
@@ -347,39 +387,31 @@ export function BackendSetupPanel({
             ))}
           </Select>
         </Field>
-        <Field
-          heldChange={heldLan}
-          hint={lanAccess ? `Other devices can open http://<this-computer's-IP>:${serverPort}.` : undefined}
-          label="Network access"
-        >
-          <Select disabled={pending} onChange={(event) => setLanAccess(event.target.value === "network")} value={lanAccess ? "network" : "local"}>
-            <option value="local">This computer only</option>
-            <option value="network">Other devices on this local network</option>
-          </Select>
-        </Field>
-        <div className="text-sm text-ink-body">
-          <label className="flex touch-manipulation items-start gap-3 coarse:min-h-ds-touch-target">
-            <input
-              checked={pinEnabled}
-              className="mt-0.5 size-4 accent-integration-backend"
-              disabled={pending}
-              onChange={(event) => {
-                setPinEnabled(event.target.checked);
-              }}
-              type="checkbox"
-            />
-            <span>
-              <span className="block font-semibold text-ink">
-                Require a PIN for web dashboards
-              </span>
-              {heldPinEnabled && <HeldMarker />}
-              <span className="mt-1 block text-xs text-ink-muted">
-                Enabled by default. The initial PIN is 1234.
-              </span>
-            </span>
-          </label>
-          {pinEnabled && (
-            <Field className="mt-3" error={errPin} heldChange={heldPin} hint="Saved with Save configuration." label="Replace dashboard PIN">
+      </div>
+
+      <div data-connection-access>
+        <ConnectionMethod
+          disabled={pending || remote.checkboxBusy || saved === null}
+          label="Connection Access"
+          onChange={chooseAccess}
+          options={accessOptions}
+          value={access}
+        />
+        <p className="mt-2 max-w-3xl text-xs text-ink-muted" data-access-hint>
+          {access === "host"
+            ? "Only this computer can open StagePilot."
+            : `Other devices on this network can open http://<this-computer's-IP>:${serverPort}.`}
+          {access === "internet" ? " Anyone you add below can also sign in from anywhere." : ""}
+        </p>
+        {remote.checkboxBusy && <p className="mt-2 inline-flex items-center gap-2 text-xs text-ink-muted"><ButtonSpinner />Applying…</p>}
+        {needsRestart && !pending && !saveFailed && (
+          <p className="mt-2 text-xs text-warning-text" data-access-restart role="status">
+            Saved. Restart StagePilot to {chosenLan ? "let other devices connect" : "make it available to this computer only"}.
+          </p>
+        )}
+        {showAccessPin && (
+          <div className="mt-3 flex flex-wrap items-end gap-3" data-access-pin>
+            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} hint="Required to open the dashboard from another device. The initial PIN is 1234. Replacing it signs out every open dashboard." label="Replace dashboard PIN">
               <Input
                 autoComplete="new-password"
                 className="font-mono"
@@ -388,42 +420,23 @@ export function BackendSetupPanel({
                 maxLength={64}
                 minLength={4}
                 onChange={(event) => setDashboardPin(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
                 placeholder="Leave blank to keep the saved PIN…"
                 type="password"
                 value={dashboardPin}
               />
             </Field>
-          )}
-        </div>
-      </div>
-
-      <SectionLabel>People</SectionLabel>
-      <p className="mt-2 text-sm text-ink-body">Let people sign in from a phone or another computer.</p>
-      <div className="mt-3 space-y-4">
-        <label className="flex min-h-ds-touch-target touch-manipulation items-start gap-3 text-sm text-ink-body">
-          <input
-            checked={remote.enabled}
-            className="mt-0.5 size-4 accent-integration-backend"
-            disabled={remote.checkboxBusy}
-            onChange={(event) => {
-              if (event.target.checked) remote.requestEnable();
-              else remote.requestDisable();
-            }}
-            type="checkbox"
-          />
-          <span>
-            <span className="inline-flex items-center gap-2">
-              <span className="block font-semibold text-ink">
-                Remote Access
-              </span>
-              {remote.checkboxBusy && <ButtonSpinner />}
-            </span>
-            <span className="mt-1 block text-xs text-ink-muted">
-              Securely view or operate this StagePilot from another device.
-            </span>
-          </span>
-        </label>
-        {remote.panelOpen && <RemoteAccessPanel control={remote} />}
+            <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
+          </div>
+        )}
+        {access === "internet" && remote.panelOpen && (
+          <div className="mt-4" data-access-people>
+            <SectionLabel>People</SectionLabel>
+            <p className="mt-2 text-sm text-ink-body">Let people sign in from a phone or another computer.</p>
+            <div className="mt-3"><RemoteAccessPanel control={remote} /></div>
+          </div>
+        )}
+        {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
       </div>
 
       <div className="mt-6">
@@ -477,7 +490,7 @@ export function BackendSetupPanel({
       </div>
 
       <p className="mt-4 text-xs text-ink-muted">
-        Timezone, logging, port, and network-access changes take effect after a backend restart. Saving a PIN change signs out every open dashboard.
+        Timezone, logging and port changes take effect after a backend restart.
       </p>
       {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

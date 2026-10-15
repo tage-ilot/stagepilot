@@ -579,10 +579,23 @@ describe("useStagePilot", () => {
     );
 
     expect(mockedUpdateSettings).toHaveBeenCalledWith(updated.settings);
-    expect(mockedUpdateDashboardAccess).toHaveBeenCalledWith(true, undefined);
+    // No PIN change was made, so the dashboard-access endpoint (which signs every dashboard out) is not called (owner 2026-10-14).
+    expect(mockedUpdateDashboardAccess).not.toHaveBeenCalled();
     expect(mockedRememberServerPort).toHaveBeenCalledWith(9001);
     expect(result.current.settings).toEqual(updated);
     expect(result.current.settingsMessage).toMatch(/Restart StagePilot/i);
+  });
+
+  it("replacing the dashboard PIN calls the dashboard-access endpoint with the new PIN", async () => {
+    const updated: SettingsResponse = { ...settings, settings: { ...settings.settings, onboarding: { general_completed: true } }, restart_required: false };
+    mockedUpdateSettings.mockResolvedValueOnce(updated);
+    mockedUpdateDashboardAccess.mockResolvedValueOnce(updated);
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+    await act(async () =>
+      result.current.saveGeneralSettings({ ...settings.settings, web_dashboard_pin_enabled: true, web_dashboard_pin: "4321" } as never),
+    );
+    expect(mockedUpdateDashboardAccess).toHaveBeenCalledWith(true, "4321");
   });
 
   it("saves advanced MIDI settings and activates real input", async () => {
