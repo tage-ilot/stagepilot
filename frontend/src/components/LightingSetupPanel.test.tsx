@@ -212,6 +212,25 @@ describe("LightingSetupPanel", () => {
       expect(body.contains(screen.getByRole("group", { name: "Test cue" }))).toBe(true);
     });
 
+    it("keeps the MIDI Test cue where it was before the section collapsed: at the right of the song row, wrapping above it, never below", () => {
+      mount();
+      const testCue = screen.getByRole("group", { name: "Test cue" });
+      const row = testCue.parentElement!;
+      // Same row as the song picker and Add cue; the row wraps in reverse, so a test cue that does not fit lands ABOVE them.
+      expect(row).toHaveClass("flex", "flex-wrap-reverse");
+      expect(row.contains(screen.getByLabelText("Song"))).toBe(true);
+      expect(row.contains(screen.getByRole("button", { name: "Add cue" }))).toBe(true);
+      // It is the last child of the row, pushed to the right by the stylesheet rule.
+      expect(row.lastElementChild).toBe(testCue);
+      expect(testCue).toHaveClass("lighting-test");
+      expect(testCue.querySelector("h3")).toHaveClass("pb-2.5");
+    });
+
+    it("has the .lighting-test right-alignment rule back in the stylesheet", async () => {
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.lighting-test \{\s*margin-left: auto;\s*\}/);    });
+
     it("collapses on click, saves the choice, and folds the Test cue controls away with the rest", async () => {
       const user = userEvent.setup();
       mount();

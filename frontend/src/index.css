@@ -959,6 +959,11 @@ textarea:focus-visible {
   container-type: inline-size;
 }
 
+/* The MIDI test cue sits at the right of the song row, as it did before the section became collapsible. */
+.lighting-test {
+  margin-left: auto;
+}
+
 .lighting-pads {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
 }
