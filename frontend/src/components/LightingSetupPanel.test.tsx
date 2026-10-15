@@ -209,16 +209,38 @@ describe("LightingSetupPanel", () => {
       expect(within(body as HTMLElement).getByLabelText("Song")).toBeInTheDocument();
       expect(body.contains(screen.getByTestId("lighting-cue-list"))).toBe(true);
       expect(body.contains(screen.getByTestId("lighting-timeline"))).toBe(true);
+      expect(body.contains(screen.getByRole("group", { name: "Test cue" }))).toBe(true);
     });
 
-    it("collapses on click, saves the choice, and keeps the Test cue controls visible", async () => {
+    it("keeps the MIDI Test cue where it was before the section collapsed: at the right of the song row, wrapping above it, never below", () => {
+      mount();
+      const testCue = screen.getByRole("group", { name: "Test cue" });
+      const row = testCue.parentElement!;
+      // Same row as the song picker and Add cue; the row wraps in reverse, so a test cue that does not fit lands ABOVE them.
+      expect(row).toHaveClass("flex", "flex-wrap-reverse");
+      expect(row.contains(screen.getByLabelText("Song"))).toBe(true);
+      expect(row.contains(screen.getByRole("button", { name: "Add cue" }))).toBe(true);
+      // It is the last child of the row, pushed to the right by the stylesheet rule.
+      expect(row.lastElementChild).toBe(testCue);
+      expect(testCue).toHaveClass("lighting-test");
+      expect(testCue.querySelector("h3")).toHaveClass("pb-2.5");
+    });
+
+    it("has the .lighting-test right-alignment rule back in the stylesheet", async () => {
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.lighting-test \{\s*margin-left: auto;\s*\}/);    });
+
+    it("collapses on click, saves the choice, and folds the Test cue controls away with the rest", async () => {
       const user = userEvent.setup();
       mount();
       await user.click(header());
       expect(header()).toHaveAttribute("aria-expanded", "false");
       expect(window.localStorage.getItem(KEY)).toBe("false");
       const body = header().parentElement!.querySelector("[data-part=region]")!;
-      expect(body.contains(screen.getByRole("group", { name: "Test cue" }))).toBe(false);
+      // Test cue lives inside the group (owner, 2026-10-15), so closing the group hides it from the page and the tab order.
+      expect(body.contains(screen.getByRole("group", { name: "Test cue", hidden: true }))).toBe(true);
+      expect(body.firstElementChild).toHaveAttribute("inert");
       await user.click(header());
       expect(header()).toHaveAttribute("aria-expanded", "true");
       expect(window.localStorage.getItem(KEY)).toBe("true");
@@ -230,11 +252,40 @@ describe("LightingSetupPanel", () => {
       expect(header()).toHaveAttribute("aria-expanded", "false");
     });
 
-    it("shows how many cues are saved while closed", async () => {
+    it("is a tinted feature card: the title, a detail line that says what is inside, and the active method as a tag", () => {
       window.localStorage.setItem(KEY, "false");
       mount();
-      expect(header()).toHaveTextContent(/\d+ cues?|No cues yet/);
+      const card = header().closest("[data-variant]")!;
+      expect(card).toHaveAttribute("data-variant", "feature");
+      expect(card).toHaveAttribute("data-tone", "lighting");
+      expect(card.className).toMatch(/border-integration-lighting-soft\/70/);
+      expect(card.className).toMatch(/border-l-\[5px\]/);
+      const detail = card.querySelector("[data-part=detail]")!;
+      // How many cues across how many songs, how many pads, and the song that is selected with its length.
+      expect(detail.textContent).toMatch(/(\d+ cues? on \d+ of \d+ songs?|No cues yet) · \d+ pads?/);
+      expect(detail.textContent).toMatch(/\d{2}:\d{2}$/);
+      expect(card.querySelector("[data-part=aside]")).toHaveTextContent(/^(MIDI|OSC)$/);
     });
+
+    it("keeps the detail line when it is open, and the card does not look like the Save bar", async () => {
+      mount();
+      const card = header().closest("[data-variant]")!;
+      expect(card.querySelector("[data-part=detail]")).toBeInTheDocument();
+      const bar = document.querySelector("[data-save-bar]")!;
+      // The bar is a flat fill with an even outline; the card has a rail and a wash that fades out.
+      expect(card.className).toContain("bg-gradient-to-r");
+      expect(bar.className).not.toContain("bg-gradient-to-r");
+      expect(bar.className).not.toMatch(/border-l-\[/);
+    });
+  });
+
+  it("does not show a MIDI Alternate pill in the header", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const header = document.querySelector("[data-setup-panel-header]")!;
+    expect(header).not.toHaveTextContent(/Alternate/i);
+    expect(header).not.toHaveTextContent("MIDI ·");
   });
 
   it("keeps one short subtitle whichever connection method is chosen", async () => {

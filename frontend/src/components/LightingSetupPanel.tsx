@@ -358,10 +358,20 @@ export function LightingSetupPanel({
   };
 
   const shownCues = method === "osc" ? oscCues : cues;
+  const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
+    (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
+  ).length;
   const cueTotal = Object.values(settings?.settings.lights.cue_maps ?? {}).reduce(
     (total, map) => total + (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)),
     0,
   );
+  const activePads = pads.filter((pad) => pad.method === method).length;
+  // The line under the title, shown open or closed: what is in here, so the closed card still tells the story.
+  const timelineDetail = [
+    cueTotal === 0 ? "No cues yet" : `${cueTotal} cue${cueTotal === 1 ? "" : "s"} on ${songsWithCues} of ${songs.length} song${songs.length === 1 ? "" : "s"}`,
+    `${activePads} pad${activePads === 1 ? "" : "s"}`,
+    selectedSong && selectedSong.duration_seconds != null ? `${selectedSong.title} ${formatElapsed(selectedSong.duration_seconds)}` : null,
+  ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = method === "osc"
     ? oscCues.filter((cue) => cue.address !== "").map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || cue.address, color: cue.color ?? null }))
@@ -457,7 +467,6 @@ export function LightingSetupPanel({
         description="Sends timed cues to your lighting software."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
-        statusDetail={savedMethod === "midi" ? "MIDI · Alternate" : undefined}
         title="Lighting"
       />
 
@@ -524,57 +533,19 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
-      {/* Test cue checks the connection, so it stays visible when the song timeline below is folded away. */}
-      <div className="mt-5 border-t border-edge-subtle pt-5">
-          {method === "midi" && (
-          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
-            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
-            <div className="w-28 flex-none">
-              <Field label="Note">
-                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
-                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-                </Select>
-              </Field>
-            </div>
-            <div className="w-28 flex-none">
-              <Field label="Velocity">
-                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-              </Field>
-            </div>
-            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
-          </div>
-          )}
-        {method === "osc" && (
-          <div aria-label="OSC test cue" className="lighting-osc-test grid gap-3" role="group">
-            <h3 className="font-semibold text-ink">Test cue</h3>
-            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
-              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
-            </Field>
-            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
-            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
-            <div>
-              <Button
-                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
-                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
-                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-                tone="lighting"
-                variant="tinted"
-              >
-                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
-      </div>
-
       <Disclosure
-        className="mt-5"
+        aside={(
+          <span className="rounded-ds-full border border-integration-lighting-soft/40 bg-integration-lighting-soft/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-integration-lighting-text">
+            {method === "osc" ? "OSC" : "MIDI"}
+          </span>
+        )}
+        className="mt-6"
+        detail={timelineDetail}
         onOpenChange={setTimelineOpen}
         open={timelineOpen}
-        summary={cueTotal === 0 ? "No cues yet" : `${cueTotal} cue${cueTotal === 1 ? "" : "s"}`}
         title="Song lighting timeline"
-        variant="activity"
+        tone="lighting"
+        variant="feature"
       >
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
@@ -605,7 +576,47 @@ export function LightingSetupPanel({
           )}
           <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} tone="lighting" variant="tinted">Add cue</Button>
           </div>
+          {method === "midi" && (
+          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
+            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
+            <div className="w-28 flex-none">
+              <Field label="Note">
+                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div className="w-28 flex-none">
+              <Field label="Velocity">
+                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+              </Field>
+            </div>
+            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+          </div>
+          )}
         </div>
+        {method === "osc" && (
+          <div aria-label="OSC test cue" className="lighting-osc-test mt-4 grid gap-3" role="group">
+            <h3 className="font-semibold text-ink">Test cue</h3>
+            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
+              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
+            </Field>
+            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
+            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
+            <div>
+              <Button
+                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
+                tone="lighting"
+                variant="tinted"
+              >
+                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
+              </Button>
+            </div>
+          </div>
+        )}
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         {onSavePads && (

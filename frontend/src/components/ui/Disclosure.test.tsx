@@ -134,4 +134,55 @@ describe("Disclosure", () => {
     await userEvent.click(screen.getByRole("button"));
     expect(chevron()).toContain("rotate-90");
   });
+
+  describe("feature variant (a major, optional section)", () => {
+    const feature = (props: Partial<React.ComponentProps<typeof Disclosure>> = {}) => render(
+      <Disclosure aside="MIDI" detail="16 cues on 2 of 4 songs" open={false} onOpenChange={() => undefined} title="Song lighting timeline" tone="lighting" variant="feature" {...props}>
+        <p>inside</p>
+      </Disclosure>,
+    );
+
+    it("draws a tinted card with a rail, the title, an always-shown detail line and an aside tag", () => {
+      feature();
+      const card = document.querySelector("[data-variant='feature']")!;
+      expect(card).toHaveAttribute("data-tone", "lighting");
+      expect(card.className).toMatch(/border-l-\[5px\]/);
+      expect(card.className).toMatch(/border-integration-lighting-soft\/70/);
+      expect(card.className).toContain("bg-gradient-to-r");
+      expect(card.querySelector("[data-part=title]")).toHaveTextContent("Song lighting timeline");
+      expect(card.querySelector("[data-part=detail]")).toHaveTextContent("16 cues on 2 of 4 songs");
+      expect(card.querySelector("[data-part=aside]")).toHaveTextContent("MIDI");
+    });
+
+    it("is a real disclosure: expanded state, chevron turn, inert body while closed", () => {
+      const { rerender } = feature();
+      const button = screen.getByRole("button", { name: /Song lighting timeline/ });
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(document.querySelector("[data-part=region]")!.firstElementChild).toHaveAttribute("inert");
+      rerender(
+        <Disclosure aside="MIDI" detail="x" open onOpenChange={() => undefined} title="Song lighting timeline" tone="lighting" variant="feature"><p>inside</p></Disclosure>,
+      );
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      expect(document.querySelector("[data-part=chevron]")).toHaveClass("rotate-90");
+      expect(document.querySelector("[data-part=region]")!.firstElementChild).not.toHaveAttribute("inert");
+    });
+
+    it("keeps the detail line when it is open and reports toggles", async () => {
+      const onOpenChange = vi.fn();
+      feature({ onOpenChange });
+      await userEvent.click(screen.getByRole("button", { name: /Song lighting timeline/ }));
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+      expect(document.querySelector("[data-part=detail]")).toBeInTheDocument();
+    });
+
+    it("works without a detail or aside, and for every tone", () => {
+      for (const tone of ["services", "presentation", "playback", "midi", "lighting", "backend"] as const) {
+        const { unmount } = render(<Disclosure open={false} onOpenChange={() => undefined} title={`T ${tone}`} tone={tone} variant="feature"><p>x</p></Disclosure>);
+        expect(document.querySelector("[data-part=detail]")).toBeNull();
+        expect(document.querySelector("[data-part=aside]")).toBeNull();
+        expect(document.querySelector("[data-variant='feature']")!.className).toMatch(new RegExp(`border-integration-${tone === "midi" ? "playback-midi" : tone}-soft/70`));
+        unmount();
+      }
+    });
+  });
 });
