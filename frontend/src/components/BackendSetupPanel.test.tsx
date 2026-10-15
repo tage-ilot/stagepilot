@@ -81,16 +81,23 @@ function renderPanel(props: Partial<React.ComponentProps<typeof BackendSetupPane
 }
 
 describe("Status section", () => {
-  // Status is four boxes: Version, API endpoint, WebSocket and State revision (owner, 2026-10-14). Running since,
-  // Connections and the collapsed Connection details row are gone.
-  it("shows Version, API endpoint, WebSocket and State revision as the four status boxes", () => {
+  // Four boxes in this order: Version, State revision, API endpoint, WebSocket (owner, 2026-10-14). The Status heading is gone;
+  // the group is still labelled "Status" for assistive technology.
+  it("shows Version, State revision, API endpoint and WebSocket as the four status boxes, in that order, with no Status heading", () => {
     renderPanel();
-    expect(screen.getByText("Status")).toBeInTheDocument();
-    for (const label of ["Version", "API endpoint", "WebSocket", "State revision"]) expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", {name: "Status"})).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toBeInTheDocument();
+    const order = Array.from(document.querySelectorAll(".backend-status > div dt")).map((dt) => dt.textContent);
+    expect(order).toEqual(["Version", "State revision", "API endpoint", "WebSocket"]);
     for (const gone of ["Running since", "Connections", "Connection details"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {name: /Connection details/})).not.toBeInTheDocument();
     expect(screen.queryByText(/\d of 5 connected/)).not.toBeInTheDocument();
     expect(document.querySelectorAll(".backend-status > div")).toHaveLength(4);
+  });
+
+  it("keeps some of the space under the header that the removed Status heading used to take: half of its 52.5px, so 26px", () => {
+    renderPanel();
+    expect(document.querySelector(".backend-status-wrap")).toHaveClass("mt-[26px]");
   });
 
   it("says Backend configuration above the title and drops the runtime-identity sentence", () => {
@@ -100,9 +107,8 @@ describe("Status section", () => {
     expect(screen.queryByText(/runtime identity/i)).not.toBeInTheDocument();
   });
 
-  it("draws the four facts as small bordered cards, like the style guide, under a kicker-style heading", () => {
+  it("draws the four facts as small bordered cards, like the style guide", () => {
     renderPanel();
-    expect(screen.getByRole("heading", {level: 3, name: "Status"})).toHaveClass("uppercase", "text-ink-muted");
     for (const label of ["Version", "API endpoint", "WebSocket", "State revision"]) {
       const card = screen.getByText(label).parentElement!;
       expect(card).toHaveClass("rounded-ds-lg", "border", "border-edge-subtle", "bg-surface-950/40");
@@ -318,24 +324,38 @@ describe("Copy Log", () => {
 describe("StagePilot panel sections", () => {
   const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-  it("shows Status as the only heading while Internet is off, then Connection Access, then Advanced as a collapsed row", async () => {
+  it("has no section headings while Internet is off: the status cards, Advanced, then Connection Access", async () => {
     renderPanel({settings: settingsResponse});
     await screen.findByRole("radio", {name: "Internet"});
-    // Remote access (the old People section) lives under Connection Access and only when Internet is chosen. Advanced is a collapsed row, not a heading.
-    expect(screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent)).toEqual(["Status"]);
+    // Remote access (the old People section) lives under Connection Access and only when Internet is chosen. Advanced is a collapsed row.
+    expect(screen.queryAllByRole("heading", {level: 3})).toHaveLength(0);
     expect(screen.getByRole("button", {name: /^Advanced/})).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("puts Timezone, then Connection Access, then Advanced, with the restart-needed fields in Advanced", async () => {
+  it("puts the status cards, then Advanced (Timezone first), then Connection Access, then Save configuration", async () => {
     renderPanel({settings: settingsResponse});
     await screen.findByRole("radio", {name: "Internet"});
+    const cards = screen.getByLabelText("Status");
     const advanced = screen.getByRole("button", {name: /^Advanced/});
     const access = screen.getByText("Connection Access");
-    expect(after(screen.getByRole("heading", {name: "Status"}), screen.getByLabelText("Timezone"))).toBe(true);
-    expect(after(screen.getByLabelText("Timezone"), access)).toBe(true);
-    expect(after(access, advanced)).toBe(true);
-    for (const label of ["Server port", "Log level", "Release channel"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
-    expect(after(screen.getByLabelText("Release channel"), screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
+    expect(after(cards, advanced)).toBe(true);
+    expect(after(advanced, access)).toBe(true);
+    const labels = Array.from(document.querySelectorAll(".backend-advanced label")).map((l) => l.textContent);
+    expect(labels).toEqual(["Timezone", "Server port", "Log level", "Release channel"]);
+    expect(document.querySelector(".backend-advanced")).toContainElement(screen.getByLabelText("Timezone"));
+    for (const label of ["Timezone", "Server port", "Log level", "Release channel"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
+    expect(after(access, screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
+  });
+
+  it("lays Advanced out 1, 2 or 4 across by container width, switching with the status cards and never at 3", async () => {
+    // vitest blanks CSS imports, so read the stylesheet from disk (no @types/node in the app tsconfig).
+    const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+    const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+    for (const klass of ["backend-status", "backend-advanced"]) {
+      const columns = [...css.matchAll(new RegExp(`\\.${klass} \\{\\s*grid-template-columns: ([^;]+);`, "g"))].map((m) => m[1]);
+      expect(columns).toEqual(["minmax(0, 1fr)", "repeat(2, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))"]);
+    }
+    expect(css).toMatch(/\.backend-advanced-wrap \{\s*container-type: inline-size;/);
   });
 
   it("has no Network access dropdown, no Require a PIN checkbox and no Remote Access checkbox any more", async () => {
@@ -473,27 +493,28 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
   describe("the PIN and Remote access appear only when they apply", () => {
     it("Host: no PIN field, no Remote access", () => {
       withLan(false);
-      expect(screen.queryByLabelText("Replace dashboard PIN")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Access PIN")).not.toBeInTheDocument();
       expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
     });
 
     it("Local network: the PIN field, still no Remote access", () => {
       withLan(true);
-      expect(screen.getByLabelText("Replace dashboard PIN")).toHaveAttribute("type", "password");
+      expect(screen.getByLabelText("Access PIN")).toHaveAttribute("type", "password");
       expect(screen.getByText(/The initial PIN is 1234/)).toBeInTheDocument();
       expect(screen.queryByRole("heading", {name: "Remote access"})).not.toBeInTheDocument();
     });
 
-    it("Internet: the PIN field (the local network is on too) and Remote access, both directly under the switch and above Advanced", async () => {
+    it("Internet: the PIN field (the local network is on too) and Remote access, both directly under the switch, after Advanced", async () => {
       vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
       vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
       withLan(true);
       const people = await screen.findByRole("heading", {name: "Remote access"});
-      const pin = screen.getByLabelText("Replace dashboard PIN");
+      const pin = screen.getByLabelText("Access PIN");
       const order = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       expect(order(screen.getByRole("radiogroup", {name: "Connection Access"}), pin)).toBe(true);
       expect(order(pin, people)).toBe(true);
-      expect(order(people, screen.getByRole("button", {name: /^Advanced/}))).toBe(true);
+      // Advanced now sits under the status cards, above Connection Access, so Connection Access and what hangs off it come last.
+      expect(order(screen.getByRole("button", {name: /^Advanced/}), screen.getByRole("radiogroup", {name: "Connection Access"}))).toBe(true);
     });
   });
 
@@ -502,7 +523,7 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
       const onSave = vi.fn();
       const props = {settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave};
       const view = renderPanel(props);
-      const pin = screen.getByLabelText("Replace dashboard PIN");
+      const pin = screen.getByLabelText("Access PIN");
       fireEvent.change(pin, {target: {value: "4321"}});
       expect(onSave).not.toHaveBeenCalled(); // typing never saves
       fireEvent.click(screen.getByRole("button", {name: "Save PIN"}));
@@ -510,13 +531,13 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
       expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: true, web_dashboard_pin_enabled: true, web_dashboard_pin: "4321"});
       view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending {...props} />);
       view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending={false} {...props} />);
-      expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
+      expect(screen.getByLabelText("Access PIN")).toHaveValue("");
     });
 
     it("Enter in the field saves too", () => {
       const onSave = vi.fn();
       renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave});
-      const pin = screen.getByLabelText("Replace dashboard PIN");
+      const pin = screen.getByLabelText("Access PIN");
       fireEvent.change(pin, {target: {value: "9999"}});
       fireEvent.keyDown(pin, {key: "Enter"});
       expect(onSave).toHaveBeenCalledWith(expect.objectContaining({web_dashboard_pin: "9999"}));
@@ -525,10 +546,10 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
     it("a PIN shorter than 4 characters cannot be saved", () => {
       const onSave = vi.fn();
       renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave});
-      fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "12"}});
+      fireEvent.change(screen.getByLabelText("Access PIN"), {target: {value: "12"}});
       expect(screen.getByRole("button", {name: "Save PIN"})).toBeDisabled();
       expect(screen.getByText("Enter a PIN of at least 4 characters.")).toBeInTheDocument();
-      fireEvent.keyDown(screen.getByLabelText("Replace dashboard PIN"), {key: "Enter"});
+      fireEvent.keyDown(screen.getByLabelText("Access PIN"), {key: "Enter"});
       expect(onSave).not.toHaveBeenCalled();
     });
   });

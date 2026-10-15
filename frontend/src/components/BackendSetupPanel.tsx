@@ -220,8 +220,8 @@ export function BackendSetupPanel({
   const errPort = attempt.attempted && !portValid ? "Enter a port from 1 to 65535." : undefined;
   const pinTooShort = dashboardPin !== "" && dashboardPin.length < 4;
   // A problem or a waiting change inside Advanced must never hide behind the closed row.
-  const advancedHeld = [heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
-  useEffect(() => { if (errPort) setAdvancedOpen(true); }, [errPort]);
+  const advancedHeld = [heldTimezone, heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
+  useEffect(() => { if (errPort || errTimezone) setAdvancedOpen(true); }, [errPort, errTimezone]);
   const advancedSummary = advancedHeld > 0
     ? `${advancedHeld} ${advancedHeld === 1 ? "change" : "changes"} waiting`
     : `Port ${serverPort} · Logging ${logLevel.toLowerCase()}`;
@@ -354,12 +354,17 @@ export function BackendSetupPanel({
         title="StagePilot"
       />
 
-      <SectionLabel>Status</SectionLabel>
-      <div className="backend-status-wrap">
-      <dl className="backend-status mt-3 grid gap-3 text-sm">
+      {/* The removed Status heading used to add 52.5px under the header (24px margin + 16.5px line + 12px). The owner wanted about
+          half of that back (2026-10-14), so 26px. */}
+      <div className="backend-status-wrap mt-[26px]">
+      <dl aria-label="Status" className="backend-status grid gap-3 text-sm">
         <div className={factCard}>
           <dt className={factLabel}>Version</dt>
           <dd className="mt-1 font-semibold text-ink">{health ? health.version : "Loading"}</dd>
+        </div>
+        <div className={factCard}>
+          <dt className={factLabel}>State revision</dt>
+          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
         </div>
         <div className={factCard}>
           <dt className={factLabel}>API endpoint</dt>
@@ -372,76 +377,10 @@ export function BackendSetupPanel({
           </dd>
           <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
         </div>
-        <div className={factCard}>
-          <dt className={factLabel}>State revision</dt>
-          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
-        </div>
       </dl>
       </div>
 
-      <div className="mt-3 space-y-4">
-        <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
-          <Select disabled={pending} onChange={(event) => setTimezone(event.target.value)} value={timezone}>
-            {timezoneChoices.map((zone) => (
-              <option key={zone} value={zone}>{zone}</option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      <div data-connection-access>
-        <ConnectionMethod
-          disabled={pending || remote.checkboxBusy || saved === null}
-          label="Connection Access"
-          onChange={chooseAccess}
-          options={accessOptions}
-          value={access}
-        />
-        <p className="mt-2 max-w-3xl text-xs text-ink-muted" data-access-hint>
-          {access === "host"
-            ? "Only this computer can open StagePilot."
-            : `Other devices on this network can open http://<this-computer's-IP>:${serverPort}.`}
-          {access === "internet" ? " Anyone you add below can also sign in from anywhere." : ""}
-        </p>
-        {remote.checkboxBusy && <p className="mt-2 inline-flex items-center gap-2 text-xs text-ink-muted"><ButtonSpinner />Applying…</p>}
-        {needsRestart && !pending && !saveFailed && (
-          <p className="mt-2 text-xs text-warning-text" data-access-restart role="status">
-            Saved. Restart StagePilot to {chosenLan ? "let other devices connect" : "make it available to this computer only"}.
-          </p>
-        )}
-        {showAccessPin && (
-          <div className="mt-3" data-access-pin>
-            {/* The label sits above; the small input and its Save PIN button share one row directly below it. */}
-            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} label="Replace dashboard PIN">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  autoComplete="new-password"
-                  className="!w-28 font-mono"
-                  disabled={pending}
-                  inputMode="numeric"
-                  maxLength={64}
-                  minLength={4}
-                  onChange={(event) => setDashboardPin(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
-                  type="password"
-                  value={dashboardPin}
-                />
-                <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
-              </div>
-            </Field>
-            <p className="mt-2 max-w-3xl text-xs text-ink-muted">The initial PIN is 1234. Replacing it signs out every open dashboard.</p>
-          </div>
-        )}
-        {access === "internet" && remote.panelOpen && (
-          <div className="mt-4" data-access-people>
-            <SectionLabel>Remote access</SectionLabel>
-            <div className="mt-3"><RemoteAccessPanel control={remote} /></div>
-          </div>
-        )}
-        {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
-      </div>
-
-      <div className="mt-6">
+      <div className="mt-3">
         <Disclosure
           onOpenChange={setAdvancedOpen}
           open={advancedOpen}
@@ -450,7 +389,16 @@ export function BackendSetupPanel({
           tone="backend"
           variant="advanced"
         >
-        <div className="grid gap-4 sm:grid-cols-3">
+        {/* Four settings, laid out 1, 2 or 4 across by the width of the section, exactly like the status cards above (never 3). */}
+        <div className="backend-advanced-wrap">
+        <div className="backend-advanced grid gap-4">
+          <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
+            <Select disabled={pending} onChange={(event) => setTimezone(event.target.value)} value={timezone}>
+              {timezoneChoices.map((zone) => (
+                <option key={zone} value={zone}>{zone}</option>
+              ))}
+            </Select>
+          </Field>
           <Field error={errPort} heldChange={heldPort} label="Server port">
             <Input
               disabled={pending}
@@ -488,7 +436,60 @@ export function BackendSetupPanel({
             </Select>
           </Field>
         </div>
+        </div>
         </Disclosure>
+      </div>
+
+      <div className="mt-4" data-connection-access>
+        <ConnectionMethod
+          disabled={pending || remote.checkboxBusy || saved === null}
+          label="Connection Access"
+          onChange={chooseAccess}
+          options={accessOptions}
+          value={access}
+        />
+        <p className="mt-2 max-w-3xl text-xs text-ink-muted" data-access-hint>
+          {access === "host"
+            ? "Only this computer can open StagePilot."
+            : `Other devices on this network can open http://<this-computer's-IP>:${serverPort}.`}
+          {access === "internet" ? " Anyone you add below can also sign in from anywhere." : ""}
+        </p>
+        {remote.checkboxBusy && <p className="mt-2 inline-flex items-center gap-2 text-xs text-ink-muted"><ButtonSpinner />Applying…</p>}
+        {needsRestart && !pending && !saveFailed && (
+          <p className="mt-2 text-xs text-warning-text" data-access-restart role="status">
+            Saved. Restart StagePilot to {chosenLan ? "let other devices connect" : "make it available to this computer only"}.
+          </p>
+        )}
+        {showAccessPin && (
+          <div className="mt-3" data-access-pin>
+            {/* The label sits above; the small input and its Save PIN button share one row directly below it. */}
+            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} label="Access PIN">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  autoComplete="new-password"
+                  className="!w-28 font-mono"
+                  disabled={pending}
+                  inputMode="numeric"
+                  maxLength={64}
+                  minLength={4}
+                  onChange={(event) => setDashboardPin(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
+                  type="password"
+                  value={dashboardPin}
+                />
+                <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
+              </div>
+            </Field>
+            <p className="mt-2 max-w-3xl text-xs text-ink-muted">The initial PIN is 1234. Replacing it signs out every open dashboard.</p>
+          </div>
+        )}
+        {access === "internet" && remote.panelOpen && (
+          <div className="mt-4" data-access-people>
+            <SectionLabel>Remote access</SectionLabel>
+            <div className="mt-3"><RemoteAccessPanel control={remote} /></div>
+          </div>
+        )}
+        {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
       </div>
 
       <p className="mt-4 text-xs text-ink-muted">
