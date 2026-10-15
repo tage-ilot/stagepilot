@@ -32,7 +32,8 @@ import type {
   ProPresenterSettingsInput,
   ProPresenterStatusResponse,
   SettingsResponse,
-  SongLightingCueMap,
+  SongLightingCueMapInput,
+  OscArgument,
 } from "./types";
 
 const SERVER_PORT_KEY = "stagepilot.server-port";
@@ -306,7 +307,7 @@ export const updateLightsSettings = (settings: LightsSettingsInput) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
-export const updateLightingCueMap = (cueMap: SongLightingCueMap) =>
+export const updateLightingCueMap = (cueMap: SongLightingCueMapInput) =>
   requestJson<LightsOperationResponse>("/api/v1/lights/cue-map", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -317,4 +318,10 @@ export const testLightingCue = (note: number, velocity: number) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ note, velocity }),
+  });
+export const testOscLightingCue = (address: string, args: OscArgument[]) =>
+  requestJson<LightsOperationResponse>("/api/v1/lights/test-osc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, args }),
   });

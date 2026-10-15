@@ -202,12 +202,98 @@ class LightingCue(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class LightingMethod(StrEnum):
+    """How Lighting reaches the lighting application. Only the saved method fires."""
+
+    OSC = "osc"
+    MIDI = "midi"
+
+
+class OscPreset(StrEnum):
+    """Lighting applications with a known default OSC port. Presets only fill defaults."""
+
+    LIGHTKEY = "lightkey"
+    QLC_PLUS = "qlc_plus"
+    CHAMSYS = "chamsys"
+    ETC_EOS = "etc_eos"
+    GRANDMA = "grandma"
+    RESOLUME = "resolume"
+    CUSTOM = "custom"
+
+
+class OscArgument(BaseModel):
+    """One typed OSC argument. The type is explicit so 1.0 stays a float and 1 an int."""
+
+    type: Literal["int", "float", "string", "bool"]
+    value: int | float | str | bool
+
+    @model_validator(mode="after")
+    def value_matches_type(self) -> OscArgument:
+        value = self.value
+        if self.type == "bool":
+            ok = isinstance(value, bool)
+        elif self.type == "int":
+            ok = isinstance(value, int) and not isinstance(value, bool)
+            ok = ok and -(2**31) <= int(value) < 2**31
+        elif self.type == "float":
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+            if ok:
+                self.value = float(value)
+        else:
+            ok = isinstance(value, str) and len(value) <= 512
+        if not ok:
+            raise ValueError(f"OSC argument value does not match type {self.type}.")
+        return self
+
+
+def validate_osc_address(value: str) -> str:
+    """OSC address rule shared by cues and test sends: leading slash, no whitespace."""
+
+    if not value.startswith("/"):
+        raise ValueError("An OSC address must start with /.")
+    if any(character.isspace() or ord(character) < 32 for character in value):
+        raise ValueError("An OSC address cannot contain spaces.")
+    if len(value) > 256:
+        raise ValueError("An OSC address can be at most 256 characters.")
+    return value
+
+
+class OscLightingCue(BaseModel):
+    """One elapsed-time one-shot OSC message. OSC has no note length or pulse."""
+
+    id: UUID = Field(default_factory=uuid4)
+    at_seconds: int = Field(ge=0, le=86_399)
+    address: str = Field(min_length=1, max_length=256)
+    args: list[OscArgument] = Field(default_factory=list, max_length=16)
+    label: str = Field(default="", max_length=120)
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def address_is_trimmed(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("address")
+    @classmethod
+    def address_is_valid(cls, value: str) -> str:
+        return validate_osc_address(value)
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def label_is_trimmed(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
 class SongLightingCueMap(BaseModel):
-    """Persistent lighting timeline for one stable Planning Center song."""
+    """Persistent lighting timeline for one stable Planning Center song.
+
+    ``cues`` are the MIDI cues (unchanged, so every existing cue map keeps working) and
+    ``osc_cues`` the OSC cues. Both lists are kept; only the saved method's list fires.
+    """
 
     song_key: str = Field(min_length=1, max_length=256)
     song_title: str = Field(min_length=1, max_length=500)
     cues: list[LightingCue] = Field(default_factory=list, max_length=2_000)
+    osc_cues: list[OscLightingCue] = Field(default_factory=list, max_length=2_000)
 
     @field_validator("song_key", "song_title", mode="before")
     @classmethod
@@ -221,22 +307,42 @@ class SongLightingCueMap(BaseModel):
 
     @model_validator(mode="after")
     def cue_ids_are_unique(self) -> SongLightingCueMap:
-        cue_ids = [cue.id for cue in self.cues]
-        if len(cue_ids) != len(set(cue_ids)):
-            raise ValueError("Every lighting cue must have a unique ID.")
+        for cues in (self.cues, self.osc_cues):
+            cue_ids = [cue.id for cue in cues]
+            if len(cue_ids) != len(set(cue_ids)):
+                raise ValueError("Every lighting cue must have a unique ID.")
         self.cues.sort(key=lambda cue: (cue.at_seconds, str(cue.id)))
+        self.osc_cues.sort(key=lambda cue: (cue.at_seconds, str(cue.id)))
         return self
 
 
 class LightsSettings(BaseModel):
-    """Validated MIDI output and per-song cue timelines for Lighting."""
+    """Validated lighting output (OSC or MIDI) and per-song cue timelines for Lighting."""
 
     enabled: bool = False
+    method: LightingMethod = LightingMethod.OSC
     transport: MidiTransport = MidiTransport.LOCAL
     output_name: str | None = Field(default=None, max_length=512)
     channel: int = Field(default=1, ge=1, le=15)
     pulse_ms: int = Field(default=100, ge=10, le=2_000)
+    osc_preset: OscPreset = OscPreset.LIGHTKEY
+    osc_host: str = Field(default="127.0.0.1", min_length=1, max_length=253)
+    osc_port: int = Field(default=21_600, ge=1, le=65_535)
     cue_maps: dict[str, SongLightingCueMap] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def existing_lighting_settings_stay_midi(cls, data: object) -> object:
+        """Settings saved before OSC existed have no method and keep sending MIDI.
+
+        A fresh install (no saved lighting block) gets OSC.
+        """
+
+        if not isinstance(data, dict) or "method" in data:
+            return data
+        if data:  # a saved lighting block from before OSC existed
+            return {**data, "method": LightingMethod.MIDI}
+        return data
 
     @field_validator("output_name", mode="before")
     @classmethod
@@ -244,6 +350,16 @@ class LightsSettings(BaseModel):
         if isinstance(value, str):
             stripped = value.strip()
             return stripped or None
+        return value
+
+    @field_validator("osc_host", mode="before")
+    @classmethod
+    def osc_host_is_trimmed(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped or any(character.isspace() for character in stripped):
+                raise ValueError("Enter an OSC host name or IP address without spaces.")
+            return stripped
         return value
 
     @model_validator(mode="after")

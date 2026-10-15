@@ -16,6 +16,9 @@ import type {
   GeneralSettingsInput,
   HealthResponse,
   LightingCue,
+  LightingMethod,
+  OscArgument,
+  OscLightingCue,
   LightsSettingsInput,
   LightsStatusResponse,
   MidiInputsResponse,
@@ -454,6 +457,7 @@ export function Dashboard({
   saveLighting = () => undefined,
   refreshLighting = () => undefined,
   sendLightingTest = () => undefined,
+  sendOscLightingTest = () => undefined,
   saveLightingCues = () => undefined,
   clearAllLightingCues = () => undefined,
   updater,
@@ -510,8 +514,9 @@ export function Dashboard({
   saveLighting?: (settings: LightsSettingsInput) => void;
   refreshLighting?: () => void;
   sendLightingTest?: (note: number, velocity: number) => void;
-  saveLightingCues?: (song: Song, cues: LightingCue[]) => void;
-  clearAllLightingCues?: (songs: Song[]) => void;
+  sendOscLightingTest?: (address: string, args: OscArgument[]) => void;
+  saveLightingCues?: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod) => void;
+  clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
   updater?: UpdaterController;
 }) {
   const { canOperate, canConfigure } = capabilities;
@@ -1098,6 +1103,7 @@ export function Dashboard({
           onSaveCues={saveLightingCues}
           onSaveSettings={saveLighting}
           onTest={sendLightingTest}
+          onTestOsc={sendOscLightingTest}
           pendingOperation={pendingLightingOperation}
           settings={settings}
           state={state}

@@ -23,6 +23,7 @@ import {
   simulateMidiCue,
   startPlanningCenterOAuth,
   testLightingCue,
+  testOscLightingCue,
   testPlanningCenter,
   testProPresenter,
   updatePlanningCenterSettings,
@@ -54,7 +55,10 @@ import type {
   ProPresenterStatusResponse,
   SettingsResponse,
   Song,
-  SongLightingCueMap,
+  LightingMethod,
+  OscArgument,
+  OscLightingCue,
+  SongLightingCueMapInput,
   StateEnvelope,
 } from "../types";
 import { restartDesktopBackend, signInWithPlanningCenter } from "../desktop";
@@ -896,16 +900,41 @@ export function useStagePilot() {
     }
   }, [claim, release, canOperate]);
 
-  const saveLightingCues = useCallback(async (song: Song, cues: LightingCue[]) => {
+  const sendOscLightingTest = useCallback(async (address: string, args: OscArgument[]) => {
+    if (!canOperate) return;
+    if (!claim("lights")) return;
+    setPendingLightingOperation("test");
+    setLightingError(null);
+    setLightingMessage(null);
+    try {
+      const response = await testOscLightingCue(address, args);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      if (!response.accepted) setLightingError(response.message);
+    } catch (cause) {
+      setLightingError(describeError(cause, "OSC test cue failed."));
+    } finally {
+      release("lights");
+      setPendingLightingOperation(null);
+    }
+  }, [claim, release, canOperate]);
+
+  const saveLightingCues = useCallback(async (
+    song: Song,
+    cues: LightingCue[] | OscLightingCue[],
+    method: LightingMethod = "midi",
+  ) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
     setPendingLightingOperation("save-cues");
     setLightingError(null);
     setLightingMessage(null);
-    const cueMap: SongLightingCueMap = {
+    const cueMap: SongLightingCueMapInput = {
+      method,
       song_key: song.source_song_id ?? song.id,
       song_title: song.title,
-      cues,
+      cues: method === "midi" ? (cues as LightingCue[]) : [],
+      osc_cues: method === "osc" ? (cues as OscLightingCue[]) : [],
     };
     try {
       const response = await updateLightingCueMap(cueMap);
@@ -920,7 +949,7 @@ export function useStagePilot() {
     }
   }, [claim, release, canConfigure]);
 
-  const clearAllLightingCues = useCallback(async (songs: Song[]) => {
+  const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
     setPendingLightingOperation("save-cues");
@@ -932,7 +961,9 @@ export function useStagePilot() {
         const response = await updateLightingCueMap({
           song_key: song.source_song_id ?? song.id,
           song_title: song.title,
+          method,
           cues: [],
+          osc_cues: [],
         });
         latestLighting = response.lights;
       }
@@ -969,12 +1000,16 @@ export function useStagePilot() {
       });
     }
 
-    if (saved.lights.enabled && saved.lights.output_name) {
+    if (saved.lights.enabled && (saved.lights.method === "osc" || saved.lights.output_name)) {
       await saveLighting({
         enabled: true,
+        method: saved.lights.method ?? "midi",
         output_name: saved.lights.output_name,
         channel: saved.lights.channel,
         pulse_ms: saved.lights.pulse_ms,
+        osc_preset: saved.lights.osc_preset,
+        osc_host: saved.lights.osc_host,
+        osc_port: saved.lights.osc_port,
       });
     }
 
@@ -1050,6 +1085,7 @@ export function useStagePilot() {
     saveLighting,
     refreshLighting,
     sendLightingTest,
+    sendOscLightingTest,
     saveLightingCues,
     clearAllLightingCues,
     activateConfiguredServices,

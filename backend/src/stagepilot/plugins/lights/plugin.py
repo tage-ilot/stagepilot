@@ -1,13 +1,22 @@
-"""Event-driven MIDI output timeline for lighting applications such as Lightkey."""
+"""Event-driven OSC or MIDI output timeline for lighting applications such as Lightkey."""
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
 
 from stagepilot.core.actions import ActionOutcome
-from stagepilot.core.config import LightingCue, LightsSettings, SongLightingCueMap
+from stagepilot.core.config import (
+    LightingCue,
+    LightingMethod,
+    LightsSettings,
+    OscArgument,
+    OscLightingCue,
+    SongLightingCueMap,
+    validate_osc_address,
+)
 from stagepilot.core.event_bus import EventBus, Subscription
 from stagepilot.core.events import (
     ConnectionPayload,
@@ -28,10 +37,21 @@ from stagepilot.plugins.lights.client import (
     MidiOutputPortContract,
     MidoMidiOutputBackend,
 )
+from stagepilot.plugins.lights.osc import (
+    OscOutputBackendFactory,
+    OscOutputContract,
+    UdpOscOutputBackend,
+)
+
+type AnyLightingCue = LightingCue | OscLightingCue
 
 
 class LightsPlugin(Plugin):
-    """Send each song's elapsed-time cue map as short MIDI note pulses."""
+    """Send each song's elapsed-time cue map through the saved method only.
+
+    OSC cues are one-shot UDP messages. MIDI cues are short note pulses. The inactive
+    method's cues stay saved but are never scheduled, and the two are never sent together.
+    """
 
     name = "lights"
     version = "0.1.0"
@@ -43,6 +63,7 @@ class LightsPlugin(Plugin):
         settings: LightsSettings,
         *,
         backend_factory: MidiOutputBackendFactory | None = None,
+        osc_backend_factory: OscOutputBackendFactory | None = None,
         monitor_interval: float = 2.0,
     ) -> None:
         super().__init__(event_bus, state_store)
@@ -50,9 +71,11 @@ class LightsPlugin(Plugin):
         self._backend_factory = backend_factory or MidoMidiOutputBackend
         if monitor_interval <= 0:
             raise ValueError("Lighting MIDI monitor interval must be positive.")
+        self._osc_backend_factory = osc_backend_factory or UdpOscOutputBackend
         self._monitor_interval = monitor_interval
         self._backend: MidiOutputBackendContract | None = None
         self._port: MidiOutputPortContract | None = None
+        self._osc_output: OscOutputContract | None = None
         self._subscriptions: list[Subscription] = []
         self._pending_song: Song | None = None
         self._timeline_task: asyncio.Task[None] | None = None
@@ -65,6 +88,7 @@ class LightsPlugin(Plugin):
         self._last_error: str | None = None
         self._last_activity_at: datetime | None = None
         self._last_cue: LightingCue | None = None
+        self._last_osc_cue: OscLightingCue | None = None
         self._last_cue_at: datetime | None = None
         self._logger = get_logger(self.name)
 
@@ -97,7 +121,7 @@ class LightsPlugin(Plugin):
         else:
             await self._set_connection(
                 ConnectionStatus.DISCONNECTED,
-                "Lighting MIDI output is not configured.",
+                self._not_configured_detail(),
             )
         self._connection_task = asyncio.create_task(
             self._supervise_connection(),
@@ -123,7 +147,7 @@ class LightsPlugin(Plugin):
         self._status = PluginStatus.STOPPED
         await self._set_connection(
             ConnectionStatus.DISCONNECTED,
-            "Lighting MIDI output stopped.",
+            "Disconnected. Lighting output stopped.",
         )
 
     async def health(self) -> PluginHealth:
@@ -138,9 +162,14 @@ class LightsPlugin(Plugin):
     async def snapshot(self, *, refresh: bool = False) -> LightsSnapshot:
         if refresh:
             await self._refresh_connection()
-        names = await self._list_output_names()
+        midi_active = self._settings.method is LightingMethod.MIDI
+        names = await self._list_output_names() if midi_active else []
         return LightsSnapshot(
             enabled=self._settings.enabled,
+            method=self._settings.method,
+            osc_preset=self._settings.osc_preset,
+            osc_host=self._settings.osc_host,
+            osc_port=self._settings.osc_port,
             output_name=self._settings.output_name,
             channel=self._settings.channel,
             pulse_ms=self._settings.pulse_ms,
@@ -160,6 +189,7 @@ class LightsPlugin(Plugin):
                 for name in names
             ],
             last_cue=self._last_cue,
+            last_osc_cue=self._last_osc_cue,
             last_cue_at=self._last_cue_at,
         )
 
@@ -173,25 +203,45 @@ class LightsPlugin(Plugin):
             self._last_error = None
             await self._set_connection(
                 ConnectionStatus.DISCONNECTED,
-                "Lighting MIDI output is disabled.",
+                "Disconnected. Lighting output is disabled.",
             )
-            return ActionOutcome(True, "Lighting MIDI output disabled.")
+            return ActionOutcome(True, "Lighting output disabled.")
         connected = await self._connect()
         return ActionOutcome(
             connected,
-            self._detail
-            or ("Lighting MIDI output connected." if connected else "Connection failed."),
+            self._detail or ("Lighting output ready." if connected else "Connection failed."),
         )
 
     async def replace_cue_map(self, cue_map: SongLightingCueMap) -> None:
         cue_maps = dict(self._settings.cue_maps)
-        if cue_map.cues:
+        if cue_map.cues or cue_map.osc_cues:
             cue_maps[cue_map.song_key] = cue_map
         else:
             cue_maps.pop(cue_map.song_key, None)
         self._settings = self._settings.model_copy(update={"cue_maps": cue_maps}, deep=True)
 
+    async def test_osc_cue(self, address: str, args: list[OscArgument]) -> ActionOutcome:
+        if self._settings.method is not LightingMethod.OSC:
+            return ActionOutcome(False, "Lighting is set to MIDI. Switch to OSC and save first.")
+        try:
+            address = validate_osc_address(address)
+        except ValueError as exc:
+            return ActionOutcome(False, str(exc))
+        if (self._osc_output is None or self._osc_output.closed) and not await self._connect():
+            return ActionOutcome(False, self._detail or "Disconnected. OSC output is unavailable.")
+        cue = OscLightingCue(at_seconds=0, address=address, args=args, label="Test cue")
+        try:
+            await self._send_osc(cue)
+        except Exception as exc:
+            await self._record_error(exc, "OSC test cue failed.")
+            return ActionOutcome(False, self._detail or "OSC test cue failed.")
+        target = f"{self._settings.osc_host}:{self._settings.osc_port}"
+        await self._set_connection(ConnectionStatus.CONNECTED, f"Sent {address} to {target}.")
+        return ActionOutcome(True, f"Sent {address} to {target} (UDP, delivery not confirmed).")
+
     async def test_cue(self, note: int, velocity: int) -> ActionOutcome:
+        if self._settings.method is not LightingMethod.MIDI:
+            return ActionOutcome(False, "Lighting is set to OSC. Switch to MIDI and save first.")
         cue = LightingCue(at_seconds=0, note=note, velocity=velocity, label="Test cue")
         if (self._port is None or self._port.closed) and not await self._connect():
             return ActionOutcome(False, self._detail or "Lighting MIDI output is unavailable.")
@@ -217,11 +267,12 @@ class LightsPlugin(Plugin):
             return
         song_key = song.source_song_id or song.id
         cue_map = self._settings.cue_maps.get(song_key)
-        if not self._settings.enabled or cue_map is None or not cue_map.cues:
+        active = self._active_cues(cue_map)
+        if not self._settings.enabled or not active:
             return
-        if (self._port is None or self._port.closed) and not await self._connect():
+        if not self._output_ready() and not await self._connect():
             return
-        cues = [cue for cue in cue_map.cues if cue.at_seconds <= event.payload.duration_seconds]
+        cues = [cue for cue in active if cue.at_seconds <= event.payload.duration_seconds]
         if not cues:
             return
         self._timeline_task = asyncio.create_task(
@@ -242,14 +293,14 @@ class LightsPlugin(Plugin):
         if song is None:
             return
         song_key = song.source_song_id or song.id
-        cue_map = self._settings.cue_maps.get(song_key)
-        if not self._settings.enabled or cue_map is None or not cue_map.cues:
+        active = self._active_cues(self._settings.cue_maps.get(song_key))
+        if not self._settings.enabled or not active:
             return
         total = position + payload.duration_seconds
-        cues = [cue for cue in cue_map.cues if position <= cue.at_seconds <= total]
+        cues = [cue for cue in active if position <= cue.at_seconds <= total]
         if not cues:
             return
-        if (self._port is None or self._port.closed) and not await self._connect():
+        if not self._output_ready() and not await self._connect():
             return
         self._timeline_task = asyncio.create_task(
             self._run_timeline(cues, payload.started_at, position),
@@ -261,7 +312,7 @@ class LightsPlugin(Plugin):
 
     async def _run_timeline(
         self,
-        cues: list[LightingCue],
+        cues: Sequence[AnyLightingCue],
         started_at: datetime | None,
         offset: float = 0.0,
     ) -> None:
@@ -286,13 +337,48 @@ class LightsPlugin(Plugin):
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _send_at(self, started: float, cue: LightingCue) -> None:
+    async def _send_at(self, started: float, cue: AnyLightingCue) -> None:
         delay = max(0.0, started + cue.at_seconds - asyncio.get_running_loop().time())
         if delay:
             await asyncio.sleep(delay)
-        await self._send_pulse(cue)
+        if isinstance(cue, OscLightingCue):
+            await self._send_osc(cue)
+        else:
+            await self._send_pulse(cue)
+
+    def _active_cues(self, cue_map: SongLightingCueMap | None) -> Sequence[AnyLightingCue]:
+        """Only the saved method's cues; the other method's cues stay saved but idle."""
+
+        if cue_map is None:
+            return []
+        if self._settings.method is LightingMethod.OSC:
+            return cue_map.osc_cues
+        return cue_map.cues
+
+    def _output_ready(self) -> bool:
+        if self._settings.method is LightingMethod.OSC:
+            return self._osc_output is not None and not self._osc_output.closed
+        return self._port is not None and not self._port.closed
+
+    def _not_configured_detail(self) -> str:
+        if self._settings.method is LightingMethod.OSC:
+            return "Disconnected. Lighting OSC output is not configured."
+        return "Lighting MIDI output is not configured."
+
+    async def _send_osc(self, cue: OscLightingCue) -> None:
+        if self._settings.method is not LightingMethod.OSC:
+            return  # never send OSC while MIDI is the saved method
+        output = self._osc_output
+        if output is None or output.closed:
+            raise RuntimeError("Disconnected. The OSC output closed before a cue was sent.")
+        await asyncio.to_thread(output.send_message, cue.address, cue.args)
+        self._last_osc_cue = cue
+        self._last_cue_at = datetime.now(UTC)
+        self._last_activity_at = self._last_cue_at
 
     async def _send_pulse(self, cue: LightingCue) -> None:
+        if self._settings.method is not LightingMethod.MIDI:
+            return  # never send MIDI while OSC is the saved method
         port = self._port
         if port is None or port.closed:
             raise RuntimeError("Lighting MIDI output disconnected before a cue was sent.")
@@ -334,9 +420,37 @@ class LightsPlugin(Plugin):
         with suppress(asyncio.CancelledError):
             await task
 
+    async def _connect_osc(self) -> bool:
+        settings = self._settings
+        target = f"{settings.osc_host}:{settings.osc_port}"
+        async with self._operation_lock:
+            await self._close_port_locked()
+            try:
+                self._osc_output = await asyncio.to_thread(
+                    self._osc_backend_factory().open_output,
+                    settings.osc_host,
+                    settings.osc_port,
+                )
+            except Exception as exc:
+                self._status = PluginStatus.ERROR
+                self._last_error = self._public_error(exc, f"OSC output to {target} failed.")
+                await self._set_connection(ConnectionStatus.ERROR, self._last_error)
+                return False
+        self._status = PluginStatus.RUNNING
+        self._last_error = None
+        self._last_activity_at = datetime.now(UTC)
+        # UDP has no handshake: "ready" means the socket opened, not that anything listens.
+        await self._set_connection(
+            ConnectionStatus.CONNECTED,
+            f"OSC ready for {target}. Nothing sent yet; UDP does not confirm delivery.",
+        )
+        return True
+
     async def _connect(self) -> bool:
         if not self._settings.enabled:
             return False
+        if self._settings.method is LightingMethod.OSC:
+            return await self._connect_osc()
         if not self._settings.output_name:
             self._status = PluginStatus.RUNNING
             self._last_error = None
@@ -395,7 +509,7 @@ class LightsPlugin(Plugin):
     async def _refresh_connection(self) -> None:
         if not self._settings.enabled:
             return
-        if self._port is None or self._port.closed:
+        if not self._output_ready():
             await self._connect()
 
     async def _supervise_connection(self) -> None:
@@ -408,8 +522,8 @@ class LightsPlugin(Plugin):
                 return
             except TimeoutError:
                 pass
-            if not self._settings.enabled:
-                continue
+            if not self._settings.enabled or self._settings.method is not LightingMethod.MIDI:
+                continue  # OSC over UDP has nothing to monitor
             try:
                 names = await asyncio.to_thread(self._require_backend().list_output_names)
             except Exception as exc:
@@ -454,6 +568,10 @@ class LightsPlugin(Plugin):
         self._port = None
         if port is not None and not port.closed:
             await asyncio.to_thread(port.close)
+        osc_output = self._osc_output
+        self._osc_output = None
+        if osc_output is not None and not osc_output.closed:
+            await asyncio.to_thread(osc_output.close)
 
     async def _record_error(self, exc: BaseException, fallback: str) -> None:
         detail = self._public_error(exc, fallback)

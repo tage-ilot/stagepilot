@@ -6,6 +6,12 @@ from stagepilot.plugins.lights.client import (
     MidiOutputPortContract,
     MidoMidiOutputBackend,
 )
+from stagepilot.plugins.lights.osc import (
+    OscOutputBackendContract,
+    OscOutputBackendFactory,
+    OscOutputContract,
+    UdpOscOutputBackend,
+)
 from stagepilot.plugins.lights.plugin import LightsPlugin
 
 __all__ = [
@@ -14,4 +20,8 @@ __all__ = [
     "MidiOutputBackendFactory",
     "MidiOutputPortContract",
     "MidoMidiOutputBackend",
+    "OscOutputBackendContract",
+    "OscOutputBackendFactory",
+    "OscOutputContract",
+    "UdpOscOutputBackend",
 ]

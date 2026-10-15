@@ -216,14 +216,44 @@ export interface LightingCue {
   label: string;
 }
 
+export type LightingMethod = "osc" | "midi";
+export type OscPreset = "lightkey" | "qlc_plus" | "chamsys" | "etc_eos" | "grandma" | "resolume" | "custom";
+export type OscArgumentType = "int" | "float" | "string" | "bool";
+
+export interface OscArgument {
+  type: OscArgumentType;
+  value: number | string | boolean;
+}
+
+export interface OscLightingCue {
+  id: string;
+  at_seconds: number;
+  address: string;
+  args: OscArgument[];
+  label: string;
+}
+
 export interface SongLightingCueMap {
   song_key: string;
   song_title: string;
+  /** MIDI cues. Kept when OSC is the saved method. */
   cues: LightingCue[];
+  /** OSC cues. Kept when MIDI is the saved method. */
+  osc_cues?: OscLightingCue[];
+}
+
+/** What the cue-map PUT sends: only the cue list of `method` is replaced. */
+export interface SongLightingCueMapInput extends SongLightingCueMap {
+  method?: LightingMethod;
 }
 
 export interface LightsSettings {
   enabled: boolean;
+  /** Older backends omit the OSC fields; a missing method means MIDI. */
+  method?: LightingMethod;
+  osc_preset?: OscPreset;
+  osc_host?: string;
+  osc_port?: number;
   output_name: string | null;
   channel: number;
   pulse_ms: number;
@@ -239,6 +269,11 @@ export interface LightingOutput {
 
 export interface LightsStatusResponse {
   enabled: boolean;
+  /** Older backends omit the OSC fields; a missing method means MIDI. */
+  method?: LightingMethod;
+  osc_preset?: OscPreset;
+  osc_host?: string;
+  osc_port?: number;
   output_name: string | null;
   channel: number;
   pulse_ms: number;
@@ -246,13 +281,14 @@ export interface LightsStatusResponse {
   detail: string | null;
   outputs: LightingOutput[];
   last_cue: LightingCue | null;
+  last_osc_cue?: OscLightingCue | null;
   last_cue_at: string | null;
 }
 
 export type LightsSettingsInput = Pick<
   LightsSettings,
   "enabled" | "output_name" | "channel" | "pulse_ms"
->;
+> & Partial<Pick<LightsSettings, "method" | "osc_preset" | "osc_host" | "osc_port">>;
 
 export interface LightsOperationResponse {
   accepted: boolean;

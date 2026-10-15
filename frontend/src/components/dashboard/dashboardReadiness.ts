@@ -93,6 +93,7 @@ export function buildConnectionCardViews({
   const connectedMidi = midi?.inputs.find((input) => input.connected);
   const propresenterEnabled = settings?.settings.propresenter.enabled ?? propresenter?.enabled ?? false;
   const lightingEnabled = settings?.settings.lights.enabled ?? lights?.enabled ?? false;
+  const lightingMethod = lights?.method ?? settings?.settings.lights.method ?? "midi";
   const lightOutput = lights?.output_name ?? settings?.settings.lights.output_name ?? null;
 
   return {
@@ -192,7 +193,7 @@ export function buildConnectionCardViews({
     lights: !lightingEnabled
       ? {
           status: "disconnected",
-          detail: "Configure a Lighting MIDI output",
+          detail: lightingMethod === "osc" ? "Configure Lighting OSC" : "Configure a Lighting MIDI output",
           configured: false,
           mode: "disabled",
         }
@@ -200,9 +201,9 @@ export function buildConnectionCardViews({
           status: state.lights_status,
           detail: statusDetail(
             state.lights_status,
-            lights?.detail ?? (lightOutput ? `Waiting for ${lightOutput}` : "No Lighting output selected"),
+            lights?.detail ?? (lightingMethod === "osc" ? "OSC not sent yet" : lightOutput ? `Waiting for ${lightOutput}` : "No Lighting output selected"),
           ),
-          configured: Boolean(lightOutput),
+          configured: lightingMethod === "osc" || Boolean(lightOutput),
           mode: "real",
         },
   };
@@ -315,6 +316,7 @@ export function buildReadinessChecks({
     });
   }
   const lightingConfigured = views.lights.configured;
+  const lightingLabel = (settings?.settings.lights.method ?? "midi") === "osc" ? "Lighting OSC output" : "Lighting MIDI output";
   if (views.midi.actionNotice) checks.push({
     id: "playback-order", label: views.midi.actionNotice, passed: false,
     required: true, severity: "blocking", status: "disconnected",
@@ -324,8 +326,8 @@ export function buildReadinessChecks({
   checks.push({
     id: "lights",
     label: views.lights.status === "connected"
-      ? "Lighting MIDI output connected"
-      : "Lighting MIDI output disconnected",
+      ? `${lightingLabel} ${lightingLabel.includes("OSC") ? "ready" : "connected"}`
+      : `${lightingLabel} disconnected`,
     passed: views.lights.status === "connected",
     required: lightingRequired,
     severity: lightingRequired ? "blocking" : "info",

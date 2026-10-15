@@ -458,6 +458,9 @@ def _environment_overrides(values: Mapping[str, str]) -> dict[str, object]:
         ("STAGEPILOT_LIGHTS_OUTPUT_NAME", "output_name", _optional),
         ("STAGEPILOT_LIGHTS_CHANNEL", "channel", int),
         ("STAGEPILOT_LIGHTS_PULSE_MS", "pulse_ms", int),
+        ("STAGEPILOT_LIGHTS_METHOD", "method", lambda value: value.lower()),
+        ("STAGEPILOT_LIGHTS_OSC_HOST", "osc_host", str),
+        ("STAGEPILOT_LIGHTS_OSC_PORT", "osc_port", int),
     )
     for environment_name, field, converter in lights_fields:
         if environment_name not in values:
