@@ -127,3 +127,20 @@ describe("ConnectionMethod (the template for every connection that has more than
     for (const radio of screen.getAllByRole("radio")) expect(radio.closest("label")).toHaveClass("min-h-ds-touch-target");
   });
 });
+
+describe("ConnectionMethod without ranked options (Backend Connection Access)", () => {
+  it("draws no PRIMARY/ALTERNATE line when an option has no role, and names the radio by its label alone", () => {
+    render(
+      <ConnectionMethod
+        label="Connection Access"
+        onChange={() => undefined}
+        options={[{ value: "host", label: "Host" }, { value: "network", label: "Local network" }, { value: "internet", label: "Internet" }]}
+        value="host"
+      />,
+    );
+    expect(screen.getByRole("radiogroup", { name: "Connection Access" })).toBeInTheDocument();
+    expect(screen.queryByText(/primary|alternate/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Local network" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Host" })).toBeChecked();
+  });
+});

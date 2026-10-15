@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api";
 import * as desktop from "../desktop";
@@ -119,32 +119,38 @@ describe("Status section", () => {
   });
 });
 
-describe("Remote Access checkbox", () => {
-  it("checking the box enables Remote immediately even with no Operator yet, then shows the bootstrap UI", async () => {
+describe("Internet access (Connection Access switch)", () => {
+  const internet = () => screen.findByRole("radio", {name: "Internet"});
+  const on = {...off, enabled: true, state: "connected" as const, needs_operator: false, url: "https://test.trycloudflare.com"};
+  const withLan = (lan: boolean) => ({settings: {...saved, lan_access: lan}} as unknown as SettingsResponse);
+
+  it("choosing Internet enables Remote immediately even with no Operator yet, then shows the bootstrap UI, and turns the local network on too", async () => {
     vi.mocked(api.getRemoteStatus).mockResolvedValue(off);
     vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
-      const next = {...off, enabled, state: enabled ? "enabling" as const : "off" as const, needs_operator: true};
+      const next = {...off, enabled, state: enabled ? "connected" as const : "off" as const, needs_operator: true};
       vi.mocked(api.getRemoteStatus).mockResolvedValue(next);
       return next;
     });
-    renderPanel();
-    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
-    expect(checkbox).not.toBeChecked();
+    const onSave = vi.fn();
+    renderPanel({settings: settingsResponse, onSave});
+    const radio = await internet();
+    expect(radio).not.toBeChecked();
 
-    fireEvent.click(checkbox);
+    fireEvent.click(radio);
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(true));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(checkbox).toBeChecked());
-    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
-    expect(checkbox.closest("label")).not.toHaveAttribute("aria-controls");
+    await waitFor(() => expect(radio).toBeChecked());
 
-    // Enabled, but still no Operator: the bootstrap form is a required next
-    // step and stays visible, not a precondition that was waited on.
+    // Internet implies the local network: it is saved at once, with the PIN requirement left on.
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: true, web_dashboard_pin_enabled: true});
+
+    // Enabled, but still no Operator: the bootstrap form is a required next step and sits under People.
     expect(await screen.findByRole("heading", {name: "Create first Operator"})).toBeInTheDocument();
     expect(screen.getByText(/Remote Access is running\. Create the first Operator/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", {name: "People"})).toBeInTheDocument();
 
-    // Creating the first Operator now must NOT call setRemoteEnabled again
-    // (it's already enabled) -- only bootstrapRemote itself.
+    // Creating the first Operator must NOT call setRemoteEnabled again (it's already enabled) -- only bootstrapRemote itself.
     vi.mocked(api.bootstrapRemote).mockResolvedValue(operator);
     vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
     fireEvent.change(screen.getByLabelText("Email"), {target: {value: operator.email}});
@@ -154,63 +160,78 @@ describe("Remote Access checkbox", () => {
     expect(api.setRemoteEnabled).toHaveBeenCalledTimes(1);
   });
 
+  it("does not save the network again when Internet is chosen and the local network is already on", async () => {
+    vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
+      vi.mocked(api.getRemoteStatus).mockResolvedValue({...on, enabled});
+      return {...on, enabled};
+    });
+    const onSave = vi.fn();
+    renderPanel({settings: withLan(true), onSave});
+    fireEvent.click(await internet());
+    await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(screen.getByRole("radio", {name: "Internet"})).toBeChecked());
+    expect(onSave).not.toHaveBeenCalled();
+  });
 
-  it("unchecking with confirmation disables Remote and collapses the panel", async () => {
-    vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
+  it("leaving Internet asks first, then turns Remote off and collapses People", async () => {
+    vi.mocked(api.getRemoteStatus).mockResolvedValue(on);
     vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
     vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
       const next = {...off, enabled, state: enabled ? "connected" as const : "off" as const, needs_operator: false, url: enabled ? "https://test.trycloudflare.com" : null};
       vi.mocked(api.getRemoteStatus).mockResolvedValue(next);
       return next;
     });
-    renderPanel();
-    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
-    await waitFor(() => expect(checkbox).toBeChecked());
+    const onSave = vi.fn();
+    renderPanel({settings: withLan(true), onSave});
+    const radio = await internet();
+    await waitFor(() => expect(radio).toBeChecked());
+    expect(screen.getByRole("heading", {name: "People"})).toBeInTheDocument();
 
-    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("radio", {name: "Host"}));
     expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
     expect(api.setRemoteEnabled).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", {name: "Confirm disable"}));
     await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(false));
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
-    await waitFor(() => expect(checkbox).not.toBeChecked());
-    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
+    await waitFor(() => expect(screen.getByRole("radio", {name: "Host"})).toBeChecked());
+    expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Remote Access", {selector: "div"})).not.toBeInTheDocument();
+    // Going back to Host also takes the local network away again, in the same flow.
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: false});
   });
 
-  it("unchecking then cancelling reverts the checkbox to checked with Remote Access still enabled", async () => {
-    vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
-    renderPanel();
-    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
-    await waitFor(() => expect(checkbox).toBeChecked());
+  it("leaving Internet for Local network keeps the local network on and saves nothing else", async () => {
+    vi.mocked(api.getRemoteStatus).mockResolvedValue(on);
+    vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
+    vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
+      vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled, state: "off", needs_operator: false});
+      return {...off, enabled};
+    });
+    const onSave = vi.fn();
+    renderPanel({settings: withLan(true), onSave});
+    await waitFor(async () => expect(await internet()).toBeChecked());
+    fireEvent.click(screen.getByRole("radio", {name: "Local network"}));
+    fireEvent.click(await screen.findByRole("button", {name: "Confirm disable"}));
+    await waitFor(() => expect(screen.getByRole("radio", {name: "Local network"})).toBeChecked());
+    expect(onSave).not.toHaveBeenCalled();
+  });
 
-    fireEvent.click(checkbox);
+  it("cancelling the disable confirmation keeps Internet chosen and changes nothing", async () => {
+    vi.mocked(api.getRemoteStatus).mockResolvedValue(on);
+    const onSave = vi.fn();
+    renderPanel({settings: withLan(true), onSave});
+    const radio = await internet();
+    await waitFor(() => expect(radio).toBeChecked());
+
+    fireEvent.click(screen.getByRole("radio", {name: "Host"}));
     expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", {name: "Cancel"}));
     expect(api.setRemoteEnabled).not.toHaveBeenCalled();
-    expect(checkbox).toBeChecked();
+    expect(radio).toBeChecked();
     expect(screen.queryByRole("group", {name: "Confirm disable Remote Access"})).not.toBeInTheDocument();
-  });
-
-  it("disabling still works identically regardless of whether an Operator exists", async () => {
-    vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: true, url: "https://test.trycloudflare.com"});
-    vi.mocked(api.setRemoteEnabled).mockImplementation(async (enabled) => {
-      const next = {...off, enabled, state: enabled ? "connected" as const : "off" as const, needs_operator: true, url: enabled ? "https://test.trycloudflare.com" : null};
-      vi.mocked(api.getRemoteStatus).mockResolvedValue(next);
-      return next;
-    });
-    renderPanel();
-    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
-    await waitFor(() => expect(checkbox).toBeChecked());
-
-    fireEvent.click(checkbox);
-    expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", {name: "Confirm disable"}));
-    await waitFor(() => expect(api.setRemoteEnabled).toHaveBeenCalledWith(false));
-    expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
-    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(onSave).not.toHaveBeenCalled();
   });
 });
 
@@ -295,38 +316,190 @@ describe("Copy Log", () => {
 });
 
 describe("StagePilot panel sections", () => {
-  it("shows Status and People as headings (General configuration heading removed), then Advanced as a collapsed row", async () => {
-    renderPanel();
-    await screen.findByRole("checkbox", {name: /Remote Access/});
-    const names = screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent);
-    // Advanced is a collapsed row (a button with a summary), the guide's layout, so it is not a heading.
-    expect(names).toEqual(["Status", "People"]);
+  const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it("shows Status as the only heading while Internet is off, then Connection Access, then Advanced as a collapsed row", async () => {
+    renderPanel({settings: settingsResponse});
+    await screen.findByRole("radio", {name: "Internet"});
+    // People now lives under Connection Access and only when Internet is chosen. Advanced is a collapsed row, not a heading.
+    expect(screen.getAllByRole("heading", {level: 3}).map((h) => h.textContent)).toEqual(["Status"]);
     expect(screen.getByRole("button", {name: /^Advanced/})).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("puts the restart-needed fields in the right sections and keeps Release channel in Advanced", async () => {
-    renderPanel();
-    await screen.findByRole("checkbox", {name: /Remote Access/});
-    const section = (name: string) => name === "Advanced"
-      ? screen.getByRole("button", {name: /^Advanced/})
-      : screen.getByRole("heading", {name: name === "General configuration" ? "Status" : name});
-    const after = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(after(section("General configuration"), screen.getByLabelText("Timezone"))).toBe(true);
-    expect(after(section("General configuration"), screen.getByLabelText("Network access"))).toBe(true);
-    expect(after(section("General configuration"), screen.getByRole("checkbox", {name: /PIN/}))).toBe(true);
-    expect(after(section("People"), screen.getByRole("checkbox", {name: /Remote Access/}))).toBe(true);
-    for (const label of ["Server port", "Log level", "Release channel"]) {
-      expect(after(section("Advanced"), screen.getByLabelText(label))).toBe(true);
-    }
+  it("puts Timezone, then Connection Access, then Advanced, with the restart-needed fields in Advanced", async () => {
+    renderPanel({settings: settingsResponse});
+    await screen.findByRole("radio", {name: "Internet"});
+    const advanced = screen.getByRole("button", {name: /^Advanced/});
+    const access = screen.getByText("Connection Access");
+    expect(after(screen.getByRole("heading", {name: "Status"}), screen.getByLabelText("Timezone"))).toBe(true);
+    expect(after(screen.getByLabelText("Timezone"), access)).toBe(true);
+    expect(after(access, advanced)).toBe(true);
+    for (const label of ["Server port", "Log level", "Release channel"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
     expect(after(screen.getByLabelText("Release channel"), screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
   });
 
-  it("People is a plain section: no expander wiring, and the Remote panel stays closed while Remote is off", async () => {
-    renderPanel();
-    const checkbox = await screen.findByRole("checkbox", {name: /Remote Access/});
-    expect(checkbox.closest("label")).not.toHaveAttribute("aria-expanded");
+  it("has no Network access dropdown, no Require a PIN checkbox and no Remote Access checkbox any more", async () => {
+    renderPanel({settings: settingsResponse});
+    await screen.findByRole("radio", {name: "Internet"});
+    expect(screen.queryByLabelText("Network access")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Require a PIN/)).not.toBeInTheDocument();
+    expect(screen.queryByText("This computer only")).not.toBeInTheDocument();
+  });
+
+  it("the Remote panel and People stay closed while Internet is off", async () => {
+    renderPanel({settings: settingsResponse});
+    await screen.findByRole("radio", {name: "Internet"});
     expect(document.getElementById("remote-access-inline")).toBeNull();
     expect(screen.queryByRole("heading", {name: "Create first Operator"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+  });
+});
+
+describe("Connection Access switch (owner 2026-10-14)", () => {
+  const withLan = (lan: boolean, extra: Partial<React.ComponentProps<typeof BackendSetupPanel>> = {}) =>
+    renderPanel({settings: {settings: {...saved, lan_access: lan}} as unknown as SettingsResponse, ...extra});
+  const names = () => within(screen.getByRole("radiogroup", {name: "Connection Access"})).getAllByRole("radio").map((r) => (r as HTMLInputElement).getAttribute("aria-labelledby"));
+
+  it("is the Playback connection-method switch titled Connection Access, with Host, Local network and Internet and no PRIMARY/ALTERNATE words", () => {
+    withLan(false);
+    const group = screen.getByRole("radiogroup", {name: "Connection Access"});
+    expect(document.querySelector("[data-connection-method]")).toBeInTheDocument();
+    expect(screen.queryByText("Connection method")).not.toBeInTheDocument();
+    expect(within(group).getAllByRole("radio").map((r) => (r as HTMLInputElement).value)).toEqual(["host", "network", "internet"]);
+    expect(within(group).getByText("Host")).toBeInTheDocument();
+    expect(within(group).getByText("Local network")).toBeInTheDocument();
+    expect(within(group).getByText("Internet")).toBeInTheDocument();
+    expect(within(group).queryByText(/primary|alternate/i)).not.toBeInTheDocument();
+    expect(names().every((id) => id && !id.includes("-role"))).toBe(true);
+  });
+
+  it("shows the saved choice: Host when only this computer, Local network when other devices can connect", () => {
+    withLan(false);
+    expect(screen.getByRole("radio", {name: "Host"})).toBeChecked();
+    cleanup();
+    withLan(true);
+    expect(screen.getByRole("radio", {name: "Local network"})).toBeChecked();
+  });
+
+  it("saves the moment Local network is chosen: one save, PIN requirement on, nothing waiting on Save configuration", () => {
+    const onSave = vi.fn();
+    withLan(false, {onSave});
+    fireEvent.click(screen.getByRole("radio", {name: "Local network"}));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[0]).toEqual({
+      timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: true,
+      web_dashboard_pin_enabled: true, release_channel: "BETA",
+    });
+    expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
+    expect(screen.getByRole("radio", {name: "Local network"})).toBeChecked();
+    expect(screen.getByRole("status")).toHaveTextContent(/Restart StagePilot to let other devices connect/);
+  });
+
+  it("saves Host the moment it is chosen from Local network", () => {
+    const onSave = vi.fn();
+    withLan(true, {onSave});
+    fireEvent.click(screen.getByRole("radio", {name: "Host"}));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: false});
+  });
+
+  it("choosing the option already shown saves nothing", () => {
+    const onSave = vi.fn();
+    withLan(true, {onSave});
+    fireEvent.click(screen.getByRole("radio", {name: "Local network"}));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("saves only the access change: other fields being edited stay held, not saved by accident", () => {
+    const onSave = vi.fn();
+    withLan(false, {onSave});
+    fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
+    fireEvent.click(screen.getByRole("radio", {name: "Local network"}));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({timezone: "America/Los_Angeles", lan_access: true});
+    expect(screen.getByLabelText("Timezone")).toHaveValue("UTC");
+    expect(document.querySelector("[data-save-bar]")).toHaveTextContent("1 change waiting");
+  });
+
+  it("is locked until the settings have loaded and while a save is in flight", () => {
+    renderPanel();
+    expect(screen.getByRole("radiogroup", {name: "Connection Access"}).closest("fieldset")).toBeDisabled();
+    cleanup();
+    withLan(false, {pending: true});
+    expect(screen.getByRole("radiogroup", {name: "Connection Access"}).closest("fieldset")).toBeDisabled();
+  });
+
+  it("goes back to what is really saved when the save fails", () => {
+    const props = {settings: {settings: {...saved, lan_access: false}} as unknown as SettingsResponse, onSave: vi.fn()};
+    const view = renderPanel(props);
+    fireEvent.click(screen.getByRole("radio", {name: "Local network"}));
+    view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending {...props} />);
+    view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} message={null} pending={false} {...props} error="boom" />);
+    expect(screen.getByRole("radio", {name: "Host"})).toBeChecked();
+  });
+
+  describe("the PIN and People appear only when they apply", () => {
+    it("Host: no PIN field, no People", () => {
+      withLan(false);
+      expect(screen.queryByLabelText("Replace dashboard PIN")).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+    });
+
+    it("Local network: the PIN field, still no People", () => {
+      withLan(true);
+      expect(screen.getByLabelText("Replace dashboard PIN")).toHaveAttribute("type", "password");
+      expect(screen.getByText(/The initial PIN is 1234/)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", {name: "People"})).not.toBeInTheDocument();
+    });
+
+    it("Internet: the PIN field (the local network is on too) and People, both directly under the switch and above Advanced", async () => {
+      vi.mocked(api.getRemoteStatus).mockResolvedValue({...off, enabled: true, state: "connected", needs_operator: false, url: "https://test.trycloudflare.com"});
+      vi.mocked(api.getRemoteUsers).mockResolvedValue([operator]);
+      withLan(true);
+      const people = await screen.findByRole("heading", {name: "People"});
+      const pin = screen.getByLabelText("Replace dashboard PIN");
+      const order = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(order(screen.getByRole("radiogroup", {name: "Connection Access"}), pin)).toBe(true);
+      expect(order(pin, people)).toBe(true);
+      expect(order(people, screen.getByRole("button", {name: /^Advanced/}))).toBe(true);
+    });
+  });
+
+  describe("Save PIN", () => {
+    it("replaces the PIN on its own, keeps the PIN requirement on, and clears the field once saved", () => {
+      const onSave = vi.fn();
+      const props = {settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave};
+      const view = renderPanel(props);
+      const pin = screen.getByLabelText("Replace dashboard PIN");
+      fireEvent.change(pin, {target: {value: "4321"}});
+      expect(onSave).not.toHaveBeenCalled(); // typing never saves
+      fireEvent.click(screen.getByRole("button", {name: "Save PIN"}));
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: true, web_dashboard_pin_enabled: true, web_dashboard_pin: "4321"});
+      view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending {...props} />);
+      view.rerender(<BackendSetupPanel state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null} pending={false} {...props} />);
+      expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
+    });
+
+    it("Enter in the field saves too", () => {
+      const onSave = vi.fn();
+      renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave});
+      const pin = screen.getByLabelText("Replace dashboard PIN");
+      fireEvent.change(pin, {target: {value: "9999"}});
+      fireEvent.keyDown(pin, {key: "Enter"});
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({web_dashboard_pin: "9999"}));
+    });
+
+    it("a PIN shorter than 4 characters cannot be saved", () => {
+      const onSave = vi.fn();
+      renderPanel({settings: {settings: {...saved, lan_access: true}} as unknown as SettingsResponse, onSave});
+      fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "12"}});
+      expect(screen.getByRole("button", {name: "Save PIN"})).toBeDisabled();
+      expect(screen.getByText("Enter a PIN of at least 4 characters.")).toBeInTheDocument();
+      fireEvent.keyDown(screen.getByLabelText("Replace dashboard PIN"), {key: "Enter"});
+      expect(onSave).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -338,8 +511,7 @@ describe("Backend panel primitives", () => {
     for (const name of ["Timezone", "Server port"]) expect(screen.getByLabelText(name)).toHaveAttribute("data-state", "default");
     expect(screen.getByLabelText("Log level").tagName).toBe("SELECT");
     expect(screen.getByLabelText("Release channel").tagName).toBe("SELECT");
-    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveAttribute("type", "password");
-    expect(await screen.findByRole("checkbox", {name: /Remote Access/})).toBeInTheDocument();
+    expect(await screen.findByRole("radio", {name: "Internet"})).toBeInTheDocument();
   });
 
   it("header close is a 44px secondary Button and the status badge uses the status tone", () => {
@@ -362,7 +534,7 @@ describe("Backend panel primitives", () => {
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: " "}});
     fireEvent.click(save);
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/Enter a timezone, a port/)).toBeInTheDocument();
+    expect(screen.getByText(/Enter a timezone and a port/)).toBeInTheDocument();
   });
 });
 
@@ -383,13 +555,12 @@ describe("Save configuration SaveBar", () => {
     withSettings();
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
-    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     expect(bar()).toHaveAttribute("data-state", "held");
-    expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
-    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
+    expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    expect(bar()).toHaveTextContent("4 changes waiting");
-    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(4);
+    expect(bar()).toHaveTextContent("3 changes waiting");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
   });
 
   it("sends a payload byte-identical to the old save for the same edits", () => {
@@ -397,10 +568,9 @@ describe("Save configuration SaveBar", () => {
     withSettings({onSave});
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
-    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     const expected = {
-      timezone: "UTC", log_level: "INFO", server_port: 9000, lan_access: true,
+      timezone: "UTC", log_level: "INFO", server_port: 9000, lan_access: false,
       web_dashboard_pin_enabled: true, release_channel: "BETA",
     };
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -415,15 +585,13 @@ describe("Save configuration SaveBar", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("Discard restores the saved port, network access and timezone", () => {
+  it("Discard restores the saved port and timezone", () => {
     withSettings();
     fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
     fireEvent.change(screen.getByLabelText("Timezone"), {target: {value: "UTC"}});
-    fireEvent.change(screen.getByLabelText("Network access"), {target: {value: "network"}});
     fireEvent.click(screen.getByRole("button", {name: "Discard"}));
     expect(screen.getByLabelText("Server port")).toHaveValue("8765");
     expect(screen.getByLabelText("Timezone")).toHaveValue("America/Los_Angeles");
-    expect(screen.getByLabelText("Network access")).toHaveValue("local");
     expect(bar()).toHaveAttribute("data-state", "clean");
   });
 
@@ -447,15 +615,15 @@ describe("Save configuration SaveBar", () => {
     expect(screen.getByText(/take effect after a backend restart/)).toBeInTheDocument();
   });
 
-  it("keeps diagnostics and remote actions as actions", async () => {
+  it("keeps diagnostics and the Connection Access switch available", async () => {
     withSettings();
     expect(screen.getByRole("button", {name: "Copy Log"})).toBeInTheDocument();
     expect(screen.getByRole("button", {name: "Send all logs to developer"})).toBeInTheDocument();
-    expect(await screen.findByRole("checkbox", {name: /Remote Access/})).toBeInTheDocument();
+    expect(await screen.findByRole("radio", {name: "Internet"})).toBeInTheDocument();
   });
 });
 
-describe("Log level, release channel and PIN are held until Save configuration", () => {
+describe("Log level and release channel are held until Save configuration", () => {
   const bar = () => document.querySelector("[data-save-bar]")!;
   const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA"};
   const build = (over: Record<string, unknown> = {}, savedOver: Record<string, unknown> = {}) => (
@@ -469,52 +637,40 @@ describe("Log level, release channel and PIN are held until Save configuration",
     const onSave = vi.fn();
     render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
-    const pin = screen.getByLabelText("Replace dashboard PIN");
-    fireEvent.change(pin, {target: {value: "4321"}});
-    fireEvent.blur(pin);
-    fireEvent.keyDown(pin, {key: "Enter"});
+    const channel = screen.getByLabelText("Release channel");
+    fireEvent.change(channel, {target: {value: "STABLE"}});
+    fireEvent.blur(channel);
+    fireEvent.keyDown(channel, {key: "Enter"});
     expect(onSave).not.toHaveBeenCalled();
-    expect(bar()).toHaveTextContent("3 changes waiting. Not saved yet.");
-    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
-    fireEvent.click(screen.getByRole("checkbox", {name: /Require a PIN/}));
-    expect(onSave).not.toHaveBeenCalled();
-    // Turning the PIN requirement off hides the PIN field and drops the typed PIN from the count.
-    expect(bar()).toHaveTextContent("3 changes waiting");
-    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(3);
+    expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
   });
 
-  it("Save configuration sends all of them in one payload", () => {
+  it("Save configuration sends both in one payload, with the PIN requirement always on and no PIN value", () => {
     const onSave = vi.fn();
     render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
     fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
-    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({...savedBase, log_level: "DEBUG", release_channel: "STABLE", web_dashboard_pin: "4321"});
+    expect(onSave).toHaveBeenCalledWith({...savedBase, log_level: "DEBUG", release_channel: "STABLE"});
   });
 
-  it("a PIN shorter than 4 characters blocks Save", () => {
+  it("the PIN requirement is always sent as on, even if an older saved file had it off", () => {
     const onSave = vi.fn();
-    render(build({onSave}));
-    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "12"}});
+    render(build({onSave}, {web_dashboard_pin_enabled: false}));
+    fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
-    expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/PIN of at least 4 characters before saving/)).toBeInTheDocument();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({web_dashboard_pin_enabled: true});
   });
 
-  it("Discard restores log level, release channel, PIN requirement and clears the PIN", () => {
+  it("Discard restores log level and release channel", () => {
     render(build());
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
     fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
-    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /Require a PIN/}));
     fireEvent.click(screen.getByRole("button", {name: "Discard"}));
     expect(screen.getByLabelText("Log level")).toHaveValue("INFO");
     expect(screen.getByLabelText("Release channel")).toHaveValue("BETA");
-    expect(screen.getByRole("checkbox", {name: /Require a PIN/})).toBeChecked();
-    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
     expect(bar()).toHaveAttribute("data-state", "clean");
   });
 
@@ -522,25 +678,23 @@ describe("Log level, release channel and PIN are held until Save configuration",
     const onSave = vi.fn();
     const view = render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
+    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     view.rerender(build({onSave, pending: true}));
     view.rerender(build({onSave, error: "boom"}));
     expect(screen.getByLabelText("Log level")).toHaveValue("DEBUG");
-    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("4321");
+    expect(screen.getByLabelText("Release channel")).toHaveValue("STABLE");
     expect(bar()).toHaveAttribute("data-state", "error");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
   });
 
-  it("after a successful save the PIN field clears and the bar is clean", () => {
+  it("after a successful save the bar is clean", () => {
     const onSave = vi.fn();
     const view = render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Replace dashboard PIN"), {target: {value: "4321"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     view.rerender(build({onSave, pending: true}));
     view.rerender(build({onSave}, {log_level: "DEBUG"}));
-    expect(screen.getByLabelText("Replace dashboard PIN")).toHaveValue("");
     expect(bar()).toHaveAttribute("data-state", "auto");
   });
 });
@@ -560,7 +714,6 @@ describe("StagePilot hold-until-saved conformance (guard)", () => {
     { label: "Server port", value: "9000", saved: "8765", payload: { server_port: 9000 } },
     { label: "Log level", value: "DEBUG", saved: "INFO", payload: { log_level: "DEBUG" } },
     { label: "Release channel", value: "STABLE", saved: "BETA", payload: { release_channel: "STABLE" } },
-    { label: "Replace dashboard PIN", value: "4321", saved: "", payload: { dashboard_pin: "4321" } },
   ];
   it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved }) => {
     const onSave = vi.fn();
