@@ -119,7 +119,7 @@ typography:
     fontWeight: 400
     lineHeight: 1
   display-timer:
-    fontFamily: ui-monospace      # Tailwind font-mono
+    fontFamily: Geist Mono        # Tailwind font-mono (bundled; falls back to ui-monospace)
     fontSize: 5.4rem             # max. Real CSS is clamp(3rem, 5vw, 5.4rem); the spec cannot express clamp()
     fontWeight: 300
     lineHeight: 1

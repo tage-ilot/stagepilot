@@ -765,7 +765,7 @@ export function Dashboard({
   // smoothly (it would snap to blue), so for one moment after a stop data-settling plays the blue sweeping down the same way.
   const nowPlayingRail = useRef<HTMLElement>(null);
   const previousTimerStatus = useRef(state.timer.status);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const was = previousTimerStatus.current;
     previousTimerStatus.current = state.timer.status;
     const panel = nowPlayingRail.current;

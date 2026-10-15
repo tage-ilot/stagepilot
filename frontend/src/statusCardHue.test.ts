@@ -55,6 +55,22 @@ describe("Now playing rail (owner 2026-10-14)", () => {
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.now-playing-panel\.now-playing-panel\[data-timer="running"\]::before \{\s*animation: none;\s*background-image: none;\s*background-color: var\(--ds-primary\)/);
   });
 
+  it("on stop the label, elapsed time and glow wait for the blue sweep to start (delayed), on start they change straight away", () => {
+    expect(css).toMatch(/\.now-playing-panel \.now-playing-tint \{\s*color: var\(--ds-live-back-text\);\s*transition: color 600ms ease-in-out 380ms/);
+    expect(css).toMatch(/\[data-timer="running"\] \.now-playing-tint \{\s*color: var\(--ds-primary-text\);\s*transition: color 700ms ease-out 0ms/);
+    expect(css).toMatch(/@property --rail-glow \{\s*syntax: "<color>"/);
+    expect(css).toMatch(/transition: --rail-glow 600ms ease-in-out 380ms/);
+    const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
+    // The settle starts in the same frame as the stop, so the bar sweep never trails the text.
+    expect(src).toMatch(/const previousTimerStatus = useRef\(state\.timer\.status\);\s*useLayoutEffect\(/);
+  });
+
+  it("every font-mono number uses the bundled Geist Mono (variable weight), not a CDN or the system monospace", () => {
+    expect(css).toMatch(/font-family: "Geist Mono";\s*src: url\("\.\/assets\/fonts\/GeistMono-latin-wght\.woff2"\) format\("woff2"\);[^}]*font-weight: 100 900/);
+    expect(css).toMatch(/\.font-mono \{\s*font-family: "Geist Mono", ui-monospace/);
+    expect(css).not.toMatch(/https?:\/\/[^)]*GeistMono/i);
+  });
+
   it("the label and elapsed time follow the rail (blue at rest, the live tint while running), and the plan title is 18px", () => {
     const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
     expect(src).toContain('now-playing-tint text-live-back-text">Now playing</p>');
