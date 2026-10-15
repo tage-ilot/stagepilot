@@ -516,7 +516,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
     const chip = screen.getByTestId("header-chip");
     expect(chip).toHaveAttribute("data-state", "message");
-    expect(chip).toHaveClass("bg-danger-solid", "text-on-danger");
+    expect(chip).toHaveClass("bg-danger-deep", "text-on-danger");
   });
 
   describe("header layout (owner, 2026-10-15)", () => {
@@ -557,7 +557,7 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.getByTestId("header-chip").querySelector(".header-chip-dot")).toBeNull();
       ready.unmount();
       renderDashboard({ ...loadedServiceState, is_stale: true });
-      expect(screen.getByTestId("header-chip")).toHaveClass("bg-danger-solid");
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-danger-deep");
       expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
     });
 
@@ -568,7 +568,10 @@ describe("Dashboard Planning Center plan states", () => {
       expect(css).not.toMatch(/header-chip-dot/);
       // The pill animates its size, and the words slide in when one message replaces another.
       expect(css).toMatch(/\.header-chip \{[^}]*transition:\s*width 360ms/);
-      expect(css).toMatch(/\.header-chip-note-text \{\s*display: block;\s*animation: header-note-in/);
+      // The words wait for the pill to finish resizing (330ms) before they appear, so they never wrap mid-change.
+      expect(css).toMatch(/\.header-chip-note-text \{\s*display: block;[\s\S]*?animation: header-note-in 260ms[^;]* 330ms both;/);
+      expect(css).toMatch(/\.header-chip\[data-state="message"\] \.header-chip-note \{[^}]*transition-delay: 330ms/);
+      expect(css).toMatch(/\.header-chip-note \{[^}]*white-space: nowrap;/);
     });
   });
 

@@ -882,10 +882,16 @@ textarea:focus-visible {
   text-transform: none;
   letter-spacing: 0.02em;
   line-height: 1.25rem;
-  white-space: normal;
+  /* One line while the pill is still changing size (so the words never wrap just for a moment); two only when the message
+     really needs them (data-wrap), and the words only appear once the pill is its full size (see the delays below). */
+  white-space: nowrap;
   opacity: 0;
   transform: translateY(0.35rem);
   pointer-events: none;
+}
+
+.header-chip[data-wrap="true"] .header-chip-note {
+  white-space: normal;
 }
 
 .header-chip[data-state="message"] .header-chip-status {
@@ -896,14 +902,20 @@ textarea:focus-visible {
 .header-chip[data-state="message"] .header-chip-note {
   opacity: 1;
   transform: translateY(0);
-  /* The words arrive once the pill has mostly grown. */
-  transition-delay: 120ms, 120ms;
+  /* The words arrive only once the pill has finished growing (its size takes 360ms). */
+  transition-delay: 330ms, 330ms;
+}
+
+/* And when the message ends the status words wait for the pill to finish shrinking. */
+.header-chip[data-state="status"] .header-chip-status {
+  transition-delay: 300ms, 300ms;
 }
 
 /* A notice that replaces another one: the new words slide in while the pill resizes. */
 .header-chip-note-text {
   display: block;
-  animation: header-note-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* A message that replaces another: the old words go at once, the pill resizes, then the new words slide in. */
+  animation: header-note-in 260ms cubic-bezier(0.22, 1, 0.36, 1) 330ms both;
 }
 
 @keyframes header-note-in {
