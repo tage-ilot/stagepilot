@@ -922,6 +922,29 @@ textarea:focus-visible {
   }
 }
 
+/* Advanced settings (Timezone, Server port, Log level, Release channel): 1, 2 or 4 across, never 3, switching at the same window
+   widths as the status cards above them (owner, 2026-10-14). The Advanced row has about 35px (2.2rem) of its own padding, so its
+   container breakpoints are the status cards' 24rem and 52rem less that. */
+.backend-advanced-wrap {
+  container-type: inline-size;
+}
+
+.backend-advanced {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 21.8rem) {
+  .backend-advanced {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 49.8rem) {
+  .backend-advanced {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* Playback API: the status message sits to the right of the Scan Network button, and drops under it when the half is too narrow. */
 .playback-scan-row {
   display: flex;
