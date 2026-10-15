@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi.testclient import TestClient
 
-from stagepilot.core.config import LightingMethod, LightsSettings, Settings
+from stagepilot.core.config import LightingMethod, LightsSettings, OscArgument, Settings
 from stagepilot.main import create_app
 
 
@@ -35,6 +37,34 @@ class FakeOutputBackend:
         port = FakeOutputPort()
         self.ports.append(port)
         return port
+
+
+@dataclass
+class FakeOscOutput:
+    closed: bool = False
+    sent: list[tuple[str, list[object]]] = field(default_factory=list)
+
+    def send_message(self, address: str, args: Sequence[OscArgument]) -> None:
+        self.sent.append((address, [argument.value for argument in args]))
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@dataclass
+class FakeOscBackend:
+    outputs: list[FakeOscOutput] = field(default_factory=list)
+    opened: list[tuple[str, int]] = field(default_factory=list)
+
+    def open_output(self, host: str, port: int) -> FakeOscOutput:
+        self.opened.append((host, port))
+        output = FakeOscOutput()
+        self.outputs.append(output)
+        return output
+
+    @property
+    def sent(self) -> list[tuple[str, list[object]]]:
+        return [message for output in self.outputs for message in output.sent]
 
 
 def test_lights_settings_test_pulse_and_cue_map_persist_through_api() -> None:
@@ -266,3 +296,118 @@ def test_fractional_cue_times_round_trip_and_old_integer_times_load() -> None:
             "osc_cues"
         ]
     assert [cue["at_seconds"] for cue in cues] == [3.3, 4.0]
+
+
+def test_midi_and_osc_settings_never_overwrite_each_other() -> None:
+    """Saving one method leaves the other's saved settings alone.
+
+    That is the MIDI output, channel and length on one side and the OSC host and port on the other.
+    """
+
+    midi = FakeOutputBackend()
+    osc = FakeOscBackend()
+    app = create_app(
+        Settings(lights=LightsSettings(method=LightingMethod.MIDI)),
+        lights_backend_factory=lambda: midi,
+        lights_osc_backend_factory=lambda: osc,
+    )
+
+    def saved(client: TestClient) -> dict[str, Any]:
+        lights: dict[str, Any] = client.get("/api/v1/settings").json()["settings"]["lights"]
+        return lights
+
+    with TestClient(app) as client:
+        # Configure MIDI first, then OSC with its own host and port.
+        client.post(
+            "/api/v1/lights/settings",
+            json={
+                "enabled": True,
+                "method": "midi",
+                "output_name": "StagePilot to Lightkey",
+                "channel": 4,
+                "pulse_ms": 250,
+            },
+        )
+        client.post(
+            "/api/v1/lights/settings",
+            json={
+                "enabled": True,
+                "method": "osc",
+                "osc_host": "192.168.4.50",
+                "osc_port": 8000,
+            },
+        )
+        after_osc = saved(client)
+
+        # An OSC save did not reset or blank the MIDI settings, though the request had none.
+        assert after_osc["method"] == "osc"
+        assert after_osc["output_name"] == "StagePilot to Lightkey"
+        assert after_osc["channel"] == 4
+        assert after_osc["pulse_ms"] == 250
+        assert (after_osc["osc_host"], after_osc["osc_port"]) == ("192.168.4.50", 8000)
+
+        # Back to MIDI with a different output setup, and a request that carries stale OSC defaults.
+        client.post(
+            "/api/v1/lights/settings",
+            json={
+                "enabled": True,
+                "method": "midi",
+                "output_name": "StagePilot to Lightkey",
+                "channel": 9,
+                "pulse_ms": 100,
+                "osc_host": "127.0.0.1",
+                "osc_port": 21600,
+            },
+        )
+        after_midi = saved(client)
+
+        # A MIDI save did not overwrite the OSC host and port the user typed.
+        assert after_midi["method"] == "midi"
+        assert (after_midi["osc_host"], after_midi["osc_port"]) == ("192.168.4.50", 8000)
+        assert (after_midi["channel"], after_midi["pulse_ms"]) == (9, 100)
+
+
+def test_only_the_active_method_touches_its_transport() -> None:
+    """While OSC is saved no MIDI port is opened; while MIDI is saved no UDP socket is."""
+
+    midi = FakeOutputBackend()
+    osc = FakeOscBackend()
+    app = create_app(
+        Settings(lights=LightsSettings(method=LightingMethod.MIDI)),
+        lights_backend_factory=lambda: midi,
+        lights_osc_backend_factory=lambda: osc,
+    )
+    with TestClient(app) as client:
+        client.post(
+            "/api/v1/lights/settings",
+            json={
+                "enabled": True,
+                "method": "midi",
+                "output_name": "StagePilot to Lightkey",
+                "channel": 1,
+                "pulse_ms": 10,
+            },
+        )
+        midi_tested = client.post("/api/v1/lights/test", json={"note": 60, "velocity": 100})
+        osc_while_midi = client.post("/api/v1/lights/test-osc", json={"address": "/a", "args": []})
+        assert osc.opened == [] and osc.sent == []  # MIDI is saved: no UDP socket, nothing sent
+
+        client.post(
+            "/api/v1/lights/settings",
+            json={"enabled": True, "method": "osc", "osc_host": "127.0.0.1", "osc_port": 9},
+        )
+        ports_before = len(midi.ports)
+        midi_while_osc = client.post("/api/v1/lights/test", json={"note": 61, "velocity": 100})
+        osc_tested = client.post("/api/v1/lights/test-osc", json={"address": "/a", "args": []})
+        assert len(midi.ports) == ports_before  # OSC is saved: no MIDI port was opened
+        assert not any(
+            message[0] == "note_on" and message[2] == 61
+            for port in midi.ports
+            for message in port.messages
+        )
+
+    assert midi_tested.json()["accepted"] is True
+    assert osc_while_midi.json()["accepted"] is False
+    assert midi_while_osc.json()["accepted"] is False
+    assert osc_tested.json()["accepted"] is True
+    assert osc.sent == [("/a", [])]

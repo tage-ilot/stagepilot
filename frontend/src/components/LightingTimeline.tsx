@@ -121,7 +121,7 @@ export function LightingTimeline({
           <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} tone="lighting" variant="tinted">+</Button>
         </div>
       </div>
-      <div className="mt-2 overflow-x-auto overscroll-x-contain rounded-ds-lg border border-edge-subtle bg-surface-950" data-testid="lighting-timeline-scroll" tabIndex={-1}>
+      <div className="scroll-region scroll-region-x mt-2 overflow-x-auto overscroll-x-contain rounded-ds-lg" data-testid="lighting-timeline-scroll" tabIndex={-1}>
         <div className="relative px-3 pb-3" style={trackStyle}>
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
             {ticks.map((tick) => (

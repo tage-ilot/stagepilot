@@ -162,9 +162,25 @@ describe("LightingSetupPanel", () => {
     );
     const region = screen.getByTestId("lighting-cue-list");
     expect(region).toHaveClass("overflow-y-auto", "overscroll-contain");
+    // A box that scrolls is an obvious bordered region (owner, 2026-10-15): bordered, edge glows, focusable and named.
+    expect(region).toHaveClass("scroll-region", "scroll-region-y");
+    expect(region).toHaveAttribute("role", "region");
+    expect(region).toHaveAttribute("aria-label", "Lighting cues, scrollable");
+    expect(region).toHaveAttribute("tabindex", "0");
     const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Lighting cue label"]'));
     expect(labels).toHaveLength(40);
     expect(labels[0]).toHaveValue(label);
+  });
+
+  it("draws no scroll box around an empty cue list", () => {
+    const empty = { ...settings, settings: { ...settings.settings, lights: { ...settings.settings.lights, cue_maps: {} } } };
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={empty} state={state} />,
+    );
+    const region = screen.getByTestId("lighting-cue-list");
+    expect(region).not.toHaveClass("scroll-region");
+    expect(region).not.toHaveAttribute("role");
+    expect(region).not.toHaveAttribute("tabindex");
   });
 
   it("shows the test cue result in the Lighting colour with a dot; errors stay danger", () => {

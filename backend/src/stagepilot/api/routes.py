@@ -872,14 +872,18 @@ async def update_lights_settings(
         raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
     current = runtime.settings_service.effective_runtime_settings().lights
     try:
+        # MIDI and OSC are independent: saving one method never touches the other's
+        # settings. A MIDI save cannot overwrite the saved OSC host and port, and an
+        # OSC save cannot reset the saved MIDI output, channel or note length.
+        use_osc = settings.method is LightingMethod.OSC
         updated = LightsSettings(
             enabled=settings.enabled,
             method=settings.method,
-            output_name=settings.output_name,
-            channel=settings.channel,
-            pulse_ms=settings.pulse_ms,
-            osc_host=settings.osc_host or current.osc_host,
-            osc_port=settings.osc_port or current.osc_port,
+            output_name=current.output_name if use_osc else settings.output_name,
+            channel=current.channel if use_osc else settings.channel,
+            pulse_ms=current.pulse_ms if use_osc else settings.pulse_ms,
+            osc_host=(settings.osc_host or current.osc_host) if use_osc else current.osc_host,
+            osc_port=(settings.osc_port or current.osc_port) if use_osc else current.osc_port,
             cue_maps=current.cue_maps,
             pads=current.pads,
         )

@@ -785,6 +785,40 @@ textarea:focus-visible {
   background: theme("colors.slate.700");
 }
 
+/* A box that scrolls (the Lighting cue list, the timeline) is drawn as an obvious, bordered region (owner, 2026-10-15). The border is
+   stronger than a card's, and a light glow appears on any edge that has more content past it, so it reads as scrollable even where
+   the system hides scrollbars. (A dark shadow cannot be seen on this near-black surface, so the edge hint is light.) The glows use
+   background-attachment: the "local" covers move with the content and hide the "scroll" glows at the ends, so a glow only shows
+   where there is more to reach. */
+.scroll-region {
+  border: 1px solid theme("colors.ink-muted");
+  background-color: var(--ds-surface-950);
+}
+
+.scroll-region-y {
+  background-image:
+    linear-gradient(var(--ds-surface-950) 30%, transparent),
+    linear-gradient(transparent, var(--ds-surface-950) 70%),
+    linear-gradient(theme("colors.ink-muted"), transparent),
+    linear-gradient(transparent, theme("colors.ink-muted"));
+  background-position: top, bottom, top, bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 36px, 100% 36px, 100% 14px, 100% 14px;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.scroll-region-x {
+  background-image:
+    linear-gradient(to right, var(--ds-surface-950) 30%, transparent),
+    linear-gradient(to left, var(--ds-surface-950) 30%, transparent),
+    linear-gradient(to right, theme("colors.ink-muted"), transparent),
+    linear-gradient(to left, theme("colors.ink-muted"), transparent);
+  background-position: left, right, left, right;
+  background-repeat: no-repeat;
+  background-size: 36px 100%, 36px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
 /* Phones and tablets: a focused field is never hidden under the sticky save bar. */
 @media (max-width: 1023.98px) {
   html {

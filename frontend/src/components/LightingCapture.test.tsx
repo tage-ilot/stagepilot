@@ -255,5 +255,8 @@ describe("LightingTimeline", () => {
     render(<LightingTimeline markers={markers} onMove={vi.fn()} onRemove={vi.fn()} playhead={null} songLength={200} />);
     const scroll = screen.getByTestId("lighting-timeline-scroll");
     expect(scroll.className).toContain("overflow-x-auto");
+    // The scrolling box is drawn as an obvious bordered region with an edge glow (owner, 2026-10-15).
+    expect(scroll).toHaveClass("scroll-region", "scroll-region-x");
+    expect(scroll.className).not.toContain("border-edge-subtle");
   });
 });
