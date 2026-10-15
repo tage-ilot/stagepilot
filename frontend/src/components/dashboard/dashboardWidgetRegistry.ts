@@ -8,6 +8,8 @@ export type DashboardWidgetDefinition = {
   desktop: Omit<DashboardLayoutItem, "id" | "kind">;
   tablet: Omit<DashboardLayoutItem, "id" | "kind">;
 };
+// Default desktop arrangement (owner, 2026-10-15), the same for a first-time user and for "Reset layout": Service plan on the left;
+// on the right, Now playing, then Manual controls, then Event stream, all the same width as Now playing (5 columns, x = 7).
 export const DASHBOARD_WIDGETS: Record<DashboardWidgetId, DashboardWidgetDefinition> = {
   "service-plan": {
     title: "Service plan",

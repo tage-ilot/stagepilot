@@ -17,8 +17,9 @@ describe("widget placement: free columns, upward gravity (owner 2026-10-14)", ()
 
   it("never repacks desktop widgets in reading order after a drag or resize (that would shuffle them sideways)", () => {
     const direct = [...grid.matchAll(/\.compact\("compact"\)/g)].length;
-    // compactGrid (button), the mobile settle helper and the one-off startup/Reset fit; never after a drag or resize on desktop.
-    expect(direct).toBe(3);
+    // Only the "Compact layout" button and the mobile settle helper. The one-off startup/Reset fit settles with gravity alone, so a
+    // new user's first layout and Reset layout keep Manual controls and Event stream under Now playing (owner, 2026-10-15).
+    expect(direct).toBe(2);
     expect(grid).not.toMatch(/initializedGrid\.compact\(/);
   });
 
