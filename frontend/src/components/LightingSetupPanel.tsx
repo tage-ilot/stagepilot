@@ -442,7 +442,7 @@ export function LightingSetupPanel({
     <Panel className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lighting configuration"
-        description={method === "osc" ? "Send elapsed-time OSC messages to Lighting." : "Send elapsed-time MIDI Note On/Off cues to Lighting."}
+        description="Sends timed cues to your lighting software."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
         statusDetail={savedMethod === "midi" ? "MIDI · Alternate" : undefined}
