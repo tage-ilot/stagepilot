@@ -73,17 +73,22 @@ describe("Now playing rail (owner 2026-10-14)", () => {
 
   it("the countdown is 4px bigger than before and a hovered song row takes the live red-orange tint", () => {
     const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
-    expect(src).toContain("text-[clamp(calc(3rem+4px),calc(5vw+4px),calc(5.4rem+4px))]");
+    expect(src).toContain("text-[clamp(calc(3rem+8px),calc(5vw+8px),calc(5.4rem+8px))]"); // +4px, then +4px again (owner, 2026-10-14)
     expect(src).toContain("can-hover:bg-primary/[0.08]");
     expect(src).toContain("group-hover:bg-primary/20 group-hover:text-primary-text");
     // Generic (non-song) rows keep their own darker hover.
     expect(src).toContain("can-hover:bg-surface-950/40");
   });
 
-  it("the label and elapsed time follow the rail (blue at rest, the live tint while running), and the plan title is 18px", () => {
+  it("the Now playing label follows the rail (blue at rest, the live tint while running), and the plan title is 18px", () => {
     const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
     expect(src).toContain('now-playing-tint text-live-back-text">Now playing</p>');
-    expect(src).toMatch(/now-playing-tint text-live-back-text">\{formatDuration\(timerElapsed\)\}/);
+    // The elapsed time now looks exactly like Time remaining (owner, 2026-10-14): same label, light mono ink digits, same tracking.
+    expect(src).toMatch(/<p className="text-sm text-ink-muted">Elapsed time<\/p>/);
+    expect(src).toMatch(/operational-timer mt-1 font-mono [^"]*font-light leading-none">\{formatDuration\(timerElapsed\)\}/);
+    // Position and Up next share one value style; the "N songs" count is in the pixel font.
+    expect(src).toContain('<p className="mt-1 line-clamp-2 font-semibold text-ink">{state.playing_song_index == null');
+    expect(src).toContain('<p className="font-pixel !text-sm text-ink-body">{plan?.songs.length ?? 0} songs</p>');
     expect(css).toMatch(/\[data-timer="running"\] \.now-playing-tint \{\s*color: var\(--ds-primary-text\)/);
     expect(src).toContain('font-pixel mt-1 break-words !text-[1.125rem]');
   });
