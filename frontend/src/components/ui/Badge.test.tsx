@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { AccentContext } from "./accent";
 import { Badge, StatusBadge } from "./Badge";
 import { statusTone, type StatusWord } from "./statusWord";
 import badgeSource from "./Badge.tsx?raw";
@@ -61,5 +62,21 @@ describe("StatusBadge", () => {
     expect(el).toHaveAttribute("data-tone", tone);
     expect(el).toHaveClass("uppercase");
     expect(el.textContent).toBe(word);
+  });
+
+  it("keeps its own status colours inside a connection panel, while an ordinary success badge takes the connection's accent", () => {
+    render(
+      <AccentContext.Provider value="playback">
+        <StatusBadge status="Connected" />
+        <StatusBadge status="Error" />
+        <Badge tone="success">Saved</Badge>
+      </AccentContext.Provider>,
+    );
+    const connected = screen.getByText("Connected");
+    expect(connected).toHaveAttribute("data-tone", "success");
+    expect(connected).toHaveClass("text-success-text");
+    expect(connected.querySelector("[data-tone]")).toHaveAttribute("data-tone", "success");
+    expect(screen.getByText("Error")).toHaveAttribute("data-tone", "danger");
+    expect(screen.getByText("Saved")).toHaveAttribute("data-tone", "playback");
   });
 });
