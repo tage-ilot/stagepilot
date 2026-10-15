@@ -5,16 +5,17 @@ declare const process: { cwd(): string };
 const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
 const read = (file: string) => readFileSync(`${process.cwd()}/src/components/dashboard/${file}`, "utf8");
 
-describe("free widget placement (owner 2026-10-14)", () => {
+describe("widget placement: free columns, upward gravity (owner 2026-10-14)", () => {
   const grid = read("DashboardGrid.tsx");
 
-  it("turns gravity off on desktop so a widget stays where it is dropped, and keeps one-column mobile packed", () => {
-    expect(grid).toContain('float: modeRef.current !== "mobile"');
-    expect(grid).toContain('grid.float(mode !== "mobile")');
+  it("keeps upward gravity on in every layout, so no empty space opens above a widget", () => {
+    expect(grid).toContain("float: false,");
+    expect(grid).toContain("grid.float(false);");
+    expect(grid).not.toContain("float: modeRef.current");
     expect(grid).toMatch(/const settle = useCallback\(\(target: GridStack\) => \{\s*if \(modeRef\.current === "mobile"\) target\.compact\("compact"\);/);
   });
 
-  it("only pulls widgets upward when asked (Compact layout) or during the initial fit and Reset", () => {
+  it("never repacks desktop widgets in reading order after a drag or resize (that would shuffle them sideways)", () => {
     const direct = [...grid.matchAll(/\.compact\("compact"\)/g)].length;
     // compactGrid (button), the mobile settle helper and the one-off startup/Reset fit; never after a drag or resize on desktop.
     expect(direct).toBe(3);

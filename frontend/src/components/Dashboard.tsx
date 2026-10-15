@@ -1134,7 +1134,7 @@ export function Dashboard({
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold tabular-nums text-ink-body">{plan?.songs.length ?? 0} songs</p>
+              <p className="font-pixel !text-sm text-ink-body">{plan?.songs.length ?? 0} songs</p>
               <p className="text-xs tabular-nums text-ink-muted">
                 {plan ? formatPlanCurrentAsOf(state.last_successful_plan_reload_at) : "Load time unavailable"}
               </p>
@@ -1162,16 +1162,16 @@ export function Dashboard({
             <div className="mt-2 flex items-end justify-between gap-5">
               <div>
                 <p className="text-sm text-ink-muted">Time remaining</p>
-                <p className="operational-timer mt-1 font-mono text-[clamp(calc(3rem+4px),calc(5vw+4px),calc(5.4rem+4px))] font-light leading-none">{formatDuration(timerRemaining)}</p>
+                <p className="operational-timer mt-1 font-mono text-[clamp(calc(3rem+8px),calc(5vw+8px),calc(5.4rem+8px))] font-light leading-none">{formatDuration(timerRemaining)}</p>
               </div>
               <div className="elapsed-time-block pb-1 text-right">
-                <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
-                <p className="mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-semibold leading-none tabular-nums now-playing-tint text-live-back-text">{formatDuration(timerElapsed)}</p>
+                <p className="text-sm text-ink-muted">Elapsed time</p>
+                <p className="operational-timer mt-1 font-mono text-[clamp(1.5rem,2.4cqw,2rem)] font-light leading-none">{formatDuration(timerElapsed)}</p>
                 <p className="mt-1 text-xs font-medium tabular-nums text-ink-muted sm:text-sm">of {formatDuration(state.playing_song?.duration_seconds)}</p>
               </div>
             </div>
             <div className="now-playing-metadata mt-7 grid grid-cols-2 gap-4 border-t border-edge-subtle pt-4 text-sm">
-              <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{state.playing_song_index == null ? "Not started" : `${state.playing_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
+              <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.playing_song_index == null ? "Not started" : `${state.playing_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
               <div><p className="text-xs text-ink-muted">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.up_next_song?.title ?? "End of service"}</p></div>
             </div>
           </Panel>
