@@ -51,7 +51,7 @@ describe("StatusBadge", () => {
   const expected: Record<StatusWord, string> = {
     Connected: "success",
     Connecting: "warning",
-    "Not connected": "idle",
+    "Disconnected": "idle",
     Error: "danger",
   };
   it.each(Object.entries(expected))("maps %s to %s", (word, tone) => {

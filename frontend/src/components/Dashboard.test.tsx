@@ -593,7 +593,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(ready.querySelector("[data-size]")).toBeNull();
     // ...and none of the five status cards has a dot either.
     expect(document.querySelectorAll(".connections-status [data-size], .connections-status .status-card-dot")).toHaveLength(0);
-    expect(screen.getByText("Lighting MIDI output not connected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
     expect(screen.getByText("Optional")).toBeInTheDocument();
   });
 
@@ -719,11 +719,11 @@ describe("Dashboard Planning Center plan states", () => {
       state: unavailableState,
     });
 
-    expect(screen.getByText("Services not connected")).toBeInTheDocument();
+    expect(screen.getByText("Services disconnected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
-    expect(screen.getByText("Playback not connected")).toBeInTheDocument();
-    expect(screen.getByText("Presentation not connected")).toBeInTheDocument();
+    expect(screen.getByText("Playback disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
   });
 
   it("shows when the service plan was last successfully loaded", () => {
@@ -762,7 +762,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lighting MIDI output not connected")).toBeInTheDocument();
+    expect(screen.getByText("Lighting MIDI output disconnected")).toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s plan loaded")).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s service")).not.toBeInTheDocument();
   });
@@ -1162,7 +1162,7 @@ describe("Dashboard widget layout", () => {
     });
 
     expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lighting MIDI output not connected")).toHaveClass("text-ink-muted");
+    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 
@@ -1363,7 +1363,7 @@ describe("Dashboard connection configuration panels", () => {
         heading: "Presentation",
       },
       {
-        card: /^Lighting Not connected/,
+        card: /^Lighting Disconnected/,
         close: "Close Lighting configuration",
         heading: "Lighting",
       },

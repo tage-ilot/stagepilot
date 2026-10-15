@@ -622,11 +622,11 @@ add noise without adding hierarchy.
 - **Status card:** icon tile + title + status word + detail line. No status dot
   (removed 2026-10-13). The word is **capitalized** (CONNECTED, CONNECTING, NOT
   CONNECTED, ERROR), semibold, and grows with the card: it is sized from the card
-  width so the longest phrase, NOT CONNECTED, always fits beside the icon, from
+  width so the longest phrase, DISCONNECTED, always fits beside the icon, from
   11px on a 181px card up to 18px on a 266px one. In compact mode (1000px and
   below) the word sits under the icon on ONE line, always (owner, 2026-10-13): it never
   wraps, never ellipsizes and never overlaps the icon or a neighbour. Its size is the
-  card width minus padding divided by 8.3, at most 11px, so NOT CONNECTED (the widest
+  card width minus padding divided by 8.3, at most 11px, so DISCONNECTED (the widest
   phrase) fits; that is about 10px on tablets, 8.6px at 480px and 6.5px at 390px, and
   the owner-accepted exception to the 11px floor. Collapses to an icon-only tile in compact mode.
 - **Live (now-playing) panel:** red rail, 135° red wash fading out by 42%,
@@ -756,7 +756,7 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 | **Cue** | pulse | a message sent to Lighting (decided) |
 | **Note** | pulse | the MIDI note a cue uses, and how long it lasts. Use **Note** wherever the app said "pulse": "Note length (ms)", "Test cue" (decided 2026-10-11) |
 | **People** | remote users | who can sign in remotely |
-| **Connected / Connecting / Not connected / Error** | disconnected | the four status words (sentence case in text, UPPERCASE in badges) |
+| **Connected / Connecting / Disconnected / Error** | disconnected | the four status words (sentence case in text, UPPERCASE in badges) |
 
 ### Labels and buttons
 - Button labels are **verb + object**: `Save configuration`, `Scan for devices`,
@@ -1086,7 +1086,7 @@ identical.
   error state shows the status word `Error`, not a colour change.
 - **Playback `#4b73b0` is no longer near the idle grey** (`idle` `#64748b`):
   hue 216 and saturation 40% against hue 215 and 17%. It is still only 1.01:1 in
-  luminance from idle, so idle stays a dot plus the words *Not connected*, and
+  luminance from idle, so idle stays a dot plus the words *Disconnected*, and
   Playback stays a tile tint, top border and tinted buttons. Its **Advanced**
   tone (`#7e95b6`) is 5.9:1 on panels and clearly blue-grey.
 - **Services green `#6bb03c` and the deep success green `#31551d`** are the same

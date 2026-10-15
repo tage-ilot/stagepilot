@@ -337,7 +337,7 @@ describe("dashboard integration truthfulness", () => {
     });
 
     expect(checks.find((check) => check.id === "lights")).toMatchObject({
-      label: "Lighting MIDI output not connected",
+      label: "Lighting MIDI output disconnected",
       required: false,
       status: "disconnected",
     });

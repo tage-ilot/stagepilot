@@ -328,7 +328,7 @@ export function BackendSetupPanel({
         <div className={factCard}>
           <dt className={factLabel}>WebSocket</dt>
           <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
-            {live ? "Connected" : "Not connected"}
+            {live ? "Connected" : "Disconnected"}
           </dd>
           <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
         </div>

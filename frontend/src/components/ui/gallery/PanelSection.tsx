@@ -9,7 +9,7 @@ import type { Tone } from "../types";
 import { Section } from "./Section";
 
 const tones: Tone[] = ["services", "presentation", "playback", "lighting", "backend", "success", "warning", "danger", "info", "idle"];
-const words: StatusWord[] = ["Connected", "Connecting", "Not connected", "Error"];
+const words: StatusWord[] = ["Connected", "Connecting", "Disconnected", "Error"];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (

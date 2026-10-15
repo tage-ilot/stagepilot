@@ -7,7 +7,7 @@ type Status = "connected" | "connecting" | "disconnected" | "error";
 const statusTextStyles: Record<Status, string> = {
   connected: "text-success-text",
   connecting: "text-warning-text",
-  disconnected: "text-ink-muted",
+  disconnected: "text-ink",
   error: "text-danger-text",
 };
 
@@ -66,7 +66,7 @@ export function StatusCard({
       <span aria-hidden="true" className="status-card-surface" data-status-motion-part="surface" />
       <div className="status-card-layout grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 xl:gap-x-3">
         <div className="status-card-copy min-w-0">
-          <p className="status-card-title whitespace-nowrap text-type-micro font-semibold uppercase tracking-[0.14em] text-ink-muted transition-colors can-hover:group-hover:text-ink-body" title={title}>{title}</p>
+          <p className="status-card-title whitespace-nowrap text-type-micro font-semibold uppercase tracking-[0.14em] text-ink-muted transition-colors" title={title}>{title}</p>
           <div className="status-card-status mt-2 flex min-w-0 items-center gap-1 xl:gap-2" data-status-motion-part="status">
             <span className={`status-card-status-word ${statusTextStyles[status]}`}>{connectionWord[status]}</span>
           </div>
@@ -81,7 +81,7 @@ export function StatusCard({
             {icon}
           </span>
         </span>
-        <p className="status-card-detail col-span-2 mt-2 truncate text-xs text-ink-muted transition-colors can-hover:group-hover:text-ink-body" title={detail}>{detail}</p>
+        <p className="status-card-detail col-span-2 mt-2 truncate text-xs text-ink-muted transition-colors" title={detail}>{detail}</p>
       </div>
     </Element>
   );

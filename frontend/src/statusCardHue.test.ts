@@ -38,11 +38,50 @@ describe("open status card hue", () => {
   });
 });
 
+describe("Manual controls grid (owner 2026-10-14)", () => {
+  const columnsAt = (minWidth: string) => {
+    const block = css.match(new RegExp(`@container \\(min-width: ${minWidth}\\) \\{\\s*\\.manual-controls-grid \\{\\s*grid-template-columns: repeat\\((\\d), minmax\\(0, 1fr\\)\\)`));
+    return block ? Number(block[1]) : null;
+  };
+
+  it("is 2 columns by default and only 3 or 6 columns above: always even rows, never 4 + 2 or one column", () => {
+    expect(css).toMatch(/\.manual-controls-grid \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(columnsAt("37rem")).toBe(3);
+    expect(columnsAt("74.5rem")).toBe(6);
+    expect(css).not.toMatch(/\.manual-controls-grid \{[^}]*repeat\((1|4|5)\b/);
+  });
+
+  it("adds a column only when each label still fits on one line (12rem columns for the 186px longest label)", () => {
+    // 3 x 12rem + 2 x 0.5rem gap = 37rem; 6 x 12rem + 5 x 0.5rem gap = 74.5rem.
+    expect(3 * 12 + 2 * 0.5).toBe(37);
+    expect(6 * 12 + 5 * 0.5).toBe(74.5);
+    expect(12 * 16).toBeGreaterThanOrEqual(186 + 6);
+  });
+});
+
+describe("status card hover and Disconnected colour (owner 2026-10-14)", () => {
+  it("title and description lighten when the whole card is hovered, pressed, focused or open - not only the text", () => {
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.status-card\.status-card:hover \.status-card-title\.status-card-title,\s*\.status-card\.status-card:hover \.status-card-detail\.status-card-detail \{\s*color: var\(--ds-ink-body\)/);
+    for (const trigger of [":active", ":focus-visible", '[aria-expanded="true"]']) {
+      expect(css).toContain(`.status-card.status-card${trigger} .status-card-title.status-card-title`);
+      expect(css).toContain(`.status-card.status-card${trigger} .status-card-detail.status-card-detail`);
+    }
+  });
+
+  it("the card no longer relies on the text-only group-hover classes for the title and description", () => {
+    const src = readFileSync(`${process.cwd()}/src/components/StatusCard.tsx`, "utf8");
+    expect(src).not.toMatch(/status-card-(title|detail)[^"]*group-hover/);
+    expect(src).toContain('disconnected: "text-ink"');
+  });
+});
+
 describe("status card title (owner 2026-10-14)", () => {
-  it("sits 2px higher than its natural spot, by a relative offset so nothing below it moves", () => {
+  it("is 13px, 2px larger than the 11px micro size, and is not offset from its natural position", () => {
     const rule = css.match(/\.status-card-title \{[^}]*\}/)?.[0] ?? "";
-    expect(rule).toContain("position: relative");
-    expect(rule).toContain("top: -2px");
+    expect(rule).toMatch(/font-size: clamp\(0\.6875rem, calc\(\(100cqw - [\d.]+rem\) \/ [\d.]+\), 0\.8125rem\)/);
+    expect(rule).toContain("line-height: 1.03125rem");
+    expect(rule).not.toContain("top:");
+    expect(rule).not.toContain("position: relative");
   });
 });
 

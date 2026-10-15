@@ -282,14 +282,14 @@ class PlaybackInputPlugin(Plugin):
                 result.reason = NOT_FOUND_REASON
             elif self.selected and self.settings.playback_api.enabled:
                 result.reason = (
-                    f"Not connected. {SCAN_BLOCK_DETAIL}. Open Local Network settings to fix it."
+                    f"Disconnected. {SCAN_BLOCK_DETAIL}. Open Local Network settings to fix it."
                     if self.status.last_error == SCAN_BLOCK_DETAIL
-                    else f"Not connected. {UNREACHABLE_REASON}"
+                    else f"Disconnected. {UNREACHABLE_REASON}"
                     if self.status.last_error
-                    else "Not connected. Looking for Playback…"
+                    else "Disconnected. Looking for Playback…"
                 )
             else:
-                result.reason = "Not connected. Choose Scan Network to find Playback."
+                result.reason = "Disconnected. Choose Scan Network to find Playback."
         return result
 
     async def _publish_connection(self) -> None:

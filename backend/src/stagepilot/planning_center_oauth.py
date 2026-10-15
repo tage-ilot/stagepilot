@@ -174,7 +174,7 @@ class OAuthTokenStore:
         try:
             return OAuthTokens.model_validate_json(raw)
         except ValidationError:
-            # A corrupt blob is treated as "not connected" rather than
+            # A corrupt blob is treated as "disconnected" rather than
             # crashing startup; the user can simply sign in again.
             logger.warning("planning_center_oauth_tokens_unreadable")
             return None
@@ -411,7 +411,7 @@ class PlanningCenterOAuthService:
             current = tokens or self._tokens.load()
             if current is None:
                 raise PlanningCenterOAuthError(
-                    "Planning Center is not connected. Sign in again.", permanent=True
+                    "Planning Center is disconnected. Sign in again.", permanent=True
                 )
             flow_id, ticket = await self._control_plane.start_flow()
             try:
@@ -435,7 +435,7 @@ class PlanningCenterOAuthService:
         current = self._tokens.load()
         if current is None:
             raise PlanningCenterOAuthError(
-                "Planning Center is not connected. Sign in again.", permanent=True
+                "Planning Center is disconnected. Sign in again.", permanent=True
             )
         if current.needs_reconnect:
             raise PlanningCenterOAuthError(

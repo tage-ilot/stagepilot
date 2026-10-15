@@ -158,7 +158,7 @@ async def test_drop_then_return_after_short_gap() -> None:
         await connected(fake, client)
         fake.go_offline()
         await until(lambda: not client.status.connected)
-        assert client.status.last_error  # true state: not connected
+        assert client.status.last_error  # true state: disconnected
         await asyncio.sleep(0.15)
         fake.come_back()
         await connected(fake, client, 2)
