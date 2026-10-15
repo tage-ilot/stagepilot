@@ -1114,7 +1114,7 @@ export function Dashboard({
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div className="min-w-0 max-w-full">
               <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
-              <h2 className="mt-1 break-words text-lg font-bold text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
+              <h2 className="font-pixel mt-1 break-words text-lg text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
               </p>
@@ -1159,8 +1159,6 @@ export function Dashboard({
             <div className="now-playing-metadata mt-7 grid grid-cols-2 gap-4 border-t border-edge-subtle pt-4 text-sm">
               <div><p className="text-xs text-ink-muted">Position</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{state.playing_song_index == null ? "Not started" : `${state.playing_song_index + 1} of ${plan?.songs.length ?? 0}`}</p></div>
               <div><p className="text-xs text-ink-muted">Up next</p><p className="mt-1 line-clamp-2 font-semibold text-ink">{state.up_next_song?.title ?? "End of service"}</p></div>
-              <div><p className="text-xs text-ink-muted">Countdown started</p><p className="mt-1 font-semibold tabular-nums text-ink-body">{formatTime(state.timer.started_at)}</p></div>
-              <div><p className="text-xs text-ink-muted">Last action</p><p className="mt-1 font-semibold capitalize text-ink-body">{state.last_action?.replaceAll("_", " ") ?? "None"}</p></div>
             </div>
           </Panel>
           ),

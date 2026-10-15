@@ -81,17 +81,19 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
 
   return (
     <div className="mt-4 space-y-4">
-      <div className={`rounded-ds-xl border p-4 ${toneClass[tone]}`} role="status" aria-live="polite" data-testid="playback-banner">
-        <p className="text-base font-semibold">{status ? status.reason : playback?.error ?? "Checking Playback…"}</p>
-        {status?.scan.state === "scanning" && <p className="mt-1 text-sm tabular-nums opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
-      </div>
 
       <div className="playback-connect">
         <div className="playback-connect-grid">
         <div className="min-w-0 space-y-3">
-          {scanning
-            ? <Button className="w-full sm:w-auto" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
-            : <Button className="w-full sm:w-auto" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
+          <div className="playback-scan-row">
+            {scanning
+              ? <Button className="flex-none" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
+              : <Button className="flex-none" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
+        <div className={`min-w-0 flex-1 rounded-ds-xl border px-4 py-2.5 ${toneClass[tone]}`} role="status" aria-live="polite" data-testid="playback-banner">
+          <p className="text-sm font-semibold">{status ? status.reason : playback?.error ?? "Checking Playback…"}</p>
+          {status?.scan.state === "scanning" && <p className="mt-1 text-sm tabular-nums opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
+        </div>
+          </div>
           {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
             ? (
               <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
@@ -124,7 +126,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
             )
             : (
               <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
-                <p className="font-semibold">Couldn't find Playback</p>
+                <p className="font-semibold">Make sure:</p>
                 <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
                 {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
                 <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>

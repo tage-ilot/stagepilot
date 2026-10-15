@@ -66,7 +66,7 @@ describe("Scan Network is always first and never dead", () => {
   it("not found: plain checklist, Scan again and Enter address instead; never a stuck spinner", async () => {
     const playback = controller({ status: none({ scan: scanOf("not_found"), reason: "Couldn't find Playback. Check things." }) });
     render(<PlaybackApiPanel playback={playback} />);
-    expect(screen.getByText("Couldn't find Playback")).toBeVisible();
+    expect(screen.getByText("Make sure:")).toBeVisible();
     expect(screen.getByText("Remote Connections is turned on in Playback")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
     expect(playback.scan).toHaveBeenCalledWith();
@@ -752,15 +752,15 @@ describe("Scan diagnostics", () => {
     const status = none({ scan: scanOf("scanning", { typed: true, phase: "Connecting to 192.0.2.50…", elapsed: 1 }) });
     render(<PlaybackApiPanel playback={controller({ status })} />);
     expect(screen.getByTestId("scan-progress").textContent).toContain("Connecting to 192.0.2.50");
-    expect(screen.queryByText("Couldn't find Playback")).toBeNull();
+    expect(screen.queryByText("Make sure:")).toBeNull();
   });
 
   it("a scanning state is not replaced by not-found before the backend says so", () => {
     const { rerender } = render(<PlaybackApiPanel playback={controller({ status: scanning() })} />);
-    expect(screen.queryByText("Couldn't find Playback")).toBeNull();
+    expect(screen.queryByText("Make sure:")).toBeNull();
     expect(screen.getByRole("button", { name: /Scanning/ })).toBeInTheDocument();
     rerender(<PlaybackApiPanel playback={controller({ status: none({ scan: scanOf("not_found", { reason: "x", hosts_probed: 254, hosts_total: 254, networks: ["192.0.2.0/24"], elapsed: 9 }) }) })} />);
-    expect(screen.getByText("Couldn't find Playback")).toBeInTheDocument();
+    expect(screen.getByText("Make sure:")).toBeInTheDocument();
     expect(screen.getByText(/Checked 254 of 254 addresses on 1 network \(192.0.2.0\/24\)/)).toBeInTheDocument();
   });
 
@@ -774,7 +774,7 @@ describe("Scan diagnostics", () => {
     });
     render(<PlaybackApiPanel playback={controller({ status: none({ scan }) })} />);
     expect(screen.getByTestId("scan-error")).toHaveTextContent("Privacy & Security > Local Network");
-    expect(screen.queryByText("Couldn't find Playback")).toBeNull();
+    expect(screen.queryByText("Make sure:")).toBeNull();
     expect(screen.getByRole("button", { name: "Open Local Network settings" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Copy diagnostic details" }));
     expect(writeText).toHaveBeenCalledWith("{\"outcome\":\"error\"}");
@@ -789,7 +789,7 @@ describe("Scan diagnostics", () => {
       expect(screen.getByText(/Turn StagePilot off and on again/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Open Local Network settings" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Copy diagnostic details" })).toBeInTheDocument();
-      expect(screen.queryByText("Couldn't find Playback")).toBeNull();
+      expect(screen.queryByText("Make sure:")).toBeNull();
       expect(screen.queryByText(/Playback is open/)).toBeNull();
       unmount();
     }

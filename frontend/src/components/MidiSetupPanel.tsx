@@ -219,79 +219,6 @@ export function MidiSetupPanel({
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 
-      <div className="mt-4">
-        <Disclosure summary="Song order and velocity map" title="Playback song velocities" tone="midi" variant="advanced">
-        <div className="mt-2 rounded-ds-lg bg-integration-playback-midi-soft/10 p-3">
-          <p className="mt-1 text-xs text-ink-body">
-            Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
-          </p>
-          {songs.length > 0 ? (
-            <>
-              <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                {songs.slice(0, 99).map((song, index) => (
-                  <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>
-                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-integration-playback-midi-soft/20 px-1.5 py-0.5 font-mono font-bold tabular-nums text-integration-playback-midi-text">
-                      {index + 1}
-                    </span>
-                    <span className="truncate">{song.title}</span>
-                  </li>
-                ))}
-              </ol>
-              {songs.length > 99 && (
-                <p className="mt-3 text-xs text-danger-text">
-                  This service plan has more than 99 songs. Positions after 99 cannot be addressed by MIDI velocity.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="mt-2 text-xs text-warning-text">Load a service plan to see its song-to-velocity map.</p>
-          )}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field heldChange={midiView && Boolean(savedMidi) && channel !== String(savedMidi!.channel)} label="MIDI channel">
-            <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setChannel(event.target.value)} value={channel} />
-          </Field>
-          <Field heldChange={midiView && Boolean(savedMidi) && note !== String(savedMidi!.note)} label="Fixed note">
-            <Select
-              disabled={pendingSettingsSave}
-              onChange={(event) => setNote(event.target.value)}
-              value={note}
-            >
-              {midiNoteOptions.map((option) => (
-                <option key={option.note} value={option.note}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field heldChange={midiView && Boolean(savedMidi) && debounce !== String(savedMidi!.debounce_ms)} label="Debounce (ms)">
-            <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setDebounce(event.target.value)} value={debounce} />
-          </Field>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {cues.map(([cue, label]) => (
-            <Field heldChange={heldVelocity(cue)} key={cue} label={`${label} velocity`}>
-              <Input
-                aria-label={`${label} velocity`}
-                className="tabular-nums"
-                disabled={pendingSettingsSave}
-                inputMode="numeric"
-                min={100}
-                max={127}
-                onChange={(event) => setVelocities((current) => ({ ...current, [cue]: event.target.value }))}
-                value={velocities[cue]}
-              />
-            </Field>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
-        {midi && !enabled && (
-          <InlineAlert className="mt-3" tone="warning">
-            Save the MIDI settings above, then restart StagePilot to discover and connect the input device.
-          </InlineAlert>
-        )}
-        </Disclosure>
-      </div>
 
       {(settingsError || settingsMessage) && (
         <InlineAlert className="mt-3" tone={settingsError ? "danger" : "info"}>
@@ -365,6 +292,80 @@ export function MidiSetupPanel({
           <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!midi ? onRetryLoad : undefined} />
         </div>
 
+      </div>
+
+      <div className="mt-4">
+        <Disclosure summary="Song order and velocity map" title="Playback song velocities" tone="midi" variant="advanced">
+        <div className="mt-2 rounded-ds-lg bg-integration-playback-midi-soft/10 p-3">
+          <p className="mt-1 text-xs text-ink-body">
+            Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
+          </p>
+          {songs.length > 0 ? (
+            <>
+              <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                {songs.slice(0, 99).map((song, index) => (
+                  <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>
+                    <span className="inline-flex min-w-8 justify-center rounded-ds-lg bg-integration-playback-midi-soft/20 px-1.5 py-0.5 font-mono font-bold tabular-nums text-integration-playback-midi-text">
+                      {index + 1}
+                    </span>
+                    <span className="truncate">{song.title}</span>
+                  </li>
+                ))}
+              </ol>
+              {songs.length > 99 && (
+                <p className="mt-3 text-xs text-danger-text">
+                  This service plan has more than 99 songs. Positions after 99 cannot be addressed by MIDI velocity.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-warning-text">Load a service plan to see its song-to-velocity map.</p>
+          )}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field heldChange={midiView && Boolean(savedMidi) && channel !== String(savedMidi!.channel)} label="MIDI channel">
+            <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setChannel(event.target.value)} value={channel} />
+          </Field>
+          <Field heldChange={midiView && Boolean(savedMidi) && note !== String(savedMidi!.note)} label="Fixed note">
+            <Select
+              disabled={pendingSettingsSave}
+              onChange={(event) => setNote(event.target.value)}
+              value={note}
+            >
+              {midiNoteOptions.map((option) => (
+                <option key={option.note} value={option.note}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field heldChange={midiView && Boolean(savedMidi) && debounce !== String(savedMidi!.debounce_ms)} label="Debounce (ms)">
+            <Input className="tabular-nums" disabled={pendingSettingsSave} inputMode="numeric" onChange={(event) => setDebounce(event.target.value)} value={debounce} />
+          </Field>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {cues.map(([cue, label]) => (
+            <Field heldChange={heldVelocity(cue)} key={cue} label={`${label} velocity`}>
+              <Input
+                aria-label={`${label} velocity`}
+                className="tabular-nums"
+                disabled={pendingSettingsSave}
+                inputMode="numeric"
+                min={100}
+                max={127}
+                onChange={(event) => setVelocities((current) => ({ ...current, [cue]: event.target.value }))}
+                value={velocities[cue]}
+              />
+            </Field>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
+        {midi && !enabled && (
+          <InlineAlert className="mt-3" tone="warning">
+            Save the MIDI settings above, then restart StagePilot to discover and connect the input device.
+          </InlineAlert>
+        )}
+        </Disclosure>
       </div>
 
       <div className="mt-4 overflow-hidden rounded-ds-lg bg-surface-950/30">

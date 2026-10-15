@@ -293,6 +293,102 @@ describe("useStagePilot", () => {
     expect(result.current.error).not.toContain("interrupted");
   });
 
+  describe("automatic Try again after a restart (owner, 2026-10-14)", () => {
+    const down = () => new TypeError("Failed to fetch");
+    const failAllPanelLoads = () => {
+      mockedGetSettings.mockRejectedValue(down());
+      mockedGetMidiInputs.mockRejectedValue(down());
+      mockedGetLightsStatus.mockRejectedValue(down());
+      mockedGetPlanningCenterStatus.mockRejectedValue(down());
+    };
+
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("retries the panel loads on its own once StagePilot is reachable, with no button press", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      failAllPanelLoads();
+      const { result } = renderHook(() => useStagePilot());
+      await waitFor(() => expect(result.current.midiError).toBe("Can't reach StagePilot. Check that it is running, then try again."));
+      expect(result.current.lightingError).toBe("Can't reach StagePilot. Check that it is running, then try again.");
+
+      // The backend comes up. Nobody clicks Try again.
+      mockedGetSettings.mockResolvedValue(settings);
+      mockedGetMidiInputs.mockResolvedValue(midi);
+      mockedGetPlanningCenterStatus.mockResolvedValue({
+        connection_status: "disconnected", configured: false, app_id: null, service_type_id: null,
+        planning_center_secret_saved: false, connection_method: "manual", oauth_connected: false, oauth_needs_reconnect: false, detail: null,
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+
+      await waitFor(() => expect(result.current.midiError).toBeNull());
+      expect(result.current.settingsError).toBeNull();
+      expect(result.current.midi).toEqual(midi);
+    });
+
+    it("backs off (0.5s, 1s, 2s, 4s, then every 5s) while it still cannot reach StagePilot, then stops once it can", async () => {
+      // A fully manual clock (no real time leaking in), so every retry lands at an exact, repeatable moment.
+      vi.useFakeTimers({ shouldAdvanceTime: false });
+      const t0 = Date.now();
+      const times: number[] = [];
+      let up = false;
+      mockedGetSettings.mockRejectedValue(down());
+      mockedGetLightsStatus.mockRejectedValue(down());
+      mockedGetPlanningCenterStatus.mockRejectedValue(down());
+      mockedGetMidiInputs.mockImplementation(async () => {
+        times.push(Date.now() - t0);
+        if (!up) throw down();
+        return midi;
+      });
+      const { result } = renderHook(() => useStagePilot());
+      const tick = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+      for (let i = 0; i < 160; i++) await tick(100); // 16s of the backend staying down
+      expect(result.current.midiError).toBe("Can't reach StagePilot. Check that it is running, then try again.");
+
+      // After the first automatic retry the gaps are 1s, 2s, 4s, then it holds at 5s.
+      const gaps = times.slice(2).map((t, i) => t - times[i + 1]!);
+      expect(gaps.slice(0, 5)).toEqual([1_000, 2_000, 4_000, 5_000].slice(0, gaps.length));
+      expect(times.length).toBeGreaterThanOrEqual(5);
+
+      // The backend comes up: the next retry succeeds, the error clears, and the retries stop.
+      up = true;
+      mockedGetSettings.mockResolvedValue(settings);
+      mockedGetLightsStatus.mockResolvedValue({
+        enabled: false, output_name: null, channel: 1, pulse_ms: 100, connection_status: "disconnected",
+        detail: null, outputs: [], last_cue: null, last_cue_at: null,
+      });
+      mockedGetPlanningCenterStatus.mockResolvedValue({
+        connection_status: "disconnected", configured: false, app_id: null, service_type_id: null,
+        planning_center_secret_saved: false, connection_method: "manual", oauth_connected: false, oauth_needs_reconnect: false, detail: null,
+      });
+      for (let i = 0; i < 70; i++) await tick(100);
+      expect(result.current.midiError).toBeNull();
+      const settled = times.length;
+      for (let i = 0; i < 400; i++) await tick(100);
+      expect(times.length).toBe(settled);
+    });
+
+    it("retries straight away when the live connection comes back", async () => {
+      failAllPanelLoads();
+      const { result } = renderHook(() => useStagePilot());
+      await waitFor(() => expect(result.current.midiError).not.toBeNull());
+      const socket = MockWebSocket.instances[0];
+      mockedGetMidiInputs.mockResolvedValue(midi);
+      await act(async () => { socket!.onopen?.(); });
+      await waitFor(() => expect(result.current.midiError).toBeNull());
+    });
+
+    it("never retries an error that is not 'Can't reach StagePilot' (a refusal or a server error stays put)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const refused = Object.assign(new Error("Bad request"), { status: 400 });
+      mockedGetMidiInputs.mockRejectedValue(refused);
+      const { result } = renderHook(() => useStagePilot());
+      await waitFor(() => expect(result.current.midiError).not.toBeNull());
+      const calls = mockedGetMidiInputs.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(mockedGetMidiInputs.mock.calls.length).toBe(calls);
+    });
+  });
+
   it("reports an interruption only after a live connection was established", async () => {
     const { result } = renderHook(() => useStagePilot());
     await waitFor(() => expect(result.current.state?.revision).toBe(1));
