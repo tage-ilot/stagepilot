@@ -187,14 +187,32 @@ class MidiSettings(BaseModel):
         return value
 
 
+PadColor = Literal["rose", "teal", "amber", "blue", "violet", "green"]
+"""Named pad colours. The UI maps each name to a design token; no raw colours are stored."""
+
+
+def _round_tenths(value: object) -> object:
+    """Cue times are kept to 0.1 s (the Live capture and timeline resolution)."""
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return round(float(value), 1)
+    return value
+
+
 class LightingCue(BaseModel):
     """One elapsed-time MIDI pulse sent to the lighting application."""
 
     id: UUID = Field(default_factory=uuid4)
-    at_seconds: int = Field(ge=0, le=86_399)
+    at_seconds: float = Field(ge=0, le=86_399)
     note: int = Field(ge=0, le=127)
     velocity: int = Field(default=127, ge=1, le=127)
     label: str = Field(default="", max_length=120)
+    color: PadColor | None = None
+
+    @field_validator("at_seconds", mode="before")
+    @classmethod
+    def at_seconds_is_tenths(cls, value: object) -> object:
+        return _round_tenths(value)
 
     @field_validator("label", mode="before")
     @classmethod
@@ -250,10 +268,16 @@ class OscLightingCue(BaseModel):
     """One elapsed-time one-shot OSC message. OSC has no note length or pulse."""
 
     id: UUID = Field(default_factory=uuid4)
-    at_seconds: int = Field(ge=0, le=86_399)
+    at_seconds: float = Field(ge=0, le=86_399)
     address: str = Field(min_length=1, max_length=256)
     args: list[OscArgument] = Field(default_factory=list, max_length=16)
     label: str = Field(default="", max_length=120)
+    color: PadColor | None = None
+
+    @field_validator("at_seconds", mode="before")
+    @classmethod
+    def at_seconds_is_tenths(cls, value: object) -> object:
+        return _round_tenths(value)
 
     @field_validator("address", mode="before")
     @classmethod
@@ -269,6 +293,42 @@ class OscLightingCue(BaseModel):
     @classmethod
     def label_is_trimmed(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
+
+
+class LightingPad(BaseModel):
+    """A saved, reusable cue on the cue board. Global (not per song).
+
+    A pad holds the payload for one method. A pad whose method is not the saved method is
+    kept but disabled in the UI, like the per-song cues of the inactive method.
+    """
+
+    id: UUID = Field(default_factory=uuid4)
+    label: str = Field(min_length=1, max_length=60)
+    color: PadColor | None = None
+    method: LightingMethod
+    address: str | None = Field(default=None, max_length=256)
+    args: list[OscArgument] = Field(default_factory=list, max_length=16)
+    note: int | None = Field(default=None, ge=0, le=127)
+    velocity: int = Field(default=127, ge=1, le=127)
+
+    @field_validator("label", "address", mode="before")
+    @classmethod
+    def text_is_trimmed(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def payload_matches_method(self) -> LightingPad:
+        if self.method is LightingMethod.OSC:
+            if self.address is None:
+                raise ValueError("An OSC pad needs an OSC address.")
+            validate_osc_address(self.address)
+            self.note = None
+        else:
+            if self.note is None:
+                raise ValueError("A MIDI pad needs a MIDI note.")
+            self.address = None
+            self.args = []
+        return self
 
 
 class SongLightingCueMap(BaseModel):
@@ -316,6 +376,7 @@ class LightsSettings(BaseModel):
     osc_host: str = Field(default="127.0.0.1", min_length=1, max_length=253)
     osc_port: int = Field(default=21_600, ge=1, le=65_535)
     cue_maps: dict[str, SongLightingCueMap] = Field(default_factory=dict)
+    pads: list[LightingPad] = Field(default_factory=list, max_length=64)
 
     @model_validator(mode="before")
     @classmethod
@@ -354,6 +415,9 @@ class LightsSettings(BaseModel):
         for key, cue_map in self.cue_maps.items():
             if key != cue_map.song_key:
                 raise ValueError("Every lighting cue-map key must match its song key.")
+        pad_ids = [pad.id for pad in self.pads]
+        if len(pad_ids) != len(set(pad_ids)):
+            raise ValueError("Every lighting pad must have a unique ID.")
         return self
 
 

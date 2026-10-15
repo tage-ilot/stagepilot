@@ -208,12 +208,16 @@ export interface PersistentSettings {
   };
 }
 
+export type PadColor = "rose" | "teal" | "amber" | "blue" | "violet" | "green";
+
 export interface LightingCue {
   id: string;
+  /** Elapsed seconds, kept to 0.1 s. */
   at_seconds: number;
   note: number;
   velocity: number;
   label: string;
+  color?: PadColor | null;
 }
 
 export type LightingMethod = "osc" | "midi";
@@ -230,6 +234,26 @@ export interface OscLightingCue {
   address: string;
   args: OscArgument[];
   label: string;
+  color?: PadColor | null;
+}
+
+/** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
+export interface LightingPad {
+  id: string;
+  label: string;
+  color: PadColor | null;
+  method: LightingMethod;
+  /** OSC pads. */
+  address: string | null;
+  args: OscArgument[];
+  /** MIDI pads. */
+  note: number | null;
+  velocity: number;
+}
+
+export interface LightingCaptureResponse extends LightsOperationResponse {
+  cue_id: string | null;
+  at_seconds: number | null;
 }
 
 export interface SongLightingCueMap {
@@ -256,6 +280,8 @@ export interface LightsSettings {
   channel: number;
   pulse_ms: number;
   cue_maps: Record<string, SongLightingCueMap>;
+  /** Older backends omit the cue board. */
+  pads?: LightingPad[];
 }
 
 export interface LightingOutput {

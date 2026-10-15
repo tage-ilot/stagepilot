@@ -157,7 +157,10 @@ def test_existing_saved_lighting_settings_stay_midi_and_cues_survive(tmp_path: P
     lights = LightsSettings.model_validate(legacy)
     assert lights.method is LightingMethod.MIDI
     cue_map = lights.cue_maps["song-1"]
-    assert [cue.model_dump(mode="json") for cue in cue_map.cues] == [legacy_cue]
+    # Times now load as tenths (65 -> 65.0) and a cue gains an unset colour; nothing else changes.
+    assert [cue.model_dump(mode="json") for cue in cue_map.cues] == [
+        {**legacy_cue, "at_seconds": 65.0, "color": None}
+    ]
     assert cue_map.osc_cues == []
 
     # Through the real settings file: old file without "method" loads as MIDI, then round-trips.

@@ -69,10 +69,17 @@ export const describeOscArguments = (args: OscArgument[]): string =>
 
 export const newOscCue = (id: string): OscLightingCue => ({ id, at_seconds: 0, address: "", args: [], label: "" });
 
-export const formatElapsed = (seconds: number) =>
-  `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+/** mm:ss, or mm:ss.t when the time is not a whole second (cue times are kept to 0.1 s). */
+export const formatElapsed = (seconds: number) => {
+  const tenths = Math.round(Math.max(0, seconds) * 10);
+  const whole = Math.floor(tenths / 10);
+  const mmss = `${String(Math.floor(whole / 60)).padStart(2, "0")}:${String(whole % 60).padStart(2, "0")}`;
+  return tenths % 10 === 0 ? mmss : `${mmss}.${tenths % 10}`;
+};
 
+/** Accepts mm:ss and mm:ss.t. Returns seconds, or null when the text is not a time. */
 export const parseElapsed = (value: string) => {
-  const match = /^(\d{1,3}):([0-5]\d)$/.exec(value.trim());
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  const match = /^(\d{1,3}):([0-5]\d)(?:\.(\d))?$/.exec(value.trim());
+  if (!match) return null;
+  return Math.round((Number(match[1]) * 60 + Number(match[2]) + Number(match[3] ?? 0) / 10) * 10) / 10;
 };

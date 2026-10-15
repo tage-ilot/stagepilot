@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime
 from typing import Literal, NoReturn, cast
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
@@ -12,9 +13,11 @@ from pydantic import ValidationError
 
 from stagepilot.api.remote_retry import RemoteRetryRoute
 from stagepilot.core.config import (
+    LightingCue,
     LightingMethod,
     LightsSettings,
     MidiSource,
+    OscLightingCue,
     ProPresenterSettings,
     Settings,
     SongLightingCueMap,
@@ -38,10 +41,14 @@ from stagepilot.core.settings import (
 from stagepilot.models.api import (
     ActionResponse,
     HealthResponse,
+    LightingCaptureRequest,
+    LightingCaptureResponse,
+    LightingCaptureUndoRequest,
     LightingCueMapRequest,
     LightingCueTestRequest,
     LightingOscCueTestRequest,
     LightingOutputResponse,
+    LightingPadsRequest,
     LightsOperationResponse,
     LightsSettingsRequest,
     LightsStatusResponse,
@@ -874,6 +881,7 @@ async def update_lights_settings(
             osc_host=settings.osc_host or current.osc_host,
             osc_port=settings.osc_port or current.osc_port,
             cue_maps=current.cue_maps,
+            pads=current.pads,
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from exc
@@ -934,6 +942,188 @@ async def update_lighting_cue_map(
     return LightsOperationResponse(
         accepted=True,
         message=message,
+        lights=_lights_response(await controller.snapshot()),
+    )
+
+
+def _cue_map_lock(request: Request) -> asyncio.Lock:
+    """One lock for every cue-map read-modify-write, so a capture, an undo and a cue-map save
+    never interleave and drop each other's cues."""
+
+    lock = getattr(request.app.state, "lights_cue_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        request.app.state.lights_cue_lock = lock
+    return cast(asyncio.Lock, lock)
+
+
+@router.put("/lights/pads", response_model=LightsOperationResponse)
+async def update_lighting_pads(
+    body: LightingPadsRequest,
+    request: Request,
+) -> LightsOperationResponse:
+    runtime = _runtime(request)
+    controller = runtime.lights_controller
+    if controller is None:
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
+    async with _cue_map_lock(request):
+        current = runtime.settings_service.effective_runtime_settings().lights
+        try:
+            updated = LightsSettings.model_validate(
+                {
+                    **current.model_dump(mode="json"),
+                    "pads": [p.model_dump(mode="json") for p in body.pads],
+                }
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from exc
+        try:
+            runtime.settings_service.persist_lights(updated)
+        except SettingsFileError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        runtime.settings.lights = updated
+    return LightsOperationResponse(
+        accepted=True,
+        message=f"Saved {len(body.pads)} lighting pads.",
+        lights=_lights_response(await controller.snapshot()),
+    )
+
+
+@router.post("/lights/capture", response_model=LightingCaptureResponse)
+async def capture_lighting_pad(
+    body: LightingCaptureRequest,
+    request: Request,
+) -> LightingCaptureResponse:
+    """Fire a pad through the saved method and, if asked, add it to the song's timeline."""
+
+    runtime = _runtime(request)
+    controller = runtime.lights_controller
+    if controller is None:
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
+    async with _cue_map_lock(request):
+        current = runtime.settings_service.effective_runtime_settings().lights
+        pad = next((item for item in current.pads if item.id == body.pad_id), None)
+        if pad is None:
+            raise HTTPException(status_code=404, detail="That pad no longer exists.")
+        if pad.method is not current.method:
+            raise HTTPException(
+                status_code=409,
+                detail=f"This pad is for {pad.method.value.upper()}; "
+                f"Lighting is set to {current.method.value.upper()}.",
+            )
+        if pad.method is LightingMethod.OSC:
+            assert pad.address is not None
+            fired = await controller.test_osc_cue(pad.address, pad.args)
+        else:
+            assert pad.note is not None
+            fired = await controller.test_cue(pad.note, pad.velocity)
+        cue_id: UUID | None = None
+        at_seconds: float | None = None
+        message = fired.message
+        if (
+            body.song_key is not None
+            and body.song_title is not None
+            and body.at_seconds is not None
+        ):
+            # Read the cue map again after the send: a timer restart or a cue-map save may have
+            # landed while the cue was going out, and there is no await from here to the write.
+            current = runtime.settings_service.effective_runtime_settings().lights
+            cue_maps = dict(current.cue_maps)
+            existing = cue_maps.get(body.song_key)
+            midi_cues = list(existing.cues) if existing else []
+            osc_cues = list(existing.osc_cues) if existing else []
+            if pad.method is LightingMethod.OSC:
+                assert pad.address is not None
+                osc_cue = OscLightingCue(
+                    at_seconds=body.at_seconds,
+                    address=pad.address,
+                    args=pad.args,
+                    label=pad.label,
+                    color=pad.color,
+                )
+                osc_cues.append(osc_cue)
+                cue_id, at_seconds = osc_cue.id, osc_cue.at_seconds
+            else:
+                assert pad.note is not None
+                midi_cue = LightingCue(
+                    at_seconds=body.at_seconds,
+                    note=pad.note,
+                    velocity=pad.velocity,
+                    label=pad.label,
+                    color=pad.color,
+                )
+                midi_cues.append(midi_cue)
+                cue_id, at_seconds = midi_cue.id, midi_cue.at_seconds
+            merged = SongLightingCueMap(
+                song_key=body.song_key,
+                song_title=body.song_title,
+                cues=midi_cues,
+                osc_cues=osc_cues,
+            )
+            cue_maps[body.song_key] = merged
+            updated = current.model_copy(update={"cue_maps": cue_maps}, deep=True)
+            try:
+                runtime.settings_service.persist_lights(updated)
+            except SettingsFileError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            runtime.settings.lights = updated
+            await controller.replace_cue_map(merged)
+    return LightingCaptureResponse(
+        accepted=fired.accepted,
+        message=message,
+        lights=_lights_response(await controller.snapshot()),
+        cue_id=cue_id,
+        at_seconds=at_seconds,
+    )
+
+
+@router.post("/lights/capture/undo", response_model=LightsOperationResponse)
+async def undo_lighting_capture(
+    body: LightingCaptureUndoRequest,
+    request: Request,
+) -> LightsOperationResponse:
+    runtime = _runtime(request)
+    controller = runtime.lights_controller
+    if controller is None:
+        raise HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
+    async with _cue_map_lock(request):
+        current = runtime.settings_service.effective_runtime_settings().lights
+        existing = current.cue_maps.get(body.song_key)
+        if existing is None:
+            return LightsOperationResponse(
+                accepted=False,
+                message="Nothing to undo.",
+                lights=_lights_response(await controller.snapshot()),
+            )
+        cues = [cue for cue in existing.cues if cue.id != body.cue_id]
+        osc_cues = [cue for cue in existing.osc_cues if cue.id != body.cue_id]
+        if len(cues) == len(existing.cues) and len(osc_cues) == len(existing.osc_cues):
+            return LightsOperationResponse(
+                accepted=False,
+                message="That capture was already changed or removed.",
+                lights=_lights_response(await controller.snapshot()),
+            )
+        merged = SongLightingCueMap(
+            song_key=existing.song_key,
+            song_title=existing.song_title,
+            cues=cues,
+            osc_cues=osc_cues,
+        )
+        cue_maps = dict(current.cue_maps)
+        if merged.cues or merged.osc_cues:
+            cue_maps[body.song_key] = merged
+        else:
+            cue_maps.pop(body.song_key, None)
+        updated = current.model_copy(update={"cue_maps": cue_maps}, deep=True)
+        try:
+            runtime.settings_service.persist_lights(updated)
+        except SettingsFileError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        runtime.settings.lights = updated
+        await controller.replace_cue_map(merged)
+    return LightsOperationResponse(
+        accepted=True,
+        message="Capture undone.",
         lights=_lights_response(await controller.snapshot()),
     )
 

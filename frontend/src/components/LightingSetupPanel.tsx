@@ -2,8 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type {
   ApplicationState,
+  LightingCaptureResponse,
   LightingCue,
   LightingMethod,
+  LightingPad,
   OscArgument,
   OscLightingCue,
   LightsSettingsInput,
@@ -27,7 +29,12 @@ import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
+import { LightingTimeline } from "./LightingTimeline";
+import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
+  formatElapsed,
+  parseElapsed,
   newOscCue,
   oscAddressError,
   oscHostError,
@@ -48,14 +55,6 @@ const midiNoteOptions = (mode: NoteDisplayMode) =>
     label: mode === "music" ? midiNoteName(note) : String(note),
   }));
 
-const formatElapsed = (seconds: number) =>
-  `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-
-const parseElapsed = (value: string) => {
-  const match = /^(\d{1,3}):([0-5]\d)$/.exec(value.trim());
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
-};
-
 const newCueId = () => {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (value) => {
@@ -66,6 +65,16 @@ const newCueId = () => {
 };
 
 const songKey = (song: Song) => song.source_song_id ?? song.id;
+
+/** The cue-board actions the panel needs from the app (kept together so Dashboard stays small). */
+export interface LightingPanelActions {
+  onPressPad: (
+    padId: string,
+    capture?: { song_key: string; song_title: string; at_seconds: number },
+  ) => Promise<LightingCaptureResponse | null>;
+  onUndoCapture: (songKey: string, cueId: string) => Promise<boolean>;
+  onSavePads: (pads: LightingPad[]) => Promise<boolean>;
+}
 
 export function LightingSetupPanel({
   connectionStatus,
@@ -84,6 +93,9 @@ export function LightingSetupPanel({
   onTestOsc,
   onSaveCues,
   onClearAllCues,
+  onPressPad,
+  onUndoCapture,
+  onSavePads,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -101,7 +113,7 @@ export function LightingSetupPanel({
   onTestOsc?: (address: string, args: OscArgument[]) => void;
   onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod) => void;
   onClearAllCues?: (songs: Song[], method: LightingMethod) => void;
-}) {
+} & Partial<LightingPanelActions>) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
   const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
@@ -168,6 +180,79 @@ export function LightingSetupPanel({
     setOscCues(savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? []);
   }, [savedCueMap, selectedSongKey]);
 
+  // ---- Cue board, live capture and timeline ----
+  const pads = settings?.settings.lights.pads ?? [];
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("capture");
+  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
+  const [lastCapture, setLastCapture] = useState<{ songKey: string; cueId: string } | null>(null);
+  const [boardBusy, setBoardBusy] = useState(false);
+  const boardBusyRef = useRef(false);
+  const [clock, setClock] = useState(() => Date.now());
+  const playingSong = state.playing_song ?? state.current_song;
+  const timerRunning = state.timer?.status === "running" && Boolean(state.timer?.started_at);
+  const selectedSongRunning = timerRunning && selectedSong !== null
+    && playingSong !== null && playingSong !== undefined && songKey(playingSong) === songKey(selectedSong);
+  useEffect(() => {
+    setClock(Date.now());
+    if (!selectedSongRunning) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 100);
+    return () => window.clearInterval(timer);
+  }, [selectedSongRunning, state.timer?.started_at]);
+  const elapsed = selectedSongRunning
+    ? elapsedSince(state.timer?.started_at, state.timer?.position_seconds, clock)
+    : null;
+  const songLength = selectedSong?.duration_seconds ?? null;
+
+  const pressPad = async (pad: LightingPad) => {
+    if (!onPressPad || boardBusyRef.current) return;
+    boardBusyRef.current = true;
+    setBoardBusy(true);
+    try {
+      // Read the clock at the press, not at the last render tick.
+      const now = Date.now();
+      const live = selectedSongRunning && selectedSong
+        ? elapsedSince(state.timer?.started_at, state.timer?.position_seconds, now)
+        : null;
+      const capturing = captureMode === "capture" && live !== null && selectedSong !== null;
+      const at = capturing ? clampCueTime(snapTenths(live), songLength) : 0;
+      const response = await onPressPad(
+        pad.id,
+        capturing && selectedSong
+          ? { song_key: songKey(selectedSong), song_title: selectedSong.title, at_seconds: at }
+          : undefined,
+      );
+      if (!response) { setCaptureStatus(null); return; }
+      if (response.cue_id && selectedSong) {
+        setLastCapture({ songKey: songKey(selectedSong), cueId: response.cue_id });
+        setCaptureStatus(response.accepted
+          ? `Added at ${formatElapsed(response.at_seconds ?? at)}`
+          : `Added at ${formatElapsed(response.at_seconds ?? at)}, but the cue did not send: ${response.message}`);
+      } else if (!response.accepted) {
+        setCaptureStatus(response.message);
+      } else if (captureMode === "preview") {
+        setCaptureStatus("Fired in preview. Nothing was added to the song.");
+      } else {
+        setCaptureStatus("Fired. No song is running, so nothing was added.");
+      }
+    } finally {
+      boardBusyRef.current = false;
+      setBoardBusy(false);
+    }
+  };
+  const undoCapture = async () => {
+    if (!onUndoCapture || !lastCapture || boardBusyRef.current) return;
+    boardBusyRef.current = true;
+    setBoardBusy(true);
+    try {
+      const ok = await onUndoCapture(lastCapture.songKey, lastCapture.cueId);
+      setCaptureStatus(ok ? "Last capture undone." : "That capture was already changed or removed.");
+      setLastCapture(null);
+    } finally {
+      boardBusyRef.current = false;
+      setBoardBusy(false);
+    }
+  };
+
   const parsedSettings = useMemo<LightsSettingsInput | null>(() => {
     const osc = {
       osc_host: oscHost.trim(),
@@ -209,6 +294,16 @@ export function LightingSetupPanel({
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setOscCues(sortedCues);
     if (selectedSong) onSaveCues(selectedSong, sortedCues, "osc");
+  };
+
+  // Timeline edits go through the same save as the cue rows, so the two stay in sync.
+  const moveCue = (id: string, at: number) => {
+    if (method === "osc") persistOscCues(oscCues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
+    else persistCues(cues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
+  };
+  const removeCue = (id: string) => {
+    if (method === "osc") persistOscCues(oscCues.filter((cue) => cue.id !== id));
+    else persistCues(cues.filter((cue) => cue.id !== id));
   };
 
   const updateCue = (id: string, update: Partial<LightingCue>, save = false) => {
@@ -255,6 +350,10 @@ export function LightingSetupPanel({
   };
 
   const shownCues = method === "osc" ? oscCues : cues;
+  // Only the method on screen is drawn; cues of the other method stay saved.
+  const timelineMarkers: TimelineMarker[] = method === "osc"
+    ? oscCues.filter((cue) => cue.address !== "").map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || cue.address, color: cue.color ?? null }))
+    : cues.map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || `Note ${cue.note}`, color: cue.color ?? null }));
   const savedLighting = settings?.settings.lights ?? lights;
   const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
   const savedOutputName = savedLighting?.output_name ?? null;
@@ -486,13 +585,40 @@ export function LightingSetupPanel({
         {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
+        {onSavePads && (
+          <LightingCueBoard
+            busy={boardBusy || pendingOperation !== null}
+            canUndo={lastCapture !== null}
+            captureMode={captureMode}
+            onCaptureMode={setCaptureMode}
+            onPress={(pad) => void pressPad(pad)}
+            onSavePads={onSavePads}
+            onUndo={() => void undoCapture()}
+            pads={pads}
+            running={selectedSongRunning}
+            savedMethod={savedMethod}
+            status={captureStatus}
+            viewMethod={method}
+          />
+        )}
+        {selectedSong && (
+          <LightingTimeline
+            disabled={pendingOperation !== null}
+            markers={timelineMarkers}
+            onMove={moveCue}
+            onRemove={removeCue}
+            playhead={elapsed}
+            songLength={songLength}
+          />
+        )}
+
         <div className="mt-3 grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain" data-testid="lighting-cue-list">
           {method === "osc" && oscCues.map((cue) => (
             <OscCueRow
               canTest={savedMethod === "osc" && !draftDiffersFromSaved}
               cue={cue}
               disabled={pendingOperation !== null}
-              key={cue.id}
+              key={`${cue.id}-${cue.at_seconds}`}
               onCommit={(next) => persistOscCues(oscCues.map((item) => item.id === next.id ? next : item))}
               onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
               onTest={(address, args) => onTestOsc?.(address, args)}
@@ -506,7 +632,7 @@ export function LightingSetupPanel({
           {cues.map((cue) => (
             <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
               <Field label="Cue elapsed time">
-                <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
+                <Input aria-label="Cue elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
               </Field>
               <Field label="Lighting cue note">
                 <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>

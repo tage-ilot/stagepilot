@@ -23,6 +23,9 @@ import {
   simulateMidiCue,
   startPlanningCenterOAuth,
   testLightingCue,
+  captureLightingPad,
+  undoLightingCapture,
+  updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
   testProPresenter,
@@ -39,7 +42,9 @@ import type {
   ApplicationState,
   ConnectionStatus,
   HealthResponse,
+  LightingCaptureResponse,
   LightingCue,
+  LightingPad,
   LightsSettingsInput,
   LightsStatusResponse,
   GeneralSettingsInput,
@@ -949,6 +954,63 @@ export function useStagePilot() {
     }
   }, [claim, release, canConfigure]);
 
+  const saveLightingPads = useCallback(async (pads: LightingPad[]): Promise<boolean> => {
+    if (!canConfigure) return false;
+    if (!claim("lights-pads")) return false;
+    setLightingError(null);
+    try {
+      const response = await updateLightingPads(pads);
+      setLights(response.lights);
+      setSettings(await getSettings());
+      return true;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Lighting pads failed to save."));
+      return false;
+    } finally {
+      release("lights-pads");
+    }
+  }, [claim, release, canConfigure]);
+
+  /** Fires a pad; with `capture` it is also added to the song. One press per pad at a time. */
+  const pressLightingPad = useCallback(async (
+    padId: string,
+    capture?: { song_key: string; song_title: string; at_seconds: number },
+  ): Promise<LightingCaptureResponse | null> => {
+    if (!canOperate) return null;
+    if (!claim(`lights-pad-${padId}`)) return null;
+    setLightingError(null);
+    try {
+      const response = await captureLightingPad(padId, capture);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      if (!response.accepted) setLightingError(response.message);
+      if (capture && response.cue_id) setSettings(await getSettings());
+      return response;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Pad failed to fire."));
+      return null;
+    } finally {
+      release(`lights-pad-${padId}`);
+    }
+  }, [claim, release, canOperate]);
+
+  const undoLightingCapture_ = useCallback(async (songKey: string, cueId: string): Promise<boolean> => {
+    if (!canOperate) return false;
+    if (!claim("lights-undo")) return false;
+    try {
+      const response = await undoLightingCapture(songKey, cueId);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      setSettings(await getSettings());
+      return response.accepted;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Undo failed."));
+      return false;
+    } finally {
+      release("lights-undo");
+    }
+  }, [claim, release, canOperate]);
+
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -1086,6 +1148,9 @@ export function useStagePilot() {
     sendLightingTest,
     sendOscLightingTest,
     saveLightingCues,
+    saveLightingPads,
+    pressLightingPad,
+    undoLightingCapture: undoLightingCapture_,
     clearAllLightingCues,
     activateConfiguredServices,
   };
