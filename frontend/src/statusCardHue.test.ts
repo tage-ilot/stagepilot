@@ -71,6 +71,15 @@ describe("Now playing rail (owner 2026-10-14)", () => {
     expect(css).not.toMatch(/https?:\/\/[^)]*GeistMono/i);
   });
 
+  it("the countdown is 4px bigger than before and a hovered song row takes the live red-orange tint", () => {
+    const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
+    expect(src).toContain("text-[clamp(calc(3rem+4px),calc(5vw+4px),calc(5.4rem+4px))]");
+    expect(src).toContain("can-hover:bg-primary/[0.08]");
+    expect(src).toContain("group-hover:bg-primary/20 group-hover:text-primary-text");
+    // Generic (non-song) rows keep their own darker hover.
+    expect(src).toContain("can-hover:bg-surface-950/40");
+  });
+
   it("the label and elapsed time follow the rail (blue at rest, the live tint while running), and the plan title is 18px", () => {
     const src = readFileSync(`${process.cwd()}/src/components/Dashboard.tsx`, "utf8");
     expect(src).toContain('now-playing-tint text-live-back-text">Now playing</p>');

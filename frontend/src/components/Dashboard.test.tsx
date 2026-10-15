@@ -391,7 +391,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(brand).toContainElement(button);
     expect(screen.getByRole("heading", { name: "StagePilot" })).toHaveClass("select-none");
     expect(screen.getByRole("heading", { name: "StagePilot" })).toHaveClass(
-      "-translate-y-4",
+      "-translate-y-[18px]", // 2px higher than the old -translate-y-4 (owner, 2026-10-14)
     );
     expect(screen.getByRole("heading", { name: "StagePilot" })).not.toHaveClass("scale-[1.8]");
   });

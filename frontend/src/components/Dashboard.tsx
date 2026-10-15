@@ -347,10 +347,10 @@ function SongRow({ song, current, next, hoverWarmup }: { song: Song; current: bo
   return (
     <li
       ref={popoverHoverRef as unknown as Ref<HTMLLIElement>}
-      className={`group grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-ink/5 ${current ? "current-song-row" : ""}`}
+      className={`group grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-edge-subtle px-4 py-3 transition-colors duration-150 ease-out motion-reduce:transition-none can-hover:bg-primary/[0.08] ${current ? "current-song-row" : ""}`}
       {...popoverHoverProps}
     >
-      <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : next ? "bg-info/15 text-info-text group-hover:bg-info/25" : "bg-ink/5 text-ink-muted group-hover:bg-ink/10"}`}>
+      <span className={`grid h-7 w-7 place-items-center rounded-ds-lg text-xs font-bold tabular-nums transition-colors duration-150 motion-reduce:transition-none ${current ? "bg-primary text-on-primary" : next ? "bg-info/15 text-info-text group-hover:bg-info/25" : "bg-ink/5 text-ink-muted group-hover:bg-primary/20 group-hover:text-primary-text"}`}>
         {song.order}
       </span>
       <div className="min-w-0">
@@ -819,7 +819,7 @@ export function Dashboard({
     <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
       <header className="mb-5 grid grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_minmax(0,auto)] sm:gap-4">
         <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-y-1 sm:col-span-1">
-          <h1 className="relative z-10 -translate-y-4 shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
+          <h1 className="relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
               onClick={updater.openConfirmation}
@@ -1162,7 +1162,7 @@ export function Dashboard({
             <div className="mt-2 flex items-end justify-between gap-5">
               <div>
                 <p className="text-sm text-ink-muted">Time remaining</p>
-                <p className="operational-timer mt-1 font-mono text-[clamp(3rem,5vw,5.4rem)] font-light leading-none">{formatDuration(timerRemaining)}</p>
+                <p className="operational-timer mt-1 font-mono text-[clamp(calc(3rem+4px),calc(5vw+4px),calc(5.4rem+4px))] font-light leading-none">{formatDuration(timerRemaining)}</p>
               </div>
               <div className="elapsed-time-block pb-1 text-right">
                 <p className="text-sm font-semibold text-ink-muted sm:text-base">Elapsed time</p>
