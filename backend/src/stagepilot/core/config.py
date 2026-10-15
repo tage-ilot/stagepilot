@@ -209,18 +209,6 @@ class LightingMethod(StrEnum):
     MIDI = "midi"
 
 
-class OscPreset(StrEnum):
-    """Lighting applications with a known default OSC port. Presets only fill defaults."""
-
-    LIGHTKEY = "lightkey"
-    QLC_PLUS = "qlc_plus"
-    CHAMSYS = "chamsys"
-    ETC_EOS = "etc_eos"
-    GRANDMA = "grandma"
-    RESOLUME = "resolume"
-    CUSTOM = "custom"
-
-
 class OscArgument(BaseModel):
     """One typed OSC argument. The type is explicit so 1.0 stays a float and 1 an int."""
 
@@ -325,7 +313,6 @@ class LightsSettings(BaseModel):
     output_name: str | None = Field(default=None, max_length=512)
     channel: int = Field(default=1, ge=1, le=15)
     pulse_ms: int = Field(default=100, ge=10, le=2_000)
-    osc_preset: OscPreset = OscPreset.LIGHTKEY
     osc_host: str = Field(default="127.0.0.1", min_length=1, max_length=253)
     osc_port: int = Field(default=21_600, ge=1, le=65_535)
     cue_maps: dict[str, SongLightingCueMap] = Field(default_factory=dict)

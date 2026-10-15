@@ -17,7 +17,6 @@ from stagepilot.core.config import (
     LightsSettings,
     OscArgument,
     OscLightingCue,
-    OscPreset,
     SongLightingCueMap,
 )
 from stagepilot.core.event_bus import EventBus
@@ -136,7 +135,6 @@ def test_osc_host_must_not_contain_spaces() -> None:
 def test_fresh_install_defaults_to_osc_lightkey() -> None:
     lights = LightsSettings()
     assert lights.method is LightingMethod.OSC
-    assert lights.osc_preset is OscPreset.LIGHTKEY
     assert (lights.osc_host, lights.osc_port) == ("127.0.0.1", 21600)
     assert PersistentSettings().lights.method is LightingMethod.OSC
 
@@ -170,7 +168,7 @@ def test_existing_saved_lighting_settings_stay_midi_and_cues_survive(tmp_path: P
 
     data = json.loads(raw)
     del data["lights"]["method"]
-    for key in ("osc_preset", "osc_host", "osc_port"):
+    for key in ("osc_host", "osc_port"):
         data["lights"].pop(key, None)
     for cue_map_data in data["lights"]["cue_maps"].values():
         cue_map_data.pop("osc_cues", None)
@@ -185,7 +183,6 @@ def test_new_method_and_osc_settings_round_trip(tmp_path: Path) -> None:
     lights = LightsSettings(
         enabled=True,
         method=LightingMethod.OSC,
-        osc_preset=OscPreset.QLC_PLUS,
         osc_host="192.168.4.50",
         osc_port=7700,
         cue_maps={
@@ -202,11 +199,7 @@ def test_new_method_and_osc_settings_round_trip(tmp_path: Path) -> None:
     store.save(PersistentSettings(lights=lights))
     loaded = SettingsService(store, MemoryCredentialStore(), environ={}).load().lights
     assert loaded.method is LightingMethod.OSC
-    assert (loaded.osc_preset, loaded.osc_host, loaded.osc_port) == (
-        OscPreset.QLC_PLUS,
-        "192.168.4.50",
-        7700,
-    )
+    assert (loaded.osc_host, loaded.osc_port) == ("192.168.4.50", 7700)
     assert loaded.cue_maps["s"].osc_cues[0].args[0].value == 1
     assert loaded.cue_maps["s"].cues[0].note == 60
 

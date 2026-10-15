@@ -1007,7 +1007,6 @@ export function useStagePilot() {
         output_name: saved.lights.output_name,
         channel: saved.lights.channel,
         pulse_ms: saved.lights.pulse_ms,
-        osc_preset: saved.lights.osc_preset,
         osc_host: saved.lights.osc_host,
         osc_port: saved.lights.osc_port,
       });

@@ -1,14 +1,12 @@
 import { useState } from "react";
 
-import type { OscArgument, OscArgumentType, OscLightingCue, OscPreset } from "../types";
+import type { OscArgument, OscArgumentType, OscLightingCue } from "../types";
 import {
   argumentToDraft,
   formatElapsed,
   oscAddressError,
   oscHostError,
   oscPortError,
-  oscPresetInfo,
-  oscPresets,
   parseElapsed,
   parseOscArguments,
   type OscArgumentDraft,
@@ -25,28 +23,20 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
   { value: "bool", label: "True or false" },
 ];
 
-/** Host, port and preset. A preset only fills defaults; both fields stay editable. */
+/** Host and UDP port. The port has no default to guess at: each app listens on its own, so it is typed in. */
 export function OscConnectionFields({
-  preset, host, port, held, attempted, onPreset, onHost, onPort,
+  host, port, held, attempted, onHost, onPort,
 }: {
-  preset: OscPreset;
   host: string;
   port: string;
-  held: { preset: boolean; host: boolean; port: boolean };
+  held: { host: boolean; port: boolean };
   attempted: boolean;
-  onPreset: (preset: OscPreset) => void;
   onHost: (host: string) => void;
   onPort: (port: string) => void;
 }) {
-  const info = oscPresetInfo(preset);
   return (
     <div className="lighting-osc-connection mt-4">
       <div className="lighting-osc-fields grid gap-4">
-        <Field heldChange={held.preset} label="Preset">
-          <Select onChange={(event) => onPreset(event.target.value as OscPreset)} value={preset}>
-            {oscPresets.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </Select>
-        </Field>
         <Field error={attempted ? oscHostError(host) ?? undefined : undefined} heldChange={held.host} label="Host or IP address">
           <Input autoCapitalize="none" autoCorrect="off" onChange={(event) => onHost(event.target.value)} spellCheck={false} value={host} />
         </Field>
@@ -55,8 +45,7 @@ export function OscConnectionFields({
         </Field>
       </div>
       <p className="mt-2 text-type-body-sm text-ink-muted">
-        {info.pattern}
-        {info.port === null && preset !== "custom" ? " Enter the port your app listens on." : ""}
+        Enter the port your lighting app listens for OSC on. In Lightkey, control-click a cue and choose External Control, then Copy OSC Address, to get a cue's address.
       </p>
     </div>
   );
@@ -122,10 +111,9 @@ export function OscArgumentRows({
 
 /** One OSC cue. Edits stay local until every field is valid, then the cue is saved. */
 export function OscCueRow({
-  cue, preset, disabled, canTest, testReasonId, testDisabledReason, songDuration, onCommit, onRemove, onTest,
+  cue, disabled, canTest, testReasonId, testDisabledReason, songDuration, onCommit, onRemove, onTest,
 }: {
   cue: OscLightingCue;
-  preset: OscPreset;
   disabled: boolean;
   canTest: boolean;
   testReasonId?: string;
@@ -140,7 +128,6 @@ export function OscCueRow({
   const [label, setLabel] = useState(cue.label);
   const [drafts, setDrafts] = useState<OscArgumentDraft[]>(cue.args.map(argumentToDraft));
   const [touched, setTouched] = useState(cue.address === "");
-  const actions = oscPresetInfo(preset).actions;
 
   const parsedTime = parseElapsed(time);
   const timeError = parsedTime === null
@@ -176,26 +163,6 @@ export function OscCueRow({
         <Field label="Lighting cue label">
           <Input disabled={disabled} maxLength={120} onBlur={() => commit({})} onChange={(event) => setLabel(event.target.value)} value={label} />
         </Field>
-        {actions.length > 0 && (
-          <Field label="Action">
-            <Select
-              disabled={disabled}
-              onChange={(event) => {
-                const action = actions[Number(event.target.value)];
-                if (!action) return;
-                const nextDrafts = action.args.map(argumentToDraft);
-                setAddress(action.address);
-                setDrafts(nextDrafts);
-                if (!label) setLabel(action.label);
-                commit({ address: action.address, drafts: nextDrafts, label: label || action.label });
-              }}
-              value=""
-            >
-              <option value="">Fill from an action</option>
-              {actions.map((action, index) => <option key={action.label} value={index}>{action.label}</option>)}
-            </Select>
-          </Field>
-        )}
         <Field className="lighting-osc-address" error={touched ? addressError ?? undefined : undefined} label="OSC address">
           <Input
             autoCapitalize="none"
