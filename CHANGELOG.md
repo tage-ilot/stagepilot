@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+## [1.1.104-beta.37] - 2026-10-16
+
+### Added
+
+- Lighting can send OSC (UDP) as well as MIDI. OSC is the main method; MIDI stays
+  as the alternate. Only the saved method sends cues, and each method keeps its
+  own cue list, so switching never deletes anything.
+- Lighting cue board: saved reusable cues you press while a song plays to add a
+  cue at the current time, with "Preview only" and "Undo last capture". A visual
+  timeline shows the cues on the song, with drag-to-move, zoom, and labels that
+  stack so close cues stay readable. The whole Song lighting timeline is one
+  collapsible section that remembers whether you left it open.
+- Connection Access (Host, Local network, Internet) on the StagePilot panel is
+  one switch that saves as soon as you choose it. The dashboard PIN is always
+  required (default 1234); Remote access and its people appear under Internet.
+- The loading logo glides into the dashboard header, and the dashboard fades in
+  once it lands.
+- Dashboard widgets can be placed anywhere without overlapping; the spacer tool
+  is gone. New users and "Reset layout" get the same arrangement: Service plan
+  on the left, and Now playing, Manual controls and the event stream stacked
+  on the right.
+- The Now playing bar is blue at rest, sweeps to the live colour when the
+  countdown starts and keeps a lighter band moving down it, and sweeps back to
+  blue when it stops.
+
+### Changed
+
+- Services, Presentation and MIDI connect, switch and change settings without
+  restarting StagePilot. Switching a running show's source is refused with a
+  clear message until the timer is stopped, and settings fixed by an environment
+  variable say so. Concurrent changes are applied one at a time, so the last
+  save wins.
+- The header status pill is the notification: it grows into an info (blue) or
+  error (red) message for up to 5 seconds, then shrinks back. The logo no longer
+  moves at any window width.
+- Status words, pills and the Manual controls buttons use the bold pixel font;
+  the countdown and other numbers use Geist Mono. Manual controls always make
+  even rows, and Now playing and Manual controls cannot be resized to cut off
+  their content.
+- Playback: Playback host sits beside Scan Network, and network scanning and
+  connecting automatically are always on. The "Simulated MIDI" option is removed.
+- StagePilot panel: the status cards are Version, State revision, API endpoint
+  and WebSocket, with Advanced (Timezone first) under them.
+- The Presentation Look list reads "Current Look" for "leave the Look alone".
+- "Not connected" is now "Disconnected" everywhere.
+- After a restart StagePilot retries by itself when it cannot reach the backend.
+- Developer guides: DESIGN.md and the style guide were rewritten to match the app.
+
 ## [1.1.104-beta.36] - 2026-10-13
 
 ### Changed
