@@ -179,6 +179,16 @@ describe("ProPresenterSetupPanel", () => {
     );
   });
 
+  it("the first Look option, which leaves the Look alone, is called Current Look", () => {
+    render(
+      <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={{ ...status, looks: [] }} />,
+    );
+    const look = screen.getByRole("combobox", { name: "ProPresenter Look" }) as HTMLSelectElement;
+    expect(look.options[0]).toHaveTextContent("Current Look");
+    expect(look.options[0]!.value).toBe("");
+    expect(look).not.toHaveTextContent(/Do not change/);
+  });
+
   it("stages a Look change and applies it only when settings are saved", async () => {
     const onSave = vi.fn();
     const user = userEvent.setup();

@@ -222,7 +222,7 @@ export function ProPresenterSetupPanel({
             onChange={(event) => setLookId(event.target.value)}
             value={lookId}
           >
-            <option value="">Do not change the current Look</option>
+            <option value="">Current Look</option>
             {lookId && !lookDetected && (
               <option value={lookId}>Saved Look (currently unavailable)</option>
             )}

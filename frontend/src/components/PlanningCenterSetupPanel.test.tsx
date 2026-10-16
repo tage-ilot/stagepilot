@@ -226,7 +226,9 @@ describe("PlanningCenterSetupPanel", () => {
     renderPanel();
 
     expect(screen.getByRole("button", { name: /Manual API Connection/ })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("heading", { name: "Service plan configuration" })).toBeInTheDocument();
+    // The fields stand on their own: there is no "Service plan configuration" heading above them (owner, 2026-10-16).
+    expect(screen.queryByRole("heading", { name: "Service plan configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Service plan configuration")).not.toBeInTheDocument();
 
     for (const label of [
       "Service type",

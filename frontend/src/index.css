@@ -1158,7 +1158,7 @@ textarea:focus-visible {
   }
 }
 
-/* Playback API: the scan button on the left, the host choice (with Automatically Connect) on the right half;
+/* Playback API: the scan button on the left, the host choice on the right half;
    the host drops under the scan button when the panel is too narrow for two halves. */
 .playback-connect {
   container-type: inline-size;

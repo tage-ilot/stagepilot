@@ -482,10 +482,7 @@ export function PlanningCenterSetupPanel({
       </div>
 
       <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted">
-          Service plan configuration
-        </h3>
-        <div className="service-plan-fields mt-4 grid gap-4">
+        <div className="service-plan-fields grid gap-4">
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
             <Select
               disabled={busy || serviceTypes.length === 0}
