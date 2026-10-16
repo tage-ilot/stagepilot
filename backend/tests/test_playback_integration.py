@@ -208,7 +208,9 @@ async def application(
         midi_backend_factory=(lambda: midi) if midi else None,
     )
     inputs = controller(app)
-    inputs._step_timeout = 0.6
+    # A roomy step timeout: a slow CI runner (macOS Intel) once delayed a heartbeat past 0.6 s.
+    # Tests with a SILENT Playback set a short timeout themselves so they still fail fast.
+    inputs._step_timeout = 2.0
     try:
         async with (
             app.router.lifespan_context(app),
@@ -329,6 +331,8 @@ async def test_failure_never_persists_partial_result(failure: str) -> None:
         before = app.state.runtime.settings_service.snapshot().playback_api
         fake.disconnect_on_command = failure == "disconnect"
         fake.silent = failure == "silence"
+        if fake.silent:
+            inputs._step_timeout = 0.6
         fake.version_on_command = failure == "version"
         fake.wrap = failure == "wrap"
         if failure == "limit":
@@ -476,6 +480,7 @@ async def test_shutdown_cancels_discovery_without_saving() -> None:
     fake = FakePlayback()
     async with application(fake) as (app, _):
         inputs = controller(app)
+        inputs._step_timeout = 0.6
         fake.silent = True
         task = asyncio.create_task(inputs.discover_song_order())
         await wait_for(lambda: inputs.discovery == "running")
