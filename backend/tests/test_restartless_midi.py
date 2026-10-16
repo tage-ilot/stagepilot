@@ -38,6 +38,7 @@ def _app(
     backend: FakeMidiBackend,
     *,
     input_name: str | None = None,
+    environ: dict[str, str] | None = None,
 ) -> FastAPI:
     settings = Settings(
         integration_modes=IntegrationModes(
