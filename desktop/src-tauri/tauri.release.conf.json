@@ -3,7 +3,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json"
+        "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json"
       ]
     }
   },

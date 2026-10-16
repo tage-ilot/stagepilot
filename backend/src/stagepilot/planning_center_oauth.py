@@ -3,7 +3,7 @@
 The client_secret never reaches this machine: every call that needs it is
 relayed through the StagePilot control-plane Worker
 (`/v1/planning-center/oauth/flow|token|refresh`, added in phase 1), which
-holds the secret server-side. See docs/planning-center-oauth-design.md.
+holds the secret server-side.
 
 The transient-vs-permanent distinction here is deliberate and mirrors the
 Remote Access credential work (t_7bdec765 / t_460cf8dd): a network blip,

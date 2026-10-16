@@ -10,35 +10,17 @@ The macOS community release is ad-hoc signed without Hardened Runtime; it does
 not require Apple Developer ID or notarization. See
 [macOS ad-hoc signing](macos-adhoc-signing.md).
 
-## Private beta channel
+## Release channel
 
-The beta ships from `tage-ilot/stagepilot-beta` only; never tag, push, or release
-`tage-ilot/stagepilot` for a beta.
+StagePilot ships from `tage-ilot/stagepilot` with plain `X.Y.Z` versions (for example
+`2.41.0`). There is one channel: every install checks GitHub
+`releases/latest/download/latest.json`, not a control-plane broker. The base config and
+both release overlays select that endpoint, and no `STAGEPILOT_RELEASE_TOKEN` or broker
+deployment is required. Never embed a GitHub PAT in Tauri, frontend code, or an artifact.
 
-Latest published release at this refresh: `v1.1.104-beta.23`.
-Read current latest with `gh release view --repo tage-ilot/stagepilot-beta
---json tagName,isDraft,assets` before selecting a new, unused version.
-Historical release 1 was `v1.1.103-beta.6` at
-`e7af35a7c2e9e0bd53cec90eacb77c0511699058`; it is not today's beta.
-
-Five earlier attempts burned immutable tags and are left in place, unmoved:
-`v1.1.103-beta.1` (bootstrap failure), `v1.1.103-beta.2` (cross-platform mypy
-defect and an unusable signing key), `v1.1.103-beta.3` (stale `backend/uv.lock`
-aborted every `uv sync --locked`), `v1.1.103-beta.4` (five Windows-only backend
-test failures) and `v1.1.103-beta.5` (all signed builds passed; publication
-failed because the self-hosted runner has no `gh` CLI). Follow
-[the private beta release and acceptance plan](private-beta-release-and-acceptance.md)
-and the authoritative
-[native completion runbook](native-completion-runbook.md).
-
-The repository stays public indefinitely and the updater is live through
-GitHub `releases/latest/download/latest.json`, not a control-plane broker.
-Base config and both release overlays in this beta repository select that
-endpoint. The retained STABLE/BETA settings switch selects the runtime channel.
-No `STAGEPILOT_RELEASE_TOKEN` or broker deployment is required. Never embed a
-GitHub PAT in Tauri, frontend code, or an artifact. Fresh hardware acceptance,
-including discovery/install/relaunch and Gatekeeper/SmartScreen, remains
-UNPROVEN; use the single operator checklist in the native completion runbook.
+Read the current latest with `gh release view --repo tage-ilot/stagepilot --json tagName,isDraft,assets`
+before choosing a new, unused version. A failed release still occupies its tag, so
+the next release uses a higher version; tags are never moved or reused.
 
 ## One-time updater key setup
 
@@ -60,8 +42,8 @@ from accepting future updates.
 Configure GitHub without printing either secret:
 
 ```powershell
-gh secret set TAURI_SIGNING_PRIVATE_KEY --repo tage-ilot/stagepilot-beta < "$env:USERPROFILE\.tauri\stagepilot-updater.key"
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo tage-ilot/stagepilot-beta
+gh secret set TAURI_SIGNING_PRIVATE_KEY --repo tage-ilot/stagepilot < "$env:USERPROFILE\.tauri\stagepilot-updater.key"
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo tage-ilot/stagepilot
 ```
 
 The second command prompts securely. The release fails before building if

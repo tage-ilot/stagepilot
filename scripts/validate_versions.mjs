@@ -36,17 +36,17 @@ if (tauri.productName !== "StagePilot") throw new Error("The stable product name
 if (tauri.identifier !== "org.stagepilot.desktop") throw new Error("The stable bundle identifier changed.");
 if (tauri.app?.windows?.[0]?.label !== "main") throw new Error("The stable main window label changed.");
 if (tauri.bundle?.createUpdaterArtifacts !== true) throw new Error("Updater artifacts are not enabled.");
-if (tauri.plugins?.updater?.endpoints?.[0] !== "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json") {
+if (tauri.plugins?.updater?.endpoints?.[0] !== "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json") {
   throw new Error("The main updater endpoint is missing or changed.");
 }
 if (!tauri.plugins?.updater?.pubkey || tauri.plugins.updater.pubkey === "STAGEPILOT_UPDATER_PUBLIC_KEY_REQUIRED") {
   throw new Error("A real Tauri updater public key must replace STAGEPILOT_UPDATER_PUBLIC_KEY_REQUIRED before release.");
 }
-const betaEndpoint = "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json";
+const updaterEndpoint = "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
 for (const file of ["desktop/src-tauri/tauri.release.conf.json", "desktop/src-tauri/tauri.macos.conf.json"]) {
   const overlay = JSON.parse(read(file));
-  if (overlay.plugins?.updater?.endpoints?.[0] !== betaEndpoint) {
-    throw new Error(`The beta updater endpoint is missing or changed in ${file}.`);
+  if (overlay.plugins?.updater?.endpoints?.[0] !== updaterEndpoint) {
+    throw new Error(`The updater endpoint is missing or changed in ${file}.`);
   }
 }
 

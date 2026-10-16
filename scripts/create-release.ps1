@@ -14,7 +14,7 @@ Set-StrictMode -Version Latest
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 . (Join-Path $PSScriptRoot "release-helpers.ps1")
-$BetaRepo = "tage-ilot/stagepilot-beta"
+$Repo = "tage-ilot/stagepilot"
 $env:GIT_PAGER = "cat"
 $env:PAGER = "cat"
 
@@ -72,8 +72,8 @@ if ($LASTEXITCODE -ne 0 -or $GitPrefix) {
 }
 
 $OriginUrl = (git remote get-url origin 2>$null)
-if ($LASTEXITCODE -ne 0 -or -not (Test-BetaOrigin $OriginUrl)) {
-    throw "origin is '$OriginUrl'. This script releases the private beta ($BetaRepo) only; it will not tag or push anything else."
+if ($LASTEXITCODE -ne 0 -or -not (Test-ReleaseOrigin $OriginUrl)) {
+    throw "origin is '$OriginUrl'. This script releases $Repo only; it will not tag or push anything else."
 }
 
 if (-not $env:CARGO_TARGET_DIR -and $GitTopLevel.StartsWith("//")) {
@@ -83,23 +83,23 @@ if (-not $env:CARGO_TARGET_DIR -and $GitTopLevel.StartsWith("//")) {
 
 Invoke-Checked "Verify GitHub authentication" { gh auth status }
 
-$RemoteTags = @(gh api repos/$BetaRepo/tags --paginate --jq '.[].name')
+$RemoteTags = @(gh api repos/$Repo/tags --paginate --jq '.[].name')
 if ($LASTEXITCODE -ne 0 -or -not $RemoteTags) {
-    throw "Could not read the existing StagePilot beta tags on GitHub."
+    throw "Could not read the existing StagePilot version tags on GitHub."
 }
-$LatestBeta = Get-LatestBetaTag $RemoteTags
-$Suggested = Get-NextBetaVersion $RemoteTags
+$Latest = Get-LatestTag $RemoteTags
+$Suggested = Get-NextVersion $RemoteTags
 $SuggestedTag = "v$Suggested"
-Write-Host "`nLatest GitHub beta: StagePilot $($LatestBeta.Tag)" -ForegroundColor Cyan
+Write-Host "`nLatest GitHub release: StagePilot $($Latest.Tag)" -ForegroundColor Cyan
 
 if (-not $Version) {
-    $Version = Read-Host "New StagePilot beta version (default $SuggestedTag)"
+    $Version = Read-Host "New StagePilot version (default $SuggestedTag)"
     if (-not $Version) {
         $Version = $SuggestedTag
     }
 }
 $Version = $Version.Trim().TrimStart("v")
-Assert-BetaVersion $Version $RemoteTags
+Assert-ReleaseVersion $Version $RemoteTags
 
 $Tag = "v$Version"
 $CurrentBranch = (git branch --show-current).Trim()
@@ -258,7 +258,7 @@ if (Test-Path "tools/multitracks-cues/package.json") {
 }
 
 Invoke-Checked "Release workflow runner boundary" { python scripts/validate_workflow_runners.py }
-Invoke-Checked "Beta source export audit" { node scripts/audit_beta_release.mjs source }
+Invoke-Checked "Source export audit" { node scripts/audit_release.mjs source }
 
 Invoke-Checked "Check the release diff" { git --no-pager diff --check }
 
@@ -292,19 +292,19 @@ Write-Host "`nTag $Tag is pushed. GitHub builds the Windows, Intel Mac and Apple
 $RunId = $null
 for ($attempt = 0; $attempt -lt 12 -and -not $RunId; $attempt += 1) {
     Start-Sleep -Seconds 5
-    $RunId = gh run list --repo $BetaRepo --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
+    $RunId = gh run list --repo $Repo --workflow release-macos.yml --event push --branch $Tag --limit 1 --json databaseId --jq '.[0].databaseId'
 }
 if (-not $RunId) {
-    throw "The tag was pushed, but the GitHub release workflow was not found. Check https://github.com/$BetaRepo/actions manually."
+    throw "The tag was pushed, but the GitHub release workflow was not found. Check https://github.com/$Repo/actions manually."
 }
-Write-Host "Release run: https://github.com/$BetaRepo/actions/runs/$RunId"
+Write-Host "Release run: https://github.com/$Repo/actions/runs/$RunId"
 Write-Host "A background watcher on the Hermes host reports the result to WhatsApp; you do not need to keep this window open." -ForegroundColor Cyan
 
 if ($env:STAGEPILOT_RELEASE_WATCH -eq "1") {
     Invoke-Checked "Build and publish StagePilot $Tag on GitHub" {
-        gh run watch $RunId --repo $BetaRepo --interval 30 --exit-status
+        gh run watch $RunId --repo $Repo --interval 30 --exit-status
     }
-    $ReleaseUrl = gh release view $Tag --repo $BetaRepo --json url --jq '.url'
+    $ReleaseUrl = gh release view $Tag --repo $Repo --json url --jq '.url'
     Write-Host "`nStagePilot $Tag is published:" -ForegroundColor Green
     Write-Host $ReleaseUrl
 }

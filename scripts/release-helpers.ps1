@@ -1,49 +1,47 @@
 # Pure helpers for create-release.ps1 (no network, no git writes) so they can be tested anywhere:
 #   pwsh -NoProfile -File scripts/release-helpers.test.ps1
 
-$BetaTagPattern = '^v(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$'
+$TagPattern = '^v(\d+)\.(\d+)\.(\d+)$'
 
-function ConvertTo-BetaVersionObject {
+function ConvertTo-VersionObject {
     param([Parameter(Mandatory)][string]$Tag)
-    if ($Tag -match $BetaTagPattern) {
+    if ($Tag -match $TagPattern) {
         return [pscustomobject]@{
-            Tag  = $Tag
-            Base = [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
-            Beta = [int]$Matches[4]
+            Tag     = $Tag
+            Version = [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
         }
     }
     return $null
 }
 
-# Highest beta tag by (base version, beta number). Burned tags (a failed release still occupies its
-# tag) are included on purpose, so the suggestion is never an occupied version.
-function Get-LatestBetaTag {
+# Highest X.Y.Z tag. Burned tags (a failed release still occupies its tag) are included on purpose,
+# so the suggestion is never an occupied version.
+function Get-LatestTag {
     param([string[]]$Tags)
-    $parsed = @($Tags | ForEach-Object { ConvertTo-BetaVersionObject $_ } | Where-Object { $_ })
+    $parsed = @($Tags | ForEach-Object { ConvertTo-VersionObject $_ } | Where-Object { $_ })
     if (-not $parsed) { return $null }
-    return $parsed | Sort-Object -Property @{Expression = { $_.Base }; Descending = $true }, @{Expression = { $_.Beta }; Descending = $true } | Select-Object -First 1
+    return $parsed | Sort-Object -Property @{Expression = { $_.Version }; Descending = $true } | Select-Object -First 1
 }
 
-function Get-NextBetaVersion {
+# Next suggestion: one patch past the highest tag (2.41.0 -> 2.41.1). Type a different version to jump.
+function Get-NextVersion {
     param([string[]]$Tags)
-    $latest = Get-LatestBetaTag $Tags
-    if (-not $latest) { throw "GitHub does not contain a beta version tag (vX.Y.Z-beta.N)." }
-    return "$($latest.Base)-beta.$($latest.Beta + 1)"
+    $latest = Get-LatestTag $Tags
+    if (-not $latest) { throw "GitHub does not contain a version tag (vX.Y.Z)." }
+    $v = $latest.Version
+    return "$($v.Major).$($v.Minor).$($v.Build + 1)"
 }
 
-# $true only for X.Y.Z-beta.N that sorts strictly after the latest existing beta tag.
-function Assert-BetaVersion {
+# Throws unless the version is X.Y.Z and sorts strictly after the latest existing tag.
+function Assert-ReleaseVersion {
     param([Parameter(Mandatory)][string]$Version, [string[]]$Tags)
-    if ($Version -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') {
-        throw "Version '$Version' is not a beta version. Use X.Y.Z-beta.N (the beta asset audit requires it)."
+    if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "Version '$Version' is not valid. Use X.Y.Z (the release audit requires it)."
     }
-    $candidate = ConvertTo-BetaVersionObject "v$Version"
-    $latest = Get-LatestBetaTag $Tags
-    if ($latest) {
-        $newer = ($candidate.Base -gt $latest.Base) -or (($candidate.Base -eq $latest.Base) -and ($candidate.Beta -gt $latest.Beta))
-        if (-not $newer) {
-            throw "Version $Version is not newer than the latest beta tag $($latest.Tag)."
-        }
+    $candidate = ConvertTo-VersionObject "v$Version"
+    $latest = Get-LatestTag $Tags
+    if ($latest -and -not ($candidate.Version -gt $latest.Version)) {
+        throw "Version $Version is not newer than the latest tag $($latest.Tag)."
     }
 }
 
@@ -54,8 +52,8 @@ function Test-ChangelogHasVersion {
     return [bool](Select-String -Path $Path -Pattern $pattern -Quiet)
 }
 
-# Only these origins may release the beta. Never the main product repository.
-function Test-BetaOrigin {
+# Only this repository may be released from.
+function Test-ReleaseOrigin {
     param([string]$Url)
-    return [bool]($Url -match '[:/]tage-ilot/stagepilot-beta(\.git)?/?$')
+    return [bool]($Url -match '[:/]tage-ilot/stagepilot(\.git)?/?$')
 }

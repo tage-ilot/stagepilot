@@ -1,15 +1,8 @@
-# StagePilot (beta channel)
+<h1>
+  <img src="https://avatars.githubusercontent.com/u/314876342?s=200&v=4" width="48" align="absmiddle">
+  StagePilot
+</h1>
 
-This repository carries **pre-release builds of StagePilot**. It ships beta
-versions ahead of the main channel so they can be tested before promotion.
-Existing users opt in to receiving these builds via the beta-updates toggle in
-the main app (see `BackendSetupPanel.tsx` in
-[tage-ilot/stagepilot](https://github.com/tage-ilot/stagepilot)); everyone
-else can download a beta installer directly from this repo's
-[Releases page](https://github.com/tage-ilot/stagepilot-beta/releases). Beta
-builds are less tested than the main channel and may contain regressions —
-use them for early feedback, not production-critical services, unless you
-understand the risk.
 
 StagePilot brings the moving parts of a live production into one dependable dashboard. It loads service plans from Planning Center, listens for MIDI cues from MultiTracks Playback, keeps a ProPresenter countdown in sync, and sends scheduled MIDI cues to a lighting controller such as Lightkey.
 
@@ -18,13 +11,13 @@ Production desktop builds check the signed
 stays unchanged when StagePilot is current; an **Update** button appears beside
 the logo only when a newer signed release is available.
 
-## Download StagePilot 1.1.102
+## Download StagePilot 2.41.0
 
-Download the installer for your computer from the [StagePilot v1.1.102 release](https://github.com/tage-ilot/stagepilot/releases/tag/v1.1.102):
+Download the installer for your computer from the [StagePilot v2.41.0 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.41.0):
 
-- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_x64-setup.exe)
-- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_x64.dmg)
-- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v1.1.102/StagePilot_1.1.102_aarch64.dmg)
+- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_x64-setup.exe)
+- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_x64.dmg)
+- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_aarch64.dmg)
 
 On **Windows**, run the installer and open StagePilot from the Start menu.
 
@@ -161,7 +154,7 @@ Test the complete signal path with the same computers, network, MIDI routes, Pla
 
 ## Contributing
 
-StagePilot is open source. Development, testing, and packaging instructions are in [CONTRIBUTING.md](CONTRIBUTING.md), with future direction in [ROADMAP.md](ROADMAP.md).
+StagePilot is open source. Development, testing, and packaging instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Maintainers can validate, version, push, and publish all supported installers
 with one PowerShell command. See [Creating a StagePilot release](docs/creating-a-release.md).

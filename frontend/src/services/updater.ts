@@ -52,7 +52,7 @@ export type UpdateRelaunchResult = {
 
 export interface UpdaterAdapter {
   isEnabled(): boolean;
-  check(options?: { betaEnabled?: boolean }): Promise<UpdateCandidate | null>;
+  check(): Promise<UpdateCandidate | null>;
   prepareRelaunch(version: string): Promise<void>;
   clearRelaunchMarker(): void;
   relaunch(): Promise<void>;
@@ -114,7 +114,7 @@ const normalizeProgress = (
   };
 };
 
-type ChannelUpdateMetadata = {
+type UpdateMetadata = {
   rid: number;
   currentVersion: string;
   version: string;
@@ -159,19 +159,11 @@ export const tauriUpdaterAdapter: UpdaterAdapter = {
     if (import.meta.env.PROD) return true;
     return import.meta.env.VITE_STAGEPILOT_ENABLE_UPDATER === "true";
   },
-  check: async (options) => {
-    // The stock `check()` export from `@tauri-apps/plugin-updater` cannot
-    // select a non-default endpoint at runtime (its `CheckOptions` has no
-    // endpoints override in 2.10.1), so channel selection goes through a
-    // custom Rust command instead. That command still builds its updater
-    // via the plugin's own `updater_builder()` and returns the same
-    // resource-table-backed metadata shape the plugin's own `check` IPC
-    // command does, so `Update.download()`/`Update.install()` — and their
-    // signature verification — are completely unchanged.
-    const metadata = await invoke<ChannelUpdateMetadata | null>(
-      "check_for_update_on_channel",
-      { betaEnabled: options?.betaEnabled ?? false },
-    );
+  check: async () => {
+    // The stock plugin `check()` cannot hand its resource id back to us, so the check goes through one
+    // Rust command that builds the updater from tauri.conf.json (same signature verification as the default
+    // path) and returns the same resource-table-backed metadata shape.
+    const metadata = await invoke<UpdateMetadata | null>("check_for_update");
     if (!metadata) return null;
     const update = new Update(metadata);
     return candidateFromUpdate(update);

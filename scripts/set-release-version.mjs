@@ -83,8 +83,8 @@ const replacements = [
   ["backend/src/stagepilot/__init__.py", /^__version__ = "[^"]+"/m, `__version__ = "${version}"`],
   [
     "backend/src/stagepilot/core/config.py",
-    /default="StagePilot\/[^ ]+ \(https:\/\/github\.com\/tage-ilot\/stagepilot-beta\)"/,
-    `default="StagePilot/${version} (https://github.com/tage-ilot/stagepilot-beta)"`,
+    /default="StagePilot\/[^ ]+ \(https:\/\/github\.com\/tage-ilot\/stagepilot\)"/,
+    `default="StagePilot/${version} (https://github.com/tage-ilot/stagepilot)"`,
   ],
   [
     "backend/src/stagepilot/core/config.py",
@@ -112,35 +112,27 @@ for (const [file, pattern, replacement] of replacements) {
   write(file, replaceOnce(content, pattern, replacement, file));
 }
 
-// README's download section advertises the STABLE channel from
-// github.com/tage-ilot/stagepilot. A pre-release ships through the private beta
-// channel instead, so rewriting these links would publish URLs to a main-repo
-// tag that does not exist. Only stable versions update the download section.
-const isPreRelease = version.includes("-");
-if (isPreRelease) {
-  console.log(`Left README.md download links on the stable channel; ${version} is a pre-release.`);
-} else {
-  let readme = read("README.md");
-  readme = replaceOnce(
-    readme,
-    /^## Download StagePilot [^\r\n]+/m,
-    `## Download StagePilot ${version}`,
-    "README.md",
-  );
-  readme = readme.replace(
-    /https:\/\/github\.com\/tage-ilot\/stagepilot\/releases\/(?:tag|download)\/v\d+\.\d+\.\d+/g,
-    (url) => url.replace(/v\d+\.\d+\.\d+$/, `v${version}`),
-  );
-  readme = readme.replace(
-    /\[StagePilot v\d+\.\d+\.\d+ release\]/,
-    `[StagePilot v${version} release]`,
-  );
-  readme = readme.replace(
-    /StagePilot_\d+\.\d+\.\d+_/g,
-    `StagePilot_${version}_`,
-  );
-  write("README.md", readme);
-}
+// README's download section advertises the current release from github.com/tage-ilot/stagepilot.
+let readme = read("README.md");
+readme = replaceOnce(
+  readme,
+  /^## Download StagePilot [^\r\n]+/m,
+  `## Download StagePilot ${version}`,
+  "README.md",
+);
+readme = readme.replace(
+  /https:\/\/github\.com\/(?:tage-ilot|huntrw6)\/stagepilot\/releases\/(?:tag|download)\/v\d+\.\d+\.\d+/g,
+  (url) => url.replace(/v\d+\.\d+\.\d+$/, `v${version}`),
+);
+readme = readme.replace(
+  /\[StagePilot v\d+\.\d+\.\d+ release\]/,
+  `[StagePilot v${version} release]`,
+);
+readme = readme.replace(
+  /StagePilot_\d+\.\d+\.\d+_/g,
+  `StagePilot_${version}_`,
+);
+write("README.md", readme);
 
 if (currentVersion === version) {
   console.log(`StagePilot is already version ${version}; verified and refreshed all version sources.`);

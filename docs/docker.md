@@ -187,10 +187,8 @@ The production managed install on `agent-hub` runs native (systemd user units:
 not this Docker Compose path — Docker/RTP-MIDI networking above applies if/when
 the MIDI-gateway container path is adopted there. `systemd-analyze --user verify`
 passed for both installed units; `loginctl show-user` reports `Linger=yes`;
-`/media/SONY` (the filesystem backing the repo checkout) is mounted. See
-`docs/remote-deployment-acceptance.md` → "Live verification" and "Backup and
-recovery — policy and procedure" for the current PCO/ProPresenter/MIDI status
-and the backup/restore procedure (target intentionally not yet provisioned).
+`/media/SONY` (the filesystem backing the repo checkout) is mounted. The
+backup/restore procedure for this target is intentionally not yet provisioned.
 
 ## Reverse proxy and security
 

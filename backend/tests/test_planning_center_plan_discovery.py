@@ -35,7 +35,7 @@ def client_settings() -> PlanningCenterSettings:
         app_id="test-app-id",
         secret="test-secret",
         request_timeout_seconds=3,
-        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot-beta)",
+        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot)",
     )
 
 

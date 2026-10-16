@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [2.41.0] - 2026-10-16
+
+StagePilot moves to one release channel and a simpler version number. This release
+rolls up every change made since 1.1.103 (the 1.1.104 pre-releases below), so everyone
+on 1.1.103 receives all of them in one update.
+
+### Changed
+
+- One channel: there is no longer a Stable/Beta switch. Every install updates from the
+  public GitHub releases of `tage-ilot/stagepilot`. The "Release channel" setting is
+  removed from Advanced; a saved value from an older version is ignored and dropped the
+  next time settings are saved. Beta installs update to this release automatically.
+- Versions are plain `X.Y.Z` from here on (this release is 2.41.0).
+- Release tooling now suggests the next patch and refuses anything that is not a plain
+  `X.Y.Z` newer than the latest tag.
+- The in-app update check uses one command (`check_for_update`) in place of the
+  per-channel one.
+
+### Includes
+
+All of the 1.1.104 pre-release work, notably: song arrangement (skip a song on either
+side of a Playback pairing without reordering anything), OSC lighting with cue board and
+timeline, Connection Access, a restartless Remote Access race fix, the animated loading
+logo, playback auto-connect always on, and the reworked design system. See the
+`1.1.104-beta.41` notes below for the full list.
+
 ## [1.1.104-beta.41] - 2026-10-16
 
 ### Added

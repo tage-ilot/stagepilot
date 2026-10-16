@@ -1,13 +1,8 @@
 # Updating StagePilot
 
-The public beta updater is live. `tage-ilot/stagepilot-beta` stays public
-indefinitely; its base config and release overlays select anonymous GitHub
-`releases/latest/download/latest.json`. No broker or release-download PAT is
-in this delivery path. The retained STABLE/BETA settings switch selects the
-runtime channel; stable uses the stable repository's public release metadata.
-Latest verified for this refresh was `v1.1.104-beta.23`, not a permanent target.
-Read latest again when testing. Fresh native update acceptance remains UNPROVEN;
-see [the operator checklist](native-completion-runbook.md#step-4--operator-hardware-acceptance-pass).
+StagePilot updates itself from the public GitHub releases of `tage-ilot/stagepilot`. The base
+config and the release overlays select anonymous `releases/latest/download/latest.json`; no
+broker or release-download token is involved.
 
 StagePilot checks after the desktop dashboard is ready and waits about five
 seconds so the check never blocks
@@ -47,7 +42,6 @@ involved. Drafting does not downgrade already-updated clients. Fix forward with
 a higher signed version; never reuse a tag or replace a published payload.
 If in-app recovery is impossible, install a safe build manually. macOS may
 require Privacy & Security approval for the browser-downloaded replacement.
-See [rollback](native-completion-runbook.md#step-5--rollback-of-a-live-public-updater).
 
 Tauri updater signatures are not Apple code signatures. Their contents are
 embedded in `latest.json` and allow installed StagePilot copies to authenticate

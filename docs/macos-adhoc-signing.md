@@ -71,7 +71,7 @@ flavor and must be tested against PyInstaller's extracted libraries. Tauri
 updater signatures remain independent: they authenticate updates inside
 StagePilot and are required whether Apple signing is ad-hoc or Developer ID.
 
-## Stable signing identity (from beta.30)
+## Stable signing identity (from 1.1.104-beta.30)
 
 Releases are re-signed after `tauri build` by `scripts/resign_macos_release.sh` with a
 free, self-created code-signing certificate ("StagePilot Beta Code Signing", public
@@ -100,7 +100,7 @@ macOS sees a new identity once. Click, once each: **Allow** for Local Network (r
 Network), **Always Allow** for the Keychain password prompt (Planning Center), and approve
 any "App Management"/background-item prompt. Later updates should show none.
 
-## Keychain and Local Network prompts (ad-hoc builds, up to beta.29)
+## Keychain and Local Network prompts (ad-hoc builds, up to 1.1.104-beta.29)
 
 
 Prompt sources on an ad-hoc build, what StagePilot does about each, and what cannot

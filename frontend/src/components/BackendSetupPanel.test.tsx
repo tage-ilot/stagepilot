@@ -59,7 +59,7 @@ beforeEach(() => {
 
 const saved = {
   timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false,
-  web_dashboard_pin_enabled: true, release_channel: "BETA",
+  web_dashboard_pin_enabled: true,
 };
 const settingsResponse = {settings: saved} as unknown as SettingsResponse;
 
@@ -341,9 +341,9 @@ describe("StagePilot panel sections", () => {
     expect(after(cards, advanced)).toBe(true);
     expect(after(advanced, access)).toBe(true);
     const labels = Array.from(document.querySelectorAll(".backend-advanced label")).map((l) => l.textContent);
-    expect(labels).toEqual(["Timezone", "Server port", "Log level", "Release channel"]);
+    expect(labels).toEqual(["Timezone", "Server port", "Log level"]);
     expect(document.querySelector(".backend-advanced")).toContainElement(screen.getByLabelText("Timezone"));
-    for (const label of ["Timezone", "Server port", "Log level", "Release channel"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
+    for (const label of ["Timezone", "Server port", "Log level"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
     expect(after(access, screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
   });
 
@@ -533,7 +533,7 @@ describe("Connection Access switch (owner 2026-10-14)", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0]?.[0]).toEqual({
       timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: true,
-      web_dashboard_pin_enabled: true, release_channel: "BETA",
+      web_dashboard_pin_enabled: true,
     });
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(0);
@@ -655,7 +655,7 @@ describe("Backend panel primitives", () => {
     expect(panel).toHaveAttribute("data-variant", "setup");
     for (const name of ["Timezone", "Server port"]) expect(screen.getByLabelText(name)).toHaveAttribute("data-state", "default");
     expect(screen.getByLabelText("Log level").tagName).toBe("SELECT");
-    expect(screen.getByLabelText("Release channel").tagName).toBe("SELECT");
+    expect(screen.queryByLabelText("Release channel")).not.toBeInTheDocument();
     expect(await screen.findByRole("radio", {name: "Internet"})).toBeInTheDocument();
   });
 
@@ -716,7 +716,7 @@ describe("Save configuration SaveBar", () => {
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     const expected = {
       timezone: "UTC", log_level: "INFO", server_port: 9000, lan_access: false,
-      web_dashboard_pin_enabled: true, release_channel: "BETA",
+      web_dashboard_pin_enabled: true,
     };
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0]?.[0]).toEqual(expected);
@@ -779,9 +779,9 @@ describe("Save configuration SaveBar", () => {
   });
 });
 
-describe("Log level and release channel are held until Save configuration", () => {
+describe("Log level and server port are held until Save configuration", () => {
   const bar = () => document.querySelector("[data-save-bar]")!;
-  const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA"};
+  const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true};
   const build = (over: Record<string, unknown> = {}, savedOver: Record<string, unknown> = {}) => (
     <BackendSetupPanel
       state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null}
@@ -793,10 +793,10 @@ describe("Log level and release channel are held until Save configuration", () =
     const onSave = vi.fn();
     render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    const channel = screen.getByLabelText("Release channel");
-    fireEvent.change(channel, {target: {value: "STABLE"}});
-    fireEvent.blur(channel);
-    fireEvent.keyDown(channel, {key: "Enter"});
+    const port = screen.getByLabelText("Server port");
+    fireEvent.change(port, {target: {value: "9000"}});
+    fireEvent.blur(port);
+    fireEvent.keyDown(port, {key: "Enter"});
     expect(onSave).not.toHaveBeenCalled();
     expect(bar()).toHaveTextContent("2 changes waiting. Not saved yet.");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
@@ -806,10 +806,10 @@ describe("Log level and release channel are held until Save configuration", () =
     const onSave = vi.fn();
     render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({...savedBase, log_level: "DEBUG", release_channel: "STABLE"});
+    expect(onSave).toHaveBeenCalledWith({...savedBase, log_level: "DEBUG", server_port: 9000});
   });
 
   it("the PIN requirement is always sent as on, even if an older saved file had it off", () => {
@@ -820,13 +820,13 @@ describe("Log level and release channel are held until Save configuration", () =
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({web_dashboard_pin_enabled: true});
   });
 
-  it("Discard restores log level and release channel", () => {
+  it("Discard restores log level and server port", () => {
     render(build());
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
     fireEvent.click(screen.getByRole("button", {name: "Discard"}));
     expect(screen.getByLabelText("Log level")).toHaveValue("INFO");
-    expect(screen.getByLabelText("Release channel")).toHaveValue("BETA");
+    expect(screen.getByLabelText("Server port")).toHaveValue("8765");
     expect(bar()).toHaveAttribute("data-state", "clean");
   });
 
@@ -834,12 +834,12 @@ describe("Log level and release channel are held until Save configuration", () =
     const onSave = vi.fn();
     const view = render(build({onSave}));
     fireEvent.change(screen.getByLabelText("Log level"), {target: {value: "DEBUG"}});
-    fireEvent.change(screen.getByLabelText("Release channel"), {target: {value: "STABLE"}});
+    fireEvent.change(screen.getByLabelText("Server port"), {target: {value: "9000"}});
     fireEvent.click(screen.getByRole("button", {name: "Save configuration"}));
     view.rerender(build({onSave, pending: true}));
     view.rerender(build({onSave, error: "boom"}));
     expect(screen.getByLabelText("Log level")).toHaveValue("DEBUG");
-    expect(screen.getByLabelText("Release channel")).toHaveValue("STABLE");
+    expect(screen.getByLabelText("Server port")).toHaveValue("9000");
     expect(bar()).toHaveAttribute("data-state", "error");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
   });
@@ -857,7 +857,7 @@ describe("Log level and release channel are held until Save configuration", () =
 
 describe("StagePilot hold-until-saved conformance (guard)", () => {
   const bar = () => document.querySelector("[data-save-bar]")!;
-  const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA"};
+  const savedBase = {timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true};
   const build = (over: Record<string, unknown> = {}) => (
     <BackendSetupPanel
       state={state} health={null} live={false} onClose={vi.fn()} error={null} message={null}
@@ -869,7 +869,6 @@ describe("StagePilot hold-until-saved conformance (guard)", () => {
     { label: "Timezone", value: "America/New_York", saved: "America/Los_Angeles", payload: { timezone: "America/New_York" } },
     { label: "Server port", value: "9000", saved: "8765", payload: { server_port: 9000 } },
     { label: "Log level", value: "DEBUG", saved: "INFO", payload: { log_level: "DEBUG" } },
-    { label: "Release channel", value: "STABLE", saved: "BETA", payload: { release_channel: "STABLE" } },
   ];
   it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved }) => {
     const onSave = vi.fn();
