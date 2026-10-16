@@ -4,8 +4,8 @@ name: StagePilot
 description: >-
   A dark, high-contrast live-production control surface. Calm slate panels,
   one deep red accent (#c7231d) for "live / primary", and unmistakable status colors,
-  readable at arm's length in a dim booth. Values are AS RENDERED today
-  unless marked CHANGED (decided) or OPEN (still needs an answer).
+  readable at arm's length in a dim booth. These tokens are the source of truth for the app:
+  npm run tokens:generate turns them into src/design-tokens.css and tailwind.config.js.
 
 colors:
   # --- Surfaces (darkest to lightest) ---
@@ -56,7 +56,7 @@ colors:
   integration-presentation: "#fe7821"    # DECIDED (owner, 2026-10-12): bright orange. UI label "Presentation" (ProPresenter today)
   integration-presentation-soft: "#fe7821"
   integration-presentation-text: "#fe802e"
-  integration-lighting: "#d53367"          # DECIDED (owner, 2026-10-12): pink-red. UI label "Lighting" (was "Lighting"). 3.9:1 on panels: fill/border/dot only. NEAR the error rose: see "Colour collisions"
+  integration-lighting: "#d53367"          # DECIDED (owner, 2026-10-12): pink-red. UI label "Lighting". 3.9:1 on panels: fill/border/dot only. NEAR the error rose: see "Colour collisions"
   integration-lighting-soft: "#d53367"
   integration-lighting-text: "#e687a5"
   integration-playback: "#4b73b0"        # DECIDED (owner, 2026-10-13): the slate-blue made clearly BLUE (hue 216, saturation 40%; was #56677b, hue 212, saturation 18%). 3.8:1 on panels and cards, so it works as a fill, dot, border and tint with no separate lifted copy. White text on it 4.8:1. MIDI has no colour of its own (configured under Playback)
@@ -333,858 +333,322 @@ elevation:                       # custom section (not in the Google spec; the l
   overlay: "0 8px 24px rgb(22 13 12 / 0.45), 0 24px 80px rgb(22 13 12 / 0.60)"   # DECIDED (owner approved, 2026-10-11): dialogs, toasts, popovers (replaces shadow-2xl).
 ---
 
-# StagePilot design reference
+# StagePilot design rules
 
-> **Status: DRAFT v3 for owner review. Not yet wired into the app.**
-> Extracted from `frontend/src/index.css`, `frontend/tailwind.config.js` and
-> `frontend/src/components/**` of `tage-ilot/stagepilot-beta` @ `cfb439f`
-> (1.1.104-beta.31). Edit the values in the YAML block above; prose below
-> explains intent. Markers used in comments: **CHANGED** = differs from what
-> renders today, on purpose; **OPEN** = needs your decision; **UNUSED** = defined
-> in code but never used by a component.
+This file is the single source of truth for how StagePilot looks and behaves. **The YAML block above is machine-read**: `npm run tokens:generate` (in `frontend/`) turns it into `src/design-tokens.css` and `tailwind.config.js`, `npm run lint` fails if those are stale, and CI runs `npx @google/design.md@0.4.0 lint DESIGN.md`. **This prose is for you (the agent or developer): it tells you what to do, how the existing screens were built, and how to add to them without breaking cohesion.** A human-facing visual version lives in the style guide (served on the LAN at `http://192.168.4.21:8099/`; source in `~/AgentHub-data/projects/stagepilot-design/styleguide/`).
 
-## Overview
+**How to use this file:** read §1 and §2 always. Then read the section for what you are touching (§3 tokens, §4 type, §5 components, §6 panels, §7 dashboard, §8 header, §9 saving, §10 words). Run the checklist in §11 before you open a PR. Where a rule says **MUST**, a test or lint enforces it or a reviewer will reject it. Where it names a file, that file is the reference implementation: copy its pattern, do not invent a parallel one.
 
-StagePilot is used by a tech running a live service, often in a dim booth,
-glancing at a screen while their hands are on something else. The interface
-is a **control surface, not a marketing page**: dark and low-glare, with large
-legible numbers, generous hit targets, and colour that carries meaning. It
-should feel calm when everything is fine and become impossible to miss when it
-is not.
+---
 
-1. **Calm slate, one hot accent.** Everything is a dark blue-grey panel except
-   the one thing that matters *right now*, which gets the primary red.
-2. **Colour means state.** Green, red (errors and warnings) and the connection colours are reserved for status, never
-   decoration.
-3. **Each service has an identity hue** so a user can tell Playback from
-   Services without reading.
+## 1. What this product is
 
-## Our look
+StagePilot is a **live-production control surface**. A tech runs a church service from it, in a dim booth, glancing at it while their hands are busy. Everything follows from that:
 
-**DECIDED (owner accepted, 2026-10-11), drawn from what the app already does.** The style in
-one line: **8-bit meets film flare, with a modern touch.** The app is a calm,
-modern control surface (Geist, clean panels, clear status colours) with two
-signatures that make it ours: a little pixel-art character and a warm,
-cinematic glow. Both are accents. Neither takes over.
+- **Calm when fine, impossible to miss when not.** Dark slate panels; colour appears only when it carries meaning.
+- **Usable with no training.** Controls sit where people expect them, labels say what will happen, and only the choices that make sense are offered. If a feature needs a manual, redesign it.
+- **Nothing surprising during a show.** Anything that could change what a running show sends or reads is held until the user presses **Save configuration** (§9).
+- **One look: "8-bit meets film flare, with a modern touch."**
+  - *Modern* is the baseline: Geist, clean panels, 8/12px corners, tokens only.
+  - *8-bit* is the app's **voice** for *system state*: the Geist Pixel Square font (status words, pills, connection labels, the Manual controls buttons, the service-plan title), the pixel loading bar, the phone spinner, the outlined logo. It means "StagePilot is telling you something about itself".
+  - *Film flare* is **light and warmth**: the photo background, the warm brown-red shadow lit from the upper left, the red rail and wash on the live item. The red light means **live or selected** and appears on at most one item per view.
+  - Both signatures are accents. Never use pixel fonts for body copy or form labels, pixelated borders on panels, neon outlines, gradients on ordinary controls, or extra film effects (grain, vignette, lens flare).
 
-### 8-bit: where it lives (system moments only)
-- **Yes:** the startup/loading bar (its fill KEEPS the pixel stripes, decided:
-  the stripes must not be flattened or stretched) and the phone spinner (stepped pixel
-  stripes, hard 5px offset shadow, `image-rendering: pixelated`, animation in
-  `steps()`), and the outlined arcade wordmark (StagePilot Logo with its 1px
-  black outline), and the generic pixel-art service icons
-  (checklist, monitor, audio tracks, lighting).
-- **Rule:** pixel styling marks *the app doing something itself* (starting,
-  loading, connecting, failing). It is blue for progress, red when slow, red
-  when failed.
-- **No:** pixel fonts for body text or labels, pixelated borders or corners on
-  panels and buttons, retro "game" wording, 8-bit sound or icons everywhere.
-  Controls stay modern: 8px corners, Geist, clean borders.
+## 2. The ten laws
 
-### Film flare: where it lives (light and warmth)
-- **Yes:** the photo background, the warm brown-red soft shadow lit from the
-  upper left, the red wash and left rail on the live item, and the faint
-  warm glow behind the timer.
-- **Rule:** the red light means *live or selected*. Glow is earned: it shows on
-  at most one live item per view. Everything else is quiet slate.
-- **No:** glow, neon outlines or gradients on ordinary panels, buttons or text;
-  cool grey or pure black shadows; extra film effects (grain overlays, lens
-  flares, vignettes) stacked on top of the photo.
+1. **Tokens only.** Every colour, radius, shadow, font size and spacing comes from the YAML above. No raw hex, `rgb()`, `hsl()`, stock Tailwind palette classes (`red-500`), `text-white`/`bg-black`, or `transition-all` in `frontend/src` (enforced by `src/tokensOnlyAll.test.ts` and `components/ui/tokensOnly.test.ts`; `index.css` may hold `rgb()` shadows only). Need a value that does not exist? Add the token to the YAML first, run `npm run tokens:generate`, then use it.
+2. **Colour means one thing.** State colours = state. Connection colours = identity. The primary red = the one primary action and the live item. Teal = information. Never repeat a colour for a second meaning (§3).
+3. **A state is never colour alone.** Pair every state colour with a word or icon (`Connected`, `Error`, `Not saved yet`).
+4. **Build from `components/ui/`.** `Panel`, `Button`, `Badge`/`StatusBadge`, `Field`/`Input`/`Select`, `ConnectionMethod`, `Disclosure`, `SaveBar`, `ScrollRegion`, `SectionLabel`, `InlineAlert`, `Dialog`, `Toast`. Extend a primitive (add a variant or prop) rather than writing a second look.
+5. **One panel, one recipe.** Every connection's configuration panel follows the same anatomy in the same order (§6). New app-wide options go in the **StagePilot** panel, never into a connection.
+6. **Containers decide layout, not the window.** Grids inside panels and widgets switch with `@container` queries on the component's own width (§7). Only the page shell and status cards use viewport breakpoints.
+7. **Hold, don't surprise.** Disruptive settings are held until **Save configuration**; harmless or reversible ones save the moment they change and say so (§9).
+8. **One word per thing.** Use the vocabulary in §10. A brand name (Planning Center, ProPresenter) appears only where the user signs in to it or an API is specific to it.
+9. **Respect reduced motion and touch.** Every animation has a `prefers-reduced-motion` fallback; nothing important is hover-only; targets are 44px (36px for ordinary buttons with a mouse).
+10. **Keep the file true.** If you change what the UI does, update this file in the same PR (an out-of-date rule is worse than none). Do not mix a visual change and a behaviour change in one PR.
 
-### Modern: the baseline
-Geist (bundled), 8px/12px corners, the three widget borders, tokens only,
-44/36px targets, plain verb-and-object labels, visible status with words.
+---
 
-### Avoid (generic defaults that would blur our identity)
-Purple-to-blue gradients; glassmorphism on every panel (blur only on the
-header and popovers, as today); the same icon + heading + text card repeated
-for everything; a pulsing dot on things that are not live; invented numbers or
-metrics; decorative animation that moves or delays a control; gradient text;
-emoji as icons; nested rounded boxes that add no hierarchy; and any new colour
-that is not a status, a service, or the primary red.
+## 3. Colour
 
-### Check before shipping a screen
-1. **Does the 8-bit or film touch appear only where the rules above allow?**
-2. **Remove each decorative layer in your head.** If meaning, state or action
-   survive, delete it.
-3. Run `audit-ai-design-slop` (evidence-based review of generic patterns and
-   real UI defects) and `web-design-guidelines` (accessibility and UX review)
-   on the changed files; run `design.md lint` on this file.
+### 3.1 Surfaces and text
+| Token (Tailwind class) | Use |
+| --- | --- |
+| `background` | page, under the photo (the photo is `fixed`, behind scrolling content; keep it) |
+| `surface-panel` (`panel`) | widgets and configuration panels (drawn at 94% alpha) |
+| `surface-panel-strong` (`panel-strong`) | the live Now playing widget |
+| `card` | status cards, sub-cards |
+| `surface-950` | inputs, dialogs, toasts, popovers, scroll regions, the header pill: **anything recessed reads as a dark well** |
+| `ink` `#f8f4ec` | headings, key figures, timers, text people type |
+| `ink-body` `#cbd5e1` | default copy |
+| `ink-muted` `#94a3b8` | labels, kickers, hints, placeholders (7:1 on every surface) |
 
-## Colors
-- **Surfaces.** The page is `background` over the film-flare photo (decided: keep the photo). Cards sit on
-  `panel` / `panel-strong` / `card`. Inputs, dialogs and toasts use
-  `surface-950` (near black), so they read as wells.
-- **Text ladder (decided).** Three colours: `text` (`#f8f4ec`, the warm
-  off-white: headings, key figures, timers, text you type) > `text-body`
-  (`#cbd5e1`, default copy) > `text-muted` (`#94a3b8`, labels, kickers, hints,
-  placeholders). **`text-strong` is not a colour:** it is `text` set bolder
-  (weight 700) for emphasis. The old cool-white `#f1f5f9` is gone. The old
-  `text-quiet` (slate-500, 72 uses, only 3.4:1) is replaced by `text-muted`
-  (7:1 or better on every surface).
-- **Primary (`#c7231d`, deep red; replaced coral on 2026-10-11)** marks the live
-  item (now-playing rail, current song row) and the layout-save action. (The
-  open status card is NOT primary any more: it wears its own connection colour,
-  see Connection colours.) Its family: `primary-hover` `#cd3934` (tint 10%),
-  `primary-focus` `#dd7b77` (tint 40%, focus ring), `primary-active` `#b3201a`
-  (shade 10%, pressed), `primary-text` `#e3918e` (tint 50%, for red used as
-  text). The full 10% to 90% shade and tint scale is kept under
-  `primary-scale` as a reference. **The red alone is 3.2:1 on panels, so it is
-  for fills, rails, borders and dots (3:1 is enough for those); text and thin
-  icons use `primary-text`.**
-- **Red now has two jobs, so they are told apart by form (decided default):**
-  primary is a *solid fill with white text* or a *rail*; errors are pale
-  `danger-text` words with a red dot and icon; destructive confirms use
-  `danger-solid` (red `#ff0000`) with a verb that says what is lost. A
-  destructive button never uses `primary`, and `primary` never carries an error.
-- **Text on fills (DECIDED rule): light text on dark fills, dark text on light
-  fills.** Most of the app is dark, so light text stays the norm.
-  - Light fills (the Services green, the Presentation orange): dark text (`on-light`, `#020617`). The Playback blue takes white (4.8:1), and so do the deep success green (7.8:1), Lighting and the StagePilot red.
-  - **Identity fills (solid):** Services green 7.6:1 and Presentation orange 7.6:1 take dark text (`on-light`); Playback purple 9.2:1, Lighting pink 4.7:1 and the StagePilot red 5.7:1 take white (`on-primary`).
-  - The **teal accent fill** `info`: dark text (`on-info`, 9.1:1); white would be 2.2:1.
-  - The **primary red** is a mid-dark fill: **white text** (`on-primary`, 5.7:1).
-  - Dark red fill (`danger-solid` `#e11d48`, 4.7:1 with white): white text
-    (`on-danger`); it is the same pure red as the error colour (4.0:1).
-  - Where an **error** colour needs dark text (a light red fill such as
-    red-300/400), use dark **red** `on-danger-soft` `#4c0519`, never black.
-  - **Minimum 4.5:1** for any text, and this file is linted for it.
-- **One solid action colour (DECIDED): the primary red is the only primary button.**
-  Every panel's main action (Save, Connect, Unlock, Update and Restart) is
-  primary red with white text. Integration hues are for identity only: tinted
-  borders, tinted secondary buttons, panel accents. Consequences in code:
-  - "Save general settings" (StagePilot panel, red) and the MIDI save (magenta) become
-    the primary red. Red now also means primary, so the form rule above (solid + white text = primary; pale text + dot = error) keeps them apart.
-  - "Update and Restart" (sky solid) and the two PIN/unlock buttons (sky) become primary red.
-  - "Use <plan>" in the Services plan picker (warning solid) becomes a
-    tinted Services (green) button. The warning red is only for warnings.
-  - `danger-solid` stays for destructive confirms only.
-- **Status colours** are fixed app-wide: `success` = connected/running/ready,
-  `warning` = connecting/delayed/needs attention, `danger` = error or
-  destructive, `idle` = disconnected/idle. Use `*-text` for words and
-  `*-soft` for dots on dark panels. `info` is the **secondary accent teal
-  `#1dc1c7`** (owner, 2026-10-12): information, "what comes next", and
-  non-disruptive actions; it is never a state.
-- **Connection colours (decided 2026-10-12)** tint a connection's status card
-  icon, setup panel, secondary buttons and badges. **Services is green
-  `#6bb03c`, Presentation is orange `#fe7821`, Playback is blue
-  `#4b73b0`, Lighting is pink-red `#d53367`, and the StagePilot (backend) card
-  and panel are `#c7231d`.** MIDI is configured under Playback and has no colour
-  of its own. Each has three roles: the base (solid fills, rails), `-soft` (dots,
-  borders and 10-30% tints on dark surfaces) and `-text` (small text, 7:1).
-  Playback is a clearly blue `#4b73b0` (it began as the owner's slate-blue
-  `#3a4e66`; the first lift to `#56677b` still read as grey), 3.8:1 on dark
-  surfaces, so one colour serves as fill, dot, border and tint. **The open status card wears its connection's colour (decided
-  2026-10-13):** 70% border, a 10% wash fading out by 44%, and a 3px left bar in
-  the base colour. The StagePilot card is the one exception: it is the same red as
-  the live item, so it keeps the neutral card with a 1px `#c7231d` border and no wash
-  or bar (see Colour collisions). Never reuse these for status. **Accent inside a configuration panel (decided
-  2026-10-13):** inside a connection's configuration panel its colour is the only
-  accent. The panel's solid action buttons (*Save configuration*, *Scan*, *Scan
-  again*, *Connect*) are filled with it, tinted buttons, links, checkboxes and
-  badges use it, a "connected" or "saved" message uses it instead of green or
-  teal, the Save bar is a deep tint of it (the accent at 20% over the panel),
-  and the panel wash comes from it. Label colour: dark on Services and
-  Presentation, white on the rest. **Exceptions that keep their own colour:**
-  errors (pure red), warnings (pure red, like errors), idle grey, the destructive buttons,
-  and everything outside the panel (the header, dialogs, toasts). **Advanced** parts of a service's setup use a muted version of
-  the service colour (`advanced-*`, the hue mixed half-way with `text-muted`)
-  so they read as secondary. Decided: mixed 30% hue / 70% grey so the difference from the main colour is easy to see.
-- **Dashboard names (decided): generic, not brand names.** The dashboard says
-  **Services** and **Presentation**, not Planning Center and ProPresenter, so
-  the app reads as usable with many tools and avoids implying an endorsement.
-  A brand name appears only where the user is signing in to, or an API is
-  specific to, that company's product (for example the Planning Center OAuth
-  screen). Today the code still uses the brand names in the setup checklist,
-  accessible labels and setup panels; those move to the generic names in the
-  migration.
-- **Live controls (decided: keep four colours).** The Manual controls widget
-  uses colour to show how much a press changes a running show: **green**
-  (Start next, Restart current: moves the show forward), **orange**
-  (Previous: steps back), **teal accent** (Reload service plan: nothing on stage changes),
-  **red** (Stop timer, Reset position: halts or rewinds). They are outlined
-  at rest and fill on hover, with dark text on green and orange fills, white
-  on blue and red. The red hover fill is the pure red (4.0:1 with white). These do not follow the
-  primary-only rule on purpose: they are a severity scale, not "actions".
-- **Widget borders (decided: three)** are white at 6/10/18% opacity so they sit right on any
-  surface. `border` (10%) is the default. The old 5% and 7% merged into `border-subtle`; the old 15% and 20% (the least used) merged into `border-medium`.
-- The **retro loading bar** is blue pixel-art, deliberately not red
-  (decided: keep). Use it lightly; its contrast against the red/slate UI is
-  the point. **Decided: remove the white "scan" bar that sweeps along its
-  leading edge** (`.loading-progress-scan` in `index.css`, a `<span>` in
-  `App.tsx`). About 20 hardcoded hex values in `index.css`.
+`text-strong` is **not** a colour: it is `ink` set at weight 700. Never use a slate-500 grey for text (it fails contrast).
 
-## Typography
-- **Geist, bundled** (decided): self-hosted variable font
-  (`@fontsource-variable/geist`, OFL-1.1), no CDN, so the desktop app looks the
-  same offline and on every OS. Geist replaced Inter by owner decision on
-  2026-10-11. It is safe because it keeps tabular numbers (`tnum`), has the same
-  100-900 weight axis and the same Latin glyph coverage, and its licence permits
-  bundling (notice in `THIRD_PARTY_NOTICES.md`).
-- **StagePilot Logo** (`assets/logo-font.ttf`) is for the wordmark only, with a
-  1px black outline (`.font-brand`).
-- **Sizes (decided):** `text-sm` 14px (197 uses), `text-xs` 12px (134),
-  `text-lg` (13), `text-base` (5), `text-xl` (3), `text-2xl` (3), `text-4xl`
-  (2), and **one micro size, 11px**, replacing `0.6rem` / `0.65rem` / `0.68rem`.
-- **Weights:** 600 labels and buttons (90), 700 headings and badges (84),
-  900 small chips (13), 800 kickers.
-- **Timer:** light-weight **monospace**, tabular numerals,
-  `clamp(3rem, 5vw, 5.4rem)`, tracking `-0.06em`. **Song title** (live
-  panel heading) is a separate style: Geist 900,
-  `clamp(2rem, 3.2vw, 3.65rem)`, tracking `-0.045em`. These are two different
-  elements, not a conflict.
-- **Tracking (decided): three steps.** `0.05em` (Tailwind `tracking-wider`,
-  uppercase labels, 56 uses), `0.18em` (kickers; absorbs the 0.14 / 0.2 / 0.22
-  one-offs), `0.35em` (display).
-- **Placeholders (decided):** `text-muted`. No placeholder style exists today.
+### 3.2 The primary red (`primary` `#c7231d`)
+Marks the **live item** (Now playing rail, current song row) and the **one solid primary button** (Save configuration, Connect, Scan, Update). At 3.2:1 on panels it is for **fills, rails, borders and dots only**; as text or a thin icon use `primary-text`. States: `primary-hover`, `primary-active`, focus ring `primary-focus`. Text on a primary fill is `on-primary` (white). A destructive button never uses `primary`; `primary` never carries an error.
 
-## Layout
-- 4px base unit. Most common: padding `px-3` (118) / `py-2` (85) / `py-2.5`
-  (45); gaps `gap-3` (49) / `gap-2` (35); panel padding `p-4` (18) / `p-5` (12).
-- Page capped at 1700px and centred; minimum supported width 320px.
-- **Breakpoints:** Tailwind defaults. `sm:` 35 uses, `lg:` 12, `xl:` 10,
-  `md:` 7. `lg` (1024px) is the phone/tablet vs desktop split. Components that
-  resize inside the dashboard use **container queries** (`@container`,
-  8.5/10/18/36/46rem), not viewport queries.
-- Dashboard is a drag/resize grid (GridStack) with 5px gutters; see
-  `docs/dashboard-layout.md`.
-- **Tap targets (decided):** **44px** for live controls (timer, cue and manual
-  controls, dialog actions) and for every input; **36px** for all other
-  buttons. Today only 5 files use `min-h-11`; most buttons are about 38px, so
-  the 36px tier mostly matches what exists.
-- **Stacking order** (`z-index`):
+### 3.3 State colours (fixed app-wide)
+| State | Fill | Dots / borders | Words |
+| --- | --- | --- | --- |
+| connected / ready / running | `success` `#31551d` | `success-soft` `#417227` | `success-text` `#69b63e` |
+| connecting / delayed / attention | `warning` `#ff0000` | same | `warning-text` |
+| error / destructive | `danger-solid` `#ff0000` | `danger` | `danger-text` `#ff4d4d` |
+| disconnected / idle | | `idle` `#64748b` | near-white word "Disconnected" |
+| information, "what comes next" | `info` teal `#1dc1c7` (dark text `on-info`) | `info` | `info-text` |
 
-  | Layer | z | Used by |
-  | --- | --- | --- |
-  | In-widget controls | 10 | widget handles, header |
-  | Menus | 20 | Services plan menu |
-  | Header chip | 40 | system-status chip |
-  | Popovers, confirm dialogs | 50 | discard-changes, Playback discover confirm, Services length preview, tooltips |
-  | Title bar | 100 | desktop title bar (sticky) |
-  | Update dialog | 100 | same level as the title bar (decided: stays) |
-  | Fatal toasts | 110 | crash-loop and global-error toasts |
-  | Error boundary | 120 | full-screen crash screen |
+- **Warnings and errors are the same pure red** and are told apart by their words (`Connecting`, `Delayed`, `Not saved yet` vs `Error`, `Couldn't save`).
+- `success` is too dark for a dot: it is a **fill**. Status cards and the header pill carry state by *word and outline*, not a dot. Dots appear only where a word sits beside them (Check system list, badges).
+- **Teal (`info`) is never a state and never the primary action.** Uses: "Up next", info banners, links, the Reload service plan control, the Update available button.
+- **The header pill** uses the darkest reds that still pass contrast on its dark surface: words `danger-pill` `#f00000` (4.5:1), outline `danger-edge` `#bc0000` (3:1). Do not reuse these for anything else.
 
-  Above the title bar: both toasts and the error boundary. Level with it: the
-  update dialog. Below it: the three confirm dialogs at 50 and all popovers.
-  **Decided to keep as is.** The title bar holds the window's drag area and
-  close/minimise controls; leaving it reachable under a routine confirm means
-  a user is never trapped in a dialog, which is how native apps behave. Only
-  fatal states (crash toasts, error screen) and the update dialog, which is
-  about the app itself, cover it.
+### 3.4 Connection colours (identity)
+Each connection owns one hue. It tints that connection's status-card icon, its panel, its secondary buttons and badges, and is the **only accent inside its own panel**.
 
-## Elevation & Depth
-- **Default shadow (decided; the old "printed" offset shadow is deleted):** soft, layered and warm. Light
-  comes from the upper-left, like the film-flare photo, so shadows fall down
-  and to the right in a brown-red (`rgb(22 13 12)`), not cool black, plus a
-  faint warm inner highlight on the top-left edge. Value is in the
-  `elevation.default` token. Rendered over the real background next to the old
-  one: it separates well and looks more physical; its weakest spot is the
-  right edge over the darkest part of the image, which the 10% white border
-  covers.
-- `elevation.overlay` (dialogs, toasts, popovers) is a stronger version of
-  the same idea and replaces `shadow-2xl`. **Decided** (owner approved after review).
-- The old "printed" offset shadow is deleted (decided); `elevation.default` is the only panel shadow.
-- **Strength:** `elevation.default` is level 1 until you pick a stronger level from `elevation-options` (5 levels, each darker). The dialog and toast shadow scales with it.
-- Live panel: 5px red left rail with a faint glow. Hover on cards raises
-  border opacity, not size.
-- Dragging a widget: opacity ~0.78 plus a large drop shadow.
-- Glass: `backdrop-blur-xl` (5 uses) on header/popover chrome.
+| Connection | Token family | Hex | Label colour on a solid fill |
+| --- | --- | --- | --- |
+| Services | `integration-services` | `#6bb03c` green | dark (`on-light`) |
+| Presentation | `integration-presentation` | `#fe7821` orange | dark (`on-light`) |
+| Playback | `integration-playback` | `#4b73b0` blue | white |
+| Playback → MIDI method | `integration-playback-midi` | `#7761b8` blue-violet | white |
+| Lighting | `integration-lighting` | `#d53367` pink-red | white |
+| Lighting → OSC method | `integration-lighting-osc` | `#2f9e8f` teal-green | white |
+| StagePilot (backend) | `integration-backend` | `#c7231d` (= primary) | white |
 
-## Shapes
-- **8px** (`rounded-lg`, 157 uses) is the control radius, and the bare
-  `rounded` (4px, 12 uses) becomes 8px (decided).
-- **12px** for **all** panels and cards (decided; setup panels move from 16px).
-- **16px** for toasts only. **Full** for pills and dots.
+Each family has three roles: the base (solid fills, rails), `-soft` (dots, borders, 10-30% tints) and `-text` (small text, 7:1). `advanced-<name>` is the muted tone (30% hue / 70% grey) for that connection's Advanced section.
+- **Inside a connection's panel** (via `Panel tone=…` and `AccentContext`): primary buttons, tinted buttons, links, checkboxes, badges, success and info messages and the Save bar all take the connection's colour. **Exceptions that keep their own colour:** errors and warnings (pure red), idle grey, destructive buttons, and everything outside the panel (header, dialogs, toasts).
+- **Never use a connection colour to mean state.** The open status card wears its connection colour (70% border, 10% wash fading by 44%, 3px left bar); the StagePilot card is the exception (it is primary red) and keeps a neutral card with a 1px red border.
+- A *method* inside a connection (MIDI under Playback, OSC under Lighting) gets its own sub-hue **only for the chosen option in the `ConnectionMethod` control** (`chip` prop). Do not tint whole panels with method colours.
 
-### Borders inside panels (decided)
-A panel is one box. Inside it, **only these get their own border**: form
-fields (inputs, selects, text areas), the Advanced disclosure row, the Activity
-row, and the save bar. Everything else is grouped with spacing, a heading, or a
-single thin divider (`border-subtle`), never another bordered box.
-- A group of related fields is a heading plus spacing, not a bordered card.
-- Status cards, live controls and dialogs are their own surfaces, not boxes
-  inside a panel.
-- A thin divider separates sections of one panel; do not put a divider and a
-  box around the same thing.
-- Nested boxes only when the inner one is a different kind of thing the user can
-  act on (for example the held-change field marker or an alert).
-Reason: the design check flagged "card inside card" repeatedly; extra borders
-add noise without adding hierarchy.
+### 3.5 Colours that sit close together (keep apart by form, not hue)
+- **StagePilot `#c7231d` = primary red.** A rail or wash means *live or selected* and appears once per view; a connection tint is a thin tile tint and 1px border, never a rail or wash.
+- **Lighting `#d53367` is near the error red.** Lighting is tint and dot only. Errors are always words plus a red dot and icon; a Lighting card in error says `Error`, it does not change colour.
+- **Services green and the success green share a hue.** Inside a Services panel a "connected" message uses the panel accent, never the success green.
+- **Live controls (Manual controls):** `live-go` green (Start next, Restart current), `live-back` dark blue (Previous), `live-reload` teal (Reload service plan), `live-stop` rose `#e11d48` / `#fecdd3` (Stop timer, Reset position). They are outlined at rest and fill on hover/press: a **severity scale** (how much a press changes the show), not "actions", so they do not follow the primary-only rule. The Stop/Reset rose is **deliberately a different red** from the pure-red error colour and the header pill (owner chose rose over the pill's dark red on 2026-10-16: do not change it).
 
-## Motion
+### 3.6 Contrast and text on fills
+- **Minimum 4.5:1 for text, 3:1 for outlines/dots/large bold text.** `design.md lint` checks token pairs.
+- **Light text on dark fills, dark text on light fills.** Dark label (`on-light`/`on-info`) on the Services green, Presentation orange and teal accent; white (`on-primary`/`on-danger`) on everything else. Where an error colour needs dark text on a light red fill use `on-danger-soft` (dark *red*), never black.
+- **Label shadow:** light text on a dark/tinted button gets `text-shadow.on-dark-text` (`text-shadow-label`). **Dark text gets no shadow.**
+- Photo-sampled `flare-*` colours are for washes and glows on the live item only, never text, buttons or status.
 
-- Micro-interactions 140ms; live reveals 420ms; status colour 180ms;
-  expand/collapse 500ms; status-card morph 275ms linear; loading bar steps.
-  Easing `cubic-bezier(.2,.8,.2,1)`.
-- **Everything must respect `prefers-reduced-motion`** (a global override
-  already exists in `index.css`; keep it).
+---
 
-## Components
-- **Panel (one recipe, two variants; decided):** `panel` fill, widget border
-  border, 12px radius, `elevation.default`. Variant `panel-setup` adds the
-  red-to-clear 120° wash and 20px padding. The `!important` overrides on
-  `.setup-panel` go away when they merge.
-- **Status card:** icon tile + title + status word + detail line. No status dot
-  (removed 2026-10-13). The word is **capitalized** (CONNECTED, CONNECTING, NOT
-  CONNECTED, ERROR), semibold, and grows with the card: it is sized from the card
-  width so the longest phrase, DISCONNECTED, always fits beside the icon, from
-  11px on a 181px card up to 18px on a 266px one. In compact mode (1000px and
-  below) the word sits under the icon on ONE line, always (owner, 2026-10-13): it never
-  wraps, never ellipsizes and never overlaps the icon or a neighbour. Its size is the
-  card width minus padding divided by 8.3, at most 11px, so DISCONNECTED (the widest
-  phrase) fits; that is about 10px on tablets, 8.6px at 480px and 6.5px at 390px, and
-  the owner-accepted exception to the 11px floor. Collapses to an icon-only tile in compact mode.
-- **Live (now-playing) panel:** red rail, 135° red wash fading out by 42%,
-  oversize tabular timer.
-- **Buttons.** Height: 44px for live controls, 36px for everything else.
-  - *Solid* (primary): `primary` red, white text; hover `primary-hover`, pressed `primary-active`, focus ring `primary-focus`.
-  - *Tinted* (most of the app): `hue @ 10%` fill, `hue @ 20-30%` border, light
-    `hue-200` text, `hue @ 20%` on hover.
-  - Disabled: 40% opacity (a few use 50%; normalise to 40%), `cursor-not-allowed`.
-  - **Label shadow (decided):** light text on a dark or tinted button gets a small very-dark-grey shadow (`text-shadow.on-dark-text`). **Dark text gets no shadow.** A light shadow under dark text was tried and rejected by the owner because it looks bad (it reads as a blurry halo). If dark labels ever need more punch, change the fill or the text colour, not add a shadow.
-  - Primary = red (decided). Secondary = tinted in the panel's hue.
-- **Inputs (decided):** `surface-950`, widget border, 8px radius, 44px
-  tall, `text-muted` placeholder. Native checkboxes (7), `accent-rose-500` on 3.
-- **Badges/pills:** full radius, uppercase, 700 weight, hue at 10-15% fill with
-  matching light text.
-- **Inline alerts:** 8px radius, hue at 10% fill, 20-30% border, `role="alert"`
-  (11) or `role="status"` (7).
-- **Dialogs:** `fixed inset-0`, `scrim`, centred `surface-950` card, 12px
-  radius, `elevation.overlay`. Actions are 44px.
-- **Toasts:** fixed bottom corner (left = global error, right = crash-loop),
-  16px radius, red border, `elevation.overlay`.
-- **Focus:** 2px `primary-focus` outline, 3px offset, global
-  (`:focus-visible`). Never remove.
-- **Icons:** no icon library; service icons are PNGs in `assets/`.
-- **Scrollbar:** 9px, `scrollbar-track`, slate-700 (`#334155`) thumb.
+## 4. Typography
 
-## Patterns
+**Fonts (all bundled; never a CDN, so the desktop app works offline):**
+| Voice | Font | Use |
+| --- | --- | --- |
+| Interface | **Geist** (variable, `font-sans`) | everything by default |
+| Numbers | **Geist Mono** (`font-mono`) | timers, elapsed time, countdowns, any live-changing figures; always `tabular-nums` |
+| System state | **Geist Pixel Square** (`.font-pixel`) | **status words** on status cards and the header pill, **info/error notification text**, **connection pills/badges**, **Manual controls buttons**, the **service-plan title**, the `N songs` count |
+| Wordmark | **StagePilot Logo** (`.font-brand`) | the logo only, with a 1px black outline |
 
-Everything here is **DECIDED** (owner accepted the recommendations on 2026-10-11, with the specific answers marked **(decided)** below). Principle behind all of it: **anyone can use
-the app with no training.** No hunting and no manuals: each control is where
-the user expects it, labels say exactly what will happen, and the choices
-offered are the ones that make sense at that moment. Nothing is kept just
-because the current code does it.
+- **Geist Pixel Square has one weight.** "Bold" is a 0.05em `-webkit-text-stroke` in the text colour built into `.font-pixel` (the status-card word uses 0.07em because it is larger). **Always use the class**, never `font-bold` on pixel text, and never fake bold. Letters like O, D, e, a must keep open counters.
+- **Scale (use the tokens):** `type-brand` 4.05rem; `type-display-timer` clamp(3rem, 5vw, 5.4rem) +8px on the Now playing countdown, weight 300, tracking -0.06em; `type-song-title` Geist 900; `type-h1` 24; `type-h2` 18; panel titles 20px bold; `type-text-strong`/`type-label` 14; `type-body-md` 14; `type-body-sm` 12; `type-kicker`/`type-micro` **11px, the floor**. The only text allowed below 11px is the status word on compact status cards (≤1000px).
+- **Kickers** (`type-kicker`: 11px, 800, uppercase, 0.18em, `ink-muted`) name sections: `Connection configuration`, `Status`, `Advanced`, `Connection method`. Use `SectionLabel` (it renders a real heading).
+- **Tracking has three steps:** 0.05em (uppercase labels), 0.18em (kickers), 0.35em (display).
+- **Numbers and units:** `tabular-nums` on every timer/clock/count; non-breaking space between a number and its unit; single `…` character in placeholders and loading text.
+- **Text colour matches state tint where it is a live readout:** the Now playing label and elapsed time take the rail's colour (`.now-playing-tint`).
 
-### Responsive behaviour
-- The status cards switch design at **1000px** viewport width (not just
-  shrink): **Wide** = icon tile + title + status dot + status word + detail
-  line; **Compact** = icon tile only, with the status dot and word beneath it
-  (title and detail stay in the accessible label and the opened panel). Five
-  cards always fit in one row.
-- `lg` (1024px) is the phone/tablet vs desktop split for everything else.
-- Phone layout is a first-class design, not a squeezed desktop: single column,
-  44px targets everywhere, dialogs full-width with actions stacked.
+---
 
-### Startup and sign-in screens
-- **Desktop startup:** centred wordmark (`brand-hero`), the blue pixel loading
-  **bar**, one headline, one detail line.
-- **Remote / phone loading (decided): a circular pixel spinner _instead of_
-  the bar**, with the same headline and detail text. (Today the code shows the
-  spinner **and** the bar together on phones: that is a bug against this rule.)
-  The spinner follows the bar's states: blue = loading, red = taking longer
-  than usual, red and stopped = failed.
-- The white lead-in line on the bar is removed.
-- **Remote sign-in (PIN or login):** a single centred card with the wordmark,
-  one sentence of purpose, the field(s), and **one primary red button**. Errors appear
-  under the field, in `danger-text`, announced to screen readers.
+## 5. Shape, depth, spacing, motion
 
-### Choice fields and menus
-- **Choosing one value from a list = a styled native select** (input look,
-  44px, chevron on the right). Works on phones, keyboard and screen readers for
-  free. There are 15 today in 3 different looks; they become one.
-- **Choosing an action = an action menu** (button with a chevron that opens a
-  card): `surface-950`, `border-medium`, 8px radius, `elevation.overlay`,
-  items 44px tall, current item checked, arrow keys + Escape. Only for several
-  variants of one action, such as "Update service plan".
+- **Radius:** 8px (`rounded-ds-lg`) controls, inputs, inline alerts, popovers; **12px** (`rounded-ds-xl`) **every** panel, card and dialog; 16px toasts only; full for pills, dots, badges.
+- **Borders (three, white at low opacity):** `edge-subtle` 6% (dividers, card edges), `edge` 10% (**default**), `edge-medium` 18% (secondary button outline, hover). Hover on cards raises border opacity; it never changes size.
+- **Elevation:** one warm shadow, `elevation.default` (brown-red, lit from the upper left, with an inner top-left highlight); `elevation.overlay` for dialogs, toasts, popovers. Never cool grey or pure black shadows.
+- **Spacing:** 4px base unit; `md` 12px default gap; `lg` 16px panel padding (setup panels 20px). Targets: **44px** (`touch-target`) for live controls, all inputs and every button on touch (`pointer: coarse`); **36px** (`control`) for other buttons with a mouse.
+- **Page:** capped at 1700px, centred, supports 320px.
+- **Z-index layers:** widget handles 10 · menus 20 · header chip 40 (the system-check list sits above widgets) · popovers and confirm dialogs 50 · title bar and update dialog 100 · fatal toasts 110 · error boundary 120. Use these; do not add layers.
+- **Motion:** micro-interactions 140ms; status colour 180ms; status-card morph 275ms; expand/collapse 500ms; header-pill resize and loading-logo flight as in §8; easing `cubic-bezier(.2,.8,.2,1)`. Animate `transform`/`opacity` only; list transitioned properties (never `transition: all`); respect `prefers-reduced-motion` with a calm alternative that still shows the change; animation must never delay or block a control. Do not use a pulsing dot on anything that is not live.
 
-### Connection method (decided: MIDI is a method, not a brand)
-A connection may be reachable in more than one way. The ways are shown as a
-**Connection method** select at the top of General configuration, so alternates are where the
-user looks, not hidden behind a toggle:
-- **Playback:** `Playback API` (main) or `MIDI` (alternate).
-- **Lighting:** `MIDI` (the main method today; a method select appears only when
-  a second method exists).
-- When only one method exists, show it as a line of text ("Sends cues by MIDI"),
-  not a select with one item.
-Changing the method swaps the fields beneath it. MIDI is a protocol, not a
-company, so the word stays in the UI.
+---
 
-### Collapsible sections ("Advanced")
-- **One pattern for every collapsed section** (today there are five: a ▸ text
-  button, `<details>`, a checkbox row, a bordered button, a plain toggle).
-- A full-width 44px row: chevron + label on the left, and on the right **a
-  one-line summary of what is inside** when closed (for example
-  `Port 8080 · Channel 1`), so a user rarely has to open it.
-- Colour: the service's muted `advanced-*` tone for chevron and label; the open
-  area gets a 3px left bar in the same tone. General configuration is never inside a collapsed
-  section; Advanced always comes after General configuration. Motion: 500ms expand, honouring
-  reduced motion.
+## 6. Components (the `components/ui/` kit)
 
-### Telling expandable things apart (decided)
-In beta 31, "Connect a specific computer", "Recent activity" and
-"Alternate connection: MIDI settings" are three near-identical grey rows that
-do three different jobs. Rule: **a row's shape says what kind of thing it is.**
-1. **A way of connecting (Playback API vs MIDI) is never a collapsed row, and it is never a
-   dropdown.** It is the **Connection method** control at the top of the panel, built once as
-   `ConnectionMethod` and **used by every connection that has more than one way to connect, now
-   and in future** (decided 2026-10-14, replacing the earlier select): two or more options
-   side by side, each a bold name over a tiny uppercase **PRIMARY** or **ALTERNATE**
-   (`Playback API / PRIMARY`, `MIDI / ALTERNATE`). **Whichever option is chosen, primary or
-   alternate, wears the connection's tint** (an outline and a 45% fill; the primary red outside a
-   panel), so the toggle itself says which is active. **There is no "how to switch back"
-   notice**: the toggle is that. The header badge still says `Connected · MIDI` when the
-   alternate is in use. It is a radio group (arrow keys, one label, 44px targets). Do not build a
-   second method picker; add options to this one. A change is held until Save configuration.
-2. **Extra options = Advanced:** the one tinted row with a one-line summary.
-3. **Read-only information (Recent activity) = Activity:** flat and neutral, with a
-   dashed top rule and a neutral grey count pill (`12 events`) (the pill takes the connection colour inside a connection panel), no fill, no box.
-4. **A one-off value (a specific computer address) is a choice in the field it
-   belongs to** ("Other computer…" at the end of the computer select), not a
-   separate collapsed row.
-Words: "Alternate connection: MIDI settings" becomes **MIDI** under
-**Connection method**, and "Main" / "Alternate" are labels on the options.
+### 6.1 Buttons (`Button`)
+| Variant | Look | Use |
+| --- | --- | --- |
+| `primary` | solid `primary` red (or the connection's colour inside a panel), white text (dark on Services/Presentation) | the **one** main action: Save configuration, Connect, Scan, Update |
+| `tinted` | `hue @ 10%` fill, 20-30% border, light hue text | secondary actions in a panel; takes the connection hue |
+| `secondary` | `surface-950` fill, `edge-medium` outline | neutral: Discard, Close, Copy Log |
+| `destructive` / `destructive-soft` | `danger-solid` red | irreversible actions only; label names what is lost (`Delete layout`) |
+| `live` + `liveTone` | outlined, fill on hover/press | Manual controls only (§3.5) |
+- Labels are **verb + object** (`Save configuration`, `Scan Network`, `Test connection`), sentence case, never `OK`/`Submit`/`Yes`. The safe option sits on the left of a pair.
+- Disabled = 40% opacity + `cursor-not-allowed` **and a reason shown nearby** (`No changes to save`). Never silently grey out.
+- Only one primary button per panel. Focus ring: 2px `primary-focus`, 3px offset, global; never remove.
 
-### Vocabulary (one word for one thing, everywhere)
+### 6.2 Inputs and choices
+- `Field` = label **above** (never left), optional hint in `ink-muted`, error under in `danger-text` with a short fix ("Enter a number from 1 to 16"). `Input`/`Select`: `surface-950`, `edge`, 8px, **44px** tall, `ink-muted` placeholder. Validate on blur; keep the user's input on error.
+- **Choose one value from a list → styled native `Select`.** **Choose an action → action menu** (button + chevron opening a `surface-950` card, 44px items, arrow keys + Escape). **Choose how a connection connects, or one of a few exclusive modes → `ConnectionMethod`** (below). A one-off value (a specific computer) is the last option of the select it belongs to ("Other computer…"), never a separate collapsed row.
+- Short fixed-width controls stay short: a PIN input is `w-28` with **Save PIN** beside it on the same row.
+
+### 6.3 `ConnectionMethod`: THE switch
+A segmented radio group: two or more options side by side, each a bold name, optionally over a tiny uppercase `PRIMARY`/`ALTERNATE` (`role` prop; omit it for unranked options). The chosen option wears the connection's tint (outline + 45% fill) and **the blue box slides between options**. Native radios (arrow keys, 44px). Used for **Playback** (Playback API primary / MIDI alternate), **Lighting** (OSC primary / MIDI alternate) and **Backend Connection Access** (Host / Local network / Internet). `label` overrides the kicker (default `Connection method`). **Never build a second picker; add options to this one.** Changing method swaps the fields beneath it; fields belonging to the other method are hidden and never affect each other (OSC cues work only when OSC is saved, MIDI only when MIDI is).
+
+### 6.4 `Disclosure`: three kinds of expandable thing (shape says what it is)
+| Variant | Look | Means |
+| --- | --- | --- |
+| `advanced` | one tinted bordered row, chevron + label, **one-line summary of what is inside when closed** (`Port 18766 · Logging info`), 3px left bar in the connection's `advanced-*` tone when open, 44px | extra options. Always **after** General configuration. Opens by itself when a field inside is invalid |
+| `activity` | flat, no box/fill, dashed top rule, neutral count pill (`12 events`) | read-only information, or a group of controls people may not use (Remote access). Pass `usePersistedFlag` so the open state survives restarts |
+| `feature` | card with a **5px rail, 70% border and soft wash in the connection colour**, `text-lg` title, a **detail line** shown open or closed that says what is inside (`16 cues on 2 of 4 songs · 2 pads · Battle Belongs 04:41`), an `aside` tag at the right | a **major** optional feature that deserves weight (Lighting's Song lighting timeline). Everything in the feature, including its Test cue controls, folds away with it |
+Expand/collapse 500ms; respect reduced motion. **Persist** collapse state with `usePersistedFlag(KEY, default)` whenever a section is optional for some users (Remote access, Song lighting timeline: both start open).
+
+### 6.5 Other primitives
+- **`Panel`** (`variant` default | setup | live; `tone` = connection): `surface-panel` fill, `edge` border, 12px, `elevation.default`. `setup` adds the connection-tinted wash and 20px padding; `live` adds the red rail and 135° wash.
+- **`SaveBar`**: §9. **`Badge`/`StatusBadge`**: full radius, uppercase pixel text, hue at 10-15% fill. **`InlineAlert`** (warning/danger → `role="alert"`; success/info → `role="status"`): 8px, hue 10% fill, 20-30% border, under the thing it is about.
+- **`ScrollRegion`**: any box that scrolls on its own is drawn as an obvious bordered region (1px `ink-muted` border, 12px, `surface-950`), with an 18px fade **over the content, inputs included** along any edge with more to reach. Keep it focusable and named (`role="region"`, `tabIndex=0`, `aria-label`). An empty list is not framed. Do not use a dark shadow (invisible on `surface-950`).
+- **Borders inside a panel:** a panel is one box. Only **form fields, the Advanced/Activity/Feature rows, `ScrollRegion`, the Save bar, and the two Remote-access groups** get their own border. Group everything else with a heading, spacing or a single `edge-subtle` divider. Never a divider *and* a box around the same thing.
+- **Dialogs** (`fixed inset-0`, `scrim`, centred `surface-950`, 12px, `elevation.overlay`, 44px actions) and **toasts** (bottom corner, 16px, red border) are for things the user did not just cause (crash, update) or for confirming something destructive. Anything about the current panel is an inline alert.
+
+---
+
+## 7. The dashboard
+
+### 7.1 Header (above the widgets)
+- **Logo first, never moving.** One row at every width: the StagePilot logo sits **32px in from the left edge of the background image** (the image is 1700px wide and centred, so on a window wider than it the logo moves with the image, never into the black beside it). Everything else is one status pill to its right.
+- **Status pill** (`HeaderStatusChip`): always the widgets' dark `surface-950` with a thin outline and bold-pixel words. Ready = green (`success-soft` outline, `success-text` words). Check system / Error = red (`danger-edge` outline, `danger-pill` words). **The pill is the notification:** on an info message the *same pill* grows to the message size, keeps the dark surface and takes the Previous blue (`live-back-soft` outline, `live-back-text` words); an error message takes the red; then it shrinks back. New messages show immediately (words slide, pill resizes); each lasts **5 seconds max**; simultaneous messages play in turn. If the header is too narrow even for the pill, the pill disappears (never a dot) and the message appears just under the header on a solid surface. Announce via a visually hidden live region (the drawn copy is `aria-hidden`).
+- **System check list** (the pill's hover/focus panel, above the widgets): lists only what the show cannot run without: Services, Service plan, Song durations, Playback, Presentation (and its timer), StagePilot. **Lighting is not in it** (optional). The Playback entry names the saved method ("Playback API connected" / "Playback MIDI disconnected"). Words match the status cards.
+
+### 7.2 Startup and the hand-off
+- Desktop startup: centred `brand-hero` wordmark, the blue pixel loading bar, one headline, one detail line. Phone/remote: a circular pixel spinner *instead of* the bar. Blue = loading, red = slow, red and stopped = failed. Remote sign-in: one centred card, one primary button, errors under the field in `danger-text`.
+- **The loading logo glides into the header** (`startup/logoLanding.ts`): the dashboard's own header logo starts at the loading logo's centre and size and moves home (translate + scale, 720ms) while the rest of the dashboard is hidden from the first frame, then the whole dashboard fades in over 200ms (borders and contents together; a border-first stagger was tried and dropped). It never plays on a reload of the loaded app or in tests; reduced motion skips it.
+- "Can't reach StagePilot" retries by itself when the dashboard loads and whenever that error occurs; the manual **Try again** remains.
+
+### 7.3 Status cards (five, in this order: Services, Playback, Presentation, Lighting, StagePilot)
+Icon tile + title + **status word** (Connected / Connecting / Disconnected / Error) + one detail line. No status dot. The word is bold-pixel, uppercase, and **grows with the card** (about 12px up to a 22px maximum) so DISCONNECTED always fits on one line; the title is 13px. Card hover/open tints the title and description whenever the *card* is hovered or open (not only the text). At **≤1000px** viewport width the cards switch to **compact** (icon tile, word on one line beneath it; never wraps, ellipsizes or overlaps). The open card wears its connection colour (§3.4).
+
+### 7.4 Widgets (GridStack, 12 columns desktop / 6 tablet, 5px gutters)
+Four widgets: **Service plan**, **Now playing**, **Manual controls**, **Recent event stream** (`dashboardWidgetRegistry.ts`).
+- **Default (and "Reset layout") arrangement:** Service plan on the left (x 0, 7 wide); on the right, in one 5-wide column: Now playing, then Manual controls, then Event stream, all the same width as Now playing. First-time users get exactly this.
+- **Free placement:** widgets can go anywhere they do not overlap. There is no spacer tool. A light **upward gravity** keeps gaps from forming at the top unless a widget cannot fit beside what is there; the startup pass settles by gravity only (no compaction).
+- **No clipped content, no dead space:** every widget has min sizes; **Now playing and Manual controls heights lock to their content** (`dashboard/contentFit.ts`), so a user cannot resize them into cut-off controls or empty space. Service plan and Event stream scroll internally.
+- **Now playing:** `live` panel with a left rail. At rest (idle/paused/stopped/ended) the rail is the dark Previous blue; when the countdown starts the live red **sweeps down from the top-left** and then a lighter band keeps travelling down it ("alive to the music"); on stop the blue sweeps back the same way. The label, elapsed time and glow wait for the sweep and follow it. Every colour change starts at the top; none fades the whole bar. Countdown: Geist Mono 300, +8px; elapsed time matches **Time remaining**'s style; `Up next` is teal, `Current · live` is the song actually started (`playing_song`), `Up next` is what **Start next** will play (`up_next_song`).
+- **Service plan rows:** hover tints **dark** on non-song rows and a subtle red-orange "live" tint (`can-hover:bg-primary/[0.08]`) on song rows. The plan title uses bold pixel.
+- **Manual controls:** six live-control buttons in **even rows**: 2 columns (default), 3 columns from 37rem, 6 columns from 74.5rem container width (`.manual-controls-grid`), never a ragged last row, and only more per row when the label fits on one line. Labels use bold pixel.
+- Edit mode: **Edit layout** → drag the labelled **Move** handle, resize from the lower-right, **Compact layout**, **Reset layout**, **Done**. Normal mode locks every widget so a live press cannot move one. Layout data never leaves the browser.
+
+---
+
+## 8. Configuration panels: the shared anatomy
+
+Every connection opens a panel under the status cards, in this order. **A new connection copies this exactly.**
+1. **Header** (`SetupPanelHeader`): kicker `Connection configuration` (the StagePilot panel says `Backend configuration`), a 20px bold **title in the connection's own colour** (`-soft`; the StagePilot title uses its pale `-text` tint because its red is only 3.2:1), a one-sentence description in body grey, the **status pill** and the 44px **Close** button. The pill sits in a **fixed slot immediately left of Close on every panel**, uses the real state colours (green/red/idle), **not** the connection tint, and does not change the title position. Below 480px the pill moves to its own row under the title.
+2. **`ConnectionMethod`** (only if the connection has more than one way).
+3. **General configuration** fields, ordered by how often they change.
+4. **`Disclosure advanced`** (optional).
+5. **Feature section(s)** (optional, `Disclosure feature`).
+6. **`SaveBar`**, always last, always visible (§9).
+Rules:
+- Description is one short sentence of **what this does for the user**. Never explain the UI in the UI.
+- Do not add sub-headings like "Service plan configuration" over a form that is obviously the form. Use a divider and the fields.
+- The header subtitle describing a connection is **fixed and short**; it must not change when the method changes.
+- A held field shows a red dot and `Not saved yet`. Unsaved edits give the Save bar a red edge **without moving anything below it** (reserve room for the border).
+- Narrow: the Save bar's buttons stack full width below 480px and it is sticky at the bottom on phones/tablets.
+
+### 8.1 Panel-by-panel reference (what exists today)
+- **Services** (green): sign-in row, then service-plan fields, then the four **system checks**.
+  - Sign-in row: **Planning Center OAuth** (primary, takes ~2/3) and a **Manual API Connection** `advanced` Disclosure (~1/3) side by side from 40rem container width, stacked below it.
+  - Fields: Service type, Timezone, Service plan title preference, Preferred service time in **1, 2 or 4 columns** (28rem / 56rem container), never 3+1. Then `Load service types` / `Load today's plan`.
+  - The status checks at the bottom are four across while their words fit (panel ≥ 30rem), then two, then one.
+- **Presentation** (orange): Host, Port, Detected timer, Timeout (seconds), ProPresenter Look (first option reads **Current Look**, meaning "leave the Look alone"), `Test connection`, `Refresh timers and Looks`.
+- **Playback** (blue; accessible name "MIDI / Playback"): `ConnectionMethod` (Playback API primary / MIDI alternate). *Playback API view:* `Scan Network` with its status text to its **right**, and **Playback host** (select with "Other computer…") on the right half of the row, dropping under the scan button when narrow; network scan and automatic connecting are **always on and have no switch**; **Song order** (`Update Services`, category menu); `Recent activity` (`activity`). *MIDI view (blue-violet accent)*: Available input (select, `Refresh inputs`, `Connect`/`Disconnect`); **Playback song velocities** (an `advanced` Disclosure) holds MIDI channel, Fixed note, Debounce (ms) and the six action velocities (unique, 100-127) and sits just above the **live MIDI note monitor**.
+- **Lighting** (pink-red): `ConnectionMethod` (OSC primary / MIDI alternate; the choice is saved and only that method's cues fire). Connection fields (OSC: Host or IP address, UDP port; MIDI: MIDI Output, MIDI channel, Note length) fit one row when the panel is wide. Then the **Song lighting timeline** `feature` Disclosure, which holds: Song select, ♪# toggle and `Add Cue` beside it, **Test cue** (note/OSC address, velocity/argument, `Send test cue`, kept compact on one line and justified right of the song select, moving above it when narrow), the **Cue board** (saved reusable pads; press one while a song plays to capture a cue at the current time; `Preview only`, `Undo last capture`, `Edit pads`), the **Timeline** (marker labels stack on up to 3 rows; zoom), and the cue list in a `ScrollRegion` with Clear / Clear all. Lighting is optional, so it never turns the header pill to Check system.
+- **StagePilot / backend** (red): top to bottom: **Status** (four recessed cards, 1/2/4 across: Version, State revision, API endpoint, WebSocket), **Advanced** (Timezone first, then Server port, Log level, Release channel, 1/2/4 across; the restart-needed note sits at its bottom), **Connection Access** (§9), then the Save bar and support-log buttons (`Copy Log`, `Send all logs to developer`) below a divider.
+  - **Connection Access** is a `ConnectionMethod` titled "Connection Access": **Host** (this computer only), **Local network**, **Internet**. It **autosaves the moment you choose** (no Save needed). The dashboard PIN is always on (default `1234`) and its small input + `Save PIN` appear under Local network and Internet. Choosing Internet reveals **Remote access** (an `activity` Disclosure, persisted, starting open) with two bordered groups: the **Remote link** (address, `Copy link`, `Regenerate Remote link`) and **People** (viewers are read-only; operators can control StagePilot; `Add a person` opens its fields only when pressed).
+  - New app-wide options go in this panel, never into a connection.
+
+---
+
+## 9. Saving
+
+- **The `SaveBar` is never hidden**, even when nothing changed, and always says one of five things (same wording in every panel):
+  1. clean: `All changes saved` + dimmed button with the reason beside it (`No changes to save`);
+  2. auto: green check, `Saved automatically at 9:41 AM`;
+  3. saving: `Saving…`;
+  4. held: red, `2 changes waiting. Not saved yet.` + `Discard` + primary `Save configuration`;
+  5. error: red, what failed + `Try again`; the field keeps its value.
+  The bar is a deep tint of the connection colour; a *clean* bar is quiet, a *held* or *major* one is not. The Lighting feature card and Save bar sit side by side and must read as different things in one family (card has a rail; Save bar is a flat tint).
+- **Held until Save configuration:** connection method, which computer, velocities, MIDI network/channel/note length, OSC host/port, Presentation timer/Look, Services type/plan choice, StagePilot port/timezone/log level/release channel. Reason: saving most of these reconfigures or reconnects something a running show may use.
+- **Saved immediately (and the bar says "Saved automatically"):** Connection Access choice, the PIN via its own `Save PIN`, Lighting cue-list edits (add/remove/edit cues, cue board captures), `Scan Network`/`Connect` host saves, Remote-access actions, UI preferences (collapse state, note-name display). Rule of thumb: **if pressing it during a show could break the show, hold it; if operators must do it live or it only changes what *you* see, apply it at once.**
+- Held changes need **Save configuration** whether or not a show is running. Leaving a panel with held changes asks `Discard unsaved changes?` (focus lands on Discard; Escape and backdrop do not dismiss).
+- **Send/Test actions** (Test connection, Send test cue, Test) run when pressed using the *saved* configuration, and are disabled with a reason while a different output is selected but unsaved.
+
+---
+
+## 10. Words
+
 | Say | Never say | Meaning |
 | --- | --- | --- |
-| **Connection** | integration, plugin, connector | one of the things StagePilot talks to |
-| **Services** | Planning Center (unless signing in to it) | the connection that supplies the service plan |
-| **Presentation** | ProPresenter (unless an API screen needs it) | the connection that shows the countdown |
-| **Playback** | MultiTracks | the connection that tells StagePilot a song started |
-| **Lighting** | Lighting (until 2026-10-12), Lightkey | the connection that receives cues. Renamed from "Lighting" by the owner on 2026-10-12. Describe its output as **MIDI Output to Lighting Controller** (decided) |
-| **MIDI** | (stays) | a connection method: alternate for Playback, main for Lighting |
-| **Configuration** | settings, setup, production setup | what you edit for a connection (decided) |
-| **General configuration / Advanced** | alternate, specific, manual | the two parts of Configuration |
-| **StagePilot** | backend, local API, plugin health | the fifth status card; its panel holds the app's own status and all app-wide configuration |
-| **Service plan** | plan | the day's list of songs (decided) |
-| **Cue** | pulse | a message sent to Lighting (decided) |
-| **Note** | pulse | the MIDI note a cue uses, and how long it lasts. Use **Note** wherever the app said "pulse": "Note length (ms)", "Test cue" (decided 2026-10-11) |
-| **People** | remote users | who can sign in remotely |
-| **Connected / Connecting / Disconnected / Error** | disconnected | the four status words (sentence case in text, UPPERCASE in badges) |
+| **Connection** | integration, plugin, connector | something StagePilot talks to |
+| **Services** | Planning Center (except sign-in/OAuth/API screens) | supplies the service plan |
+| **Presentation** | ProPresenter (except where the product is the subject: "ProPresenter Look") | shows the countdown |
+| **Playback** | MultiTracks | tells StagePilot a song started. Status card accessible name: "MIDI / Playback" |
+| **Lighting** | Lightkey | receives cues |
+| **StagePilot** | backend, local API (except the kicker `Backend configuration`) | the fifth card; app-wide configuration |
+| **Connection method**, **Connection Access** | connection type, mode | how a connection is reached; who can reach StagePilot |
+| **Host / Local network / Internet** | This Computer only, Remote access (as the option names) | the three Connection Access options |
+| **OSC**, **MIDI** | | protocol methods; MIDI is Playback's alternate and Lighting's alternate |
+| **Configuration**, **General configuration**, **Advanced** | settings, setup | what you edit; the two parts of a panel |
+| **Service plan** | plan | the day's song list |
+| **Cue** (a message sent to Lighting), **Note** (MIDI note and its length) | pulse | |
+| **Cue board / pad / Timeline** | | Lighting's saved reusable cues, their buttons, and the visual song line |
+| **Remote access / People** | remote users | the Internet section and who may sign in |
+| **Connected · Connecting · Disconnected · Error** | not connected | the four status words (sentence case in text, uppercase pixel in badges and cards) |
+| **Current · live / Up next** | | the song actually started / the song Start next will play |
+- Sentence case everywhere except badges and kickers. Plain verb-and-object labels. Short: delete a sentence if the control already says it ("Required to open the dashboard from another device." was removed; so was "Sends cues by MIDI").
+- Copy states what **will happen**, never how the UI works. Do not add text that explains a toggle the toggle already shows.
 
-### Labels and buttons
-- Button labels are **verb + object**: `Save configuration`, `Scan for devices`,
-  `Test connection`, `Discard changes`. Never `OK`, `Submit`, `Yes`.
-- Sentence case everywhere, except badges and kickers (uppercase).
-- Destructive buttons name what is lost (`Delete layout`); the safe option is
-  on the left.
-- A control is **disabled with a reason shown nearby**, never silently greyed.
+---
 
-### The loading screen hands over to the header (decided 2026-10-16)
-The big StagePilot logo on the loading screen is not replaced by the dashboard: the dashboard's own header logo starts at the loading logo's centre and size and glides to its place in the header (720ms), while the rest of the dashboard is held back (hidden from the first frame), then fades in (200ms). `startup/logoLanding.ts` does it with the `translate` and `scale` properties, so nothing is cloned and the logo's own transform is untouched. People who prefer reduced motion get the dashboard at once, and a page that did not come from the loading screen (a reload of the loaded app, a test) never plays it. The Backend panel's "Timezone, logging and port changes take effect after a backend restart." now sits at the bottom of the Advanced section, under the four settings it is about.
+## 11. Checklist before you ship
 
-### Small copy decisions (2026-10-16)
-- **Playback API has no "Automatically Connect" switch.** Connecting automatically is always on; an install that was saved with it off is switched back on once, quietly, when the Playback API view loads. Scan Network and Connect are unchanged.
-- **Services has no "Service plan configuration" heading**; the service-plan fields sit directly under the divider.
-- **The first option of the ProPresenter Look list reads "Current Look"** (it leaves the Look as it is); it used to say "Do not change the current Look".
+1. **Tokens only?** No raw colours, no new radius/size/shadow/z-index. `npm run tokens:generate` run if you touched the YAML; `npm run lint` clean (0 errors; the baseline is 6 warnings).
+2. **Right primitive?** You used `components/ui/`, not a fresh look. If you added a variant, you documented it here.
+3. **Colour check:** each colour you used has exactly one meaning from §3. State is also a word. Contrast ≥ 4.5:1 for text, 3:1 for outlines.
+4. **Where does it go?** Belongs to a connection → that panel's General configuration, Advanced or a feature Disclosure. Otherwise → the StagePilot panel. Same order as §8.
+5. **Held or immediate?** Applied the §9 rule and the Save bar tells the truth.
+6. **Responsive by container:** it works at 320px; multi-column groups use 1/2/4 (never 3+1) via `@container`; nothing wraps a status word or overlaps a neighbour; targets are 44px.
+7. **Motion:** has a reduced-motion fallback, animates `transform`/`opacity`, does not delay a control.
+8. **Words:** names come from §10; sentence case; verb-and-object buttons.
+9. **Looked at it:** verified in a real browser at ≥3 widths (e.g. 1400, 900, 390), plus `npx tsc --noEmit`, `npm run lint`, `npx vitest run`, `npm run build`. Tests assert intended behaviour, not just "it renders".
+10. **Docs:** this file (and the style guide if the visual rule is new) updated in the same PR. Run `npx --yes @google/design.md@0.4.0 lint DESIGN.md`.
 
-### The dashboard header (decided 2026-10-15)
-The logo is **32px in from the left edge of the background image** (decided 2026-10-15), at every width. The image is 1700px wide and centred, so on a window wider than it the logo moves with the image and never lands in the black beside it; on a narrower window the image fills the window. The status checks at the bottom of Services (and any panel using `.status-checks`) are four across while their words fit (the panel is 30rem or wider), then two, then one; they follow the panel width, not the window.
+### Do and don't, in one place
+- **Do** let the connection colour be the only accent in its panel; **don't** use it for state.
+- **Do** put the major optional feature in a `feature` Disclosure with a useful detail line; **don't** add a fourth kind of expandable row.
+- **Do** persist the collapse state of optional sections; **don't** persist anything that changes what the show sends.
+- **Do** pair a state colour with a word; **don't** rely on colour or on hover alone.
+- **Don't** use the primary red for decoration, for text, or for more than one live item per view; **don't** let it carry an error.
+- **Don't** put a bordered box inside a panel except the listed ones; **don't** nest cards.
+- **Don't** hardcode brand names, widths of text containers, or pixel-perfect positions that depend on the window width; **don't** use `transition: all`.
 
-One row at every window width, with the **logo first and never moving**: no grid, nothing re-flows around it. Everything else is one status pill (`HeaderStatusChip`) in a slot to its right:
-- **The pill is the notification.** The pill is always the widgets' dark surface (`surface-950`) with a thin outline and pixel text in the status colour (decided 2026-10-15; it was a solid fill before): at rest Ready is green (`success-soft` outline, `success-text` words) and Check system / Error is red (`danger-edge` outline, `danger-pill` words: the darkest reds that still pass 3:1 and 4.5:1 on the dark surface). When a message arrives the same pill grows to the message's size, keeps the dark surface and takes the blue of the Previous button (`live-back-soft` outline, `live-back-text` words; not the light teal `info`) for an info message, or the same red for an error, and swaps its words; when the message ends it shrinks back. Both the status words and the message use the bold Geist Pixel Square (`font-pixel`).
-- **A new message shows right away**, replacing the one on screen (the words slide in and the pill resizes if the new text is a different length). Messages that arrive together play in turn. Each lasts 5 seconds at most.
-- **Too small for even the pill:** the pill disappears (never a dot) and the message appears just under the header on a solid surface.
-- The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`. Reduced motion turns the animation off.
+---
 
-### The system check list (the pill's hover panel, decided 2026-10-15)
-- It lists what the show cannot run without: Services, Service plan, Song durations, Playback, Presentation (and its timer) and StagePilot. **Lighting is not in it**: it is optional and has its own card, so a Lighting output going away never turns the pill to Check system.
-- The Playback entry names the saved connection method: "Playback API connected" or "Playback MIDI disconnected".
-- The panel sits above the dashboard widgets (the header has its own stacking level), and every word in it matches the cards.
+## 12. Reference
 
-### Scrolling boxes (decided 2026-10-15)
+### 12.1 Where things live
+| What | Where |
+| --- | --- |
+| Tokens → CSS/Tailwind | `frontend/scripts/design-tokens.mjs`, generated `src/design-tokens.css`, `tailwind.config.js` |
+| Global styles, container queries, keyframes | `frontend/src/index.css` (each block carries a comment with the decision) |
+| UI kit | `frontend/src/components/ui/` (`gallery/` has a visual dev gallery) |
+| Panels | `components/{PlanningCenter,ProPresenter,PlaybackApi,Midi,Lighting,Backend}SetupPanel.tsx`, `RemoteAccessPanel.tsx`, `SetupPanelHeader.tsx`, `PlaybackSaveFooter.tsx`/`usePlaybackSave.ts` |
+| Dashboard | `components/Dashboard.tsx`, `components/dashboard/*` (layout, registry, `contentFit.ts`), `StatusCard.tsx`, `HeaderStatusChip.tsx` |
+| Startup / hand-off | `src/startup/*` |
+| Tests that guard the design | `tokensOnlyAll.test.ts`, `components/ui/tokensOnly.test.ts`, `connectionPalette.test.ts`, `statusCardHue.test.ts`, `narrowZoom.test.ts` |
+| Dev visual editor | `docs/visual-editor.md` (dev-only click-to-edit side panel; changes still go through tokens) |
 
-A box that scrolls on its own (the Lighting cue list, the timeline) is drawn as an obvious region so people know there is more to see:
-- Use `ScrollRegion` (`components/ui/ScrollRegion.tsx`). It draws a 1px `ink-muted` border, rounded corners and `surface-950` fill around the scroller.
-- A light fade (`ink-muted` to transparent, 18px) lies **on top of the content, inputs included**, along any edge that has more to reach, and is hidden at the ends. It is an overlay that ignores the pointer. A dark shadow is not used: it cannot be seen on `surface-950`.
-- The scroller stays focusable and named when it has content (`role="region"`, `tabIndex=0`, an `aria-label`). An empty list is not framed.
-- Collapsing a group of controls that people may not use (Remote access) uses `Disclosure variant="activity"` with its open state saved by `usePersistedFlag`, starting open.
-- A **major** optional section (the Lighting song timeline) uses `Disclosure variant="feature"` (decided 2026-10-15): a card with a 5px rail, a 70% border and a soft wash in the connection's colour that fades to the right; a two-line header (bold title, then a detail line that is shown open or closed and says what is inside, for example `16 cues on 2 of 4 songs · 2 pads · Battle Belongs 04:41`); a small tag at the right (the active method); and the body under a rule. Everything in the section, including its Test cue controls, folds away with it. It sits next to the Save bar, which is a flat full tint with no rail, so the two read as different things in one family.
+### 12.2 Decision log (why things are the way they are)
+Keep these in mind before you "improve" them; each was an explicit owner choice.
+- **2026-10-09 to 13:** Geist replaced Inter (bundled). The primary is a deep red (`#c7231d`); coral is retired. Errors and warnings are one pure red. Connected is a deep green (fill) with a lifted copy for dots. Teal is the secondary accent for information. Three borders (6/10/18%). One warm layered shadow (the hard "printed" shadow is gone). Light button labels carry a small dark text-shadow; dark labels carry none. Services/Presentation use generic names.
+- **2026-10-14:** panels follow the style-guide look (kicker + coloured title + section kickers). `ConnectionMethod` replaced the select and the "alternate" row. Playback MIDI is blue-violet. Manual controls use bold pixel and always form even rows. The Now playing rail pulses live and settles blue. Backend status became four cards; Advanced moved under them with Timezone first.
+- **2026-10-15:** header pill is the notification (dark surface, coloured outline, grows to the message, 5s). Lighting gained OSC (primary), a Cue board and a visual Timeline; MIDI Output cue lists are independent of OSC. `ScrollRegion`, `Disclosure feature`. Default dashboard layout stacks Manual controls and Event stream under Now playing. Free widget placement replaced the spacer.
+- **2026-10-16:** the loading logo glides into the header. Connection Access (Host / Local network / Internet) autosaves; PIN always on. Playback "Automatically Connect" removed (always on). Services lost its "Service plan configuration" heading. ProPresenter Look default reads "Current Look". Stop timer / Reset position stay **rose** (the pill's dark red was tried and rejected). Dashboard borders do not appear before contents.
 
-### Panels read like the style guide (decided 2026-10-14)
-The owner preferred the guide's StagePilot and Playback panels to the app's. The app now follows them:
-- **Header:** the kicker `Connection configuration` (11px, 800, uppercase, 0.18em, muted); the **title is
-  larger (20px) and bold, in the connection's own colour** (Services, Presentation, Playback and Lighting
-  use their `-soft` colour, which is 3:1 or more for large bold text; **StagePilot uses its pale `-text`
-  tint**, because its red is the primary red at only 3.2:1); the one-sentence description in body grey.
-- **Section names** (Status, General configuration, People, Advanced, Connection method) are **kickers**:
-  11px, uppercase, tracked, muted, not bold sentences. They are still real headings. One shared
-  `SectionLabel` draws them.
-- **StagePilot Status facts** are **small recessed bordered cards** (`border-subtle`, a 40% darker well,
-  8px radius), four across, each a kicker label over a bold value. This is the one place Status facts
-  are boxed, because each is a separate value to scan.
-- **Recent activity** is **flat**: no box and no fill, a dashed rule above it, a neutral grey count pill
-  (`12 events`). Advanced stays the one tinted, bordered row, so the two still read as different jobs.
-
-### StagePilot panel layout (decided 2026-10-14, from the guide the owner liked)
-Header, then **Status**: three cards (**Version**, **Running since**, **Connections: N of 5
-connected**) and one quiet **Connection details** row beneath them holding the API endpoint, the
-WebSocket and the state revision (it is for support, not for operating). **General configuration**:
-**Timezone** and **Network access** are full-width selects (`This computer only` / `Other devices on
-this local network`), then the PIN. **People**: one sentence, then Remote Access; once it is on, the signed-in people are listed and **Add a person** opens the email, password and role fields only when pressed (Cancel folds them away again; the very first Operator keeps its form open because it is the only step). **Advanced** is a
-collapsed row with a one-line summary (`Port 8765 · Logging info`); it holds Server port, Log level
-and Release channel, opens by itself when its port is invalid, and says `N changes waiting` while
-one is held. The save bar follows; support logs sit below it.
-
-### Configuration panel anatomy (every connection looks the same)
-1. **Header:** kicker `Connection configuration` (muted), title = the
-   connection name, status badge, close button (44px).
-2. **One sentence** saying what this connection does for the user.
-3. **Connection method** (when more than one), then **General configuration**, ordered by how
-   often they change.
-4. **Advanced** (collapsed, see above).
-5. **Save bar, always last and always in the same place** (see below).
-
-**Narrow screens (320px, found when the guide was checked):** the header's
-status badge and close button are 160px + 44px and don't fit beside the title.
-Below 480px the header wraps: the title takes the first row with the 44px close
-button at the right; the status badge moves to its own row beneath the title.
-The close button never shrinks below 44px. The save bar's buttons stack full
-width below 480px.
-
-### Saving (decided: save as you go, plus an always-visible Save configuration button)
-- **Default (option A, decided 2026-10-11): every field is explicit-save.** A
-  change is held, marked, and saved only by `Save configuration`. Reason: today
-  saving any field in a panel reconnects or restarts something that a running
-  show may be using. True save-as-you-go (option C) is planned for later, once
-  the backend can apply non-disruptive fields without reconnecting; until then
-  nothing saves on change, on leaving a field, or on Enter.
-- **The `Save configuration` button is always visible** at the bottom of every
-  connection panel, for every kind of change, including ones that already saved
-  by themselves. Reason: an operator can't be expected to know which controls
-  auto-apply, and a missing button looks like a glitch. Pressing it when
-  everything is already saved is harmless and just confirms (`All changes saved
-  at 9:41 AM`). It is **never hidden**.
-- **The save bar shows one of five states** (same wording in every panel):
-  1. **Nothing changed:** `All changes saved`, button dimmed with the reason
-     beside it ("No changes to save").
-  2. **Saved automatically:** green check, `Saved automatically at 9:41 AM`,
-     button ready to press to confirm.
-  3. **Saving:** `Saving…`.
-  4. **Waiting (held changes):** red, `2 changes waiting. Not saved yet.`
-     with `Discard` and a primary red **`Save configuration`**. Held changes only take
-     effect when this is pressed, **whether or not a show is running** (decided).
-  5. **Couldn't save:** red, what failed and `Try again`; the field keeps its
-     value.
-- **Held until `Save configuration` (decided):** every field in every
-  connection panel and in the StagePilot panel.
-  - **Services:** service type, service plan choice, `Reload service plan`.
-  - **Presentation:** which timer or target receives the countdown.
-  - **Playback:** connection method, which computer, velocities.
-  - **Lighting:** the **MIDI network / output, the MIDI channel and the note
-    pulse** (any Lighting save reconfigures the plugin: it cancels the running
-    lighting timeline and reopens the MIDI port).
-  - **StagePilot:** port, network access, timezone, log level, release channel,
-    PIN requirement and the new PIN (the PIN is never saved per keystroke).
-- **Saved immediately, even during a show (decided):** only Lighting cue list
-  edits (cue notes, velocities, labels, elapsed times, add and remove), which
-  already use their own endpoints, because operators need to add cues quickly
-  during a show. Tests and display preferences (note names vs numbers) change no
-  saved configuration.
-- A held field is marked with a red dot and `Not saved yet` until saved, so
-  it's clear which controls wait and which don't.
-- On phones the save bar is sticky at the bottom of the screen.
-- The StagePilot panel uses the same bar.
-
-### The StagePilot panel (decided)
-The fifth card stays in the connections row, as the quick look at the app's
-own health, and its panel replaces a separate app-settings page. **All
-app-wide configuration that is not for one connection lives here.**
-Sections, in order: **Status** (version, running state, connection health:
-read-only), **General configuration** (timezone, network access, PIN), **People** (remote
-access and who can sign in), **Advanced** (port, logging, diagnostics).
-New app-wide options go here, never into a connection.
-
-### Form fields
-- Label above the field (`text-strong`), hint under it in `text-muted`, error
-  under that in `danger-text` with a short fix ("Enter a number from 1 to 16").
-- Field height 44px; the label never sits to the left of a field.
-- Validate when the user leaves the field, not on every keystroke.
-
-### Feedback
-- **Inline alert** for anything about the current panel (red, error
-  red, success green), under the thing it is about.
-- **Toast** only for things the user did not just cause (crash, update).
-- **Empty state:** one sentence saying what to do next plus one button.
-- **Progress in a panel** uses the blue pixel bar; on phones, the spinner.
-
-### Build rules (from the Web Interface Guidelines and hardening checks)
-These are the mechanical rules every component must follow. Each one came from
-a skill check against beta 31 or against this guide.
-- **Motion:** list the transitioned properties (never `transition: all`);
-  animate `transform` and `opacity` only (the loader fill should scale, not
-  animate `width`); honour `prefers-reduced-motion` with a calm alternative that
-  still shows the state change; animations must not block input.
-- **Touch:** `touch-action: manipulation` on buttons and controls;
-  `overscroll-behavior: contain` inside dialogs, panels and menus; 44px targets
-  on `pointer: coarse`; nothing important only on hover.
-- **Text:** `…` (single character) in placeholders and loading text, and
-  placeholders show an example ("For example, Sunday Morning…"); `tabular-nums`
-  on every timer, clock, count and duration; non-breaking space between a number
-  and its unit; 11px is the smallest text anywhere (no 10px), with ONE owner-decided
-  exception: the status word on compact status cards (1000px and below).
-- **Forms:** every field has a visible label above it; correct `type`,
-  `inputmode` and `autocomplete`; never block paste; validate on blur and keep
-  the user's input on error; focus the first error after a failed save; the Save
-  button is disabled only while a save is in flight (no double submit).
-- **Semantics (keep what exists; hover and touch come first):** `<button>` for actions, `<a>` for navigation; icon-only buttons
-  have an `aria-label`; async results (saved, failed, connecting) are announced
-  with `aria-live="polite"`; status is never colour alone; headings go in order
-  (no skipped levels).
-- **Long and odd content:** text containers use `min-w-0` with truncate or wrap;
-  labels allow 40% longer translations (no fixed widths on text); long names
-  (songs, devices, computers) truncate with the full text available on focus or
-  tap; empty lists show an empty state, never a blank gap; layouts survive 200%
-  zoom and 320px width.
-- **Destructive or live-affecting actions** need a confirm or an undo window.
-- **Images:** explicit width and height; decorative images `alt=""`.
-
-### Rules for adding anything new
-1. Does it belong to a connection? Then it goes in that connection's
-   Configuration, General configuration or Advanced. If not, it goes in the StagePilot panel.
-2. Could it change everything a running show sends or reads? Then it is a held change, saved with `Save configuration`. Everything else saves as you go.
-3. Use an existing pattern from this file. If none fits, add the new pattern
-   here first, then build it.
-4. Name it from the Vocabulary table. Add any new word to the table.
-5. It must work at 320px wide, with mouse hover and with touch (the priority). Do not regress the keyboard and screen-reader support that exists today, but do not gold-plate it.
-6. A new colour is never needed: status colours for state, the service colour
-   for identity, the primary red for the one primary action.
-
-## Do's and Don'ts
-- Do use status colours only for state, integration hues only for identity.
-- Do put light text on dark fills and dark text on light fills; check any new
-  pair at 4.5:1 (use the linter).
-- Do keep error colours reddish, including text on a light error fill.
-- Do put new colours here first, then use the token. No raw hex in components.
-- Do pair state colour with a word or icon (status cards already do).
-- Don't use the primary red for decoration, for text (use `primary-text`), or for more than one "live" item per view.
-- Don't add radii, font sizes, shadows or z-indexes not listed here.
-- Don't put a bordered box inside a panel except fields, the Advanced / Activity
-  rows and the save bar (see Borders inside panels).
-
-## How this drives the app
-
-Status (final audit, 2026-10-11): the three systems below are one system once
-the Phase 5 and 6 PRs (#132 to #142) are merged. Merged at the final audit:
-#132, #137, #138, #139, #142. Still draft: #133 to #136, #140, #141. The table records what
-main had before them and where each went; the plan steps after it are done
-except where noted.
-
-| Layer | Where | Reach |
-| --- | --- | --- |
-| `--sp-*` CSS variables | `index.css` `:root` | deleted by PR #139 (merged) |
-| `stage-*` Tailwind colours | `tailwind.config.js` | deleted in PR #139 |
-| Stock Tailwind palette | components | none left in `src` non-test files (checked at the final audit; guard in PR #142) |
-
-Wiring plan (each step was a small PR; status at the final audit):
-
-1. `npx @google/design.md export` to generate the Tailwind theme and CSS
-   variables from this file; replace both `:root` and `stage-*` with it. Done
-   (plumbing in Phase 2; the old `--sp-*` and `stage-*` are deleted in PR #139).
-2. Add semantic Tailwind names (`text-muted`, `bg-success`, `border`)
-   and migrate components screen by screen; add a CI grep that blocks new
-   raw hex and new stock-palette colours. Done: the migration landed in
-   Phases 3 to 4 and the tokens-only guard over all of `src` is PR #142.
-3. Add `design.md lint` to CI and a line in `CONTRIBUTING.md`. Done in PR #142 (CI step; the
-   `CONTRIBUTING.md` line is in the same PR).
-
-### Audit ledger: discrepancies found and how each was handled
-
-| # | Finding | Handling |
-| --- | --- | --- |
-| 1 | Draft v1 said timer is Inter 900 (historical), 4rem. Real: mono, weight 300, clamp(3rem, 5vw, 5.4rem) | Fixed in tokens |
-| 2 | Draft v1 listed `brand` at 1.5rem; real sizes are 4.05rem header and up to 11.25rem splash | Fixed; added `brand-hero` |
-| 3 | Draft v1 claimed text pairs pass AA. `text-muted` (slate-500) is 3.4-4.2:1; `danger` as text 4.4:1; white on coral 3.0, rose-500 3.7, fuchsia-500 3.5 | `text-muted` CHANGED to `#7b8ba1`; others documented as rules |
-| 4 | `--sp-*` vs rendered values differ (success `#42dda4` vs `#34d399`, warning `#f6c453` vs `#fbbf24`, info `#7dd3fc` vs `#38bdf8`, muted `#9aa9bb` vs `#94a3b8`, quiet `#718096`) | Rendered values used; `--sp-*` values listed as OPEN Q1 |
-| 5 | `stage-800` / `stage-700` defined but never used; `stage-900` only in scrollbar CSS | Decided: delete both unused; `stage-850` -> `card`, `stage-900` -> `scrollbar-track` |
-| 6 | Missing `panel`, `panel-strong`, dialog/toast/popover, scrim, widget borders | Added |
-| 7 | Missing z-index scale (7 layers) with two apparent stacking conflicts | Added table; layering decided: keep as is |
-| 8 | Missing: Inter not loaded (now Geist, bundled); tap-target rule mostly unenforced; no placeholder style; two shadow languages; 3 button recipes | Decided: bundle a font (Geist since 2026-10-11), 44/36px tap targets, placeholder style, new shadow, one panel recipe; coral is the only solid primary |
-| 9 | Draft v1 listed `rounded` sm/md as in use; bare `rounded` (4px) is the real odd one | Documented |
-
-| 10 | I said one timer used -0.045em vs -0.06em. Wrong: -0.045em is the song title heading, a different element | Corrected; `song-title` token added |
-| 11 | Draft v2 had no text-colour rule for coloured fills; white on rose-500 (3.7), fuchsia-500 (3.5), sky-500 (2.8) fail | Rule decided; darker fills added |
-| 12 | Live controls (4 severity colours) were not documented, and the red hover fill fails AA with white text | Documented as a deliberate exception; red hover fill darkened |
-| 13 | Dashboard and docs used vendor brand names | Generic names decided; brand names only for OAuth/API-specific screens |
-
-## Decisions made (owner, 2026-10-09)
-
-**Principle:** the app must be usable by anyone without training. Nothing is
-kept because the current code does it.
-
-**Foundations**
-- Three text steps (`text` warm, `text-body`, `text-muted`); `text-strong` is
-  the same warm colour set bolder (700), not a separate colour.
-- Three widget borders (6 / 10 / 18%). One warm layered default shadow (old
-  shadow deleted); stronger levels 2 to 5 exist for the owner to choose.
-- Light button labels carry a small very-dark-grey text shadow. Dark labels
-  (on red and Services-green fills) carry none: the light shadow under dark
-  text was tried and rejected.
-- Advanced tones are 30% service colour mixed with 70% `text-muted`.
-- Light text on dark fills, dark text on light fills; error text keeps its
-  reddish colour. Contrast minimum 4.5:1 for text.
-- The primary red is the only solid primary button. Playback is fuchsia `#e879f9`;
-  MIDI is a connection method, not a service colour. Live controls keep four
-  severity colours.
-- Geist is bundled (replaced Inter, 2026-10-11). Three tracking steps; one 11px micro size; bare `rounded`
-  becomes 8px. Inputs on `surface-950`.
-- Photo background stays, fixed behind scrolling content. Blue loading bar
-  stays; its white lead-in line is removed.
-- Service icons are generic pixel-art illustrations (checklist, monitor with
-  cursor, audio tracks), not vendor logos, and count as 8-bit moments.
-
-**Sizes**
-- 44px: live controls, inputs, and **every button on touch devices**
-  (`@media (pointer: coarse)`). 36px buttons are for mouse pointers only.
-
-**Patterns (see Patterns section)**
-- Wide status cards above 1000px, compact below. Phone/remote loading is a
-  spinner instead of the bar.
-- Connection method select (Playback API main / MIDI alternate; Lighting shows
-  MIDI as text). Activity and Advanced rows look different; "Other computer…"
-  replaces "Connect a specific computer".
-- Vocabulary: Connection, Services, Presentation, Playback, Lighting, MIDI,
-  Configuration, General configuration / Advanced, StagePilot, Service plan, Cue (not pulse),
-  Note (kept), People.
-- StagePilot card and panel hold all app-wide configuration.
-- Save as you go, plus an always-visible `Save configuration` button and a
-  five-state save bar. Held until saved: service type / plan choice / Reload
-  service plan, Presentation timer target, Playback method / computer /
-  velocities, Lighting **MIDI network (output) and channel only**, StagePilot
-  restart-needed items. Everything else applies immediately, including the
-  rest of Lighting.
-- **Send test cue** runs when pressed, using the saved output. It is disabled
-  (greyed, with the reason beside it) while a new MIDI output is selected but
-  not saved.
-
-**Process**
-- Documentation-only PR first, then component migrations in small PRs; styling
-  and behaviour changes are never mixed in one PR.
-
-## Primary colour change (owner, 2026-10-11)
-Coral `#ff6238` is retired everywhere. The primary is the deep red `#c7231d`,
-with the supplied shade and tint scales under `primary-scale`. Mapping:
-- `primary` coral -> `#c7231d`; `primary-hover` -> tint 10% `#cd3934`;
-  `primary-focus` -> tint 40% `#dd7b77`; new `primary-active` shade 10%
-  `#b3201a`; new `primary-text` tint 50% `#e3918e`.
-- Text on a primary fill is now **white** (5.7:1), not dark (dark would be 3.5:1).
-- The red is 3.2:1 on panels: fill, rail, border and dot only. As text it is
-  `primary-text`.
-- Wash tints that were coral (`rgb(255 98 56 / x)`) become the primary at the
-  same opacity.
-- Red is now both "live/primary" and the error family. Told apart by form:
-  primary = solid fill + white text or a rail; error = pale text + dot + icon;
-  destructive = `danger-solid` red. Hover/focus/active never swap between them.
-- Photo-sampled `flare-*` colours are for washes and glows on the live item
-  only, never for text, buttons or status.
-
-## Secondary accent (owner, 2026-10-12): teal `#1dc1c7`
-The secondary accent is **information and "what comes next"**, never state and
-never an action that changes the show. It is bright (8.2:1 on panels), so unlike
-the red it works as text.
-- **Tokens:** `info` `#1dc1c7` (fills, dots, borders, large glyphs), `info-text`
-  tint 40% `#77dadd` (small text, 11.0:1), `info-hover` tint 10% `#34c7cd`,
-  `info-active` shade 10% `#1aaeb3`, `on-info` `#020617` (dark text on an accent
-  fill). It replaces sky (`#38bdf8`) as `info` and blue-700 as `live-reload`.
-- **Uses (decided):** the **Up next** song label (dashboard song list and the
-  Now-playing "Up next" caption), informational text and banners (`InlineAlert`
-  and `PanelAlert` tone info, Remote Access status lines, first-launch
-  configuration kicker, "Update available" kicker and version number), the
-  **Reload service plan** live control, the info badge and status dot.
-- **Extra uses (decided 2026-10-12, owner: make those real):** the **next song's number
-  chip** beside "Up next"; the **"Send test cue"** result line; the **Activity**
-  row's count badge (neutral grey today); links (`linkButton`, e.g. Playback
-  "Other computer" and learn-more links); the **Update available** button; the
-  note-display toggle glyphs in Lighting; the dashboard **intentional spacer**
-  outline; and the **progress** of an update download.
-- **Never:** state (that is green, red for warning and error, slate), the one primary action
-  (that is the red), service identity (that is the integration hues), or the
-  retro loading bar (stays blue pixel art).
-- **Collision resolved (owner, 2026-10-12):** Lighting's identity colour is no
-  longer sky; the teal accent is distinct from every connection colour now.
-
-## Colour collisions to know about (owner palette, 2026-10-12)
-The owner chose these five connection colours. Two of them sit very close to
-other colours that already mean something. They are kept apart **by form and
-placement**, never by hue alone. Contrast between two colours is 1.0 when
-identical.
-- **StagePilot `#c7231d` is the primary red (1.00).** The StagePilot card and
-  panel therefore carry the live-red. Rule: the red *rail and wash* on a card or
-  panel means **live or selected** and appears once per view; a connection tint
-  is a *thin icon-tile tint and a 1px top border*, never a rail or a wash. A
-  StagePilot panel keeps its single solid primary button (`Save configuration`),
-  which is the same red as its tint; that is by design.
-- **Lighting `#d53367` is next to the error red (`danger-solid` `#ff0000`,
-  1.01) and close to the primary red (1.22).** Rule: Lighting is *tint and dot*
-  only. Error is always `danger-text` words with a red dot and an icon;
-  `Stop timer`/`Reset position` stay rose-coloured live controls (a different red from the error red). A Lighting card in an
-  error state shows the status word `Error`, not a colour change.
-- **Playback `#4b73b0` is no longer near the idle grey** (`idle` `#64748b`):
-  hue 216 and saturation 40% against hue 215 and 17%. It is still only 1.01:1 in
-  luminance from idle, so idle stays a dot plus the words *Disconnected*, and
-  Playback stays a tile tint, top border and tinted buttons. Its **Advanced**
-  tone (`#7e95b6`) is 5.9:1 on panels and clearly blue-grey.
-- **Services green `#6bb03c` and the deep success green `#31551d`** are the same
-  hue (96 vs 98) at very different brightness (2.3:1 apart as fills; the lifted
-  `success-soft` `#417227` is 1.9:1 from Services). Rule: Services is identity only
-  (icon tile, panel border, accent buttons). The success green is never used
-  inside a Services panel at all: there, a "connected" message uses the panel
-  accent (see "Accent inside a configuration panel"). So the two never touch.
-- **Errors and warnings are pure red `#ff0000`, one family (decided 2026-10-13).** Both use
-  `danger` / `danger-text`, so a warning is never mistaken for the primary red `#c7231d`
-  (Backend, Start), Lighting `#d53367` or the Presentation orange. They are told apart by words
-  and icon, not hue: warning is *Connecting*, *Delayed*, *Needs attention*, *Not saved yet*; error
-  is *Error* and the failed-action message. Filled destructive buttons use `danger-solid`
-  `#ff0000`, the same red, with white text (4.0:1, bold, label shadow). **Previous** (`live-back` `#2d487c`) is dark blue, the same lightness as Start next's green, so it is
-  not mistaken for the red Stop controls.
-
-## Decided (owner, 2026-10-13): "Current · live" and "Up next" describe the show
-**Previous** and **Next** only move the navigation cursor: they select a song and start nothing (the
-timer, ProPresenter and Lighting do not change). The labels used to follow the cursor, so after
-Previous the previous song read "Current · live" while another song was still playing, and the real
-effect (the next Start next plays it) was hidden. Now:
-- **Current · live** (and the Now playing title, position and elapsed) is the song that was actually
-  started, `playing_song`.
-- **Up next** (service plan row and the Now playing caption) is the song the next **Start next** will
-  play, `up_next_song`. After Previous that is the previous song.
-- Before anything starts nothing is live and Up next is the first song. **Reset position** clears the
-  live song. **Restart current** restarts the cursor song and makes it the live one.
-- Playback, MIDI and the Lighting cue editor keep using the cursor (`current_song`,
-  `current_song_index`), unchanged.
-- A service plan reload keeps both the live song and the Start next target by song id.
-
-## Decided (owner, 2026-10-13): a darker "connected" green
-`success` is now **`#31551d`**. Measured on panels (`#0f1720`), cards and the live panel:
-| Role | Value | Contrast | Used for |
-| --- | --- | --- | --- |
-| `success` | `#31551d` | 2.1:1 on panels; light text on it 7.8:1 | fills only: Ready pill, solid badge, Start next / Restart current on press |
-| `success-soft` | `#417227` | 3.15:1 | dots and borders, 10-30% tints |
-| `success-text` | `#69b63e` | 7.2:1 (6.1:1 on its own 20% tint) | the words *Connected*, *Ready*, the live control label at rest |
-Because the base is too dark for a dot, **status dots are removed from the five
-status cards and the header Ready pill** (decided 2026-10-13): the word carries
-the state, with the pill outlined in `success-soft`. Dots stay in the Check system
-list, badges and panels where a word sits beside them.
-
-## Still open
-
-Resolved (owner, 2026-10-12): Lighting moves to `#d53367`; see "Colour collisions".
-
-Nothing blocking. Decisions recorded 2026-10-11 (owner):
-- Release channel lives in **Advanced** in the StagePilot panel.
-- "Pulse" becomes **Note** everywhere ("Note length (ms)", "Test cue").
-- The Lighting output reads **MIDI Output to Lighting Controller**; no vendor name.
-- Compact status words may go **below the 11px floor**. This is the one
-  documented exception (status word, compact cards, 1000px and below). Nothing
-  else may.
-- The loading-bar fill keeps its **pixel stripes**.
-- `elevation.overlay` is approved.
-- Save behaviour: explicit save with held markers everywhere (option A); the
-  backend split for true save-as-you-go (option C) is later work.
-
-Still not done:
-- Real-device touch, screen-reader and real 200% browser zoom checks (only emulated).
-- Exhaustive destructive-action confirmation audit.
-- Option C (backend split for true save-as-you-go).
-
-Decided exception: startup/error screen text over the photo may measure as low as 1.1:1 at the brightest patch; owner decided to leave it (2026-10-11).
+### 12.3 Still open
+- Real-device touch, screen-reader and 200% browser-zoom checks are emulated only.
+- A confirmation audit for every destructive action.
+- Backend split for true per-field save-as-you-go.
+- Decided exceptions: the compact status-card word may be below 11px; startup/error text over the brightest patch of the photo may measure 1.1:1.
