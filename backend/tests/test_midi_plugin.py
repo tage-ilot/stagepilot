@@ -276,7 +276,7 @@ async def test_dispatches_all_six_configured_notes_in_fifo_order() -> None:
     try:
         await harness.plugin.start()
         await wait_until(lambda: len(harness.backend.ports) == 1)
-        # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+        # A note sent before the connection is active is (correctly) dropped as stale.
         await wait_for_health(harness.plugin, PluginStatus.RUNNING)
         port = harness.backend.ports[0]
 
@@ -307,7 +307,7 @@ async def test_velocities_one_through_99_dispatch_exact_song_positions() -> None
     try:
         await harness.plugin.start()
         await wait_until(lambda: len(harness.backend.ports) == 1)
-        # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+        # A note sent before the connection is active is (correctly) dropped as stale.
         await wait_for_health(harness.plugin, PluginStatus.RUNNING)
         port = harness.backend.ports[0]
 
@@ -334,7 +334,7 @@ async def test_filters_other_channels_and_unmapped_notes_before_dispatch() -> No
     try:
         await harness.plugin.start()
         await wait_until(lambda: len(harness.backend.ports) == 1)
-        # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+        # A note sent before the connection is active is (correctly) dropped as stale.
         await wait_for_health(harness.plugin, PluginStatus.RUNNING)
         port = harness.backend.ports[0]
 
@@ -400,7 +400,7 @@ async def test_monitor_records_received_notes_and_why_they_were_ignored() -> Non
     try:
         await harness.plugin.start()
         await wait_until(lambda: len(harness.backend.ports) == 1)
-        # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+        # A note sent before the connection is active is (correctly) dropped as stale.
         await wait_for_health(harness.plugin, PluginStatus.RUNNING)
         port = harness.backend.ports[0]
 
@@ -461,7 +461,7 @@ async def test_note_release_latching_and_monotonic_debounce_prevent_duplicates()
     try:
         await harness.plugin.start()
         await wait_until(lambda: len(harness.backend.ports) == 1)
-        # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+        # A note sent before the connection is active is (correctly) dropped as stale.
         await wait_for_health(harness.plugin, PluginStatus.RUNNING)
         port = harness.backend.ports[0]
 
@@ -620,7 +620,7 @@ async def test_shutdown_is_idempotent_closes_port_and_rejects_late_work() -> Non
     harness = await plugin_harness()
     await harness.plugin.start()
     await wait_until(lambda: len(harness.backend.ports) == 1)
-    # The port exists before the plugin marks the connection active; a note sent in that gap is (correctly) dropped as stale.
+    # A note sent before the connection is active is (correctly) dropped as stale.
     await wait_for_health(harness.plugin, PluginStatus.RUNNING)
     port = harness.backend.ports[0]
 
