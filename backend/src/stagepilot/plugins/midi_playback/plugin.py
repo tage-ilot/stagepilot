@@ -233,16 +233,33 @@ class MidiPlaybackPlugin(Plugin, MidiController):
     async def reconfigure(self, settings: MidiSettings) -> ActionOutcome:
         """Apply cue-filter settings without reopening the selected MIDI input."""
 
-        if (
-            not settings.enabled
-            or self._stopping
-            or self._status in {PluginStatus.STOPPED, PluginStatus.STOPPING}
-        ):
-            return ActionOutcome(False, "Restart StagePilot to change MIDI plugin availability.")
+        if self._stopping or self._status in {PluginStatus.STOPPED, PluginStatus.STOPPING}:
+            return ActionOutcome(False, "The MIDI Playback plugin is not running.")
+        if not settings.enabled:
+            return ActionOutcome(False, "MIDI is turned off in the saved settings.")
 
         self._settings = settings.model_copy(deep=True)
         self._held_notes.clear()
         self._last_triggered_at.clear()
+        if settings.input_name != self._selected_input_name:
+            # A different input was saved: connect to it live (the supervisor retries
+            # while the device is absent and picks it up when it appears).
+            async with self._selection_lock:
+                self._selected_input_name = settings.input_name
+                self._active_connection_id = None
+                self._wake.set()
+                if settings.input_name is None:
+                    await self._set_connection(
+                        ConnectionStatus.DISCONNECTED,
+                        "No MIDI input is selected; cue simulation remains available.",
+                        plugin_status=PluginStatus.STARTING,
+                    )
+                else:
+                    await self._set_connection(
+                        ConnectionStatus.CONNECTING,
+                        f'Connecting to "{settings.input_name}".',
+                        plugin_status=PluginStatus.STARTING,
+                    )
         self._logger.info(
             "midi_settings_reconfigured",
             channel=settings.channel,

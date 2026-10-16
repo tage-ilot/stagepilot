@@ -179,8 +179,9 @@ The dashboard presents a six-step first-launch checklist:
 2. Enter the Planning Center PAT application ID and secret, test the connection,
    choose a discovered service type, and save. Saving enables the real Planning
    Center source automatically.
-3. Save the MIDI channel, fixed note, velocities, and debounce settings. Restart,
-   refresh the available inputs, and select the Playback input.
+3. Save the MIDI channel, fixed note, velocities, and debounce settings. Refresh
+   the available inputs and select the Playback input; it connects immediately,
+   with no restart. Changing the input while the timer runs is refused (409).
 4. Save the ProPresenter API and countdown timer settings. Saving enables the real
    ProPresenter output automatically.
 5. Test all three integration connections.

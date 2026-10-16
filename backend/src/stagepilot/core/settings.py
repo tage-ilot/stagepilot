@@ -584,6 +584,17 @@ class SettingsService:
                 return name
         return None
 
+    def midi_pin(self, *, source: bool, enabled: bool) -> str | None:
+        """Name of the environment variable pinning the MIDI source or availability, if any."""
+
+        names = ["STAGEPILOT_MIDI_SOURCE", "STAGEPILOT_DEMO_SIMULATE_MIDI"]
+        if enabled:
+            names.append("STAGEPILOT_MIDI_ENABLED")
+        for name in names:
+            if name in self._environ:
+                return name
+        return None
+
     def set_access_token_provider(self, provider: Callable[[], str | None] | None) -> None:
         self._access_token_provider = provider
         self._runtime = self._resolve(self._persistent, self._secret)
