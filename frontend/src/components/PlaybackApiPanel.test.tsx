@@ -389,20 +389,21 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(playback.save).not.toHaveBeenCalled();
   });
 
-  it("method change plus setting change: selectSource then save, in that order", async () => {
+  it("a method change is applied by selectSource alone: there is no separate settings save", async () => {
     const order: string[] = [];
     const playback = controller({
       selectSource: vi.fn(async () => { order.push("selectSource"); return true; }),
       save: vi.fn(async () => { order.push("save"); return true; }),
     });
     const Host = () => { const draft = usePlaybackDraft(playback, "real"); const save = usePlaybackSave(draft, playback, noMidi); return <>
-      <button onClick={() => { draft.setMethod("playback_api"); draft.setEnabled(!draft.enabled); }} type="button">edit</button>
+      <button onClick={() => { draft.setMethod("playback_api"); }} type="button">edit</button>
       <button onClick={() => void save.save()} type="button">go</button></>; };
     render(<Host />);
     await userEvent.click(screen.getByRole("button", { name: "edit" }));
     await userEvent.click(screen.getByRole("button", { name: "go" }));
-    expect(order).toEqual(["selectSource", "save"]);
+    expect(order).toEqual(["selectSource"]);
     expect(playback.selectSource).toHaveBeenCalledWith("playback_api");
+    expect(playback.save).not.toHaveBeenCalled();
   });
 
   it("stops at the first failure: save is not called and the draft stays", async () => {
@@ -449,7 +450,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(order).toEqual(["selectSource", "saveMidi"]);
   });
 
-  it("order with all three edited: selectSource, updatePlaybackSettings, MIDI save; the MIDI payload is byte-identical to the old Save MIDI settings", async () => {
+  it("order with the method and MIDI edited: selectSource, then the MIDI save; the MIDI payload is byte-identical to the old Save MIDI settings", async () => {
     const order: string[] = [];
     const base = controller();
     const playback = controller({
@@ -460,13 +461,12 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn(async () => { order.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Automatically Connect"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
-    expect(document.querySelector("[data-save-status]")!.textContent).toBe("3\u00a0changes waiting. Not saved yet.");
+    expect(document.querySelector("[data-save-status]")!.textContent).toBe("2\u00a0changes waiting. Not saved yet.");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
-    expect(order).toEqual(["selectSource", "playbackSave", "saveMidi"]);
-    expect(playback.save).toHaveBeenCalledExactlyOnceWith({ ...base.status!.settings, enabled: false });
+    expect(order).toEqual(["selectSource", "saveMidi"]);
+    expect(playback.save).not.toHaveBeenCalled();
     expect(JSON.stringify((onSaveSettings.mock.calls as unknown as unknown[][])[0]![0])).toBe(JSON.stringify({ ...validMidi.settings.midi, enabled: true, channel: 5, note: validMidi.settings.midi.note, debounce_ms: validMidi.settings.midi.debounce_ms, mappings: validMidi.settings.midi.mappings }));
   });
 
@@ -479,14 +479,13 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     const onSaveSettings = vi.fn().mockImplementationOnce(async () => { calls.push("saveMidi"); return false; }).mockImplementation(async () => { calls.push("saveMidi"); return true; });
     const user = userEvent.setup();
     midiPanel(playback, onSaveSettings);
-    await user.click(screen.getByLabelText("Automatically Connect"));
     await chooseMethod(user, "real");
     fireEvent.change(screen.getByLabelText("MIDI channel"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
-    expect(calls).toEqual(["selectSource", "playbackSave", "saveMidi"]);
+    expect(calls).toEqual(["selectSource", "saveMidi"]);
     expect(document.querySelector("[data-save-status]")!.textContent).toBe("Couldn't save");
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(calls).toEqual(["selectSource", "playbackSave", "saveMidi", "saveMidi"]);
+    expect(calls).toEqual(["selectSource", "saveMidi", "saveMidi"]);
   });
 
   it("invalid MIDI values: nothing is written and the reason is shown", async () => {
@@ -605,10 +604,11 @@ function Harness({ save, onDirty }: { save: PlaybackController["save"]; onDirty?
 
 describe("Save configuration bar (Playback)", () => {
   afterEach(() => vi.useRealTimers());
-  const toggle = () => screen.getByLabelText("Automatically Connect");
   const saveButton = () => screen.getByRole("button", { name: "Save configuration" });
   const state = () => document.querySelector("[data-save-bar]")!.getAttribute("data-state");
   const statusText = () => document.querySelector("[data-save-status]")!.textContent;
+  // The one edit left on the API view is the connection method: choosing MIDI holds a change until Save.
+  const editMethod = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole("radio", { name: /^MIDI/ }));
 
   it("clean: All changes saved, button present but dimmed with the reason beside it, click does nothing", () => {
     const save = vi.fn().mockResolvedValue(true);
@@ -622,45 +622,51 @@ describe("Save configuration bar (Playback)", () => {
     expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });
 
-  it("held: N changes waiting, held marker on the edited setting, Discard restores clean", () => {
-    render(<Harness save={vi.fn().mockResolvedValue(true)} />);
-    fireEvent.click(toggle());
-    expect(state()).toBe("held");
-    expect(statusText()).toBe("1\u00a0change waiting. Not saved yet.");
-    expect(toggle()).toHaveAccessibleDescription("Not saved yet");
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(toggle()).toBeChecked();
-    expect(screen.getByLabelText("Automatically Connect")).toBeChecked();
-    expect(state()).toBe("clean");
-    expect(document.querySelector("[data-held-marker]")).toBeNull();
+  it("there is no Automatically Connect switch: connecting automatically is always on", () => {
+    panel();
+    expect(screen.queryByLabelText("Automatically Connect")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Automatically Connect/);
   });
 
-  it("saving: Saving… with the button loading, then clean once the saved settings arrive", async () => {
+  it("held: N changes waiting, Discard restores clean and never saves", async () => {
+    const user = userEvent.setup();
+    const playback = controller();
+    panel(playback);
+    await editMethod(user);
+    expect(state()).toBe("held");
+    expect(statusText()).toBe("1\u00a0change waiting. Not saved yet.");
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(state()).toBe("clean");
+    expect(playback.selectSource).not.toHaveBeenCalled();
+    expect(playback.save).not.toHaveBeenCalled();
+  });
+
+  it("saving: Saving… while the method is written", async () => {
     let finish!: (ok: boolean) => void;
-    const save = vi.fn().mockReturnValue(new Promise<boolean>((resolve) => { finish = resolve; }));
-    render(<Harness save={save} />);
-    fireEvent.click(toggle());
-    fireEvent.click(saveButton());
-    expect(save).toHaveBeenCalledExactlyOnceWith({ enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true });
+    const selectSource = vi.fn().mockReturnValue(new Promise<boolean>((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    panel(controller({ selectSource }));
+    await editMethod(user);
+    await user.click(saveButton());
+    expect(selectSource).toHaveBeenCalledExactlyOnceWith("real");
     expect(state()).toBe("saving");
     expect(statusText()).toBe("Saving…");
     await act(async () => finish(true));
-    expect(state()).toBe("clean");
-    expect(toggle()).not.toBeChecked();
+    expect(state()).not.toBe("saving");
   });
 
-  it("error: Couldn't save with Try again, changes kept; Try again repeats only the failed step", async () => {
-    const save = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
-    render(<Harness save={save} />);
-    fireEvent.click(toggle());
-    await act(async () => { fireEvent.click(saveButton()); });
+  it("error: Couldn't save with Try again, changes kept; Try again repeats the failed step", async () => {
+    const selectSource = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const user = userEvent.setup();
+    panel(controller({ selectSource }));
+    await editMethod(user);
+    await user.click(saveButton());
     expect(state()).toBe("error");
     expect(statusText()).toBe("Couldn't save");
     expect(screen.getByRole("alert")).toHaveTextContent("not saved");
-    expect(toggle()).not.toBeChecked();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); });
-    expect(save).toHaveBeenCalledTimes(2);
-    expect(state()).toBe("clean");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(selectSource).toHaveBeenCalledTimes(2);
+    expect(state()).not.toBe("error");
   });
 
   it("auto: when Scan or Connect saves the computer by itself the bar says Saved automatically at <time>", async () => {
@@ -670,33 +676,29 @@ describe("Save configuration bar (Playback)", () => {
     await act(async () => undefined);
     expect(state()).toBe("auto");
     expect(statusText()).toMatch(/^Saved automatically at\s/);
-    fireEvent.click(toggle());
-    expect(state()).toBe("held");
   });
 
-  it("always sends network scan on and fast transport on, byte-identical to the old payload", async () => {
+  it("an install saved with automatic connecting off is turned back on once, with network scan and fast transport on", async () => {
     const save = vi.fn().mockResolvedValue(true);
-    render(<Harness save={save} />);
-    expect(screen.queryByLabelText(/Playback Network Scan/)).not.toBeInTheDocument();
-    fireEvent.click(toggle());
-    await act(async () => { fireEvent.click(saveButton()); });
-    expect(JSON.stringify(save.mock.calls[0]![0])).toBe('{"enabled":false,"host":null,"port":8080,"auto_scan":true,"fast_transport":true}');
-  });
-
-  it("Discard never saves", () => {
-    const save = vi.fn();
-    render(<Harness save={save} />);
-    fireEvent.click(screen.getByLabelText("Automatically Connect"));
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(screen.getByLabelText("Automatically Connect")).toBeChecked();
-    expect(save).not.toHaveBeenCalled();
+    const off = playbackStatus({ enabled: false, settings: { enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true } });
+    const Heal = ({ method }: { method: "playback_api" | "real" }) => { usePlaybackDraft(controller({ status: off, save }), method); return null; };
+    const view = render(<Heal method="real" />);
+    expect(save).not.toHaveBeenCalled(); // MIDI is the saved method: Playback API is not touched
+    view.rerender(<Heal method="playback_api" />);
+    await act(async () => undefined);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(save.mock.calls[0]![0])).toBe('{"enabled":true,"host":null,"port":8080,"auto_scan":true,"fast_transport":true}');
+    view.rerender(<Heal method="playback_api" />);
+    await act(async () => undefined);
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it("Scan Network and Connect are never gated by unsaved edits", async () => {
     const playback = controller();
-    const Gate = () => { const draft = usePlaybackDraft(playback); const bar = usePlaybackSave(draft, playback, noMidi); return <><PlaybackApiPanel playback={playback} draft={draft} /><PlaybackSaveBar save={bar} /></>; };
+    const Gate = () => { const draft = usePlaybackDraft(playback); const bar = usePlaybackSave(draft, playback, noMidi); return <><PlaybackApiPanel playback={playback} draft={draft} /><PlaybackSaveBar save={bar} /><button onClick={() => draft.setMethod("real")} type="button">edit</button></>; };
     render(<Gate />);
-    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole("button", { name: "edit" }));
+    expect(state()).toBe("held");
     expect(screen.getByRole("button", { name: "Scan Network" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Scan Network" }));
     expect(playback.scan).toHaveBeenCalledWith();
@@ -714,12 +716,13 @@ describe("Save configuration bar (Playback)", () => {
     expect(screen.getAllByRole("button", { name: "Save configuration" })).toHaveLength(1);
   });
 
-  it("reports dirtiness upward so leaving can ask first", () => {
+  it("reports dirtiness upward so leaving can ask first", async () => {
+    const user = userEvent.setup();
     const onDirtyChange = vi.fn();
     panel(controller(), { onDirtyChange });
-    fireEvent.click(screen.getByLabelText("Automatically Connect"));
+    await editMethod(user);
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 

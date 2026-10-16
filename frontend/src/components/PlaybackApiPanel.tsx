@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { openExternalUrl } from "../desktop";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -27,19 +27,11 @@ const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 
 
-// A checkbox row with the same held marker as Field heldChange (warning dot, "Not saved yet"), kept out of the label so the accessible name stays the same.
-function HeldRow({ held, id, children }: { held: boolean; id: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3">
-      <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-3 text-sm text-ink-body">{children}</label>
-      {held && <span id={id} data-held-marker className="inline-flex items-center gap-1.5 text-type-body-sm text-warning-text"><span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />Not saved yet</span>}
-    </div>
-  );
-}
-
 const SCAN_CANCEL_GUARD_MS = 600;
 
-export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
+// Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` is accepted so the panel keeps
+// the same props as the MIDI view next to it.
+export function PlaybackApiPanel({ playback }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
@@ -77,7 +69,6 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
   const cancelScan = () => { if (Date.now() - scanClickedAt.current < SCAN_CANCEL_GUARD_MS) return; playback?.cancelScan(); };
   const connect = () => { if (trimmed && hostOk) { scanClickedAt.current = Date.now(); playback?.scan(trimmed); } };
   const tone = status ? playbackBannerTone(status) : "idle";
-  const apiOn = draft?.enabled ?? status?.enabled ?? true;
 
   return (
     <div className="mt-4 space-y-4">
@@ -159,10 +150,6 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
             {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
             {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
           </form>
-          <HeldRow held={Boolean(draft && status && draft.enabled !== status.settings.enabled)} id="held-enabled">
-            <input className="size-4 accent-integration-playback" type="checkbox" checked={apiOn} disabled={!status || !draft} aria-describedby={draft && status && draft.enabled !== status.settings.enabled ? "held-enabled" : undefined} onChange={(event) => draft?.setEnabled(event.target.checked)} />
-            Automatically Connect
-          </HeldRow>
         </div>
         </div>
       </div>

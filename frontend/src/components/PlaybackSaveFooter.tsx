@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { SaveBar } from "./ui/SaveBar";
@@ -13,14 +13,6 @@ export interface PlaybackDraft {
   setMethod: (value: PlaybackMethod) => void;
   /** Writes the chosen method (selectSource) when it differs from the saved one. True when nothing is left to apply. */
   applyMethod: () => Promise<boolean>;
-  enabled: boolean;
-  setEnabled: (value: boolean) => void;
-  /** Playback settings (not the method) differ from the saved ones. */
-  settingsDirty: boolean;
-  /** Number of Playback settings that differ from the saved values. */
-  settingsCount: number;
-  /** Writes the Playback settings (updatePlaybackSettings). The payload is the same as the old Save settings. */
-  applySettings: () => Promise<boolean>;
   dirty: boolean;
   saving: boolean;
   error: string | null;
@@ -32,20 +24,25 @@ export interface PlaybackDraft {
 export function usePlaybackDraft(playback?: PlaybackController, savedMethod: PlaybackMethod = "playback_api"): PlaybackDraft {
   const status = playback?.status ?? null;
   const savedEnabled = status?.settings.enabled ?? true;
-  const [enabled, setEnabledState] = useState(savedEnabled);
   const [method, setMethodState] = useState<PlaybackMethod>(savedMethod);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => setMethodState(savedMethod), [savedMethod]);
-  useEffect(() => setEnabledState(savedEnabled), [savedEnabled]);
+  useEffect(() => setMethodState(savedMethod), [savedMethod]);
+
+  // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. An install saved with it off while Playback
+  // API is the saved method is turned back on once, quietly, with the settings it already has (Scan Network and Connect do the same).
+  const healed = useRef(false);
+  useEffect(() => {
+    if (healed.current || !playback || !status || savedMethod !== "playback_api" || savedEnabled) return;
+    healed.current = true;
+    void playback.save({ ...status.settings, enabled: true, auto_scan: true, fast_transport: true });
+  }, [playback, savedEnabled, savedMethod, status]);
 
   const methodDirty = method !== savedMethod;
-  const settingsCount = Number(enabled !== savedEnabled);
-  const settingsDirty = settingsCount > 0;
-  const dirty = settingsDirty || methodDirty;
+  const dirty = methodDirty;
   const setMethod = useCallback((value: PlaybackMethod) => { setError(null); setMethodState(value); }, []);
-  const setEnabled = useCallback((value: boolean) => { setError(null); setEnabledState(value); }, []);
 
   const applyMethod = useCallback(async () => {
     if (!methodDirty) return true;
@@ -61,26 +58,12 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
     }
   }, [method, methodDirty, playback]);
 
-  const applySettings = useCallback(async () => {
-    if (!status || !playback) return false;
-    setError(null);
-    setSaving(true);
-    try {
-      const ok = await playback.save({ ...status.settings, enabled, auto_scan: true, fast_transport: true });
-      if (!ok) setError("Your configuration was not saved. Your changes are still here; try again.");
-      return ok;
-    } finally {
-      setSaving(false);
-    }
-  }, [enabled, playback, status]);
-
   const revert = useCallback(() => {
     setMethodState(savedMethod);
-    setEnabledState(savedEnabled);
     setError(null);
-  }, [savedEnabled, savedMethod]);
+  }, [savedMethod]);
 
-  return { method, methodDirty, setMethod, applyMethod, enabled, setEnabled, settingsDirty, settingsCount, applySettings, dirty, saving, error, revert };
+  return { method, methodDirty, setMethod, applyMethod, dirty, saving, error, revert };
 }
 
 export function PlaybackSaveBar({ save }: { save: PlaybackSave }) {

@@ -21,7 +21,7 @@ function Host({ playback, midi = noMidi }: { playback: PlaybackController; midi?
   return (
     <>
       <PlaybackApiPanel playback={playback} draft={draft} />
-      <button onClick={() => { draft.setMethod("playback_api"); draft.setEnabled(!draft.enabled); }} type="button">edit</button>
+      <button onClick={() => { draft.setMethod("playback_api"); }} type="button">edit</button>
       <PlaybackSaveBar save={bar} />
     </>
   );
@@ -29,7 +29,7 @@ function Host({ playback, midi = noMidi }: { playback: PlaybackController; midi?
 const saveButton = () => screen.getByRole("button", { name: "Save configuration" });
 
 describe("Playback Save configuration is single-flight", () => {
-  it("user double-click while the first step is pending: one selectSource, one save", async () => {
+  it("user double-click while the first step is pending: one selectSource, nothing else", async () => {
     const gate = deferred<boolean>();
     const playback = controller({ selectSource: vi.fn(() => gate.promise), save: vi.fn().mockResolvedValue(true) });
     const user = userEvent.setup();
@@ -40,7 +40,8 @@ describe("Playback Save configuration is single-flight", () => {
     expect(playback.selectSource).toHaveBeenCalledTimes(1);
     await act(async () => { gate.resolve(true); await Promise.resolve(); });
     expect(playback.selectSource).toHaveBeenCalledTimes(1);
-    expect(playback.save).toHaveBeenCalledTimes(1);
+    // Connecting automatically is always on, so there is no separate settings save any more.
+    expect(playback.save).not.toHaveBeenCalled();
   });
 
   it("two rapid fireEvent.click in one tick: still one selectSource", async () => {
@@ -54,26 +55,23 @@ describe("Playback Save configuration is single-flight", () => {
     await act(async () => { gate.resolve(true); await Promise.resolve(); });
   });
 
-  it("order method -> settings -> MIDI; stops on first failure; Try again does not repeat the finished step", async () => {
+  it("order method -> MIDI; stops on first failure; Try again does not repeat the finished step", async () => {
     const order: string[] = [];
-    const midiApply = vi.fn(async () => { order.push("midi"); return true; });
+    let midiOk = false;
+    const midiApply = vi.fn(async () => { order.push("midi"); return midiOk; });
     const midi: PlaybackMidiStep = { ...noMidi, pending: true, count: 1, snapshot: "m1", apply: midiApply };
-    let settingsOk = false;
-    const playback = controller({
-      selectSource: vi.fn(async () => { order.push("method"); return true; }),
-      save: vi.fn(async () => { order.push("settings"); return settingsOk; }),
-    });
+    const playback = controller({ selectSource: vi.fn(async () => { order.push("method"); return true; }) });
     const user = userEvent.setup();
     render(<Host playback={playback} midi={midi} />);
     await user.click(screen.getByRole("button", { name: "edit" }));
     await user.click(saveButton());
-    expect(order).toEqual(["method", "settings"]);
-    expect(midiApply).not.toHaveBeenCalled();
+    expect(order).toEqual(["method", "midi"]);
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-    settingsOk = true;
+    midiOk = true;
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(order).toEqual(["method", "settings", "settings", "midi"]);
+    expect(order).toEqual(["method", "midi", "midi"]);
     expect(playback.selectSource).toHaveBeenCalledTimes(1);
+    expect(playback.save).not.toHaveBeenCalled();
   });
 });
 
