@@ -8,7 +8,7 @@ import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 const save = () => screen.getByRole("button", { name: "Save configuration" });
 
 describe("Backend panel: failed save", () => {
-  const saved = { timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true, release_channel: "BETA" };
+  const saved = { timezone: "America/Los_Angeles", log_level: "INFO", server_port: 8765, lan_access: false, web_dashboard_pin_enabled: true };
   const build = (onSave = vi.fn()) => (
     <BackendSetupPanel state={{ plugins: {} } as unknown as ApplicationState} health={null} live={false} onClose={vi.fn()} error={null} message={null}
       pending={false} onSave={onSave} settings={{ settings: saved } as unknown as SettingsResponse} />

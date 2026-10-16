@@ -38,7 +38,6 @@ export type UpdaterState = {
 export type UseUpdaterOptions = {
   adapter?: UpdaterAdapter;
   ready: boolean;
-  betaEnabled?: boolean;
   startupDelayMs?: number;
   checkIntervalMs?: number;
 };
@@ -59,7 +58,6 @@ const initialState: UpdaterState = {
 export function useUpdater({
   adapter = tauriUpdaterAdapter,
   ready,
-  betaEnabled = false,
   startupDelayMs = 5_000,
   checkIntervalMs = 6 * 60 * 60 * 1_000,
 }: UseUpdaterOptions) {
@@ -69,8 +67,6 @@ export function useUpdater({
   const installing = useRef(false);
   const lastCheckedAt = useRef(0);
   const installBlocked = useRef<string | null>(null);
-  const betaEnabledRef = useRef(betaEnabled);
-  betaEnabledRef.current = betaEnabled;
 
   const checkForUpdate = useCallback(async () => {
     if (!ready || !adapter.isEnabled() || checking.current || installing.current) return;
@@ -90,7 +86,7 @@ export function useUpdater({
       }
       installBlocked.current = blockedReason;
       try {
-        const update = await adapter.check({ betaEnabled: betaEnabledRef.current });
+        const update = await adapter.check();
         candidate.current = update;
         lastCheckedAt.current = Date.now();
         setState((current) => update

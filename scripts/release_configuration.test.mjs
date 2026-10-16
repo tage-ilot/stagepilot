@@ -8,7 +8,7 @@ import test from "node:test";
 const root = path.resolve(import.meta.dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Tauri updater configuration isolates main and beta release channels", () => {
+test("Tauri updater configuration points at the one release feed", () => {
   const config = JSON.parse(read("desktop/src-tauri/tauri.conf.json"));
   const windowsConfig = JSON.parse(read("desktop/src-tauri/tauri.release.conf.json"));
   const macOSConfig = JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json"));
@@ -31,14 +31,14 @@ test("Tauri updater configuration isolates main and beta release channels", () =
     "Tauri's trailing /** pattern matches directories rather than resource files",
   );
   assert.deepEqual(config.plugins.updater.endpoints, [
-    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json",
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json",
   ]);
   // Packaged release builds must use the same direct, anonymous GitHub
   // releases endpoint as the base config — never the control-plane broker,
   // which returns 503 whenever GITHUB_RELEASE_TOKEN is unset (deliberately
-  // unset for this beta).
+  // unset).
   const directGitHubEndpoint =
-    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json";
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
   const deadBrokerEndpoint =
     "https://stagepilot-beta-control-plane.stagepilot-illuminary-beta.workers.dev/v1/releases/latest.json";
   assert.deepEqual(windowsConfig.plugins.updater.endpoints, [directGitHubEndpoint]);
@@ -135,8 +135,8 @@ test("release workflow requires secrets and publishes latest.json last", () => {
   assert.match(workflow, /secrets\.TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
   assert.match(workflow, /generate_updater_manifest\.mjs/);
   assert.match(workflow, /validate_updater_manifest\.mjs/);
-  assert.match(workflow, /audit_beta_release\.mjs source/);
-  assert.match(workflow, /audit_beta_release\.mjs assets/);
+  assert.match(workflow, /audit_release\.mjs source/);
+  assert.match(workflow, /audit_release\.mjs assets/);
   assert.match(workflow, /node scripts\/publish_release\.mjs "\$RELEASE_TAG" release-assets/);
   assert.equal((workflow.match(/ref: \$\{\{ inputs\.release_tag \|\| github\.ref \}\}/g) ?? []).length, 3);
   assert.match(workflow, /refs\/tags\/\$RELEASE_TAG\^\{commit\}/);
@@ -170,7 +170,7 @@ test("release workflow requires secrets and publishes latest.json last", () => {
     /!name\.endsWith\("\.sig"\)/,
     "standalone updater signatures must not be published as user-facing release assets",
   );
-  assert.match(publisher, /Release \$\{tag\} already exists; immutable beta assets will not be replaced/);
+  assert.match(publisher, /Release \$\{tag\} already exists; immutable release assets will not be replaced/);
   assert.match(publisher, /process\.exit\(1\)/, "an existing release must abort publication");
   assert.ok(
     publisher.includes('filter((n) => n !== "latest.json"), ...entries.filter((n) => n === "latest.json")'),
@@ -179,7 +179,7 @@ test("release workflow requires secrets and publishes latest.json last", () => {
   assert.match(publisher, /draft: true/, "the release must be created as a draft");
   assert.match(publisher, /draft: false/, "the release must be published only after all uploads succeed");
   assert.doesNotMatch(workflow, /--clobber/);
-  // The release broker/in-app updater are deferred for this beta: no
+  // The release broker/in-app updater are deferred: no
   // STAGEPILOT_RELEASE_TOKEN Actions secret is issued, and the deploy
   // workflow must never require or reference one.
   assert.doesNotMatch(deployWorkflow, /STAGEPILOT_RELEASE_TOKEN/);
@@ -212,24 +212,24 @@ test("macOS lifecycle CI generates bundled Help before Cargo compilation", () =>
   );
 });
 
-test("beta release automation targets only the beta repo, suggests the next beta and confirms with YES", () => {
+test("release automation targets only this repo, suggests the next patch and confirms with YES", () => {
   const releaseScript = read("scripts/create-release.ps1");
   const helpers = read("scripts/release-helpers.ps1");
-  assert.match(releaseScript, /\$BetaRepo = "tage-ilot\/stagepilot-beta"/);
-  assert.match(releaseScript, /gh api repos\/\$BetaRepo\/tags --paginate --jq '\.\[\]\.name'/);
-  assert.doesNotMatch(releaseScript, /repos\/tage-ilot\/stagepilot\//);
-  assert.doesNotMatch(releaseScript, /--repo tage-ilot\/stagepilot\b(?!-beta)/);
-  assert.match(releaseScript, /Test-BetaOrigin \$OriginUrl/);
-  assert.match(releaseScript, /Assert-BetaVersion \$Version \$RemoteTags/);
+  assert.match(releaseScript, /\$Repo = "tage-ilot\/stagepilot"/);
+  assert.match(releaseScript, /gh api repos\/\$Repo\/tags --paginate --jq '\.\[\]\.name'/);
+  assert.doesNotMatch(releaseScript, /stagepilot-(beta|alpha)/);
+  assert.match(releaseScript, /Test-ReleaseOrigin \$OriginUrl/);
+  assert.match(releaseScript, /Assert-ReleaseVersion \$Version \$RemoteTags/);
   assert.match(releaseScript, /Test-ChangelogHasVersion/);
-  assert.match(releaseScript, /audit_beta_release\.mjs source/);
+  assert.match(releaseScript, /audit_release\.mjs source/);
   assert.match(releaseScript, /validate_workflow_runners\.py/);
-  assert.match(releaseScript, /New StagePilot beta version \(default \$SuggestedTag\)/);
+  assert.match(releaseScript, /New StagePilot version \(default \$SuggestedTag\)/);
   assert.match(releaseScript, /Type YES to begin the unattended release/);
   assert.match(releaseScript, /ToUpperInvariant\(\) -ne "YES"/);
   assert.match(releaseScript, /STAGEPILOT_RELEASE_WATCH/);
-  assert.match(helpers, /\^v\(\\d\+\)\\\.\(\\d\+\)\\\.\(\\d\+\)-beta\\\.\(\\d\+\)\$/);
-  assert.match(helpers, /tage-ilot\/stagepilot-beta/);
+  assert.match(helpers, /\^v\(\\d\+\)\\\.\(\\d\+\)\\\.\(\\d\+\)\$/);
+  assert.match(helpers, /tage-ilot\/stagepilot/);
+  assert.doesNotMatch(helpers, /beta/i);
 });
 
 test("macOS final-artifact verifier rejects hardened sidecars and starts packaged backends", () => {

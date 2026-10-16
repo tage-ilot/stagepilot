@@ -240,9 +240,6 @@ All transport/discovery/integration tests use synthetic IDs and fake loopback
 WebSockets. The application-test default finder is disabled by an autouse fixture
 so migration does not make unrelated tests scan a real production LAN. No real
 Playback/hardware validation, deployment, release or merge has been performed.
-See `playback-settings-contract.md`, `playback-transport-handoff.md`, and
-`playback-mapping-handoff.md` for slice contracts. Consolidated verification is
-recorded in the integration handoff, not inferred from older slice counts.
 
 ## Local Network access on macOS
 

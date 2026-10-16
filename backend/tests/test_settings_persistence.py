@@ -100,7 +100,7 @@ def test_built_in_defaults_load_without_a_saved_file(tmp_path: Path) -> None:
     assert settings.midi.note == 112
     assert service.snapshot().web_dashboard_pin_enabled is True
     assert verify_dashboard_pin("1234", service.snapshot().web_dashboard_pin_hash)
-    assert service.snapshot().release_channel == "BETA"
+    assert not hasattr(service.snapshot(), "release_channel")
     assert set(dict(settings.midi.mappings.configured()).values()) == {
         100,
         101,
@@ -169,17 +169,20 @@ def test_saved_settings_survive_a_new_service_instance(tmp_path: Path) -> None:
     assert restarted_service.snapshot().onboarding.general_completed is True
 
 
-def test_release_channel_persists_across_service_instances(tmp_path: Path) -> None:
+def test_legacy_release_channel_is_discarded_on_load_and_on_save(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     first = settings_service(path)
     first.load()
-    assert first.snapshot().release_channel == "BETA"
-
-    first.save(first.snapshot().model_copy(update={"release_channel": "STABLE"}))
+    payload = json.loads(first.snapshot().model_dump_json())
+    payload["release_channel"] = "BETA"
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
     restarted = settings_service(path)
     restarted.load()
-    assert restarted.snapshot().release_channel == "STABLE"
+    assert "release_channel" not in restarted.snapshot().model_dump()
+    restarted.save(restarted.snapshot())
+    assert "release_channel" not in json.loads(path.read_text(encoding="utf-8"))
+    assert PersistentSettings.model_validate({"release_channel": "STABLE"}) == PersistentSettings()
 
 
 def test_environment_and_session_values_override_saved_settings(tmp_path: Path) -> None:

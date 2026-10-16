@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "StagePilot",
-  "version": "1.1.104-beta.41",
+  "version": "2.41.0",
   "identifier": "org.stagepilot.desktop",
   "build": {
     "beforeDevCommand": "npm --prefix ../frontend run dev -- --host 127.0.0.1",
@@ -55,7 +55,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json"
+        "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4RjYzNTk5MTUwQTU0QUMKUldTc1ZBb1ZtVFgyNkxJajN0V3RWTExZL2lFN0RPZmVnNm93YnpneXJOZjhkdTd5SjBSdTN0dmEK"
     }

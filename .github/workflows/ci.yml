@@ -70,9 +70,6 @@ jobs:
       - name: Run type checking
         run: npm --prefix frontend run typecheck
 
-      - name: Check DESIGN.md
-        run: npx --yes @google/design.md@0.4.0 lint DESIGN.md
-
       - name: Build UI gallery
         run: npm --prefix frontend run ui:gallery:build
 

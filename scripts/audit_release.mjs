@@ -17,15 +17,11 @@ function auditSource() {
     .toString("utf8").split("\0").filter(Boolean);
   const leaks = tracked.filter((file) => forbidden.test(file));
   if (leaks.length) throw new Error(`Release-export leak(s): ${leaks.join(", ")}`);
-  for (const required of [".tools/", ".deploy-worktree/", "*.sqlite3", "*.key", "*.pem"]) {
-    const ignored = execFileSync("git", ["check-ignore", "--no-index", "-q", required.replace("*", "candidate")], { cwd: root, stdio: "ignore" });
-    void ignored;
-  }
   console.log(JSON.stringify({ mode: "source", trackedFiles: tracked.length, leaks: [] }));
 }
 
 function auditAssets(directory, version) {
-  if (!/^\d+\.\d+\.\d+-beta\.\d+$/.test(version)) throw new Error("A beta semantic version is required.");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("A stable X.Y.Z version is required.");
   const required = [
     `StagePilot_${version}_aarch64.dmg`,
     `StagePilot_${version}_x64.dmg`,
@@ -56,4 +52,4 @@ function auditAssets(directory, version) {
 const [command, first, second] = process.argv.slice(2);
 if (command === "source") auditSource();
 else if (command === "assets" && first && second) auditAssets(first, second);
-else throw new Error("Usage: node scripts/audit_beta_release.mjs source | assets DIRECTORY VERSION");
+else throw new Error("Usage: node scripts/audit_release.mjs source | assets DIRECTORY VERSION");

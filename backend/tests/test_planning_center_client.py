@@ -33,7 +33,7 @@ def client_settings() -> PlanningCenterSettings:
         app_id="test-app-id",
         secret="test-secret",
         request_timeout_seconds=3,
-        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot-beta)",
+        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot)",
     )
 
 
@@ -372,7 +372,7 @@ def oauth_settings() -> PlanningCenterSettings:
         connection_method="oauth",
         access_token="oauth-access-token",
         request_timeout_seconds=3,
-        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot-beta)",
+        user_agent="StagePilot tests (https://github.com/tage-ilot/stagepilot)",
     )
 
 

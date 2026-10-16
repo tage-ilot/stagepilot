@@ -11,7 +11,6 @@ const startup = vi.hoisted(() => ({
   planningCenterStatus: null as object | null,
   settings: {
     settings: {
-      release_channel: "BETA",
       integration_modes: { service_source: "planning_center" },
     },
   } as object | null,
@@ -102,7 +101,6 @@ describe("startup Planning Center activation readiness", () => {
     vi.useFakeTimers();
     startup.settings = {
       settings: {
-        release_channel: "BETA",
         integration_modes: { service_source: "demo" },
       },
     };
@@ -114,7 +112,6 @@ describe("startup Planning Center activation readiness", () => {
     expect(startup.activateConfiguredServices).toHaveBeenCalledOnce();
     startup.settings = {
       settings: {
-        release_channel: "BETA",
         integration_modes: { service_source: "planning_center" },
       },
     };

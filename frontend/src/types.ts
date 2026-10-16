@@ -183,7 +183,6 @@ export interface PersistentSettings {
   server_port: number;
   lan_access?: boolean;
   web_dashboard_pin_enabled?: boolean;
-  release_channel?: "STABLE" | "BETA";
   planning_center: PlanningCenterPublicSettings;
   midi: {
     enabled: boolean;
@@ -328,7 +327,7 @@ export interface SettingsResponse {
 
 export type GeneralSettingsInput = Pick<
   PersistentSettings,
-  "timezone" | "log_level" | "server_port" | "lan_access" | "web_dashboard_pin_enabled" | "release_channel"
+  "timezone" | "log_level" | "server_port" | "lan_access" | "web_dashboard_pin_enabled"
 > & {
   web_dashboard_pin?: string;
 };

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Proves every part of the beta updater metadata chain that is provable on
+// Proves every part of the updater metadata chain that is provable on
 // Linux without building a native installer. It NEVER fabricates a platform
 // artifact: the fixtures below are opaque placeholder bytes used solely to
 // exercise manifest generation/validation logic, and are deleted afterwards.
@@ -12,8 +12,8 @@ import path from "node:path";
 // and remains DEFERRED to the native acceptance matrix.
 
 const root = path.resolve(import.meta.dirname, "..");
-const BROKER = "https://stagepilot-beta-control-plane.stagepilot-illuminary-beta.workers.dev/v1/releases";
-const MAIN = "https://github.com/tage-ilot/stagepilot/releases/download";
+const BASE = "https://github.com/tage-ilot/stagepilot/releases/download";
+const OTHER = "https://github.com/tage-ilot/stagepilot-alpha/releases/download";
 
 const generate = (directory, tag, base) => execFileSync(process.execPath, [
   path.join(root, "scripts/generate_updater_manifest.mjs"), directory, tag, base,
@@ -47,14 +47,14 @@ const proven = [];
 const directories = [];
 
 try {
-  // 1. latest.json generation and validation against the beta broker base.
-  const betaVersion = "1.1.103-beta.6";
-  const beta = stage(betaVersion);
-  directories.push(beta);
-  generate(beta, `v${betaVersion}`, BROKER);
-  validate(beta, BROKER);
-  const manifest = JSON.parse(fs.readFileSync(path.join(beta, "latest.json"), "utf8"));
-  assert.equal(manifest.version, betaVersion);
+  // 1. latest.json generation and validation against the release download base.
+  const version = "2.41.0";
+  const release = stage(version);
+  directories.push(release);
+  generate(release, `v${version}`, BASE);
+  validate(release, BASE);
+  const manifest = JSON.parse(fs.readFileSync(path.join(release, "latest.json"), "utf8"));
+  assert.equal(manifest.version, version);
   assert(Number.isFinite(Date.parse(manifest.pub_date)));
   assert.deepEqual(Object.keys(manifest.platforms).sort(), [
     "darwin-aarch64", "darwin-x86_64", "windows-x86_64",
@@ -63,76 +63,71 @@ try {
 
   // 2. Every signature is embedded from its .sig sidecar, not invented.
   for (const [platform, filename] of Object.entries({
-    "darwin-aarch64": `StagePilot_${betaVersion}_aarch64.app.tar.gz`,
-    "darwin-x86_64": `StagePilot_${betaVersion}_x64.app.tar.gz`,
-    "windows-x86_64": `StagePilot_${betaVersion}_x64-setup.exe`,
+    "darwin-aarch64": `StagePilot_${version}_aarch64.app.tar.gz`,
+    "darwin-x86_64": `StagePilot_${version}_x64.app.tar.gz`,
+    "windows-x86_64": `StagePilot_${version}_x64-setup.exe`,
   })) {
-    const sidecar = fs.readFileSync(path.join(beta, `${filename}.sig`), "utf8").trim();
+    const sidecar = fs.readFileSync(path.join(release, `${filename}.sig`), "utf8").trim();
     assert.equal(manifest.platforms[platform].signature, sidecar);
-    assert.equal(manifest.platforms[platform].url, `${BROKER}/v${betaVersion}/${filename}`);
+    assert.equal(manifest.platforms[platform].url, `${BASE}/v${version}/${filename}`);
   }
   proven.push("signature_embedding_from_sidecar");
 
   // 3. A missing signature must stop manifest generation before publication.
-  const unsigned = stage(betaVersion);
+  const unsigned = stage(version);
   directories.push(unsigned);
-  fs.rmSync(path.join(unsigned, `StagePilot_${betaVersion}_x64-setup.exe.sig`));
-  rejects(() => generate(unsigned, `v${betaVersion}`, BROKER), /Missing updater signature/);
+  fs.rmSync(path.join(unsigned, `StagePilot_${version}_x64-setup.exe.sig`));
+  rejects(() => generate(unsigned, `v${version}`, BASE), /Missing updater signature/);
   proven.push("missing_signature_rejected");
 
   // 4. An empty signature must stop manifest generation.
-  const empty = stage(betaVersion);
+  const empty = stage(version);
   directories.push(empty);
-  fs.writeFileSync(path.join(empty, `StagePilot_${betaVersion}_aarch64.app.tar.gz.sig`), "   \n");
-  rejects(() => generate(empty, `v${betaVersion}`, BROKER), /Empty updater signature/);
+  fs.writeFileSync(path.join(empty, `StagePilot_${version}_aarch64.app.tar.gz.sig`), "   \n");
+  rejects(() => generate(empty, `v${version}`, BASE), /Empty updater signature/);
   proven.push("empty_signature_rejected");
 
   // 5. A missing artifact must stop manifest generation.
-  const incomplete = stage(betaVersion);
+  const incomplete = stage(version);
   directories.push(incomplete);
-  fs.rmSync(path.join(incomplete, `StagePilot_${betaVersion}_x64.app.tar.gz`));
-  rejects(() => generate(incomplete, `v${betaVersion}`, BROKER), /Missing updater artifact/);
+  fs.rmSync(path.join(incomplete, `StagePilot_${version}_x64.app.tar.gz`));
+  rejects(() => generate(incomplete, `v${version}`, BASE), /Missing updater artifact/);
   proven.push("missing_artifact_rejected");
 
   // 6. Version/tag agreement is enforced.
-  rejects(() => generate(stage(betaVersion), betaVersion, BROKER), /Invalid release tag/);
+  rejects(() => generate(stage(version), version, BASE), /Invalid release tag/);
   proven.push("tag_version_agreement_enforced");
 
   // 7. A non-HTTPS or query-bearing endpoint is refused.
-  rejects(() => generate(beta, `v${betaVersion}`, "http://example.com/releases"), /HTTPS/);
-  rejects(() => generate(beta, `v${betaVersion}`, `${BROKER}?token=x`), /query or fragment/);
+  rejects(() => generate(release, `v${version}`, "http://example.com/releases"), /HTTPS/);
+  rejects(() => generate(release, `v${version}`, `${BASE}?token=x`), /query or fragment/);
   proven.push("endpoint_scheme_and_shape_enforced");
 
-  // 8. Channel isolation: a beta manifest must not validate against the main
-  //    endpoint, and a main manifest must not validate against the broker.
-  const crossed = stage(betaVersion);
-  directories.push(crossed);
-  generate(crossed, `v${betaVersion}`, BROKER);
-  rejects(() => validate(crossed, MAIN), /Untrusted or missing URL/);
-  const mainside = stage(betaVersion);
-  directories.push(mainside);
-  generate(mainside, `v${betaVersion}`, MAIN);
-  rejects(() => validate(mainside, BROKER), /Untrusted or missing URL/);
-  proven.push("beta_main_channel_isolation");
+  // 8. A manifest built for any other download base must not validate against this repo's.
+  const foreign = stage(version);
+  directories.push(foreign);
+  generate(foreign, `v${version}`, OTHER);
+  rejects(() => validate(foreign, BASE), /Untrusted or missing URL/);
+  proven.push("foreign_download_base_rejected");
 
   // 9. A tampered URL that escapes the allowlisted path is refused.
-  const tampered = stage(betaVersion);
+  const tampered = stage(version);
   directories.push(tampered);
-  generate(tampered, `v${betaVersion}`, BROKER);
+  generate(tampered, `v${version}`, BASE);
   const escaped = JSON.parse(fs.readFileSync(path.join(tampered, "latest.json"), "utf8"));
-  escaped.platforms["windows-x86_64"].url = `${BROKER}/v${betaVersion}/%2e%2e%2foutside.bin`;
+  escaped.platforms["windows-x86_64"].url = `${BASE}/v${version}/%2e%2e%2foutside.bin`;
   fs.writeFileSync(path.join(tampered, "latest.json"), JSON.stringify(escaped));
-  rejects(() => validate(tampered, BROKER), /Untrusted or missing URL/);
+  rejects(() => validate(tampered, BASE), /Untrusted or missing URL/);
   proven.push("path_escape_rejected");
 
   // 10. A dropped platform makes the manifest inventory invalid.
-  const partial = stage(betaVersion);
+  const partial = stage(version);
   directories.push(partial);
-  generate(partial, `v${betaVersion}`, BROKER);
+  generate(partial, `v${version}`, BASE);
   const dropped = JSON.parse(fs.readFileSync(path.join(partial, "latest.json"), "utf8"));
   delete dropped.platforms["darwin-x86_64"];
   fs.writeFileSync(path.join(partial, "latest.json"), JSON.stringify(dropped));
-  rejects(() => validate(partial, BROKER), /platform inventory is invalid/);
+  rejects(() => validate(partial, BASE), /platform inventory is invalid/);
   proven.push("platform_inventory_enforced");
 
   // 11. The configured updater public key is real, not a placeholder, and the
@@ -146,26 +141,19 @@ try {
   assert(typeof pubkey === "string" && pubkey.length > 40, "updater public key is missing");
   assert(!/REQUIRED|PLACEHOLDER|CHANGEME|TODO/i.test(pubkey), "updater public key is still a placeholder");
   assert.deepEqual(config.plugins.updater.endpoints, [
-    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json",
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json",
   ]);
   assert.deepEqual(windows.plugins.updater.endpoints, [
-    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json",
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json",
   ]);
   assert.deepEqual(macos.plugins.updater.endpoints, [
-    "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json",
+    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json",
   ]);
   proven.push("public_key_and_endpoint_configuration");
 
-  // 12. Every reserved beta version is distinct and well formed, so no release
-  //     can ever reuse an earlier immutable tag. beta.1 and beta.2 are burned
-  //     by failed attempts; beta.4 is release 1.
-  const burned = ["1.1.103-beta.1", "1.1.103-beta.2", "1.1.103-beta.3", "1.1.103-beta.4", "1.1.103-beta.5"];
-  assert(!burned.includes(betaVersion), "release 1 must not reuse a burned tag");
-  assert.equal(new Set([...burned, betaVersion, "1.1.103-beta.7"]).size, 7);
-  for (const version of [...burned, betaVersion]) {
-    assert.match(version, /^\d+\.\d+\.\d+-beta\.\d+$/);
-  }
-  proven.push("reserved_immutable_versions_distinct");
+  // 12. The release version is plain X.Y.Z (no pre-release suffix), the only form the release audit accepts.
+  assert.match(version, /^\d+\.\d+\.\d+$/);
+  proven.push("release_version_is_plain_x_y_z");
 } finally {
   for (const directory of directories) fs.rmSync(directory, { recursive: true, force: true });
 }

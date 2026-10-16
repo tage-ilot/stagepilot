@@ -7,15 +7,15 @@ not tracked in git):
 .\scripts\create-release.ps1
 ```
 
-The command reads the beta tags (`vX.Y.Z-beta.N`) from `tage-ilot/stagepilot-beta`
-and suggests the next beta number. Existing tags from an unsuccessful release are
-included, so the suggested version is never already occupied. Press Enter to accept
-that version or type a different beta version; stable versions and versions that
-are not newer than the latest beta tag are refused. The destination defaults to
-`main`; another branch may be selected when needed. It first checks that `origin`
-is the beta repository (it will not tag or push anything else) and that
-`CHANGELOG.md` already has a `## [VERSION]` heading, before it changes anything.
-It then:
+The command reads the version tags (`vX.Y.Z`) from `tage-ilot/stagepilot` and suggests
+one patch past the highest. Existing tags from an unsuccessful release are included, so
+the suggested version is never already occupied. Press Enter to accept that version or
+type a different one; versions that are not plain `X.Y.Z` or not newer than the latest
+tag are refused. The destination defaults to `main`; another branch may be selected when
+needed. It first checks that `origin` is `tage-ilot/stagepilot` (it will not tag or push
+anything else) and that `CHANGELOG.md` already has a `## [VERSION]` heading, before it
+changes anything. It then:
+
 
 1. Shows the release title, source branch, destination branch, and current changes.
 2. Requires one final typed confirmation: `YES`.
@@ -36,19 +36,19 @@ After the release plan is confirmed, no further input is required.
 You may supply the version directly:
 
 ```powershell
-.\scripts\create-release.ps1 1.1.104-beta.34
+.\scripts\create-release.ps1 2.41.1
 ```
 
 For an unattended invocation after reviewing the working tree, add `-Yes`:
 
 ```powershell
-.\scripts\create-release.ps1 1.1.104-beta.34 -Yes
+.\scripts\create-release.ps1 2.41.1 -Yes
 ```
 
 `-Yes` uses `main` by default. To publish the release commit to another branch:
 
 ```powershell
-.\scripts\create-release.ps1 1.1.104-beta.34 -TargetBranch release/test -Yes
+.\scripts\create-release.ps1 2.41.1 -TargetBranch release/test -Yes
 ```
 
 The release stops immediately if a test fails, the tag already exists, GitHub
@@ -57,8 +57,6 @@ or generated/sensitive files are staged. A failure before confirmation makes
 no changes; a later validation failure leaves changes local without committing,
 tagging, or pushing.
 
-This helper is for the private beta repository only (`tage-ilot/stagepilot-beta`).
+This helper releases `tage-ilot/stagepilot` only, with plain `X.Y.Z` versions
+(for example `2.41.0`; the suggestion is one patch past the highest tag).
 The helper functions are tested with `pwsh -NoProfile -File scripts/release-helpers.test.ps1`.
-Private-beta releases use the exact versions, repository boundary,
-asset audit, and manual gates in
-[`private-beta-release-and-acceptance.md`](private-beta-release-and-acceptance.md).

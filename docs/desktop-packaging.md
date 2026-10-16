@@ -85,10 +85,8 @@ Test every installer candidate on a Windows account without repository tooling:
 7. Uninstall StagePilot and confirm user settings remain available for an upgrade
    unless the release policy explicitly adds a separate data-removal option.
 
-For the private beta, execute this flow on Windows x64, macOS arm64, and macOS
-x64, including actual reboot and a signed beta-1 to beta-2 in-app update. Record
-the matrix with `scripts/beta_release_acceptance.py` as described in
-[`private-beta-release-and-acceptance.md`](private-beta-release-and-acceptance.md).
+Execute this flow on Windows x64, macOS arm64, and macOS x64, including an actual
+reboot and a signed in-app update from the previous release.
 
 The application is not code-signed or notarized yet. Windows may display an
 unknown-publisher warning, and macOS may require the user to approve the app in

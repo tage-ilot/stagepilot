@@ -75,11 +75,6 @@ const BACKEND_LOG_COPY_MAX_BYTES: u64 = 200 * 1024;
 /// lines that is ~15-25KB, trivially inside the upload budget.
 const MAX_LOG_LINES: usize = 100;
 const STAGEPILOT_GITHUB_URL: &str = "https://github.com/tage-ilot/stagepilot";
-// Stable-channel updates come from the main (non-beta) desktop release feed;
-// beta-channel updates keep using whichever endpoint tauri.conf.json (or its
-// platform overrides) already configures for this build.
-const STABLE_UPDATE_ENDPOINT: &str =
-    "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StagePilotMenuAction {
@@ -1355,7 +1350,7 @@ async fn prepare_for_update(
     Ok(())
 }
 
-/// Metadata describing an update found by [`check_for_update_on_channel`].
+/// Metadata describing an update found by [`check_for_update`].
 ///
 /// This mirrors the plugin's own (private) `Metadata` shape closely enough
 /// for the frontend to reconstruct the plugin's public `Update` class from
@@ -1363,7 +1358,7 @@ async fn prepare_for_update(
 /// resource id.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChannelUpdateMetadata {
+struct UpdateMetadata {
     rid: tauri::ResourceId,
     current_version: String,
     version: String,
@@ -1372,60 +1367,14 @@ struct ChannelUpdateMetadata {
     raw_json: serde_json::Value,
 }
 
-/// Checks for an update on the requested release channel (STABLE or BETA)
-/// instead of the static `tauri.conf.json` endpoint list.
+/// Checks the endpoint configured in `tauri.conf.json` (the GitHub releases feed).
 ///
-/// This still goes through `updater_builder()` — the same builder the
-/// plugin's own default `check` IPC command uses internally — so signature
-/// verification is identical to the default path; only the endpoint list
-/// changes. "No update available" on STABLE (an empty/older feed) surfaces
-/// as `Ok(None)`, never an error, exactly like the plugin's default check.
+/// This goes through `updater_builder()` -- the same builder the plugin's own
+/// default `check` IPC command uses internally -- so signature verification is
+/// identical to the default path. "No update available" surfaces as `Ok(None)`,
+/// never an error, exactly like the plugin's default check.
 #[tauri::command]
-async fn check_for_update_on_channel(
-    webview: tauri::Webview,
-    beta_enabled: bool,
-) -> Result<Option<ChannelUpdateMetadata>, String> {
-    let endpoint = if beta_enabled {
-        // BETA keeps the endpoint(s) already configured for this build via
-        // tauri.conf.json / the platform-specific overrides.
-        return check_for_update_default(webview).await;
-    } else {
-        STABLE_UPDATE_ENDPOINT
-    };
-    let url = url::Url::parse(endpoint).map_err(|error| {
-        format!("StagePilot could not parse the update endpoint {endpoint}: {error}")
-    })?;
-
-    let updater = webview
-        .updater_builder()
-        .endpoints(vec![url])
-        .map_err(|error| format!("StagePilot could not configure the update channel: {error}"))?
-        .build()
-        .map_err(|error| format!("StagePilot could not build the updater: {error}"))?;
-
-    let update = updater
-        .check()
-        .await
-        .map_err(|error| format!("StagePilot could not check for updates: {error}"))?;
-
-    Ok(update.map(|update| {
-        let metadata = ChannelUpdateMetadata {
-            current_version: update.current_version.clone(),
-            version: update.version.clone(),
-            date: update.date.map(|date| date.to_string()),
-            body: update.body.clone(),
-            raw_json: update.raw_json.clone(),
-            rid: 0,
-        };
-        let mut resources = webview.resources_table();
-        let rid = resources.add(update);
-        ChannelUpdateMetadata { rid, ..metadata }
-    }))
-}
-
-async fn check_for_update_default(
-    webview: tauri::Webview,
-) -> Result<Option<ChannelUpdateMetadata>, String> {
+async fn check_for_update(webview: tauri::Webview) -> Result<Option<UpdateMetadata>, String> {
     let updater = webview
         .updater_builder()
         .build()
@@ -1437,7 +1386,7 @@ async fn check_for_update_default(
         .map_err(|error| format!("StagePilot could not check for updates: {error}"))?;
 
     Ok(update.map(|update| {
-        let metadata = ChannelUpdateMetadata {
+        let metadata = UpdateMetadata {
             current_version: update.current_version.clone(),
             version: update.version.clone(),
             date: update.date.map(|date| date.to_string()),
@@ -1447,7 +1396,7 @@ async fn check_for_update_default(
         };
         let mut resources = webview.resources_table();
         let rid = resources.add(update);
-        ChannelUpdateMetadata { rid, ..metadata }
+        UpdateMetadata { rid, ..metadata }
     }))
 }
 
@@ -1731,7 +1680,7 @@ pub fn run() {
             copy_backend_log,
             collect_diagnostic_bundle,
             prepare_for_update,
-            check_for_update_on_channel,
+            check_for_update,
             install_environment,
             set_remote_autostart,
             hide_application_window,
@@ -1954,18 +1903,6 @@ mod tests {
     }
 
     #[test]
-    fn stable_channel_endpoint_is_distinct_from_the_configured_beta_endpoint() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let beta_endpoint = config["plugins"]["updater"]["endpoints"][0]
-            .as_str()
-            .unwrap();
-        assert_ne!(STABLE_UPDATE_ENDPOINT, beta_endpoint);
-        assert!(STABLE_UPDATE_ENDPOINT.starts_with("https://"));
-        assert!(url::Url::parse(STABLE_UPDATE_ENDPOINT).is_ok());
-    }
-
-    #[test]
     fn saved_server_port_is_validated() {
         assert_eq!(port_from_settings(r#"{"server_port": 9123}"#), Some(9123));
         assert_eq!(port_from_settings(r#"{"server_port": 0}"#), None);
@@ -1996,12 +1933,12 @@ mod tests {
         assert_eq!(macos["bundle"]["macOS"]["minimumSystemVersion"], "12.0");
         assert_eq!(
             config["plugins"]["updater"]["endpoints"][0],
-            "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json"
+            "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json"
         );
         let windows: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.release.conf.json")).unwrap();
         let direct_github_endpoint =
-            "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json";
+            "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
         assert_eq!(
             windows["plugins"]["updater"]["endpoints"][0],
             direct_github_endpoint
@@ -2018,7 +1955,7 @@ mod tests {
     /// Packaged release configs (Windows/macOS overlays) must never point the
     /// updater at the dead control-plane release broker: `releaseAsset()` in
     /// `control-plane/src/index.ts` returns 503 whenever
-    /// `GITHUB_RELEASE_TOKEN` is unset, which is the case for this beta.
+    /// `GITHUB_RELEASE_TOKEN` is unset, which is the case today.
     /// Every packaged/release-config updater endpoint must be the direct,
     /// anonymous GitHub releases URL instead.
     #[test]
@@ -2026,7 +1963,7 @@ mod tests {
         let dead_broker_endpoint =
             "https://stagepilot-beta-control-plane.stagepilot-illuminary-beta.workers.dev/v1/releases/latest.json";
         let direct_github_endpoint =
-            "https://github.com/tage-ilot/stagepilot-beta/releases/latest/download/latest.json";
+            "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json";
 
         for (name, contents) in [
             ("tauri.conf.json", include_str!("../tauri.conf.json")),

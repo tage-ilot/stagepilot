@@ -94,7 +94,7 @@ describe("Tauri updater adapter relaunch state", () => {
     });
     mocks.install.mockResolvedValue(undefined);
     mocks.invoke.mockImplementation(async (command: string) => {
-      if (command === "check_for_update_on_channel") {
+      if (command === "check_for_update") {
         return {
           rid: 1,
           currentVersion: "1.1.43",
@@ -106,7 +106,7 @@ describe("Tauri updater adapter relaunch state", () => {
       return undefined;
     });
 
-    const candidate = await tauriUpdaterAdapter.check({ betaEnabled: false });
+    const candidate = await tauriUpdaterAdapter.check();
     const progress = vi.fn();
     await candidate!.install(progress);
 
@@ -127,24 +127,18 @@ describe("Tauri updater adapter relaunch state", () => {
     });
   });
 
-  it.each([
-    { betaEnabled: false },
-    { betaEnabled: true },
-  ])(
-    "resolves $betaEnabled channel by invoking check_for_update_on_channel with betaEnabled=$betaEnabled",
-    async ({ betaEnabled }) => {
-      mocks.invoke.mockResolvedValue(null);
-
-      const candidate = await tauriUpdaterAdapter.check({ betaEnabled });
-
-      expect(candidate).toBeNull();
-      expect(mocks.invoke).toHaveBeenCalledWith("check_for_update_on_channel", { betaEnabled });
-    },
-  );
-
-  it("returns null cleanly when no update is available on either channel", async () => {
+  it("checks for updates by invoking check_for_update with no channel argument", async () => {
     mocks.invoke.mockResolvedValue(null);
-    const candidate = await tauriUpdaterAdapter.check({ betaEnabled: true });
+
+    const candidate = await tauriUpdaterAdapter.check();
+
+    expect(candidate).toBeNull();
+    expect(mocks.invoke).toHaveBeenCalledWith("check_for_update");
+  });
+
+  it("returns null cleanly when no update is available", async () => {
+    mocks.invoke.mockResolvedValue(null);
+    const candidate = await tauriUpdaterAdapter.check();
     expect(candidate).toBeNull();
   });
 

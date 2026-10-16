@@ -176,7 +176,6 @@ export function BackendSetupPanel({
   const [logLevel, setLogLevel] = useState<GeneralSettingsInput["log_level"]>("INFO");
   const [serverPort, setServerPort] = useState("8765");
   const [dashboardPin, setDashboardPin] = useState("");
-  const [releaseChannel, setReleaseChannel] = useState<GeneralSettingsInput["release_channel"]>("BETA");
   const remote = useRemoteAccess();
   // The Remote access section starts open and then stays however the user leaves it, across restarts (owner, 2026-10-14).
   const [remoteOpenSaved, setRemoteOpenSaved] = usePersistedFlag(REMOTE_ACCESS_OPEN_KEY, true);
@@ -187,11 +186,9 @@ export function BackendSetupPanel({
   const syncedTimezone = savedSettings?.timezone ?? null;
   const syncedLogLevel = savedSettings?.log_level ?? null;
   const syncedPort = savedSettings ? String(savedSettings.server_port) : null;
-  const syncedChannel = savedSettings ? (savedSettings.release_channel ?? "BETA") : null;
   useEffect(() => { if (syncedTimezone !== null) setTimezone(syncedTimezone); }, [syncedTimezone]);
   useEffect(() => { if (syncedLogLevel !== null) setLogLevel(syncedLogLevel); }, [syncedLogLevel]);
   useEffect(() => { if (syncedPort !== null) setServerPort(syncedPort); }, [syncedPort]);
-  useEffect(() => { if (syncedChannel !== null) setReleaseChannel(syncedChannel); }, [syncedChannel]);
 
   const parsedSettings = useMemo<GeneralSettingsInput | null>(() => {
     const parsedPort = Number(serverPort);
@@ -205,9 +202,8 @@ export function BackendSetupPanel({
       lan_access: savedSettings?.lan_access ?? false,
       // The dashboard PIN is always required (owner, 2026-10-14); only its value can be replaced.
       web_dashboard_pin_enabled: true,
-      release_channel: releaseChannel,
     };
-  }, [logLevel, releaseChannel, savedSettings, serverPort, timezone]);
+  }, [logLevel, savedSettings, serverPort, timezone]);
   // Every field here is held until Save configuration. PUT /settings rewrites the whole settings
   // file, may reconfigure the MIDI port, and reports restart_required; the PIN endpoint signs out
   // every dashboard session (backend/src/stagepilot/api/dashboard_auth.py).
@@ -215,8 +211,7 @@ export function BackendSetupPanel({
   const heldTimezone = saved !== null && timezone !== saved.timezone;
   const heldPort = saved !== null && serverPort !== String(saved.server_port);
   const heldLogLevel = saved !== null && logLevel !== saved.log_level;
-  const heldChannel = saved !== null && releaseChannel !== (saved.release_channel ?? "BETA");
-  const changeCount = [heldTimezone, heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
+  const changeCount = [heldTimezone, heldPort, heldLogLevel].filter(Boolean).length;
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const attempt = useSaveAttempt("backend-configuration");
@@ -225,7 +220,7 @@ export function BackendSetupPanel({
   const errPort = attempt.attempted && !portValid ? "Enter a port from 1 to 65535." : undefined;
   const pinTooShort = dashboardPin !== "" && dashboardPin.length < 4;
   // A problem or a waiting change inside Advanced must never hide behind the closed row.
-  const advancedHeld = [heldTimezone, heldPort, heldLogLevel, heldChannel].filter(Boolean).length;
+  const advancedHeld = [heldTimezone, heldPort, heldLogLevel].filter(Boolean).length;
   useEffect(() => { if (errPort || errTimezone) setAdvancedOpen(true); }, [errPort, errTimezone]);
   const advancedSummary = advancedHeld > 0
     ? `${advancedHeld} ${advancedHeld === 1 ? "change" : "changes"} waiting`
@@ -266,7 +261,6 @@ export function BackendSetupPanel({
     setTimezone(saved.timezone);
     setServerPort(String(saved.server_port));
     setLogLevel(saved.log_level);
-    setReleaseChannel(saved.release_channel ?? "BETA");
     setSaveFailed(false);
     attempt.reset();
   };
@@ -298,7 +292,6 @@ export function BackendSetupPanel({
     server_port: saved.server_port,
     lan_access: overrides.lan_access ?? savedLan,
     web_dashboard_pin_enabled: true,
-    release_channel: saved.release_channel ?? "BETA",
     ...(overrides.web_dashboard_pin ? { web_dashboard_pin: overrides.web_dashboard_pin } : {}),
   });
   const saveLan = (lan: boolean) => {
@@ -423,20 +416,6 @@ export function BackendSetupPanel({
             >
               {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
                 <option key={level} value={level}>{level}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field heldChange={heldChannel} label="Release channel">
-            <Select
-              disabled={pending}
-              onChange={(event) => {
-                const value = event.target.value as GeneralSettingsInput["release_channel"];
-                setReleaseChannel(value);
-              }}
-              value={releaseChannel}
-            >
-              {(["STABLE", "BETA"] as const).map((channel) => (
-                <option key={channel} value={channel}>{channel}</option>
               ))}
             </Select>
           </Field>

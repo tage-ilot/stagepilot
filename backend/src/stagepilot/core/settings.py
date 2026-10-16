@@ -119,7 +119,6 @@ class PersistentSettings(BaseModel):
     lan_access: bool = False
     web_dashboard_pin_enabled: bool = True
     web_dashboard_pin_hash: str | None = Field(default=None, exclude=True)
-    release_channel: Literal["STABLE", "BETA"] = "BETA"
     planning_center: PersistentPlanningCenterSettings = Field(
         default_factory=PersistentPlanningCenterSettings
     )
@@ -135,6 +134,9 @@ class PersistentSettings(BaseModel):
         """Move untouched legacy installs to Playback; keep explicit MIDI choices."""
         if not isinstance(value, dict):
             return value
+        if "release_channel" in value:
+            # The Stable/Beta channel is gone; old files and clients may still send it.
+            value = {key: item for key, item in value.items() if key != "release_channel"}
         version = value.get("schema_version", SETTINGS_SCHEMA_VERSION)
         if type(version) is int and version == 1:
             migrated = dict(value)

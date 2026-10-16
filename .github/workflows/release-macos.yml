@@ -46,7 +46,7 @@ jobs:
             echo "::error::Checked-out source does not match $RELEASE_TAG."
             exit 1
           }
-          node scripts/audit_beta_release.mjs source
+          node scripts/audit_release.mjs source
       - name: Reject tracked private keys
         run: |
           if git ls-files | grep -E '\.(key|pem)$'; then
@@ -223,11 +223,11 @@ jobs:
           } > release-assets/release-notes.md
       - name: Generate and validate latest.json
         env:
-          BETA_DOWNLOAD_BASE: https://github.com/tage-ilot/stagepilot-beta/releases/download
+          DOWNLOAD_BASE: https://github.com/tage-ilot/stagepilot/releases/download
         run: |
-          node scripts/generate_updater_manifest.mjs release-assets "$RELEASE_TAG" "$BETA_DOWNLOAD_BASE"
-          node scripts/validate_updater_manifest.mjs release-assets/latest.json release-assets "$BETA_DOWNLOAD_BASE"
-          node scripts/audit_beta_release.mjs assets release-assets "${RELEASE_TAG#v}"
+          node scripts/generate_updater_manifest.mjs release-assets "$RELEASE_TAG" "$DOWNLOAD_BASE"
+          node scripts/validate_updater_manifest.mjs release-assets/latest.json release-assets "$DOWNLOAD_BASE"
+          node scripts/audit_release.mjs assets release-assets "${RELEASE_TAG#v}"
       - name: Create release and upload artifacts
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -49,7 +49,7 @@ const request = async (url, options = {}) => {
 
 const existing = await fetch(`${api}/repos/${repository}/releases/tags/${tag}`, { headers });
 if (existing.ok) {
-  console.error(`Release ${tag} already exists; immutable beta assets will not be replaced.`);
+  console.error(`Release ${tag} already exists; immutable release assets will not be replaced.`);
   process.exit(1);
 }
 if (existing.status !== 404) {
