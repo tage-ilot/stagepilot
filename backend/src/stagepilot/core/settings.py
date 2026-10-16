@@ -576,6 +576,14 @@ class SettingsService:
         self.warning: str | None = None
         self.credential_saved = False
 
+    def service_source_pin(self) -> str | None:
+        """Name of the environment variable pinning the Services source, if any."""
+
+        for name in ("STAGEPILOT_SERVICE_SOURCE", "STAGEPILOT_DEMO_MODE"):
+            if name in self._environ:
+                return name
+        return None
+
     def set_access_token_provider(self, provider: Callable[[], str | None] | None) -> None:
         self._access_token_provider = provider
         self._runtime = self._resolve(self._persistent, self._secret)

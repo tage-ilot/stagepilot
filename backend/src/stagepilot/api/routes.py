@@ -19,6 +19,7 @@ from stagepilot.core.config import (
     MidiSource,
     OscLightingCue,
     ProPresenterSettings,
+    ServiceSource,
     Settings,
     SongLightingCueMap,
 )
@@ -99,6 +100,7 @@ from stagepilot.plugins.planning_center.errors import (
 from stagepilot.plugins.planning_center.plugin import ALL_SERVICE_TYPES_ID
 from stagepilot.plugins.playback_api.plugin import DiscoveryConflict
 from stagepilot.plugins.propresenter.errors import ProPresenterError
+from stagepilot.services.service_source import CREDENTIAL_BUSY_MESSAGE, ServiceSourceBusyError
 
 router = APIRouter(prefix="/api/v1", route_class=RemoteRetryRoute)
 
@@ -122,6 +124,64 @@ def _runtime_settings_without_midi(settings: Settings) -> dict[str, object]:
     payload = cast(dict[str, object], settings.model_dump(mode="python"))
     payload.pop("midi", None)
     return payload
+
+
+async def _apply_service_source(runtime: Runtime) -> str | None:
+    """Make the running Services plugin match the saved settings; return a warning on failure."""
+
+    controller = runtime.service_source
+    if controller is None:
+        return None
+    try:
+        health = await controller.sync()
+    except ServiceSourceBusyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    if health is not None and health.status is PluginStatus.ERROR:
+        return health.last_error or "Services could not be started."
+    return None
+
+
+async def _apply_planning_center_credentials(runtime: Runtime) -> None:
+    """Hand the current credentials (OAuth token or PAT) to the running Planning Center plugin."""
+
+    plugin = runtime.planning_center
+    if plugin is not None:
+        await plugin.reconfigure(
+            runtime.settings_service.effective_runtime_settings().planning_center
+        )
+    else:
+        await _apply_service_source(runtime)
+
+
+async def _ensure_show_idle(runtime: Runtime, message: str) -> None:
+    controller = runtime.service_source
+    if controller is None:
+        return
+    try:
+        await controller.ensure_idle(message)
+    except ServiceSourceBusyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+async def _refuse_service_source_change(
+    runtime: Runtime, requested: ServiceSource, effective: ServiceSource
+) -> None:
+    """Reject a source switch the environment pins, or one that would disturb a running show."""
+
+    if requested is effective:
+        return
+    pin = runtime.settings_service.service_source_pin()
+    if pin is not None:
+        raise HTTPException(
+            409,
+            f"This is set by the {pin} environment variable and cannot be changed here.",
+        )
+    controller = runtime.service_source
+    if controller is not None:
+        try:
+            await controller.ensure_idle()
+        except ServiceSourceBusyError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
 
 def _settings_response(
@@ -341,6 +401,11 @@ async def update_settings(
 ) -> SettingsResponse:
     runtime = _runtime(request)
     previous = runtime.settings_service.effective_runtime_settings()
+    await _refuse_service_source_change(
+        runtime,
+        settings.integration_modes.service_source,
+        previous.integration_modes.service_source,
+    )
     if runtime.playback_input is not None:
         if runtime.playback_input.discovery == "running":
             raise HTTPException(409, "Wait for Discover Song Order before changing settings.")
@@ -364,8 +429,17 @@ async def update_settings(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     updated = runtime.settings_service.effective_runtime_settings()
+    service_warning = await _apply_service_source(runtime)
     restart_required = True
     controller = _midi_controller(runtime)
+    # The Services source is applied live above, so it never needs a restart.
+    previous = previous.model_copy(
+        update={
+            "integration_modes": previous.integration_modes.model_copy(
+                update={"service_source": updated.integration_modes.service_source}
+            )
+        }
+    )
     only_midi_runtime_settings_changed = _runtime_settings_without_midi(
         previous
     ) == _runtime_settings_without_midi(updated)
@@ -386,7 +460,12 @@ async def update_settings(
         and previous.integration_modes.timer_output == updated.integration_modes.timer_output
     ):
         restart_required = False
-    return _settings_response(runtime, restart_required=restart_required)
+    response = _settings_response(runtime, restart_required=restart_required)
+    if service_warning is not None:
+        response.warning = (
+            f"{response.warning} {service_warning}".strip() if response.warning else service_warning
+        )
+    return response
 
 
 @router.get("/planning-center/status", response_model=PlanningCenterStatusResponse)
@@ -449,6 +528,8 @@ async def complete_planning_center_oauth(
 ) -> PlanningCenterOAuthStatusResponse:
     runtime = _runtime(request)
     service = _oauth(request)
+    if runtime.planning_center is not None:
+        await _ensure_show_idle(runtime, CREDENTIAL_BUSY_MESSAGE)
     try:
         await service.complete(
             state=payload.state,
@@ -486,10 +567,7 @@ async def complete_planning_center_oauth(
             )
         except (CredentialStoreError, SettingsFileError) as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        plugin = runtime.planning_center
-        if plugin is not None:
-            updated_settings = runtime.settings_service.effective_runtime_settings().planning_center
-            await plugin.reconfigure(updated_settings)
+    await _apply_planning_center_credentials(runtime)
 
     return PlanningCenterOAuthStatusResponse.model_validate(
         service.status(connection_method="oauth").model_dump()
@@ -516,6 +594,8 @@ async def disconnect_planning_center_oauth(
 ) -> PlanningCenterOAuthStatusResponse:
     runtime = _runtime(request)
     service = _oauth(request)
+    if runtime.planning_center is not None:
+        await _ensure_show_idle(runtime, CREDENTIAL_BUSY_MESSAGE)
     try:
         await asyncio.to_thread(service.disconnect)
         # Fall back to the manual path; any existing PAT secret is left
@@ -523,6 +603,7 @@ async def disconnect_planning_center_oauth(
         await asyncio.to_thread(runtime.settings_service.update_connection_method, "manual")
     except (CredentialStoreError, SettingsFileError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await _apply_planning_center_credentials(runtime)
     return PlanningCenterOAuthStatusResponse.model_validate(
         service.status(connection_method="manual").model_dump()
     )
@@ -556,7 +637,10 @@ async def update_planning_center_settings(
     # window that comes with it -- on every settings save.
     app_id_changed = public_settings.app_id != previous_planning_center.app_id
     secret_changed = settings.secret is not None or settings.remove_secret
-    restart_required = app_id_changed or secret_changed
+    if (app_id_changed or secret_changed) and runtime.planning_center is not None:
+        # Rebuilding the Planning Center client replaces the plan source under a live show.
+        await _ensure_show_idle(runtime, CREDENTIAL_BUSY_MESSAGE)
+    restart_required = False
     try:
         await asyncio.to_thread(
             runtime.settings_service.update_planning_center,
@@ -569,12 +653,16 @@ async def update_planning_center_settings(
 
     reconfigure_error: str | None = None
     plugin = runtime.planning_center
-    if not restart_required and plugin is not None:
+    if plugin is not None:
+        # reconfigure() rebuilds the HTTP client in place, so a changed app id, secret or removed
+        # secret takes effect immediately.
         updated_settings = runtime.settings_service.effective_runtime_settings().planning_center
         outcome = await plugin.reconfigure(updated_settings)
         if not outcome.accepted:
             reconfigure_error = outcome.message
-            restart_required = True
+    elif runtime.service_source is not None:
+        # Planning Center is the saved source but no plugin is running (a previous start failed).
+        reconfigure_error = await _apply_service_source(runtime)
 
     response = _settings_response(runtime, persisted=True, restart_required=restart_required)
     if reconfigure_error is not None:

@@ -639,18 +639,12 @@ export function useStagePilot() {
           },
         });
         setSettings(response);
-        if (response.restart_required && await restartDesktopBackend()) {
-          window.location.reload();
-          return;
-        }
+        // Services connects and switches live: the backend has already started or rebuilt the
+        // plugin, so there is never a restart step here.
         setPlanningCenterStatus(await getPlanningCenterStatus());
-        if (response.restart_required) {
-          if (response.warning) {
-            setPlanningCenterError(response.warning);
-          }
-          setPlanningCenterMessage(
-            "Services configuration saved securely. Restart StagePilot to apply the service source.",
-          );
+        if (response.warning) {
+          setPlanningCenterError(response.warning);
+          setPlanningCenterMessage("Services configuration saved, but the connection failed.");
         } else {
           setPlanningCenterMessage(
             "Services configuration saved securely and applied to the running service source.",

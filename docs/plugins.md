@@ -95,3 +95,16 @@ safety property, as it is for ProPresenter's stop/set/reset/start sequence.
 
 Run the backend quality checks documented in [../CONTRIBUTING.md](../CONTRIBUTING.md)
 before submitting a plugin change.
+
+## Changing plugins while StagePilot runs
+
+`PluginManager.add`, `remove` and `replace` start, stop and swap a plugin without restarting
+StagePilot. They are serialised by one lock, a plugin whose start fails is reported as an error
+(`PLUGIN_FAILED`) and is not left registered, and other plugins are never touched.
+
+Services uses this: `ServiceSourceController` (`services/service_source.py`) swaps the Demo and
+Planning Center plugins when `service_source` is saved, and `ServicePluginFactory` is the single
+place that builds the Services plugin for both startup and live switches. A switch is refused with
+HTTP 409 while the timer is running, and a source pinned by `STAGEPILOT_SERVICE_SOURCE` (or
+`STAGEPILOT_DEMO_MODE`) cannot be changed from the dashboard. Changing the Planning Center app id,
+secret or sign-in rebuilds the client in place; no Services change needs a restart.

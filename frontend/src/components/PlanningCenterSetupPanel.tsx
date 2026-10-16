@@ -308,7 +308,7 @@ export function PlanningCenterSetupPanel({
         description="Sign in with Planning Center and manage the Service plan."
         headingId="planning-center-setup-heading"
         onClose={onClose}
-        status={status?.connection_status ?? state.planning_center_status}
+        status={pendingOperation === "save" ? "connecting" : (status?.connection_status ?? state.planning_center_status)}
         title="Services"
       />
 
@@ -562,11 +562,6 @@ export function PlanningCenterSetupPanel({
       </div>
 
       <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!status ? onRetryLoad : undefined} />
-      {!state.plugins.planning_center && (
-        <p className="mt-3 text-xs text-warning-text">
-          Saving this configuration enables Services. Restart StagePilot to start the connection.
-        </p>
-      )}
 
       <div className="status-checks-box mt-5">
       <dl className="status-checks grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm">

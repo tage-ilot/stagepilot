@@ -92,6 +92,31 @@ class StateService:
             await self._event_bus.unsubscribe(subscription)
         self._subscriptions.clear()
 
+    async def clear_service(self) -> None:
+        """Forget the loaded service: used when the Services source is switched live.
+
+        Clears exactly what a Services plugin owns (plan, song cursor and labels, load state and
+        reload time, the timer it fed) so a switched install never keeps the previous plan.
+        """
+
+        async with self._action_lock:
+            self._pending_start_index = 0
+
+            def mutation(state: ApplicationState) -> None:
+                state.plan = None
+                state.current_song = None
+                state.next_song = None
+                state.current_song_index = None
+                state.playing_song = None
+                state.playing_song_index = None
+                state.up_next_song = None
+                state.service_load = ServiceLoadState()
+                state.timer = TimerState()
+                state.last_successful_plan_reload_at = None
+                state.last_action = None
+
+            await self._state_store.mutate(mutation)
+
     async def dispatch(self, action: ActionName, source: str = "api") -> ActionOutcome:
         request_id = uuid4()
         report = await self._event_bus.publish(
