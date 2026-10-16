@@ -4,12 +4,12 @@
 </h1>
 
 
-StagePilot brings the moving parts of a live production into one dependable dashboard. It loads service plans from Planning Center, listens for MIDI cues from MultiTracks Playback, keeps a ProPresenter countdown in sync, and sends scheduled MIDI cues to a lighting controller such as Lightkey.
+StagePilot brings the moving parts of a live production into one dependable dashboard. It loads service plans from Planning Center, follows MultiTracks Playback (over its network API or MIDI cues), keeps a ProPresenter countdown in sync, and sends scheduled MIDI or OSC cues to a lighting controller such as Lightkey.
 
 Production desktop builds check the signed
 [GitHub updater feed](docs/updating-stagepilot.md) after startup. The header
 stays unchanged when StagePilot is current; an **Update** button appears beside
-the logo only when a newer signed release is available.
+the logo only when a newer signed release is available. There is one release channel: every install follows the releases on this page.
 
 ## Download StagePilot 2.41.0
 
@@ -41,21 +41,23 @@ Only install downloads from the **official StagePilot GitHub release page**.
 StagePilot works with:
 
 - Planning Center Services and a Personal Access Token
-- A MIDI input from MultiTracks Playback or another MIDI source
+- MultiTracks Playback on the same network (or a MIDI input from Playback or another MIDI source)
 - ProPresenter with its local network API enabled
-- Optionally, a MIDI destination for Lightkey or another lighting controller
+- Optionally, a MIDI or OSC destination for Lightkey or another lighting controller
 
-Planning Center, MIDI, and ProPresenter are independent. You can configure and test one connection without requiring every other integration to be online.
+Planning Center, Playback, ProPresenter, and Lighting are independent. You can configure and test one connection without requiring every other integration to be online.
 
 ## Initial setup
 
 All normal setup happens inside StagePilot; command-line variables are not required.
 
-1. Click **StagePilot backend** and set the timezone, log level, and local server port.
-2. Click **Planning Center**, enter the Personal Access Token Application ID and Secret, test the connection, and choose a service type from the discovered list.
-3. Click **MIDI / Playback**, select the MIDI input, channel, cue note, action velocities, and debounce time.
-4. Click **ProPresenter**, enter its host and API port, select the song timer and optional Look, then test the connection.
-5. Click **Lighting** to select an output and add elapsed-time lighting cues when lighting automation is needed.
+1. Open **Backend** and set the timezone, log level, and local server port under Advanced. Choose how StagePilot is reached under **Connection Access** (see below).
+2. Open **Services**, choose **Sign in with Planning Center** (or use **Manual API Connection** with a Personal Access Token), test the connection, and choose a service type from the discovered list.
+3. Open **MIDI / Playback**. The default connection method is **Playback API**: scan the network for Playback and connect, and StagePilot stays connected automatically. To use MIDI cues instead, choose **MIDI** and set the input, channel, cue note, action velocities, and debounce time.
+4. Open **Presentation**, enter ProPresenter's host and API port, select the song timer and optional Look (the default is **Current Look**), then test the connection.
+5. Open **Lighting** to choose MIDI or OSC, select the output, and add elapsed-time lighting cues when lighting automation is needed.
+
+If Playback's song order differs from the service plan, use **Song arrangement** in the Playback panel: skip a song on either side and the remaining songs pair up in order. Nothing is ever reordered, and skips are saved with **Save configuration**.
 
 Settings persist between launches. On future launches, StagePilot automatically refreshes the saved MIDI input and reconnects configured Planning Center, ProPresenter, and Lighting integrations after startup finishes. Planning Center credentials are stored separately in the operating system credential store and are never returned by the StagePilot API.
 
@@ -63,18 +65,18 @@ The title-bar **X** hides the dashboard while StagePilot and its integrations co
 
 ## Browser dashboard
 
-While the StagePilot desktop app is running, the same dashboard is available in a browser at [http://127.0.0.1:8765](http://127.0.0.1:8765), using the server port saved in **StagePilot backend**.
+While the StagePilot desktop app is running, the same dashboard is available in a browser at [http://127.0.0.1:8765](http://127.0.0.1:8765), using the server port saved in **Backend**.
 
 To open it from another computer on the same trusted network:
 
-1. Open **StagePilot backend** and enable **Allow dashboard access from this local network**.
-2. Replace the initial dashboard PIN (`1234`) with a private PIN, then save the settings.
-3. Fully restart StagePilot.
+1. Open **Backend** and set **Connection Access** to **Local network**. The choice saves immediately.
+2. Replace the initial dashboard PIN (`1234`) with a private PIN under **Access PIN** and select **Save PIN**.
+3. If StagePilot says a restart is needed, restart it so it listens on the network.
 4. Find the StagePilot computer's local IP address, such as `192.168.1.40`.
 5. On the other computer, open `http://192.168.1.40:8765`, replacing the address and port as needed.
 6. Enter the dashboard PIN. The normal StagePilot loading screen appears only after access is approved.
 
-PIN protection is enabled by default and can be disabled in **StagePilot backend**, but LAN access should still be used only on a trusted, private production network—not public Wi-Fi. Allow StagePilot through the operating-system firewall if prompted.
+**Host** keeps the dashboard on this computer only. **Internet** turns on Remote access, which gives the dashboard a private web address you can use away from the building (local network access stays available too). A dashboard PIN is always required for access from another device; use LAN access only on a trusted, private production network, not public Wi-Fi. Allow StagePilot through the operating-system firewall if prompted.
 
 ## Weekly operation
 
@@ -83,14 +85,16 @@ When StagePilot opens, it looks for a plan on the current local date. If none ex
 Before a service:
 
 1. Confirm the correct service and service time in **Service Plan**.
-2. Review **Readiness Check** and open any connection card that needs attention.
-3. Send a Playback cue or use **Manual Controls** to test the timer path.
+2. Review the system check at the top of the dashboard (it reads **Ready** when everything is connected) and open any connection card that needs attention.
+3. Start a song in Playback or use **Manual Controls** to test the timer path.
 4. Confirm ProPresenter shows the selected timer as a Countdown Timer with the correct duration.
 5. Keep StagePilot open during the service to monitor timing, connections, lighting cues, and events.
 
-Service headers and reference items remain visible in Planning Center order, while song rows drive the timer workflow. Select **Edit layout** to drag or resize the Service Plan, Now Playing, Manual Controls, Readiness Check, and Recent Event Stream widgets. StagePilot compacts accidental gaps, supports explicit spacers, provides keyboard ordering controls, and keeps separate desktop, tablet, and mobile layouts between launches. See [Dashboard layout](docs/dashboard-layout.md).
+Service headers and reference items remain visible in Planning Center order, while song rows drive the timer workflow. Select **Edit layout** to drag or resize the Service plan, Now Playing, Manual Controls, and Recent Event Stream widgets. StagePilot compacts accidental gaps, supports explicit spacers, provides keyboard ordering controls, and keeps separate desktop, tablet, and mobile layouts between launches. See [Dashboard layout](docs/dashboard-layout.md).
 
 ## MIDI controls
+
+This section applies when the connection method is **MIDI**. (With the default **Playback API** method, StagePilot follows Playback directly and needs no cues.)
 
 The default Playback cue uses MIDI channel 1 and note 112 (`E7`). For each song,
 create a note-on cue at the exact beginning and set its velocity to the song's
@@ -123,14 +127,11 @@ returns both StagePilot and the configured ProPresenter timer to `0:00`.
 
 ## Planning Center access
 
-To use the Service Plan features, sign in to Planning Center's [Personal Access Token page](https://api.planningcenteronline.com/personal_access_tokens) and create a Personal Access Token for StagePilot.
+The simplest way to connect is **Sign in with Planning Center** in the Services panel: approve StagePilot in the browser window that opens, then test the connection, load the available service types, choose the one StagePilot should follow, and save.
 
-1. Create a new token with a recognizable name such as `StagePilot`.
-2. Copy the token's **Client ID** into StagePilot's **Application ID** field.
-3. Copy the token's **Secret** into StagePilot's **Secret** field.
-4. Select **Test connection**, load the available service types, choose the service StagePilot should follow, and save the settings.
+If you prefer a Personal Access Token, use **Manual API Connection**. Sign in to Planning Center's [Personal Access Token page](https://api.planningcenteronline.com/personal_access_tokens), create a token with a recognizable name such as `StagePilot`, copy its **Client ID** into the **Application ID** field and its **Secret** into the **Secret** field, then test and save.
 
-Treat the Client ID and Secret like a password. Do not include them in screenshots, logs, support requests, or GitHub issues. StagePilot stores the secret in the operating system credential store rather than its normal settings file.
+Treat the Client ID and Secret like a password. Do not include them in screenshots, logs, support requests, or GitHub issues. StagePilot stores credentials in the operating system credential store rather than its normal settings file.
 
 ## Reliability and troubleshooting
 
