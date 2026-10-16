@@ -44,6 +44,67 @@ class PluginManager:
         self._plugins: dict[str, Plugin] = {}
         self._health: dict[str, PluginHealth] = {}
         self._logger = get_logger("plugin_manager")
+        # One runtime lifecycle change (add / remove / replace) at a time.
+        self._lifecycle_lock = asyncio.Lock()
+
+    def has(self, name: str) -> bool:
+        return name in self._plugins
+
+    def get(self, name: str) -> Plugin | None:
+        return self._plugins.get(name)
+
+    async def add(self, plugin: Plugin) -> PluginHealth:
+        """Register and start a plugin while the application is running.
+
+        A failed start never leaves the plugin registered: the failure is reported through the
+        usual PLUGIN_FAILED event and the returned ERROR health, and other plugins are untouched.
+        """
+
+        async with self._lifecycle_lock:
+            return await self._add_locked(plugin)
+
+    async def remove(self, name: str) -> PluginHealth | None:
+        """Stop and unregister a plugin; unknown names return ``None``."""
+
+        async with self._lifecycle_lock:
+            return await self._remove_locked(name)
+
+    async def replace(self, name: str, plugin: Plugin) -> PluginHealth:
+        """Swap the named plugin for ``plugin`` as one serialised change.
+
+        The old plugin is stopped and unregistered first. If the new plugin fails to start it is
+        not left registered either, so the failure is visible (ERROR health, PLUGIN_FAILED event)
+        and no stale plugin keeps running with settings that were just replaced.
+        """
+
+        async with self._lifecycle_lock:
+            await self._remove_locked(name)
+            return await self._add_locked(plugin)
+
+    async def _add_locked(self, plugin: Plugin) -> PluginHealth:
+        self.register(plugin)
+        await self._start_plugin(plugin)
+        health = self._health[plugin.name]
+        if health.status is PluginStatus.RUNNING:
+            return health.model_copy(deep=True)
+        failed = health.model_copy(deep=True)
+        try:
+            await plugin.stop()
+        except Exception:  # best-effort cleanup of a plugin that never started
+            self._logger.warning("plugin_cleanup_after_failed_start_failed", plugin=plugin.name)
+        del self._plugins[plugin.name]
+        del self._health[plugin.name]
+        return failed
+
+    async def _remove_locked(self, name: str) -> PluginHealth | None:
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return None
+        await self._stop_plugin(plugin)
+        result = self._health[name].model_copy(deep=True)
+        del self._plugins[name]
+        del self._health[name]
+        return result
 
     def register(self, plugin: Plugin) -> None:
         if plugin.name in self._plugins:

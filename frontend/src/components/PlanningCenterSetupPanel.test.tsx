@@ -711,9 +711,30 @@ describe("PlanningCenterSetupPanel SaveBar", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ service_type_id: "wednesday" }), "America/Los_Angeles");
   });
 
-  it("keeps the restart-needed note while the connection is not enabled", () => {
-    renderPanel();
-    expect(screen.getByText(/Restart StagePilot to start the connection/)).toBeInTheDocument();
+  it("has no restart notice or wording in any state (Services connects live)", () => {
+    const view = render(panelElement());
+    expect(view.container.textContent ?? "").not.toMatch(/restart/i);
+    view.rerender(panelElement({ panelPlugins: { planning_center: true } }));
+    expect(view.container.textContent ?? "").not.toMatch(/restart/i);
+    view.rerender(panelElement({ pendingOperation: "save" }));
+    expect(view.container.textContent ?? "").not.toMatch(/restart/i);
+    view.rerender(panelElement({ error: "Stop the timer before switching between Demo and Planning Center." }));
+    expect(view.container.textContent ?? "").not.toMatch(/restart/i);
+  });
+
+  it("shows Connecting while a save is applying, then Connected", () => {
+    const connected = { connection_status: "connected", configured: true, app_id: "saved-app-id", service_type_id: "sunday", planning_center_secret_saved: true, connection_method: "manual", oauth_connected: false, oauth_needs_reconnect: false, detail: null } as PlanningCenterStatusResponse;
+    const view = render(panelElement({ pendingOperation: "save" }));
+    expect(screen.getAllByText(/Connecting/i).length).toBeGreaterThan(0);
+    view.rerender(panelElement({ pendingOperation: null, status: connected }));
+    expect(screen.queryByText(/Connecting/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Connected/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows the refusal message from the backend and keeps it free of restart wording", () => {
+    const message = "Stop the timer before switching between Demo and Planning Center.";
+    render(panelElement({ error: message }));
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
   it("keeps Reload service plan, Test connection and sign-in as plain actions outside the bar", () => {

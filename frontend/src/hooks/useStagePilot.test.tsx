@@ -700,7 +700,7 @@ describe("useStagePilot", () => {
     };
     const finalSettings: SettingsResponse = {
       ...planningCenterSettings,
-      restart_required: true,
+      restart_required: false,
       settings: {
         ...planningCenterSettings.settings,
         integration_modes: {
@@ -741,6 +741,39 @@ describe("useStagePilot", () => {
       "private-secret",
     );
     expect(result.current.settings).toEqual(finalSettings);
+  });
+
+  it("shows the 409 refusal for a Services save and never mentions a restart", async () => {
+    const refusal = "Stop the timer before switching between Demo and Planning Center.";
+    mockedUpdatePlanningCenterSettings.mockRejectedValueOnce(new Error(refusal));
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+
+    await act(async () =>
+      result.current.savePlanningCenter(
+        { ...settings.settings.planning_center, secret: "s" },
+        "America/Los_Angeles",
+      ),
+    );
+
+    expect(result.current.planningCenterError).toContain(refusal);
+    expect(result.current.planningCenterMessage ?? "").not.toMatch(/restart/i);
+    expect(result.current.planningCenterError ?? "").not.toMatch(/restart/i);
+  });
+
+  it("reports the real connection error after a live Services save, without a restart note", async () => {
+    const saved: SettingsResponse = { ...settings, warning: "Planning Center rejected the credentials.", restart_required: false };
+    mockedUpdatePlanningCenterSettings.mockResolvedValueOnce(saved);
+    mockedUpdateSettings.mockResolvedValueOnce(saved);
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+
+    await act(async () =>
+      result.current.savePlanningCenter({ ...settings.settings.planning_center, secret: "s" }, "America/Los_Angeles"),
+    );
+
+    expect(result.current.planningCenterError).toBe("Planning Center rejected the credentials.");
+    expect(result.current.planningCenterMessage ?? "").not.toMatch(/restart/i);
   });
 
   it("reactivates every configured integration after dashboard startup", async () => {

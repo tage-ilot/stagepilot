@@ -28,7 +28,7 @@ from stagepilot.api.remote_feature import router as remote_feature_router
 from stagepilot.api.remote_ingress import RemoteAccess
 from stagepilot.api.routes import router as api_router
 from stagepilot.api.websocket import router as websocket_router
-from stagepilot.core.config import MidiSource, ServiceSource, Settings, TimerOutput, get_settings
+from stagepilot.core.config import Settings, TimerOutput, get_settings
 from stagepilot.core.event_bus import EventBus
 from stagepilot.core.events import EventType, new_event
 from stagepilot.core.logging import configure_logging, get_logger
@@ -55,7 +55,6 @@ from stagepilot.planning_center_oauth import (
     PlanningCenterOAuthService,
     proactive_refresh_loop,
 )
-from stagepilot.plugins.demo import DemoPlugin
 from stagepilot.plugins.lights import (
     LightsPlugin,
     MidiOutputBackendFactory,
@@ -76,6 +75,7 @@ from stagepilot.plugins.propresenter import ProPresenterClientFactory, ProPresen
 from stagepilot.services.dashboard_auth import DashboardSessionStore
 from stagepilot.services.planning_center_setup import PlanningCenterSetupService
 from stagepilot.services.remote_auth import RemoteStore
+from stagepilot.services.service_source import ServicePluginFactory, ServiceSourceController
 from stagepilot.services.startup_activation import StartupActivationService
 from stagepilot.services.state_service import StateService
 
@@ -215,30 +215,17 @@ def create_app(
         else FilePlanCacheStore(default_plan_cache_path())
     )
 
-    if resolved_settings.integration_modes.service_source is ServiceSource.DEMO:
-        plugin_manager.register(
-            DemoPlugin(
-                event_bus,
-                state_store,
-                simulate_midi=(
-                    resolved_settings.integration_modes.midi_source is MidiSource.SIMULATED
-                ),
-                simulate_propresenter=(
-                    resolved_settings.integration_modes.timer_output is TimerOutput.SIMULATED
-                ),
-            )
-        )
-    else:
-        planning_center_plugin = PlanningCenterPlugin(
-            event_bus,
-            state_store,
-            resolved_settings.planning_center,
-            timezone_name=resolved_settings.timezone,
-            client_factory=planning_center_client_factory,
-            today_provider=planning_center_today_provider,
-            plan_cache_store=resolved_plan_cache_store,
-        )
-        plugin_manager.register(planning_center_plugin)
+    service_plugin_factory = ServicePluginFactory(
+        event_bus,
+        state_store,
+        client_factory=planning_center_client_factory,
+        today_provider=planning_center_today_provider,
+        plan_cache_store=resolved_plan_cache_store,
+    )
+    service_plugin = service_plugin_factory.build(resolved_settings)
+    if isinstance(service_plugin, PlanningCenterPlugin):
+        planning_center_plugin = service_plugin
+    plugin_manager.register(service_plugin)
 
     def make_midi(input_settings: Settings) -> MidiPlaybackPlugin:
         return MidiPlaybackPlugin(
@@ -292,6 +279,18 @@ def create_app(
         planning_center=planning_center_plugin,
         planning_center_oauth=planning_center_oauth,
         playback_input=playback_input,
+    )
+
+    def publish_planning_center(plugin: PlanningCenterPlugin | None) -> None:
+        runtime.planning_center = plugin
+
+    runtime.service_source = ServiceSourceController(
+        plugin_manager=plugin_manager,
+        factory=service_plugin_factory,
+        settings_service=resolved_settings_service,
+        state_store=state_store,
+        state_service=state_service,
+        on_planning_center_changed=publish_planning_center,
     )
     startup_activation = StartupActivationService(
         plugin_manager=plugin_manager,
