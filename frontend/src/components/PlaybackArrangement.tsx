@@ -1,5 +1,5 @@
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
-import { arrangeSongs, CLOSE_SECONDS, LIKELY_DIFFERENT_SECONDS, secondsApart, type ArrangementLine } from "./playbackArrangement";
+import { arrangeSongs, CLOSE_SECONDS, LIKELY_DIFFERENT_SECONDS, secondsApart, type ArrangementLine } from "./songPairing";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Switch } from "./ui/Switch";
 import { cx } from "./ui/cx";

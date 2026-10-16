@@ -13,7 +13,7 @@ export interface PlaybackDraft {
   setMethod: (value: PlaybackMethod) => void;
   /** Writes the chosen method (selectSource) when it differs from the saved one. True when nothing is left to apply. */
   applyMethod: () => Promise<boolean>;
-  /** Songs skipped on each side, held until Save. Order is never touched; see playbackArrangement.ts. */
+  /** Songs skipped on each side, held until Save. Order is never touched; see songPairing.ts. */
   skippedPlanSongs: ReadonlySet<string>;
   skippedPlaybackSongs: ReadonlySet<number>;
   setPlanSongSkipped: (id: string, skipped: boolean) => void;

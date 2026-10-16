@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { arrangeSongs, secondsApart } from "./playbackArrangement";
+import { arrangeSongs, secondsApart } from "./songPairing";
 
 const PLAN = ["a", "b", "c", "d", "e"];
 const ORDER = [900, 17, 42, 55, 70];
