@@ -254,6 +254,10 @@ export const updatePlaybackSettings = (settings: PlaybackSettingsInput) =>
   requestJson<PlaybackStatusResponse>("/api/v1/playback-api/settings", {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings),
   });
+export const updatePlaybackArrangement = (skipped_song_ids: number[], skipped_plan_song_ids: string[]) =>
+  requestJson<PlaybackStatusResponse>("/api/v1/playback-api/arrangement", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ skipped_song_ids, skipped_plan_song_ids }),
+  });
 export const discoverPlaybackSongOrder = () =>
   requestJson<PlaybackStatusResponse>("/api/v1/playback-api/discover-song-order", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }),

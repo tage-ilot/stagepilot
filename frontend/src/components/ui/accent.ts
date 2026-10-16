@@ -38,6 +38,8 @@ export interface AccentClasses {
   banner: string;
   /** The chosen option in the Connection method control: the connection colour as a 45% fill with a solid outline. */
   chip: string;
+  /** A switch that is on: peer-checked classes, written out in full so Tailwind sees them. */
+  switchOn: string;
 }
 
 export const accentClasses: Record<PanelIdentity, AccentClasses> = {
@@ -53,6 +55,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-services-soft/50 bg-integration-services-soft/[0.22]",
     banner: "border-integration-services-soft/40 bg-integration-services-soft/10 text-integration-services-text",
     chip: "border-integration-services-soft bg-integration-services-soft/45",
+    switchOn: "peer-checked:border-integration-services-soft peer-checked:bg-integration-services-soft",
   },
   presentation: {
     solid: "border-transparent bg-integration-presentation text-on-light can-hover:bg-integration-presentation/85 active:bg-integration-presentation/75",
@@ -66,6 +69,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-presentation-soft/50 bg-integration-presentation-soft/[0.22]",
     banner: "border-integration-presentation-soft/40 bg-integration-presentation-soft/10 text-integration-presentation-text",
     chip: "border-integration-presentation-soft bg-integration-presentation-soft/45",
+    switchOn: "peer-checked:border-integration-presentation-soft peer-checked:bg-integration-presentation-soft",
   },
   playback: {
     solid: "border-transparent bg-integration-playback text-on-primary text-shadow-label can-hover:bg-integration-playback/85 active:bg-integration-playback/75",
@@ -79,6 +83,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-playback-soft/50 bg-integration-playback-soft/[0.22]",
     banner: "border-integration-playback-soft/40 bg-integration-playback-soft/10 text-integration-playback-text",
     chip: "border-integration-playback-soft bg-integration-playback-soft/45",
+    switchOn: "peer-checked:border-integration-playback-soft peer-checked:bg-integration-playback-soft",
   },
   midi: {
     solid: "border-transparent bg-integration-playback-midi text-on-primary text-shadow-label can-hover:bg-integration-playback-midi/85 active:bg-integration-playback-midi/75",
@@ -92,6 +97,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-playback-midi-soft/50 bg-integration-playback-midi-soft/[0.22]",
     banner: "border-integration-playback-midi-soft/40 bg-integration-playback-midi-soft/10 text-integration-playback-midi-text",
     chip: "border-integration-playback-midi-soft bg-integration-playback-midi-soft/45",
+    switchOn: "peer-checked:border-integration-playback-midi-soft peer-checked:bg-integration-playback-midi-soft",
   },
   lighting: {
     solid: "border-transparent bg-integration-lighting text-on-primary text-shadow-label can-hover:bg-integration-lighting/85 active:bg-integration-lighting/75",
@@ -105,6 +111,7 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-lighting-soft/50 bg-integration-lighting-soft/[0.22]",
     banner: "border-integration-lighting-soft/40 bg-integration-lighting-soft/10 text-integration-lighting-text",
     chip: "border-integration-lighting-soft bg-integration-lighting-soft/45",
+    switchOn: "peer-checked:border-integration-lighting-soft peer-checked:bg-integration-lighting-soft",
   },
   backend: {
     solid: "border-transparent bg-integration-backend text-on-primary text-shadow-label can-hover:bg-integration-backend/85 active:bg-integration-backend/75",
@@ -118,5 +125,6 @@ export const accentClasses: Record<PanelIdentity, AccentClasses> = {
     bar: "border-integration-backend-soft/50 bg-integration-backend-soft/[0.22]",
     banner: "border-integration-backend-soft/40 bg-integration-backend-soft/10 text-integration-backend-text",
     chip: "border-integration-backend-soft bg-integration-backend-soft/45",
+    switchOn: "peer-checked:border-integration-backend-soft peer-checked:bg-integration-backend-soft",
   },
 };

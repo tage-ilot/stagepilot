@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { cancelPlaybackScan, discoverPlaybackSongOrder, findPlayback, getPlaybackEvents, getPlaybackStatus, getSettings, updatePlaybackSettings, updateSettings } from "../api";
+import { cancelPlaybackScan, discoverPlaybackSongOrder, updatePlaybackArrangement, findPlayback, getPlaybackEvents, getPlaybackStatus, getSettings, updatePlaybackSettings, updateSettings } from "../api";
 import { describeError } from "../errorText";
 import type { PlaybackMonitorEntry, PlaybackSettingsInput, PlaybackStatusResponse, SettingsResponse } from "../types";
 
@@ -12,6 +12,7 @@ export interface PlaybackController {
   message: string | null;
   pending: PlaybackOperation;
   save: (settings: PlaybackSettingsInput) => Promise<boolean>;
+  saveArrangement: (skippedSongIds: number[], skippedPlanSongIds: string[]) => Promise<boolean>;
   selectSource: (source: "playback_api" | "real") => Promise<boolean>;
   scan: (host?: string) => void;
   cancelScan: () => void;
@@ -125,6 +126,17 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
     });
   }, [onSettings, run]);
 
+  const saveArrangement = useCallback((skippedSongIds: number[], skippedPlanSongIds: string[]): Promise<boolean> => {
+    const current = generation.current;
+    return run("save", async () => {
+      const next = await updatePlaybackArrangement(skippedSongIds, skippedPlanSongIds);
+      if (generation.current !== current) return;
+      ++statusRevision.current;
+      setStatus(next);
+      setMessage("Configuration saved.");
+    });
+  }, [run]);
+
   const selectSource = useCallback((source: "playback_api" | "real"): Promise<boolean> => {
     const current = generation.current;
     return run("source", async () => {
@@ -192,5 +204,5 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
 
   const acceptStatus = useCallback((next: PlaybackStatusResponse) => { ++statusRevision.current; setStatus(next); void getSettings().then(onSettings).catch(() => undefined); }, [onSettings]);
 
-  return { acceptStatus, status, events, error: error ?? statusError, message, pending, save, selectSource, scan, cancelScan, discover };
+  return { acceptStatus, status, events, error: error ?? statusError, message, pending, save, saveArrangement, selectSource, scan, cancelScan, discover };
 }

@@ -28,6 +28,8 @@ export { SaveBar } from "./SaveBar";
 export { changeCountText } from "./changeCount";
 export type { SaveBarProps, SaveBarState } from "./SaveBar";
 export { Dialog } from "./Dialog";
+export { Switch } from "./Switch";
+export type { SwitchProps } from "./Switch";
 export { Toast } from "./Toast";
 export type { ToastProps, ToastTone, ToastSide } from "./Toast";
 export type { DialogProps, DialogLayer, DialogTone } from "./Dialog";
