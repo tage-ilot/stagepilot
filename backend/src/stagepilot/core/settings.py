@@ -584,6 +584,18 @@ class SettingsService:
                 return name
         return None
 
+    def timer_output_pin(self) -> str | None:
+        """Name of the environment variable pinning the Presentation output, if any."""
+
+        for name in (
+            "STAGEPILOT_TIMER_OUTPUT",
+            "STAGEPILOT_DEMO_SIMULATE_PROPRESENTER",
+            "STAGEPILOT_PROPRESENTER_ENABLED",
+        ):
+            if name in self._environ:
+                return name
+        return None
+
     def set_access_token_provider(self, provider: Callable[[], str | None] | None) -> None:
         self._access_token_provider = provider
         self._runtime = self._resolve(self._persistent, self._secret)

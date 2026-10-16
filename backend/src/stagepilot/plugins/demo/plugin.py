@@ -37,6 +37,7 @@ class DemoPlugin(Plugin):
         self._last_error: str | None = None
         self._last_activity_at: datetime | None = None
         self._subscriptions: list[Subscription] = []
+        self._timer_subscriptions: list[Subscription] = []
         self._simulate_midi = simulate_midi
         self._simulate_propresenter = simulate_propresenter
 
@@ -49,22 +50,7 @@ class DemoPlugin(Plugin):
             )
         )
         if self._simulate_propresenter:
-            self._subscriptions.extend(
-                [
-                    await self.event_bus.subscribe(
-                        EventType.SONG_STARTED,
-                        self._on_song_started,
-                    ),
-                    await self.event_bus.subscribe(
-                        EventType.SONG_RESTARTED,
-                        self._on_song_started,
-                    ),
-                    await self.event_bus.subscribe(
-                        EventType.TIMER_STOP_REQUESTED,
-                        self._on_timer_stop_requested,
-                    ),
-                ]
-            )
+            await self._subscribe_timer()
         plan = demo_service_plan()
         await self.event_bus.publish(service_loaded(plan))
         await self.event_bus.publish(service_load_ready(plan))
@@ -75,11 +61,42 @@ class DemoPlugin(Plugin):
 
     async def stop(self) -> None:
         self._status = PluginStatus.STOPPING
+        await self._unsubscribe_timer()
         for subscription in self._subscriptions:
             await self.event_bus.unsubscribe(subscription)
         self._subscriptions.clear()
         self._status = PluginStatus.STOPPED
         self._last_activity_at = datetime.now(UTC)
+
+    async def set_simulate_propresenter(self, simulate: bool) -> None:
+        """Start or stop simulating the timer output while running, as a fresh start would."""
+
+        if simulate == self._simulate_propresenter:
+            return
+        self._simulate_propresenter = simulate
+        if self._status is not PluginStatus.RUNNING:
+            return
+        if simulate:
+            await self._subscribe_timer()
+            await self.event_bus.publish(timer_stopped())
+        else:
+            await self._unsubscribe_timer()
+
+    async def _subscribe_timer(self) -> None:
+        self._timer_subscriptions.extend(
+            [
+                await self.event_bus.subscribe(EventType.SONG_STARTED, self._on_song_started),
+                await self.event_bus.subscribe(EventType.SONG_RESTARTED, self._on_song_started),
+                await self.event_bus.subscribe(
+                    EventType.TIMER_STOP_REQUESTED, self._on_timer_stop_requested
+                ),
+            ]
+        )
+
+    async def _unsubscribe_timer(self) -> None:
+        for subscription in self._timer_subscriptions:
+            await self.event_bus.unsubscribe(subscription)
+        self._timer_subscriptions.clear()
 
     async def health(self) -> PluginHealth:
         return PluginHealth(
