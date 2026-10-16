@@ -11,13 +11,13 @@ Production desktop builds check the signed
 stays unchanged when StagePilot is current; an **Update** button appears beside
 the logo only when a newer signed release is available. There is one release channel: every install follows the releases on this page.
 
-## Download StagePilot 2.41.0
+## Download StagePilot 2.41.1
 
-Download the installer for your computer from the [StagePilot v2.41.0 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.41.0):
+Download the installer for your computer from the [StagePilot v2.41.1 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.41.1):
 
-- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_x64-setup.exe)
-- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_x64.dmg)
-- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.0/StagePilot_2.41.0_aarch64.dmg)
+- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.1/StagePilot_2.41.1_x64-setup.exe)
+- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.1/StagePilot_2.41.1_x64.dmg)
+- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.41.1/StagePilot_2.41.1_aarch64.dmg)
 
 On **Windows**, run the installer and open StagePilot from the Start menu.
 

@@ -517,7 +517,7 @@ class PlanningCenterSettings(BaseModel):
     upcoming_lookahead_days: int = Field(default=30, ge=0, le=365)
     request_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
     user_agent: str = Field(
-        default="StagePilot/2.41.0 (https://github.com/tage-ilot/stagepilot)",
+        default="StagePilot/2.41.1 (https://github.com/tage-ilot/stagepilot)",
         min_length=1,
         max_length=256,
     )
@@ -574,7 +574,7 @@ class Settings(BaseModel):
     """Validated runtime settings; integration secrets remain server-side only."""
 
     app_name: str = "StagePilot"
-    version: str = "2.41.0"
+    version: str = "2.41.1"
     bind_host: str = "127.0.0.1"
     bind_port: int = Field(default=8765, ge=1, le=65535)
     log_level: str = "INFO"

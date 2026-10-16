@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
-## [2.41.0] - 2026-10-16
+## [2.41.1] - 2026-10-16
+
+First published release of the single-channel, plain-version line (2.41.0 was tagged but its
+build failed validation on the Intel Mac runner, so it was never published and its notes are
+included here).
+
+### Fixed
+
+- Test-only: the fake Playback used in the test suite allowed 0.25 s between heartbeats, so a
+  slow build machine could drop the connection mid-scan. No application behaviour changed.
+
+## [2.41.0] - 2026-10-16 (not published)
 
 StagePilot moves to one release channel and a simpler version number. This release
 rolls up every change made since 1.1.103 (the 1.1.104 pre-releases below), so everyone
