@@ -43,6 +43,14 @@ tasks, and closes resources. Health checks should be fast and side-effect free.
 The concrete base class and health model in `backend/src/stagepilot/core` are the
 source of truth. This document describes the boundary, not a separate API.
 
+Presentation (ProPresenter) follows the same live lifecycle as Services:
+`PresentationPluginFactory` builds the plugin for startup and for live changes,
+and `PresentationController` adds, removes or reconfigures it through the plugin
+manager, updates `Runtime.propresenter_controller` and the startup activation
+reference, and clears only the timer state the simulation owned. Switching
+between simulated and ProPresenter while the timer runs is refused (HTTP 409),
+as is a switch pinned by `STAGEPILOT_TIMER_OUTPUT`.
+
 ## Events and state
 
 Prefer a domain event such as `song.started` over `midi.note_100_received` when

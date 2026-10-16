@@ -17,6 +17,7 @@ from stagepilot.planning_center_oauth import PlanningCenterOAuthService
 from stagepilot.plugins.planning_center.plugin import PlanningCenterPlugin
 from stagepilot.plugins.playback_api.plugin import PlaybackInputPlugin
 from stagepilot.services.planning_center_setup import PlanningCenterSetupService
+from stagepilot.services.presentation_source import PresentationController
 from stagepilot.services.service_source import ServiceSourceController
 from stagepilot.services.state_service import StateService
 
@@ -38,5 +39,6 @@ class Runtime:
     planning_center_oauth: PlanningCenterOAuthService | None = None
     playback_input: PlaybackInputPlugin | None = None
     service_source: ServiceSourceController | None = None
+    presentation: PresentationController | None = None
     # When this process started (UTC), for the StagePilot panel's "Running since". Read-only.
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
