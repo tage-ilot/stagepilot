@@ -20,6 +20,7 @@ import {
 import { useDashboardAccess } from "./access/AccessContext";
 import { useStagePilot } from "./hooks/useStagePilot";
 import { useUpdater } from "./hooks/useUpdater";
+import { rememberLoadingLogo } from "./startup/logoLanding";
 import { useStartupProgress } from "./startup/useStartupProgress";
 
 function StagePilotApp() {
@@ -36,6 +37,7 @@ function StagePilotApp() {
   const [retryingBackend, setRetryingBackend] = useState(false);
   const [startupAttempt, setStartupAttempt] = useState(0);
   const startupServicesActivated = useRef(false);
+  const loadingLogo = useRef<HTMLHeadingElement>(null);
   const startupProgress = useStartupProgress({
     supervisorState: backendSupervisor?.state ?? null,
     applicationStateLoaded: Boolean(stagePilot.state),
@@ -79,7 +81,11 @@ function StagePilotApp() {
 
   useEffect(() => {
     if (!stagePilot.state || !startupProgress.complete || dashboardVisible) return;
-    const reveal = window.setTimeout(() => setDashboardVisible(true), 40);
+    const reveal = window.setTimeout(() => {
+      // The dashboard's own logo starts where this big one is and flies to the header (see startup/logoLanding.ts).
+      rememberLoadingLogo(loadingLogo.current);
+      setDashboardVisible(true);
+    }, 40);
     return () => window.clearTimeout(reveal);
   }, [dashboardVisible, stagePilot.state, startupProgress.complete]);
 
@@ -158,7 +164,7 @@ function StagePilotApp() {
         <DesktopTitleBar />
         <main className="grid min-h-[calc(100vh-2.25rem)] place-items-center px-6 text-center">
           <div className="w-full max-w-4xl overflow-hidden px-2">
-            <h1 className="select-none font-brand text-6xl leading-none text-ink sm:text-8xl lg:text-[11.25rem]">
+            <h1 className="select-none font-brand text-6xl leading-none text-ink sm:text-8xl lg:text-[11.25rem]" ref={loadingLogo}>
               StagePilot
             </h1>
             <span className="loading-spinner-circular loading-spinner-circular--mobile-only" aria-hidden="true" />

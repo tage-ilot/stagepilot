@@ -870,6 +870,33 @@ textarea:focus-visible {
   margin-left: calc(2rem - var(--page-pad) - max(0px, (var(--page-w) - 1680px) / 2) + max(0px, (var(--page-w) - 1700px) / 2));
 }
 
+/* Arriving from the loading screen (startup/logoLanding.ts): the header logo glides from the big loading position to its place, and
+   everything else waits, then fades in. The attribute exists only during that moment. */
+.stagepilot-dashboard[data-landing="moving"] > :not(header),
+.stagepilot-dashboard[data-landing="moving"] .app-header-status {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Hidden from the very first frame (no transition while moving), then it fades in once the logo has landed. */
+.stagepilot-dashboard[data-landing="done"] > :not(header),
+.stagepilot-dashboard[data-landing="done"] .app-header-status {
+  animation: landing-fade-in 400ms ease-out both;
+}
+
+@keyframes landing-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagepilot-dashboard[data-landing="done"] > :not(header),
+  .stagepilot-dashboard[data-landing="done"] .app-header-status {
+    animation: none;
+  }
+}
+
 /* The status checks at the bottom of a configuration (Services): four across for as long as their words fit, then two, then one.
    It follows the panel's own width, not the window's. The columns are never narrower than their widest text. */
 .status-checks-box {

@@ -441,6 +441,9 @@ export function BackendSetupPanel({
             </Select>
           </Field>
         </div>
+        <p className="mt-3 text-xs text-ink-muted" data-advanced-restart-note>
+          Timezone, logging and port changes take effect after a backend restart.
+        </p>
         </div>
         </Disclosure>
       </div>
@@ -506,9 +509,6 @@ export function BackendSetupPanel({
         {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
       </div>
 
-      <p className="mt-4 text-xs text-ink-muted">
-        Timezone, logging and port changes take effect after a backend restart.
-      </p>
       {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
 

@@ -760,6 +760,17 @@ describe("Save configuration SaveBar", () => {
     expect(screen.getByText(/take effect after a backend restart/)).toBeInTheDocument();
   });
 
+  it("puts the restart sentence inside the Advanced section, under its settings", () => {
+    withSettings();
+    const note = document.querySelector("[data-advanced-restart-note]")!;
+    expect(note).toHaveTextContent("Timezone, logging and port changes take effect after a backend restart.");
+    const advanced = screen.getByRole("button", { name: /Advanced/ }).closest("[data-variant]")!;
+    expect(advanced.contains(note)).toBe(true);
+    // It follows the four fields, so it reads as a note to them rather than to the whole panel.
+    const lastField = advanced.querySelector(".backend-advanced")!;
+    expect(lastField.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("keeps diagnostics and the Connection Access switch available", async () => {
     withSettings();
     expect(screen.getByRole("button", {name: "Copy Log"})).toBeInTheDocument();
