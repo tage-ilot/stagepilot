@@ -101,14 +101,16 @@ class ServiceSourceController:
     async def sync(self) -> PluginHealth | None:
         """Make the running Services plugin match the saved source; no-op when it already does."""
 
-        settings = self._settings_service.effective_runtime_settings()
-        target = settings.integration_modes.service_source
-        if target is self.current_source and (
-            target is ServiceSource.DEMO or self._manager.has(PLANNING_CENTER_PLUGIN)
-        ):
-            return None
-        await self.ensure_idle()
-        return await self._swap(settings)
+        async with self._manager.reconcile_lock:
+            # Re-read inside the lock so the last saved state wins.
+            settings = self._settings_service.effective_runtime_settings()
+            target = settings.integration_modes.service_source
+            if target is self.current_source and (
+                target is ServiceSource.DEMO or self._manager.has(PLANNING_CENTER_PLUGIN)
+            ):
+                return None
+            await self.ensure_idle()
+            return await self._swap(settings)
 
     async def _swap(self, settings: Settings) -> PluginHealth:
         previous = self._manager.get(DEMO_PLUGIN) or self._manager.get(PLANNING_CENTER_PLUGIN)

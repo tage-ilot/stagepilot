@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime
-from typing import Literal, NoReturn, cast
+from typing import Any, Literal, NoReturn, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -109,6 +111,24 @@ router = APIRouter(prefix="/api/v1", route_class=RemoteRetryRoute)
 
 def _runtime(request: Request) -> Runtime:
     return request.app.state.runtime  # type: ignore[no-any-return]
+
+
+def _serialised[T](
+    handler: Callable[..., Awaitable[T]],
+) -> Callable[..., Awaitable[T]]:
+    """Run a connection-changing route inside the runtime's reconcile lock.
+
+    The busy/env-pin checks, the save and the live apply then form one critical section, so
+    concurrent saves apply one at a time and live state matches the final saved state.
+    """
+
+    @functools.wraps(handler)
+    async def wrapper(*args: Any, **kwargs: Any) -> T:
+        runtime = _runtime(kwargs["request"])
+        async with runtime.plugin_manager.reconcile_lock:
+            return await handler(*args, **kwargs)
+
+    return wrapper
 
 
 def _midi_controller(runtime: Runtime) -> MidiController | None:
@@ -464,6 +484,7 @@ async def settings(request: Request) -> SettingsResponse:
 
 
 @router.put("/settings", response_model=SettingsResponse)
+@_serialised
 async def update_settings(
     settings: PersistentSettings,
     request: Request,
@@ -602,6 +623,7 @@ async def start_planning_center_oauth(request: Request) -> PlanningCenterOAuthSt
 
 
 @router.post("/planning-center/oauth/callback", response_model=PlanningCenterOAuthStatusResponse)
+@_serialised
 async def complete_planning_center_oauth(
     payload: PlanningCenterOAuthCallbackRequest,
     request: Request,
@@ -669,6 +691,7 @@ async def planning_center_oauth_status(request: Request) -> PlanningCenterOAuthS
 
 
 @router.post("/planning-center/oauth/disconnect", response_model=PlanningCenterOAuthStatusResponse)
+@_serialised
 async def disconnect_planning_center_oauth(
     request: Request,
 ) -> PlanningCenterOAuthStatusResponse:
@@ -690,6 +713,7 @@ async def disconnect_planning_center_oauth(
 
 
 @router.post("/planning-center/settings", response_model=SettingsResponse)
+@_serialised
 async def update_planning_center_settings(
     settings: PlanningCenterSettingsUpdateRequest,
     request: Request,
@@ -846,6 +870,7 @@ async def midi_messages(request: Request) -> MidiMonitorResponse:
     "/midi/input-selection",
     response_model=MidiInputSelectionResponse,
 )
+@_serialised
 async def select_midi_input(
     selection: MidiInputSelectionRequest,
     request: Request,
@@ -954,6 +979,7 @@ async def refresh_propresenter_timers(request: Request) -> ProPresenterOperation
     "/propresenter/settings",
     response_model=ProPresenterOperationResponse,
 )
+@_serialised
 async def update_propresenter_settings(
     settings: ProPresenterSettingsRequest,
     request: Request,
