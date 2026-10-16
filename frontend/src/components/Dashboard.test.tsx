@@ -425,19 +425,28 @@ describe("Dashboard Planning Center plan states", () => {
       actionMessage: "Service position and timer reset.",
     });
 
+    // The message is announced through a live region and drawn in the status slot, which sits in the header.
     const notification = screen.getByRole("status");
     const header = screen.getByRole("banner");
     expect(header).toContainElement(notification);
     expect(notification).toHaveTextContent("Service position and timer reset.");
-    expect(notification).toHaveClass("h-9", "w-fit", "max-w-full", "truncate");
+    // The status pill itself turns into the message: same element, info colours, the message's words.
+    const chip = within(header).getByTestId("header-chip");
+    expect(chip).toHaveAttribute("data-state", "message");
+    // A dark pill like the widgets; the Previous-button blue is carried by the text and the border.
+    expect(chip).toHaveClass("bg-surface-950", "text-live-back-text", "border-live-back-soft", "font-pixel");
+    expect(within(header).getByTestId("header-message")).toHaveTextContent("Service position and timer reset.");
   });
 
   it("keeps the same reserved header slot when no notification is visible", () => {
     renderDashboard(loadedServiceState);
 
     const header = screen.getByRole("banner");
-    const notification = header.querySelector('[role="status"]');
-    expect(notification).toHaveClass("h-9", "invisible");
+    const chip = within(header).getByTestId("header-chip");
+    // Ready: the pill rests green, in the pixel font, and it is the same pill that carries messages.
+    expect(chip).toHaveAttribute("data-state", "status");
+    expect(chip).toHaveClass("bg-surface-950", "border-success-soft", "text-success-text", "font-pixel");
+    expect(header.querySelector('[role="status"]')).toHaveTextContent("");
   });
 
   it("queues simultaneous action and Planning Center notifications in the header", () => {
@@ -462,7 +471,8 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(notification).toHaveClass("invisible");
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("data-state", "status");
+      expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -491,7 +501,8 @@ describe("Dashboard Planning Center plan states", () => {
       );
 
       act(() => vi.advanceTimersByTime(6_000));
-      expect(notification).toHaveClass("invisible");
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("data-state", "status");
+      expect(notification).toHaveTextContent("");
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -501,7 +512,79 @@ describe("Dashboard Planning Center plan states", () => {
   it("shows errors in the same header slot with error styling", () => {
     renderDashboard(loadedServiceState, { error: "Backend unavailable." });
 
-    expect(screen.getByRole("status")).toHaveClass("border-danger/25");
+    expect(screen.getByRole("status")).toHaveTextContent("Backend unavailable.");
+    expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
+    const chip = screen.getByTestId("header-chip");
+    expect(chip).toHaveAttribute("data-state", "message");
+    expect(chip).toHaveClass("bg-surface-950", "border-danger-edge", "text-danger-pill");
+  });
+
+  describe("header layout (owner, 2026-10-15)", () => {
+    const parts = () => {
+      const header = screen.getByRole("banner");
+      return {
+        header,
+        logo: within(header).getByRole("heading", { name: "StagePilot" }),
+        brand: header.querySelector(".app-header-brand")!,
+        slot: header.querySelector(".app-header-status")!,
+        chip: header.querySelector(".header-chip-wrap")!,
+      };
+    };
+
+    it("pins the logo 32px inside the background image at every width, including windows wider than the image (stylesheet rule)", async () => {
+      renderDashboard(loadedServiceState);
+      expect(parts().logo).toHaveClass("app-logo");
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      // 32px in from the left edge of the 1700px background image: it cancels the page padding and the dashboard's centring (1680px),
+      // then adds the image's own centring offset (1700px), so on a wide window it follows the image instead of the window edge.
+      expect(css).toMatch(/\.app-logo \{\s*margin-left: calc\(2rem - var\(--page-pad\) - max\(0px, \(var\(--page-w\) - 1680px\) \/ 2\) \+ max\(0px, \(var\(--page-w\) - 1700px\) \/ 2\)\);/);
+      expect(css).toMatch(/\.app-header \{\s*--page-pad: 1rem;/);
+      expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.app-header \{\s*--page-pad: 2rem;/);
+    });
+
+    it("is a single row with the logo first, on every width: no grid that re-flows or wraps the logo", () => {
+      renderDashboard(loadedServiceState);
+      const { header, brand, slot, logo } = parts();
+      expect(header).toHaveClass("flex", "items-center");
+      expect(header.className).not.toMatch(/\bgrid\b|grid-cols|flex-wrap|sm:col-|row-start/);
+      expect(header.firstElementChild).toBe(brand);
+      expect(brand.contains(logo)).toBe(true);
+      expect(brand).toHaveClass("min-w-0"); // the Update button may wrap inside the brand; the logo itself never moves
+      expect(slot).toHaveClass("flex-1");
+      expect(header.lastElementChild).toBe(slot);
+    });
+
+    it("keeps the pill, the message and a screen-reader copy in the header's own slot", () => {
+      renderDashboard(loadedServiceState, { actionMessage: "Service position and timer reset." });
+      const { slot, chip } = parts();
+      expect(slot.contains(chip)).toBe(true);
+      expect(slot.contains(screen.getByTestId("header-chip"))).toBe(true);
+      expect(slot.querySelector('[role="status"]')).toHaveClass("sr-only");
+    });
+
+    it("is green when Ready and red when not; blue for an info message, red for an error message; no dot anywhere", () => {
+      const ready = renderDashboard(loadedServiceState);
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-surface-950", "text-success-text");
+      expect(screen.getByTestId("header-chip").querySelector(".header-chip-dot")).toBeNull();
+      ready.unmount();
+      renderDashboard({ ...loadedServiceState, is_stale: true });
+      expect(screen.getByTestId("header-chip")).toHaveClass("bg-surface-950", "text-danger-pill");
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
+    });
+
+    it("steps aside, instead of shrinking to a dot, when the slot is too small (stylesheet rules)", async () => {
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.header-chip-wrap\[data-fits="false"\] \{\s*display: none;/);
+      expect(css).not.toMatch(/header-chip-dot/);
+      // The pill animates its size, and the words slide in when one message replaces another.
+      expect(css).toMatch(/\.header-chip \{[^}]*transition:\s*width 360ms/);
+      // The words wait for the pill to finish resizing (330ms) before they appear, so they never wrap mid-change.
+      expect(css).toMatch(/\.header-chip-note-text \{\s*display: block;[\s\S]*?animation: header-note-in 260ms[^;]* 330ms both;/);
+      expect(css).toMatch(/\.header-chip\[data-state="message"\] \.header-chip-note \{[^}]*transition-delay: 330ms/);
+      expect(css).toMatch(/\.header-chip-note \{[^}]*white-space: nowrap;/);
+    });
   });
 
   it("renders ambiguous candidates and sends the selected plan ID", async () => {
@@ -589,12 +672,11 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
     // Owner 2026-10-13: the Ready pill is the deep green with light text and NO status dot.
     const ready = screen.getByRole("button", { name: /^Ready$/ });
-    expect(ready).toHaveClass("bg-success", "text-ink", "border-success-soft");
+    expect(ready).toHaveClass("bg-surface-950", "text-success-text", "border-success-soft");
     expect(ready.querySelector("[data-size]")).toBeNull();
     // ...and none of the five status cards has a dot either.
     expect(document.querySelectorAll(".connections-status [data-size], .connections-status .status-card-dot")).toHaveLength(0);
-    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
-    expect(screen.getByText("Optional")).toBeInTheDocument();
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
   });
 
   it("keeps MIDI setup closed until its connection card is clicked", async () => {
@@ -722,7 +804,8 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Services disconnected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
-    expect(screen.getByText("Playback disconnected")).toBeInTheDocument();
+    // No saved settings here, so Playback reads as the MIDI method; the entry names whichever method is saved.
+    expect(screen.getByText("Playback MIDI disconnected")).toBeInTheDocument();
     expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
   });
 
@@ -762,7 +845,7 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lighting MIDI output disconnected")).toBeInTheDocument();
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s plan loaded")).not.toBeInTheDocument();
     expect(screen.queryByText("TodayÃ¢â‚¬â„¢s service")).not.toBeInTheDocument();
   });
@@ -1140,29 +1223,18 @@ describe("Dashboard widget layout", () => {
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
   });
 
-  it("blocks readiness when a configured Lighting output disconnects", () => {
+  it("a configured Lighting output that disconnects is not part of the system check (it has its own card)", () => {
     const configuredlightssettings: SettingsResponse = {
       ...productionSettings,
-      settings: {
-        ...productionSettings.settings,
-        lights: {
-          ...productionSettings.settings.lights,
-          enabled: true,
-          output_name: "StagePilot to Lightkey",
-        },
-      },
+      settings: { ...productionSettings.settings, lights: { ...productionSettings.settings.lights, enabled: true, output_name: "StagePilot to Lightkey" } },
     };
 
     renderDashboard(loadedServiceState, {
       settings: configuredlightssettings,
-      state: applicationState(loadedServiceState, {
-        lights_status: "disconnected",
-        plugins: {},
-      }),
+      state: applicationState(loadedServiceState, { lights_status: "disconnected", plugins: {} }),
     });
 
-    expect(screen.getByRole("button", { name: "Check system" })).toBeInTheDocument();
-    expect(screen.getByText("Lighting MIDI output disconnected")).toHaveClass("text-ink-muted");
+    expect(screen.queryByText(/^Lighting (MIDI|OSC)/)).not.toBeInTheDocument();
     expect(screen.queryByText("Optional")).not.toBeInTheDocument();
   });
 

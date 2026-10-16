@@ -568,7 +568,8 @@ export function PlanningCenterSetupPanel({
         </p>
       )}
 
-      <dl className="mt-5 grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+      <div className="status-checks-box mt-5">
+      <dl className="status-checks grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm">
         <div>
           <dt className="text-xs uppercase tracking-wider text-ink-muted">Connection</dt>
           <dd className="mt-1 text-ink-body">{connectionWord[status?.connection_status ?? state.planning_center_status]}</dd>
@@ -586,6 +587,7 @@ export function PlanningCenterSetupPanel({
           <dd className="mt-1 text-ink-body tabular-nums">{formatTimestamp(state.last_successful_plan_reload_at)}</dd>
         </div>
       </dl>
+      </div>
 
       {serviceLoad.candidates.length > 0 && (
         <div className="mt-5 border-t border-edge-subtle pt-4">

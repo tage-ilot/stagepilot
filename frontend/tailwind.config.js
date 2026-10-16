@@ -30,6 +30,8 @@ export default {
     "danger-soft": "#ff3b3b",
     "danger-text": "#ff4d4d",
     "danger-solid": "#ff0000",
+    "danger-pill": "#f00000",
+    "danger-edge": "#bc0000",
     "on-danger": "#ffffff",
     "on-danger-soft": "#3d0000",
     "info": "#1dc1c7",

@@ -39,6 +39,8 @@ colors:
   danger-soft: "#ff3b3b"       # hover / lighter edge of the pure red
   danger-text: "#ff4d4d"       # error text on dark panels, 5.4:1 (pure red text would be 4.4:1 on cards)
   danger-solid: "#ff0000"      # FILLED buttons/badges ("Error action", Delete): the SAME pure red, owner 2026-10-13. White text on it is 4.0:1 (bold, with the label shadow); dark text would be 5.1:1 but the system keeps white on red fills
+  danger-pill: "#f00000"       # DECIDED (owner, 2026-10-15): the darkest pure red that still gives the header pill's small words 4.5:1 on its dark surface (4.52:1). The pill's words use this
+  danger-edge: "#bc0000"       # the darkest pure red that still gives the pill's outline the 3:1 non-text minimum on that surface (3.01:1)
   on-danger: "#ffffff"         # light text on the dark red fill
   on-danger-soft: "#3d0000"    # dark RED (not black) text on the light red fill: 5.0:1 on danger-soft
   info: "#1dc1c7"              # CHANGED (owner, 2026-10-12): the SECONDARY ACCENT replaces sky for information. Informational text, "Up next", the Reload service plan control, info banners. 8.2:1 on panels, so it works as text AND as a fill
@@ -768,6 +770,20 @@ Words: "Alternate connection: MIDI settings" becomes **MIDI** under
 - Destructive buttons name what is lost (`Delete layout`); the safe option is
   on the left.
 - A control is **disabled with a reason shown nearby**, never silently greyed.
+
+### The dashboard header (decided 2026-10-15)
+The logo is **32px in from the left edge of the background image** (decided 2026-10-15), at every width. The image is 1700px wide and centred, so on a window wider than it the logo moves with the image and never lands in the black beside it; on a narrower window the image fills the window. The status checks at the bottom of Services (and any panel using `.status-checks`) are four across while their words fit (the panel is 30rem or wider), then two, then one; they follow the panel width, not the window.
+
+One row at every window width, with the **logo first and never moving**: no grid, nothing re-flows around it. Everything else is one status pill (`HeaderStatusChip`) in a slot to its right:
+- **The pill is the notification.** The pill is always the widgets' dark surface (`surface-950`) with a thin outline and pixel text in the status colour (decided 2026-10-15; it was a solid fill before): at rest Ready is green (`success-soft` outline, `success-text` words) and Check system / Error is red (`danger-edge` outline, `danger-pill` words: the darkest reds that still pass 3:1 and 4.5:1 on the dark surface). When a message arrives the same pill grows to the message's size, keeps the dark surface and takes the blue of the Previous button (`live-back-soft` outline, `live-back-text` words; not the light teal `info`) for an info message, or the same red for an error, and swaps its words; when the message ends it shrinks back. Both the status words and the message use the bold Geist Pixel Square (`font-pixel`).
+- **A new message shows right away**, replacing the one on screen (the words slide in and the pill resizes if the new text is a different length). Messages that arrive together play in turn. Each lasts 5 seconds at most.
+- **Too small for even the pill:** the pill disappears (never a dot) and the message appears just under the header on a solid surface.
+- The message is announced through a visually hidden live region; the drawn copy is `aria-hidden`. Reduced motion turns the animation off.
+
+### The system check list (the pill's hover panel, decided 2026-10-15)
+- It lists what the show cannot run without: Services, Service plan, Song durations, Playback, Presentation (and its timer) and StagePilot. **Lighting is not in it**: it is optional and has its own card, so a Lighting output going away never turns the pill to Check system.
+- The Playback entry names the saved connection method: "Playback API connected" or "Playback MIDI disconnected".
+- The panel sits above the dashboard widgets (the header has its own stacking level), and every word in it matches the cards.
 
 ### Scrolling boxes (decided 2026-10-15)
 

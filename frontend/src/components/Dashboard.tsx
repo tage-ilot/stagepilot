@@ -7,6 +7,7 @@ import multitracksIcon from "../assets/multitracks-icon.png";
 import planningCenterIcon from "../assets/planning-center-icon.png";
 import propresenterIcon from "../assets/propresenter-icon.png";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
+import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import type {
   AccessCapabilities,
@@ -65,7 +66,7 @@ type HeaderNotification = {
   tone: "error" | "info";
 };
 
-const NOTIFICATION_DURATION_MS = 6_000;
+const NOTIFICATION_DURATION_MS = 5_000;
 const MAX_NOTIFICATION_QUEUE = 2;
 // Retain the first-launch implementation for possible future use while keeping
 // it disabled in every production configuration state.
@@ -532,6 +533,16 @@ export function Dashboard({
   const [notificationQueue, setNotificationQueue] = useState<HeaderNotification[]>([]);
   const [statusCompact, setStatusCompact] = useState(() => window.innerWidth <= 1_000);
   const [statusMotionPhase, setStatusMotionPhase] = useState<"idle" | "preparing" | "moving">("idle");
+  // The logo is pinned to the window's left edge, so it needs the scrollbar's width to cancel the centred dashboard exactly.
+  useEffect(() => {
+    const root = document.documentElement;
+    const measure = () => root.style.setProperty("--scrollbar-w", `${window.innerWidth - root.clientWidth}px`);
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(root);
+    return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
+  }, []);
   const readinessHover = useDelayedHover();
   const hoverPreviewWarmupRef = useRef<HoverPreviewWarmupState>(createHoverPreviewWarmupState());
   const notificationId = useRef(0);
@@ -709,7 +720,9 @@ export function Dashboard({
       update: updater?.successMessage ?? null,
     };
     if (pending.length) {
-      setNotificationQueue((current) => [...current, ...pending].slice(-MAX_NOTIFICATION_QUEUE));
+      // A new notice shows right away, replacing whichever one is on screen (owner, 2026-10-15). Notices that arrive together
+      // play one after another, each for at most NOTIFICATION_DURATION_MS.
+      setNotificationQueue(pending.slice(-MAX_NOTIFICATION_QUEUE));
     }
   }, [actionMessage, error, serviceLoad.status, serviceNotification, updater?.successMessage]);
 
@@ -829,9 +842,13 @@ export function Dashboard({
 
   return (
     <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
-      <header className="mb-5 grid grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(12rem,1fr)_minmax(0,auto)] sm:gap-4">
-        <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-y-1 sm:col-span-1">
-          <h1 className="relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
+      {/* One row at every width (owner, 2026-10-15). The logo never moves: it is always first, always on this row. Everything else
+          lives in the status slot to its right, which is the only part that gives way. The status pill turns into a message when
+          one arrives (it grows out of the pill's end), or, when the logo leaves too little room beside it, the message floats just
+          under the header so nothing reflows. The pill shrinks to a status dot on very narrow screens. See .app-header in index.css. */}
+      <header className="app-header relative z-20 mb-5 flex items-center gap-3">
+        <div className="app-header-brand flex min-w-0 flex-wrap items-center gap-y-2">
+          <h1 className="app-logo relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
               onClick={updater.openConfirmation}
@@ -840,33 +857,10 @@ export function Dashboard({
             />
           )}
         </div>
-        <div
-          aria-atomic="true"
-          aria-live="polite"
-          className={`col-span-1 row-start-2 min-w-0 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:justify-self-end ${notification ? "" : "hidden sm:block"}`}
-        >
-          <div
-            className={`ml-auto h-9 w-fit max-w-full truncate rounded-ds-lg border px-4 py-2 text-center text-sm transition-opacity ${notification ? `opacity-100 ${notification.tone === "error" ? "border-danger/25 bg-danger/10 text-danger-text" : "border-info/20 bg-info/10 text-info-text"}` : "invisible border-transparent opacity-0"}`}
-            role="status"
-            title={notification?.message}
-          >
-            {notification?.message ?? "\u00A0"}
-          </div>
-        </div>
-        <div
-          className="relative z-40 col-start-2 row-start-2 min-w-0 max-w-full justify-self-end sm:col-start-3 sm:row-start-1"
-          ref={readinessHover.containerRef}
-          {...readinessHover.hoverProps}
-        >
-          <button
-            aria-describedby="system-readiness-popover"
-            title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
-            aria-expanded={readinessHover.open}
-            className={`flex max-w-full min-w-0 cursor-help touch-manipulation items-center gap-2 break-words rounded-ds-full border px-3 py-1.5 font-type-badge text-type-badge font-bold uppercase tracking-wider text-shadow-label transition-colors duration-[140ms] motion-reduce:transition-none coarse:min-h-ds-touch-target ${ready ? "border-success-soft bg-success text-ink can-hover:bg-success/85" : systemError ? "border-danger/40 bg-surface-950 text-danger-text can-hover:bg-surface-900" : "border-warning/40 bg-surface-950 text-warning-text can-hover:bg-surface-900"}`}
-            type="button"
-          >
-            <span className="min-w-0 text-left">{!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}</span>
-          </button>
+        <HeaderStatusChip
+          expanded={readinessHover.open}
+          notice={notification ? { id: notification.id, message: notification.message, tone: notification.tone === "error" ? "error" : "info" } : null}
+          popover={(
           <div
             className={`absolute right-0 top-full w-[min(22rem,calc(100vw-2rem))] pt-2 transition-[opacity,transform,visibility] motion-reduce:transition-none ${readinessHover.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
             id="system-readiness-popover"
@@ -896,7 +890,13 @@ export function Dashboard({
               </ul>
             </div>
           </div>
-        </div>
+          )}
+          statusClass={ready ? "border-success-soft text-success-text" : "border-danger-edge text-danger-pill"}
+          statusLabel={!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
+          title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
+          wrapProps={readinessHover.hoverProps}
+          wrapRef={readinessHover.containerRef}
+        />
       </header>
 
 
