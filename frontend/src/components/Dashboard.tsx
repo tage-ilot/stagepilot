@@ -9,6 +9,7 @@ import propresenterIcon from "../assets/propresenter-icon.png";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
 import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
+import { landLogo } from "../startup/logoLanding";
 import type {
   AccessCapabilities,
   ActionName,
@@ -543,6 +544,10 @@ export function Dashboard({
     observer?.observe(root);
     return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
   }, []);
+  const dashboardRoot = useRef<HTMLElement>(null);
+  const headerLogo = useRef<HTMLHeadingElement>(null);
+  // Arriving from the loading screen, the logo glides from the big loading position to here before the rest appears.
+  useLayoutEffect(() => landLogo(headerLogo.current, dashboardRoot.current), []);
   const readinessHover = useDelayedHover();
   const hoverPreviewWarmupRef = useRef<HoverPreviewWarmupState>(createHoverPreviewWarmupState());
   const notificationId = useRef(0);
@@ -841,14 +846,14 @@ export function Dashboard({
   ].sort((left, right) => left.sequence - right.sequence);
 
   return (
-    <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8">
+    <main className="stagepilot-dashboard mx-auto min-h-screen max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8" ref={dashboardRoot}>
       {/* One row at every width (owner, 2026-10-15). The logo never moves: it is always first, always on this row. Everything else
           lives in the status slot to its right, which is the only part that gives way. The status pill turns into a message when
           one arrives (it grows out of the pill's end), or, when the logo leaves too little room beside it, the message floats just
           under the header so nothing reflows. The pill shrinks to a status dot on very narrow screens. See .app-header in index.css. */}
       <header className="app-header relative z-20 mb-5 flex items-center gap-3">
         <div className="app-header-brand flex min-w-0 flex-wrap items-center gap-y-2">
-          <h1 className="app-logo relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
+          <h1 ref={headerLogo} className="app-logo relative z-10 -translate-y-[18px] shrink-0 select-none font-brand text-[4.05rem] leading-[0.56] text-ink">StagePilot</h1>
           {canConfigure && updater?.status === "available" && updater.availableVersion && (
             <UpdateAvailableButton
               onClick={updater.openConfirmation}
