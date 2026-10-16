@@ -94,22 +94,23 @@ class PresentationController:
         Returns the new plugin's health when one was started, else ``None``.
         """
 
-        settings = self._settings_service.effective_runtime_settings()
-        wanted = self._factory.wanted(settings)
-        present = self._manager.get(PROPRESENTER_PLUGIN)
-        if wanted and isinstance(present, ProPresenterPlugin):
-            if settings.propresenter != self._applied:
-                await present.reconfigure(settings.propresenter)
-                self._applied = settings.propresenter
+        async with self._manager.reconcile_lock:
+            settings = self._settings_service.effective_runtime_settings()
+            wanted = self._factory.wanted(settings)
+            present = self._manager.get(PROPRESENTER_PLUGIN)
+            if wanted and isinstance(present, ProPresenterPlugin):
+                if settings.propresenter != self._applied:
+                    await present.reconfigure(settings.propresenter)
+                    self._applied = settings.propresenter
+                return None
+            if not wanted and present is None:
+                await self._set_simulated(True)
+                return None
+            await self.ensure_idle()
+            if wanted:
+                return await self._start(settings)
+            await self._stop()
             return None
-        if not wanted and present is None:
-            await self._set_simulated(True)
-            return None
-        await self.ensure_idle()
-        if wanted:
-            return await self._start(settings)
-        await self._stop()
-        return None
 
     async def _start(self, settings: Settings) -> PluginHealth:
         plugin = self._factory.build(settings)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
+from typing import Any
 
 from stagepilot.core.event_bus import EventBus
 from stagepilot.core.events import EventType, PluginPayload, new_event
@@ -36,6 +37,36 @@ class Plugin(ABC):
         """Return the plugin's current health."""
 
 
+class ReconcileLock:
+    """Task-reentrant async lock serialising live connection changes.
+
+    Held around read-saved-settings -> decide -> act -> publish so concurrent saves apply one at a
+    time and the last writer wins. Reentrant per task, so a route holding it can call a
+    controller's ``sync()`` which takes it again. Separate from the PluginManager lifecycle lock,
+    which ``add``/``remove`` take internally.
+    """
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._owner: asyncio.Task[Any] | None = None
+        self._depth = 0
+
+    async def __aenter__(self) -> None:
+        task = asyncio.current_task()
+        if self._owner is not None and self._owner is task:
+            self._depth += 1
+            return
+        await self._lock.acquire()
+        self._owner = task
+        self._depth = 1
+
+    async def __aexit__(self, *exc: object) -> None:
+        self._depth -= 1
+        if self._depth == 0:
+            self._owner = None
+            self._lock.release()
+
+
 class PluginManager:
     """Register and supervise plugins without allowing one failure to stop others."""
 
@@ -46,6 +77,8 @@ class PluginManager:
         self._logger = get_logger("plugin_manager")
         # One runtime lifecycle change (add / remove / replace) at a time.
         self._lifecycle_lock = asyncio.Lock()
+        # Outer lock for whole reconcile sequences in the live controllers and routes.
+        self.reconcile_lock = ReconcileLock()
 
     def has(self, name: str) -> bool:
         return name in self._plugins
