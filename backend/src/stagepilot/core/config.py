@@ -133,6 +133,9 @@ class PlaybackApiSettings(BaseModel):
     lengths_applied_key: str | None = None
     captured_at: datetime | None = None
     song_lengths: list[float | None] = Field(default_factory=list, max_length=200)
+    # Songs left out of the pairing; order never changes (plugins/playback_api/arrangement.py).
+    skipped_song_ids: list[StrictInt] = Field(default_factory=list, max_length=200)
+    skipped_plan_song_ids: list[str] = Field(default_factory=list, max_length=200)
     discovery_duration_seconds: float | None = Field(default=None, gt=0)
     lengths_measured_at: datetime | None = None
 
@@ -142,6 +145,8 @@ class PlaybackApiSettings(BaseModel):
             update = {
                 "song_lengths": [],
                 "lengths_measured_at": None,
+                # A new scan is a new setlist: Playback skips no longer mean anything.
+                "skipped_song_ids": [],
                 **update,
             }
         return super().model_copy(update=update, deep=deep)
@@ -152,7 +157,16 @@ class PlaybackApiSettings(BaseModel):
             raise ValueError("Song lengths must have the same length as song order.")
         if any(length is not None and not 0 < length <= 86400 for length in self.song_lengths):
             raise ValueError("Song lengths must be finite positive seconds or null.")
+        if not set(self.skipped_song_ids) <= set(self.song_order):
+            raise ValueError("Skipped Playback songs must be songs in the saved order.")
         return self
+
+    @field_validator("skipped_song_ids", "skipped_plan_song_ids")
+    @classmethod
+    def skips_are_unique(cls, value: list[Any]) -> list[Any]:
+        if len(value) != len(set(value)):
+            raise ValueError("Skipped songs must be unique.")
+        return value
 
     @field_validator("song_order")
     @classmethod

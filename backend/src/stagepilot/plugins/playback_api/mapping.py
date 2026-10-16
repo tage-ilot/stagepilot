@@ -6,6 +6,8 @@ from typing import cast
 from stagepilot.core.actions import ActionDispatcher, ActionOutcome, TimerPositionDispatcher
 from stagepilot.core.events import ActionName
 from stagepilot.core.state import StateStore
+from stagepilot.models.state import ApplicationState
+from stagepilot.plugins.playback_api.arrangement import plan_index_for
 from stagepilot.plugins.playback_api.normalizer import Heartbeat, PlaybackEvent
 
 
@@ -24,6 +26,9 @@ class PlaybackMapper:
         self._state_store = state_store
         self._timer = cast(TimerPositionDispatcher, dispatcher)
         self.song_order: tuple[int, ...] = ()
+        # Songs left out of the pairing (see arrangement.py); the order itself never changes.
+        self.skipped_song_ids: frozenset[int] = frozenset()
+        self.skipped_plan_song_ids: frozenset[str] = frozenset()
         self.captured_version: int | None = None
         self.setlist_id: int | str | None = None
         self.stale = True
@@ -54,6 +59,13 @@ class PlaybackMapper:
         self._heartbeat = None
         self._generation += 1
         self._invalidated = False
+
+    def set_skips(self, playback: tuple[int, ...] = (), plan: tuple[str, ...] = ()) -> None:
+        """Install the saved skips; a change drops anything queued under the old arrangement."""
+        playback_set, plan_set = frozenset(playback), frozenset(plan)
+        if (playback_set, plan_set) != (self.skipped_song_ids, self.skipped_plan_song_ids):
+            self.skipped_song_ids, self.skipped_plan_song_ids = playback_set, plan_set
+            self._generation += 1
 
     def set_discovery(self, active: bool) -> None:
         if active != self.discovery:
@@ -125,8 +137,11 @@ class PlaybackMapper:
             return None
         if event.song_id not in self.song_order:
             return None
-        position = self.song_order.index(event.song_id) + 1
         state = await self._state_store.snapshot()
+        index = self._plan_index(event.song_id, state)
+        if index is None:
+            return None  # Skipped, unpaired, or the plan no longer fits: leave the timer alone.
+        position = index + 1
         if self.discovery or self.stale or observation.generation != self._generation:
             return None
         if state.current_song is not None and state.current_song_index == position - 1:
@@ -143,8 +158,19 @@ class PlaybackMapper:
         state = await self._state_store.snapshot()
         if self.discovery or self.stale or observation.generation != self._generation:
             return False
-        return state.current_song is not None and state.current_song_index == self.song_order.index(
-            event.song_id
+        return state.current_song is not None and state.current_song_index == self._plan_index(
+            event.song_id, state
+        )
+
+    def _plan_index(self, song_id: int, state: ApplicationState) -> int | None:
+        """The plan song this Playback song drives, honouring the saved skips."""
+        plan_ids = [song.id for song in state.plan.songs] if state.plan else None
+        return plan_index_for(
+            song_id,
+            plan_ids,
+            self.song_order,
+            self.skipped_plan_song_ids,
+            self.skipped_song_ids,
         )
 
     async def _reapply(self, observation: Observation) -> ActionOutcome | None:

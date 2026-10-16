@@ -21,6 +21,8 @@ Runtime `Settings` and persisted `PersistentSettings` expose `playback_api`:
 | song_order | unique strict integer array, max 200 | [] | Explicitly discovered ordered opaque song IDs |
 | captured_version | strict integer or null | null | Heartbeat setlistCloudVersion at capture |
 | captured_at | ISO datetime or null | null | Capture timestamp (integration should supply UTC) |
+| skipped_song_ids | unique strict integer array, each in song_order | [] | Playback songs left out of the pairing (for example background music). Cleared by a new scan |
+| skipped_plan_song_ids | unique string array | [] | Service-plan songs with no Playback track (for example an acoustic song). Kept across scans; cues are held back if one is no longer in the loaded plan |
 
 `integration_modes.midi_source` remains the existing source-selector contract:
 `playback_api` selects Playback; `real` selects the unchanged desktop/network
@@ -48,3 +50,12 @@ heartbeat song ID makes the order stale; reconnect alone does not invalidate,
 but the first heartbeat must be checked against saved version and membership.
 Stop/pause may still stop timers while order is stale. The settings migration
 creates no discovered order and sends no Playback commands.
+
+## Song arrangement
+
+Neither list is ever reordered. `PUT /api/v1/playback-api/arrangement` accepts only
+`skipped_song_ids` and `skipped_plan_song_ids`; the Nth Playback song not skipped pairs with the Nth plan
+song not skipped (`plugins/playback_api/arrangement.py`). A skipped or unpaired Playback song does not start
+or restart a plan song, and does not stop the timer. With no skips the original one-to-one behaviour is
+unchanged. The Planning Center length preview uses the same pairing, so a skipped plan song gets no measured
+length. Saving an arrangement clears `lengths_applied_key`, because the pairing of lengths to plan songs changed.

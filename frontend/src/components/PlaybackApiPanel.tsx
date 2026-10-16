@@ -5,7 +5,7 @@ import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { PlanningCenterLengths } from "./PlanningCenterLengths";
 import { ScanProgress } from "./ScanProgress";
-import { PlaybackSongLengths } from "./PlaybackSongLengths";
+import { PlaybackArrangement } from "./PlaybackArrangement";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
 import { Disclosure } from "./ui/Disclosure";
@@ -29,9 +29,9 @@ const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turn
 
 const SCAN_CANCEL_GUARD_MS = 600;
 
-// Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` is accepted so the panel keeps
-// the same props as the MIDI view next to it.
-export function PlaybackApiPanel({ playback }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
+// Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
+// (skipped songs) until Save configuration.
+export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
@@ -171,7 +171,7 @@ export function PlaybackApiPanel({ playback }: { playback?: PlaybackController; 
           <PlanningCenterLengths status={status} onStatus={playback?.acceptStatus} />
           </div>
           {mismatch && <p className="text-sm text-ink-body">{mismatch}</p>}
-          <PlaybackSongLengths status={status} />
+          <PlaybackArrangement draft={draft} status={status} />
           {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-danger-text">{status.last_error}</p>}
         </section>
       )}
