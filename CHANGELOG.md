@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.104-beta.40] - 2026-10-16
+## [1.1.104-beta.41] - 2026-10-16
 
 ### Added
 
@@ -55,7 +55,7 @@
 
 ### Notes
 
-- Versions 37 to 39 were not published (their release builds failed on test-only problems), so these notes include them.
+- Versions 37 to 40 were not published (their release builds failed on test-only problems, never on the app), so these notes include them.
 
 ## [1.1.104-beta.36] - 2026-10-13
 
