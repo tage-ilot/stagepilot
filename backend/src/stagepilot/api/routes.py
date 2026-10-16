@@ -85,6 +85,7 @@ from stagepilot.models.state import (
     ConnectionStatus,
     PluginStatus,
     ServiceLoadStatus,
+    TimerStatus,
 )
 from stagepilot.planning_center_oauth import (
     PlanningCenterOAuthError,
@@ -218,6 +219,38 @@ async def _refuse_service_source_change(
             await controller.ensure_idle()
         except ServiceSourceBusyError as exc:
             raise HTTPException(409, str(exc)) from exc
+
+
+MIDI_BUSY_MESSAGE = "Stop the timer before changing the MIDI input."
+
+
+async def _refuse_midi_change(
+    runtime: Runtime, requested: PersistentSettings, effective: Settings
+) -> None:
+    """Reject a MIDI connection change the environment pins or that would drop a live input."""
+
+    source_changed = (
+        requested.integration_modes.midi_source != effective.integration_modes.midi_source
+    )
+    enabled_changed = (
+        requested.midi.enabled != runtime.settings_service.effective_snapshot().midi.enabled
+    )
+    input_changed = requested.midi.input_name != effective.midi.input_name
+    if not (source_changed or enabled_changed or input_changed):
+        return
+    if source_changed or enabled_changed:
+        pin = runtime.settings_service.midi_pin(source=source_changed, enabled=enabled_changed)
+        if pin is not None:
+            raise HTTPException(
+                409, f"This is set by the {pin} environment variable and cannot be changed here."
+            )
+    await _ensure_timer_idle(runtime, MIDI_BUSY_MESSAGE)
+
+
+async def _ensure_timer_idle(runtime: Runtime, message: str) -> None:
+    state = await runtime.state_store.snapshot()
+    if state.timer.status is TimerStatus.RUNNING:
+        raise HTTPException(409, message)
 
 
 def _settings_response(
@@ -443,6 +476,7 @@ async def update_settings(
         previous.integration_modes.service_source,
     )
     await _refuse_presentation_change(runtime, settings)
+    await _refuse_midi_change(runtime, settings, previous)
     if runtime.playback_input is not None:
         if runtime.playback_input.discovery == "running":
             raise HTTPException(409, "Wait for Discover Song Order before changing settings.")
@@ -820,6 +854,10 @@ async def select_midi_input(
     controller = _midi_controller(runtime)
     if controller is None:
         raise HTTPException(status_code=409, detail="The MIDI Playback plugin is disabled.")
+    snapshot_before = await controller.input_snapshot()
+    current_id = next((v.id for v in snapshot_before.inputs if v.selected), None)
+    if selection.input_id != current_id:
+        await _ensure_timer_idle(runtime, MIDI_BUSY_MESSAGE)
     outcome = await controller.select_input(selection.input_id)
     if not outcome.accepted:
         raise HTTPException(status_code=409, detail=outcome.message)

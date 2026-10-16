@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -171,8 +171,22 @@ describe("MidiSetupPanel", () => {
   it("disables the input list when the MIDI plugin is disabled", () => {
     renderPanel({ value: { ...midi, enabled: false } });
 
-    expect(screen.getByText(/Save the MIDI settings above/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Save the MIDI settings above/i)).not.toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toMatch(/restart stagepilot/i);
     expect(screen.getByLabelText("Available input")).toBeDisabled();
+  });
+
+  it("shows Connecting, then Connected, with no restart wording in any state", () => {
+    const selected = { ...midi, selected_input_name: midi.inputs[0]!.name, inputs: midi.inputs.map((input, index) => ({ ...input, selected: index === 0, connected: false })) };
+    cleanup();
+    renderPanel({ value: selected });
+    expect(screen.getByText(/Connecting to/)).toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toMatch(/restart stagepilot/i);
+    cleanup();
+    renderPanel({ value: { ...selected, inputs: selected.inputs.map((input, index) => ({ ...input, connected: index === 0 })) } });
+    expect(screen.getByText(/Connected:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toMatch(/restart stagepilot/i);
   });
 
   it("the MIDI method tints the panel blue-violet but the Playback title keeps the Playback blue", async () => {

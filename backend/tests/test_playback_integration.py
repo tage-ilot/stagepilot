@@ -418,7 +418,13 @@ async def test_reconnect_revalidates_and_source_switch_closes_old_listeners() ->
         await client.post("/api/v1/midi/cue-simulation", json={"cue": "start_next"})
         assert (await client.get("/api/v1/state")).json()["current_song_index"] == 0
         old_port = midi.ports[-1]
+        # Dropping the live MIDI input is refused while the timer runs.
         saved["integration_modes"]["midi_source"] = "playback_api"
+        if (await client.get("/api/v1/state")).json()["timer"]["status"] == "running":
+            refused = await client.put("/api/v1/settings", json=saved)
+            assert refused.status_code == 409
+            assert "Stop the timer" in refused.json()["detail"]
+            assert (await client.post("/api/v1/actions/stop_timer")).status_code == 200
         assert (await client.put("/api/v1/settings", json=saved)).status_code == 200
         assert old_port.closed
         await wait_for(lambda: inputs.status.connected)

@@ -554,15 +554,7 @@ export function useStagePilot() {
           midi: { ...input, enabled: true },
         });
         setSettings(response);
-        if (response.restart_required && await restartDesktopBackend()) {
-          window.location.reload();
-          return true;
-        }
-        setSettingsMessage(
-          response.restart_required
-            ? "MIDI configuration saved. Restart StagePilot to apply the hardware input configuration."
-            : "MIDI configuration saved and applied to the running Playback input.",
-        );
+        setSettingsMessage("MIDI configuration saved and applied to the running Playback input.");
         return true;
       } catch (cause) {
         setSettingsError(describeError(cause, "MIDI configuration update failed."));

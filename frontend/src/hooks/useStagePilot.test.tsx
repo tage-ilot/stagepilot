@@ -628,6 +628,19 @@ describe("useStagePilot", () => {
     expect(result.current.settingsMessage).toMatch(/saved and applied/i);
   });
 
+  it("shows the 409 refusal for a MIDI input change and never mentions a restart", async () => {
+    const refusal = "Stop the timer before changing the MIDI input.";
+    mockedUpdateSettings.mockRejectedValueOnce(new Error(refusal));
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+
+    await act(async () => result.current.saveMidiSettings({ ...settings.settings.midi, input_name: "Other" }));
+
+    expect(result.current.settingsError).toContain(refusal);
+    expect(result.current.settingsError ?? "").not.toMatch(/restart/i);
+    expect(result.current.settingsMessage ?? "").not.toMatch(/restart/i);
+  });
+
   it("activates ProPresenter when its real connection settings are saved", async () => {
     const input = {
       host: "192.168.1.40",

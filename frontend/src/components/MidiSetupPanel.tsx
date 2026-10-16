@@ -279,7 +279,7 @@ export function MidiSetupPanel({
             </span>
             {midi?.selected_input_name && !connectedInput && (
               <span className="rounded-ds-full bg-warning/10 px-2.5 py-1 font-bold text-warning-text">
-                Waiting for {midi.selected_input_name}
+                {midi.inputs.some((input) => input.name === midi.selected_input_name) ? "Connecting to" : "Waiting for"} {midi.selected_input_name}
               </span>
             )}
             {midi?.configured_input_name && (
@@ -360,11 +360,6 @@ export function MidiSetupPanel({
           ))}
         </div>
         <p className="mt-3 text-xs text-ink-muted">Saving enables real MIDI input. Action velocities must be unique and between 100 and 127.</p>
-        {midi && !enabled && (
-          <InlineAlert className="mt-3" tone="warning">
-            Save the MIDI settings above, then restart StagePilot to discover and connect the input device.
-          </InlineAlert>
-        )}
         </Disclosure>
       </div>
 

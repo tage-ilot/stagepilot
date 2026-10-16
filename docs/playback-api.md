@@ -205,8 +205,13 @@ selected: bool                 source is playback_api, independently of enable
 Read full settings at `GET /api/v1/settings`; change
 `integration_modes.midi_source` through `PUT /api/v1/settings` to select
 `playback_api`, `real`, or `simulated`. Source-only/MIDI/Playback updates apply
-without restart and report `restart_required: false`; unrelated integration
-registration changes retain the existing restart requirement. MIDI selection and
+without restart and report `restart_required: false`. Changing the MIDI input,
+its availability or the MIDI source while the timer runs is refused with 409
+(`Stop the timer before changing the MIDI input.`); an environment pin
+(`STAGEPILOT_MIDI_SOURCE`, `STAGEPILOT_MIDI_ENABLED`, `STAGEPILOT_DEMO_SIMULATE_MIDI`)
+is reported by variable name. `POST /midi/inputs/refresh` re-scans live; a saved
+input that appears later connects on its own, and a removed one reports
+Disconnected and reconnects when it returns (existing supervisor behaviour). MIDI selection and
 monitor routes remain available while API is selected (MIDI itself stays stopped); cue
 simulation still requires explicitly selecting MIDI. No stopped/old controller
 can bypass ownership checks. Both settings
