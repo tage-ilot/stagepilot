@@ -47,6 +47,14 @@ class StartupActivationService:
         self._planning_center = planning_center
         self._logger = get_logger("startup_activation")
 
+    def set_propresenter(
+        self, propresenter: ProPresenterController | None, settings: ProPresenterSettings
+    ) -> None:
+        """Follow a live Presentation change so no stale plugin or settings are kept."""
+
+        self._propresenter = propresenter
+        self._propresenter_settings = settings
+
     async def run(self) -> None:
         """Retry failed plugins, then reconcile configured integrations concurrently."""
 

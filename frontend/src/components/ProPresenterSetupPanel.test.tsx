@@ -343,6 +343,28 @@ describe("ProPresenterSetupPanel", () => {
     expect(onSave.mock.calls[1]?.[0]).toEqual(onSave.mock.calls[0]?.[0]);
   });
 
+  it("has no restart wording in any state and shows Connecting while a save applies", () => {
+    const states: Array<Partial<React.ComponentProps<typeof ProPresenterSetupPanel>>> = [
+      { propresenter: null },
+      { propresenter: { ...status, enabled: false, connection_status: "disconnected" } },
+      { propresenter: status },
+      { propresenter: status, pendingOperation: "save" },
+      { propresenter: status, error: "Host unreachable" },
+      { propresenter: status, message: "ProPresenter session settings applied." },
+    ];
+    for (const props of states) {
+      const view = renderPanel(props);
+      expect(view.container.textContent ?? "").not.toMatch(/restart/i);
+      expect(screen.queryByText(/then restart/i)).toBeNull();
+      if (props.pendingOperation === "save") {
+        expect(screen.getByText("Connecting to Presentation…")).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText("Connecting to Presentation…")).toBeNull();
+      }
+      view.unmount();
+    }
+  });
+
   it("keeps Test connection and Refresh as actions outside the bar and keeps the Look helper text", () => {
     renderPanel();
     const bar = document.querySelector("[data-save-bar]") as HTMLElement;

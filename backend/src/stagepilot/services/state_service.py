@@ -117,6 +117,17 @@ class StateService:
 
             await self._state_store.mutate(mutation)
 
+    async def clear_timer(self) -> None:
+        """Forget the countdown: used when the Presentation output is switched live.
+
+        Clears exactly what a timer output owns (the timer state) and leaves the plan and cursor.
+        """
+
+        def mutation(state: ApplicationState) -> None:
+            state.timer = TimerState()
+
+        await self._state_store.mutate(mutation)
+
     async def dispatch(self, action: ActionName, source: str = "api") -> ActionOutcome:
         request_id = uuid4()
         report = await self._event_bus.publish(

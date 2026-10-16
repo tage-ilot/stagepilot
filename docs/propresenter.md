@@ -20,9 +20,10 @@ The production setup panel persistently stores:
 - Connection test
 - Timer rediscovery
 
-Save the connection settings in the panel and restart StagePilot. Saving
-automatically enables real ProPresenter output; no simulated output choice is
-shown in the production panel. Environment overrides remain available for
+Save the connection settings in the panel. Saving automatically enables real
+ProPresenter output and connects right away, with no restart; no simulated
+output choice is shown in the production panel. Switching between simulated and
+real output is refused while the timer is running. Environment overrides remain available for
 development or unattended startup:
 
 ```dotenv

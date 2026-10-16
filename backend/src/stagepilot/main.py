@@ -28,7 +28,7 @@ from stagepilot.api.remote_feature import router as remote_feature_router
 from stagepilot.api.remote_ingress import RemoteAccess
 from stagepilot.api.routes import router as api_router
 from stagepilot.api.websocket import router as websocket_router
-from stagepilot.core.config import Settings, TimerOutput, get_settings
+from stagepilot.core.config import Settings, get_settings
 from stagepilot.core.event_bus import EventBus
 from stagepilot.core.events import EventType, new_event
 from stagepilot.core.logging import configure_logging, get_logger
@@ -74,6 +74,10 @@ from stagepilot.plugins.playback_api.plugin import (
 from stagepilot.plugins.propresenter import ProPresenterClientFactory, ProPresenterPlugin
 from stagepilot.services.dashboard_auth import DashboardSessionStore
 from stagepilot.services.planning_center_setup import PlanningCenterSetupService
+from stagepilot.services.presentation_source import (
+    PresentationController,
+    PresentationPluginFactory,
+)
 from stagepilot.services.remote_auth import RemoteStore
 from stagepilot.services.service_source import ServicePluginFactory, ServiceSourceController
 from stagepilot.services.startup_activation import StartupActivationService
@@ -248,17 +252,11 @@ def create_app(
     midi_plugin = playback_input.midi
     plugin_manager.register(playback_input)
 
-    real_propresenter_enabled = (
-        resolved_settings.propresenter.enabled
-        and resolved_settings.integration_modes.timer_output is TimerOutput.PROPRESENTER
+    presentation_factory = PresentationPluginFactory(
+        event_bus, state_store, client_factory=propresenter_client_factory
     )
-    if real_propresenter_enabled:
-        propresenter_plugin = ProPresenterPlugin(
-            event_bus,
-            state_store,
-            resolved_settings.propresenter,
-            client_factory=propresenter_client_factory,
-        )
+    propresenter_plugin = presentation_factory.build(resolved_settings)
+    if propresenter_plugin is not None:
         plugin_manager.register(propresenter_plugin)
 
     runtime = Runtime(
@@ -302,6 +300,22 @@ def create_app(
         lights_settings=resolved_settings.lights,
         planning_center=planning_center_plugin,
     )
+
+    def publish_propresenter(plugin: ProPresenterPlugin | None) -> None:
+        current = resolved_settings_service.effective_runtime_settings().propresenter
+        runtime.settings.propresenter = current
+        runtime.propresenter_controller = plugin
+        startup_activation.set_propresenter(plugin, current)
+
+    runtime.presentation = PresentationController(
+        plugin_manager=plugin_manager,
+        factory=presentation_factory,
+        settings_service=resolved_settings_service,
+        state_store=state_store,
+        state_service=state_service,
+        on_changed=publish_propresenter,
+    )
+    runtime.presentation.adopt(propresenter_plugin, resolved_settings.propresenter)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

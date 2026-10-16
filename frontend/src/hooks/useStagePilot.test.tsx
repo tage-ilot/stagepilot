@@ -662,7 +662,7 @@ describe("useStagePilot", () => {
           enabled: true,
         },
       },
-      restart_required: true,
+      restart_required: false,
     };
     mockedUpdateSettings.mockResolvedValueOnce(updated);
     mockedUpdateProPresenterSettings.mockResolvedValueOnce({
@@ -672,7 +672,7 @@ describe("useStagePilot", () => {
         enabled: true,
         ...input,
         connection_status: "disconnected",
-        detail: "Restart required.",
+        detail: "Connecting to ProPresenter.",
         timers: [],
         selected_timer_id: null,
         timer_found: false,
@@ -691,6 +691,52 @@ describe("useStagePilot", () => {
     expect(mockedUpdateSettings).toHaveBeenCalledWith(updated.settings);
     expect(mockedUpdateProPresenterSettings).toHaveBeenCalledWith(input);
     expect(result.current.settings).toEqual(updated);
+  });
+
+  it("shows Connecting while Presentation saves, then the connected result, with no restart wording", async () => {
+    const input = { host: "192.168.1.40", port: 1025, timer_name: "Song Countdown", request_timeout_seconds: 3 };
+    mockedUpdateSettings.mockResolvedValueOnce(settings);
+    let finish: (value: Awaited<ReturnType<typeof updateProPresenterSettings>>) => void = () => undefined;
+    mockedUpdateProPresenterSettings.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => { pending = result.current.saveProPresenter(input); });
+    await waitFor(() => expect(result.current.pendingProPresenterOperation).toBe("save"));
+    await act(async () => {
+      finish({
+        accepted: true,
+        message: "ProPresenter session settings applied.",
+        propresenter: {
+          enabled: true, ...input, connection_status: "connected", detail: null, timers: [],
+          selected_timer_id: null, timer_found: true, look_id: null, looks: [], current_look_id: null,
+          look_found: true, last_checked_at: null,
+        },
+      });
+      await pending;
+    });
+    expect(result.current.pendingProPresenterOperation).toBeNull();
+    expect(result.current.propresenter?.connection_status).toBe("connected");
+    expect(result.current.propresenterMessage).not.toMatch(/restart/i);
+    expect(result.current.propresenterError).toBeNull();
+  });
+
+  it("shows the running-timer refusal when Presentation cannot be switched", async () => {
+    const input = { host: "192.168.1.40", port: 1025, timer_name: "Song Countdown", request_timeout_seconds: 3 };
+    mockedUpdateSettings.mockRejectedValueOnce(
+      Object.assign(
+        new Error("Stop the timer before switching Presentation between simulated and ProPresenter."),
+        { status: 409 },
+      ),
+    );
+    const { result } = renderHook(() => useStagePilot());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+    await act(async () => result.current.saveProPresenter(input));
+    expect(result.current.propresenterError).toBe(
+      "Stop the timer before switching Presentation between simulated and ProPresenter.",
+    );
+    expect(mockedUpdateProPresenterSettings).not.toHaveBeenCalled();
   });
 
   it("tests credentials, discovers service types, and saves the selected setup", async () => {

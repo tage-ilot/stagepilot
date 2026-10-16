@@ -101,6 +101,7 @@ from stagepilot.plugins.planning_center.errors import (
 from stagepilot.plugins.planning_center.plugin import ALL_SERVICE_TYPES_ID
 from stagepilot.plugins.playback_api.plugin import DiscoveryConflict
 from stagepilot.plugins.propresenter.errors import ProPresenterError
+from stagepilot.services.presentation_source import PresentationBusyError, PresentationPluginFactory
 from stagepilot.services.service_source import CREDENTIAL_BUSY_MESSAGE, ServiceSourceBusyError
 
 router = APIRouter(prefix="/api/v1", route_class=RemoteRetryRoute)
@@ -140,6 +141,41 @@ async def _apply_service_source(runtime: Runtime) -> str | None:
     if health is not None and health.status is PluginStatus.ERROR:
         return health.last_error or "Services could not be started."
     return None
+
+
+async def _apply_presentation(runtime: Runtime) -> str | None:
+    """Make the running Presentation output match the saved settings; warn on failure."""
+
+    controller = runtime.presentation
+    if controller is None:
+        return None
+    try:
+        health = await controller.sync()
+    except PresentationBusyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    if health is not None and health.status is PluginStatus.ERROR:
+        return health.last_error or "Presentation could not be started."
+    return None
+
+
+async def _refuse_presentation_change(runtime: Runtime, requested: PersistentSettings) -> None:
+    """Reject an output switch the environment pins, or one that would disturb a running show."""
+
+    effective = runtime.settings_service.effective_runtime_settings()
+    wanted = PresentationPluginFactory.wanted
+    if wanted(requested) is wanted(effective):
+        return
+    pin = runtime.settings_service.timer_output_pin()
+    if pin is not None:
+        raise HTTPException(
+            409,
+            f"This is set by the {pin} environment variable and cannot be changed here.",
+        )
+    if runtime.presentation is not None:
+        try:
+            await runtime.presentation.ensure_idle()
+        except PresentationBusyError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
 
 async def _apply_planning_center_credentials(runtime: Runtime) -> None:
@@ -439,6 +475,7 @@ async def update_settings(
         settings.integration_modes.service_source,
         previous.integration_modes.service_source,
     )
+    await _refuse_presentation_change(runtime, settings)
     await _refuse_midi_change(runtime, settings, previous)
     if runtime.playback_input is not None:
         if runtime.playback_input.discovery == "running":
@@ -464,14 +501,24 @@ async def update_settings(
         raise HTTPException(400, str(exc)) from exc
     updated = runtime.settings_service.effective_runtime_settings()
     service_warning = await _apply_service_source(runtime)
+    presentation_warning = await _apply_presentation(runtime)
+    if presentation_warning is not None:
+        service_warning = (
+            f"{service_warning} {presentation_warning}" if service_warning else presentation_warning
+        )
     restart_required = True
     controller = _midi_controller(runtime)
-    # The Services source is applied live above, so it never needs a restart.
+    # The Services source and the Presentation output are applied live above, so they never
+    # need a restart.
     previous = previous.model_copy(
         update={
             "integration_modes": previous.integration_modes.model_copy(
-                update={"service_source": updated.integration_modes.service_source}
-            )
+                update={
+                    "service_source": updated.integration_modes.service_source,
+                    "timer_output": updated.integration_modes.timer_output,
+                }
+            ),
+            "propresenter": updated.propresenter,
         }
     )
     only_midi_runtime_settings_changed = _runtime_settings_without_midi(
@@ -491,7 +538,6 @@ async def update_settings(
         and previous.model_dump(exclude={"midi", "playback_api", "integration_modes"})
         == updated.model_dump(exclude={"midi", "playback_api", "integration_modes"})
         and previous.integration_modes.service_source == updated.integration_modes.service_source
-        and previous.integration_modes.timer_output == updated.integration_modes.timer_output
     ):
         restart_required = False
     response = _settings_response(runtime, restart_required=restart_required)
@@ -931,14 +977,20 @@ async def update_propresenter_settings(
             runtime.settings_service.persist_propresenter(updated)
         except SettingsFileError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        status = await _propresenter_status(runtime)
-        return ProPresenterOperationResponse(
-            accepted=True,
-            message="ProPresenter settings saved. Restart StagePilot to apply the output mode.",
-            propresenter=status,
-        )
+        # Saved settings that enable the output start it right now; otherwise they are just kept.
+        warning = await _apply_presentation(runtime)
+        controller = runtime.propresenter_controller
+        if controller is None:
+            status = await _propresenter_status(runtime)
+            return ProPresenterOperationResponse(
+                accepted=warning is None,
+                message=warning or "ProPresenter settings saved.",
+                propresenter=status,
+            )
     snapshot = await controller.reconfigure(updated)
     runtime.settings.propresenter = updated
+    if runtime.presentation is not None:
+        runtime.presentation.adopt(controller, updated)
     try:
         runtime.settings_service.persist_propresenter(updated)
     except SettingsFileError as exc:

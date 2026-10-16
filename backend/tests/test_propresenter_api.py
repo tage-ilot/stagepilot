@@ -232,7 +232,7 @@ def test_disabled_propresenter_returns_safe_status() -> None:
         assert payload["timer_found"] is False
         assert saved.status_code == 200
         assert saved.json()["accepted"] is True
-        assert "Restart StagePilot" in saved.json()["message"]
+        assert "restart" not in saved.json()["message"].lower()
 
     persisted = app.state.runtime.settings_service.snapshot().propresenter
     assert persisted.host == "192.168.1.20"

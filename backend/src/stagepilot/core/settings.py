@@ -584,6 +584,18 @@ class SettingsService:
                 return name
         return None
 
+    def timer_output_pin(self) -> str | None:
+        """Name of the environment variable pinning the Presentation output, if any."""
+
+        for name in (
+            "STAGEPILOT_TIMER_OUTPUT",
+            "STAGEPILOT_DEMO_SIMULATE_PROPRESENTER",
+            "STAGEPILOT_PROPRESENTER_ENABLED",
+        ):
+            if name in self._environ:
+                return name
+        return None
+
     def midi_pin(self, *, source: bool, enabled: bool) -> str | None:
         """Name of the environment variable pinning the MIDI source or availability, if any."""
 

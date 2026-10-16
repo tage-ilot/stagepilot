@@ -161,9 +161,9 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      {propresenter && disabled && !error && (
-        <InlineAlert className="mt-4" tone="warning">
-          Save these settings to enable Presentation, then restart StagePilot.
+      {pendingOperation === "save" && (
+        <InlineAlert className="mt-4" tone="info">
+          Connecting to Presentation…
         </InlineAlert>
       )}
 
