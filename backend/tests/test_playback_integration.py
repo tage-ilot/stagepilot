@@ -51,7 +51,9 @@ class FakePlayback:
     version: int = 8
     commands: list[str] = field(default_factory=list)
     silent: bool = False
-    heartbeat_timeout: float = 0.25
+    # The fake beats every 50 ms, but a slow CI runner (macOS Intel) can stall past the old
+    # 0.25 s and drop the connection mid-scan. Tests needing a fast failure set their own.
+    heartbeat_timeout: float = 2.0
     disconnect_on_command: bool = False
     version_on_command: bool = False
     wrap: bool = False
