@@ -871,7 +871,7 @@ textarea:focus-visible {
 }
 
 /* Arriving from the loading screen (startup/logoLanding.ts): the header logo glides from the big loading position to its place, and
-   everything else waits, then fades in. The attribute exists only during that moment. */
+   everything else waits, then fades in (200ms). The attribute exists only during that moment. */
 .stagepilot-dashboard[data-landing="moving"] > :not(header),
 .stagepilot-dashboard[data-landing="moving"] .app-header-status {
   opacity: 0;
@@ -881,7 +881,7 @@ textarea:focus-visible {
 /* Hidden from the very first frame (no transition while moving), then it fades in once the logo has landed. */
 .stagepilot-dashboard[data-landing="done"] > :not(header),
 .stagepilot-dashboard[data-landing="done"] .app-header-status {
-  animation: landing-fade-in 400ms ease-out both;
+  animation: landing-fade-in 200ms ease-out both;
 }
 
 @keyframes landing-fade-in {

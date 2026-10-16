@@ -39,11 +39,11 @@ describe("loading logo landing", () => {
     expect(header.style.translate).toBe(`${710 - 143.5}px ${380 - 62}px`);
     expect(Number(header.style.scale)).toBeCloseTo(620 / 223, 5);
     vi.advanceTimersByTime(16);
-    vi.advanceTimersByTime(900);
+    vi.advanceTimersByTime(800);
     expect(header.style.translate).toBe("");
     expect(header.style.scale).toBe("");
     expect(root.dataset.landing).toBe("done");
-    vi.advanceTimersByTime(600);
+    vi.advanceTimersByTime(400);
     expect(root.dataset.landing).toBeUndefined();
   });
 
@@ -78,6 +78,6 @@ describe("loading logo landing", () => {
     expect(css).toMatch(/\[data-landing="moving"\] > :not\(header\),[^{]*\{\s*opacity: 0;/);
     // No transition while moving, or the dashboard would flash before it is hidden.
     expect(css).not.toMatch(/\.stagepilot-dashboard\[data-landing\] > :not\(header\)/);
-    expect(css).toMatch(/\[data-landing="done"\] > :not\(header\),[^{]*\{\s*animation: landing-fade-in 400ms/);
+    expect(css).toMatch(/\[data-landing="done"\] > :not\(header\),[^{]*\{\s*animation: landing-fade-in 200ms/);
   });
 });

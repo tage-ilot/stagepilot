@@ -13,7 +13,7 @@ interface TextBox {
 }
 
 const MOVE_MS = 720;
-const FADE_MS = 400;
+const FADE_MS = 200;
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 let pending: TextBox | null = null;
@@ -75,7 +75,7 @@ export function landLogo(logo: HTMLElement | null, root: HTMLElement | null): ((
     logo.style.removeProperty("scale");
     root.dataset.landing = "done";
     fadeTimer = window.setTimeout(() => delete root.dataset.landing, FADE_MS + 100);
-  }, MOVE_MS + 60);
+  }, MOVE_MS + 30);
 
   return () => {
     window.cancelAnimationFrame(frame);
