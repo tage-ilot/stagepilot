@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
-## [1.1.104-beta.37] - 2026-10-16
+## [1.1.104-beta.40] - 2026-10-16
 
 ### Added
 
+- Playback song arrangement: Playback songs and service-plan songs show as linked pairs, and you can skip a song on
+  either side without reordering anything. Skipping plan song 4 and Playback song 5 makes Playback track 4 start plan
+  song 5. Skips are saved with Save configuration; a skipped Playback song never touches the timer.
 - Lighting can send OSC (UDP) as well as MIDI. OSC is the main method; MIDI stays
   as the alternate. Only the saved method sends cues, and each method keeps its
   own cue list, so switching never deletes anything.
@@ -49,6 +52,10 @@
 - "Not connected" is now "Disconnected" everywhere.
 - After a restart StagePilot retries by itself when it cannot reach the backend.
 - Developer guides: DESIGN.md and the style guide were rewritten to match the app.
+
+### Notes
+
+- Versions 37 to 39 were not published (their release builds failed on test-only problems), so these notes include them.
 
 ## [1.1.104-beta.36] - 2026-10-13
 

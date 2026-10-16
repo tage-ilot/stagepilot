@@ -29,6 +29,12 @@ desktop/src-tauri/gen/
 desktop/src-tauri/generated-help/
 release-assets/
 
+# Local-only files (owner, 2026-10-16): agent planning notes and the release launcher stay on the developer machine.
+# The release logic itself is scripts/create-release.ps1, which stays tracked.
+kanban/
+/create-new-release.ps1
+/create-new-release.cmd
+
 # Agent, acceptance, deployment, and nested-worktree state
 .tools/
 .agents/

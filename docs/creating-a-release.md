@@ -1,9 +1,10 @@
 # Creating a StagePilot release
 
-From the repository root in PowerShell, run:
+From the repository root in PowerShell, run the release script (a local `create-new-release.ps1` / `.cmd` launcher that calls it is
+not tracked in git):
 
 ```powershell
-.\create-new-release.ps1
+.\scripts\create-release.ps1
 ```
 
 The command reads the beta tags (`vX.Y.Z-beta.N`) from `tage-ilot/stagepilot-beta`
@@ -35,19 +36,19 @@ After the release plan is confirmed, no further input is required.
 You may supply the version directly:
 
 ```powershell
-.\create-new-release.ps1 1.1.104-beta.34
+.\scripts\create-release.ps1 1.1.104-beta.34
 ```
 
 For an unattended invocation after reviewing the working tree, add `-Yes`:
 
 ```powershell
-.\create-new-release.ps1 1.1.104-beta.34 -Yes
+.\scripts\create-release.ps1 1.1.104-beta.34 -Yes
 ```
 
 `-Yes` uses `main` by default. To publish the release commit to another branch:
 
 ```powershell
-.\create-new-release.ps1 1.1.104-beta.34 -TargetBranch release/test -Yes
+.\scripts\create-release.ps1 1.1.104-beta.34 -TargetBranch release/test -Yes
 ```
 
 The release stops immediately if a test fails, the tag already exists, GitHub

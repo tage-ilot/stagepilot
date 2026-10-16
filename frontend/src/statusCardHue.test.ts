@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 declare const process: { cwd: () => string };
-const css: string = readFileSync(`${process.cwd()}/src/index.css`, "utf8");
+// Windows checks the files out with CRLF line endings; the patterns below match "\n", so read the stylesheet with LF.
+const css: string = readFileSync(`${process.cwd()}/src/index.css`, "utf8").replace(/\r\n/g, "\n");
 
 // DESIGN.md Connection colours: the OPEN status card wears its own connection colour, not primary.
 describe("open status card hue", () => {

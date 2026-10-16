@@ -230,7 +230,6 @@ test("beta release automation targets only the beta repo, suggests the next beta
   assert.match(releaseScript, /STAGEPILOT_RELEASE_WATCH/);
   assert.match(helpers, /\^v\(\\d\+\)\\\.\(\\d\+\)\\\.\(\\d\+\)-beta\\\.\(\\d\+\)\$/);
   assert.match(helpers, /tage-ilot\/stagepilot-beta/);
-  assert.match(read("create-new-release.ps1"), /scripts\\create-release\.ps1/);
 });
 
 test("macOS final-artifact verifier rejects hardened sidecars and starts packaged backends", () => {
