@@ -1,10 +1,10 @@
-# Rust workspace (migration, phase 1)
+# Rust workspace (migration, phase 2)
 
 Not shipped yet: nothing here is packaged by the release workflows. Plan and rationale: `docs/rust-migration/`.
 
-- `stagepilot-core`: models and events (serde). Currently only the type-generation proof (`src/api.rs`); TypeScript lands in `generated/ts/`.
+- `stagepilot-core`: models, events, event bus, state service, plugin supervisor, settings, auth, alerts (no I/O beyond the settings file, keyring and SQLite stores). TypeScript lands in `generated/ts/`.
 - `stagepilot-playback`: Playback WebSocket client, normalizer port, Rust fake Playback (`testkit`), tests, examples (`bench`, `stress`, `fake_playback`).
-- `stagepilot-server`: empty placeholder for the axum server (phase 6).
+- `stagepilot-server`: axum app and `stagepilot-server` binary (health, state, settings, dashboard auth, actions, `/ws`, static frontend). See `docs/rust-migration/phase2.md`.
 - `midi-probe`: compile + port-listing smoke test for `midir`. Needs ALSA headers on Linux, see `docs/rust-migration/linux-midi.md`.
 
 Toolchain is pinned in `rust-toolchain.toml`; `Cargo.lock` is committed; lints are shared through `[workspace.lints]`.

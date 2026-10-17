@@ -57,11 +57,9 @@ pub struct AppOptions {
 /// `STAGEPILOT_WEB_ROOT`, then `frontend/dist` next to the repository root.
 pub fn default_web_root() -> Option<PathBuf> {
     let configured = std::env::var_os("STAGEPILOT_WEB_ROOT").map(PathBuf::from);
-    let beside = std::env::current_exe().ok().and_then(|exe| {
-        exe.parent()
-            .map(|p| p.join("stagepilot_web"))
-            .or_else(|| None)
-    });
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.join("stagepilot_web")));
     [configured, beside, Some(PathBuf::from("frontend/dist"))]
         .into_iter()
         .flatten()

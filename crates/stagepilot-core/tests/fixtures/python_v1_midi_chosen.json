@@ -1,0 +1,12 @@
+{
+  "integration_modes": {
+    "midi_source": "real",
+    "service_source": "demo",
+    "timer_output": "simulated"
+  },
+  "midi": {
+    "enabled": true,
+    "input_name": "Synthetic MIDI Port 1"
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,89 @@
+{
+  "planning_center_length_undo": [],
+  "schema_version": 2,
+  "onboarding": {
+    "general_completed": false
+  },
+  "integration_modes": {
+    "service_source": "demo",
+    "midi_source": "playback_api",
+    "timer_output": "simulated"
+  },
+  "timezone": "America/Chicago",
+  "log_level": "INFO",
+  "server_port": 9123,
+  "lan_access": true,
+  "web_dashboard_pin_enabled": true,
+  "planning_center": {
+    "app_id": null,
+    "connection_method": "manual",
+    "service_type_id": null,
+    "plan_title_preference": null,
+    "preferred_service_time": null,
+    "upcoming_lookahead_days": 30,
+    "request_timeout_seconds": 10.0
+  },
+  "midi": {
+    "enabled": false,
+    "transport": "local",
+    "input_name": null,
+    "channel": 1,
+    "note": 112,
+    "mappings": {
+      "start_next": 100,
+      "restart_current": 101,
+      "previous": 102,
+      "next": 103,
+      "reload_plan": 104,
+      "stop_timer": 105
+    },
+    "debounce_ms": 250
+  },
+  "playback_api": {
+    "enabled": true,
+    "host": null,
+    "port": 8080,
+    "auto_scan": true,
+    "fast_transport": true,
+    "planning_center_update_service_type_id": null,
+    "song_order": [],
+    "captured_version": null,
+    "setlist_id": null,
+    "scan_plan_key": null,
+    "lengths_applied_key": null,
+    "captured_at": null,
+    "song_lengths": [],
+    "skipped_song_ids": [],
+    "skipped_plan_song_ids": [],
+    "discovery_duration_seconds": null,
+    "lengths_measured_at": null
+  },
+  "network_midi": {
+    "socket_path": "/run/stagepilot-midi/midi.sock",
+    "request_timeout_seconds": 2.0
+  },
+  "lights": {
+    "enabled": false,
+    "method": "osc",
+    "transport": "local",
+    "output_name": null,
+    "channel": 1,
+    "pulse_ms": 100,
+    "osc_host": "127.0.0.1",
+    "osc_port": 21600,
+    "cue_maps": {},
+    "pads": []
+  },
+  "propresenter": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 1025,
+    "timer_name": "Song Countdown",
+    "look_id": null,
+    "request_timeout_seconds": 3.0,
+    "reconnect_initial_seconds": 1.0,
+    "reconnect_max_seconds": 30.0,
+    "health_check_interval_seconds": 10.0
+  },
+  "web_dashboard_pin_hash": "pbkdf2_sha256$210000$Q8JmcY57BkV4TE4N3FGh9Q==$xxelD_oXBUP-6aVyySuSeiVmCGPdVjsuDRfZp8hM7Rc="
+}

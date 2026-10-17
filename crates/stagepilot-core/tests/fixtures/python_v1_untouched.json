@@ -1,0 +1,12 @@
+{
+  "integration_modes": {
+    "midi_source": "real",
+    "service_source": "demo",
+    "timer_output": "simulated"
+  },
+  "midi": {
+    "enabled": true
+  },
+  "release_channel": "beta",
+  "timezone": "America/Denver"
+}

@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - feat/rust-phase1
+      - feat/rust-phase2
       - main
     paths:
       - "Cargo.toml"
@@ -19,6 +20,8 @@ on:
       - "contract/**"
       - "scripts/contract/**"
       - "tools/rust-playback/**"
+      - "tools/gen_settings_fixtures.py"
+      - "scripts/diff_generated_types.mjs"
       - "backend/src/**"
       - ".github/workflows/rust.yml"
 
@@ -136,6 +139,24 @@ jobs:
 
       - name: Replay golden transcripts against the Python backend
         run: scripts/contract/run_baseline.sh
+
+      - name: Replay golden transcripts against the Rust server
+        run: scripts/contract/run_rust.sh
+
+      - name: Settings and auth fixtures are valid for the Python app that wrote them
+        run: |
+          cd backend
+          uv run --frozen python - <<'PY'
+          import json, pathlib
+          from stagepilot.core.settings import PersistentSettings
+          root = pathlib.Path("../crates/stagepilot-core/tests/fixtures")
+          PersistentSettings.model_validate(json.loads((root / "python_written_v2.json").read_text()))
+          PersistentSettings.model_validate(json.loads((root / "python_v1_untouched.json").read_text()))
+          PY
+
+      - name: Generated types vs frontend types (report only)
+        run: |
+          if command -v node >/dev/null; then node scripts/diff_generated_types.mjs; else echo "node not installed on this runner; skipped"; fi
 
       - name: Rust fixtures are current with the Python normalizer
         run: |

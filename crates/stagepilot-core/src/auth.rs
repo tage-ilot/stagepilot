@@ -579,6 +579,8 @@ impl RemoteStore {
         // The throttle commits on its own, so a failed password still counts.
         self.throttle(&email)?;
         let incorrect = || RemoteAuthError::new(401, "Incorrect email or password.");
+        // The binding keeps the connection's borrow from outliving it.
+        #[allow(clippy::let_and_return)]
         let user: Option<(String, String, i64)> = {
             let conn = self.open()?;
             let result = conn
