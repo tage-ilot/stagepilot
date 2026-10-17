@@ -225,3 +225,204 @@ fn apply(state: &Mutex<FakeState>, text: &str) -> Vec<String> {
     }
     out
 }
+
+// ---------------------------------------------------------------------------------------------
+// SimPlayback: in-process scripted Playback for measurement / discovery tests (no sockets).
+// Implements `TransportPort`, so it runs on tokio's paused virtual clock.
+// ---------------------------------------------------------------------------------------------
+
+use crate::client::{ClientError, Command, PlaybackStatus, TransportPort};
+use crate::normalizer::{Heartbeat, SetlistId};
+
+#[derive(Debug, Clone)]
+pub struct SimState {
+    pub songs: Vec<i64>,
+    /// Length per song; `None` = a seek-to-end that has no effect (Playback ignores it).
+    pub lengths: Vec<Option<f64>>,
+    pub index: usize,
+    pub position: f64,
+    pub playing: bool,
+    pub version: i64,
+    pub setlist_id: Option<i64>,
+    pub connected: bool,
+    pub generation: u64,
+    /// Every command kind received, in order (`transportNextSong`, ...).
+    pub commands: Vec<String>,
+    /// When set, a seek-to-end reports a different end every time (never steady).
+    pub unsteady: bool,
+    /// When set, commands are accepted but the state never changes.
+    pub deaf: bool,
+}
+
+pub struct SimPlayback {
+    pub state: Arc<Mutex<SimState>>,
+    serial: Arc<std::sync::atomic::AtomicU64>,
+    last: Arc<Mutex<tokio::time::Instant>>,
+    changed: watch::Sender<u64>,
+}
+
+impl SimPlayback {
+    pub fn new(songs: Vec<i64>, lengths: Vec<Option<f64>>, index: usize) -> Arc<Self> {
+        let sim = Arc::new(SimPlayback {
+            state: Arc::new(Mutex::new(SimState {
+                songs,
+                lengths,
+                index,
+                position: 0.0,
+                playing: false,
+                version: 1,
+                setlist_id: Some(122),
+                connected: true,
+                generation: 1,
+                commands: vec![],
+                unsteady: false,
+                deaf: false,
+            })),
+            serial: Arc::default(),
+            last: Arc::new(Mutex::new(tokio::time::Instant::now())),
+            changed: watch::channel(0).0,
+        });
+        sim.beat();
+        sim
+    }
+
+    /// One fresh heartbeat with the current state (what Playback does ~10 times a second).
+    pub fn beat(&self) {
+        {
+            // `unsteady`: an end position that keeps creeping, so it is never a stable length.
+            let mut s = self.state.lock().unwrap();
+            if s.unsteady && s.position > 0.5 {
+                s.position += 0.5;
+            }
+        }
+        self.serial
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        *self.last.lock().unwrap() = tokio::time::Instant::now();
+        self.changed.send_modify(|v| *v += 1);
+    }
+
+    /// Heartbeats every `every` of (virtual) time until the returned handle is aborted.
+    pub fn spawn_heartbeats(
+        self: &Arc<Self>,
+        every: std::time::Duration,
+    ) -> tokio::task::JoinHandle<()> {
+        let me = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(every).await;
+                me.beat();
+            }
+        })
+    }
+
+    pub fn snapshot(&self) -> SimState {
+        self.state.lock().unwrap().clone()
+    }
+
+    pub fn commands(&self) -> Vec<String> {
+        self.state.lock().unwrap().commands.clone()
+    }
+
+    pub fn disconnect(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.connected = false;
+        s.generation += 1;
+        drop(s);
+        self.changed.send_modify(|v| *v += 1);
+    }
+
+    fn apply(&self, command: Command) {
+        let mut s = self.state.lock().unwrap();
+        let kind = command
+            .payload()
+            .trim_start_matches('{')
+            .split('"')
+            .nth(1)
+            .unwrap_or("")
+            .to_string();
+        s.commands.push(kind);
+        if s.deaf {
+            return;
+        }
+        match command {
+            Command::Previous => {
+                s.index = s.index.saturating_sub(1);
+                s.position = 0.0;
+            }
+            Command::Next => {
+                s.index = (s.index + 1).min(s.songs.len() - 1);
+                s.position = 0.0;
+            }
+            Command::ReturnToStart => s.position = 0.0,
+            Command::SeekEnd | Command::Seek(_) => {
+                let target = match command {
+                    Command::Seek(t) => t,
+                    _ => 86400.0,
+                };
+                if let Some(Some(len)) = s.lengths.get(s.index).copied() {
+                    s.position = if target >= len { len } else { target };
+                }
+            }
+            Command::Play(p) => s.playing = p,
+            Command::SelectSong(id) => {
+                if let Some(i) = s.songs.iter().position(|x| *x == id) {
+                    s.index = i;
+                    s.position = 0.0;
+                    s.playing = false;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+impl TransportPort for SimPlayback {
+    fn status(&self) -> PlaybackStatus {
+        let s = self.state.lock().unwrap();
+        PlaybackStatus {
+            connected: s.connected,
+            host: Some("sim".into()),
+            port: 0,
+            last_error: None,
+            heartbeat: s.connected.then(|| Heartbeat {
+                song_id: s.songs[s.index],
+                position: s.position,
+                playing: s.playing,
+                pad: false,
+                setlist_version: Some(s.version),
+            }),
+            setlist_id: s.setlist_id.map(SetlistId::Int),
+        }
+    }
+    fn generation(&self) -> u64 {
+        self.state.lock().unwrap().generation
+    }
+    fn heartbeat_serial(&self) -> u64 {
+        self.serial.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn last_heartbeat_at(&self) -> tokio::time::Instant {
+        *self.last.lock().unwrap()
+    }
+    fn subscribe(&self) -> watch::Receiver<u64> {
+        self.changed.subscribe()
+    }
+    async fn send(&self, command: Command) -> Result<(), ClientError> {
+        {
+            let s = self.state.lock().unwrap();
+            if !s.connected {
+                return Err(ClientError::Disconnected);
+            }
+            if matches!(
+                command,
+                Command::Previous | Command::Next | Command::SeekEnd | Command::ReturnToStart
+            ) && s.playing
+            {
+                return Err(ClientError::NotStopped);
+            }
+        }
+        self.apply(command);
+        // Playback answers a command with a heartbeat (after real latency; here: immediately).
+        self.beat();
+        Ok(())
+    }
+}

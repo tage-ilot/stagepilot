@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - feat/rust-phase1
+      - feat/rust-phase3a
       - main
     paths:
       - "Cargo.toml"
@@ -76,6 +77,20 @@ jobs:
           start=$(date +%s)
           cargo test --workspace
           echo "test_seconds=$(( $(date +%s) - start )) runner=${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the rig latency probe (artifact only; nothing is published)
+        shell: bash
+        run: cargo build --release -p stagepilot-playback --example rig_latency
+
+      - name: Upload rig latency probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-latency-${{ matrix.runner }}
+          path: |
+            target/release/examples/rig_latency
+            target/release/examples/rig_latency.exe
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: midir port listing (no MIDI is sent)
         shell: bash
