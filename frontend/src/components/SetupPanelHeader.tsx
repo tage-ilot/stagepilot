@@ -1,6 +1,7 @@
 import type { ConnectionStatus } from "../types";
 import { Badge, StatusBadge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import type { PanelIdentity } from "./ui/Panel";
 import { accentClasses, useAccent } from "./ui/accent";
 import { cx } from "./ui/cx";
 import { connectionWord } from "./ui/statusWord";
@@ -16,6 +17,7 @@ export function SetupPanelHeader({
   headingId,
   onClose,
   statusDetail,
+  titleTone,
 }: {
   title: string;
   /** The sentence under the title; omit it to show none. */
@@ -28,6 +30,8 @@ export function SetupPanelHeader({
   onClose?: () => void;
   /** Extra badge after the status word, e.g. the saved alternate connection method. */
   statusDetail?: string;
+  /** Keeps the title in this identity's colour when the controls wear another accent (Lighting on its MIDI method). */
+  titleTone?: PanelIdentity;
 }) {
   const accent = useAccent();
   // Text and close share row one; below 480px the badge drops to row two, above it sits between them.
@@ -40,7 +44,7 @@ export function SetupPanelHeader({
         <p className="font-type-kicker text-type-kicker uppercase text-ink-muted">
           {kicker ?? "Connection configuration"}
         </p>
-        <h2 className={cx("mt-1 text-xl font-bold", accent ? accentClasses[accent === "midi" ? "playback" : accent].title : "text-ink")} id={headingId}>
+        <h2 className={cx("mt-1 text-xl font-bold", titleTone ? accentClasses[titleTone].title : accent ? accentClasses[accent === "midi" ? "playback" : accent].title : "text-ink")} id={headingId}>
           {title}
         </h2>
         {description ? <p className="mt-1 max-w-3xl text-sm text-ink-body">{description}</p> : null}

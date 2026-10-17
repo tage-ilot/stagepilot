@@ -33,7 +33,8 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
   const menu = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
   const returnFocus = useRef<"arrow" | "main" | null>(null);
-  useEffect(() => { if (!busy && returnFocus.current) { (returnFocus.current === "arrow" ? arrow : main).current?.focus(); returnFocus.current = null; } }, [busy, open, preview]);
+  // Restore focus only once the dialog has unmounted and the button is enabled again; asking earlier is ignored by the open dialog.
+  useEffect(() => { if (!busy && !preview && returnFocus.current) { (returnFocus.current === "arrow" ? arrow : main).current?.focus(); returnFocus.current = null; } }, [busy, open, preview]);
   const reason = lengthUpdateReason(status);
   const fingerprint = `${status.captured_at}|${status.stale}|${status.plan_changed ?? false}|${status.lengths_applied ?? false}|${status.discovery}|${status.playing}|${status.planning_center_connected}`;
   useEffect(() => { generation.current++; setPreview(null); }, [fingerprint]);
@@ -47,7 +48,7 @@ export function PlanningCenterLengths({ status, onStatus }: { status: PlaybackSt
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
-  const close = () => { setPreview(null); returnFocus.current = "main"; if (!busy) main.current?.focus(); };
+  const close = () => { returnFocus.current = "main"; setPreview(null); };
   const run = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);

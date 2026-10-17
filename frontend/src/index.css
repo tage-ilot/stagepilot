@@ -922,8 +922,9 @@ textarea:focus-visible {
 /* ---- Dashboard header (owner, 2026-10-15) ------------------------------------------------------------------------------------
    One row at every width. The logo is the first thing on it and never moves; everything else lives in .app-header-status to its
    right, the only part that gives way. The status pill (.header-chip) is a single element: when a message arrives it grows to the
-   message's size, takes its colours and swaps its words; when the message ends it shrinks back. If the slot is too small for even
-   the pill, the pill disappears (no dot) and the message appears just under the header instead. */
+   message's size, takes its colours and swaps its words; when the message ends it shrinks back. A message is always one line and
+   ends in "..." when it is too long (owner, 2026-10-16); on a compact window it may grow leftward over the logo, never past the
+   header's left edge. If the slot is too small for even the pill, the pill disappears (no dot) but a message still shows. */
 .header-chip {
   border-radius: 9999px;
   transition:
@@ -934,9 +935,8 @@ textarea:focus-visible {
     color 240ms ease-out;
 }
 
-/* A taller message (it wrapped to a second line) gets a rounder-rectangle corner than a full pill would give. */
 .header-chip[data-state="message"] {
-  border-radius: 1.125rem;
+  border-radius: 9999px;
 }
 
 .header-chip-pane {
@@ -957,16 +957,12 @@ textarea:focus-visible {
   text-transform: none;
   letter-spacing: 0.02em;
   line-height: 1.25rem;
-  /* One line while the pill is still changing size (so the words never wrap just for a moment); two only when the message
-     really needs them (data-wrap), and the words only appear once the pill is its full size (see the delays below). */
+  /* Always one line; a long message is cut with "..." (see .header-chip-note-text). The words only appear once the pill is its
+     full size (see the delays below). */
   white-space: nowrap;
   opacity: 0;
   transform: translateY(0.35rem);
   pointer-events: none;
-}
-
-.header-chip[data-wrap="true"] .header-chip-note {
-  white-space: normal;
 }
 
 .header-chip[data-state="message"] .header-chip-status {
@@ -989,6 +985,11 @@ textarea:focus-visible {
 /* A notice that replaces another one: the new words slide in while the pill resizes. */
 .header-chip-note-text {
   display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   /* A message that replaces another: the old words go at once, the pill resizes, then the new words slide in. */
   animation: header-note-in 260ms cubic-bezier(0.22, 1, 0.36, 1) 330ms both;
 }
@@ -1030,54 +1031,18 @@ textarea:focus-visible {
   text-transform: none;
   letter-spacing: 0.02em;
   line-height: 1.25rem;
-  white-space: normal;
+  white-space: nowrap;
   width: max-content;
 }
 
-/* Too small for even the pill: it steps aside. */
-.header-chip-wrap[data-fits="false"] {
+/* Too small for even the pill: the status pill steps aside, but a message still shows (right-aligned, over the logo). */
+.header-chip-wrap[data-fits="false"][data-notice="false"] {
   display: none;
-}
-
-/* The fallback message (only when the pill had to step aside): just under the header, on a solid surface. */
-.header-message {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  width: max-content;
-  max-width: min(24rem, calc(100vw - 2rem));
-  z-index: 30;
-  pointer-events: none;
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(-0.35rem);
-  transition: opacity 200ms ease-out, transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 280ms;
-}
-
-.header-message.is-shown {
-  pointer-events: auto;
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 200ms ease-out, transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
-}
-
-.header-message-text {
-  display: block;
-  border-radius: theme("borderRadius.ds-lg");
-  border: 1px solid;
-  padding: 0.5rem 1rem;
-  line-height: 1.25rem;
-  text-transform: none;
-  letter-spacing: 0.02em;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .header-chip,
-  .header-chip-pane,
-  .header-message,
-  .header-message.is-shown {
+  .header-chip-pane {
     transition: none;
   }
 }

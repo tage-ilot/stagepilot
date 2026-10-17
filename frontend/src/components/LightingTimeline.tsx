@@ -117,9 +117,9 @@ export function LightingTimeline({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold text-ink">Timeline</h3>
         <div aria-label="Timeline zoom" className="flex items-center gap-1" role="group">
-          <Button aria-label="Zoom out" disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} tone="lighting" variant="tinted">−</Button>
+          <Button aria-label="Zoom out" disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} variant="tinted">−</Button>
           <span aria-live="polite" className="min-w-[3.5rem] text-center text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "Fit" : `${zoom} px/s`}</span>
-          <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} tone="lighting" variant="tinted">+</Button>
+          <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
         </div>
       </div>
       <ScrollRegion axis="x" className="overflow-x-auto overscroll-x-contain" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>

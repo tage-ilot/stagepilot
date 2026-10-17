@@ -156,8 +156,8 @@ export function LightingCueBoard({
             />
             Preview only
           </label>
-          <Button disabled={!canUndo || busy} onClick={onUndo} tone="lighting" variant="tinted">Undo last capture</Button>
-          <Button aria-pressed={editing} onClick={() => { setEditing((value) => !value); setDraft(null); }} tone="lighting" variant="tinted">{editing ? "Done" : "Edit pads"}</Button>
+          <Button disabled={!canUndo || busy} onClick={onUndo} variant="tinted">Undo last capture</Button>
+          <Button aria-pressed={editing} onClick={() => { setEditing((value) => !value); setDraft(null); }} variant="tinted">{editing ? "Done" : "Edit pads"}</Button>
         </div>
       </div>
       <p className="mt-1 text-type-body-sm text-ink-muted" data-testid="capture-hint">{captureHint} Keys 1-9 press a pad when the board has focus.</p>
@@ -185,7 +185,7 @@ export function LightingCueBoard({
                 <div className="flex flex-wrap gap-1">
                   <Button aria-label={`Move ${pad.label} earlier`} disabled={index === 0 || busy} onClick={() => reorder(pad, -1)} variant="secondary">←</Button>
                   <Button aria-label={`Move ${pad.label} later`} disabled={index === viewPads.length - 1 || busy} onClick={() => reorder(pad, 1)} variant="secondary">→</Button>
-                  <Button aria-label={`Edit ${pad.label}`} disabled={busy} onClick={() => { setDraft(draftFromPad(pad)); setAttempted(false); }} tone="lighting" variant="tinted">Edit</Button>
+                  <Button aria-label={`Edit ${pad.label}`} disabled={busy} onClick={() => { setDraft(draftFromPad(pad)); setAttempted(false); }} variant="tinted">Edit</Button>
                   <Button aria-label={`Delete ${pad.label}`} disabled={busy} onClick={() => remove(pad)} tone="danger" variant="tinted">Delete</Button>
                 </div>
               )}
@@ -218,7 +218,7 @@ export function LightingCueBoard({
 
       {editing && !draft && (
         <div className="mt-3">
-          <Button disabled={busy || pads.length >= 64} onClick={() => { setDraft(emptyDraft()); setAttempted(false); }} tone="lighting" variant="tinted">Add pad</Button>
+          <Button disabled={busy || pads.length >= 64} onClick={() => { setDraft(emptyDraft()); setAttempted(false); }} variant="tinted">Add pad</Button>
         </div>
       )}
       {editing && draft && (

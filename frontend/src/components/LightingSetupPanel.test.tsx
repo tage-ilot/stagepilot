@@ -257,8 +257,9 @@ describe("LightingSetupPanel", () => {
       mount();
       const card = header().closest("[data-variant]")!;
       expect(card).toHaveAttribute("data-variant", "feature");
-      expect(card).toHaveAttribute("data-tone", "lighting");
-      expect(card.className).toMatch(/border-integration-lighting-soft\/70/);
+      // The card follows the chosen method (owner, 2026-10-16): the MIDI method wears the MIDI colour, OSC the Lighting colour.
+      expect(card).toHaveAttribute("data-tone", "midi");
+      expect(card.className).toMatch(/border-integration-playback-midi-soft\/70/);
       expect(card.className).toMatch(/border-l-\[5px\]/);
       const detail = card.querySelector("[data-part=detail]")!;
       // How many cues across how many songs, how many pads, and the song that is selected with its length.
@@ -322,9 +323,10 @@ describe("LightingSetupPanel", () => {
       <LightingSetupPanel error={null} lights={lights} message="Sent lighting test cue on MIDI note 60" onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
     const status = screen.getByRole("status");
-    expect(status).toHaveClass("text-integration-lighting-text");
+    // On the MIDI method the whole panel wears the MIDI colour.
+    expect(status).toHaveClass("text-integration-playback-midi-text");
     expect(status).toHaveTextContent("Sent lighting test cue on MIDI note 60");
-    expect(status.querySelector('[data-part="dot"]')).toHaveClass("bg-integration-lighting-soft");
+    expect(status.querySelector('[data-part="dot"]')).toHaveClass("bg-integration-playback-midi-soft");
     rerender(
       <LightingSetupPanel error="Lighting failed" lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
@@ -332,16 +334,53 @@ describe("LightingSetupPanel", () => {
     expect(document.querySelector('[data-part="dot"]')).toBeNull();
   });
 
-  it("note display glyphs use the Lighting colour when active and muted when inactive", () => {
+  it("note display glyphs use the MIDI colour when active and muted when inactive", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
     const glyphs = [screen.getByText("♪"), screen.getByText("#")];
-    expect(glyphs.filter((g) => g.className.includes("text-integration-lighting-text"))).toHaveLength(1);
+    expect(glyphs.filter((g) => g.className.includes("text-integration-playback-midi-text"))).toHaveLength(1);
     expect(glyphs.filter((g) => g.className.includes("text-ink-muted"))).toHaveLength(1);
     const toggle = screen.getByRole("switch");
-    expect(toggle.className).toContain("integration-lighting");
+    expect(toggle.className).toContain("integration-playback-midi");
     expect(toggle.className).not.toContain("info");
+  });
+
+  describe("the chosen method colours everything but the title and the panel's own background (owner, 2026-10-16)", () => {
+    const mountPanel = () => render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    const panel = () => document.getElementById("lighting-configuration")!;
+
+    it("on MIDI the controls wear the MIDI colour; the title, top border and wash stay Lighting", () => {
+      mountPanel();
+      // Panel's own identity: top border and the wash behind everything stay Lighting.
+      expect(panel().className).toMatch(/border-t-integration-lighting-soft/);
+      expect(panel().className).toMatch(/from-integration-lighting\/\[0\.13\]/);
+      expect(screen.getByRole("heading", { name: "Lighting" })).toHaveClass("text-integration-lighting-soft");
+      // Controls: buttons, the feature card and its tag, the note-display switch and the Save bar.
+      expect(screen.getByRole("button", { name: "Add cue" }).className).toMatch(/integration-playback-midi/);
+      expect(screen.getByRole("button", { name: "Add cue" }).className).not.toMatch(/integration-lighting/);
+      expect(screen.getByRole("switch", { name: /MIDI note display/ }).className).toMatch(/integration-playback-midi/);
+      const card = panel().querySelector("[data-variant=feature]")!;
+      expect(card).toHaveAttribute("data-tone", "midi");
+      expect(card.querySelector("[data-part=aside] > span")!.className).toMatch(/integration-playback-midi/);
+    });
+
+    it("on OSC everything stays the Lighting colour, and switching back and forth swaps the controls with it", async () => {
+      const user = userEvent.setup();
+      mountPanel();
+      const group = screen.getByRole("radiogroup");
+      await user.click(within(group).getByRole("radio", { name: /OSC/ }));
+      expect(panel().className).toMatch(/border-t-integration-lighting-soft/);
+      expect(screen.getByRole("heading", { name: "Lighting" })).toHaveClass("text-integration-lighting-soft");
+      expect(screen.getByRole("button", { name: "Add cue" }).className).toMatch(/integration-lighting/);
+      expect(screen.getByRole("button", { name: "Add cue" }).className).not.toMatch(/integration-playback-midi/);
+      expect(panel().querySelector("[data-variant=feature]")).toHaveAttribute("data-tone", "lighting");
+      await user.click(within(group).getByRole("radio", { name: /MIDI/ }));
+      expect(screen.getByRole("button", { name: "Add cue" }).className).toMatch(/integration-playback-midi/);
+      expect(screen.getByRole("heading", { name: "Lighting" })).toHaveClass("text-integration-lighting-soft");
+    });
   });
 
   it("has the shared Connection method switch (OSC primary, MIDI alternate) and no stray \"Sends cues by MIDI\" line", () => {

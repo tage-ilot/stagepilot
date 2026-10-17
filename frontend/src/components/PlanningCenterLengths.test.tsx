@@ -36,6 +36,26 @@ describe("explicit Planning Center split button", () => {
     // Focus returns from Dialog's cleanup and from the component's busy/returnFocus effect after the dialog unmounts; wait for it instead of reading it synchronously.
     await waitFor(() => expect(update()).toHaveFocus());
   });
+  it.each(["Cancel", "Escape"])("%s hands focus back to Update Services only after the dialog has gone", async (action) => {
+    const user = userEvent.setup();
+    show(); const trigger = update(); await user.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    // Every call to the button's focus(), and whether the dialog was still on screen when it happened.
+    const dialogShownAtFocus: boolean[] = [];
+    const spy = vi.spyOn(trigger, "focus").mockImplementation(() => {
+      dialogShownAtFocus.push(screen.queryByRole("dialog") !== null);
+      HTMLElement.prototype.focus.call(trigger);
+    });
+    try {
+      if (action === "Cancel") await user.click(cancel); else await user.keyboard("{Escape}");
+      await waitFor(() => expect(trigger).toHaveFocus());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(dialogShownAtFocus.length).toBeGreaterThan(0);
+      expect(dialogShownAtFocus.every((shown) => !shown)).toBe(true);
+      expect(api.confirmPlanLengths).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
   it("one confirmation covers every measured length; result and Restore appear and restore updates result", async () => {
     vi.mocked(api.previewPlanLengths).mockResolvedValue({ ...preview, items: [{ ...preview.items[0]! }] });
     vi.mocked(api.confirmPlanLengths).mockResolvedValue(ready({ planning_center_undo_available: true, planning_center_lengths: { status: "done", message: "Updated 1 songs in Planning Center: Worship 4:05 -> 4:28. StagePilot reloaded the plan and verified the song times.", items: [], reload: "verified" } }));
