@@ -34,7 +34,7 @@ EXPECTED_NATIVE = {
     "release-macos.yml:build",
     "macos-signing-stability.yml:stability",
     "release-windows.yml:build",
-    "spike-rust.yml:rust",
+    "rust.yml:rust",
 }
 
 

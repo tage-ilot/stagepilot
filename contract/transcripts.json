@@ -1,0 +1,3467 @@
+{
+ "steps": [
+  {
+   "name": "health",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/health"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "plugins": [
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "demo",
+       "status": "running",
+       "version": "<str>"
+      },
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     ],
+     "started_at": "<str>",
+     "status": "healthy",
+     "version": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "health live",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/health/live"
+   },
+   "response": {
+    "body": {
+     "status": "alive"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "access (LAN, no PIN enforced)",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/access"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "authentication": "pin",
+     "capabilities": {
+      "canActivateServices": true,
+      "canBootstrapRemote": true,
+      "canConfigure": true,
+      "canManageRemote": true,
+      "canOperate": true,
+      "canRead": true
+     },
+     "csrf_token": null,
+     "expires_at": null,
+     "mode": "lan",
+     "user": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "state, demo plan loaded",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": null,
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 281,
+      "formatted_duration": "4:41",
+      "id": "demo-battle-belongs",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Battle Belongs"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Demo scheduled item length",
+      "id": "demo-service-plan",
+      "service_times": [
+       "09:00",
+       "11:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": null,
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 281,
+        "formatted_duration": "4:41",
+        "id": "demo-battle-belongs",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Battle Belongs"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "demo-holy-forever",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Holy Forever"
+       },
+       {
+        "description": null,
+        "duration_seconds": 352,
+        "formatted_duration": "5:52",
+        "id": "demo-gratitude",
+        "is_generic": false,
+        "order": 3,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Gratitude"
+       },
+       {
+        "description": null,
+        "duration_seconds": 377,
+        "formatted_duration": "6:17",
+        "id": "demo-firm-foundation",
+        "is_generic": false,
+        "order": 4,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Firm Foundation"
+       }
+      ],
+      "title": "Sunday Worship — Demo"
+     },
+     "planning_center_status": "disconnected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "demo": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "demo",
+       "status": "running",
+       "version": "<str>"
+      },
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "timer.stopped"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Demo service loaded.",
+      "skipped_items": [],
+      "status": "loaded",
+      "target_date": "2026-10-17"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "stopped"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 281,
+      "formatted_duration": "4:41",
+      "id": "demo-battle-belongs",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Battle Belongs"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "planning center status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": null,
+     "configured": false,
+     "connection_method": "manual",
+     "connection_status": "disconnected",
+     "detail": "Demo service loaded.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": false,
+     "service_type_id": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "planning center service types (not configured)",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center credentials are not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "midi inputs",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/midi/inputs"
+   },
+   "response": {
+    "body": {
+     "channel": 1,
+     "configured_input_name": null,
+     "enabled": false,
+     "inputs": [],
+     "mappings": {
+      "next": 103,
+      "previous": 102,
+      "reload_plan": 104,
+      "restart_current": 101,
+      "start_next": 100,
+      "stop_timer": 105
+     },
+     "note": 112,
+     "selected_input_name": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "midi messages",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/midi/messages"
+   },
+   "response": {
+    "body": {
+     "messages": []
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "propresenter status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/propresenter"
+   },
+   "response": {
+    "body": {
+     "connection_status": "disconnected",
+     "current_look_id": null,
+     "detail": "The ProPresenter plugin is disabled.",
+     "enabled": false,
+     "host": "127.0.0.1",
+     "last_checked_at": null,
+     "look_found": true,
+     "look_id": null,
+     "looks": [],
+     "port": 1025,
+     "request_timeout_seconds": 3.0,
+     "selected_timer_id": null,
+     "timer_found": false,
+     "timer_name": "Song Countdown",
+     "timers": []
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lights status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights"
+   },
+   "response": {
+    "body": {
+     "channel": 1,
+     "connection_status": "disconnected",
+     "detail": "Disconnected. Lighting OSC output is not configured.",
+     "enabled": false,
+     "last_cue": null,
+     "last_cue_at": null,
+     "last_osc_cue": null,
+     "method": "osc",
+     "osc_host": "127.0.0.1",
+     "osc_port": 21600,
+     "output_name": null,
+     "outputs": [],
+     "pulse_ms": 100
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "2026-10-17",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "",
+      "operation": "update",
+      "reload": "not_needed",
+      "status": "idle"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 8080,
+     "progress": 0,
+     "reason": "Disconnected. Choose Scan Network to find Playback.",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": false,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": true,
+      "enabled": true,
+      "fast_transport": true,
+      "host": null,
+      "port": 8080
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback connection",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/connection"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "connected": false,
+     "reason": "Disconnected. Choose Scan Network to find Playback.",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback events",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/events"
+   },
+   "response": {
+    "body": {
+     "capacity": 100,
+     "events": []
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "dashboard auth status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard-auth/status"
+   },
+   "response": {
+    "body": {
+     "authenticated": false,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote access status",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote access is not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "messages": [
+    {
+     "data": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": null,
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     },
+     "type": "state.snapshot"
+    },
+    {
+     "data": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "start_next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     },
+     "type": "state.snapshot"
+    }
+   ],
+   "name": "ws: initial snapshot, then a snapshot after start_next",
+   "ws": "/ws"
+  },
+  {
+   "name": "state while running",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": {
+      "description": null,
+      "duration_seconds": 281,
+      "formatted_duration": "4:41",
+      "id": "demo-battle-belongs",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Battle Belongs"
+     },
+     "current_song_index": 0,
+     "last_action": "start_next",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 336,
+      "formatted_duration": "5:36",
+      "id": "demo-holy-forever",
+      "is_generic": false,
+      "order": 2,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Holy Forever"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Demo scheduled item length",
+      "id": "demo-service-plan",
+      "service_times": [
+       "09:00",
+       "11:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": null,
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 281,
+        "formatted_duration": "4:41",
+        "id": "demo-battle-belongs",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Battle Belongs"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "demo-holy-forever",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Holy Forever"
+       },
+       {
+        "description": null,
+        "duration_seconds": 352,
+        "formatted_duration": "5:52",
+        "id": "demo-gratitude",
+        "is_generic": false,
+        "order": 3,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Gratitude"
+       },
+       {
+        "description": null,
+        "duration_seconds": 377,
+        "formatted_duration": "6:17",
+        "id": "demo-firm-foundation",
+        "is_generic": false,
+        "order": 4,
+        "service_sequence": null,
+        "source_song_id": null,
+        "title": "Firm Foundation"
+       }
+      ],
+      "title": "Sunday Worship — Demo"
+     },
+     "planning_center_status": "disconnected",
+     "playing_song": {
+      "description": null,
+      "duration_seconds": 281,
+      "formatted_duration": "4:41",
+      "id": "demo-battle-belongs",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Battle Belongs"
+     },
+     "playing_song_index": 0,
+     "plugins": {
+      "demo": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "demo",
+       "status": "running",
+       "version": "<str>"
+      },
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "timer.stopped"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "song.selected"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "song.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "timer.started"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Demo service loaded.",
+      "skipped_items": [],
+      "status": "loaded",
+      "target_date": "2026-10-17"
+     },
+     "timer": {
+      "duration_seconds": 281,
+      "last_error": null,
+      "position_seconds": "<float>",
+      "remaining_seconds": null,
+      "started_at": "<str>",
+      "status": "running"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 336,
+      "formatted_duration": "5:36",
+      "id": "demo-holy-forever",
+      "is_generic": false,
+      "order": 2,
+      "service_sequence": null,
+      "source_song_id": null,
+      "title": "Holy Forever"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "next song",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/next"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "next",
+     "message": "\"Holy Forever\" is up next. Press Start next to play it.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "current_song_index": 1,
+      "last_action": "next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 352,
+       "formatted_duration": "5:52",
+       "id": "demo-gratitude",
+       "is_generic": false,
+       "order": 3,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Gratitude"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "previous song",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/previous"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "previous",
+     "message": "\"Battle Belongs\" is up next. Press Start next to play it.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "previous",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "stop timer",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": "<int>",
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "reset position",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/reset_position"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "reset_position",
+     "message": "Service position and timer reset.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reset_position",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "restart current",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/restart_current"
+   },
+   "response": {
+    "body": {
+     "accepted": false,
+     "action": "restart_current",
+     "message": "No current song to restart.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reset_position",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "stop timer again",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "2026-10-17"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "unknown action is a 422",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/bogus"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "expected": "'start_next', 'restart_current', 'previous', 'next', 'stop_timer', 'reload_plan' or 'reset_position'"
+       },
+       "input": "bogus",
+       "loc": [
+        "path",
+        "action"
+       ],
+       "msg": "Input should be 'start_next', 'restart_current', 'previous', 'next', 'stop_timer', 'reload_plan' or 'reset_position'",
+       "type": "enum"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "unknown route is a 404",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/does-not-exist"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "wrong method is a 405",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "detail": "Method Not Allowed"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 405
+   }
+  },
+  {
+   "name": "settings PUT with an invalid body is a 422",
+   "request": {
+    "json": {
+     "timezone": 5
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 5,
+       "loc": [
+        "body",
+        "timezone"
+       ],
+       "msg": "Input should be a valid string",
+       "type": "string_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback find, invalid body",
+   "request": {
+    "json": {
+     "bogus": true
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/find"
+   },
+   "response": {
+    "body": {
+     "detail": "Enter a host name or IP address."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "midi input selection, unknown input",
+   "request": {
+    "json": {
+     "input_name": "No Such Port"
+    },
+    "method": "POST",
+    "path": "/api/v1/midi/input-selection"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {
+        "input_name": "No Such Port"
+       },
+       "loc": [
+        "body",
+        "input_id"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  }
+ ],
+ "volatile_keys": [
+  "date",
+  "elapsed_seconds",
+  "last_activity_at",
+  "last_checked_at",
+  "last_cue_at",
+  "position_seconds",
+  "remaining_seconds",
+  "revision",
+  "started_at",
+  "timestamp",
+  "updated_at",
+  "version"
+ ],
+ "volatile_suffixes": [
+  "_at"
+ ]
+}

@@ -1,0 +1,147 @@
+# Rust migration (see docs/rust-migration/). Builds and tests the Cargo workspace on every platform
+# the app ships on, and runs the Linux-only contract and generated-types checks.
+# Isolated from the release workflows: nothing here is packaged or published.
+name: rust
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/rust-phase1
+      - main
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "crates/**"
+      - "generated/**"
+      - "contract/**"
+      - "scripts/contract/**"
+      - "tools/rust-playback/**"
+      - "backend/src/**"
+      - ".github/workflows/rust.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Windows, macOS Apple Silicon, macOS Intel. Linux has its own job below because it must run on
+  # the self-hosted runner (scripts/validate_workflow_runners.py).
+  rust:
+    name: Rust — ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            runner: windows-latest
+          - name: macOS Apple Silicon
+            runner: macos-15
+          - name: macOS Intel
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Toolchain versions (pinned by rust-toolchain.toml)
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Restore cargo cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        shell: bash
+        run: |
+          start=$(date +%s)
+          cargo test --workspace
+          echo "test_seconds=$(( $(date +%s) - start )) runner=${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: midir port listing (no MIDI is sent)
+        shell: bash
+        run: cargo run --release -p midi-probe | tee -a "$GITHUB_STEP_SUMMARY"
+
+  rust-linux:
+    name: Rust — Linux
+    runs-on: [self-hosted, stagepilot-linux]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Toolchain versions (pinned by rust-toolchain.toml)
+        run: |
+          rustc --version
+          cargo --version
+
+      # midi-probe links ALSA through midir; the self-hosted runner has no libasound2-dev or
+      # pkg-config and none are installed here, so Linux builds every other crate.
+      # See docs/rust-migration/linux-midi.md.
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --exclude midi-probe --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --exclude midi-probe
+
+      - name: Generated TypeScript is current
+        run: |
+          cargo test -p stagepilot-core export_bindings
+          git diff --exit-code -- generated/ts
+          test -z "$(git status --porcelain -- generated/ts)"
+
+  contract:
+    name: Contract baseline — Python backend (Linux)
+    runs-on: [self-hosted, stagepilot-linux]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          working-directory: backend
+
+      - name: Install locked backend dependencies
+        run: uv sync --project backend --frozen --extra dev
+
+      - name: Frozen OpenAPI and transcripts are current
+        run: |
+          uv run --project backend --frozen python scripts/contract/contract.py openapi
+          uv run --project backend --frozen python scripts/contract/contract.py record
+          git diff --exit-code -- contract
+
+      - name: Replay golden transcripts against the Python backend
+        run: scripts/contract/run_baseline.sh
+
+      - name: Rust fixtures are current with the Python normalizer
+        run: |
+          cd backend
+          uv run --frozen python ../tools/rust-playback/gen_replay.py
+          uv run --frozen python ../tools/rust-playback/gen_real_replay.py
+          uv run --frozen python ../tools/rust-playback/gen_transport_cases.py
+          cd ..
+          git diff --exit-code -- crates/stagepilot-playback/tests/fixtures
