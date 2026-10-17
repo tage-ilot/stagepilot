@@ -88,13 +88,13 @@ const formatTime = (value: string | null | undefined) =>
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(value))
     : "No activity yet";
 
-const formatPlanCurrentAsOf = (value: string | null | undefined) => {
+const formatPlanCurrent = (value: string | null | undefined) => {
   if (!value) return "Load time unavailable";
   const loadedAt = new Date(value);
   if (Number.isNaN(loadedAt.getTime())) return "Load time unavailable";
   const time = `${String(loadedAt.getHours()).padStart(2, "0")}:${String(loadedAt.getMinutes()).padStart(2, "0")}`;
   const date = `${String(loadedAt.getMonth() + 1).padStart(2, "0")}-${String(loadedAt.getDate()).padStart(2, "0")}-${loadedAt.getFullYear()}`;
-  return `Current as of ${time} ${date}`;
+  return `Current ${time} ${date}`;
 };
 
 const connectionIcon = (source: string, name: string, compact = false) => (
@@ -1157,7 +1157,7 @@ export function Dashboard({
             <div className="text-right">
               <p className="font-pixel !text-sm text-ink-body">{plan?.songs.length ?? 0} songs</p>
               <p className="text-xs tabular-nums text-ink-muted">
-                {plan ? formatPlanCurrentAsOf(state.last_successful_plan_reload_at) : "Load time unavailable"}
+                {plan ? formatPlanCurrent(state.last_successful_plan_reload_at) : "Load time unavailable"}
               </p>
             </div>
           </div>

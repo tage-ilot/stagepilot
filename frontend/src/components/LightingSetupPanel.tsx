@@ -27,6 +27,7 @@ import { Panel } from "./ui/Panel";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Disclosure } from "./ui/Disclosure";
+import { accentClasses } from "./ui/accent";
 import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
@@ -404,6 +405,9 @@ export function LightingSetupPanel({
   const [saveFailed, setSaveFailed] = useState(false);
   const attempt = useSaveAttempt("lighting-configuration");
   const pulseNumber = Number(pulseMs);
+  // The controls wear the chosen method (OSC keeps the lighting colour, MIDI the Playback MIDI blue-violet); the title and the
+  // panel's own top border and wash stay lighting (owner, 2026-10-16), the same split the MIDI / Playback panel uses.
+  const accent = method === "midi" ? "midi" : "lighting";
   const errOutput = method === "midi" && attempt.attempted && !outputName ? "Choose an output." : undefined;
   const errPulse = attempt.attempted && !(Number.isInteger(pulseNumber) && pulseNumber >= 10 && pulseNumber <= 2000) ? "Enter a note length from 10 to 2000 ms." : undefined;
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
@@ -461,13 +465,14 @@ export function LightingSetupPanel({
     && !lights?.outputs.some((output) => output.name === outputName);
 
   return (
-    <Panel className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
+    <Panel accent={accent} className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
       <SetupPanelHeader
         closeLabel="Close Lighting configuration"
         description="Sends timed cues to your lighting software."
         onClose={onClose}
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
         title="Lighting"
+        titleTone="lighting"
       />
 
       <ConnectionMethod
@@ -529,13 +534,13 @@ export function LightingSetupPanel({
       </div>
       <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={pendingOperation !== null} onClick={onRefresh} tone="lighting" variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
+        <Button disabled={pendingOperation !== null} onClick={onRefresh} variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
         </>
       )}
       <Disclosure
         aside={(
-          <span className="rounded-ds-full border border-integration-lighting-soft/40 bg-integration-lighting-soft/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-integration-lighting-text">
+          <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
             {method === "osc" ? "OSC" : "MIDI"}
           </span>
         )}
@@ -544,7 +549,7 @@ export function LightingSetupPanel({
         onOpenChange={setTimelineOpen}
         open={timelineOpen}
         title="Song lighting timeline"
-        tone="lighting"
+        tone={accent}
         variant="feature"
       >
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
@@ -557,24 +562,24 @@ export function LightingSetupPanel({
           </Field>
           {method === "midi" && (
           <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
-            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-lighting-text" : "text-ink-muted"}>♪</span>
+            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-playback-midi-text" : "text-ink-muted"}>♪</span>
             <button
               aria-checked={noteDisplayMode === "numeric"}
               aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-lighting-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-lighting-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-lighting-soft/20" : "bg-surface-900"}`}
+              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-playback-midi-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-playback-midi-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-playback-midi-soft/20" : "bg-surface-900"}`}
               onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
               role="switch"
               type="button"
             >
               <span
                 aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-lighting-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-playback-midi-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
               />
             </button>
-            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-lighting-text" : "text-ink-muted"}>#</span>
+            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-playback-midi-text" : "text-ink-muted"}>#</span>
           </div>
           )}
-          <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} tone="lighting" variant="tinted">Add cue</Button>
+          <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} variant="tinted">Add cue</Button>
           </div>
           {method === "midi" && (
           <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
@@ -591,7 +596,7 @@ export function LightingSetupPanel({
                 <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
               </Field>
             </div>
-            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} tone="lighting" variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
           </div>
           )}
         </div>
@@ -608,7 +613,6 @@ export function LightingSetupPanel({
                 aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
                 disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
                 onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-                tone="lighting"
                 variant="tinted"
               >
                 {pendingOperation === "test" ? "Sending…" : "Send test cue"}
@@ -689,7 +693,7 @@ export function LightingSetupPanel({
               <Field label="Cue label">
                 <Input aria-label="Cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
               </Field>
-              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} tone="lighting" variant="tinted">Test</Button>
+              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} variant="tinted">Test</Button>
               <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
             </div>
           ))}

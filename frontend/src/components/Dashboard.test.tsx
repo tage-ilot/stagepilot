@@ -573,10 +573,11 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
     });
 
-    it("steps aside, instead of shrinking to a dot, when the slot is too small (stylesheet rules)", async () => {
+    it("steps aside, instead of shrinking to a dot, when the slot is too small; a message still shows (stylesheet rules)", async () => {
       const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
       const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
-      expect(css).toMatch(/\.header-chip-wrap\[data-fits="false"\] \{\s*display: none;/);
+      // Only the STATUS pill steps aside; while a message is showing (data-notice) the pill stays so the message is never lost.
+      expect(css).toMatch(/\.header-chip-wrap\[data-fits="false"\]\[data-notice="false"\] \{\s*display: none;/);
       expect(css).not.toMatch(/header-chip-dot/);
       // The pill animates its size, and the words slide in when one message replaces another.
       expect(css).toMatch(/\.header-chip \{[^}]*transition:\s*width 360ms/);
@@ -584,6 +585,24 @@ describe("Dashboard Planning Center plan states", () => {
       expect(css).toMatch(/\.header-chip-note-text \{\s*display: block;[\s\S]*?animation: header-note-in 260ms[^;]* 330ms both;/);
       expect(css).toMatch(/\.header-chip\[data-state="message"\] \.header-chip-note \{[^}]*transition-delay: 330ms/);
       expect(css).toMatch(/\.header-chip-note \{[^}]*white-space: nowrap;/);
+    });
+
+    it("keeps a notification to one line that ends in an ellipsis, and never wraps it (stylesheet rules, owner 2026-10-16)", async () => {
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.header-chip-note-text \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/);
+      // The old wrap-to-two-lines state and the under-the-header fallback are gone.
+      expect(css).not.toMatch(/data-wrap/);
+      expect(css).not.toMatch(/\.header-message/);
+      expect(css).not.toMatch(/\.header-chip-probe-note \{[^}]*white-space: normal;/);
+    });
+
+    it("shows a long message on one line in the chip, growing no wider than the header row", () => {
+      renderDashboard(loadedServiceState, { error: "x ".repeat(120) });
+      const chip = screen.getByTestId("header-chip");
+      expect(chip).toHaveAttribute("data-state", "message");
+      expect(chip).not.toHaveAttribute("data-wrap");
+      expect(screen.queryByTestId("header-message-float")).toBeNull();
     });
   });
 
@@ -816,7 +835,7 @@ describe("Dashboard Planning Center plan states", () => {
       }),
     });
 
-    expect(screen.getByText("Current as of 18:28 06-15-2026")).toBeInTheDocument();
+    expect(screen.getByText("Current 18:28 06-15-2026")).toBeInTheDocument();
     expect(screen.queryByText("Planning Center scheduled item length")).not.toBeInTheDocument();
   });
 

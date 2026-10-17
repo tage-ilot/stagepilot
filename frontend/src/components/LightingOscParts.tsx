@@ -101,7 +101,7 @@ export function OscArgumentRows({
         </div>
       ))}
       <div>
-        <Button disabled={disabled || drafts.length >= 16} onClick={() => onChange([...drafts, { type: "int", text: "0" }])} tone="lighting" variant="tinted">
+        <Button disabled={disabled || drafts.length >= 16} onClick={() => onChange([...drafts, { type: "int", text: "0" }])} variant="tinted">
           Add argument
         </Button>
       </div>
@@ -188,7 +188,6 @@ export function OscCueRow({
           aria-describedby={testReason}
           disabled={!canTest || disabled || Boolean(error)}
           onClick={() => onTest(address.trim(), parsedArgs.args)}
-          tone="lighting"
           variant="tinted"
         >
           Test
