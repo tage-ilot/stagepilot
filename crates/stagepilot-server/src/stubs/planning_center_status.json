@@ -1,0 +1,11 @@
+{
+ "app_id": null,
+ "configured": false,
+ "connection_method": "manual",
+ "connection_status": "disconnected",
+ "detail": "Demo service loaded.",
+ "oauth_connected": false,
+ "oauth_needs_reconnect": false,
+ "planning_center_secret_saved": false,
+ "service_type_id": null
+}

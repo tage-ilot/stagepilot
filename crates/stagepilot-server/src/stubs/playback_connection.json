@@ -1,0 +1,15 @@
+{
+ "active_source": "none",
+ "connected": false,
+ "reason": "Disconnected. Choose Scan Network to find Playback.",
+ "sources": {
+  "midi": {
+   "connected": false,
+   "reason": "MIDI is disconnected."
+  },
+  "playback_api": {
+   "connected": false,
+   "reason": "Playback is disconnected."
+  }
+ }
+}

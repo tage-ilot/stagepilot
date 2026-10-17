@@ -1,1 +1,12 @@
-//! StagePilot server: axum HTTP and WebSocket API. Filled in by phase 6.
+//! StagePilot HTTP/WebSocket server (Rust migration phase 2): the `/api/v1/*` routes for health,
+//! state, settings, dashboard auth, actions and the `/ws` state stream, plus static dashboard
+//! serving. Integrations that later phases port are stubbed with what Python returns while the
+//! plugin is disabled.
+
+pub mod app;
+pub mod demo;
+pub mod runtime;
+pub mod validation;
+
+pub use app::{build_app, default_web_root, AppOptions};
+pub use runtime::Runtime;

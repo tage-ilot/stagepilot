@@ -60,4 +60,35 @@ SCENARIOS: list[Step] = [
     http("settings PUT with an invalid body is a 422", "PUT", "/api/v1/settings", {"timezone": 5}),
     http("playback find, invalid body", "POST", "/api/v1/playback-api/find", {"bogus": True}),
     http("midi input selection, unknown input", "POST", "/api/v1/midi/input-selection", {"input_name": "No Such Port"}),
+
+    # ---- phase 2: dashboard PIN, access and settings flows -----------------------------------
+    # Appended after the phase 1 steps so those keep their recorded positions. The backend runs
+    # with in-memory settings and PIN enforcement off, so these steps exercise the PIN endpoints
+    # and cookie sessions without locking the runner out.
+    http("PIN login, wrong default PIN is a 401", "POST", "/api/v1/dashboard-auth/login", {"pin": "9999"}),
+    http("PIN login, PIN too short is a 422", "POST", "/api/v1/dashboard-auth/login", {"pin": "12"}),
+    http("PIN login, default PIN", "POST", "/api/v1/dashboard-auth/login", {"pin": "1234"}),
+    http("dashboard auth status after login", "GET", "/api/v1/dashboard-auth/status"),
+    http("access after login", "GET", "/api/v1/access"),
+    http("PIN set", "POST", "/api/v1/dashboard-auth/settings", {"enabled": True, "pin": "8642"}),
+    http("dashboard auth status after PIN change (sessions cleared)", "GET", "/api/v1/dashboard-auth/status"),
+    http("PIN login, old PIN is a 401", "POST", "/api/v1/dashboard-auth/login", {"pin": "1234"}),
+    http("PIN login, new PIN", "POST", "/api/v1/dashboard-auth/login", {"pin": "8642"}),
+    http("PIN set, too short is a 422", "POST", "/api/v1/dashboard-auth/settings", {"enabled": True, "pin": "12"}),
+    http("PIN set, missing enabled is a 422", "POST", "/api/v1/dashboard-auth/settings", {"pin": "8642"}),
+    http("PIN protection disabled", "POST", "/api/v1/dashboard-auth/settings", {"enabled": False}),
+    http("dashboard auth status, protection off", "GET", "/api/v1/dashboard-auth/status"),
+    http("PIN login while protection is off", "POST", "/api/v1/dashboard-auth/login", {"pin": "anything"}),
+    http("PIN protection re-enabled, PIN kept", "POST", "/api/v1/dashboard-auth/settings", {"enabled": True}),
+    http("PIN login, kept PIN", "POST", "/api/v1/dashboard-auth/login", {"pin": "8642"}),
+    http("settings after PIN changes (hash never exposed)", "GET", "/api/v1/settings"),
+    http("settings PUT, unknown key is a 422", "PUT", "/api/v1/settings", {"bogus_key": 1}),
+    http("settings PUT, invalid timezone is a 422", "PUT", "/api/v1/settings", {"timezone": "Not/AZone"}),
+    http("settings PUT, out of range port is a 422", "PUT", "/api/v1/settings", {"server_port": 70000}),
+    http("settings PUT, legacy release_channel is dropped", "PUT", "/api/v1/settings", {"release_channel": "beta"}),
+    http("settings PUT, schema_version 1 body is migrated", "PUT", "/api/v1/settings", {"schema_version": 1, "integration_modes": {"service_source": "demo", "midi_source": "real", "timer_output": "simulated"}, "midi": {"enabled": False}}),
+    http("settings round trip, change timezone and log level", "PUT", "/api/v1/settings", {"timezone": "America/New_York", "log_level": "WARNING", "web_dashboard_pin_enabled": True}),
+    http("settings read back", "GET", "/api/v1/settings"),
+    http("settings PUT, nested unknown key in planning_center is a 422", "PUT", "/api/v1/settings", {"planning_center": {"bogus": 1}}),
+    http("settings PUT, non-object body is a 422", "PUT", "/api/v1/settings", [1, 2]),
 ]

@@ -134,7 +134,8 @@ pub(crate) fn value_error(errors: &mut Errors, path: &[Value], message: &str, in
         loc: path.to_vec(),
         msg: format!("Value error, {message}"),
         input,
-        ctx: Some(json!({ "error": message })),
+        // FastAPI serialises the raised ValueError object as an empty object.
+        ctx: Some(json!({ "error": {} })),
     });
 }
 

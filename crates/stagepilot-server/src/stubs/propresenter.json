@@ -1,0 +1,17 @@
+{
+ "connection_status": "disconnected",
+ "current_look_id": null,
+ "detail": "The ProPresenter plugin is disabled.",
+ "enabled": false,
+ "host": "127.0.0.1",
+ "last_checked_at": null,
+ "look_found": true,
+ "look_id": null,
+ "looks": [],
+ "port": 1025,
+ "request_timeout_seconds": 3.0,
+ "selected_timer_id": null,
+ "timer_found": false,
+ "timer_name": "Song Countdown",
+ "timers": []
+}

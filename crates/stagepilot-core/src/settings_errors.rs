@@ -74,6 +74,10 @@ pub fn map_serde_error(
         };
 
     if let Some(field) = between(&message, "unknown field `", "`") {
+        // serde_path_to_error already ends the path at the unknown key.
+        if loc.last() == Some(&json!(field)) {
+            loc.pop();
+        }
         let input = at(&loc).get(field).cloned().unwrap_or(Value::Null);
         loc.push(json!(field));
         return detail(

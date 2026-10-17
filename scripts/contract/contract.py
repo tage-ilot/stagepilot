@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import http.cookiejar
 import json
 import sys
 import urllib.error
 import urllib.request
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -70,11 +72,19 @@ def normalise(node: Any) -> Any:
                 out[key] = "<uuid>"
             elif (key in VOLATILE_KEYS or key.endswith(VOLATILE_SUFFIXES)) and value is not None:
                 out[key] = f"<{type(value).__name__}>"
+            elif key == "recent_events" and isinstance(value, list):
+                # Plugins start concurrently, so the order of events published in the same
+                # scheduling slot is not part of the contract: compare them as a sorted list.
+                events = [normalise(v) for v in value]
+                out[key] = sorted(events, key=lambda e: json.dumps(e, sort_keys=True))
             else:
                 out[key] = normalise(value)
         return out
     if isinstance(node, list):
         return [normalise(v) for v in node]
+    if isinstance(node, str) and node == date.today().isoformat():
+        # Plan dates are "today"; the transcripts must not expire at midnight.
+        return "<today>"
     return node
 
 
@@ -127,6 +137,10 @@ class Live:
 
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
+        # The TestClient keeps cookies between steps, so the live replay does too (dashboard PIN session).
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+        )
 
     def close(self) -> None:
         pass
@@ -140,7 +154,7 @@ class Live:
             headers={"Content-Type": "application/json"} if data else {},
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with self.opener.open(req, timeout=15) as resp:
                 return _exchange(resp.status, resp.headers, resp.read())
         except urllib.error.HTTPError as err:
             return _exchange(err.code, err.headers, err.read())
@@ -175,7 +189,14 @@ def run(transport: Any) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {"name": step["name"]}
         if "ws" in step:
             entry["ws"] = step["ws"]
-            entry["messages"] = transport.ws(step)
+            messages = transport.ws(step)
+            # Messages after the first are pushed mid-burst: one action changes the state several
+            # times and which intermediate revision a client sees first depends on scheduling (the
+            # recorded Python run itself saw a half-applied state). Their content is covered by the
+            # HTTP step that follows, so only their envelope is compared.
+            entry["messages"] = messages[:1] + [
+                {"type": m.get("type"), "data_keys": sorted(m.get("data", {}))} for m in messages[1:]
+            ]
         else:
             entry["request"] = {k: step[k] for k in ("method", "path", "json") if k in step}
             entry["response"] = transport.http(step)

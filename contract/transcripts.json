@@ -202,27 +202,15 @@
      "recent_events": [
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "application",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
+       "type": "application.started"
       },
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "demo",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
-      },
-      {
-       "id": "<uuid>",
-       "source": "plugin_manager",
-       "timestamp": "<str>",
-       "type": "plugin.status_changed"
-      },
-      {
-       "id": "<uuid>",
-       "source": "lights",
-       "timestamp": "<str>",
-       "type": "connection.changed"
+       "type": "service.load_changed"
       },
       {
        "id": "<uuid>",
@@ -232,9 +220,15 @@
       },
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "demo",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
+       "type": "timer.stopped"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
       },
       {
        "id": "<uuid>",
@@ -250,15 +244,9 @@
       },
       {
        "id": "<uuid>",
-       "source": "demo",
+       "source": "plugin_manager",
        "timestamp": "<str>",
-       "type": "service.load_changed"
-      },
-      {
-       "id": "<uuid>",
-       "source": "demo",
-       "timestamp": "<str>",
-       "type": "timer.stopped"
+       "type": "plugin.status_changed"
       },
       {
        "id": "<uuid>",
@@ -268,9 +256,21 @@
       },
       {
        "id": "<uuid>",
-       "source": "application",
+       "source": "plugin_manager",
        "timestamp": "<str>",
-       "type": "application.started"
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
       }
      ],
      "revision": "<int>",
@@ -281,7 +281,7 @@
       "message": "Demo service loaded.",
       "skipped_items": [],
       "status": "loaded",
-      "target_date": "2026-10-17"
+      "target_date": "<today>"
      },
      "timer": {
       "duration_seconds": null,
@@ -582,7 +582,7 @@
      "lengths_applied": false,
      "lengths_measured_at": null,
      "plan_changed": false,
-     "plan_date": "2026-10-17",
+     "plan_date": "<today>",
      "plan_song_count": 4,
      "plan_songs": [
       {
@@ -860,27 +860,15 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "application",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "application.started"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "lights",
-        "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -890,9 +878,15 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -908,15 +902,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -926,9 +914,21 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
        }
       ],
       "revision": "<int>",
@@ -939,7 +939,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": null,
@@ -965,232 +965,29 @@
      "type": "state.snapshot"
     },
     {
-     "data": {
-      "application_status": "running",
-      "current_song": {
-       "description": null,
-       "duration_seconds": 281,
-       "formatted_duration": "4:41",
-       "id": "demo-battle-belongs",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": null,
-       "source_song_id": null,
-       "title": "Battle Belongs"
-      },
-      "current_song_index": 0,
-      "last_action": "start_next",
-      "last_successful_plan_reload_at": "<str>",
-      "lights_status": "disconnected",
-      "midi_status": "disconnected",
-      "next_song": {
-       "description": null,
-       "duration_seconds": 336,
-       "formatted_duration": "5:36",
-       "id": "demo-holy-forever",
-       "is_generic": false,
-       "order": 2,
-       "service_sequence": null,
-       "source_song_id": null,
-       "title": "Holy Forever"
-      },
-      "plan": {
-       "date": "<str>",
-       "duration_source": "Demo scheduled item length",
-       "id": "demo-service-plan",
-       "service_times": [
-        "09:00",
-        "11:00"
-       ],
-       "service_type": "Weekend Services",
-       "service_type_id": null,
-       "songs": [
-        {
-         "description": null,
-         "duration_seconds": 281,
-         "formatted_duration": "4:41",
-         "id": "demo-battle-belongs",
-         "is_generic": false,
-         "order": 1,
-         "service_sequence": null,
-         "source_song_id": null,
-         "title": "Battle Belongs"
-        },
-        {
-         "description": null,
-         "duration_seconds": 336,
-         "formatted_duration": "5:36",
-         "id": "demo-holy-forever",
-         "is_generic": false,
-         "order": 2,
-         "service_sequence": null,
-         "source_song_id": null,
-         "title": "Holy Forever"
-        },
-        {
-         "description": null,
-         "duration_seconds": 352,
-         "formatted_duration": "5:52",
-         "id": "demo-gratitude",
-         "is_generic": false,
-         "order": 3,
-         "service_sequence": null,
-         "source_song_id": null,
-         "title": "Gratitude"
-        },
-        {
-         "description": null,
-         "duration_seconds": 377,
-         "formatted_duration": "6:17",
-         "id": "demo-firm-foundation",
-         "is_generic": false,
-         "order": 4,
-         "service_sequence": null,
-         "source_song_id": null,
-         "title": "Firm Foundation"
-        }
-       ],
-       "title": "Sunday Worship — Demo"
-      },
-      "planning_center_status": "disconnected",
-      "playing_song": null,
-      "playing_song_index": null,
-      "plugins": {
-       "demo": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "demo",
-        "status": "running",
-        "version": "<str>"
-       },
-       "lights": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "lights",
-        "status": "running",
-        "version": "<str>"
-       },
-       "playback_api": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "playback_api",
-        "status": "running",
-        "version": "<str>"
-       }
-      },
-      "propresenter_status": "disconnected",
-      "recent_errors": [],
-      "recent_events": [
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "lights",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "playback_connection",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "application",
-        "timestamp": "<str>",
-        "type": "application.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       }
-      ],
-      "revision": "<int>",
-      "service_load": {
-       "candidates": [],
-       "is_stale": false,
-       "last_attempt_at": "<str>",
-       "message": "Demo service loaded.",
-       "skipped_items": [],
-       "status": "loaded",
-       "target_date": "2026-10-17"
-      },
-      "timer": {
-       "duration_seconds": null,
-       "last_error": null,
-       "position_seconds": null,
-       "remaining_seconds": null,
-       "started_at": null,
-       "status": "stopped"
-      },
-      "up_next_song": {
-       "description": null,
-       "duration_seconds": 281,
-       "formatted_duration": "4:41",
-       "id": "demo-battle-belongs",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": null,
-       "source_song_id": null,
-       "title": "Battle Belongs"
-      },
-      "updated_at": "<str>"
-     },
+     "data_keys": [
+      "application_status",
+      "current_song",
+      "current_song_index",
+      "last_action",
+      "last_successful_plan_reload_at",
+      "lights_status",
+      "midi_status",
+      "next_song",
+      "plan",
+      "planning_center_status",
+      "playing_song",
+      "playing_song_index",
+      "plugins",
+      "propresenter_status",
+      "recent_errors",
+      "recent_events",
+      "revision",
+      "service_load",
+      "timer",
+      "up_next_song",
+      "updated_at"
+     ],
      "type": "state.snapshot"
     }
    ],
@@ -1332,27 +1129,21 @@
      "recent_events": [
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "api",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
+       "type": "action.requested"
       },
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "application",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
+       "type": "application.started"
       },
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "demo",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
-      },
-      {
-       "id": "<uuid>",
-       "source": "lights",
-       "timestamp": "<str>",
-       "type": "connection.changed"
+       "type": "service.load_changed"
       },
       {
        "id": "<uuid>",
@@ -1362,9 +1153,21 @@
       },
       {
        "id": "<uuid>",
-       "source": "plugin_manager",
+       "source": "demo",
        "timestamp": "<str>",
-       "type": "plugin.status_changed"
+       "type": "timer.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "demo",
+       "timestamp": "<str>",
+       "type": "timer.stopped"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
       },
       {
        "id": "<uuid>",
@@ -1380,15 +1183,9 @@
       },
       {
        "id": "<uuid>",
-       "source": "demo",
+       "source": "plugin_manager",
        "timestamp": "<str>",
-       "type": "service.load_changed"
-      },
-      {
-       "id": "<uuid>",
-       "source": "demo",
-       "timestamp": "<str>",
-       "type": "timer.stopped"
+       "type": "plugin.status_changed"
       },
       {
        "id": "<uuid>",
@@ -1398,15 +1195,21 @@
       },
       {
        "id": "<uuid>",
-       "source": "application",
+       "source": "plugin_manager",
        "timestamp": "<str>",
-       "type": "application.started"
+       "type": "plugin.status_changed"
       },
       {
        "id": "<uuid>",
-       "source": "api",
+       "source": "plugin_manager",
        "timestamp": "<str>",
-       "type": "action.requested"
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
       },
       {
        "id": "<uuid>",
@@ -1419,12 +1222,6 @@
        "source": "state_service",
        "timestamp": "<str>",
        "type": "song.started"
-      },
-      {
-       "id": "<uuid>",
-       "source": "demo",
-       "timestamp": "<str>",
-       "type": "timer.started"
       }
      ],
      "revision": "<int>",
@@ -1435,7 +1232,7 @@
       "message": "Demo service loaded.",
       "skipped_items": [],
       "status": "loaded",
-      "target_date": "2026-10-17"
+      "target_date": "<today>"
      },
      "timer": {
       "duration_seconds": 281,
@@ -1603,27 +1400,27 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "application",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "application.started"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -1633,9 +1430,21 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -1651,15 +1460,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -1669,15 +1472,27 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -1690,24 +1505,6 @@
         "source": "state_service",
         "timestamp": "<str>",
         "type": "song.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
        }
       ],
       "revision": "<int>",
@@ -1718,7 +1515,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": 281,
@@ -1887,27 +1684,33 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "application",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -1917,9 +1720,21 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -1935,15 +1750,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -1953,15 +1762,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -1974,36 +1801,6 @@
         "source": "state_service",
         "timestamp": "<str>",
         "type": "song.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
        }
       ],
       "revision": "<int>",
@@ -2014,7 +1811,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": 281,
@@ -2183,27 +1980,39 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -2213,9 +2022,27 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -2231,15 +2058,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -2249,15 +2070,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -2273,51 +2112,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
         "type": "timer.stop_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
        }
       ],
       "revision": "<int>",
@@ -2328,7 +2125,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": 281,
@@ -2477,27 +2274,45 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -2507,9 +2322,27 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -2525,15 +2358,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -2543,15 +2370,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -2567,63 +2412,15 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "timer.reset_requested"
        },
        {
         "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
         "type": "timer.stop_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "timer.reset_requested"
        }
       ],
       "revision": "<int>",
@@ -2634,7 +2431,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": null,
@@ -2783,27 +2580,51 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -2813,9 +2634,27 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -2831,15 +2670,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -2849,15 +2682,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -2873,69 +2724,15 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "timer.stop_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
         "type": "timer.reset_requested"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "state_service",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "timer.stop_requested"
        }
       ],
       "revision": "<int>",
@@ -2946,7 +2743,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": null,
@@ -3095,27 +2892,57 @@
       "recent_events": [
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "action.requested"
        },
        {
         "id": "<uuid>",
-        "source": "lights",
+        "source": "api",
         "timestamp": "<str>",
-        "type": "connection.changed"
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
        },
        {
         "id": "<uuid>",
@@ -3125,9 +2952,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "plugin_manager",
+        "source": "demo",
         "timestamp": "<str>",
-        "type": "plugin.status_changed"
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
        },
        {
         "id": "<uuid>",
@@ -3143,15 +2994,9 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
@@ -3161,15 +3006,33 @@
        },
        {
         "id": "<uuid>",
-        "source": "application",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "application.started"
+        "type": "plugin.status_changed"
        },
        {
         "id": "<uuid>",
-        "source": "api",
+        "source": "plugin_manager",
         "timestamp": "<str>",
-        "type": "action.requested"
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
        },
        {
         "id": "<uuid>",
@@ -3185,87 +3048,21 @@
        },
        {
         "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "song.selected"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "timer.stop_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "demo",
-        "timestamp": "<str>",
-        "type": "timer.stopped"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
         "type": "timer.reset_requested"
        },
        {
         "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
         "source": "state_service",
         "timestamp": "<str>",
         "type": "timer.stop_requested"
        },
        {
         "id": "<uuid>",
-        "source": "demo",
+        "source": "state_service",
         "timestamp": "<str>",
-        "type": "timer.stopped"
+        "type": "timer.stop_requested"
        }
       ],
       "revision": "<int>",
@@ -3276,7 +3073,7 @@
        "message": "Demo service loaded.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "2026-10-17"
+       "target_date": "<today>"
       },
       "timer": {
        "duration_seconds": null,
@@ -3437,6 +3234,1336 @@
        ],
        "msg": "Field required",
        "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "PIN login, wrong default PIN is a 401",
+   "request": {
+    "json": {
+     "pin": "9999"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect dashboard PIN."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "PIN login, PIN too short is a 422",
+   "request": {
+    "json": {
+     "pin": "12"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "min_length": 4
+       },
+       "input": "12",
+       "loc": [
+        "body",
+        "pin"
+       ],
+       "msg": "String should have at least 4 characters",
+       "type": "string_too_short"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "PIN login, default PIN",
+   "request": {
+    "json": {
+     "pin": "1234"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "dashboard auth status after login",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard-auth/status"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "access after login",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/access"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "authentication": "pin",
+     "capabilities": {
+      "canActivateServices": true,
+      "canBootstrapRemote": true,
+      "canConfigure": true,
+      "canManageRemote": true,
+      "canOperate": true,
+      "canRead": true
+     },
+     "csrf_token": null,
+     "expires_at": null,
+     "mode": "lan",
+     "user": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN set",
+   "request": {
+    "json": {
+     "enabled": true,
+     "pin": "8642"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "dashboard auth status after PIN change (sessions cleared)",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard-auth/status"
+   },
+   "response": {
+    "body": {
+     "authenticated": false,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN login, old PIN is a 401",
+   "request": {
+    "json": {
+     "pin": "1234"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect dashboard PIN."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "PIN login, new PIN",
+   "request": {
+    "json": {
+     "pin": "8642"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN set, too short is a 422",
+   "request": {
+    "json": {
+     "enabled": true,
+     "pin": "12"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "actual_length": 2,
+        "field_type": "Value",
+        "min_length": 4
+       },
+       "input": "12",
+       "loc": [
+        "body",
+        "pin"
+       ],
+       "msg": "Value should have at least 4 items after validation, not 2",
+       "type": "too_short"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "PIN set, missing enabled is a 422",
+   "request": {
+    "json": {
+     "pin": "8642"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {
+        "pin": "8642"
+       },
+       "loc": [
+        "body",
+        "enabled"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "PIN protection disabled",
+   "request": {
+    "json": {
+     "enabled": false
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": false
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "dashboard auth status, protection off",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard-auth/status"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": false
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN login while protection is off",
+   "request": {
+    "json": {
+     "pin": "anything"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": false
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN protection re-enabled, PIN kept",
+   "request": {
+    "json": {
+     "enabled": true
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "PIN login, kept PIN",
+   "request": {
+    "json": {
+     "pin": "8642"
+    },
+    "method": "POST",
+    "path": "/api/v1/dashboard-auth/login"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "required": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings after PIN changes (hash never exposed)",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings PUT, unknown key is a 422",
+   "request": {
+    "json": {
+     "bogus_key": 1
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "bogus_key"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "settings PUT, invalid timezone is a 422",
+   "request": {
+    "json": {
+     "timezone": "Not/AZone"
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "error": {}
+       },
+       "input": "Not/AZone",
+       "loc": [
+        "body",
+        "timezone"
+       ],
+       "msg": "Value error, Unknown IANA timezone: Not/AZone",
+       "type": "value_error"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "settings PUT, out of range port is a 422",
+   "request": {
+    "json": {
+     "server_port": 70000
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "le": 65535
+       },
+       "input": 70000,
+       "loc": [
+        "body",
+        "server_port"
+       ],
+       "msg": "Input should be less than or equal to 65535",
+       "type": "less_than_equal"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "settings PUT, legacy release_channel is dropped",
+   "request": {
+    "json": {
+     "release_channel": "beta"
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "playback_api",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings PUT, schema_version 1 body is migrated",
+   "request": {
+    "json": {
+     "integration_modes": {
+      "midi_source": "real",
+      "service_source": "demo",
+      "timer_output": "simulated"
+     },
+     "midi": {
+      "enabled": false
+     },
+     "schema_version": 1
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "playback_api",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings round trip, change timezone and log level",
+   "request": {
+    "json": {
+     "log_level": "WARNING",
+     "timezone": "America/New_York",
+     "web_dashboard_pin_enabled": true
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": true,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "playback_api",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "WARNING",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/New_York",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings read back",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "playback_api",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "WARNING",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/New_York",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "settings PUT, nested unknown key in planning_center is a 422",
+   "request": {
+    "json": {
+     "planning_center": {
+      "bogus": 1
+     }
+    },
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "planning_center",
+        "bogus"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "settings PUT, non-object body is a 422",
+   "request": {
+    "json": [
+     1,
+     2
+    ],
+    "method": "PUT",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": [
+        1,
+        2
+       ],
+       "loc": [
+        "body"
+       ],
+       "msg": "Input should be a valid dictionary or object to extract fields from",
+       "type": "model_attributes_type"
       }
      ]
     },
