@@ -1,6 +1,17 @@
-//! StagePilot core: events, state, settings and models (serde). No I/O. Filled in by phase 2.
+//! StagePilot core: models, settings, state service, event bus, plugin supervisor and auth.
 //!
-//! Phase 1 only proves the type-generation path: [`api`] mirrors one real model group from
-//! `backend/src/stagepilot/models/api.py` and exports TypeScript for it.
+//! No HTTP here (that is `stagepilot-server`). Everything is a port of the Python backend and keeps
+//! its JSON names, defaults and messages; see `docs/rust-migration/phase2.md`.
 
+pub mod alerts;
 pub mod api;
+pub mod auth;
+pub mod bus;
+pub mod config;
+pub mod events;
+pub mod plugin;
+pub mod settings;
+pub mod settings_errors;
+pub mod state;
+pub mod state_service;
+pub mod store;
