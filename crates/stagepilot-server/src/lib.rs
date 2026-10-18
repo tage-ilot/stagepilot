@@ -6,6 +6,7 @@
 pub mod app;
 pub mod demo;
 pub mod diagnostics;
+pub mod launch;
 pub mod outputs;
 pub mod pco_routes;
 pub mod playback_routes;
@@ -16,6 +17,7 @@ pub mod remote_routes;
 pub mod remote_types;
 pub mod routes_outputs;
 pub mod runtime;
+pub mod startup_activation;
 pub mod static_files;
 pub mod validation;
 

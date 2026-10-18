@@ -15,6 +15,7 @@ on:
       - feat/rust-phase4
       - feat/rust-phase6
       - feat/rust-phase6b-a
+      - feat/rust-phase6c
       - feat/rust-phase6b-b
       - main
     paths:

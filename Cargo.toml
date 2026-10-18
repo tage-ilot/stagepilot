@@ -5,6 +5,7 @@ members = [
     "crates/stagepilot-pco",
     "crates/stagepilot-playback",
     "crates/stagepilot-server",
+    "crates/stagepilot-headless",
     "crates/stagepilot-midi",
     "crates/stagepilot-osc",
     "crates/stagepilot-lights",

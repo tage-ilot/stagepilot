@@ -21,6 +21,7 @@ midir-backend = ["stagepilot-midi/midir-backend"]
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }
 stagepilot-pco = { path = "../stagepilot-pco" }
+stagepilot-remote = { path = "../stagepilot-remote" }
 serde_path_to_error = "0.1"
 url = "2"
 stagepilot-playback = { path = "../stagepilot-playback" }

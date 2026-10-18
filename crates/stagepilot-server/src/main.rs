@@ -204,8 +204,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(std::path::PathBuf::from)
         .or_else(default_web_root);
 
+    if !demo {
+        runtime.enable_startup_activation();
+    }
     runtime.start().await;
     let app = build_app(runtime.clone(), AppOptions { web_root });
+    // Production runs (no contract profile) wire the desktop Remote from the environment.
+    let desktop_remote = if demo {
+        None
+    } else {
+        stagepilot_server::launch::attach_desktop_remote(&runtime, app.clone()).await?
+    };
     if let Some((listener, ingress)) = ingress_listener {
         let wrapped = ingress.wrap(app.clone());
         tokio::spawn(async move {
@@ -222,10 +231,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-    })
+    .with_graceful_shutdown(stagepilot_server::launch::shutdown_signal())
     .await?;
+    if let Some(remote) = desktop_remote {
+        remote.stop().await;
+    }
     runtime.stop().await;
     Ok(())
 }

@@ -34,6 +34,8 @@ pub struct Runtime {
     /// Planning Center (phase 5): OAuth, setup service, client factory, the live plugin.
     pub pco: Arc<PcoRuntime>,
     oauth_stop: tokio::sync::watch::Sender<bool>,
+    /// The lifespan-owned startup activation task (`stagepilot-startup-activation`).
+    activation: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The last Planning Center length operation (always idle until that service is ported).
     pub lengths_result: Mutex<LengthUpdateResult>,
     /// MIDI input, lights and ProPresenter (phase 4).
@@ -48,6 +50,7 @@ pub struct Runtime {
     remote: RwLock<RemoteWiring>,
     /// The Services source the running plugins were built for (changing it needs a restart here).
     live_service_source: ServiceSource,
+    startup_activation: std::sync::atomic::AtomicBool,
 }
 
 impl Runtime {
@@ -203,6 +206,7 @@ impl Runtime {
             playback,
             pco,
             oauth_stop: tokio::sync::watch::channel(false).0,
+            activation: Mutex::new(None),
             lengths_result: Mutex::new(LengthUpdateResult::idle()),
             outputs,
             reconcile: tokio::sync::Mutex::new(()),
@@ -211,6 +215,7 @@ impl Runtime {
             started_at: Utc::now(),
             remote: RwLock::new(RemoteWiring::default()),
             live_service_source: settings_source,
+            startup_activation: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -252,12 +257,18 @@ impl Runtime {
         self.update_remote(|w| w.manager = manager);
     }
 
+    /// Run the delayed startup reconcile after `start` (the launcher turns this on; tests don't).
+    pub fn enable_startup_activation(&self) {
+        self.startup_activation
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn live_service_source(&self) -> ServiceSource {
         self.live_service_source
     }
 
     /// Lifespan start: OAuth startup refresh, state service, plugins, then `application.started`.
-    pub async fn start(&self) {
+    pub async fn start(self: &Arc<Self>) {
         // A persisted access token can expire while StagePilot is closed. Refresh it before the
         // plugins start and hand the fresh Bearer token to the stopped Planning Center plugin, so
         // startup never makes its first request with stale auth.
@@ -296,6 +307,19 @@ impl Runtime {
         self.bus
             .publish(empty_event(EventType::ApplicationStarted, "application"))
             .await;
+        // Python creates the activation task right after `application.started`; production only,
+        // so route and contract tests never see a delayed reconfigure.
+        if self
+            .startup_activation
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            let targets = Arc::new(crate::startup_activation::RuntimeActivation(
+                Arc::downgrade(self),
+            ));
+            *self.activation.lock().unwrap_or_else(|p| p.into_inner()) = Some(tokio::spawn(
+                crate::startup_activation::run_after_settle(targets),
+            ));
+        }
         self.store
             .mutate(|s| s.application_status = ApplicationStatus::Running);
     }
@@ -305,6 +329,15 @@ impl Runtime {
         self.bus
             .publish(empty_event(EventType::ApplicationStopping, "application"))
             .await;
+        let activation = self
+            .activation
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        if let Some(task) = activation {
+            task.abort();
+            let _ = task.await;
+        }
         let _ = self.oauth_stop.send(true);
         self.plugins.stop_all().await;
         self.state_service.stop();
