@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/stagepilot-core",
+    "crates/stagepilot-pco",
     "crates/stagepilot-playback",
     "crates/stagepilot-server",
     "crates/midi-probe",

@@ -78,20 +78,7 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .route("/api/v1/dashboard-auth/settings", post(dashboard_settings))
         .route("/api/v1/actions/{action}", post(perform_action))
         .route("/api/v1/planning-center/plan/reload", post(reload_plan))
-        .route(
-            "/api/v1/planning-center/plans/pending-selection",
-            get(pending_selection),
-        )
-        .route("/api/v1/planning-center/plan-selection", post(select_plan))
-        .route("/api/v1/planning-center/plans/select", post(select_plan))
-        .route(
-            "/api/v1/planning-center/status",
-            get(|| async { ok(stub("planning_center_status")) }),
-        )
-        .route(
-            "/api/v1/planning-center/service-types",
-            get(|| async { http_error(409, "Planning Center credentials are not configured.") }),
-        )
+        .merge(crate::pco_routes::router())
         .route("/api/v1/midi/inputs", get(midi_inputs).post(midi_inputs))
         .route("/api/v1/midi/inputs/refresh", post(midi_inputs))
         .route(
@@ -173,7 +160,6 @@ async fn method_not_allowed() -> Json {
 
 fn stub(name: &str) -> Value {
     let text = match name {
-        "planning_center_status" => include_str!("stubs/planning_center_status.json"),
         "midi_messages" => include_str!("stubs/midi_messages.json"),
         "propresenter" => include_str!("stubs/propresenter.json"),
         "lights" => include_str!("stubs/lights.json"),
@@ -296,7 +282,7 @@ fn to_value<T: serde::Serialize>(value: &T) -> Value {
 
 // ---- settings ---------------------------------------------------------------------------------
 
-fn settings_response(rt: &Runtime, persisted: bool, restart_required: bool) -> Value {
+pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required: bool) -> Value {
     let settings = if persisted {
         rt.settings_service.snapshot()
     } else {
@@ -357,6 +343,7 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
             return unprocessable(detail);
         }
     };
+    let _serialised = rt.pco.lock.lock().await;
     let previous = rt.settings_service.effective_runtime_settings();
     let previous_effective = rt.settings_service.effective_snapshot();
     let timer_running = rt.store.snapshot().timer.status == TimerStatus::Running;
@@ -412,12 +399,18 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
     let updated = rt.settings_service.effective_snapshot();
     // Playback is always present in Python, so a restart is only needed when something other
     // than MIDI, Playback, the Services source and the Presentation output changed.
-    let mut restart_required = restart_relevant(&previous_effective) != restart_relevant(&updated);
-    if updated.integration_modes.service_source != rt.live_service_source() {
-        // Not applied live in this phase (the Planning Center plugin is not ported).
-        restart_required = true;
+    let restart_required = restart_relevant(&previous_effective) != restart_relevant(&updated);
+    // The Services source is applied live (as Python does), so it never needs a restart.
+    let service_warning = match crate::pco_routes::apply_service_source(&rt).await {
+        Ok(warning) => warning,
+        Err(message) => return http_error(409, message),
+    };
+    let mut response = settings_response(&rt, false, restart_required);
+    if let Some(warning) = service_warning {
+        let existing = response["warning"].as_str().unwrap_or_default().to_string();
+        response["warning"] = json!(format!("{existing} {warning}").trim().to_string());
     }
-    ok(settings_response(&rt, false, restart_required))
+    ok(response)
 }
 
 fn pinned(pin: &str) -> Json {
@@ -554,44 +547,6 @@ async fn perform_action(State(rt): State<Rt>, Path(action): Path<String>) -> Jso
 
 async fn reload_plan(State(rt): State<Rt>) -> Json {
     run_action(&rt, ActionName::ReloadPlan).await
-}
-
-async fn pending_selection(State(rt): State<Rt>) -> Json {
-    let state = rt.store.snapshot();
-    let pending = state.service_load.status == ServiceLoadStatus::Ambiguous;
-    ok(json!({
-        "pending": pending,
-        "target_date": if pending { state.service_load.target_date.map(|d| d.to_string()) } else { None },
-        "candidates": if pending { to_value(&state.service_load.candidates) } else { json!([]) },
-        "message": if pending { state.service_load.message.clone() } else { None },
-    }))
-}
-
-async fn select_plan(State(rt): State<Rt>, body: Bytes) -> Json {
-    let parsed: Option<Value> = serde_json::from_slice(&body).ok();
-    let plan_id = parsed
-        .as_ref()
-        .and_then(|v| v.get("plan_id"))
-        .and_then(Value::as_str)
-        .map(String::from);
-    let Some(plan_id) = plan_id else {
-        return unprocessable(vec![json!({"type": "missing", "loc": ["body", "plan_id"],
-            "msg": "Field required", "input": parsed.unwrap_or(Value::Null)})]);
-    };
-    let state = rt.store.snapshot();
-    let is_candidate = state
-        .service_load
-        .candidates
-        .iter()
-        .any(|c| c.id == plan_id);
-    if state.service_load.status != ServiceLoadStatus::Ambiguous || !is_candidate {
-        return http_error(
-            409,
-            "The selected plan is not a current Planning Center candidate.",
-        );
-    }
-    // The Planning Center plugin that would act on this request arrives with a later phase.
-    http_error(503, "Planning Center could not process the plan selection.")
 }
 
 // ---- stubbed integrations ---------------------------------------------------------------------

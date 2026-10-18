@@ -1,4 +1,6982 @@
 {
+ "pco_steps": [
+  {
+   "name": "pco status, connected at boot",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco health shows the running plugin",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/health"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "plugins": [
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
+      },
+      {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     ],
+     "started_at": "<str>",
+     "status": "healthy",
+     "version": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state, plan loaded with skipped items",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": null,
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "1001",
+      "service_times": [
+       "09:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": "111",
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 240,
+        "formatted_duration": "4:00",
+        "id": "9002",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 2,
+        "source_song_id": "7001",
+        "title": "Amazing Grace"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "9003",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": 3,
+        "source_song_id": "7002",
+        "title": "Holy Forever"
+       }
+      ],
+      "title": "Sunday Worship"
+     },
+     "planning_center_status": "connected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+      "skipped_items": [
+       {
+        "description": null,
+        "duration_seconds": null,
+        "item_id": "9001",
+        "item_type": "header",
+        "reason": "header",
+        "sequence": 1,
+        "title": "Welcome"
+       },
+       {
+        "description": null,
+        "duration_seconds": 90,
+        "item_id": "9004",
+        "item_type": "media",
+        "reason": "media",
+        "sequence": 4,
+        "title": "Welcome Video"
+       },
+       {
+        "description": null,
+        "duration_seconds": 120,
+        "item_id": "9005",
+        "item_type": "item",
+        "reason": "not_song",
+        "sequence": 5,
+        "title": "Prayer"
+       },
+       {
+        "description": null,
+        "duration_seconds": 60,
+        "item_id": "9006",
+        "item_type": "song",
+        "reason": "missing_title",
+        "sequence": 6,
+        "title": "(untitled)"
+       }
+      ],
+      "status": "loaded",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings read back never exposes the secret",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 5.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth status, nothing stored",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco pending selection, nothing pending",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/plans/pending-selection"
+   },
+   "response": {
+    "body": {
+     "candidates": [],
+     "message": null,
+     "pending": false,
+     "target_date": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco plan selection, nothing pending is a 409",
+   "request": {
+    "json": {
+     "plan_id": "1001"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/plans/select"
+   },
+   "response": {
+    "body": {
+     "detail": "The selected plan is not a current Planning Center candidate."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "pco service types, saved credentials",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": [
+     {
+      "id": "111",
+      "name": "Weekend Services"
+     },
+     {
+      "id": "222",
+      "name": "Youth"
+     }
+    ],
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the service type listing"
+  },
+  {
+   "name": "pco test, wrong secret is a 401",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "secret": "wrong"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center rejected the configured application ID or secret."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "pco test, right credentials list the active service types",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "secret": "secret-1"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "message": "Planning Center authentication succeeded.",
+     "service_types": [
+      {
+       "id": "111",
+       "name": "Weekend Services"
+      },
+      {
+       "id": "222",
+       "name": "Youth"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco test, empty strings are a 422",
+   "request": {
+    "json": {
+     "app_id": "",
+     "secret": ""
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "min_length": 1
+       },
+       "input": "",
+       "loc": [
+        "body",
+        "app_id"
+       ],
+       "msg": "String should have at least 1 character",
+       "type": "string_too_short"
+      },
+      {
+       "ctx": {
+        "actual_length": 0,
+        "field_type": "Value",
+        "min_length": 1
+       },
+       "input": "",
+       "loc": [
+        "body",
+        "secret"
+       ],
+       "msg": "Value should have at least 1 item after validation, not 0",
+       "type": "too_short"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco test, unknown key is a 422",
+   "request": {
+    "json": {
+     "bogus": 1
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "bogus"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco test, non-object body is a 422",
+   "request": {
+    "json": [
+     1
+    ],
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": [
+        1
+       ],
+       "loc": [
+        "body"
+       ],
+       "msg": "Input should be a valid dictionary or object to extract fields from",
+       "type": "model_attributes_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco test, saved credentials are used when nothing is given",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "message": "Planning Center authentication succeeded.",
+     "service_types": [
+      {
+       "id": "111",
+       "name": "Weekend Services"
+      },
+      {
+       "id": "222",
+       "name": "Youth"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-wrong",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the connection tests"
+  },
+  {
+   "name": "pco settings, unknown key is a 422",
+   "request": {
+    "json": {
+     "bogus": 1
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "bogus"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco settings, secret and remove_secret together is a 422",
+   "request": {
+    "json": {
+     "remove_secret": true,
+     "secret": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "error": {}
+       },
+       "input": {
+        "remove_secret": true,
+        "secret": "x"
+       },
+       "loc": [
+        "body"
+       ],
+       "msg": "Value error, A credential cannot be replaced and removed in one request.",
+       "type": "value_error"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco settings, lookahead out of range is a 422",
+   "request": {
+    "json": {
+     "upcoming_lookahead_days": 999
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "le": 365
+       },
+       "input": 999,
+       "loc": [
+        "body",
+        "upcoming_lookahead_days"
+       ],
+       "msg": "Input should be less than or equal to 365",
+       "type": "less_than_equal"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco settings, bad service time is a 422",
+   "request": {
+    "json": {
+     "preferred_service_time": "25:00"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+       },
+       "input": "25:00",
+       "loc": [
+        "body",
+        "preferred_service_time"
+       ],
+       "msg": "String should match pattern '^([01]\\d|2[0-3]):[0-5]\\d$'",
+       "type": "string_pattern_mismatch"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco plan reload action",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/plan/reload"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "reload_plan",
+     "message": "Service plan reload requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reload_plan",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 240,
+       "formatted_duration": "4:00",
+       "id": "9002",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 2,
+       "source_song_id": "7001",
+       "title": "Amazing Grace"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Planning Center scheduled item length",
+       "id": "1001",
+       "service_times": [
+        "09:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": "111",
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 240,
+         "formatted_duration": "4:00",
+         "id": "9002",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": 2,
+         "source_song_id": "7001",
+         "title": "Amazing Grace"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "9003",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": 3,
+         "source_song_id": "7002",
+         "title": "Holy Forever"
+        }
+       ],
+       "title": "Sunday Worship"
+      },
+      "planning_center_status": "connected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "planning_center": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "planning_center",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "service.reload_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": true,
+       "last_attempt_at": "<str>",
+       "message": "Looking for the current or next upcoming Planning Center plan.",
+       "skipped_items": [
+        {
+         "description": null,
+         "duration_seconds": null,
+         "item_id": "9001",
+         "item_type": "header",
+         "reason": "header",
+         "sequence": 1,
+         "title": "Welcome"
+        },
+        {
+         "description": null,
+         "duration_seconds": 90,
+         "item_id": "9004",
+         "item_type": "media",
+         "reason": "media",
+         "sequence": 4,
+         "title": "Welcome Video"
+        },
+        {
+         "description": null,
+         "duration_seconds": 120,
+         "item_id": "9005",
+         "item_type": "item",
+         "reason": "not_song",
+         "sequence": 5,
+         "title": "Prayer"
+        },
+        {
+         "description": null,
+         "duration_seconds": 60,
+         "item_id": "9006",
+         "item_type": "song",
+         "reason": "missing_title",
+         "sequence": 6,
+         "title": "(untitled)"
+        }
+       ],
+       "status": "loading",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "idle"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 240,
+       "formatted_duration": "4:00",
+       "id": "9002",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 2,
+       "source_song_id": "7001",
+       "title": "Amazing Grace"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the plan reload"
+  },
+  {
+   "name": "pco settings, archived service type is applied but reported",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "service_type_id": "333"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "333",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": "The configured Planning Center service type is archived."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, configuration error keeps the API connected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "The configured Planning Center service type is archived.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "333"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings, remove the saved secret",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "remove_secret": true,
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": "Planning Center credentials are not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, secret removed",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": false,
+     "connection_method": "manual",
+     "connection_status": "error",
+     "detail": "The configured Planning Center service type is archived.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": false,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types, not configured is a 409",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center credentials are not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "pco test, nothing to use is a 409",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/planning-center/test"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center credentials are not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "pco settings, secret saved again",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "secret": "secret-1",
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, reconnected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings, all service types is ambiguous",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "service_type_id": "stagepilot:all-service-types"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "stagepilot:all-service-types",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco pending selection lists both candidates",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/plans/pending-selection"
+   },
+   "response": {
+    "body": {
+     "candidates": [
+      {
+       "id": "1001",
+       "service_times": [
+        "09:00"
+       ],
+       "service_type_id": "111",
+       "service_type_name": "Weekend Services",
+       "target_date": "<today>",
+       "title": "Sunday Worship"
+      },
+      {
+       "id": "2001",
+       "service_times": [
+        "19:00"
+       ],
+       "service_type_id": "222",
+       "service_type_name": "Youth",
+       "target_date": "<today>",
+       "title": "Youth Night"
+      }
+     ],
+     "message": "Multiple Planning Center plans match 2026-10-18. Select one to continue.",
+     "pending": true,
+     "target_date": "<today>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state, ambiguous load",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": "reload_plan",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "1001",
+      "service_times": [
+       "09:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": "111",
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 240,
+        "formatted_duration": "4:00",
+        "id": "9002",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 2,
+        "source_song_id": "7001",
+        "title": "Amazing Grace"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "9003",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": 3,
+        "source_song_id": "7002",
+        "title": "Holy Forever"
+       }
+      ],
+      "title": "Sunday Worship"
+     },
+     "planning_center_status": "connected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [
+      {
+       "component": "planning_center",
+       "event_id": "<uuid>",
+       "message": "Planning Center credentials are not configured.",
+       "timestamp": "<str>"
+      }
+     ],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [
+       {
+        "id": "1001",
+        "service_times": [
+         "09:00"
+        ],
+        "service_type_id": "111",
+        "service_type_name": "Weekend Services",
+        "target_date": "<today>",
+        "title": "Sunday Worship"
+       },
+       {
+        "id": "2001",
+        "service_times": [
+         "19:00"
+        ],
+        "service_type_id": "222",
+        "service_type_name": "Youth",
+        "target_date": "<today>",
+        "title": "Youth Night"
+       }
+      ],
+      "is_stale": true,
+      "last_attempt_at": "<str>",
+      "message": "Multiple Planning Center plans match 2026-10-18. Select one to continue.",
+      "skipped_items": [
+       {
+        "description": null,
+        "duration_seconds": null,
+        "item_id": "9001",
+        "item_type": "header",
+        "reason": "header",
+        "sequence": 1,
+        "title": "Welcome"
+       },
+       {
+        "description": null,
+        "duration_seconds": 90,
+        "item_id": "9004",
+        "item_type": "media",
+        "reason": "media",
+        "sequence": 4,
+        "title": "Welcome Video"
+       },
+       {
+        "description": null,
+        "duration_seconds": 120,
+        "item_id": "9005",
+        "item_type": "item",
+        "reason": "not_song",
+        "sequence": 5,
+        "title": "Prayer"
+       },
+       {
+        "description": null,
+        "duration_seconds": 60,
+        "item_id": "9006",
+        "item_type": "song",
+        "reason": "missing_title",
+        "sequence": 6,
+        "title": "(untitled)"
+       }
+      ],
+      "status": "ambiguous",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco plan selection, unknown plan is a 409",
+   "request": {
+    "json": {
+     "plan_id": "424242"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/plans/select"
+   },
+   "response": {
+    "body": {
+     "detail": "The selected plan is not a current Planning Center candidate."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "pco plan selection, unsafe id is a 422",
+   "request": {
+    "json": {
+     "plan_id": "../x"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/plans/select"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "pattern": "^[A-Za-z0-9_-]+$"
+       },
+       "input": "../x",
+       "loc": [
+        "body",
+        "plan_id"
+       ],
+       "msg": "String should match pattern '^[A-Za-z0-9_-]+$'",
+       "type": "string_pattern_mismatch"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco plan selection, missing id is a 422",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/planning-center/plans/select"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {},
+       "loc": [
+        "body",
+        "plan_id"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco plan selection, choose the youth plan",
+   "request": {
+    "json": {
+     "plan_id": "2001"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/plans/select"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "message": "Loaded \"Youth Night\".",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reload_plan",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 300,
+       "formatted_duration": "5:00",
+       "id": "9201",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 1,
+       "source_song_id": "7201",
+       "title": "Youth Song"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Planning Center scheduled item length",
+       "id": "2001",
+       "service_times": [
+        "19:00"
+       ],
+       "service_type": "Youth",
+       "service_type_id": "222",
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 300,
+         "formatted_duration": "5:00",
+         "id": "9201",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": 1,
+         "source_song_id": "7201",
+         "title": "Youth Song"
+        }
+       ],
+       "title": "Youth Night"
+      },
+      "planning_center_status": "connected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "planning_center": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "planning_center",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [
+       {
+        "component": "planning_center",
+        "event_id": "<uuid>",
+        "message": "Planning Center credentials are not configured.",
+        "timestamp": "<str>"
+       }
+      ],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "service.plan_selection_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "service.reload_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Loaded \"Youth Night\" for 2026-10-18 from Planning Center.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "idle"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 300,
+       "formatted_duration": "5:00",
+       "id": "9201",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 1,
+       "source_song_id": "7201",
+       "title": "Youth Song"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco pending selection, resolved",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/plans/pending-selection"
+   },
+   "response": {
+    "body": {
+     "candidates": [],
+     "message": null,
+     "pending": false,
+     "target_date": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco plan selection alias route",
+   "request": {
+    "json": {
+     "plan_id": "2001"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/plan-selection"
+   },
+   "response": {
+    "body": {
+     "detail": "The selected plan is not a current Planning Center candidate."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/222/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/222/plans/2001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/222/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/222/plans/2001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/222/plans/2001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the all-types discovery"
+  },
+  {
+   "name": "pco settings, preferred title picks the plan",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "plan_title_preference": "youth night",
+     "service_type_id": "stagepilot:all-service-types"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": "youth night",
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "stagepilot:all-service-types",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state, preferred plan loaded",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": "reload_plan",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 300,
+      "formatted_duration": "5:00",
+      "id": "9201",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 1,
+      "source_song_id": "7201",
+      "title": "Youth Song"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "2001",
+      "service_times": [
+       "19:00"
+      ],
+      "service_type": "Youth",
+      "service_type_id": "222",
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 300,
+        "formatted_duration": "5:00",
+        "id": "9201",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 1,
+        "source_song_id": "7201",
+        "title": "Youth Song"
+       }
+      ],
+      "title": "Youth Night"
+     },
+     "planning_center_status": "connected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [
+      {
+       "component": "planning_center",
+       "event_id": "<uuid>",
+       "message": "Planning Center credentials are not configured.",
+       "timestamp": "<str>"
+      }
+     ],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "service.plan_selection_requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Loaded \"Youth Night\" for 2026-10-18 from Planning Center.",
+      "skipped_items": [],
+      "status": "loaded",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 300,
+      "formatted_duration": "5:00",
+      "id": "9201",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 1,
+      "source_song_id": "7201",
+      "title": "Youth Song"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings, preferred service time picks the plan",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "plan_title_preference": null,
+     "preferred_service_time": "09:00",
+     "service_type_id": "stagepilot:all-service-types"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": "09:00",
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "stagepilot:all-service-types",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state, plan chosen by service time",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": "reload_plan",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "1001",
+      "service_times": [
+       "09:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": "111",
+      "songs": [
+       {
+        "description": null,
+        "duration_seconds": 240,
+        "formatted_duration": "4:00",
+        "id": "9002",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 2,
+        "source_song_id": "7001",
+        "title": "Amazing Grace"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "9003",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": 3,
+        "source_song_id": "7002",
+        "title": "Holy Forever"
+       }
+      ],
+      "title": "Sunday Worship"
+     },
+     "planning_center_status": "connected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
+      },
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
+      },
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [
+      {
+       "component": "planning_center",
+       "event_id": "<uuid>",
+       "message": "Planning Center credentials are not configured.",
+       "timestamp": "<str>"
+      }
+     ],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "service.plan_selection_requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+      "skipped_items": [
+       {
+        "description": null,
+        "duration_seconds": null,
+        "item_id": "9001",
+        "item_type": "header",
+        "reason": "header",
+        "sequence": 1,
+        "title": "Welcome"
+       },
+       {
+        "description": null,
+        "duration_seconds": 90,
+        "item_id": "9004",
+        "item_type": "media",
+        "reason": "media",
+        "sequence": 4,
+        "title": "Welcome Video"
+       },
+       {
+        "description": null,
+        "duration_seconds": 120,
+        "item_id": "9005",
+        "item_type": "item",
+        "reason": "not_song",
+        "sequence": 5,
+        "title": "Prayer"
+       },
+       {
+        "description": null,
+        "duration_seconds": 60,
+        "item_id": "9006",
+        "item_type": "song",
+        "reason": "missing_title",
+        "sequence": 6,
+        "title": "(untitled)"
+       }
+      ],
+      "status": "loaded",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "updated_at": "<str>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings, back to one service type",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "preferred_service_time": null,
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types, API 401",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center rejected the configured application ID or secret."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "pco plan reload with a rejected token",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/plan/reload"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "reload_plan",
+     "message": "Service plan reload requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reload_plan",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 240,
+       "formatted_duration": "4:00",
+       "id": "9002",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 2,
+       "source_song_id": "7001",
+       "title": "Amazing Grace"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Planning Center scheduled item length",
+       "id": "1001",
+       "service_times": [
+        "09:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": "111",
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 240,
+         "formatted_duration": "4:00",
+         "id": "9002",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": 2,
+         "source_song_id": "7001",
+         "title": "Amazing Grace"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "9003",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": 3,
+         "source_song_id": "7002",
+         "title": "Holy Forever"
+        }
+       ],
+       "title": "Sunday Worship"
+      },
+      "planning_center_status": "connected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "planning_center": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "planning_center",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [
+       {
+        "component": "planning_center",
+        "event_id": "<uuid>",
+        "message": "Planning Center credentials are not configured.",
+        "timestamp": "<str>"
+       }
+      ],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "service.plan_selection_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "planning_center",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "service.reload_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "service.reload_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": true,
+       "last_attempt_at": "<str>",
+       "message": "Looking for the current or next upcoming Planning Center plan.",
+       "skipped_items": [
+        {
+         "description": null,
+         "duration_seconds": null,
+         "item_id": "9001",
+         "item_type": "header",
+         "reason": "header",
+         "sequence": 1,
+         "title": "Welcome"
+        },
+        {
+         "description": null,
+         "duration_seconds": 90,
+         "item_id": "9004",
+         "item_type": "media",
+         "reason": "media",
+         "sequence": 4,
+         "title": "Welcome Video"
+        },
+        {
+         "description": null,
+         "duration_seconds": 120,
+         "item_id": "9005",
+         "item_type": "item",
+         "reason": "not_song",
+         "sequence": 5,
+         "title": "Prayer"
+        },
+        {
+         "description": null,
+         "duration_seconds": 60,
+         "item_id": "9006",
+         "item_type": "song",
+         "reason": "missing_title",
+         "sequence": 6,
+         "title": "(untitled)"
+        }
+       ],
+       "status": "loading",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "idle"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 240,
+       "formatted_duration": "4:00",
+       "id": "9002",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": 2,
+       "source_song_id": "7001",
+       "title": "Amazing Grace"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status after a 401 load",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "error",
+     "detail": "Planning Center rejected the configured application ID or secret.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types, API 403",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "The Planning Center user cannot access the requested Services resource."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "pco service types, API 429 keeps Retry-After",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center returned HTTP 429."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 429
+   }
+  },
+  {
+   "name": "pco service types, API 429 without Retry-After",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center returned HTTP 429."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 429
+   }
+  },
+  {
+   "name": "pco service types, API 503 is a 502",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center returned HTTP 503."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 502
+   }
+  },
+  {
+   "name": "pco service types, invalid JSON is a 502",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center returned an invalid service type response."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 502
+   }
+  },
+  {
+   "name": "pco settings, one second timeout",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "request_timeout_seconds": 1,
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 1.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types, request timeout is a 502",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center did not respond before the request timeout."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 502
+   }
+  },
+  {
+   "name": "pco settings, normal timeout again",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "request_timeout_seconds": 5,
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 5.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, recovered",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth start",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/start"
+   },
+   "response": {
+    "body": {
+     "authorize_url": "<masked>",
+     "state": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth callback, wrong state is a 401",
+   "request": {
+    "json": {
+     "code": "good-code",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "wrong.state"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center sign-in could not be verified. Try signing in again."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "pco oauth callback, missing code is a 422",
+   "request": {
+    "json": {
+     "redirect_uri": "http://127.0.0.1:1/cb",
+     "state": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {
+        "redirect_uri": "http://127.0.0.1:1/cb",
+        "state": "x"
+       },
+       "loc": [
+        "body",
+        "code"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco oauth callback, unknown key is a 422",
+   "request": {
+    "json": {
+     "code": "c",
+     "extra": 1,
+     "redirect_uri": "u",
+     "state": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "extra"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco oauth callback, empty fields are a 422",
+   "request": {
+    "json": {
+     "code": "",
+     "redirect_uri": "",
+     "state": ""
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "min_length": 1
+       },
+       "input": "",
+       "loc": [
+        "body",
+        "state"
+       ],
+       "msg": "String should have at least 1 character",
+       "type": "string_too_short"
+      },
+      {
+       "ctx": {
+        "actual_length": 0,
+        "field_type": "Value",
+        "min_length": 1
+       },
+       "input": "",
+       "loc": [
+        "body",
+        "code"
+       ],
+       "msg": "Value should have at least 1 item after validation, not 0",
+       "type": "too_short"
+      },
+      {
+       "ctx": {
+        "min_length": 1
+       },
+       "input": "",
+       "loc": [
+        "body",
+        "redirect_uri"
+       ],
+       "msg": "String should have at least 1 character",
+       "type": "string_too_short"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "pco oauth callback, rejected grant is a permanent 401",
+   "request": {
+    "json": {
+     "code": "bad-grant",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": "Your Planning Center connection has expired. Sign in again."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "pco oauth callback, busy control plane is a transient 503",
+   "request": {
+    "json": {
+     "code": "busy",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center sign-in is busy right now. Try again in a moment."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "pco oauth callback, control plane error is a transient 503",
+   "request": {
+    "json": {
+     "code": "boom",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center sign-in could not be completed. Try again."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "pco oauth status, still disconnected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth callback, good code connects",
+   "request": {
+    "json": {
+     "code": "good-code",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "connected": true,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": false,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth callback, second use of the flow is a 401",
+   "request": {
+    "json": {
+     "code": "good-code",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "detail": "This Planning Center sign-in expired. Start it again."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "pco oauth status, connected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": true,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": false,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, oauth connected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "oauth",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": true,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings read back, oauth selected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "oauth",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 5.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "auth": "none",
+     "body": {},
+     "body_keys": [],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/flow",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "bad-grant",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "busy",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "boom",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "good-code",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the sign-in and the bearer load"
+  },
+  {
+   "name": "pco settings form keeps the oauth method",
+   "request": {
+    "json": {
+     "app_id": "app-1",
+     "request_timeout_seconds": 5,
+     "service_type_id": "111"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "oauth",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 5.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco settings read back, still oauth",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": true,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "planning_center",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": false,
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 21600,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": "app-1",
+       "connection_method": "oauth",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 5.0,
+       "service_type_id": "111",
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types with the bearer token",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": [
+     {
+      "id": "111",
+      "name": "Weekend Services"
+     },
+     {
+      "id": "222",
+      "name": "Youth"
+     }
+    ],
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the bearer service types"
+  },
+  {
+   "name": "pco oauth disconnect",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/disconnect"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth status after disconnect",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status after disconnect",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth start, short lived token",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/start"
+   },
+   "response": {
+    "body": {
+     "authorize_url": "<masked>",
+     "state": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth callback, short lived token",
+   "request": {
+    "json": {
+     "code": "good-code",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "connected": true,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": false,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "auth": "none",
+     "body": {},
+     "body_keys": [],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/flow",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "good-code",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the short lived sign-in"
+  },
+  {
+   "name": "pco service types refresh the token first",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": [
+     {
+      "id": "111",
+      "name": "Weekend Services"
+     },
+     {
+      "id": "222",
+      "name": "Youth"
+     }
+    ],
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "auth": "none",
+     "body": {},
+     "body_keys": [],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/flow",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "flow_id": "aabbccdd",
+      "refresh_token_present": true,
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "flow_id",
+      "refresh_token",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/refresh",
+     "query": {}
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-2",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-2",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    }
+   ],
+   "name": "pco mock saw the refresh and the bearer call"
+  },
+  {
+   "name": "pco oauth status after refresh",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": true,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": false,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth disconnect before revocation test",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/disconnect"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth start, revocation test",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/start"
+   },
+   "response": {
+    "body": {
+     "authorize_url": "<masked>",
+     "state": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco oauth callback, revocation test",
+   "request": {
+    "json": {
+     "code": "good-code",
+     "redirect_uri": "http://127.0.0.1:53682/callback",
+     "state": "@state@"
+    },
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/callback"
+   },
+   "response": {
+    "body": {
+     "connected": true,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": false,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco service types, refresh token revoked",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/service-types"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center credentials are not configured."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "pco oauth status, needs reconnect",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/oauth/status"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "oauth",
+     "expires_at": "<float>",
+     "needs_reconnect": true,
+     "scope": "services"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, needs reconnect",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": false,
+     "connection_method": "oauth",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": true,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "basic-ok",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "auth": "none",
+     "body": {},
+     "body_keys": [],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/flow",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "code": "good-code",
+      "code_verifier_length": 86,
+      "flow_id": "aabbccdd",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "code",
+      "code_verifier",
+      "flow_id",
+      "redirect_uri",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/token",
+     "query": {}
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "0",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types",
+     "query": {
+      "offset": "2",
+      "order": "sequence",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans",
+     "query": {
+      "after": "2026-10-18T06:59:59Z",
+      "before": "2026-11-18T08:00:00Z",
+      "filter": "after,before",
+      "offset": "0",
+      "order": "sort_date",
+      "per_page": "100"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1002/plan_times",
+     "query": {
+      "offset": "0",
+      "order": "starts_at",
+      "per_page": "100",
+      "where[time_type]": "service"
+     }
+    },
+    {
+     "accept": "application/json",
+     "api_version": "2018-11-01",
+     "auth": "bearer:access-1",
+     "method": "GET",
+     "path": "/services/v2/service_types/111/plans/1001/items",
+     "query": {
+      "include": "song",
+      "offset": "0",
+      "per_page": "100"
+     }
+    },
+    {
+     "auth": "none",
+     "body": {},
+     "body_keys": [],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/flow",
+     "query": {}
+    },
+    {
+     "auth": "none",
+     "body": {
+      "flow_id": "aabbccdd",
+      "refresh_token_present": true,
+      "ticket": "ticket-1"
+     },
+     "body_keys": [
+      "flow_id",
+      "refresh_token",
+      "ticket"
+     ],
+     "method": "POST",
+     "path": "/v1/planning-center/oauth/refresh",
+     "query": {}
+    }
+   ],
+   "name": "pco mock saw the revoked refresh"
+  },
+  {
+   "name": "pco oauth disconnect, final",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/planning-center/oauth/disconnect"
+   },
+   "response": {
+    "body": {
+     "connected": false,
+     "connection_method": "manual",
+     "expires_at": null,
+     "needs_reconnect": false,
+     "scope": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco status, final",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/planning-center/status"
+   },
+   "response": {
+    "body": {
+     "app_id": "app-1",
+     "configured": true,
+     "connection_method": "manual",
+     "connection_status": "connected",
+     "detail": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+     "oauth_connected": false,
+     "oauth_needs_reconnect": false,
+     "planning_center_secret_saved": true,
+     "service_type_id": "111"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  }
+ ],
  "steps": [
   {
    "name": "health",

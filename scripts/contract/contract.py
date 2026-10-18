@@ -68,7 +68,7 @@ def normalise(node: Any) -> Any:
     if isinstance(node, dict):
         out = {}
         for key, value in node.items():
-            if key == "id" and _is_uuid(value):
+            if key in ("id", "event_id") and _is_uuid(value):
                 out[key] = "<uuid>"
             elif (key in VOLATILE_KEYS or key.endswith(VOLATILE_SUFFIXES)) and value is not None:
                 out[key] = f"<{type(value).__name__}>"
@@ -103,13 +103,13 @@ def clean_headers(headers: Any) -> dict[str, str]:
 class InProcess:
     """The backend test harness: FastAPI TestClient over create_app(demo)."""
 
-    def __init__(self) -> None:
+    def __init__(self, app: Any = None) -> None:
         from fastapi.testclient import TestClient
         from stagepilot.core.config import Settings
         from stagepilot.main import create_app
 
         self._cm = TestClient(
-            create_app(Settings(demo_mode=True), dashboard_auth_enforced=False)
+            app if app is not None else create_app(Settings(demo_mode=True), dashboard_auth_enforced=False)
         )
         self.client = self._cm.__enter__()
 
@@ -227,16 +227,61 @@ def diff(path: str, want: Any, got: Any, out: list[str]) -> None:
         out.append(f"{path}: {want!r} != {got!r}")
 
 
+def record_pco() -> list[dict[str, Any]]:
+    """Run the pco profile against the Python app served over real HTTP on loopback.
+
+    The Planning Center plugin awaits its refresh task from inside the request, which the
+    in-process TestClient portal cancels mid-flight, so this profile (unlike the demo profile) is
+    recorded exactly the way it is replayed: through a real server. Planning Center and the
+    control plane are the mock.
+    """
+
+    import socket
+    import threading
+    import time
+
+    import mock_pco
+    import pco_app
+    import pco_profile
+    import uvicorn
+
+    mock_server, mock_port = mock_pco.start()
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(pco_app.create(mock_port), host="127.0.0.1", port=port, log_level="warning")
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.1)
+    try:
+        return normalise(pco_profile.run_pco(Live(f"http://127.0.0.1:{port}"), f"http://127.0.0.1:{mock_port}"))
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+        mock_server.shutdown()
+
+
 def cmd_record(_: argparse.Namespace) -> int:
     transport = InProcess()
     try:
         transcripts = run(transport)
     finally:
         transport.close()
+    pco_steps = record_pco()
     OUT.mkdir(exist_ok=True)
     TRANSCRIPTS.write_text(
         json.dumps(
-            {"volatile_keys": sorted(VOLATILE_KEYS), "volatile_suffixes": list(VOLATILE_SUFFIXES), "steps": normalise(transcripts)},
+            {
+                "volatile_keys": sorted(VOLATILE_KEYS),
+                "volatile_suffixes": list(VOLATILE_SUFFIXES),
+                "steps": normalise(transcripts),
+                "pco_steps": pco_steps,
+            },
             indent=1,
             sort_keys=True,
             ensure_ascii=False,
@@ -244,14 +289,21 @@ def cmd_record(_: argparse.Namespace) -> int:
         + "\n",
         encoding="utf-8",
     )
-    print(f"recorded {len(transcripts)} steps -> {TRANSCRIPTS.relative_to(ROOT)}")
+    print(f"recorded {len(transcripts)} steps + {len(pco_steps)} pco steps -> {TRANSCRIPTS.relative_to(ROOT)}")
     return 0
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    golden = json.loads(TRANSCRIPTS.read_text(encoding="utf-8"))["steps"]
+    document = json.loads(TRANSCRIPTS.read_text(encoding="utf-8"))
+    golden = document["steps"]
     live = Live(args.base_url)
-    got = normalise(copy.deepcopy(run(live)))
+    if args.profile == "pco":
+        import pco_profile
+
+        golden = document["pco_steps"]
+        got = normalise(copy.deepcopy(pco_profile.run_pco(live, args.mock_url)))
+    else:
+        got = normalise(copy.deepcopy(run(live)))
     problems: list[str] = []
     for want, have in zip(golden, got):
         found: list[str] = []
@@ -263,7 +315,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     for line in problems:
         print("  " + line)
     failed = sum(1 for want, have in zip(golden, got) if want != have)
-    print(f"{len(golden) - failed}/{len(golden)} steps match")
+    print(f"{len(golden) - failed}/{len(golden)} steps match" + (f" ({args.profile} profile)" if args.profile else ""))
     return 1 if problems else 0
 
 
@@ -289,6 +341,8 @@ def main() -> int:
     sub.add_parser("openapi").set_defaults(fn=cmd_openapi)
     rp = sub.add_parser("replay")
     rp.add_argument("base_url")
+    rp.add_argument("--profile", choices=["pco"], default=None)
+    rp.add_argument("--mock-url", default=None, help="mock Planning Center base URL (pco profile)")
     rp.set_defaults(fn=cmd_replay)
     args = p.parse_args()
     return int(args.fn(args))

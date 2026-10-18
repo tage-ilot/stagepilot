@@ -932,6 +932,29 @@ impl SettingsService {
         service
     }
 
+    /// In-memory settings from a full `PersistentSettings` (contract profiles).
+    pub fn ephemeral_persistent(persistent: PersistentSettings) -> Self {
+        Self::ephemeral_with_secret(persistent, None)
+    }
+
+    /// Same, with a Planning Center secret already saved in the in-memory credential store.
+    pub fn ephemeral_with_secret(persistent: PersistentSettings, secret: Option<String>) -> Self {
+        let service = Self::new(
+            Box::new(MemorySettingsStore::new(Some(persistent.clone()))),
+            Box::new(MemoryCredentialStore::new(secret.clone())),
+            BTreeMap::new(),
+        );
+        let runtime = service.resolve(&persistent);
+        {
+            let mut s = service.lock();
+            s.persistent = persistent;
+            s.runtime = Some(runtime);
+            s.credential_saved = secret.is_some();
+            s.secret = secret;
+        }
+        service
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, ServiceState> {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
@@ -966,6 +989,17 @@ impl SettingsService {
     }
     pub fn credential_saved(&self) -> bool {
         self.lock().credential_saved
+    }
+
+    /// The saved Planning Center secret (the manual-connection PAT secret), for trusted backend
+    /// integrations only. Never serialise it.
+    pub fn planning_center_secret(&self) -> Option<String> {
+        self.lock().secret.clone()
+    }
+
+    /// The process environment captured when the service was built (`STAGEPILOT_*` overrides).
+    pub fn environ(&self) -> &BTreeMap<String, String> {
+        &self.environ
     }
 
     /// Load settings from the store and resolve precedence: saved file, then environment.
