@@ -920,260 +920,298 @@
      "accepted": true,
      "action": "reload_plan",
      "message": "Service plan reload requested.",
-     "state": {
-      "application_status": "running",
-      "current_song": null,
-      "current_song_index": null,
-      "last_action": "reload_plan",
-      "last_successful_plan_reload_at": "<str>",
-      "lights_status": "disconnected",
-      "midi_status": "disconnected",
-      "next_song": {
-       "description": null,
-       "duration_seconds": 240,
-       "formatted_duration": "4:00",
-       "id": "9002",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": 2,
-       "source_song_id": "7001",
-       "title": "Amazing Grace"
-      },
-      "plan": {
-       "date": "<str>",
-       "duration_source": "Planning Center scheduled item length",
-       "id": "1001",
-       "service_times": [
-        "09:00"
-       ],
-       "service_type": "Weekend Services",
-       "service_type_id": "111",
-       "songs": [
-        {
-         "description": null,
-         "duration_seconds": 240,
-         "formatted_duration": "4:00",
-         "id": "9002",
-         "is_generic": false,
-         "order": 1,
-         "service_sequence": 2,
-         "source_song_id": "7001",
-         "title": "Amazing Grace"
-        },
-        {
-         "description": null,
-         "duration_seconds": 336,
-         "formatted_duration": "5:36",
-         "id": "9003",
-         "is_generic": false,
-         "order": 2,
-         "service_sequence": 3,
-         "source_song_id": "7002",
-         "title": "Holy Forever"
-        }
-       ],
-       "title": "Sunday Worship"
-      },
-      "planning_center_status": "connected",
-      "playing_song": null,
-      "playing_song_index": null,
-      "plugins": {
-       "lights": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "lights",
-        "status": "running",
-        "version": "<str>"
-       },
-       "planning_center": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "planning_center",
-        "status": "running",
-        "version": "<str>"
-       },
-       "playback_api": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "playback_api",
-        "status": "running",
-        "version": "<str>"
-       }
-      },
-      "propresenter_status": "disconnected",
-      "recent_errors": [],
-      "recent_events": [
+     "state": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state after the reload settled",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": "reload_plan",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "1001",
+      "service_times": [
+       "09:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": "111",
+      "songs": [
        {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
+        "description": null,
+        "duration_seconds": 240,
+        "formatted_duration": "4:00",
+        "id": "9002",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 2,
+        "source_song_id": "7001",
+        "title": "Amazing Grace"
        },
        {
-        "id": "<uuid>",
-        "source": "application",
-        "timestamp": "<str>",
-        "type": "application.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "lights",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "playback_connection",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "service.reload_requested"
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "9003",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": 3,
+        "source_song_id": "7002",
+        "title": "Holy Forever"
        }
       ],
-      "revision": "<int>",
-      "service_load": {
-       "candidates": [],
-       "is_stale": true,
-       "last_attempt_at": "<str>",
-       "message": "Looking for the current or next upcoming Planning Center plan.",
-       "skipped_items": [
-        {
-         "description": null,
-         "duration_seconds": null,
-         "item_id": "9001",
-         "item_type": "header",
-         "reason": "header",
-         "sequence": 1,
-         "title": "Welcome"
-        },
-        {
-         "description": null,
-         "duration_seconds": 90,
-         "item_id": "9004",
-         "item_type": "media",
-         "reason": "media",
-         "sequence": 4,
-         "title": "Welcome Video"
-        },
-        {
-         "description": null,
-         "duration_seconds": 120,
-         "item_id": "9005",
-         "item_type": "item",
-         "reason": "not_song",
-         "sequence": 5,
-         "title": "Prayer"
-        },
-        {
-         "description": null,
-         "duration_seconds": 60,
-         "item_id": "9006",
-         "item_type": "song",
-         "reason": "missing_title",
-         "sequence": 6,
-         "title": "(untitled)"
-        }
-       ],
-       "status": "loading",
-       "target_date": "<today>"
-      },
-      "timer": {
-       "duration_seconds": null,
+      "title": "Sunday Worship"
+     },
+     "planning_center_status": "connected",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
        "last_error": null,
-       "position_seconds": null,
-       "remaining_seconds": null,
-       "started_at": null,
-       "status": "idle"
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
       },
-      "up_next_song": {
-       "description": null,
-       "duration_seconds": 240,
-       "formatted_duration": "4:00",
-       "id": "9002",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": 2,
-       "source_song_id": "7001",
-       "title": "Amazing Grace"
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
       },
-      "updated_at": "<str>"
-     }
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": false,
+      "last_attempt_at": "<str>",
+      "message": "Loaded \"Sunday Worship\" for 2026-10-18 from Planning Center.",
+      "skipped_items": [
+       {
+        "description": null,
+        "duration_seconds": null,
+        "item_id": "9001",
+        "item_type": "header",
+        "reason": "header",
+        "sequence": 1,
+        "title": "Welcome"
+       },
+       {
+        "description": null,
+        "duration_seconds": 90,
+        "item_id": "9004",
+        "item_type": "media",
+        "reason": "media",
+        "sequence": 4,
+        "title": "Welcome Video"
+       },
+       {
+        "description": null,
+        "duration_seconds": 120,
+        "item_id": "9005",
+        "item_type": "item",
+        "reason": "not_song",
+        "sequence": 5,
+        "title": "Prayer"
+       },
+       {
+        "description": null,
+        "duration_seconds": 60,
+        "item_id": "9006",
+        "item_type": "song",
+        "reason": "missing_title",
+        "sequence": 6,
+        "title": "(untitled)"
+       }
+      ],
+      "status": "loaded",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "updated_at": "<str>"
     },
     "headers": {
      "content-type": "application/json"
@@ -4289,519 +4327,557 @@
      "accepted": true,
      "action": "reload_plan",
      "message": "Service plan reload requested.",
-     "state": {
-      "application_status": "running",
-      "current_song": null,
-      "current_song_index": null,
-      "last_action": "reload_plan",
-      "last_successful_plan_reload_at": "<str>",
-      "lights_status": "disconnected",
-      "midi_status": "disconnected",
-      "next_song": {
-       "description": null,
-       "duration_seconds": 240,
-       "formatted_duration": "4:00",
-       "id": "9002",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": 2,
-       "source_song_id": "7001",
-       "title": "Amazing Grace"
-      },
-      "plan": {
-       "date": "<str>",
-       "duration_source": "Planning Center scheduled item length",
-       "id": "1001",
-       "service_times": [
-        "09:00"
-       ],
-       "service_type": "Weekend Services",
-       "service_type_id": "111",
-       "songs": [
-        {
-         "description": null,
-         "duration_seconds": 240,
-         "formatted_duration": "4:00",
-         "id": "9002",
-         "is_generic": false,
-         "order": 1,
-         "service_sequence": 2,
-         "source_song_id": "7001",
-         "title": "Amazing Grace"
-        },
-        {
-         "description": null,
-         "duration_seconds": 336,
-         "formatted_duration": "5:36",
-         "id": "9003",
-         "is_generic": false,
-         "order": 2,
-         "service_sequence": 3,
-         "source_song_id": "7002",
-         "title": "Holy Forever"
-        }
-       ],
-       "title": "Sunday Worship"
-      },
-      "planning_center_status": "connected",
-      "playing_song": null,
-      "playing_song_index": null,
-      "plugins": {
-       "lights": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "lights",
-        "status": "running",
-        "version": "<str>"
-       },
-       "planning_center": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "planning_center",
-        "status": "running",
-        "version": "<str>"
-       },
-       "playback_api": {
-        "last_activity_at": "<str>",
-        "last_error": null,
-        "name": "playback_api",
-        "status": "running",
-        "version": "<str>"
-       }
-      },
-      "propresenter_status": "disconnected",
-      "recent_errors": [
+     "state": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "pco state after the rejected reload settled",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state"
+   },
+   "response": {
+    "body": {
+     "application_status": "running",
+     "current_song": null,
+     "current_song_index": null,
+     "last_action": "reload_plan",
+     "last_successful_plan_reload_at": "<str>",
+     "lights_status": "disconnected",
+     "midi_status": "disconnected",
+     "next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "plan": {
+      "date": "<str>",
+      "duration_source": "Planning Center scheduled item length",
+      "id": "1001",
+      "service_times": [
+       "09:00"
+      ],
+      "service_type": "Weekend Services",
+      "service_type_id": "111",
+      "songs": [
        {
-        "component": "planning_center",
-        "event_id": "<uuid>",
-        "message": "Planning Center credentials are not configured.",
-        "timestamp": "<str>"
+        "description": null,
+        "duration_seconds": 240,
+        "formatted_duration": "4:00",
+        "id": "9002",
+        "is_generic": false,
+        "order": 1,
+        "service_sequence": 2,
+        "source_song_id": "7001",
+        "title": "Amazing Grace"
+       },
+       {
+        "description": null,
+        "duration_seconds": 336,
+        "formatted_duration": "5:36",
+        "id": "9003",
+        "is_generic": false,
+        "order": 2,
+        "service_sequence": 3,
+        "source_song_id": "7002",
+        "title": "Holy Forever"
        }
       ],
-      "recent_events": [
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "action.requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "api",
-        "timestamp": "<str>",
-        "type": "service.plan_selection_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "application",
-        "timestamp": "<str>",
-        "type": "application.started"
-       },
-       {
-        "id": "<uuid>",
-        "source": "lights",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.load_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "planning_center",
-        "timestamp": "<str>",
-        "type": "service.loaded"
-       },
-       {
-        "id": "<uuid>",
-        "source": "playback_connection",
-        "timestamp": "<str>",
-        "type": "connection.changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "plugin_manager",
-        "timestamp": "<str>",
-        "type": "plugin.status_changed"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "service.reload_requested"
-       },
-       {
-        "id": "<uuid>",
-        "source": "state_service",
-        "timestamp": "<str>",
-        "type": "service.reload_requested"
-       }
-      ],
-      "revision": "<int>",
-      "service_load": {
-       "candidates": [],
-       "is_stale": true,
-       "last_attempt_at": "<str>",
-       "message": "Looking for the current or next upcoming Planning Center plan.",
-       "skipped_items": [
-        {
-         "description": null,
-         "duration_seconds": null,
-         "item_id": "9001",
-         "item_type": "header",
-         "reason": "header",
-         "sequence": 1,
-         "title": "Welcome"
-        },
-        {
-         "description": null,
-         "duration_seconds": 90,
-         "item_id": "9004",
-         "item_type": "media",
-         "reason": "media",
-         "sequence": 4,
-         "title": "Welcome Video"
-        },
-        {
-         "description": null,
-         "duration_seconds": 120,
-         "item_id": "9005",
-         "item_type": "item",
-         "reason": "not_song",
-         "sequence": 5,
-         "title": "Prayer"
-        },
-        {
-         "description": null,
-         "duration_seconds": 60,
-         "item_id": "9006",
-         "item_type": "song",
-         "reason": "missing_title",
-         "sequence": 6,
-         "title": "(untitled)"
-        }
-       ],
-       "status": "loading",
-       "target_date": "<today>"
-      },
-      "timer": {
-       "duration_seconds": null,
+      "title": "Sunday Worship"
+     },
+     "planning_center_status": "error",
+     "playing_song": null,
+     "playing_song_index": null,
+     "plugins": {
+      "lights": {
+       "last_activity_at": "<str>",
        "last_error": null,
-       "position_seconds": null,
-       "remaining_seconds": null,
-       "started_at": null,
-       "status": "idle"
+       "name": "lights",
+       "status": "running",
+       "version": "<str>"
       },
-      "up_next_song": {
-       "description": null,
-       "duration_seconds": 240,
-       "formatted_duration": "4:00",
-       "id": "9002",
-       "is_generic": false,
-       "order": 1,
-       "service_sequence": 2,
-       "source_song_id": "7001",
-       "title": "Amazing Grace"
+      "planning_center": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "planning_center",
+       "status": "running",
+       "version": "<str>"
       },
-      "updated_at": "<str>"
-     }
+      "playback_api": {
+       "last_activity_at": "<str>",
+       "last_error": null,
+       "name": "playback_api",
+       "status": "running",
+       "version": "<str>"
+      }
+     },
+     "propresenter_status": "disconnected",
+     "recent_errors": [
+      {
+       "component": "planning_center",
+       "event_id": "<uuid>",
+       "message": "Planning Center credentials are not configured.",
+       "timestamp": "<str>"
+      },
+      {
+       "component": "planning_center",
+       "event_id": "<uuid>",
+       "message": "Planning Center rejected the configured application ID or secret.",
+       "timestamp": "<str>"
+      }
+     ],
+     "recent_events": [
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "action.requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "api",
+       "timestamp": "<str>",
+       "type": "service.plan_selection_requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "application",
+       "timestamp": "<str>",
+       "type": "application.started"
+      },
+      {
+       "id": "<uuid>",
+       "source": "lights",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.load_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "planning_center",
+       "timestamp": "<str>",
+       "type": "service.loaded"
+      },
+      {
+       "id": "<uuid>",
+       "source": "playback_connection",
+       "timestamp": "<str>",
+       "type": "connection.changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "plugin_manager",
+       "timestamp": "<str>",
+       "type": "plugin.status_changed"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      },
+      {
+       "id": "<uuid>",
+       "source": "state_service",
+       "timestamp": "<str>",
+       "type": "service.reload_requested"
+      }
+     ],
+     "revision": "<int>",
+     "service_load": {
+      "candidates": [],
+      "is_stale": true,
+      "last_attempt_at": "<str>",
+      "message": "Planning Center rejected the configured application ID or secret.",
+      "skipped_items": [
+       {
+        "description": null,
+        "duration_seconds": null,
+        "item_id": "9001",
+        "item_type": "header",
+        "reason": "header",
+        "sequence": 1,
+        "title": "Welcome"
+       },
+       {
+        "description": null,
+        "duration_seconds": 90,
+        "item_id": "9004",
+        "item_type": "media",
+        "reason": "media",
+        "sequence": 4,
+        "title": "Welcome Video"
+       },
+       {
+        "description": null,
+        "duration_seconds": 120,
+        "item_id": "9005",
+        "item_type": "item",
+        "reason": "not_song",
+        "sequence": 5,
+        "title": "Prayer"
+       },
+       {
+        "description": null,
+        "duration_seconds": 60,
+        "item_id": "9006",
+        "item_type": "song",
+        "reason": "missing_title",
+        "sequence": 6,
+        "title": "(untitled)"
+       }
+      ],
+      "status": "error",
+      "target_date": "<today>"
+     },
+     "timer": {
+      "duration_seconds": null,
+      "last_error": null,
+      "position_seconds": null,
+      "remaining_seconds": null,
+      "started_at": null,
+      "status": "idle"
+     },
+     "up_next_song": {
+      "description": null,
+      "duration_seconds": 240,
+      "formatted_duration": "4:00",
+      "id": "9002",
+      "is_generic": false,
+      "order": 1,
+      "service_sequence": 2,
+      "source_song_id": "7001",
+      "title": "Amazing Grace"
+     },
+     "updated_at": "<str>"
     },
     "headers": {
      "content-type": "application/json"

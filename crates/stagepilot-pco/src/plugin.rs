@@ -351,7 +351,7 @@ impl Inner {
                 sched.pending_reload = true;
             } else {
                 sched.running = true;
-                let _ = self.idle.send(false);
+                self.idle.send_replace(false);
                 let this = self.clone();
                 tokio::spawn(async move { this.run_scheduled_refresh(None).await });
             }
@@ -389,7 +389,7 @@ impl Inner {
         sched.running = false;
         sched.pending_reload = false;
         sched.pending_selection = None;
-        let _ = self.idle.send(true);
+        self.idle.send_replace(true);
     }
 
     async fn on_reload_requested(self: &Arc<Self>) {
@@ -402,7 +402,7 @@ impl Inner {
             return;
         }
         sched.running = true;
-        let _ = self.idle.send(false);
+        self.idle.send_replace(false);
         let this = self.clone();
         tokio::spawn(async move { this.run_scheduled_refresh(None).await });
     }
@@ -444,7 +444,7 @@ impl Inner {
                 sched.pending_selection = Some(plan_id.to_string());
             } else {
                 sched.running = true;
-                let _ = self.idle.send(false);
+                self.idle.send_replace(false);
                 let this = self.clone();
                 let id = plan_id.to_string();
                 tokio::spawn(async move { this.run_scheduled_refresh(Some(id)).await });
