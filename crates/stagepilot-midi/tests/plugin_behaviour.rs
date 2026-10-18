@@ -776,7 +776,8 @@ async fn queue_overflow_drops_the_new_message_and_reports_an_error_once() {
     let gate = Arc::new(Gate(tokio::sync::Notify::new(), AtomicUsize::new(0)));
     let mut options = MidiPluginOptions::new(factory);
     options.queue_capacity = 2;
-    options.monitor_interval = Duration::from_millis(5);
+    // The monitor re-asserts Running each tick; a slow CI host must see the Error before that.
+    options.monitor_interval = Duration::from_millis(250);
     let mut s = settings(Some("Playback"));
     s.debounce_ms = 0;
     let plugin = MidiPlaybackPlugin::new(bus, s, gate.clone(), options).unwrap();

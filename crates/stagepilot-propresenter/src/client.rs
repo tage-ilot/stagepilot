@@ -17,6 +17,14 @@ pub struct Tuning {
     pub reset_verification_interval: Duration,
 }
 
+fn install_crypto_provider() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // An error means a provider is already installed process-wide, which is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 impl Default for Tuning {
     fn default() -> Self {
         Self {
@@ -71,6 +79,7 @@ impl HttpProPresenterClient {
 
     pub fn with_tuning(settings: &ProPresenterSettings, tuning: Tuning) -> Self {
         let timeout = Duration::from_secs_f64(settings.request_timeout_seconds.max(0.001));
+        install_crypto_provider();
         let http = reqwest::Client::builder()
             .connect_timeout(timeout)
             .read_timeout(timeout)

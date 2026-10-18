@@ -2632,6 +2632,7 @@ dependencies = [
  "axum",
  "chrono",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "stagepilot-core",
