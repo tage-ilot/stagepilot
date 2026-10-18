@@ -12,6 +12,7 @@ use stagepilot_remote::connector::{supervisor_pass, Connector, TokenProvider};
 use stagepilot_remote::feature::RemoteFeature;
 use stagepilot_remote::files::{atomic_write, read_desired, DesiredRemote};
 use stagepilot_remote::http::{HttpRequest, HttpResponse, HttpTransport, TransportError};
+#[cfg(unix)]
 use stagepilot_remote::platform::{ProcessSpawner, SpawnSpec, StdSpawner};
 use stagepilot_remote::quick::QuickConnector;
 
