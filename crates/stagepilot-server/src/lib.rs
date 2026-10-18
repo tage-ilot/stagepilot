@@ -6,6 +6,7 @@
 pub mod app;
 pub mod demo;
 pub mod diagnostics;
+pub mod embedded;
 pub mod launch;
 pub mod outputs;
 pub mod pco_routes;

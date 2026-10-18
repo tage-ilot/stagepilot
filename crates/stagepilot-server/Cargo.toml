@@ -40,7 +40,7 @@ tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "s
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 chrono-tz = "0.10"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 hex = "0.4"
 httpdate = "1"

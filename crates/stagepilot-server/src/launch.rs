@@ -269,6 +269,20 @@ pub async fn run_production(
     host: Option<String>,
     port: Option<u16>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    run_production_until(host, port, shutdown_signal()).await
+}
+
+/// [`run_production`] with a caller-supplied stop trigger instead of the process signals.
+/// The Tauri shell's `in-process` feature uses this: the shell, not a signal, decides when the
+/// server stops.
+pub async fn run_production_until<F>(
+    host: Option<String>,
+    port: Option<u16>,
+    stop: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let service = stagepilot_core::settings::SettingsService::default_service();
     service.load();
     let runtime = Runtime::with_pco(
@@ -279,7 +293,7 @@ pub async fn run_production(
     let host = host.unwrap_or_else(|| runtime.settings.bind_host.clone());
     let port = port.unwrap_or(runtime.settings.bind_port);
     let address: std::net::SocketAddr = format!("{host}:{port}").parse()?;
-    serve(runtime, address, crate::default_web_root()).await
+    serve_until(runtime, address, crate::default_web_root(), stop).await
 }
 
 /// Start `runtime`, serve the application on `address`, and shut down cleanly on a signal.
@@ -288,16 +302,35 @@ pub async fn serve(
     address: std::net::SocketAddr,
     web_root: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    serve_until(runtime, address, web_root, shutdown_signal()).await
+}
+
+/// [`serve`] that stops when `stop` resolves (graceful: in-flight requests finish, then the
+/// Remote tasks and the runtime stop in reverse start order).
+pub async fn serve_until<F>(
+    runtime: Arc<Runtime>,
+    address: std::net::SocketAddr,
+    web_root: Option<PathBuf>,
+    stop: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     // Bind first so a port conflict fails before any plugin or connector starts.
     let listener = tokio::net::TcpListener::bind(address).await?;
     runtime.enable_startup_activation();
     runtime.start().await;
     let app = crate::build_app(runtime.clone(), crate::AppOptions { web_root });
-    let remote = match attach_desktop_remote(&runtime, app.clone()).await {
+    // Flatten the error before any further await: `Box<dyn Error>` is not `Send`, and the
+    // in-process shell spawns this future on a multi-threaded runtime.
+    let attached = attach_desktop_remote(&runtime, app.clone())
+        .await
+        .map_err(|error| error.to_string());
+    let remote = match attached {
         Ok(remote) => remote,
-        Err(error) => {
+        Err(message) => {
             runtime.stop().await;
-            return Err(error);
+            return Err(message.into());
         }
     };
     tracing::info!(%address, "stagepilot_server_listening");
@@ -305,7 +338,7 @@ pub async fn serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(stop)
     .await;
     if let Some(remote) = remote {
         remote.stop().await;
