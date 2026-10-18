@@ -44,6 +44,7 @@ VOLATILE_KEYS = {
     "version": "application version string, changes every release",
     "date": "plan date, today's date in the configured timezone",
     "timestamp": "wall-clock timestamp",
+    "at": "wall-clock instant of a Playback monitor entry",
     "position_seconds": "timer progress, depends on wall-clock time",
     "elapsed_seconds": "timer progress, depends on wall-clock time",
     "remaining_seconds": "timer progress, depends on wall-clock time",
@@ -183,10 +184,74 @@ def _exchange(status: int, headers: Any, body: bytes) -> dict[str, Any]:
     return {"status": status, "headers": clean_headers(headers), "body": parsed}
 
 
+FAKE_PORT = 47901
+
+
+class Fakes:
+    """The scripted fake Playback (backend/tests/playback_fake.py) driven by `fake` steps."""
+
+    def __init__(self) -> None:
+        self.fake: Any = None
+
+    def do(self, op: str, args: list[Any]) -> None:
+        if op == "start":
+            sys.path.insert(0, str(ROOT / "backend" / "tests"))
+            from playback_fake import FakePlayback  # type: ignore[import-not-found]
+
+            self.fake = FakePlayback()
+            self.fake.start(FAKE_PORT)
+        elif op == "wait_connected":
+            if not self.fake.wait_connected(*args):
+                raise RuntimeError("the server never connected to the fake Playback")
+        else:
+            getattr(self.fake, op)(*args)
+
+    def close(self) -> None:
+        if self.fake is not None:
+            self.fake.close()
+            self.fake = None
+
+
+def wait_for(transport: Any, spec: dict[str, Any]) -> None:
+    """Poll a GET until `body[key] == equals` (the Playback connection settles asynchronously)."""
+    import time
+
+    deadline = time.monotonic() + spec.get("timeout", 20)
+    while True:
+        body = transport.http({"method": "GET", "path": spec["path"]})["body"]
+        value: Any = body
+        for part in spec["key"].split("."):
+            value = value.get(part) if isinstance(value, dict) else None
+        if value == spec["equals"]:
+            return
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"timed out waiting for {spec['path']} {spec['key']} == {spec['equals']!r}")
+        time.sleep(0.05)
+
+
 def run(transport: Any) -> list[dict[str, Any]]:
     results = []
+    fakes = Fakes()
+    try:
+        _run_steps(transport, fakes, results)
+    finally:
+        fakes.close()
+    return results
+
+
+def _run_steps(transport: Any, fakes: Fakes, results: list[dict[str, Any]]) -> None:
     for step in SCENARIOS:
         entry: dict[str, Any] = {"name": step["name"]}
+        if "fake" in step:
+            fakes.do(step["fake"], step.get("args", []))
+            entry["fake"] = step["fake"]
+            results.append(entry)
+            continue
+        if "wait" in step:
+            wait_for(transport, step["wait"])
+            entry["wait"] = step["wait"]
+            results.append(entry)
+            continue
         if "ws" in step:
             entry["ws"] = step["ws"]
             messages = transport.ws(step)
@@ -201,7 +266,6 @@ def run(transport: Any) -> list[dict[str, Any]]:
             entry["request"] = {k: step[k] for k in ("method", "path", "json") if k in step}
             entry["response"] = transport.http(step)
         results.append(entry)
-    return results
 
 
 # ---- diff ---------------------------------------------------------------------------------------

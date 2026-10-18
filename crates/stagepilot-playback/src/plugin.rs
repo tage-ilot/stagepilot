@@ -601,6 +601,18 @@ impl PlaybackPlugin {
         lock(&self.inner.shared).mapper.stale
     }
 
+    /// The mapper's scanned song order and captured setlist version.
+    pub fn mapper_view(&self) -> (Vec<i64>, Option<i64>) {
+        let s = lock(&self.inner.shared);
+        (s.mapper.song_order.clone(), s.mapper.captured_version)
+    }
+
+    /// Publish `connection.changed` if the connection state changed (the status routes do this
+    /// before they read).
+    pub async fn publish_connection(&self) {
+        self.inner.publish_connection().await;
+    }
+
     pub fn mapper_revision(&self) -> u64 {
         lock(&self.inner.shared).mapper.revision()
     }

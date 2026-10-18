@@ -2,7 +2,7 @@
 //! static dashboard serving. Response bodies and status codes follow the Python backend; see
 //! `docs/rust-migration/phase2.md` for the list of routes that are stubs.
 
-use crate::demo::{today, PLAYBACK_DISCONNECTED_REASON};
+use crate::demo::today;
 use crate::runtime::Runtime;
 use crate::validation::{self, http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
@@ -21,6 +21,7 @@ use stagepilot_core::events::ActionName;
 use stagepilot_core::settings::{PersistentSettings, UpdateError};
 use stagepilot_core::state::{ApplicationState, ApplicationStatus, ConnectionStatus, PluginStatus};
 use stagepilot_core::state::{ServiceLoadStatus, TimerStatus};
+use stagepilot_playback::plugin::PlaybackError;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -104,13 +105,6 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
             get(|| async { ok(stub("propresenter")) }),
         )
         .route("/api/v1/lights", get(|| async { ok(stub("lights")) }))
-        .route("/api/v1/playback-api/status", get(playback_status))
-        .route("/api/v1/playback-api/connection", get(playback_connection))
-        .route(
-            "/api/v1/playback-api/events",
-            get(|| async { ok(stub("playback_events")) }),
-        )
-        .route("/api/v1/playback-api/find", post(playback_find))
         .route(
             "/api/v1/remote-access",
             get(|| async { http_error(503, "Remote access is not configured.") }),
@@ -120,6 +114,7 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
             get(|| async { http_error(503, "Remote access is not configured.") }),
         )
         .route("/ws", get(ws_state))
+        .merge(crate::playback_routes::routes())
         .with_state(runtime.clone());
 
     let router = match options.web_root.filter(|r| r.join("index.html").is_file()) {
@@ -177,9 +172,6 @@ fn stub(name: &str) -> Value {
         "midi_messages" => include_str!("stubs/midi_messages.json"),
         "propresenter" => include_str!("stubs/propresenter.json"),
         "lights" => include_str!("stubs/lights.json"),
-        "playback_status" => include_str!("stubs/playback_status.json"),
-        "playback_connection" => include_str!("stubs/playback_connection.json"),
-        "playback_events" => include_str!("stubs/playback_events.json"),
         _ => "{}",
     };
     serde_json::from_str(text).unwrap_or(Value::Null)
@@ -395,6 +387,12 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
     if (source_changed || enabled_changed || input_changed) && timer_running {
         return http_error(409, MIDI_BUSY);
     }
+    if rt.playback.discovery_snapshot().state.as_str() == "running" {
+        return http_error(
+            409,
+            "Wait for Discover Song Order before changing settings.",
+        );
+    }
     let saved = rt.settings_service.snapshot().playback_api;
     if requested.playback_api.song_order != saved.song_order
         || requested.playback_api.captured_version != saved.captured_version
@@ -406,8 +404,13 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
             "Song order can only be changed by Discover Song Order.",
         );
     }
-    if let Err(error) = rt.settings_service.save(requested.clone()) {
-        return http_error(503, &error.0);
+    // Python hands the new settings to the Playback plugin, which saves and reconfigures.
+    if let Err(error) = rt.playback.save_settings(requested.clone()).await {
+        return match error {
+            PlaybackError::Conflict(m) => http_error(409, &m),
+            PlaybackError::Invalid(m) => http_error(400, &m),
+            PlaybackError::Save(m) => http_error(503, &m),
+        };
     }
     let updated = rt.settings_service.effective_snapshot();
     // Playback is always present in Python, so a restart is only needed when something other
@@ -652,52 +655,6 @@ async fn midi_input_selection(body: Bytes) -> Json {
             "msg": "Input should be a valid string", "input": other}),
         ]),
     }
-}
-
-async fn playback_find(body: Bytes) -> Json {
-    // Playback discovery is not ported yet. An invalid or empty host is answered exactly like
-    // Python; a valid host would start a scan there, which this server cannot do.
-    let parsed: Option<Value> = serde_json::from_slice(&body).ok();
-    let host = parsed
-        .as_ref()
-        .and_then(|v| v.get("host"))
-        .and_then(Value::as_str)
-        .filter(|h| !h.trim().is_empty());
-    match host {
-        None => http_error(422, "Enter a host name or IP address."),
-        Some(_) => http_error(503, "Playback is not available in this build yet."),
-    }
-}
-
-fn plan_fields(state: &ApplicationState, mut status: Value) -> Value {
-    if let Some(map) = status.as_object_mut() {
-        let (date, title, songs) = match &state.plan {
-            Some(plan) => (
-                json!(plan.date.to_string()),
-                json!(plan.title),
-                plan.songs
-                    .iter()
-                    .map(|s| json!({"id": s.id, "title": s.title, "duration_seconds": s.duration_seconds}))
-                    .collect::<Vec<_>>(),
-            ),
-            None => (Value::Null, Value::Null, vec![]),
-        };
-        map.insert("plan_date".into(), date);
-        map.insert("plan_title".into(), title);
-        map.insert("plan_song_count".into(), json!(songs.len()));
-        map.insert("plan_songs".into(), json!(songs));
-    }
-    status
-}
-
-async fn playback_status(State(rt): State<Rt>) -> Json {
-    ok(plan_fields(&rt.store.snapshot(), stub("playback_status")))
-}
-
-async fn playback_connection() -> Json {
-    let mut value = stub("playback_connection");
-    value["reason"] = json!(PLAYBACK_DISCONNECTED_REASON);
-    ok(value)
 }
 
 // ---- WebSocket --------------------------------------------------------------------------------

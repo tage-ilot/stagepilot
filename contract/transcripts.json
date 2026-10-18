@@ -4572,9 +4572,2142 @@
     },
     "status": 422
    }
+  },
+  {
+   "name": "playback settings, out of range port is a 422",
+   "request": {
+    "json": {
+     "port": 0
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "ge": 1
+       },
+       "input": 0,
+       "loc": [
+        "body",
+        "port"
+       ],
+       "msg": "Input should be greater than or equal to 1",
+       "type": "greater_than_equal"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback settings, port too high is a 422",
+   "request": {
+    "json": {
+     "port": 70000
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "le": 65535
+       },
+       "input": 70000,
+       "loc": [
+        "body",
+        "port"
+       ],
+       "msg": "Input should be less than or equal to 65535",
+       "type": "less_than_equal"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback settings, bad host is a 422",
+   "request": {
+    "json": {
+     "host": "bad host!"
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": "invalid Playback host"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback settings, unknown key is a 422",
+   "request": {
+    "json": {
+     "bogus": 1
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "bogus"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback settings, bad boolean is a 422",
+   "request": {
+    "json": {
+     "enabled": "maybe"
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "maybe",
+       "loc": [
+        "body",
+        "enabled"
+       ],
+       "msg": "Input should be a valid boolean, unable to interpret input",
+       "type": "bool_parsing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback settings, non-object body is a 422",
+   "request": {
+    "json": [
+     1
+    ],
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": [
+        1
+       ],
+       "loc": [
+        "body"
+       ],
+       "msg": "Input should be a valid dictionary or object to extract fields from",
+       "type": "model_attributes_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback find cancel while idle",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/playback-api/find/cancel"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "",
+      "operation": "update",
+      "reload": "not_needed",
+      "status": "idle"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 8080,
+     "progress": 0,
+     "reason": "Disconnected. Looking for Playback…",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": true,
+      "enabled": true,
+      "fast_transport": true,
+      "host": null,
+      "port": 8080
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback find, host too long is a 422",
+   "request": {
+    "json": {
+     "host": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/find"
+   },
+   "response": {
+    "body": {
+     "detail": "Enter a host name or IP address."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback find, host with a space is a 422",
+   "request": {
+    "json": {
+     "host": "bad host"
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/find"
+   },
+   "response": {
+    "body": {
+     "detail": "invalid Playback host"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback arrangement before a scan is a 409",
+   "request": {
+    "json": {},
+    "method": "PUT",
+    "path": "/api/v1/playback-api/arrangement"
+   },
+   "response": {
+    "body": {
+     "detail": "Scan songs first, then choose which songs to skip."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "playback arrangement, duplicate skips is a 422",
+   "request": {
+    "json": {
+     "skipped_song_ids": [
+      1,
+      1
+     ]
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/arrangement"
+   },
+   "response": {
+    "body": {
+     "detail": "Skipped songs must be unique."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback arrangement, unknown song is a 422",
+   "request": {
+    "json": {
+     "skipped_song_ids": [
+      5
+     ]
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/arrangement"
+   },
+   "response": {
+    "body": {
+     "detail": "A skipped Playback song is not in the scanned song order."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback arrangement, unknown key is a 422",
+   "request": {
+    "json": {
+     "x": 1
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/arrangement"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 1,
+       "loc": [
+        "body",
+        "x"
+       ],
+       "msg": "Extra inputs are not permitted",
+       "type": "extra_forbidden"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback arrangement, wrong item type is a 422",
+   "request": {
+    "json": {
+     "skipped_song_ids": [
+      "a"
+     ]
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/arrangement"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "a",
+       "loc": [
+        "body",
+        "skipped_song_ids",
+        0
+       ],
+       "msg": "Input should be a valid integer",
+       "type": "int_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback discover without confirm is a 400",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/playback-api/discover-song-order"
+   },
+   "response": {
+    "body": {
+     "detail": "Confirm Discover Song Order with {confirm: true}."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 400
+   }
+  },
+  {
+   "name": "playback discover while disconnected is a 409",
+   "request": {
+    "json": {
+     "confirm": true
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/discover-song-order"
+   },
+   "response": {
+    "body": {
+     "detail": "Playback is disconnected. Enable remote connections and connect first."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "playback lengths restore without confirm is a 400",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/playback-api/planning-center-lengths/restore"
+   },
+   "response": {
+    "body": {
+     "detail": "Confirm restoring Planning Center times with {confirm: true}."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 400
+   }
+  },
+  {
+   "name": "playback lengths restore with nothing to restore",
+   "request": {
+    "json": {
+     "confirm": true
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/planning-center-lengths/restore"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 8080,
+     "progress": 0,
+     "reason": "Disconnected. Looking for Playback…",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": true,
+      "enabled": true,
+      "fast_transport": true,
+      "host": null,
+      "port": 8080
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback lengths preview, Planning Center not connected",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/playback-api/planning-center-lengths/preview"
+   },
+   "response": {
+    "body": {
+     "detail": "Connect Planning Center first."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "playback lengths confirm, Planning Center not connected",
+   "request": {
+    "json": {
+     "confirm": true,
+     "token": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/planning-center-lengths/confirm"
+   },
+   "response": {
+    "body": {
+     "detail": "Connect Planning Center first."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "playback lengths confirm, bad body is a 422",
+   "request": {
+    "json": {
+     "confirm": false,
+     "token": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/planning-center-lengths/confirm"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "expected": "True"
+       },
+       "input": false,
+       "loc": [
+        "body",
+        "confirm"
+       ],
+       "msg": "Input should be True",
+       "type": "literal_error"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "playback lengths categories, Planning Center unavailable",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/planning-center-lengths/categories"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center could not read this plan. Song order and lengths are saved. Try again later."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "playback lengths category, Planning Center unavailable",
+   "request": {
+    "json": {
+     "service_type_id": "abc"
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/planning-center-lengths/category"
+   },
+   "response": {
+    "body": {
+     "detail": "Planning Center could not read this plan. Song order and lengths are saved. Try again later."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "playback lengths category, bad characters is a 422",
+   "request": {
+    "json": {
+     "service_type_id": "a b"
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/planning-center-lengths/category"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "pattern": "^[A-Za-z0-9_-]+$"
+       },
+       "input": "a b",
+       "loc": [
+        "body",
+        "service_type_id"
+       ],
+       "msg": "String should match pattern '^[A-Za-z0-9_-]+$'",
+       "type": "string_pattern_mismatch"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "fake": "start",
+   "name": "start the fake Playback"
+  },
+  {
+   "name": "playback settings, manual host and port of the fake",
+   "request": {
+    "json": {
+     "auto_scan": false,
+     "enabled": true,
+     "fast_transport": true,
+     "host": "127.0.0.1",
+     "port": 47901
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Disconnected. Looking for Playback…",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": true,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "wait until Playback is connected",
+   "wait": {
+    "equals": true,
+    "key": "connected",
+    "path": "/api/v1/playback-api/connection"
+   }
+  },
+  {
+   "name": "playback connection, connected",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/connection"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "connected": true,
+     "reason": "Connected to Playback on this computer.",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback status, connected and stopped",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": true,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Connected to Playback on this computer.",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": 1,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": true,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "fake": "play",
+   "name": "fake Playback starts playing"
+  },
+  {
+   "name": "wait until Playback reports playing",
+   "wait": {
+    "equals": true,
+    "key": "playing",
+    "path": "/api/v1/playback-api/status"
+   }
+  },
+  {
+   "name": "playback status, playing",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": true,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": true,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Connected to Playback on this computer.",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": 1,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": true,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback settings saved while playing",
+   "request": {
+    "json": {
+     "auto_scan": false,
+     "enabled": true,
+     "fast_transport": false,
+     "host": "127.0.0.1",
+     "port": 47901
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Disconnected. Looking for Playback…",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "idle",
+      "total": 0,
+      "typed": false
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": false,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "wait until the reconfigured client is playing again",
+   "wait": {
+    "equals": true,
+    "key": "playing",
+    "path": "/api/v1/playback-api/status"
+   }
+  },
+  {
+   "fake": "pause",
+   "name": "fake Playback pauses"
+  },
+  {
+   "name": "wait until Playback reports stopped",
+   "wait": {
+    "equals": false,
+    "key": "playing",
+    "path": "/api/v1/playback-api/status"
+   }
+  },
+  {
+   "name": "playback find, typed host of the fake",
+   "request": {
+    "json": {
+     "host": "127.0.0.1"
+    },
+    "method": "POST",
+    "path": "/api/v1/playback-api/find"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": true,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Looking for Playback…",
+     "scan": {
+      "candidates": [],
+      "current": 0,
+      "details": null,
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 0,
+      "hosts_total": 0,
+      "networks": [],
+      "phase": "Connecting to 127.0.0.1…",
+      "reason": null,
+      "settings_url": null,
+      "state": "scanning",
+      "total": 0,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": 1,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": false,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "wait until the typed scan is done",
+   "wait": {
+    "equals": "found",
+    "key": "scan.state",
+    "path": "/api/v1/playback-api/status"
+   }
+  },
+  {
+   "name": "playback status after the typed scan",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": true,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Connected to Playback on this computer.",
+     "scan": {
+      "candidates": [
+       {
+        "host": "127.0.0.1",
+        "name": "This computer"
+       }
+      ],
+      "current": 1,
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 1,
+      "hosts_total": 1,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "found",
+      "total": 1,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": 1,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": false,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback find cancel after a scan",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/playback-api/find/cancel"
+   },
+   "response": {
+    "body": {
+     "active_source": "playback_api",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": true,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Connected to Playback on this computer.",
+     "scan": {
+      "candidates": [
+       {
+        "host": "127.0.0.1",
+        "name": "This computer"
+       }
+      ],
+      "current": 1,
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 1,
+      "hosts_total": 1,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "found",
+      "total": 1,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": 1,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": false,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": true,
+       "reason": "Playback is connected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "fake": "go_offline",
+   "name": "fake Playback goes offline"
+  },
+  {
+   "name": "wait until Playback is disconnected",
+   "wait": {
+    "equals": false,
+    "key": "connected",
+    "path": "/api/v1/playback-api/connection"
+   }
+  },
+  {
+   "name": "playback connection, offline",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/connection"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "connected": false,
+     "reason": "Disconnected. Looking for Playback… If it stays offline, turn on Remote Connections.",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback status, offline",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": true,
+     "host": "127.0.0.1",
+     "last_error": "Playback unavailable; remote connections may be off",
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 47901,
+     "progress": 0,
+     "reason": "Disconnected. Looking for Playback… If it stays offline, turn on Remote Connections.",
+     "scan": {
+      "candidates": [
+       {
+        "host": "127.0.0.1",
+        "name": "This computer"
+       }
+      ],
+      "current": 1,
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 1,
+      "hosts_total": 1,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "found",
+      "total": 1,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": false,
+      "enabled": true,
+      "fast_transport": false,
+      "host": "127.0.0.1",
+      "port": 47901
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": "manual",
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback events",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/events"
+   },
+   "response": {
+    "body": {
+     "capacity": 100,
+     "events": [
+      {
+       "at": "<str>",
+       "discovery": false,
+       "event": {
+        "active": null,
+        "continues_playing": false,
+        "message_kind": null,
+        "pad": false,
+        "playing": false,
+        "position": 0.0,
+        "previous_song_id": null,
+        "previous_version": null,
+        "provisional": false,
+        "reason": null,
+        "section_id": null,
+        "setlist_version": 1,
+        "song_id": 101,
+        "timestamp": "<float>",
+        "type": "state.snapshot"
+       }
+      },
+      {
+       "at": "<str>",
+       "discovery": false,
+       "event": {
+        "active": null,
+        "continues_playing": false,
+        "message_kind": null,
+        "pad": null,
+        "playing": null,
+        "position": 0.0,
+        "previous_song_id": null,
+        "previous_version": null,
+        "provisional": false,
+        "reason": "play",
+        "section_id": null,
+        "setlist_version": null,
+        "song_id": 101,
+        "timestamp": "<float>",
+        "type": "song.started"
+       }
+      },
+      {
+       "at": "<str>",
+       "discovery": false,
+       "event": {
+        "active": null,
+        "continues_playing": false,
+        "message_kind": null,
+        "pad": false,
+        "playing": true,
+        "position": 0.0,
+        "previous_song_id": null,
+        "previous_version": null,
+        "provisional": false,
+        "reason": null,
+        "section_id": null,
+        "setlist_version": 1,
+        "song_id": 101,
+        "timestamp": "<float>",
+        "type": "state.snapshot"
+       }
+      },
+      {
+       "at": "<str>",
+       "discovery": false,
+       "event": {
+        "active": null,
+        "continues_playing": false,
+        "message_kind": null,
+        "pad": null,
+        "playing": null,
+        "position": 0.0,
+        "previous_song_id": null,
+        "previous_version": null,
+        "provisional": false,
+        "reason": null,
+        "section_id": null,
+        "setlist_version": null,
+        "song_id": 101,
+        "timestamp": "<float>",
+        "type": "song.paused"
+       }
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback settings, disabled",
+   "request": {
+    "json": {
+     "enabled": false
+    },
+    "method": "PUT",
+    "path": "/api/v1/playback-api/settings"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": false,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 8080,
+     "progress": 0,
+     "reason": "Disconnected. Choose Scan Network to find Playback.",
+     "scan": {
+      "candidates": [
+       {
+        "host": "127.0.0.1",
+        "name": "This computer"
+       }
+      ],
+      "current": 1,
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 1,
+      "hosts_total": 1,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "found",
+      "total": 1,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": true,
+      "enabled": false,
+      "fast_transport": true,
+      "host": null,
+      "port": 8080
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "playback status, disabled",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/playback-api/status"
+   },
+   "response": {
+    "body": {
+     "active_source": "none",
+     "arrangement_current": true,
+     "captured_at": null,
+     "captured_version": null,
+     "connected": false,
+     "discovery": "idle",
+     "discovery_duration_seconds": null,
+     "discovery_song": 0,
+     "discovery_total": 0,
+     "enabled": false,
+     "host": null,
+     "last_error": null,
+     "lengths_applied": false,
+     "lengths_measured_at": null,
+     "plan_changed": false,
+     "plan_date": "<today>",
+     "plan_song_count": 4,
+     "plan_songs": [
+      {
+       "duration_seconds": 281,
+       "id": "demo-battle-belongs",
+       "title": "Battle Belongs"
+      },
+      {
+       "duration_seconds": 336,
+       "id": "demo-holy-forever",
+       "title": "Holy Forever"
+      },
+      {
+       "duration_seconds": 352,
+       "id": "demo-gratitude",
+       "title": "Gratitude"
+      },
+      {
+       "duration_seconds": 377,
+       "id": "demo-firm-foundation",
+       "title": "Firm Foundation"
+      }
+     ],
+     "plan_title": "Sunday Worship — Demo",
+     "planning_center_connected": false,
+     "planning_center_lengths": {
+      "items": [],
+      "message": "No Planning Center times needed changing.",
+      "operation": "restore",
+      "reload": "not_needed",
+      "status": "done"
+     },
+     "planning_center_undo_available": false,
+     "planning_center_update_reason": "Connect Planning Center first.",
+     "planning_center_update_service_type_id": null,
+     "playing": false,
+     "port": 8080,
+     "progress": 0,
+     "reason": "Disconnected. Choose Scan Network to find Playback.",
+     "scan": {
+      "candidates": [
+       {
+        "host": "127.0.0.1",
+        "name": "This computer"
+       }
+      ],
+      "current": 1,
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "elapsed": 0.0,
+      "error_class": null,
+      "hosts_probed": 1,
+      "hosts_total": 1,
+      "networks": [],
+      "phase": null,
+      "reason": null,
+      "settings_url": null,
+      "state": "found",
+      "total": 1,
+      "typed": true
+     },
+     "selected": true,
+     "setlist_cloud_version": null,
+     "settings": {
+      "auto_scan": true,
+      "enabled": false,
+      "fast_transport": true,
+      "host": null,
+      "port": 8080
+     },
+     "skipped_plan_song_ids": [],
+     "skipped_song_ids": [],
+     "song_count": 0,
+     "song_lengths": [],
+     "song_order": [],
+     "source": null,
+     "sources": {
+      "midi": {
+       "connected": false,
+       "reason": "MIDI is disconnected."
+      },
+      "playback_api": {
+       "connected": false,
+       "reason": "Playback is disconnected."
+      }
+     },
+     "stale": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
   }
  ],
  "volatile_keys": [
+  "at",
   "date",
   "elapsed_seconds",
   "last_activity_at",

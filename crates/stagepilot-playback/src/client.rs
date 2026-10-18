@@ -10,8 +10,8 @@
 //! measurement. Discovery is "manual host, else loopback".
 
 use crate::find::{
-    classify_error, find_playback, saved_address_blocked, CancelToken, ErrorClass, Network,
-    ProbeError, SystemNetwork, SCAN_BLOCK_DETAIL,
+    classify_error, find_playback, saved_address_blocked, CancelToken, DiscoverySource, ErrorClass,
+    Network, ProbeError, SystemNetwork, SCAN_BLOCK_DETAIL,
 };
 use crate::normalizer::{Heartbeat, Normalizer, PlaybackEvent, SetlistId};
 use futures_util::{SinkExt, StreamExt};
@@ -93,6 +93,8 @@ pub struct PlaybackStatus {
     /// Valid heartbeats seen over the client's whole life; changes exactly when Python's
     /// `status.heartbeat is not previous` would (the plugin's "fresh heartbeat" test).
     pub heartbeat_serial: u64,
+    /// How the address was found (Python `PlaybackStatus.source`).
+    pub source: Option<DiscoverySource>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -482,6 +484,8 @@ async fn run(
         .clone()
         .unwrap_or_else(|| "127.0.0.1".into());
     let mut last_good: Option<String> = None;
+    let mut source: Option<DiscoverySource> = None;
+    let mut last_source: Option<DiscoverySource> = None;
     let mut last_scan: Option<Instant> = None;
     while !*stop.borrow() {
         let mut valid_heartbeat = false;
@@ -496,6 +500,7 @@ async fn run(
                         .await
                     {
                         found = Some(good.clone());
+                        source = last_source;
                     }
                 }
                 if found.is_none() {
@@ -517,7 +522,10 @@ async fn run(
                         &cancel,
                     )
                     .await
-                    .map(|r| r.host);
+                    .map(|r| {
+                        source = Some(r.source);
+                        r.host
+                    });
                 }
                 match found {
                     Some(h) => host = h,
@@ -529,7 +537,11 @@ async fn run(
                 }
             }
             let mut ws = connect(&host, options.port, options.heartbeat_timeout).await?;
+            if options.host_override.is_some() {
+                source = Some(DiscoverySource::Manual);
+            }
             last_good = Some(host.clone());
+            last_source = source;
             let generation = {
                 let mut g = shared.generation.lock().unwrap();
                 *g += 1;
@@ -593,6 +605,7 @@ async fn run(
                             heartbeat: norm.heartbeat,
                             setlist_id: norm.setlist_id.clone(),
                             heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
+                            source,
                         }, &events);
                     }
                 }
@@ -626,6 +639,7 @@ async fn run(
                     heartbeat: None,
                     setlist_id: None,
                     heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
+                    source,
                 },
                 &[],
             );
