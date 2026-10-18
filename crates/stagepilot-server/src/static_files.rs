@@ -181,7 +181,7 @@ fn parse_range(header: &str, size: u64) -> Ranges {
     let Some((units, spec)) = header.split_once('=') else {
         return Ranges::Malformed("Malformed range header.");
     };
-    if units.trim().to_ascii_lowercase() != "bytes" {
+    if !units.trim().eq_ignore_ascii_case("bytes") {
         return Ranges::Malformed("Only support bytes range");
     }
     let mut ranges: Vec<(i128, i128)> = Vec::new();

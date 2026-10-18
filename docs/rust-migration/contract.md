@@ -41,3 +41,24 @@ Response headers other than `content-type` (date, server, content-length) are ig
 ## Playback flows (phase 3b-B)
 
 `scenarios.py` steps with `"fake"` drive `backend/tests/playback_fake.py` (a scripted Playback on loopback port 47901, started by the runner, so both backends talk to a real WebSocket server); steps with `"wait"` poll a GET until a field has a value, so a replay never races the connection. The scan summary in `scan.details` carries a wall-clock `duration_s`, which is normalised on both sides.
+
+## Remote, diagnostics and static profiles (phase 6b-A)
+
+`scripts/contract/remote_profile.py` holds three more step lists, recorded into `remote_steps` (91),
+`diagnostics_steps` (26) and `static_steps` (34) in `contract/transcripts.json`:
+
+- `remote`: the demo app with a Remote identity store and `RemoteFeature` (no manager), plus the
+  same app behind the trusted `RemoteIngress` (public origin `https://remote.contract.test`) on a
+  second listener (`--ingress-url`). Steps with `via: "ingress"` go there; a stored session cookie
+  and CSRF token are captured from the login responses. Covers the product controls, user
+  administration, same-origin/CSRF/viewer policy, keyed retries, the login throttle.
+- `diagnostics`: a scripted Remote manager enrolled against a mock control plane
+  (`mock_control.py`, a request log like the other mocks). Covers the upload shape, the playback
+  section, 413/422/429/502/503 and the manager error mapping.
+- `static`: the fixture dashboard `scripts/contract/web/`: headers, redirect, 404 shape (no SPA
+  fallback), 405, ranges and validators.
+
+Compared headers: `content-type`, `cache-control`, `retry-after`, `accept-ranges`, `content-range`,
+`content-length` (not for JSON bodies), and the presence of `etag` / `last-modified`; `set-cookie`
+is compared with the token and date blanked. The Rust server runs the profiles with
+`--contract-remote` and `--contract-diagnostics`.

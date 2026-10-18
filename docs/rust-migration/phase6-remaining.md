@@ -33,25 +33,48 @@ This branch (`feat/rust-phase6`) is the INTEGRATION step only. It contains phase
 | `main.rs` | `--contract-pco`, `--contract-outputs` and `--demo` flags together |
 | `contract.py`, `run_*.sh` | three profiles, one `run(transport, scenarios, ctx)` |
 
+## Phase 6b-A (branch `feat/rust-phase6b-a`, stacked on this branch)
+
+Finished in 6b-A, struck from the table below:
+
+- Diagnostics `POST /api/v1/diagnostics/send` (`diagnostics.rs`).
+- Remote access routes (status, bootstrap, enable, reset, disable, regenerate), replacing the 503
+  stub (`remote_routes.rs`, `remote_feature.rs`).
+- Remote auth: login, session, logout, revoke-sessions, users CRUD (`remote_routes.rs`); the
+  trusted ingress (`remote_ingress.rs`) and the keyed-retry journal (`remote_routes::remote_retry`).
+  The store itself (`services/remote_auth.py`) was already ported to `stagepilot_core::auth`.
+- Static frontend parity (`static_files.rs`), replacing `ServeDir`.
+- Contract: `remote` (91 steps), `diagnostics` (26) and `static` (34) profiles, on both backends.
+- `phase6-test-map.md` started.
+
+Where a route needs the OS or the remote-modules crate it goes through a trait in
+`remote_types.rs` (`RemoteManager`, `DiagnosticsBootstrap`); 6b-B implements them, the tests and
+the contract use `remote_fakes.rs`.
+
 ## Still unported (follow-up cards), with estimates
 
 | Item | Python source | Estimate |
 |---|---|---|
-| Diagnostics endpoint `POST /api/v1/diagnostics/send` | `api/diagnostics.py` (141 lines) | 0.5-1 agent-day |
-| Remote access routes (`GET /remote-access`, bootstrap, enable, reset, disable, regenerate) | `api/remote_feature.py` (178), `remote_feature.py` (164) | 1-2 days; currently a 503 stub |
-| Remote auth: login, session, logout, revoke-sessions, users CRUD; ingress and retry middleware | `api/remote_auth.py` (165), `api/remote_ingress.py` (225), `api/remote_retry.py` (77), `services/remote_auth.py` | 2-3 days; `/remote-access` and `/remote-auth/users` are 503 stubs |
-| Remote modules `remote_desktop`, `remote_bootstrap`, `remote_beta_control` plus connector, provider, runtime, server, health, files, control, quick | about 3,700 lines in total (see `remote-modules.md`) | 8-12 days; OS parts (credential broker, `cloudflared` supervision, file lock) behind traits |
+| ~~Diagnostics endpoint `POST /api/v1/diagnostics/send`~~ | `api/diagnostics.py` | done in 6b-A |
+| ~~Remote access routes~~ | `api/remote_feature.py`, `remote_feature.py` | done in 6b-A (the real manager behind `RemoteManager` is 6b-B) |
+| ~~Remote auth routes, ingress and retry middleware~~ | `api/remote_auth.py`, `api/remote_ingress.py`, `api/remote_retry.py` | done in 6b-A. Not yet done: the launcher that listens on the dedicated remote port and wraps the router with `RemoteIngress` (`remote_server.py`, `remote_runtime.py`: 6b-B) |
+| Remote modules `remote_desktop`, `remote_bootstrap`, `remote_beta_control` plus connector, provider, runtime, server, health, files, control, quick | about 3,700 lines in total (see `remote-modules.md`) | 8-12 days; OS parts (credential broker, `cloudflared` supervision, file lock) behind traits (6b-B) |
 | `stagepilot-headless` binary | `__main__.py`, `main.py` | 1-2 days |
-| Static frontend parity (headers, SPA fallback, 404 shape) beyond `ServeDir` | `main.py` | 0.5-1 day, needs a contract profile |
+| ~~Static frontend parity~~ | `main.py` | done in 6b-A |
 | Tauri shell linking the server in process behind a cargo feature (sidecar and PyInstaller path stay) | `desktop/src-tauri` | 3-5 days, includes the three-OS CI legs |
-| Contract: remote, diagnostics and static transcripts; any route not in the 103 steps | `scripts/contract/scenarios.py` | 1-2 days, with the routes |
-| Python tests with no Rust port yet, map in `phase6-test-map.md` | `backend/tests` | 3-5 days; start the map from the phase 3a/4 maps |
-| WebSocket parity beyond the recorded steps | `api/websocket.py` | included above |
+| Contract: any route not in the 103 + 96 + 75 + 91 + 26 + 34 steps | `scripts/contract/scenarios.py` | 1 day, with the routes (remote, diagnostics and static are done) |
+| Python tests with no Rust port yet, map in `phase6-test-map.md` | `backend/tests` | 2-4 days; the map is started, the unported rows are listed there |
+| WebSocket parity beyond the recorded steps | `api/websocket.py` | the remote variant (session re-check, 4401/4403/4503 closes) is ported and unit-tested; not in the contract (needs a WebSocket client behind the ingress) |
 
 ## Not verified
 
 - Installer chain against the last Python release; any real-rig check (no rig use, the
   2026-10-17 authorisation has lapsed).
+- 6b-A: no real control plane, tunnel, provider or credential broker was contacted (mock control
+  plane and fakes only); no rig use (the 2026-10-17 authorisation has lapsed), so rig checks are
+  deferred. The Rust remote ingress is exercised through `tower::oneshot` and the contract's
+  second listener, not behind a real TLS terminator. Windows file locking of `access.lock`
+  (`File::lock`) is untested locally.
 - The macOS/Windows cargo legs were not run locally; they run in CI.
 - The midi-probe crate cannot build on this host (no pkg-config/alsa), so the workspace was
   checked per crate; the Linux CI job excludes `midi-probe` too.

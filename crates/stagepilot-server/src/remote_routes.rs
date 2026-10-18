@@ -7,6 +7,9 @@
 //! "Invalid remote authentication request." (never an echo of the input). The Remote Access
 //! controls sit behind the same route class in Python, so they get the same treatment.
 
+// The handlers return `Result<_, Response>` and the early-return `Response` is the error.
+#![allow(clippy::result_large_err)]
+
 use crate::diagnostics;
 use crate::remote_types::{RemoteAccess, RemoteContext, RemoteWiring, AUTH_PREFIX, COOKIE_NAME};
 use crate::runtime::Runtime;
@@ -354,7 +357,7 @@ async fn users(State(rt): State<Rt>, request: Request) -> Response {
 }
 
 async fn create_user(State(rt): State<Rt>, request: Request) -> Response {
-    let gate = admin_after_body(&rt, request, |raw| parse_create(raw)).await;
+    let gate = admin_after_body(&rt, request, parse_create).await;
     let (access, body) = match gate {
         Ok(pair) => pair,
         Err(response) => return response,
@@ -396,7 +399,7 @@ async fn update_user(
     Path(user_id): Path<String>,
     request: Request,
 ) -> Response {
-    let gate = admin_after_body(&rt, request, |raw| parse_update(raw)).await;
+    let gate = admin_after_body(&rt, request, parse_update).await;
     let (access, change) = match gate {
         Ok(pair) => pair,
         Err(response) => return response,
@@ -501,7 +504,7 @@ async fn status_reply(access: &Arc<RemoteAccess>, wiring: &RemoteWiring) -> Resp
 async fn bootstrap(State(rt): State<Rt>, request: Request) -> Response {
     let remote_caller = context(&request).is_some();
     let headers = request.headers().clone();
-    let gate = admin_after_body(&rt, request, |raw| parse_login(raw)).await;
+    let gate = admin_after_body(&rt, request, parse_login).await;
     let (access, body) = match gate {
         Ok(pair) => pair,
         Err(response) => return response,
