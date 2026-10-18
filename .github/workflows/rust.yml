@@ -12,6 +12,8 @@ on:
       - feat/rust-phase5
       - feat/rust-phase3a
       - feat/rust-phase3b
+      - feat/rust-phase4
+      - feat/rust-phase6
       - main
     paths:
       - "Cargo.toml"
