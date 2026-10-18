@@ -6046,7 +6046,7 @@
        }
       ],
       "current": 1,
-      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": \"<float>\", \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
       "elapsed": 0.0,
       "error_class": null,
       "hosts_probed": 1,
@@ -6163,7 +6163,7 @@
        }
       ],
       "current": 1,
-      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": \"<float>\", \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
       "elapsed": 0.0,
       "error_class": null,
       "hosts_probed": 1,
@@ -6216,9 +6216,9 @@
   {
    "name": "wait until Playback is disconnected",
    "wait": {
-    "equals": false,
-    "key": "connected",
-    "path": "/api/v1/playback-api/connection"
+    "equals": "Playback unavailable; remote connections may be off",
+    "key": "last_error",
+    "path": "/api/v1/playback-api/status"
    }
   },
   {
@@ -6320,7 +6320,7 @@
        }
       ],
       "current": 1,
-      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": \"<float>\", \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
       "elapsed": 0.0,
       "error_class": null,
       "hosts_probed": 1,
@@ -6542,7 +6542,7 @@
        }
       ],
       "current": 1,
-      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": \"<float>\", \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
       "elapsed": 0.0,
       "error_class": null,
       "hosts_probed": 1,
@@ -6659,7 +6659,7 @@
        }
       ],
       "current": 1,
-      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": 0.0, \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
+      "details": "{\"classification\": null, \"classification_inputs\": {}, \"duration_s\": \"<float>\", \"error_class\": null, \"errors\": {}, \"found\": 1, \"hosts_probed\": 1, \"hosts_total\": 1, \"interfaces\": [], \"lan_check\": \"skipped\", \"loopback_ok\": null, \"networks\": [], \"outcome\": \"found\", \"phases\": [{\"found\": 1, \"phase\": \"typed\", \"probed\": 1}], \"sample_errors\": [], \"typed_host\": \"127.0.0.1\"}",
       "elapsed": 0.0,
       "error_class": null,
       "hosts_probed": 1,

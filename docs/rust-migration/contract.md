@@ -5,7 +5,7 @@ The HTTP and WebSocket API of the Python backend is the contract the Rust server
 | File | What |
 |---|---|
 | `contract/openapi.json` | OpenAPI 3.1 schema for `/api/v1/*` (65 paths), generated from the FastAPI app. `info.version` is replaced by a placeholder. |
-| `contract/transcripts.json` | 30 golden steps (29 HTTP exchanges and one WebSocket session) recorded in process from `create_app(Settings(demo_mode=True))` with FastAPI's `TestClient`, the same harness the backend tests use. |
+| `contract/transcripts.json` | 103 golden steps (HTTP exchanges, one WebSocket session, and `fake` / `wait` control steps for the Playback flows) recorded in process from `create_app(Settings(demo_mode=True))` with FastAPI's `TestClient`, the same harness the backend tests use. |
 | `docs/rust-migration/ws-stream.md` | Description of the WebSocket stream. |
 | `scripts/contract/scenarios.py` | The scenarios. Demo-safe only: no Planning Center, MIDI, OSC, ProPresenter or Playback traffic, no keychain, no remote access. |
 | `scripts/contract/contract.py` | `record`, `replay BASE_URL`, `openapi`. |
@@ -16,7 +16,7 @@ Commands (repo root):
 ```
 uv run --project backend --frozen python scripts/contract/contract.py openapi
 uv run --project backend --frozen python scripts/contract/contract.py record
-scripts/contract/run_baseline.sh              # Python baseline, must print 30/30
+scripts/contract/run_baseline.sh              # Python baseline, must print 103/103
 uv run --project backend --frozen python scripts/contract/contract.py replay http://127.0.0.1:PORT   # any target
 ```
 
@@ -25,7 +25,7 @@ uv run --project backend --frozen python scripts/contract/contract.py replay htt
 ## Volatile fields (not compared, only their presence and type)
 
 Matched by key name at any depth: `updated_at`, `started_at`, `last_activity_at`, `last_checked_at`, `last_cue_at`, `revision`,
-`version`, `date`, `timestamp`, `position_seconds`, `elapsed_seconds`, `remaining_seconds`, and any key ending in `_at` (wall-clock
+`version`, `date`, `timestamp`, `position_seconds`, `elapsed_seconds`, `remaining_seconds`, `at`, and any key ending in `_at` (wall-clock
 instants such as `last_attempt_at`, `last_successful_plan_reload_at`). A string `id` that is a UUID is replaced by `<uuid>`.
 Response headers other than `content-type` (date, server, content-length) are ignored.
 
@@ -37,3 +37,7 @@ Response headers other than `content-type` (date, server, content-length) are ig
 - Dashboard PIN and remote-auth flows are not replayed (they need persisted state and cookies); phase 2 adds them with the auth port.
 - `recent_events` ordering inside one step depends on task scheduling in the demo plugin; the transcripts were recorded twice and are byte-identical, and the live
   replay passed 30/30 over real HTTP.
+
+## Playback flows (phase 3b-B)
+
+`scenarios.py` steps with `"fake"` drive `backend/tests/playback_fake.py` (a scripted Playback on loopback port 47901, started by the runner, so both backends talk to a real WebSocket server); steps with `"wait"` poll a GET until a field has a value, so a replay never races the connection. The scan summary in `scan.details` carries a wall-clock `duration_s`, which is normalised on both sides.

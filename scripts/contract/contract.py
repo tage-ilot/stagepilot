@@ -73,6 +73,11 @@ def normalise(node: Any) -> Any:
                 out[key] = "<uuid>"
             elif (key in VOLATILE_KEYS or key.endswith(VOLATILE_SUFFIXES)) and value is not None:
                 out[key] = f"<{type(value).__name__}>"
+            elif key == "details" and isinstance(value, str) and '"duration_s"' in value:
+                # The scan summary carries how long the scan took, which is wall-clock.
+                summary = json.loads(value)
+                summary["duration_s"] = "<float>"
+                out[key] = json.dumps(summary, sort_keys=True)
             elif key == "recent_events" and isinstance(value, list):
                 # Plugins start concurrently, so the order of events published in the same
                 # scheduling slot is not part of the contract: compare them as a sorted list.

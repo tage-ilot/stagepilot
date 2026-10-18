@@ -137,7 +137,7 @@ SCENARIOS: list[Step] = [
     http("playback status after the typed scan", "GET", "/api/v1/playback-api/status"),
     http("playback find cancel after a scan", "POST", "/api/v1/playback-api/find/cancel"),
     {"name": "fake Playback goes offline", "fake": "go_offline"},
-    {"name": "wait until Playback is disconnected", "wait": {"path": "/api/v1/playback-api/connection", "key": "connected", "equals": False}},
+    {"name": "wait until Playback is disconnected", "wait": {"path": "/api/v1/playback-api/status", "key": "last_error", "equals": "Playback unavailable; remote connections may be off"}},
     http("playback connection, offline", "GET", "/api/v1/playback-api/connection"),
     http("playback status, offline", "GET", "/api/v1/playback-api/status"),
     http("playback events", "GET", "/api/v1/playback-api/events"),
