@@ -10,6 +10,8 @@ on:
       - feat/rust-phase1
       - feat/rust-phase2
       - feat/rust-phase5
+      - feat/rust-phase3a
+      - feat/rust-phase3b
       - main
     paths:
       - "Cargo.toml"
@@ -81,6 +83,20 @@ jobs:
           cargo test --workspace
           echo "test_seconds=$(( $(date +%s) - start )) runner=${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Build the rig latency probe (artifact only; nothing is published)
+        shell: bash
+        run: cargo build --release -p stagepilot-playback --example rig_latency
+
+      - name: Upload rig latency probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-latency-${{ matrix.runner }}
+          path: |
+            target/release/examples/rig_latency
+            target/release/examples/rig_latency.exe
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: midir port listing (no MIDI is sent)
         shell: bash
         run: cargo run --release -p midi-probe | tee -a "$GITHUB_STEP_SUMMARY"
@@ -111,7 +127,7 @@ jobs:
 
       - name: Generated TypeScript is current
         run: |
-          cargo test -p stagepilot-core export_bindings
+          cargo test -p stagepilot-core -p stagepilot-playback export_bindings
           git diff --exit-code -- generated/ts
           test -z "$(git status --porcelain -- generated/ts)"
 

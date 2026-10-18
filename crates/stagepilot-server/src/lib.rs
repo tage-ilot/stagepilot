@@ -6,6 +6,7 @@
 pub mod app;
 pub mod demo;
 pub mod pco_routes;
+pub mod playback_routes;
 pub mod runtime;
 pub mod validation;
 

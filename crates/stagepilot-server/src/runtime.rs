@@ -2,7 +2,7 @@
 //! `main.create_app` that this phase owns (event bus, state store/service, plugin manager,
 //! settings service, startup and shutdown order).
 
-use crate::demo::{DemoPlugin, LightsStub, PlaybackStub};
+use crate::demo::{DemoPlugin, LightsStub};
 use chrono::{DateTime, Utc};
 use stagepilot_core::auth::DashboardSessionStore;
 use stagepilot_core::bus::EventBus;
@@ -15,7 +15,9 @@ use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
 use stagepilot_pco::oauth::{CompleteError, OAUTH_STARTUP_REFRESH_TIMEOUT_SECONDS};
 use stagepilot_pco::runtime::{PcoOptions, PcoRuntime};
-use std::sync::Arc;
+use stagepilot_playback::api::LengthUpdateResult;
+use stagepilot_playback::plugin::{PlaybackPlugin, PluginOptions};
+use std::sync::{Arc, Mutex};
 
 pub struct Runtime {
     pub settings: RuntimeSettings,
@@ -24,10 +26,12 @@ pub struct Runtime {
     pub state_service: StateService,
     pub plugins: PluginManager,
     pub settings_service: Arc<SettingsService>,
-    pub playback: Arc<PlaybackStub>,
+    pub playback: Arc<PlaybackPlugin>,
     /// Planning Center (phase 5): OAuth, setup service, client factory, the live plugin.
     pub pco: Arc<PcoRuntime>,
     oauth_stop: tokio::sync::watch::Sender<bool>,
+    /// The last Planning Center length operation (always idle until that service is ported).
+    pub lengths_result: Mutex<LengthUpdateResult>,
     pub sessions: DashboardSessionStore,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
@@ -39,18 +43,56 @@ impl Runtime {
     /// Build the runtime. `settings_service` must already be loaded (`load()` called) so
     /// `effective_runtime_settings()` is the resolved configuration.
     pub fn new(settings_service: Arc<SettingsService>, dashboard_auth_enforced: bool) -> Arc<Self> {
-        // Embedding and tests: OAuth tokens and the plan cache stay in memory (no keychain access).
         let options = PcoOptions {
             memory_tokens: true,
             ..PcoOptions::default()
         };
-        Self::with_pco(settings_service, dashboard_auth_enforced, options)
+        Self::with_options(
+            settings_service,
+            dashboard_auth_enforced,
+            PluginOptions::default(),
+            options,
+        )
     }
 
-    /// Same, with explicit Planning Center wiring (production keychain tokens, test origins).
+    /// Playback seams replaced, in-memory Planning Center (tests).
+    pub fn with_playback_options(
+        settings_service: Arc<SettingsService>,
+        dashboard_auth_enforced: bool,
+        playback_options: PluginOptions,
+    ) -> Arc<Self> {
+        let options = PcoOptions {
+            memory_tokens: true,
+            ..PcoOptions::default()
+        };
+        Self::with_options(
+            settings_service,
+            dashboard_auth_enforced,
+            playback_options,
+            options,
+        )
+    }
+
+    /// Planning Center wiring replaced (production keychain tokens, test origins).
     pub fn with_pco(
         settings_service: Arc<SettingsService>,
         dashboard_auth_enforced: bool,
+        options: PcoOptions,
+    ) -> Arc<Self> {
+        Self::with_options(
+            settings_service,
+            dashboard_auth_enforced,
+            PluginOptions::default(),
+            options,
+        )
+    }
+
+    /// Explicit seams for Playback (client factory, scanner, timeouts) and Planning Center
+    /// (production keychain tokens, test origins).
+    pub fn with_options(
+        settings_service: Arc<SettingsService>,
+        dashboard_auth_enforced: bool,
+        playback_options: PluginOptions,
         options: PcoOptions,
     ) -> Arc<Self> {
         let settings = settings_service.effective_runtime_settings();
@@ -64,7 +106,13 @@ impl Runtime {
             settings.recent_error_limit,
         );
         let plugins = PluginManager::new(bus.clone());
-        let playback = Arc::new(PlaybackStub::new(bus.clone()));
+        let playback = Arc::new(PlaybackPlugin::new(
+            bus.clone(),
+            store.clone(),
+            state_service.clone(),
+            settings_service.clone(),
+            playback_options,
+        ));
         // Registration order is the health order Python reports: lights, services, playback.
         register(&plugins, Arc::new(LightsStub::new(bus.clone())));
         if settings.integration_modes.service_source == ServiceSource::Demo {
@@ -91,6 +139,7 @@ impl Runtime {
             playback,
             pco,
             oauth_stop: tokio::sync::watch::channel(false).0,
+            lengths_result: Mutex::new(LengthUpdateResult::idle()),
             sessions: DashboardSessionStore::new(),
             dashboard_auth_enforced,
             started_at: Utc::now(),

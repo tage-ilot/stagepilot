@@ -10,14 +10,15 @@ fn opts(port: u16) -> ConnectionOptions {
     ConnectionOptions {
         port,
         host_override: Some("127.0.0.1".into()),
-        heartbeat_timeout: Duration::from_millis(600),
+        heartbeat_timeout: Duration::from_secs(2),
         reconnect_delay: Duration::from_millis(100),
         ..Default::default()
     }
 }
 
 async fn until(what: &str, mut f: impl FnMut() -> bool) {
-    for _ in 0..400 {
+    // Generous: only an upper bound for slow shared runners; a passing test returns at once.
+    for _ in 0..6000 {
         if f() {
             return;
         }
@@ -218,17 +219,42 @@ async fn garbage_messages_do_not_refresh_heartbeat_deadline() {
     let mut c = PlaybackClient::start(opts(fake.port), None).unwrap();
     until("connected", || c.status().connected).await;
     fake.stall(true);
-    for _ in 0..8 {
+    // Keep sending unknown traffic until the (2 s) heartbeat deadline drops the link. If
+    // unknown traffic refreshed the deadline this would never drop and `until` would fail.
+    let mut sent = 0;
+    until("dropped despite unknown traffic", || {
         fake.send_raw(r#"{"weird":{}}"#);
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    assert!(
-        !c.status().connected,
-        "unknown traffic must not keep the link alive"
-    );
+        sent += 1;
+        !c.status().connected
+    })
+    .await;
+    assert!(sent > 1, "traffic was flowing when the link dropped");
     assert!(c
         .events()
         .iter()
         .any(|e| e.kind == EventType::MessageUnknown));
     c.stop().await;
+}
+
+#[tokio::test]
+async fn failed_connection_checks_for_a_blocked_network_only_for_blocked_classes() {
+    // client.py: `saved_address_blocked` is consulted only after permission_denied / no_route.
+    // A refused connection (nothing listening) must NOT trigger it and keeps the generic text.
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let a = asked.clone();
+    let check: stagepilot_playback::client::BlockedCheck = std::sync::Arc::new(move || {
+        a.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async { true })
+    });
+    let mut c = PlaybackClient::start_with(opts(port), None, check).unwrap();
+    until("unavailable", || c.status().last_error.is_some()).await;
+    assert_eq!(
+        c.status().last_error.as_deref(),
+        Some("Playback unavailable; remote connections may be off")
+    );
+    c.stop().await;
+    assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0);
 }

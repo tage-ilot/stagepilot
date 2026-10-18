@@ -27,6 +27,7 @@ fn hb(position: f64) -> String {
         version: 1,
         stalled: false,
         length: 240.0,
+        songs: vec![],
     })
 }
 
@@ -163,7 +164,7 @@ fn opts(port: u16) -> ConnectionOptions {
     ConnectionOptions {
         port,
         host_override: Some("127.0.0.1".into()),
-        heartbeat_timeout: Duration::from_millis(800),
+        heartbeat_timeout: Duration::from_secs(3),
         reconnect_delay: Duration::from_millis(100),
         ..Default::default()
     }
@@ -211,7 +212,7 @@ async fn rust_matches_python_accept_reject_verdicts() {
         // Accept: position 42 reached while still on connection 1.
         // Reject: the client reconnects (connection count reaches 2) before that.
         let mut accepted = None;
-        for _ in 0..300 {
+        for _ in 0..1500 {
             let st = c.status();
             if st.heartbeat.is_some_and(|h| h.position == 42.0) {
                 accepted = Some(*srv.connections.lock().unwrap() == 1);
@@ -256,7 +257,7 @@ async fn ping_is_answered_with_a_masked_pong_carrying_the_payload() {
     script.extend(frame(1, hb(42.0).as_bytes(), true));
     let srv = raw_server(script, false).await;
     let mut c = PlaybackClient::start(opts(srv.port), None).unwrap();
-    for _ in 0..200 {
+    for _ in 0..1000 {
         if c.status().heartbeat.is_some_and(|h| h.position == 42.0) {
             break;
         }
@@ -288,7 +289,7 @@ async fn ping_is_answered_with_a_masked_pong_carrying_the_payload() {
 async fn abrupt_close_without_close_frame_reconnects_with_unavailable_error() {
     let srv = raw_server(Vec::new(), true).await;
     let mut c = PlaybackClient::start(opts(srv.port), None).unwrap();
-    for _ in 0..300 {
+    for _ in 0..1500 {
         if *srv.connections.lock().unwrap() >= 2 {
             break;
         }
@@ -323,7 +324,13 @@ async fn handshake_with_wrong_accept_key_is_rejected_like_python() {
         }
     });
     let mut c = PlaybackClient::start(opts(port), None).unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait (up to a generous bound) for the retry instead of sleeping a fixed 0.5 s.
+    for _ in 0..1500 {
+        if *accepted.lock().unwrap() >= 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert!(!c.status().connected);
     assert!(c.status().heartbeat.is_none());
     assert!(*accepted.lock().unwrap() >= 2, "should keep retrying");

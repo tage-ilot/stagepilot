@@ -18,6 +18,7 @@ stagepilot-core = { path = "../stagepilot-core" }
 stagepilot-pco = { path = "../stagepilot-pco" }
 serde_path_to_error = "0.1"
 url = "2"
+stagepilot-playback = { path = "../stagepilot-playback" }
 async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }
