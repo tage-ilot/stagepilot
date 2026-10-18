@@ -182,3 +182,16 @@ pub fn map_serde_error(
         None,
     )
 }
+
+/// Deserialise a request body like pydantic does: on failure return one pydantic-shaped error
+/// whose `loc` is prefixed with `body` (FastAPI's location for a JSON request body).
+pub fn parse_body<T: serde::de::DeserializeOwned>(value: &Value) -> Result<T, Vec<Value>> {
+    serde_path_to_error::deserialize::<_, T>(value.clone()).map_err(|error| {
+        let detail = map_serde_error(&error, value, value);
+        let mut detail = serde_json::to_value(detail).unwrap_or(Value::Null);
+        if let Some(loc) = detail.get_mut("loc").and_then(Value::as_array_mut) {
+            loc.insert(0, json!("body"));
+        }
+        vec![detail]
+    })
+}

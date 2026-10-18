@@ -413,6 +413,12 @@ pub struct RuntimeSettings {
     pub propresenter_enabled: bool,
     pub recent_event_limit: usize,
     pub recent_error_limit: usize,
+    /// The MIDI, lighting and ProPresenter sections as resolved for this run: saved settings with
+    /// the `STAGEPILOT_MIDI_*`, `STAGEPILOT_LIGHTS_*` and `STAGEPILOT_PROPRESENTER_*` overrides
+    /// applied (phase 4).
+    pub midi: MidiSettings,
+    pub lights: LightsSettings,
+    pub propresenter: ProPresenterSettings,
 }
 
 impl RuntimeSettings {
@@ -447,6 +453,16 @@ impl RuntimeSettings {
             propresenter_enabled: p.integration_modes.timer_output == TimerOutput::Propresenter,
             recent_event_limit: 100,
             recent_error_limit: 50,
+            // `to_runtime`: the enabled flags follow the integration modes, not the saved flags.
+            midi: MidiSettings {
+                enabled: p.integration_modes.midi_source != MidiSource::Simulated,
+                ..p.midi.clone()
+            },
+            lights: p.lights.clone(),
+            propresenter: ProPresenterSettings {
+                enabled: p.integration_modes.timer_output == TimerOutput::Propresenter,
+                ..p.propresenter.clone()
+            },
         }
     }
 }
@@ -455,10 +471,11 @@ fn truthy(value: &str) -> bool {
     matches!(value.to_lowercase().as_str(), "1" | "true" | "yes" | "on")
 }
 
-/// The subset of `STAGEPILOT_*` overrides that belong to this phase (host, port, log level,
-/// timezone, integration modes). PCO, MIDI, lights and ProPresenter overrides arrive with the
-/// phases that port those integrations.
+/// The `STAGEPILOT_*` overrides ported so far: host, port, log level, timezone, integration modes
+/// and (phase 4) the MIDI, lighting and ProPresenter sections. Planning Center overrides arrive
+/// with that integration.
 pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<String, String>) {
+    apply_output_environment(runtime, environ);
     if let Some(v) = environ.get("STAGEPILOT_HOST") {
         runtime.bind_host = v.clone();
     }
@@ -503,6 +520,7 @@ pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<Strin
     if let Some(v) = environ.get("STAGEPILOT_MIDI_ENABLED") {
         let enabled = truthy(v);
         runtime.midi_enabled = enabled;
+        runtime.midi.enabled = enabled;
         if !environ.contains_key("STAGEPILOT_DEMO_SIMULATE_MIDI") {
             modes.midi_source = if enabled {
                 MidiSource::Real
@@ -514,6 +532,7 @@ pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<Strin
     if let Some(v) = environ.get("STAGEPILOT_PROPRESENTER_ENABLED") {
         let enabled = truthy(v);
         runtime.propresenter_enabled = enabled;
+        runtime.propresenter.enabled = enabled;
         if !environ.contains_key("STAGEPILOT_DEMO_SIMULATE_PROPRESENTER") {
             modes.timer_output = if enabled {
                 TimerOutput::Propresenter
@@ -539,6 +558,7 @@ pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<Strin
         if let Some(source) = source {
             modes.midi_source = source;
             runtime.midi_enabled = source == MidiSource::Real;
+            runtime.midi.enabled = source == MidiSource::Real;
         }
     }
     if let Some(v) = environ.get("STAGEPILOT_TIMER_OUTPUT") {
@@ -550,7 +570,134 @@ pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<Strin
         if let Some(output) = output {
             modes.timer_output = output;
             runtime.propresenter_enabled = output == TimerOutput::Propresenter;
+            runtime.propresenter.enabled = output == TimerOutput::Propresenter;
         }
+    }
+}
+
+fn env_optional(environ: &BTreeMap<String, String>, name: &str) -> Option<Option<String>> {
+    environ.get(name).map(|v| {
+        let trimmed = v.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn env_number<T: std::str::FromStr>(environ: &BTreeMap<String, String>, name: &str) -> Option<T> {
+    environ.get(name).and_then(|v| v.trim().parse::<T>().ok())
+}
+
+/// MIDI / lights / ProPresenter overrides (`_environment_overrides`). Python builds the section
+/// from the saved values plus these and re-validates it, failing start-up on a bad value; here a
+/// section whose overridden values do not validate is left as saved (the bad override is ignored).
+fn apply_output_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<String, String>) {
+    let mut midi = runtime.midi.clone();
+    if let Some(v) = env_optional(environ, "STAGEPILOT_MIDI_INPUT_NAME") {
+        midi.input_name = v;
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_MIDI_CHANNEL") {
+        midi.channel = v;
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_MIDI_NOTE") {
+        midi.note = v;
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_MIDI_DEBOUNCE_MS") {
+        midi.debounce_ms = v;
+    }
+    let velocities = [
+        ("STAGEPILOT_MIDI_START_NEXT_VELOCITY", 0),
+        ("STAGEPILOT_MIDI_RESTART_CURRENT_VELOCITY", 1),
+        ("STAGEPILOT_MIDI_PREVIOUS_VELOCITY", 2),
+        ("STAGEPILOT_MIDI_NEXT_VELOCITY", 3),
+        ("STAGEPILOT_MIDI_RELOAD_PLAN_VELOCITY", 4),
+        ("STAGEPILOT_MIDI_STOP_TIMER_VELOCITY", 5),
+    ];
+    for (name, slot) in velocities {
+        if let Some(v) = env_number::<u8>(environ, name) {
+            let m = &mut midi.mappings;
+            let target = match slot {
+                0 => &mut m.start_next,
+                1 => &mut m.restart_current,
+                2 => &mut m.previous,
+                3 => &mut m.next,
+                4 => &mut m.reload_plan,
+                _ => &mut m.stop_timer,
+            };
+            *target = Some(v);
+        }
+    }
+    midi.normalise();
+    let mut errors = Vec::new();
+    midi.validate(&[], &mut errors);
+    if errors.is_empty() {
+        runtime.midi = midi;
+    }
+
+    let mut lights = runtime.lights.clone();
+    if let Some(v) = env_optional(environ, "STAGEPILOT_LIGHTS_OUTPUT_NAME") {
+        lights.output_name = v;
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_LIGHTS_CHANNEL") {
+        lights.channel = v;
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_LIGHTS_PULSE_MS") {
+        lights.pulse_ms = v;
+    }
+    if let Some(v) = environ.get("STAGEPILOT_LIGHTS_METHOD") {
+        match v.to_lowercase().as_str() {
+            "osc" => lights.method = LightingMethod::Osc,
+            "midi" => lights.method = LightingMethod::Midi,
+            _ => {}
+        }
+    }
+    if let Some(v) = environ.get("STAGEPILOT_LIGHTS_OSC_HOST") {
+        lights.osc_host = v.clone();
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_LIGHTS_OSC_PORT") {
+        lights.osc_port = v;
+    }
+    if let Some(v) = environ.get("STAGEPILOT_LIGHTS_ENABLED") {
+        lights.enabled = truthy(v);
+    }
+    lights.normalise();
+    let mut errors = Vec::new();
+    lights.validate(&[], &mut errors);
+    if errors.is_empty() {
+        runtime.lights = lights;
+    }
+
+    let mut pp = runtime.propresenter.clone();
+    if let Some(v) = environ.get("STAGEPILOT_PROPRESENTER_HOST") {
+        pp.host = v.clone();
+    }
+    if let Some(v) = env_number(environ, "STAGEPILOT_PROPRESENTER_PORT") {
+        pp.port = v;
+    }
+    if let Some(v) = environ.get("STAGEPILOT_PROPRESENTER_TIMER_NAME") {
+        pp.timer_name = v.clone();
+    }
+    if let Some(v) = environ.get("STAGEPILOT_PROPRESENTER_LOOK_ID") {
+        pp.look_id = Some(v.clone());
+    }
+    for (name, field) in [
+        ("STAGEPILOT_PROPRESENTER_TIMEOUT_SECONDS", 0),
+        ("STAGEPILOT_PROPRESENTER_RECONNECT_INITIAL_SECONDS", 1),
+        ("STAGEPILOT_PROPRESENTER_RECONNECT_MAX_SECONDS", 2),
+        ("STAGEPILOT_PROPRESENTER_HEALTH_CHECK_SECONDS", 3),
+    ] {
+        if let Some(v) = env_number::<f64>(environ, name) {
+            match field {
+                0 => pp.request_timeout_seconds = v,
+                1 => pp.reconnect_initial_seconds = v,
+                2 => pp.reconnect_max_seconds = v,
+                _ => pp.health_check_interval_seconds = v,
+            }
+        }
+    }
+    pp.normalise();
+    let mut errors = Vec::new();
+    pp.validate(&[], &mut errors);
+    if errors.is_empty() {
+        runtime.propresenter = pp;
     }
 }
 
@@ -932,6 +1079,23 @@ impl SettingsService {
         service
     }
 
+    /// In-memory settings from a full persisted document (`SettingsService.ephemeral(Settings)`
+    /// when the Python test or contract profile also sets the MIDI, lights and ProPresenter blocks).
+    pub fn ephemeral_persistent(persistent: PersistentSettings) -> Self {
+        let service = Self::new(
+            Box::new(MemorySettingsStore::new(Some(persistent.clone()))),
+            Box::new(MemoryCredentialStore::default()),
+            BTreeMap::new(),
+        );
+        let runtime = service.resolve(&persistent);
+        {
+            let mut s = service.lock();
+            s.persistent = persistent;
+            s.runtime = Some(runtime);
+        }
+        service
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, ServiceState> {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
@@ -1027,8 +1191,15 @@ impl SettingsService {
         }
         out.server_port = runtime.bind_port;
         out.lan_access = runtime.bind_host == "0.0.0.0";
-        out.propresenter.enabled =
-            runtime.integration_modes.timer_output == TimerOutput::Propresenter;
+        out.midi = MidiSettings {
+            enabled: s.persistent.midi.enabled,
+            ..runtime.midi.clone()
+        };
+        out.lights = runtime.lights.clone();
+        out.propresenter = ProPresenterSettings {
+            enabled: runtime.integration_modes.timer_output == TimerOutput::Propresenter,
+            ..runtime.propresenter.clone()
+        };
         out
     }
 
@@ -1056,6 +1227,27 @@ impl SettingsService {
         s.persistent = settings;
         s.runtime = Some(runtime);
         Ok(())
+    }
+
+    pub fn persist_midi_input(&self, input_name: Option<String>) -> Result<(), SettingsFileError> {
+        let mut updated = self.snapshot();
+        updated.midi.input_name = input_name;
+        self.save(updated)
+    }
+
+    pub fn persist_propresenter(
+        &self,
+        settings: ProPresenterSettings,
+    ) -> Result<(), SettingsFileError> {
+        let mut updated = self.snapshot();
+        updated.propresenter = settings;
+        self.save(updated)
+    }
+
+    pub fn persist_lights(&self, settings: LightsSettings) -> Result<(), SettingsFileError> {
+        let mut updated = self.snapshot();
+        updated.lights = settings;
+        self.save(updated)
     }
 
     pub fn update_dashboard_access(

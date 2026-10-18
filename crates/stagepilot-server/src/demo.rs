@@ -1,8 +1,9 @@
 //! The demo Services plugin and the placeholders for plugins later phases port.
 //!
-//! `DemoPlugin` is a port of `plugins/demo/plugin.py`. `LightsStub` and `PlaybackStub` only
-//! reproduce what the Python plugins publish at start-up while their integration is disabled
-//! (a disconnected `connection.changed`), so the state snapshot and `/health` match.
+//! `DemoPlugin` is a port of `plugins/demo/plugin.py`. `PlaybackStub` only reproduces what the
+//! Python Playback input publishes at start-up while nothing is selected (a disconnected
+//! `connection.changed`), so the state snapshot and `/health` match. Lights, MIDI and
+//! ProPresenter are real since phase 4 (`outputs.rs`).
 
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
@@ -15,7 +16,6 @@ use stagepilot_core::state::{
 use std::sync::Mutex;
 
 pub const PLUGIN_VERSION: &str = "0.1.0";
-pub const LIGHTS_DISABLED_DETAIL: &str = "Disconnected. Lighting OSC output is not configured.";
 pub const PLAYBACK_DISCONNECTED_REASON: &str =
     "Disconnected. Choose Scan Network to find Playback.";
 
@@ -58,10 +58,17 @@ pub struct DemoPlugin {
     bus: EventBus,
     state: Mutex<Status>,
     subscriptions: Mutex<Vec<Subscription>>,
+    timer_subscriptions: Mutex<Vec<Subscription>>,
+    simulate_propresenter: Mutex<bool>,
 }
 
 impl DemoPlugin {
     pub fn new(bus: EventBus) -> Self {
+        Self::with_simulation(bus, true)
+    }
+
+    /// `simulate_propresenter = false` leaves the countdown to a real ProPresenter plugin.
+    pub fn with_simulation(bus: EventBus, simulate_propresenter: bool) -> Self {
         Self {
             bus,
             state: Mutex::new(Status {
@@ -69,6 +76,8 @@ impl DemoPlugin {
                 last_activity_at: None,
             }),
             subscriptions: Mutex::new(Vec::new()),
+            timer_subscriptions: Mutex::new(Vec::new()),
+            simulate_propresenter: Mutex::new(simulate_propresenter),
         }
     }
 
@@ -78,6 +87,71 @@ impl DemoPlugin {
             s.status = status;
         }
         s.last_activity_at = Some(Utc::now());
+    }
+
+    fn subscribe_timer(&self) {
+        let mut subs = Vec::new();
+        for kind in [EventType::SongStarted, EventType::SongRestarted] {
+            let bus = self.bus.clone();
+            subs.push(self.bus.subscribe(Some(kind), move |event| {
+                let bus = bus.clone();
+                async move {
+                    if let EventPayload::Song { song, .. } = &event.payload {
+                        if let Some(duration) = song.duration_seconds.filter(|d| *d > 0) {
+                            bus.publish(new_event(
+                                EventType::TimerStarted,
+                                "demo",
+                                EventPayload::Timer(TimerPayload {
+                                    duration_seconds: duration,
+                                    song: Some(song.clone()),
+                                    ..Default::default()
+                                }),
+                            ))
+                            .await;
+                        }
+                    }
+                    Ok(())
+                }
+            }));
+        }
+        let bus = self.bus.clone();
+        subs.push(
+            self.bus
+                .subscribe(Some(EventType::TimerStopRequested), move |_event| {
+                    let bus = bus.clone();
+                    async move {
+                        bus.publish(timer_stopped()).await;
+                        Ok(())
+                    }
+                }),
+        );
+        lock(&self.timer_subscriptions).extend(subs);
+    }
+
+    fn unsubscribe_timer(&self) {
+        for sub in lock(&self.timer_subscriptions).drain(..) {
+            self.bus.unsubscribe(&sub);
+        }
+    }
+
+    /// Start or stop simulating the timer output while running, as a fresh start would.
+    pub async fn set_simulate_propresenter(&self, simulate: bool) {
+        {
+            let mut current = lock(&self.simulate_propresenter);
+            if *current == simulate {
+                return;
+            }
+            *current = simulate;
+        }
+        if lock(&self.state).status != PluginStatus::Running {
+            return;
+        }
+        if simulate {
+            self.subscribe_timer();
+            self.bus.publish(timer_stopped()).await;
+        } else {
+            self.unsubscribe_timer();
+        }
     }
 }
 
@@ -126,66 +200,35 @@ impl Plugin for DemoPlugin {
 
     async fn start(&self) -> Result<(), String> {
         self.touch(Some(PluginStatus::Starting));
-        let mut subs = Vec::new();
         let bus = self.bus.clone();
-        subs.push(
-            self.bus
-                .subscribe(Some(EventType::ServiceReloadRequested), {
-                    let bus = bus.clone();
-                    move |_event| {
-                        let bus = bus.clone();
-                        async move {
-                            publish_plan(&bus, demo_service_plan(today())).await;
-                            Ok(())
-                        }
-                    }
-                }),
-        );
-        for kind in [EventType::SongStarted, EventType::SongRestarted] {
-            let bus = bus.clone();
-            subs.push(self.bus.subscribe(Some(kind), move |event| {
+        let reload = self
+            .bus
+            .subscribe(Some(EventType::ServiceReloadRequested), {
                 let bus = bus.clone();
-                async move {
-                    if let EventPayload::Song { song, .. } = &event.payload {
-                        if let Some(duration) = song.duration_seconds.filter(|d| *d > 0) {
-                            bus.publish(new_event(
-                                EventType::TimerStarted,
-                                "demo",
-                                EventPayload::Timer(TimerPayload {
-                                    duration_seconds: duration,
-                                    song: Some(song.clone()),
-                                    ..Default::default()
-                                }),
-                            ))
-                            .await;
-                        }
+                move |_event| {
+                    let bus = bus.clone();
+                    async move {
+                        publish_plan(&bus, demo_service_plan(today())).await;
+                        Ok(())
                     }
-                    Ok(())
                 }
-            }));
+            });
+        lock(&self.subscriptions).push(reload);
+        let simulate = *lock(&self.simulate_propresenter);
+        if simulate {
+            self.subscribe_timer();
         }
-        {
-            let bus = bus.clone();
-            subs.push(
-                self.bus
-                    .subscribe(Some(EventType::TimerStopRequested), move |_event| {
-                        let bus = bus.clone();
-                        async move {
-                            bus.publish(timer_stopped()).await;
-                            Ok(())
-                        }
-                    }),
-            );
-        }
-        lock(&self.subscriptions).extend(subs);
         publish_plan(&self.bus, demo_service_plan(today())).await;
-        self.bus.publish(timer_stopped()).await;
+        if simulate {
+            self.bus.publish(timer_stopped()).await;
+        }
         self.touch(Some(PluginStatus::Running));
         Ok(())
     }
 
     async fn stop(&self) -> Result<(), String> {
         self.touch(Some(PluginStatus::Stopping));
+        self.unsubscribe_timer();
         for sub in lock(&self.subscriptions).drain(..) {
             self.bus.unsubscribe(&sub);
         }
@@ -205,64 +248,6 @@ impl Plugin for DemoPlugin {
     }
 }
 
-/// Lights while disabled: publishes the disconnected connection and nothing else.
-pub struct LightsStub {
-    bus: EventBus,
-    state: Mutex<Status>,
-}
-
-impl LightsStub {
-    pub fn new(bus: EventBus) -> Self {
-        Self {
-            bus,
-            state: Mutex::new(Status {
-                status: PluginStatus::Stopped,
-                last_activity_at: None,
-            }),
-        }
-    }
-}
-
-#[async_trait]
-impl Plugin for LightsStub {
-    fn name(&self) -> &str {
-        "lights"
-    }
-    fn version(&self) -> &str {
-        PLUGIN_VERSION
-    }
-    async fn start(&self) -> Result<(), String> {
-        lock(&self.state).status = PluginStatus::Running;
-        self.bus
-            .publish(new_event(
-                EventType::ConnectionChanged,
-                "lights",
-                EventPayload::Connection {
-                    integration: Integration::Lights,
-                    status: ConnectionStatus::Disconnected,
-                    detail: Some(LIGHTS_DISABLED_DETAIL.into()),
-                },
-            ))
-            .await;
-        lock(&self.state).last_activity_at = Some(Utc::now());
-        Ok(())
-    }
-    async fn stop(&self) -> Result<(), String> {
-        lock(&self.state).status = PluginStatus::Stopped;
-        Ok(())
-    }
-    async fn health(&self) -> Result<PluginHealth, String> {
-        let s = lock(&self.state);
-        Ok(PluginHealth {
-            name: "lights".into(),
-            version: PLUGIN_VERSION.into(),
-            status: s.status,
-            last_error: None,
-            last_activity_at: s.last_activity_at,
-        })
-    }
-}
-
 /// Playback input while nothing is selected: publishes the disconnected MIDI connection once.
 pub struct PlaybackStub {
     bus: EventBus,
@@ -271,6 +256,10 @@ pub struct PlaybackStub {
 
 impl PlaybackStub {
     pub fn new(bus: EventBus) -> Self {
+        Self::new_for(bus)
+    }
+
+    fn new_for(bus: EventBus) -> Self {
         Self {
             bus,
             state: Mutex::new(Status {

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
-from scenarios import SCENARIOS, Step  # noqa: E402
+from scenarios import OUTPUT_SCENARIOS, SCENARIOS, Step  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "contract"
@@ -64,12 +64,17 @@ def _is_uuid(value: Any) -> bool:
     )
 
 
+MOCK_PORT: list[int] = []  # the mock ProPresenter port of this run (outputs profile)
+
+
 def normalise(node: Any) -> Any:
     if isinstance(node, dict):
         out = {}
         for key, value in node.items():
-            if key == "id" and _is_uuid(value):
+            if key in ("id", "cue_id") and _is_uuid(value):
                 out[key] = "<uuid>"
+            elif key == "port" and MOCK_PORT and value == MOCK_PORT[0]:
+                out[key] = "<mock_port>"
             elif (key in VOLATILE_KEYS or key.endswith(VOLATILE_SUFFIXES)) and value is not None:
                 out[key] = f"<{type(value).__name__}>"
             elif key == "recent_events" and isinstance(value, list):
@@ -103,13 +108,13 @@ def clean_headers(headers: Any) -> dict[str, str]:
 class InProcess:
     """The backend test harness: FastAPI TestClient over create_app(demo)."""
 
-    def __init__(self) -> None:
+    def __init__(self, app: Any = None) -> None:
         from fastapi.testclient import TestClient
         from stagepilot.core.config import Settings
         from stagepilot.main import create_app
 
         self._cm = TestClient(
-            create_app(Settings(demo_mode=True), dashboard_auth_enforced=False)
+            app if app is not None else create_app(Settings(demo_mode=True), dashboard_auth_enforced=False)
         )
         self.client = self._cm.__enter__()
 
@@ -183,9 +188,51 @@ def _exchange(status: int, headers: Any, body: bytes) -> dict[str, Any]:
     return {"status": status, "headers": clean_headers(headers), "body": parsed}
 
 
-def run(transport: Any) -> list[dict[str, Any]]:
+def _mock(ctx: dict[str, Any], path: str) -> Any:
+    request = urllib.request.Request(ctx["mock_url"] + path, method="GET")
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read()
+    return json.loads(body) if body else None
+
+
+def _substitute(node: Any, ctx: dict[str, Any]) -> Any:
+    if node == "@MOCK_PORT@":
+        return ctx["mock_port"]
+    if isinstance(node, dict):
+        return {k: _substitute(v, ctx) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_substitute(v, ctx) for v in node]
+    return node
+
+
+def _mask(node: Any, keys: list[str]) -> Any:
+    if isinstance(node, dict):
+        return {k: ("<masked>" if k in keys else _mask(v, keys)) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_mask(v, keys) for v in node]
+    return node
+
+
+def run(
+    transport: Any,
+    scenarios: list[Step] | None = None,
+    ctx: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    import time
+
     results = []
-    for step in SCENARIOS:
+    for step in SCENARIOS if scenarios is None else scenarios:
+        if "sleep" in step:
+            time.sleep(step["sleep"])
+            continue
+        if "mock" in step:
+            assert ctx is not None
+            _mock(ctx, step["mock"])
+            continue
+        if "mock_log" in step:
+            assert ctx is not None
+            results.append({"name": step["name"], "mock_requests": _mock(ctx, "/__log")})
+            continue
         entry: dict[str, Any] = {"name": step["name"]}
         if "ws" in step:
             entry["ws"] = step["ws"]
@@ -198,8 +245,14 @@ def run(transport: Any) -> list[dict[str, Any]]:
                 {"type": m.get("type"), "data_keys": sorted(m.get("data", {}))} for m in messages[1:]
             ]
         else:
+            # The recorded request is the template (placeholders intact); the wire request has the
+            # run's mock port substituted.
             entry["request"] = {k: step[k] for k in ("method", "path", "json") if k in step}
-            entry["response"] = transport.http(step)
+            wire = _substitute(step, ctx) if ctx is not None else step
+            response = transport.http(wire)
+            if "mask" in step:
+                response = {**response, "body": _mask(response["body"], step["mask"])}
+            entry["response"] = response
         results.append(entry)
     return results
 
@@ -227,31 +280,69 @@ def diff(path: str, want: Any, got: Any, out: list[str]) -> None:
         out.append(f"{path}: {want!r} != {got!r}")
 
 
+def _dump(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "volatile_keys": sorted(VOLATILE_KEYS),
+        "volatile_suffixes": list(VOLATILE_SUFFIXES),
+        "steps": normalise(steps),
+    }
+
+
+def record_outputs() -> list[dict[str, Any]]:
+    """Run the outputs profile in process: fake MIDI, mock ProPresenter, OSC to a dead loopback port."""
+
+    import mock_propresenter
+    import outputs_app
+
+    server, port = mock_propresenter.start()
+    MOCK_PORT[:] = [port]
+    transport = InProcess(outputs_app.create(port))
+    try:
+        return normalise(
+            run(
+                transport,
+                OUTPUT_SCENARIOS,
+                {"mock_url": f"http://127.0.0.1:{port}", "mock_port": port},
+            )
+        )
+    finally:
+        transport.close()
+        server.shutdown()
+        MOCK_PORT[:] = []
+
+
 def cmd_record(_: argparse.Namespace) -> int:
     transport = InProcess()
     try:
         transcripts = run(transport)
     finally:
         transport.close()
+    document = _dump(transcripts)
+    outputs = record_outputs()
+    document["output_steps"] = outputs
     OUT.mkdir(exist_ok=True)
     TRANSCRIPTS.write_text(
-        json.dumps(
-            {"volatile_keys": sorted(VOLATILE_KEYS), "volatile_suffixes": list(VOLATILE_SUFFIXES), "steps": normalise(transcripts)},
-            indent=1,
-            sort_keys=True,
-            ensure_ascii=False,
-        )
-        + "\n",
+        json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    print(f"recorded {len(transcripts)} steps -> {TRANSCRIPTS.relative_to(ROOT)}")
+    print(
+        f"recorded {len(transcripts)} steps + {len(outputs)} output steps -> {TRANSCRIPTS.relative_to(ROOT)}"
+    )
     return 0
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    golden = json.loads(TRANSCRIPTS.read_text(encoding="utf-8"))["steps"]
+    document = json.loads(TRANSCRIPTS.read_text(encoding="utf-8"))
+    golden = document["steps"]
     live = Live(args.base_url)
-    got = normalise(copy.deepcopy(run(live)))
+    ctx = None
+    scenarios = None
+    if args.profile == "outputs":
+        golden = document["output_steps"]
+        scenarios = OUTPUT_SCENARIOS
+        ctx = {"mock_url": args.mock_url, "mock_port": int(args.mock_url.rsplit(":", 1)[1])}
+        MOCK_PORT[:] = [ctx["mock_port"]]
+    got = normalise(copy.deepcopy(run(live, scenarios, ctx)))
     problems: list[str] = []
     for want, have in zip(golden, got):
         found: list[str] = []
@@ -263,7 +354,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     for line in problems:
         print("  " + line)
     failed = sum(1 for want, have in zip(golden, got) if want != have)
-    print(f"{len(golden) - failed}/{len(golden)} steps match")
+    print(f"{len(golden) - failed}/{len(golden)} steps match" + (f" ({args.profile} profile)" if args.profile else ""))
     return 1 if problems else 0
 
 
@@ -289,6 +380,8 @@ def main() -> int:
     sub.add_parser("openapi").set_defaults(fn=cmd_openapi)
     rp = sub.add_parser("replay")
     rp.add_argument("base_url")
+    rp.add_argument("--profile", choices=["outputs"], default=None)
+    rp.add_argument("--mock-url", default=None, help="mock ProPresenter base URL (outputs profile)")
     rp.set_defaults(fn=cmd_replay)
     args = p.parse_args()
     return int(args.fn(args))
