@@ -4,7 +4,6 @@
 
 use crate::demo::{DemoPlugin, LightsStub};
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
 use stagepilot_core::auth::DashboardSessionStore;
 use stagepilot_core::bus::EventBus;
 use stagepilot_core::config::ServiceSource;
@@ -14,6 +13,7 @@ use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_core::state::ApplicationStatus;
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
+use stagepilot_playback::api::LengthUpdateResult;
 use stagepilot_playback::plugin::{PlaybackPlugin, PluginOptions};
 use std::sync::{Arc, Mutex};
 
@@ -26,7 +26,7 @@ pub struct Runtime {
     pub settings_service: Arc<SettingsService>,
     pub playback: Arc<PlaybackPlugin>,
     /// The last Planning Center length operation (always idle until that service is ported).
-    pub lengths_result: Mutex<Value>,
+    pub lengths_result: Mutex<LengthUpdateResult>,
     pub sessions: DashboardSessionStore,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
@@ -38,6 +38,20 @@ impl Runtime {
     /// Build the runtime. `settings_service` must already be loaded (`load()` called) so
     /// `effective_runtime_settings()` is the resolved configuration.
     pub fn new(settings_service: Arc<SettingsService>, dashboard_auth_enforced: bool) -> Arc<Self> {
+        Self::with_playback_options(
+            settings_service,
+            dashboard_auth_enforced,
+            PluginOptions::default(),
+        )
+    }
+
+    /// [`new`](Self::new) with the Playback plugin's seams (client factory, scanner, timeouts)
+    /// replaced, for tests.
+    pub fn with_playback_options(
+        settings_service: Arc<SettingsService>,
+        dashboard_auth_enforced: bool,
+        playback_options: PluginOptions,
+    ) -> Arc<Self> {
         let settings = settings_service.effective_runtime_settings();
         let settings_source = settings.integration_modes.service_source;
         let bus = EventBus::new();
@@ -54,7 +68,7 @@ impl Runtime {
             store.clone(),
             state_service.clone(),
             settings_service.clone(),
-            PluginOptions::default(),
+            playback_options,
         ));
         // Registration order is the health order Python reports: lights, services, playback.
         register(&plugins, Arc::new(LightsStub::new(bus.clone())));
@@ -70,8 +84,7 @@ impl Runtime {
             plugins,
             settings_service,
             playback,
-            lengths_result: Mutex::new(json!({"operation": "update", "status": "idle",
-                "message": "", "items": [], "reload": "not_needed"})),
+            lengths_result: Mutex::new(LengthUpdateResult::idle()),
             sessions: DashboardSessionStore::new(),
             dashboard_auth_enforced,
             started_at: Utc::now(),

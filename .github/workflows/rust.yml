@@ -126,7 +126,7 @@ jobs:
 
       - name: Generated TypeScript is current
         run: |
-          cargo test -p stagepilot-core export_bindings
+          cargo test -p stagepilot-core -p stagepilot-playback export_bindings
           git diff --exit-code -- generated/ts
           test -z "$(git status --porcelain -- generated/ts)"
 

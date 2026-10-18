@@ -532,7 +532,14 @@ async fn song_started_drives_the_timer_and_stop_stops_it() {
 
     // The operator selects song 102 in Playback (arms the start), then presses play.
     fake.send_raw(r#"{"setlistSelectSong":{"setlistSongID":102}}"#);
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Wait until the plugin has seen the selection (a poll, not a guessed delay).
+    until("selection observed", || {
+        r.plugin
+            .events()
+            .iter()
+            .any(|e| e.event.kind == stagepilot_playback::normalizer::EventType::SongSelected)
+    })
+    .await;
     {
         let mut s = fake.state.lock().unwrap();
         s.playing = true;

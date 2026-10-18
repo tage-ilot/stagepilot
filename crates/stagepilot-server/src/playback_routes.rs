@@ -14,6 +14,11 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 use stagepilot_core::config::{MidiSource, PlaybackApiSettings};
 use stagepilot_core::state::ConnectionStatus;
+use stagepilot_playback::api::{
+    LengthUpdateResult, PlaybackConnectionResponse, PlaybackEventsResponse, PlaybackMonitorEntry,
+    PlaybackPlanSong, PlaybackSettingsRequest, PlaybackStatusResponse, ScanCandidateModel,
+    ScanResult, SourceStatus, SourcesStatus,
+};
 use stagepilot_playback::arrangement::align_lengths;
 use stagepilot_playback::client::ConnectionOptions;
 use stagepilot_playback::find::DiscoverySource;
@@ -498,36 +503,51 @@ fn py_dumps(value: &Value) -> String {
     }
 }
 
-fn source_name(source: Option<DiscoverySource>) -> Value {
-    match source {
-        Some(DiscoverySource::Manual) => json!("manual"),
-        Some(DiscoverySource::Loopback) => json!("loopback"),
-        Some(DiscoverySource::Lan) => json!("lan"),
-        None => Value::Null,
+fn source_name(source: Option<DiscoverySource>) -> Option<String> {
+    source.map(|s| {
+        match s {
+            DiscoverySource::Manual => "manual",
+            DiscoverySource::Loopback => "loopback",
+            DiscoverySource::Lan => "lan",
+        }
+        .to_string()
+    })
+}
+
+fn sources_of(connection: &stagepilot_playback::arbiter::PlaybackConnection) -> SourcesStatus {
+    let of = |s: &stagepilot_playback::arbiter::SourceStatus| SourceStatus {
+        connected: s.connected,
+        reason: s.reason.to_string(),
+    };
+    SourcesStatus {
+        midi: of(&connection.midi),
+        playback_api: of(&connection.playback_api),
     }
 }
 
 fn connection_json(rt: &Runtime) -> Value {
     let connection = rt.playback.connection();
-    json!({
-        "active_source": connection.active_source.as_str(),
-        "connected": connection.connected,
-        "reason": rt.playback.connection_reason(),
-        "sources": {
-            "midi": {"connected": connection.midi.connected, "reason": connection.midi.reason},
-            "playback_api": {
-                "connected": connection.playback_api.connected,
-                "reason": connection.playback_api.reason,
-            },
-        },
+    to_json(&PlaybackConnectionResponse {
+        active_source: connection.active_source.as_str().to_string(),
+        connected: connection.connected,
+        reason: rt.playback.connection_reason(),
+        sources: sources_of(&connection),
     })
 }
 
+fn to_json<T: serde::Serialize>(value: &T) -> Value {
+    serde_json::to_value(value).unwrap_or(Value::Null)
+}
+
+fn lengths_result(rt: &Runtime) -> LengthUpdateResult {
+    rt.lengths_result
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+}
+
 fn lengths_status(rt: &Runtime) -> String {
-    rt.lengths_result.lock().unwrap_or_else(|p| p.into_inner())["status"]
-        .as_str()
-        .unwrap_or("idle")
-        .to_string()
+    lengths_result(rt).status
 }
 
 /// `update_reason`: why the Planning Center write is not available right now.
@@ -571,12 +591,6 @@ fn update_reason(rt: &Runtime) -> Option<String> {
     None
 }
 
-fn merge(into: &mut Value, part: Value) {
-    if let (Some(a), Value::Object(b)) = (into.as_object_mut(), part) {
-        a.extend(b);
-    }
-}
-
 fn status_json(rt: &Runtime) -> Value {
     let state = rt.store.snapshot();
     let status = rt.playback.status();
@@ -596,12 +610,16 @@ fn status_json(rt: &Runtime) -> Value {
         last_obj
             .and_then(|m| m.get(key))
             .and_then(Value::as_u64)
-            .unwrap_or(0)
+            .unwrap_or(0) as u32
     };
-    let networks: Vec<Value> = last_obj
+    let networks: Vec<String> = last_obj
         .and_then(|m| m.get("networks"))
         .and_then(Value::as_array)
-        .cloned()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let plan = state.plan.as_ref();
     let plan_ids: Vec<&str> = plan
@@ -617,95 +635,110 @@ fn status_json(rt: &Runtime) -> Value {
         .planning_center_update_service_type_id
         .clone()
         .or_else(|| persistent.planning_center.service_type_id.clone());
-    let lengths = rt
-        .lengths_result
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .clone();
-    let mut out = json!({
-        "planning_center_lengths": lengths,
-        "planning_center_undo_available": !persistent.planning_center_length_undo.is_empty(),
-        "planning_center_connected": state.planning_center_status == ConnectionStatus::Connected,
-        "planning_center_update_reason": update_reason(rt),
-        "planning_center_update_service_type_id": update_service_type,
-        "discovery_duration_seconds": config.discovery_duration_seconds,
-        "plan_title": plan.map(|p| p.title.clone()),
-        "plan_date": plan.map(|p| p.date.to_string()),
-        "scan": {
-            "state": scan.state.as_str(),
-            "candidates": scan.candidates.iter()
-                .map(|c| json!({"name": c.name, "host": c.host})).collect::<Vec<_>>(),
-            "reason": scan.reason,
-            "current": scan.current,
-            "total": scan.total,
-            "phase": if scan.state.as_str() == "scanning" { json!(scan.phase) } else { Value::Null },
-            "error_class": scan.error_class,
-            "typed": scan.typed,
-            "elapsed": (scan.elapsed * 10.0).round() / 10.0,
-            "networks": networks,
-            "hosts_probed": count("hosts_probed"),
-            "hosts_total": count("hosts_total"),
-            "details": if last_obj.is_some_and(|m| !m.is_empty()) { json!(py_dumps(&last)) } else { Value::Null },
-            "settings_url": if blocked { json!(LOCAL_NETWORK_SETTINGS_URL) } else { Value::Null },
+    let response = PlaybackStatusResponse {
+        planning_center_lengths: lengths_result(rt),
+        planning_center_undo_available: !persistent.planning_center_length_undo.is_empty(),
+        planning_center_connected: state.planning_center_status == ConnectionStatus::Connected,
+        planning_center_update_reason: update_reason(rt),
+        planning_center_update_service_type_id: update_service_type,
+        discovery_duration_seconds: config.discovery_duration_seconds,
+        plan_title: plan.map(|p| p.title.clone()),
+        plan_date: plan.map(|p| p.date.to_string()),
+        scan: ScanResult {
+            state: scan.state.as_str().to_string(),
+            candidates: scan
+                .candidates
+                .iter()
+                .map(|c| ScanCandidateModel {
+                    name: c.name.clone(),
+                    host: c.host.clone(),
+                })
+                .collect(),
+            reason: scan.reason.clone(),
+            current: scan.current as u32,
+            total: scan.total as u32,
+            phase: if scan.state.as_str() == "scanning" {
+                scan.phase.clone()
+            } else {
+                None
+            },
+            error_class: scan.error_class.clone(),
+            typed: scan.typed,
+            elapsed: (scan.elapsed * 10.0).round() / 10.0,
+            networks,
+            hosts_probed: count("hosts_probed"),
+            hosts_total: count("hosts_total"),
+            details: if last_obj.is_some_and(|m| !m.is_empty()) {
+                Some(py_dumps(&last))
+            } else {
+                None
+            },
+            settings_url: blocked.then(|| LOCAL_NETWORK_SETTINGS_URL.to_string()),
         },
-    });
-    merge(
-        &mut out,
-        json!({
-            "selected": rt.playback.selected(),
-            "enabled": config.enabled,
-            "connected": connection.connected,
-            "active_source": connection.active_source.as_str(),
-            "sources": {
-                "midi": {"connected": connection.midi.connected, "reason": connection.midi.reason},
-                "playback_api": {
-                    "connected": connection.playback_api.connected,
-                    "reason": connection.playback_api.reason,
-                },
-            },
-            "reason": rt.playback.connection_reason(),
-            "host": status.host,
-            "port": status.port,
-            "source": source_name(status.source),
-            "last_error": discovery.error.clone()
-                .or_else(|| if connection.connected { None } else { status.last_error.clone() }),
-            "playing": status.heartbeat.is_some_and(|h| h.playing),
-            "setlist_cloud_version": status.heartbeat.and_then(|h| h.setlist_version),
+        selected: rt.playback.selected(),
+        enabled: config.enabled,
+        connected: connection.connected,
+        active_source: connection.active_source.as_str().to_string(),
+        sources: sources_of(&connection),
+        reason: rt.playback.connection_reason(),
+        host: status.host.clone(),
+        port: status.port,
+        source: source_name(status.source),
+        last_error: discovery.error.clone().or_else(|| {
+            if connection.connected {
+                None
+            } else {
+                status.last_error.clone()
+            }
         }),
-    );
-    merge(
-        &mut out,
-        json!({
-            "discovery": discovery.state.as_str(),
-            "progress": discovery.progress,
-            "discovery_song": discovery.song,
-            "discovery_total": discovery.total,
-            "song_order": song_order,
-            "song_lengths": if outdated { json!([]) } else { json!(config.song_lengths) },
-            "skipped_song_ids": config.skipped_song_ids,
-            "skipped_plan_song_ids": config.skipped_plan_song_ids,
-            "arrangement_current": arrangement_current,
-            "lengths_measured_at": if outdated { Value::Null } else { json!(config.lengths_measured_at.map(iso)) },
-            "plan_songs": plan.map(|p| p.songs.iter().map(|s| json!({
-                "id": s.id, "title": s.title, "duration_seconds": s.duration_seconds,
-            })).collect::<Vec<_>>()).unwrap_or_default(),
-            "song_count": song_order.len(),
-            "plan_song_count": plan.map_or(0, |p| p.songs.len()),
-            "captured_version": captured_version,
-            "captured_at": config.captured_at.map(iso),
-            "stale": stale,
-            "plan_changed": plan_changed,
-            "lengths_applied": rt.playback.lengths_applied(),
-            "settings": {
-                "enabled": config.enabled,
-                "host": config.host,
-                "port": config.port,
-                "auto_scan": config.auto_scan,
-                "fast_transport": config.fast_transport,
-            },
-        }),
-    );
-    out
+        playing: status.heartbeat.is_some_and(|h| h.playing),
+        setlist_cloud_version: status.heartbeat.and_then(|h| h.setlist_version),
+        discovery: discovery.state.as_str().to_string(),
+        progress: discovery.progress as u32,
+        discovery_song: discovery.song as u32,
+        discovery_total: discovery.total as u32,
+        song_count: song_order.len() as u32,
+        song_order,
+        song_lengths: if outdated {
+            vec![]
+        } else {
+            config.song_lengths.clone()
+        },
+        skipped_song_ids: config.skipped_song_ids.clone(),
+        skipped_plan_song_ids: config.skipped_plan_song_ids.clone(),
+        arrangement_current,
+        lengths_measured_at: if outdated {
+            None
+        } else {
+            config.lengths_measured_at.map(iso)
+        },
+        plan_songs: plan
+            .map(|p| {
+                p.songs
+                    .iter()
+                    .map(|s| PlaybackPlanSong {
+                        id: s.id.clone(),
+                        title: s.title.clone(),
+                        duration_seconds: s.duration_seconds,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        plan_song_count: plan.map_or(0, |p| p.songs.len() as u32),
+        captured_version,
+        captured_at: config.captured_at.map(iso),
+        stale,
+        plan_changed,
+        lengths_applied: rt.playback.lengths_applied(),
+        settings: PlaybackSettingsRequest {
+            enabled: config.enabled,
+            host: config.host.clone(),
+            port: config.port,
+            auto_scan: config.auto_scan,
+            fast_transport: config.fast_transport,
+        },
+    };
+    to_json(&response)
 }
 
 fn failure(error: PlaybackError, invalid_status: u16) -> Json {
@@ -729,19 +762,20 @@ async fn connection(State(rt): State<Rt>) -> Json {
 }
 
 async fn events(State(rt): State<Rt>) -> Json {
-    let entries: Vec<Value> = rt
+    let events = rt
         .playback
         .events()
         .iter()
-        .map(|e| {
-            json!({
-                "event": serde_json::to_value(&e.event).unwrap_or(Value::Null),
-                "discovery": e.discovery,
-                "at": iso(e.at),
-            })
+        .map(|e| PlaybackMonitorEntry {
+            event: e.event.clone(),
+            discovery: e.discovery,
+            at: iso(e.at),
         })
         .collect();
-    ok(json!({"events": entries, "capacity": 100}))
+    ok(to_json(&PlaybackEventsResponse {
+        events,
+        capacity: 100,
+    }))
 }
 
 async fn arrangement(State(rt): State<Rt>, body: Bytes) -> Json {
@@ -951,12 +985,12 @@ async fn restore_lengths(State(rt): State<Rt>, body: Bytes) -> Json {
             "Restoring Planning Center times is not available in this build yet.",
         );
     }
-    *rt.lengths_result.lock().unwrap_or_else(|p| p.into_inner()) = json!({
-        "operation": "restore",
-        "status": "done",
-        "message": "No Planning Center times needed changing.",
-        "items": [],
-        "reload": "not_needed",
-    });
+    *rt.lengths_result.lock().unwrap_or_else(|p| p.into_inner()) = LengthUpdateResult {
+        operation: "restore".into(),
+        status: "done".into(),
+        message: "No Planning Center times needed changing.".into(),
+        items: vec![],
+        reload: "not_needed".into(),
+    };
     ok(status_json(&rt))
 }

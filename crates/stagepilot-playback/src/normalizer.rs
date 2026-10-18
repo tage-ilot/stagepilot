@@ -6,8 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, rename = "PlaybackEventType")]
 pub enum EventType {
     #[serde(rename = "state.snapshot")]
     StateSnapshot,
@@ -60,7 +62,8 @@ pub struct Heartbeat {
     pub setlist_version: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct PlaybackEvent {
     #[serde(rename = "type")]
     pub kind: EventType,
