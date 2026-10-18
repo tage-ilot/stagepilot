@@ -5,10 +5,13 @@
 
 pub mod app;
 pub mod demo;
+pub mod outputs;
 pub mod pco_routes;
 pub mod playback_routes;
+pub mod routes_outputs;
 pub mod runtime;
 pub mod validation;
 
 pub use app::{build_app, default_web_root, AppOptions};
+pub use outputs::OutputBackends;
 pub use runtime::Runtime;

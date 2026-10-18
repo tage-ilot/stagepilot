@@ -13,12 +13,21 @@ workspace = true
 name = "stagepilot-server"
 path = "src/main.rs"
 
+[features]
+# Real MIDI hardware through midir (see crates/stagepilot-midi). Off by default so a plain
+# `cargo build`/`cargo test` works where ALSA headers are missing (the self-hosted Linux runner).
+midir-backend = ["stagepilot-midi/midir-backend"]
+
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }
 stagepilot-pco = { path = "../stagepilot-pco" }
 serde_path_to_error = "0.1"
 url = "2"
 stagepilot-playback = { path = "../stagepilot-playback" }
+stagepilot-midi = { path = "../stagepilot-midi" }
+stagepilot-osc = { path = "../stagepilot-osc" }
+stagepilot-lights = { path = "../stagepilot-lights" }
+stagepilot-propresenter = { path = "../stagepilot-propresenter" }
 async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }

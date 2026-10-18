@@ -26,13 +26,13 @@ pub struct Detail {
 
 pub type Errors = Vec<Detail>;
 
-pub(crate) fn path_with(path: &[Value], key: &str) -> Vec<Value> {
+pub fn path_with(path: &[Value], key: &str) -> Vec<Value> {
     let mut p = path.to_vec();
     p.push(Value::String(key.to_string()));
     p
 }
 
-pub(crate) fn check_range<T: Copy + PartialOrd + Into<f64> + Serialize>(
+pub fn check_range<T: Copy + PartialOrd + Into<f64> + Serialize>(
     errors: &mut Errors,
     path: &[Value],
     key: &str,
@@ -94,7 +94,7 @@ pub(crate) fn check_range<T: Copy + PartialOrd + Into<f64> + Serialize>(
     }
 }
 
-pub(crate) fn check_len(
+pub fn check_len(
     errors: &mut Errors,
     path: &[Value],
     key: &str,
@@ -128,7 +128,7 @@ pub(crate) fn check_len(
     }
 }
 
-pub(crate) fn value_error(errors: &mut Errors, path: &[Value], message: &str, input: Value) {
+pub fn value_error(errors: &mut Errors, path: &[Value], message: &str, input: Value) {
     errors.push(Detail {
         kind: "value_error".into(),
         loc: path.to_vec(),
@@ -634,6 +634,7 @@ fn too_long(errors: &mut Errors, path: &[Value], key: &str, len: usize, max: usi
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LightingCue {
+    #[serde(default = "Uuid::new_v4")]
     #[ts(as = "String")]
     pub id: Uuid,
     pub at_seconds: f64,
@@ -668,6 +669,7 @@ pub enum OscArgument {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct OscLightingCue {
+    #[serde(default = "Uuid::new_v4")]
     #[ts(as = "String")]
     pub id: Uuid,
     pub at_seconds: f64,
@@ -696,6 +698,7 @@ pub fn validate_osc_address(value: &str) -> Result<(), &'static str> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LightingPad {
+    #[serde(default = "Uuid::new_v4")]
     #[ts(as = "String")]
     pub id: Uuid,
     pub label: String,

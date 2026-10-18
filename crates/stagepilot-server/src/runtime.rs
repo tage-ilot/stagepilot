@@ -2,12 +2,14 @@
 //! `main.create_app` that this phase owns (event bus, state store/service, plugin manager,
 //! settings service, startup and shutdown order).
 
-use crate::demo::{DemoPlugin, LightsStub};
+use crate::demo::DemoPlugin;
+use crate::outputs::{register, OutputBackends, Outputs};
 use chrono::{DateTime, Utc};
 use stagepilot_core::auth::DashboardSessionStore;
 use stagepilot_core::bus::EventBus;
-use stagepilot_core::config::{ConnectionMethod, ServiceSource};
+use stagepilot_core::config::{ConnectionMethod, ServiceSource, TimerOutput};
 use stagepilot_core::events::{empty_event, EventType};
+use stagepilot_core::plugin::Plugin;
 use stagepilot_core::plugin::PluginManager;
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_core::state::ApplicationStatus;
@@ -32,6 +34,10 @@ pub struct Runtime {
     oauth_stop: tokio::sync::watch::Sender<bool>,
     /// The last Planning Center length operation (always idle until that service is ported).
     pub lengths_result: Mutex<LengthUpdateResult>,
+    /// MIDI input, lights and ProPresenter (phase 4).
+    pub outputs: Arc<Outputs>,
+    /// `PluginManager.reconcile_lock`: serialises live connection changes made by routes.
+    pub reconcile: tokio::sync::Mutex<()>,
     pub sessions: DashboardSessionStore,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
@@ -87,6 +93,25 @@ impl Runtime {
         )
     }
 
+    /// Same, with explicit MIDI / OSC / ProPresenter backends (tests and the contract profile).
+    pub fn with_backends(
+        settings_service: Arc<SettingsService>,
+        dashboard_auth_enforced: bool,
+        backends: OutputBackends,
+    ) -> Arc<Self> {
+        let options = PcoOptions {
+            memory_tokens: true,
+            ..PcoOptions::default()
+        };
+        Self::with_all(
+            settings_service,
+            dashboard_auth_enforced,
+            PluginOptions::default(),
+            options,
+            backends,
+        )
+    }
+
     /// Explicit seams for Playback (client factory, scanner, timeouts) and Planning Center
     /// (production keychain tokens, test origins).
     pub fn with_options(
@@ -94,6 +119,24 @@ impl Runtime {
         dashboard_auth_enforced: bool,
         playback_options: PluginOptions,
         options: PcoOptions,
+    ) -> Arc<Self> {
+        Self::with_all(
+            settings_service,
+            dashboard_auth_enforced,
+            playback_options,
+            options,
+            OutputBackends::default(),
+        )
+    }
+
+    /// The one builder that wires every plugin: Playback, Planning Center, MIDI, lights and
+    /// ProPresenter, each with its test seams.
+    pub fn with_all(
+        settings_service: Arc<SettingsService>,
+        dashboard_auth_enforced: bool,
+        playback_options: PluginOptions,
+        options: PcoOptions,
+        backends: OutputBackends,
     ) -> Arc<Self> {
         let settings = settings_service.effective_runtime_settings();
         let settings_source = settings.integration_modes.service_source;
@@ -113,10 +156,20 @@ impl Runtime {
             settings_service.clone(),
             playback_options,
         ));
-        // Registration order is the health order Python reports: lights, services, playback.
-        register(&plugins, Arc::new(LightsStub::new(bus.clone())));
+        let outputs = Arc::new(
+            Outputs::build(&bus, &state_service, &settings, backends)
+                .unwrap_or_else(|error| panic!("invalid output settings: {error}")),
+        );
+        // Registration order is the health order Python reports: lights, services, the Playback
+        // input (real MIDI or the Playback API), then ProPresenter.
+        register(&plugins, outputs.lights.clone() as Arc<dyn Plugin>);
         if settings.integration_modes.service_source == ServiceSource::Demo {
-            register(&plugins, Arc::new(DemoPlugin::new(bus.clone())));
+            let demo = Arc::new(DemoPlugin::with_simulation(
+                bus.clone(),
+                settings.integration_modes.timer_output == TimerOutput::Simulated,
+            ));
+            outputs.set_demo(demo.clone());
+            register(&plugins, demo);
         }
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::PlanningCenter {
@@ -128,7 +181,13 @@ impl Runtime {
                 Err(error) => tracing::error!(%error, "planning_center_plugin_build_failed"),
             }
         }
-        register(&plugins, playback.clone());
+        match &outputs.midi_input {
+            Some(input) => register(&plugins, input.clone() as Arc<dyn Plugin>),
+            None => register(&plugins, playback.clone()),
+        }
+        if let Some(plugin) = outputs.startup_propresenter(&settings) {
+            register(&plugins, plugin as Arc<dyn Plugin>);
+        }
         Arc::new(Self {
             settings,
             bus,
@@ -140,11 +199,22 @@ impl Runtime {
             pco,
             oauth_stop: tokio::sync::watch::channel(false).0,
             lengths_result: Mutex::new(LengthUpdateResult::idle()),
+            outputs,
+            reconcile: tokio::sync::Mutex::new(()),
             sessions: DashboardSessionStore::new(),
             dashboard_auth_enforced,
             started_at: Utc::now(),
             live_service_source: settings_source,
         })
+    }
+
+    /// `_apply_presentation`: make the running Presentation output match the saved settings.
+    /// `Err` is the 409 text; `Ok(Some(_))` a warning when the new output failed to start.
+    pub async fn apply_presentation(&self) -> Result<Option<String>, String> {
+        let settings = self.settings_service.effective_runtime_settings();
+        self.outputs
+            .sync_presentation(&settings, &self.plugins, &self.store, &self.state_service)
+            .await
     }
 
     pub fn live_service_source(&self) -> ServiceSource {
@@ -203,11 +273,5 @@ impl Runtime {
         let _ = self.oauth_stop.send(true);
         self.plugins.stop_all().await;
         self.state_service.stop();
-    }
-}
-
-fn register(plugins: &PluginManager, plugin: Arc<dyn stagepilot_core::plugin::Plugin>) {
-    if let Err(error) = plugins.register(plugin) {
-        tracing::error!(%error, "plugin_register_failed");
     }
 }

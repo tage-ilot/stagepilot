@@ -144,3 +144,150 @@ SCENARIOS: list[Step] = [
     http("playback settings, disabled", "PUT", "/api/v1/playback-api/settings", {"enabled": False}),
     http("playback status, disabled", "GET", "/api/v1/playback-api/status"),
 ]
+
+
+# ---- phase 4: the "outputs" profile ---------------------------------------------------------------
+# Run against an app with FAKE MIDI (in-memory ports "StagePilot Test In" / "Second Test In" and the
+# output "StagePilot Test Out"), a MOCK ProPresenter (scripts/contract/mock_propresenter.py, a
+# deterministic HTTP server on loopback) and OSC to a loopback UDP port nothing listens on. No
+# MIDI, OSC or ProPresenter traffic leaves the machine. Extra step kinds:
+#   {"sleep": seconds}        pause (not recorded)
+#   {"mock": "/__reset"}      call the mock ProPresenter (not recorded)
+#   {"mock_log": True}        record (and clear) the requests the mock saw, in order
+#   "mask": ["connected"]     blank these keys (any depth) in the recorded response: used where the
+#                             value is a race inside Python itself (e.g. the connected flag read
+#                             while the supervisor is still switching inputs)
+
+IN_ID = "00cc041df87ca4052a02bf61337770d405343b7704301238f3e34359b8ed63d4"  # sha256("StagePilot Test In")
+IN2_ID = "c00596005c680b3d2247ab4fc02a7f4c05957ccaa535a2a3aa62ffaad606c52b"  # sha256("Second Test In")
+PAD_OSC = "11111111-1111-4111-8111-111111111111"
+PAD_MIDI = "22222222-2222-4222-8222-222222222222"
+CUE_OSC = "33333333-3333-4333-8333-333333333333"
+CUE_MIDI = "44444444-4444-4444-8444-444444444444"
+
+
+def sleep(seconds: float) -> Step:
+    return {"sleep": seconds}
+
+
+def mock(path: str) -> Step:
+    return {"mock": path}
+
+
+def mock_log(name: str) -> Step:
+    return {"name": name, "mock_log": True}
+
+
+def masked(step: Step, *keys: str) -> Step:
+    step["mask"] = list(keys)
+    return step
+
+
+OUTPUT_SCENARIOS: list[Step] = [
+    sleep(1.6),
+    mock_log("outputs: mock saw the startup probe"),
+    http("outputs: health, every output plugin running", "GET", "/api/v1/health"),
+    http("outputs: midi inputs, fake devices discovered", "GET", "/api/v1/midi/inputs"),
+    http("outputs: midi inputs refresh", "POST", "/api/v1/midi/inputs/refresh"),
+    http("outputs: midi messages start empty", "GET", "/api/v1/midi/messages"),
+    http("outputs: propresenter status, timer and looks found", "GET", "/api/v1/propresenter"),
+    http("outputs: lights status, OSC ready", "GET", "/api/v1/lights"),
+    # ---- cue simulation drives the whole chain: MIDI -> state -> ProPresenter -> lights ----------
+    http("outputs: cue simulation, start_next", "POST", "/api/v1/midi/cue-simulation", {"cue": "start_next"}),
+    sleep(0.3),
+    mock_log("outputs: ProPresenter calls for start_next (stop, define, verify, start)"),
+    http("outputs: midi messages after the simulated cue", "GET", "/api/v1/midi/messages"),
+    http("outputs: propresenter status while running", "GET", "/api/v1/propresenter"),
+    http("outputs: input selection refused while the timer runs", "POST", "/api/v1/midi/input-selection", {"input_id": IN2_ID}),
+    http("outputs: cue simulation, next", "POST", "/api/v1/midi/cue-simulation", {"cue": "next"}),
+    http("outputs: cue simulation, reload_plan", "POST", "/api/v1/midi/cue-simulation", {"cue": "reload_plan"}),
+    http("outputs: cue simulation, reload_plan again is a duplicate", "POST", "/api/v1/midi/cue-simulation", {"cue": "reload_plan"}),
+    http("outputs: cue simulation, stop_timer", "POST", "/api/v1/midi/cue-simulation", {"cue": "stop_timer"}),
+    sleep(0.3),
+    mock_log("outputs: ProPresenter calls for next / reload / stop"),
+    http("outputs: midi messages with duplicates and dispositions", "GET", "/api/v1/midi/messages"),
+    http("outputs: cue simulation, unknown cue is a 422", "POST", "/api/v1/midi/cue-simulation", {"cue": "bogus"}),
+    http("outputs: cue simulation, missing cue is a 422", "POST", "/api/v1/midi/cue-simulation", {}),
+    http("outputs: state after the simulated show", "GET", "/api/v1/state"),
+    # ---- input selection ------------------------------------------------------------------------
+    http("outputs: input selection, unknown input is a 409", "POST", "/api/v1/midi/input-selection", {"input_id": "f" * 64}),
+    http("outputs: input selection, short id is a 422", "POST", "/api/v1/midi/input-selection", {"input_id": "abc"}),
+    http("outputs: input selection, bad characters are a 422", "POST", "/api/v1/midi/input-selection", {"input_id": "Z" * 64}),
+    http("outputs: input selection, same input is a no-op", "POST", "/api/v1/midi/input-selection", {"input_id": IN_ID}),
+    masked(http("outputs: input selection, switch to the second input", "POST", "/api/v1/midi/input-selection", {"input_id": IN2_ID}), "connected"),
+    sleep(0.4),
+    http("outputs: midi inputs after the switch", "GET", "/api/v1/midi/inputs"),
+    masked(http("outputs: input selection, disconnect", "POST", "/api/v1/midi/input-selection", {"input_id": None}), "connected"),
+    sleep(0.4),
+    http("outputs: input selection, disconnect again", "POST", "/api/v1/midi/input-selection", {"input_id": None}),
+    http("outputs: cue simulation still works with no input", "POST", "/api/v1/midi/cue-simulation", {"cue": "restart_current"}),
+    http("outputs: stop after the simulation", "POST", "/api/v1/actions/stop_timer"),
+    sleep(0.3),
+    mock_log("outputs: ProPresenter calls after the selection tests"),
+    # ---- ProPresenter routes --------------------------------------------------------------------
+    http("outputs: propresenter test", "POST", "/api/v1/propresenter/test"),
+    http("outputs: propresenter timers refresh", "POST", "/api/v1/propresenter/timers/refresh"),
+    http("outputs: propresenter settings, missing fields are a 422", "POST", "/api/v1/propresenter/settings", {"host": "127.0.0.1"}),
+    http("outputs: propresenter settings, bad port and timeout are a 422", "POST", "/api/v1/propresenter/settings",
+         {"host": "127.0.0.1", "port": 0, "timer_name": "Song Countdown", "request_timeout_seconds": 99}),
+    http("outputs: propresenter settings, empty host is a 422", "POST", "/api/v1/propresenter/settings",
+         {"host": "", "port": 1025, "timer_name": "Song Countdown", "request_timeout_seconds": 3}),
+    sleep(0.5),
+    mock_log("outputs: mock log before the settings flows"),
+    http("outputs: propresenter settings, a Look is triggered and confirmed", "POST", "/api/v1/propresenter/settings",
+         {"host": "127.0.0.1", "port": "@MOCK_PORT@", "timer_name": "Song Countdown", "look_id": "look-worship", "request_timeout_seconds": 4}),
+    sleep(0.5),
+    mock_log("outputs: ProPresenter calls for the settings save"),
+    http("outputs: propresenter status after the settings save", "GET", "/api/v1/propresenter"),
+    http("outputs: propresenter settings, an unknown Look is refused after saving", "POST", "/api/v1/propresenter/settings",
+         {"host": "127.0.0.1", "port": "@MOCK_PORT@", "timer_name": "Song Countdown", "look_id": "look-nope", "request_timeout_seconds": 4}),
+    http("outputs: propresenter settings, a missing timer is reported", "POST", "/api/v1/propresenter/settings",
+         {"host": "127.0.0.1", "port": "@MOCK_PORT@", "timer_name": "No Such Timer", "request_timeout_seconds": 4}),
+    http("outputs: propresenter settings, back to the real timer", "POST", "/api/v1/propresenter/settings",
+         {"host": "127.0.0.1", "port": "@MOCK_PORT@", "timer_name": "song countdown", "request_timeout_seconds": 3}),
+    # ---- lights ---------------------------------------------------------------------------------
+    http("outputs: lights settings, switch to MIDI output", "POST", "/api/v1/lights/settings",
+         {"enabled": True, "method": "midi", "output_name": "StagePilot Test Out", "channel": 3, "pulse_ms": 20}),
+    http("outputs: lights status, MIDI connected", "GET", "/api/v1/lights"),
+    http("outputs: lights refresh lists the outputs", "POST", "/api/v1/lights/outputs/refresh"),
+    http("outputs: lights test cue (MIDI)", "POST", "/api/v1/lights/test", {"note": 60, "velocity": 100}),
+    http("outputs: lights test cue, note out of range is a 422", "POST", "/api/v1/lights/test", {"note": 200}),
+    http("outputs: lights test OSC refused while MIDI is saved", "POST", "/api/v1/lights/test-osc", {"address": "/x", "args": []}),
+    http("outputs: lights settings, an OSC save keeps the MIDI output", "POST", "/api/v1/lights/settings",
+         {"enabled": True, "method": "osc", "osc_host": "127.0.0.1", "osc_port": 47999}),
+    http("outputs: lights test OSC cue", "POST", "/api/v1/lights/test-osc",
+         {"address": "/cue/1/go", "args": [{"type": "int", "value": 7}, {"type": "float", "value": 0.5}, {"type": "string", "value": "go"}, {"type": "bool", "value": True}]}),
+    http("outputs: lights test MIDI refused while OSC is saved", "POST", "/api/v1/lights/test", {"note": 60}),
+    http("outputs: lights test OSC, bad address is a 422", "POST", "/api/v1/lights/test-osc", {"address": "no-slash", "args": []}),
+    http("outputs: lights test OSC, address with a space is a 422", "POST", "/api/v1/lights/test-osc", {"address": "/a b", "args": []}),
+    http("outputs: lights settings, bad channel is a 422", "POST", "/api/v1/lights/settings", {"method": "midi", "channel": 99}),
+    http("outputs: lights settings, empty body is a 422", "POST", "/api/v1/lights/settings", [1]),
+    http("outputs: lights cue map, save OSC cues", "PUT", "/api/v1/lights/cue-map",
+         {"song_key": "demo-battle-belongs", "song_title": "Battle Belongs", "method": "osc",
+          "osc_cues": [{"id": CUE_OSC, "at_seconds": 12.34, "address": " /cue/2 ", "args": [{"type": "float", "value": 1}], "label": " Verse "}]}),
+    http("outputs: lights cue map, save MIDI cues keeps the OSC cues", "PUT", "/api/v1/lights/cue-map",
+         {"song_key": "demo-battle-belongs", "song_title": "Battle Belongs", "method": "midi",
+          "cues": [{"id": CUE_MIDI, "at_seconds": 3, "note": 72, "velocity": 110, "label": "Intro"}]}),
+    http("outputs: lights cue map, bad address is a 422", "PUT", "/api/v1/lights/cue-map",
+         {"song_key": "s", "song_title": "T", "method": "osc", "osc_cues": [{"at_seconds": 1, "address": "bad"}]}),
+    http("outputs: lights cue map, empty key is a 422", "PUT", "/api/v1/lights/cue-map", {"song_key": "  ", "song_title": "T"}),
+    http("outputs: settings show the saved lights cue maps", "GET", "/api/v1/settings"),
+    http("outputs: lights pads, save", "PUT", "/api/v1/lights/pads",
+         {"pads": [{"id": PAD_OSC, "label": "Blackout", "method": "osc", "address": "/blackout", "args": [], "color": "rose"},
+                   {"id": PAD_MIDI, "label": "Strobe", "method": "midi", "note": 40, "velocity": 90}]}),
+    http("outputs: lights pads, duplicate ids are a 422", "PUT", "/api/v1/lights/pads",
+         {"pads": [{"id": PAD_OSC, "label": "A", "method": "osc", "address": "/a"}, {"id": PAD_OSC, "label": "B", "method": "osc", "address": "/b"}]}),
+    http("outputs: lights pads, an OSC pad needs an address is a 422", "PUT", "/api/v1/lights/pads",
+         {"pads": [{"label": "A", "method": "osc"}]}),
+    http("outputs: lights capture fires the pad and adds a cue", "POST", "/api/v1/lights/capture",
+         {"pad_id": PAD_OSC, "song_key": "demo-holy-forever", "song_title": "Holy Forever", "at_seconds": 41.26}),
+    http("outputs: lights capture of the inactive method's pad is a 409", "POST", "/api/v1/lights/capture", {"pad_id": PAD_MIDI}),
+    http("outputs: lights capture of an unknown pad is a 404", "POST", "/api/v1/lights/capture", {"pad_id": "99999999-9999-4999-8999-999999999999"}),
+    http("outputs: lights capture needs song fields together is a 422", "POST", "/api/v1/lights/capture", {"pad_id": PAD_OSC, "song_key": "s"}),
+    http("outputs: lights undo of an unknown capture", "POST", "/api/v1/lights/capture/undo", {"song_key": "demo-holy-forever", "cue_id": CUE_MIDI}),
+    http("outputs: lights undo with nothing saved", "POST", "/api/v1/lights/capture/undo", {"song_key": "nothing", "cue_id": CUE_MIDI}),
+    http("outputs: settings show the capture before undo", "GET", "/api/v1/settings"),
+    http("outputs: lights settings, disable lighting", "POST", "/api/v1/lights/settings", {"enabled": False, "method": "osc"}),
+    http("outputs: lights status, disabled", "GET", "/api/v1/lights"),
+    http("outputs: health at the end", "GET", "/api/v1/health"),
+]

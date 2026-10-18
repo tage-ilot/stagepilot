@@ -80,18 +80,8 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .route("/api/v1/actions/{action}", post(perform_action))
         .route("/api/v1/planning-center/plan/reload", post(reload_plan))
         .merge(crate::pco_routes::router())
-        .route("/api/v1/midi/inputs", get(midi_inputs).post(midi_inputs))
-        .route("/api/v1/midi/inputs/refresh", post(midi_inputs))
-        .route(
-            "/api/v1/midi/messages",
-            get(|| async { ok(stub("midi_messages")) }),
-        )
-        .route("/api/v1/midi/input-selection", post(midi_input_selection))
-        .route(
-            "/api/v1/propresenter",
-            get(|| async { ok(stub("propresenter")) }),
-        )
-        .route("/api/v1/lights", get(|| async { ok(stub("lights")) }))
+        // MIDI, ProPresenter and lights (phase 4).
+        .merge(crate::routes_outputs::routes())
         .route(
             "/api/v1/remote-access",
             get(|| async { http_error(503, "Remote access is not configured.") }),
@@ -151,16 +141,6 @@ async fn not_found() -> Json {
 
 async fn method_not_allowed() -> Json {
     http_error(405, "Method Not Allowed")
-}
-
-fn stub(name: &str) -> Value {
-    let text = match name {
-        "midi_messages" => include_str!("stubs/midi_messages.json"),
-        "propresenter" => include_str!("stubs/propresenter.json"),
-        "lights" => include_str!("stubs/lights.json"),
-        _ => "{}",
-    };
-    serde_json::from_str(text).unwrap_or(Value::Null)
 }
 
 // ---- dashboard PIN guard ----------------------------------------------------------------------
@@ -249,8 +229,13 @@ async fn health(State(rt): State<Rt>) -> Json {
     } else {
         production_service_ready(&state, local_date(&rt.settings.timezone))
     };
-    // No Playback or MIDI input is ported yet, so only the simulated source can be "ready".
-    let playback_ready = rt.settings.integration_modes.midi_source == MidiSource::Simulated;
+    // Playback itself is still a stub (phase 3), so only the simulated source or a connected MIDI
+    // input can be "ready" (`runtime.playback_input.connection.connected`).
+    let playback_ready = match rt.settings.integration_modes.midi_source {
+        MidiSource::Simulated => true,
+        MidiSource::Real => rt.outputs.link.connected(),
+        MidiSource::PlaybackApi => false,
+    };
     let healthy = state.application_status == ApplicationStatus::Running
         && plugins.iter().all(|p| p.status == PluginStatus::Running)
         && service_ready
@@ -315,6 +300,7 @@ fn restart_relevant(settings: &PersistentSettings) -> Value {
 }
 
 async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
+    let _serialised = rt.reconcile.lock().await;
     let parsed: Option<Value> = serde_json::from_slice(&body).ok();
     let Some(value @ Value::Object(_)) = parsed.clone() else {
         return unprocessable(validation::invalid_body(&body, parsed.as_ref()));
@@ -412,6 +398,28 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
     if let Some(warning) = service_warning {
         let existing = response["warning"].as_str().unwrap_or_default().to_string();
         response["warning"] = json!(format!("{existing} {warning}").trim().to_string());
+    }
+    // Follow the saved settings live, like the Python route: the Presentation output (simulated
+    // <-> ProPresenter or a changed ProPresenter block) and the MIDI input.
+    let presentation_warning = match rt.apply_presentation().await {
+        Ok(warning) => warning,
+        Err(message) => return http_error(409, &message),
+    };
+    rt.outputs
+        .apply_midi(&rt.settings_service.effective_runtime_settings())
+        .await;
+    if let (Some(warning), Value::Object(map)) = (presentation_warning, &mut response) {
+        let existing = map
+            .get("warning")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        map.insert(
+            "warning".into(),
+            json!(match existing {
+                Some(existing) => format!("{existing} {warning}").trim().to_string(),
+                None => warning,
+            }),
+        );
     }
     ok(response)
 }
@@ -552,65 +560,7 @@ async fn reload_plan(State(rt): State<Rt>) -> Json {
     run_action(&rt, ActionName::ReloadPlan).await
 }
 
-// ---- stubbed integrations ---------------------------------------------------------------------
-
-async fn midi_inputs(State(rt): State<Rt>) -> Json {
-    let midi = rt.settings_service.effective_snapshot().midi;
-    let mappings: serde_json::Map<String, Value> = midi
-        .mappings
-        .configured()
-        .into_iter()
-        .map(|(name, note)| (name.to_string(), json!(note)))
-        .collect();
-    ok(json!({
-        "enabled": false,
-        "channel": midi.channel,
-        "note": midi.note,
-        "configured_input_name": midi.input_name,
-        "selected_input_name": null,
-        "inputs": [],
-        "mappings": mappings,
-    }))
-}
-
-async fn midi_input_selection(body: Bytes) -> Json {
-    let parsed: Option<Value> = serde_json::from_slice(&body).ok();
-    let Some(Value::Object(map)) = &parsed else {
-        return unprocessable(validation::invalid_body(&body, parsed.as_ref()));
-    };
-    let input = Value::Object(map.clone());
-    let valid = |s: &str| {
-        s.len() == 64
-            && s.bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    };
-    match map.get("input_id") {
-        None => unprocessable(vec![json!({"type": "missing", "loc": ["body", "input_id"],
-            "msg": "Field required", "input": input})]),
-        Some(Value::Null) => http_error(409, "The MIDI Playback plugin is disabled."),
-        Some(Value::String(id)) if valid(id) => {
-            http_error(409, "The MIDI Playback plugin is disabled.")
-        }
-        Some(Value::String(id)) if id.len() != 64 => {
-            let kind = if id.len() < 64 {
-                ("string_too_short", "at least", "min_length")
-            } else {
-                ("string_too_long", "at most", "max_length")
-            };
-            unprocessable(vec![json!({"type": kind.0, "loc": ["body", "input_id"],
-                "msg": format!("String should have {} 64 characters", kind.1),
-                "input": id, "ctx": {kind.2: 64}})])
-        }
-        Some(Value::String(id)) => unprocessable(vec![json!({"type": "string_pattern_mismatch",
-            "loc": ["body", "input_id"],
-            "msg": "String should match pattern '^[a-f0-9]+$'",
-            "input": id, "ctx": {"pattern": "^[a-f0-9]+$"}})]),
-        Some(other) => unprocessable(vec![
-            json!({"type": "string_type", "loc": ["body", "input_id"],
-            "msg": "Input should be a valid string", "input": other}),
-        ]),
-    }
-}
+// ---- stubbed integrations (none left in this module) ----------------------------------------
 
 // ---- WebSocket --------------------------------------------------------------------------------
 
