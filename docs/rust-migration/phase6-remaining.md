@@ -59,12 +59,38 @@ the contract use `remote_fakes.rs`.
 | ~~Remote access routes~~ | `api/remote_feature.py`, `remote_feature.py` | done in 6b-A (the real manager behind `RemoteManager` is 6b-B) |
 | ~~Remote auth routes, ingress and retry middleware~~ | `api/remote_auth.py`, `api/remote_ingress.py`, `api/remote_retry.py` | done in 6b-A. Not yet done: the launcher that listens on the dedicated remote port and wraps the router with `RemoteIngress` (`remote_server.py`, `remote_runtime.py`: 6b-B) |
 | Remote modules `remote_desktop`, `remote_bootstrap`, `remote_beta_control` plus connector, provider, runtime, server, health, files, control, quick | about 3,700 lines in total (see `remote-modules.md`) | 8-12 days; OS parts (credential broker, `cloudflared` supervision, file lock) behind traits (6b-B) |
+| Diagnostics endpoint `POST /api/v1/diagnostics/send` | `api/diagnostics.py` (141 lines) | 0.5-1 agent-day |
+| Remote access routes (`GET /remote-access`, bootstrap, enable, reset, disable, regenerate) | `api/remote_feature.py` (178), `remote_feature.py` (164) | 1-2 days; currently a 503 stub |
+| Remote auth: login, session, logout, revoke-sessions, users CRUD; ingress and retry middleware | `api/remote_auth.py` (165), `api/remote_ingress.py` (225), `api/remote_retry.py` (77), `services/remote_auth.py` | 2-3 days; `/remote-access` and `/remote-auth/users` are 503 stubs |
+| ~~Remote modules `remote_desktop`, `remote_bootstrap`, `remote_beta_control` plus connector, provider, runtime, server, health, files, control, quick~~ **Done in `stagepilot-remote` (phase 6b-B)**; deferred parts listed below | ~~about 3,700 lines in total (see `remote-modules.md`)~~ | ~~8-12 days~~ |
 | `stagepilot-headless` binary | `__main__.py`, `main.py` | 1-2 days |
 | ~~Static frontend parity~~ | `main.py` | done in 6b-A |
 | Tauri shell linking the server in process behind a cargo feature (sidecar and PyInstaller path stay) | `desktop/src-tauri` | 3-5 days, includes the three-OS CI legs |
 | Contract: any route not in the 103 + 96 + 75 + 91 + 26 + 34 steps | `scripts/contract/scenarios.py` | 1 day, with the routes (remote, diagnostics and static are done) |
 | Python tests with no Rust port yet, map in `phase6-test-map.md` | `backend/tests` | 2-4 days; the map is started, the unported rows are listed there |
 | WebSocket parity beyond the recorded steps | `api/websocket.py` | the remote variant (session re-check, 4401/4403/4503 closes) is ported and unit-tested; not in the contract (needs a WebSocket client behind the ingress) |
+
+## Remote modules (phase 6b-B): what is ported and what is deferred
+
+Ported in `crates/stagepilot-remote`: `remote_files` (`DesiredRemote`, `ControlConfig`,
+`BetaControlConfig`, `atomic_write`, `read_desired`), `remote_provider` (`CloudflareProvider`),
+`remote_control`, `remote_beta_control`, `remote_bootstrap` (including `NativeRemoteCredentialStore`),
+`remote_feature`, `remote_connector`, `remote_quick`, `remote_health`, `remote_health_alert`,
+`remote_runtime`, `remote_server` (listener and HTTPS-only check) and `remote_desktop`
+(`DesktopRemoteManager`). OS parts sit behind traits with fakes: `Clock`, `FileLocker`,
+`ProcessSpawner`, `PortProbe`, `HttpTransport` and `RemoteCredentialStore`.
+
+Deferred, with reasons:
+
+| Item | Reason |
+|---|---|
+| `RemoteIngress`, `RemoteAccess`, `RemoteStore` (`api/remote_ingress.py`, `services/remote_auth.py`) | Server-crate scope (6b-A / the remote auth card). `runtime.rs` takes the ingress as an `IngressFactory` and the identity store as a `GenerationSink`, so wiring is one closure each. |
+| FastAPI lifespan wiring (`attach_desktop_remote`, `attach_managed_remote` on an app object) | No app object in this crate: `ManagedRemote::attach` spawns the reconcile task and `DesktopRemoteManager::run` is the supervisor loop; the server crate calls both from its own startup and shutdown. |
+| Command-line entry points (`run()` in `remote_control`, `remote_beta_control`, `remote_connector`, `remote_server`, `remote_health`, `remote_health_alert`) | The library surface is complete; the binaries need `clap` and a decision on whether the headless binary ships them. `health::render` and `supervisor_pass` are the bodies. |
+| Real `keyring` credential store | The broker-over-HTTP store is ported for the headless/sidecar path. The in-process direct `keyring` call waits for the Tauri in-process card. |
+| WebSocket close code 4403 | Python accepts then closes with 4403; axum rejects the upgrade with 426 before it. Same result for a browser (failed connection), different code. |
+| Windows job objects / macOS zombie handling for `cloudflared` | Needs a real machine on each OS; `StdSpawner` uses `CREATE_NO_WINDOW`, SIGTERM then kill, and kill-on-drop only. |
+| Real `cloudflared` and Cloudflare/control-plane calls | Never run: no rig or account use. All tests use fakes and a loopback listener. |
 
 ## Not verified
 

@@ -9,6 +9,7 @@ members = [
     "crates/stagepilot-osc",
     "crates/stagepilot-lights",
     "crates/stagepilot-propresenter",
+    "crates/stagepilot-remote",
     "crates/midi-probe",
 ]
 # The Tauri shell keeps its own Cargo.lock and is built by the existing desktop jobs.
