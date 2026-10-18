@@ -5,5 +5,7 @@ pub mod client;
 pub mod discovery;
 pub mod find;
 pub mod lengths;
+pub mod mapping;
 pub mod normalizer;
+pub mod plugin;
 pub mod testkit;

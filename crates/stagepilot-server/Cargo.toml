@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }
+stagepilot-playback = { path = "../stagepilot-playback" }
 async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }

@@ -2,7 +2,7 @@
 //! `main.create_app` that this phase owns (event bus, state store/service, plugin manager,
 //! settings service, startup and shutdown order).
 
-use crate::demo::{DemoPlugin, LightsStub, PlaybackStub};
+use crate::demo::{DemoPlugin, LightsStub};
 use chrono::{DateTime, Utc};
 use stagepilot_core::auth::DashboardSessionStore;
 use stagepilot_core::bus::EventBus;
@@ -13,6 +13,7 @@ use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_core::state::ApplicationStatus;
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
+use stagepilot_playback::plugin::{PlaybackPlugin, PluginOptions};
 use std::sync::Arc;
 
 pub struct Runtime {
@@ -22,7 +23,7 @@ pub struct Runtime {
     pub state_service: StateService,
     pub plugins: PluginManager,
     pub settings_service: Arc<SettingsService>,
-    pub playback: Arc<PlaybackStub>,
+    pub playback: Arc<PlaybackPlugin>,
     pub sessions: DashboardSessionStore,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
@@ -45,7 +46,13 @@ impl Runtime {
             settings.recent_error_limit,
         );
         let plugins = PluginManager::new(bus.clone());
-        let playback = Arc::new(PlaybackStub::new(bus.clone()));
+        let playback = Arc::new(PlaybackPlugin::new(
+            bus.clone(),
+            store.clone(),
+            state_service.clone(),
+            settings_service.clone(),
+            PluginOptions::default(),
+        ));
         // Registration order is the health order Python reports: lights, services, playback.
         register(&plugins, Arc::new(LightsStub::new(bus.clone())));
         if settings.integration_modes.service_source == ServiceSource::Demo {

@@ -510,13 +510,16 @@ pub async fn find_playback<N: Network>(
     }
     for network in net.networks().await {
         let hosts: Vec<String> = network.hosts().iter().map(|h| h.to_string()).collect();
-        let mut results = stream::iter(hosts.iter())
-            .map(|h| async move { (h, probe_or_miss(net, cancel, h, port, timeout).await) })
+        let mut results = stream::iter(hosts)
+            .map(|h| async move {
+                let hb = probe_or_miss(net, cancel, &h, port, timeout).await;
+                (h, hb)
+            })
             .buffered(MAX_WORKERS);
         while let Some((host, hb)) = results.next().await {
             if let Some(hb) = hb {
                 return Some(DiscoveryResult {
-                    host: host.clone(),
+                    host,
                     port,
                     source: DiscoverySource::Lan,
                     heartbeat: hb,
@@ -923,8 +926,8 @@ pub async fn scan_network<N: Network>(
             report.outcome = ScanOutcome::Cancelled;
             return finish(report);
         }
-        let results: Vec<ProbeOne> = stream::iter(batch.iter())
-            .map(|h| probe_one(net, h, port, timeout))
+        let results: Vec<ProbeOne> = stream::iter(batch.iter().cloned())
+            .map(|h| async move { probe_one(net, &h, port, timeout).await })
             .buffered(MAX_WORKERS)
             .collect()
             .await;

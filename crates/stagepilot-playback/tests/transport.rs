@@ -27,6 +27,7 @@ fn hb(position: f64) -> String {
         version: 1,
         stalled: false,
         length: 240.0,
+        songs: vec![],
     })
 }
 

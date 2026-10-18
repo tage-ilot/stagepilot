@@ -10,7 +10,8 @@
 //! measurement. Discovery is "manual host, else loopback".
 
 use crate::find::{
-    classify_error, saved_address_blocked, ErrorClass, ProbeError, SystemNetwork, SCAN_BLOCK_DETAIL,
+    classify_error, find_playback, saved_address_blocked, CancelToken, ErrorClass, Network,
+    ProbeError, SystemNetwork, SCAN_BLOCK_DETAIL,
 };
 use crate::normalizer::{Heartbeat, Normalizer, PlaybackEvent, SetlistId};
 use futures_util::{SinkExt, StreamExt};
@@ -38,6 +39,9 @@ pub struct ConnectionOptions {
     pub heartbeat_timeout: Duration,
     pub reconnect_delay: Duration,
     pub history_capacity: usize,
+    /// Allow the occasional LAN scan when no host is saved (Python `auto_scan`). Off by default
+    /// here so a bare client only tries loopback; the plugin passes the saved setting.
+    pub auto_scan: bool,
 }
 
 impl Default for ConnectionOptions {
@@ -50,6 +54,7 @@ impl Default for ConnectionOptions {
             heartbeat_timeout: Duration::from_secs(5),
             reconnect_delay: Duration::from_secs(1),
             history_capacity: 100,
+            auto_scan: false,
         }
     }
 }
@@ -85,6 +90,9 @@ pub struct PlaybackStatus {
     pub last_error: Option<String>,
     pub heartbeat: Option<Heartbeat>,
     pub setlist_id: Option<SetlistId>,
+    /// Valid heartbeats seen over the client's whole life; changes exactly when Python's
+    /// `status.heartbeat is not previous` would (the plugin's "fresh heartbeat" test).
+    pub heartbeat_serial: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -200,9 +208,16 @@ pub struct PlaybackClient {
     shared: Arc<Shared>,
     cmd_tx: mpsc::Sender<Request>,
     stop_tx: watch::Sender<bool>,
-    task: Option<JoinHandle<()>>,
+    task: Mutex<Option<JoinHandle<()>>>,
+    cancel: CancelToken,
     port: u16,
 }
+
+/// Cheap probe after a failure while a host is known: Python `RECONNECT_PROBE_TIMEOUT`.
+const RECONNECT_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
+/// Python `FULL_SCAN_INTERVAL` / `FULL_SCAN_PROBE_TIMEOUT`.
+const FULL_SCAN_INTERVAL: Duration = Duration::from_secs(45);
+const FULL_SCAN_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 impl PlaybackClient {
     pub fn start(
@@ -217,6 +232,16 @@ impl PlaybackClient {
         options: ConnectionOptions,
         observer: Option<Observer>,
         blocked_check: BlockedCheck,
+    ) -> Result<Self, ClientError> {
+        Self::start_with_network(options, observer, blocked_check, SystemNetwork)
+    }
+
+    /// Like [`start_with`](Self::start_with) with an injectable network (tests).
+    pub fn start_with_network<N: Network + Clone + 'static>(
+        options: ConnectionOptions,
+        observer: Option<Observer>,
+        blocked_check: BlockedCheck,
+        network: N,
     ) -> Result<Self, ClientError> {
         options.validate()?;
         let shared = Arc::new(Shared {
@@ -233,6 +258,7 @@ impl PlaybackClient {
         let (cmd_tx, cmd_rx) = mpsc::channel(32);
         let (stop_tx, stop_rx) = watch::channel(false);
         let port = options.port;
+        let cancel = CancelToken::new();
         let task = if options.enabled {
             Some(tokio::spawn(run(
                 options,
@@ -241,6 +267,8 @@ impl PlaybackClient {
                 cmd_rx,
                 stop_rx,
                 blocked_check,
+                network,
+                cancel.clone(),
             )))
         } else {
             None
@@ -249,7 +277,8 @@ impl PlaybackClient {
             shared,
             cmd_tx,
             stop_tx,
-            task,
+            task: Mutex::new(task),
+            cancel,
             port,
         })
     }
@@ -295,8 +324,15 @@ impl PlaybackClient {
     }
 
     pub async fn stop(&mut self) {
+        self.shutdown().await;
+    }
+
+    /// [`stop`](Self::stop) without exclusive access, for a client shared with other tasks.
+    pub async fn shutdown(&self) {
         let _ = self.stop_tx.send(true);
-        if let Some(t) = self.task.take() {
+        self.cancel.cancel();
+        let task = self.task.lock().unwrap().take();
+        if let Some(t) = task {
             let _ = t.await;
         }
         *self.shared.status.lock().unwrap() = PlaybackStatus {
@@ -377,6 +413,16 @@ pub fn system_blocked_check() -> BlockedCheck {
     Arc::new(|| Box::pin(async { saved_address_blocked(&SystemNetwork).await }))
 }
 
+async fn probe_ok<N: Network>(
+    net: &N,
+    cancel: &CancelToken,
+    host: &str,
+    port: u16,
+    timeout: Duration,
+) -> bool {
+    !cancel.is_cancelled() && matches!(net.probe(host, port, timeout).await, Ok(Some(_)))
+}
+
 async fn connect(
     host: &str,
     port: u16,
@@ -419,6 +465,7 @@ async fn connect(
     Ok(ws)
 }
 
+#[allow(clippy::too_many_arguments)] // the connection task takes its whole environment
 async fn run(
     options: ConnectionOptions,
     shared: Arc<Shared>,
@@ -426,16 +473,63 @@ async fn run(
     mut cmd_rx: mpsc::Receiver<Request>,
     mut stop: watch::Receiver<bool>,
     blocked_check: BlockedCheck,
+    network: impl Network + Clone + 'static,
+    cancel: CancelToken,
 ) {
     let epoch = Instant::now();
-    let host = options
+    let mut host = options
         .host_override
         .clone()
         .unwrap_or_else(|| "127.0.0.1".into());
+    let mut last_good: Option<String> = None;
+    let mut last_scan: Option<Instant> = None;
     while !*stop.borrow() {
         let mut valid_heartbeat = false;
         let result: Result<(), ConnError> = async {
+            // Python `_locate`: a manual host is used as is and never falls back to scanning;
+            // otherwise the last good address, then loopback, then (auto-scan only, at most once
+            // per FULL_SCAN_INTERVAL) the LAN.
+            if options.host_override.is_none() {
+                let mut found: Option<String> = None;
+                if let Some(good) = &last_good {
+                    if probe_ok(&network, &cancel, good, options.port, RECONNECT_PROBE_TIMEOUT)
+                        .await
+                    {
+                        found = Some(good.clone());
+                    }
+                }
+                if found.is_none() {
+                    let due = options.auto_scan
+                        && last_scan.is_none_or(|t| t.elapsed() >= FULL_SCAN_INTERVAL);
+                    if due {
+                        last_scan = Some(Instant::now());
+                    }
+                    found = find_playback(
+                        &network,
+                        None,
+                        options.port,
+                        due,
+                        if due {
+                            FULL_SCAN_PROBE_TIMEOUT
+                        } else {
+                            RECONNECT_PROBE_TIMEOUT
+                        },
+                        &cancel,
+                    )
+                    .await
+                    .map(|r| r.host);
+                }
+                match found {
+                    Some(h) => host = h,
+                    None => {
+                        return Err(ConnError::Closed(
+                            "Playback not found; remote connections may be off",
+                        ))
+                    }
+                }
+            }
             let mut ws = connect(&host, options.port, options.heartbeat_timeout).await?;
+            last_good = Some(host.clone());
             let generation = {
                 let mut g = shared.generation.lock().unwrap();
                 *g += 1;
@@ -498,6 +592,7 @@ async fn run(
                             last_error: None,
                             heartbeat: norm.heartbeat,
                             setlist_id: norm.setlist_id.clone(),
+                            heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
                         }, &events);
                     }
                 }
@@ -530,6 +625,7 @@ async fn run(
                     ),
                     heartbeat: None,
                     setlist_id: None,
+                    heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
                 },
                 &[],
             );

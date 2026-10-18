@@ -23,6 +23,9 @@ pub struct FakeState {
     pub stalled: bool,
     /// Song length used to clamp `waveformSeek` (the real one seeks to the end).
     pub length: f64,
+    /// Setlist order for `transportPreviousSong` / `transportNextSong` (empty = no navigation).
+    /// Navigation stops at both ends like the real Playback (no wrap).
+    pub songs: Vec<i64>,
 }
 
 pub fn heartbeat(s: &FakeState) -> String {
@@ -66,6 +69,7 @@ impl FakePlayback {
                 version: 1,
                 stalled: false,
                 length: 240.0,
+                songs: vec![],
             }))
         });
         let (out, _) = broadcast::channel(4096);
@@ -108,6 +112,29 @@ impl FakePlayback {
         if !s.stalled {
             let _ = self.out.send(heartbeat(&s));
         }
+    }
+
+    /// Heartbeat every `period` until the fake goes away, like the real Playback's ~10 Hz.
+    pub fn auto_beat(&self, period: std::time::Duration) {
+        let (out, state, mut stop) = (
+            self.out.clone(),
+            self.state.clone(),
+            self.stop_tx.subscribe(),
+        );
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(period);
+            loop {
+                tokio::select! {
+                    _ = stop.changed() => break,
+                    _ = tick.tick() => {
+                        let s = state.lock().unwrap();
+                        if !s.stalled {
+                            let _ = out.send(heartbeat(&s));
+                        }
+                    }
+                }
+            }
+        });
     }
 
     pub fn send_raw(&self, text: &str) {
@@ -210,6 +237,20 @@ fn apply(state: &Mutex<FakeState>, text: &str) -> Vec<String> {
         "transportPad" => s.pad = body["playing"].as_bool().unwrap_or(s.pad),
         "waveformSeek" => s.position = body["sequenceTime"].as_f64().unwrap_or(0.0).min(s.length),
         "transportReturnToStart" => s.position = 0.0,
+        "transportPreviousSong" | "transportNextSong" => {
+            if let Some(at) = s.songs.iter().position(|id| *id == s.song) {
+                let to = if kind == "transportNextSong" {
+                    (at + 1).min(s.songs.len() - 1)
+                } else {
+                    at.saturating_sub(1)
+                };
+                if to != at {
+                    s.song = s.songs[to];
+                    s.position = 0.0;
+                    s.playing = false;
+                }
+            }
+        }
         "setlistSelectSong" => {
             if let Some(id) = body["setlistSongID"].as_i64() {
                 s.song = id;
@@ -392,6 +433,7 @@ impl TransportPort for SimPlayback {
                 setlist_version: Some(s.version),
             }),
             setlist_id: s.setlist_id.map(SetlistId::Int),
+            heartbeat_serial: 0,
         }
     }
     fn generation(&self) -> u64 {

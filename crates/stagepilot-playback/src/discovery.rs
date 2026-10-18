@@ -48,6 +48,10 @@ pub struct DiscoveryOptions {
     pub max_steps: usize,
     pub measure: bool,
     pub cancel: CancelToken,
+    /// Live copy of the navigation + measurement command count (Python `progress`).
+    pub progress: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
+    /// Live index of the song being measured (Python `discovery_song`).
+    pub song: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
 }
 
 impl Default for DiscoveryOptions {
@@ -57,6 +61,8 @@ impl Default for DiscoveryOptions {
             max_steps: DEFAULT_MAX_STEPS,
             measure: true,
             cancel: CancelToken::new(),
+            progress: None,
+            song: None,
         }
     }
 }
@@ -69,6 +75,12 @@ struct Walk<'a, P: TransportPort> {
 }
 
 impl<P: TransportPort> Walk<'_, P> {
+    fn publish_progress(&self) {
+        if let Some(p) = &self.opts.progress {
+            p.store(self.progress, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
     /// Python `_check_discovery`.
     fn check(&self, version: Option<i64>) -> Result<Heartbeat, DiscoveryError> {
         let status = self.port.status();
@@ -106,6 +118,7 @@ impl<P: TransportPort> Walk<'_, P> {
             .await
             .map_err(|e| DiscoveryError::Conflict(e.to_string()))?;
         self.progress += 1;
+        self.publish_progress();
         self.steps += 1;
         let deadline = Instant::now() + self.opts.step_timeout;
         let mut rx = self.port.subscribe();
@@ -186,13 +199,21 @@ async fn run<P: TransportPort>(
         if cancelled(walk) {
             return Err(DiscoveryError::Cancelled);
         }
+        if let Some(song) = &walk.opts.song {
+            song.store(order.len(), std::sync::atomic::Ordering::SeqCst);
+        }
         let length = if walk.opts.measure {
             let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let counter = count.clone();
+            let live = walk.opts.progress.clone();
+            let base = walk.progress;
             let m = MeasureOptions {
                 settle: walk.opts.step_timeout,
                 on_command: Some(std::sync::Arc::new(move || {
-                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                    if let Some(p) = &live {
+                        p.store(base + n, std::sync::atomic::Ordering::SeqCst);
+                    }
                 })),
                 ..Default::default()
             };
