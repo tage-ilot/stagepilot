@@ -191,7 +191,7 @@ impl RemoteAuthError {
     }
     fn storage(error: rusqlite::Error) -> Self {
         tracing::warn!(%error, "remote_store_failed");
-        Self::new(503, "Remote storage unavailable.")
+        Self::new(503, "Remote access storage is unavailable.")
     }
 }
 
@@ -322,7 +322,7 @@ impl RemoteStore {
     fn open(&self) -> Result<Connection, RemoteAuthError> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|_| RemoteAuthError::new(503, "Remote storage unavailable."))?;
+                .map_err(|_| RemoteAuthError::new(503, "Remote access storage is unavailable."))?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;

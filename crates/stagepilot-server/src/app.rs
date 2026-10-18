@@ -3,6 +3,7 @@
 //! `docs/rust-migration/phase2.md` for the list of routes that are stubs.
 
 use crate::demo::today;
+use crate::remote_types::RemoteContext;
 use crate::runtime::Runtime;
 use crate::validation::{self, http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
@@ -11,7 +12,8 @@ use axum::extract::{ConnectInfo, Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get, post};
+use axum::routing::{get, post};
+use axum::Extension;
 use axum::Router;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -26,7 +28,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::ServeDir;
 
 pub const COOKIE_NAME: &str = "stagepilot_dashboard_session";
 const DESKTOP_ORIGINS: [&str; 3] = [
@@ -82,28 +83,26 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::pco_routes::router())
         // MIDI, ProPresenter and lights (phase 4).
         .merge(crate::routes_outputs::routes())
-        .route(
-            "/api/v1/remote-access",
-            get(|| async { http_error(503, "Remote access is not configured.") }),
-        )
-        .route(
-            "/api/v1/remote-auth/users",
-            get(|| async { http_error(503, "Remote access is not configured.") }),
-        )
+        // Remote access, remote auth and diagnostics (phase 6b-A).
+        .merge(crate::remote_routes::routes())
         .route("/ws", get(ws_state))
         .merge(crate::playback_routes::routes())
         .with_state(runtime.clone());
 
     let router = match options.web_root.filter(|r| r.join("index.html").is_file()) {
-        Some(root) => api.fallback_service(
-            ServeDir::new(root)
-                .append_index_html_on_directories(true)
-                .not_found_service(any(not_found)),
-        ),
+        Some(root) => {
+            let root = Arc::new(root);
+            api.fallback(move |request: Request| {
+                let root = root.clone();
+                async move { crate::static_files::serve(root, request).await }
+            })
+        }
         None => api.fallback(not_found),
     };
     router
         .method_not_allowed_fallback(method_not_allowed)
+        // Keyed retries of remote one-shot requests (`RemoteRetryRoute`); inside the PIN guard.
+        .layer(middleware::from_fn(crate::remote_routes::remote_retry))
         .layer(middleware::from_fn_with_state(runtime, dashboard_guard))
         .layer(cors())
 }
@@ -176,6 +175,10 @@ fn peer_of(request: &Request) -> Option<SocketAddr> {
 }
 
 async fn dashboard_guard(State(rt): State<Rt>, request: Request, next: Next) -> Response {
+    if request.extensions().get::<RemoteContext>().is_some() {
+        // Only the trusted remote wrapper sets this, after remote authorisation.
+        return next.run(request).await;
+    }
     let path = request.uri().path().to_string();
     let protected = (path.starts_with("/api/v1") || path == "/ws")
         && !PUBLIC_PATHS.contains(&path.as_str())
@@ -498,8 +501,12 @@ async fn dashboard_settings(State(rt): State<Rt>, body: Bytes) -> Json {
 async fn access(
     State(rt): State<Rt>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    remote: Option<Extension<RemoteContext>>,
     headers: HeaderMap,
 ) -> Response {
+    if let Some(Extension(context)) = remote {
+        return remote_access(&context);
+    }
     let (required, local_authenticated) = auth_status(&rt, &headers, Some(peer));
     let desktop = desktop_origin(&headers, Some(peer));
     let authenticated = local_authenticated || !rt.dashboard_auth_enforced;
@@ -518,6 +525,38 @@ async fn access(
         "user": null,
         "expires_at": null,
         "csrf_token": null,
+    }))
+    .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+/// `/api/v1/access` through the trusted remote ingress.
+fn remote_access(context: &RemoteContext) -> Response {
+    use stagepilot_core::auth::{csrf_token, RemoteRole};
+    let session = context.session.as_ref();
+    let authenticated = session.is_some();
+    let operator = session.is_some_and(|s| s.role == RemoteRole::Operator);
+    let mut response = ok(json!({
+        "mode": "remote",
+        "authentication": "password",
+        "authenticated": authenticated,
+        "capabilities": {
+            "canRead": authenticated,
+            "canOperate": operator,
+            "canConfigure": operator,
+            "canActivateServices": false,
+            "canManageRemote": operator,
+            "canBootstrapRemote": false,
+        },
+        "user": session.map(|s| json!({"email": s.email, "role": s.role.as_str()})),
+        "expires_at": session.map(|s| s.expires_at),
+        "csrf_token": match (session, &context.token) {
+            (Some(_), Some(token)) => Some(csrf_token(token)),
+            _ => None,
+        },
     }))
     .into_response();
     response
@@ -564,8 +603,92 @@ async fn reload_plan(State(rt): State<Rt>) -> Json {
 
 // ---- WebSocket --------------------------------------------------------------------------------
 
-async fn ws_state(State(rt): State<Rt>, upgrade: WebSocketUpgrade) -> Response {
-    upgrade.on_upgrade(move |socket| state_stream(rt, socket))
+async fn ws_state(
+    State(rt): State<Rt>,
+    remote: Option<Extension<RemoteContext>>,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    match remote {
+        Some(Extension(context)) => {
+            upgrade.on_upgrade(move |socket| remote_state_stream(rt, context, socket))
+        }
+        None => upgrade.on_upgrade(move |socket| state_stream(rt, socket)),
+    }
+}
+
+async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
+    let _ = socket
+        .send(Message::Close(Some(CloseFrame {
+            code,
+            reason: reason.into(),
+        })))
+        .await;
+}
+
+/// `api/websocket.py` for a remote caller: the session is re-checked before every send (4401
+/// when it expired or was revoked, 4503 when the store is down) and the stream is receive-only
+/// (4403 when the client sends anything).
+async fn remote_state_stream(rt: Rt, context: RemoteContext, mut socket: WebSocket) {
+    async fn valid(context: &RemoteContext, socket: &mut WebSocket) -> bool {
+        let token = context.token.clone();
+        match context
+            .access
+            .call(move |store| store.session(token.as_deref()))
+            .await
+        {
+            Err(_) => {
+                close_with(socket, 4503, "Remote storage unavailable").await;
+                false
+            }
+            Ok(None) => {
+                close_with(socket, 4401, "Remote session expired or revoked").await;
+                false
+            }
+            Ok(Some(_)) => true,
+        }
+    }
+    let mut updates = rt.store.subscribe();
+    if !valid(&context, &mut socket).await {
+        return;
+    }
+    let initial = rt.store.snapshot();
+    let mut last_revision = initial.revision;
+    updates.borrow_and_update();
+    if socket.send(envelope(&initial)).await.is_err() {
+        return;
+    }
+    loop {
+        tokio::select! {
+            changed = tokio::time::timeout(std::time::Duration::from_secs(1), updates.changed()) => {
+                if !valid(&context, &mut socket).await {
+                    return;
+                }
+                match changed {
+                    Err(_) => continue,
+                    Ok(Err(_)) => break,
+                    Ok(Ok(())) => {}
+                }
+                tokio::time::sleep(COALESCE).await;
+                let snapshot = updates.borrow_and_update().clone();
+                if snapshot.revision <= last_revision {
+                    continue;
+                }
+                last_revision = snapshot.revision;
+                if socket.send(envelope(&snapshot)).await.is_err() {
+                    return;
+                }
+            }
+            incoming = socket.recv() => {
+                match incoming {
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    Some(Ok(_)) => {
+                        close_with(&mut socket, 4403, "State stream is receive-only").await;
+                        return;
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn envelope(state: &ApplicationState) -> Message {

@@ -41,6 +41,16 @@ chrono-tz = "0.10"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
+hex = "0.4"
+httpdate = "1"
+md-5 = "0.10"
+percent-encoding = "2"
+mime_guess = "2"
+# Diagnostics upload (rustls with the pure `ring` provider, as the other HTTP clients here).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "0.10.9"
+subtle = "2.6.1"
 
 [dev-dependencies]
 http-body-util = "0.1"

@@ -4,6 +4,8 @@
 
 use crate::demo::DemoPlugin;
 use crate::outputs::{register, OutputBackends, Outputs};
+use crate::remote_feature::RemoteFeature;
+use crate::remote_types::{RemoteAccess, RemoteManager, RemoteWiring};
 use chrono::{DateTime, Utc};
 use stagepilot_core::auth::DashboardSessionStore;
 use stagepilot_core::bus::EventBus;
@@ -19,7 +21,7 @@ use stagepilot_pco::oauth::{CompleteError, OAUTH_STARTUP_REFRESH_TIMEOUT_SECONDS
 use stagepilot_pco::runtime::{PcoOptions, PcoRuntime};
 use stagepilot_playback::api::LengthUpdateResult;
 use stagepilot_playback::plugin::{PlaybackPlugin, PluginOptions};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub struct Runtime {
     pub settings: RuntimeSettings,
@@ -41,6 +43,9 @@ pub struct Runtime {
     pub sessions: DashboardSessionStore,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
+    /// `app.state.remote_access` / `remote_feature` / `remote_manager`: all optional, settable
+    /// after construction exactly as the Python tests and the launcher do.
+    remote: RwLock<RemoteWiring>,
     /// The Services source the running plugins were built for (changing it needs a restart here).
     live_service_source: ServiceSource,
 }
@@ -204,6 +209,7 @@ impl Runtime {
             sessions: DashboardSessionStore::new(),
             dashboard_auth_enforced,
             started_at: Utc::now(),
+            remote: RwLock::new(RemoteWiring::default()),
             live_service_source: settings_source,
         })
     }
@@ -215,6 +221,35 @@ impl Runtime {
         self.outputs
             .sync_presentation(&settings, &self.plugins, &self.store, &self.state_service)
             .await
+    }
+
+    /// A snapshot of the Remote wiring (cheap: three optional `Arc`s).
+    pub fn remote_wiring(&self) -> RemoteWiring {
+        self.remote
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn update_remote(&self, change: impl FnOnce(&mut RemoteWiring)) {
+        change(
+            &mut self
+                .remote
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
+    }
+
+    pub fn set_remote_access(&self, access: Option<Arc<RemoteAccess>>) {
+        self.update_remote(|w| w.access = access);
+    }
+
+    pub fn set_remote_feature(&self, feature: Option<Arc<RemoteFeature>>) {
+        self.update_remote(|w| w.feature = feature);
+    }
+
+    pub fn set_remote_manager(&self, manager: Option<Arc<dyn RemoteManager>>) {
+        self.update_remote(|w| w.manager = manager);
     }
 
     pub fn live_service_source(&self) -> ServiceSource {

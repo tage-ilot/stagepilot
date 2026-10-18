@@ -1,4 +1,583 @@
 {
+ "diagnostics_steps": [
+  {
+   "name": "diagnostics send a text bundle",
+   "request": {
+    "json": {
+     "bundle": "log contents"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "message": "Logs sent to the developer.",
+     "ok": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "authorization": "bearer-ok",
+     "body": "log contents\n--- playback ---\n{\"last_scan\": null, \"recent_log\": []}",
+     "content_type": "application/octet-stream",
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    }
+   ],
+   "name": "diagnostics upload as the control plane saw it"
+  },
+  {
+   "name": "diagnostics send a JSON bundle",
+   "request": {
+    "json": {
+     "bundle": "{\"app\": \"stagepilot\", \"logs\": [\"a\", \"b\"]}"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "message": "Logs sent to the developer.",
+     "ok": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "authorization": "bearer-ok",
+     "body": {
+      "app": "stagepilot",
+      "logs": [
+       "a",
+       "b"
+      ],
+      "playback": {
+       "last_scan": null,
+       "recent_log": []
+      }
+     },
+     "content_type": "application/octet-stream",
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    }
+   ],
+   "name": "diagnostics upload of the JSON bundle"
+  },
+  {
+   "name": "diagnostics send with a non-ASCII bundle",
+   "request": {
+    "json": {
+     "bundle": "café ☃"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "message": "Logs sent to the developer.",
+     "ok": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "authorization": "bearer-ok",
+     "body": "café ☃\n--- playback ---\n{\"last_scan\": null, \"recent_log\": []}",
+     "content_type": "application/octet-stream",
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    }
+   ],
+   "name": "diagnostics upload of the non-ASCII bundle"
+  },
+  {
+   "name": "diagnostics upstream rate limit",
+   "request": {
+    "json": {
+     "bundle": "MODE:429"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": "Too many diagnostic uploads recently; try again later."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 429
+   }
+  },
+  {
+   "name": "diagnostics upstream error",
+   "request": {
+    "json": {
+     "bundle": "MODE:500"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": "Logs could not be sent to the developer. Try again shortly."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 502
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "authorization": "bearer-ok",
+     "body": "MODE:429\n--- playback ---\n{\"last_scan\": null, \"recent_log\": []}",
+     "content_type": "application/octet-stream",
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    },
+    {
+     "authorization": "bearer-ok",
+     "body": "MODE:500\n--- playback ---\n{\"last_scan\": null, \"recent_log\": []}",
+     "content_type": "application/octet-stream",
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    }
+   ],
+   "name": "diagnostics requests of the failed uploads"
+  },
+  {
+   "name": "diagnostics send with no bundle",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {},
+       "loc": [
+        "body",
+        "bundle"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "diagnostics send with a non-string bundle",
+   "request": {
+    "json": {
+     "bundle": 5
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 5,
+       "loc": [
+        "body",
+        "bundle"
+       ],
+       "msg": "Input should be a valid string",
+       "type": "string_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "diagnostics send with a malformed body",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send",
+    "raw": "nope"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "error": "Expecting value"
+       },
+       "input": {},
+       "loc": [
+        "body",
+        0
+       ],
+       "msg": "JSON decode error",
+       "type": "json_invalid"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "diagnostics send with a list body",
+   "request": {
+    "json": [
+     1
+    ],
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": [
+        1
+       ],
+       "loc": [
+        "body"
+       ],
+       "msg": "Input should be a valid dictionary or object to extract fields from",
+       "type": "model_attributes_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "diagnostics send with an empty body",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": null,
+       "loc": [
+        "body"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "diagnostics send an oversize bundle",
+   "request": {
+    "json": {
+     "bundle": ""
+    },
+    "method": "POST",
+    "pad": {
+     "bundle": 2097153
+    },
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": "Diagnostic bundle is too large to send."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 413
+   }
+  },
+  {
+   "name": "diagnostics send at the limit is not refused locally",
+   "request": {
+    "json": {
+     "bundle": ""
+    },
+    "method": "POST",
+    "pad": {
+     "bundle": 2097152
+    },
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "message": "Logs sent to the developer.",
+     "ok": true
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "mock_requests": [
+    {
+     "authorization": "bearer-ok",
+     "body_bytes": 2097152,
+     "content_type": "application/octet-stream",
+     "has_playback_section": false,
+     "method": "POST",
+     "path": "/v1/installations/abcd1234/diagnostics"
+    }
+   ],
+   "name": "diagnostics limit upload (the playback section is dropped)"
+  },
+  {
+   "name": "manager status, off",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "available": true,
+     "credential_available": true,
+     "enabled": false,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": false,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "manager enable",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/enable"
+   },
+   "response": {
+    "body": {
+     "available": true,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "connected",
+     "temporary_url": false,
+     "url": "https://contract.stagepilot.example"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "manager enable again is a conflict",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/enable"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote Access is not provisioned or is already managed."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "manager regenerate while enabled",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/regenerate"
+   },
+   "response": {
+    "body": {
+     "available": true,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "connected",
+     "temporary_url": false,
+     "url": "https://contract.stagepilot.example"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "manager disable",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/disable"
+   },
+   "response": {
+    "body": {
+     "available": true,
+     "credential_available": true,
+     "enabled": false,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": false,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "manager regenerate while disabled fails",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/regenerate"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote link regeneration is unavailable; local StagePilot is unaffected."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "manager reset needs the remote header",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-access/reset"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote settings request required."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "manager reset",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/reset"
+   },
+   "response": {
+    "body": {
+     "available": true,
+     "credential_available": true,
+     "enabled": false,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": false,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "diagnostics send after the identity was reset",
+   "request": {
+    "json": {
+     "bundle": "log contents"
+    },
+    "method": "POST",
+    "path": "/api/v1/diagnostics/send"
+   },
+   "response": {
+    "body": {
+     "detail": "Sending logs to the developer requires Remote Access to be set up on this installation."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  }
+ ],
  "output_steps": [
   {
    "mock_requests": [
@@ -13277,6 +13856,3799 @@
     },
     "headers": {
      "content-type": "application/json"
+    },
+    "status": 200
+   }
+  }
+ ],
+ "remote_steps": [
+  {
+   "name": "remote status, nothing set up",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": false,
+     "message": "Remote Access is unavailable on this installation. Local StagePilot is unaffected.",
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote enable needs the remote header",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-access/enable"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote settings request required."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote enable",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/enable"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "enabling",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote enable again is idempotent",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/enable"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "enabling",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote status after enable (waiting for the supervisor)",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": true,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "enabling",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote reset needs a manager",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/reset"
+   },
+   "response": {
+    "body": {
+     "detail": "Resetting the installation identity is unavailable on this installation."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "remote regenerate needs a manager",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/regenerate"
+   },
+   "response": {
+    "body": {
+     "detail": "Regenerating the Remote link is unavailable on this installation."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 503
+   }
+  },
+  {
+   "name": "remote bootstrap needs the remote header",
+   "request": {
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote settings request required."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote bootstrap rejects a short body",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "a@b"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "remote bootstrap rejects an extra field",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "remote bootstrap rejects a bad email",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "no-at-sign",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "A valid email address is required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "remote bootstrap rejects a short password",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "op@example.test",
+     "password": "short"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "Passwords must contain 12 to 1024 characters."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "remote bootstrap creates the first operator",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "email": "operator@example.test",
+     "enabled": true,
+     "id": "<masked>",
+     "role": "Operator"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 201
+   }
+  },
+  {
+   "name": "remote bootstrap refuses a second",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap"
+   },
+   "response": {
+    "body": {
+     "detail": "The first Operator already exists."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "remote status, operator exists",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": true,
+     "message": null,
+     "needs_operator": false,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "enabling",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "users list",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": [
+     {
+      "email": "operator@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Operator"
+     }
+    ],
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "users create a viewer",
+   "request": {
+    "json": {
+     "email": "viewer@example.test",
+     "password": "another long password here",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": {
+     "email": "viewer@example.test",
+     "enabled": true,
+     "id": "<masked>",
+     "role": "Viewer"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 201
+   }
+  },
+  {
+   "name": "users create duplicate",
+   "request": {
+    "json": {
+     "email": "viewer@example.test",
+     "password": "another long password here",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": {
+     "detail": "That email is already registered."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "users create with a short password",
+   "request": {
+    "json": {
+     "email": "short@example.test",
+     "password": "short",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "users create with an unknown role",
+   "request": {
+    "json": {
+     "email": "role@example.test",
+     "password": "correct horse battery staple",
+     "role": "Admin"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "users create with a malformed body",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users",
+    "raw": "{not json"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "users list with both",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": [
+     {
+      "email": "operator@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Operator"
+     },
+     {
+      "email": "viewer@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Viewer"
+     }
+    ],
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "users update unknown",
+   "request": {
+    "json": {
+     "enabled": false
+    },
+    "method": "PATCH",
+    "path": "/api/v1/remote-auth/users/nobody"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote user not found."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "users update rejects a short password",
+   "request": {
+    "json": {
+     "password": "short"
+    },
+    "method": "PATCH",
+    "path": "/api/v1/remote-auth/users/@viewer_id@"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "users update rejects an unknown field",
+   "request": {
+    "json": {
+     "email": "x@example.test"
+    },
+    "method": "PATCH",
+    "path": "/api/v1/remote-auth/users/@viewer_id@"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "users update disables the viewer",
+   "request": {
+    "json": {
+     "enabled": false
+    },
+    "method": "PATCH",
+    "path": "/api/v1/remote-auth/users/@viewer_id@"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "users update re-enables the viewer",
+   "request": {
+    "json": {
+     "enabled": true
+    },
+    "method": "PATCH",
+    "path": "/api/v1/remote-auth/users/@viewer_id@"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "users list after updates",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": [
+     {
+      "email": "operator@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Operator"
+     },
+     {
+      "email": "viewer@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Viewer"
+     }
+    ],
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "users delete unknown",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/remote-auth/users/nobody"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote user not found."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "users delete the viewer",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/remote-auth/users/@viewer_id@"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "users create the viewer again",
+   "request": {
+    "json": {
+     "email": "viewer@example.test",
+     "password": "another long password here",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": {
+     "email": "viewer@example.test",
+     "enabled": true,
+     "id": "<masked>",
+     "role": "Viewer"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 201
+   }
+  },
+  {
+   "name": "users list the operator and viewer",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users"
+   },
+   "response": {
+    "body": [
+     {
+      "email": "operator@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Operator"
+     },
+     {
+      "email": "viewer@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Viewer"
+     }
+    ],
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote disable",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/disable"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": false,
+     "message": "Remote Access is unavailable on this installation. Local StagePilot is unaffected.",
+     "needs_operator": false,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote disable needs the remote header",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-access/disable"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote settings request required."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote status after disable",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-access"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": false,
+     "message": "Remote Access is unavailable on this installation. Local StagePilot is unaffected.",
+     "needs_operator": false,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "remote login is not a local route",
+   "request": {
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login"
+   },
+   "response": {
+    "body": {
+     "detail": "Use the dedicated remote ingress for remote sessions."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote login validation comes first",
+   "request": {
+    "json": {
+     "email": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "remote session is not a local route",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/remote-auth/session"
+   },
+   "response": {
+    "body": {
+     "detail": "Use the dedicated remote ingress for remote sessions."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote logout is not a local route",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-auth/logout"
+   },
+   "response": {
+    "body": {
+     "detail": "Use the dedicated remote ingress for remote sessions."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "remote revoke is not a local route",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/remote-auth/revoke-sessions"
+   },
+   "response": {
+    "body": {
+     "detail": "Use the dedicated remote ingress for remote sessions."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress access, no session",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/access",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": false,
+     "authentication": "password",
+     "capabilities": {
+      "canActivateServices": false,
+      "canBootstrapRemote": false,
+      "canConfigure": false,
+      "canManageRemote": false,
+      "canOperate": false,
+      "canRead": false
+     },
+     "csrf_token": null,
+     "expires_at": null,
+     "mode": "remote",
+     "user": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress serves the login shell",
+   "request": {
+    "method": "GET",
+    "path": "/",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress serves an asset",
+   "request": {
+    "method": "GET",
+    "path": "/assets/app.js",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "window.stagepilot = \"contract\";\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "32",
+     "content-type": "text/javascript; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress serves the icon",
+   "request": {
+    "method": "GET",
+    "path": "/stagepilot-icon.png",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "not-really-a-png\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "17",
+     "content-type": "image/png",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress refuses the state without a session",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/state",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote email/password session required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress refuses settings without a session",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote email/password session required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress refuses LAN PIN auth",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/dashboard-auth/status",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "LAN PIN authentication is not available remotely."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress login needs the same origin",
+   "request": {
+    "headers": {
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote same-origin request required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress login rejects another origin",
+   "request": {
+    "headers": {
+     "Origin": "https://evil.example",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote same-origin request required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress login needs the remote header",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote login header required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress login with a bad body",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "x"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid remote authentication request."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "ingress login with an oversize body",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "",
+     "password": "x"
+    },
+    "method": "POST",
+    "pad": {
+     "email": 17000
+    },
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote authentication payload is too large."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 413
+   }
+  },
+  {
+   "name": "ingress login, unknown user",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "nobody@example.test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress login, wrong password",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "wrong password!"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress login as the operator",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "csrf_token": "<masked>"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "set-cookie": "__Host-stagepilot_remote=<token>; HttpOnly; Max-Age=43200; Path=/; SameSite=strict; Secure"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress session",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/session",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "csrf_token": "<masked>",
+     "expires_at": "<float>",
+     "user": {
+      "email": "operator@example.test",
+      "id": "<masked>",
+      "role": "Operator"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress access as the operator",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/access",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "authentication": "password",
+     "capabilities": {
+      "canActivateServices": false,
+      "canBootstrapRemote": false,
+      "canConfigure": true,
+      "canManageRemote": true,
+      "canOperate": true,
+      "canRead": true
+     },
+     "csrf_token": "<masked>",
+     "expires_at": "<float>",
+     "mode": "remote",
+     "user": {
+      "email": "operator@example.test",
+      "role": "Operator"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress health with a session",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/health/live",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "status": "alive"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress mutation without a CSRF token",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote CSRF token required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress mutation with a wrong CSRF token",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "0000000000000000000000000000000000000000000000000000000000000000",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote CSRF token required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress mutation without an origin",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "X-CSRF-Token": "@op_csrf@"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote same-origin request required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress action with a csrf token",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress keyed action, first",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Idempotency-Key": "contract-key-0000001",
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/start_next",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "start_next",
+     "message": "Started \"Battle Belongs\".",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "start_next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress keyed action, replay",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Idempotency-Key": "contract-key-0000001",
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/start_next",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "start_next",
+     "message": "Started \"Battle Belongs\".",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "start_next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress keyed action, key reused for another action",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Idempotency-Key": "contract-key-0000001",
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "This request identifier belongs to another action."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 409
+   }
+  },
+  {
+   "name": "ingress keyed action, malformed key",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Idempotency-Key": "short",
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Invalid action request identifier."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "ingress keyed action, second key",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Idempotency-Key": "contract-key-0000002",
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "disconnected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": "<int>",
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress operator reads remote access",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/remote-access",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "available": false,
+     "credential_available": true,
+     "enabled": false,
+     "message": "Remote Access is unavailable on this installation. Local StagePilot is unaffected.",
+     "needs_operator": false,
+     "permanently_revoked": false,
+     "provisioned": true,
+     "state": "off",
+     "temporary_url": true,
+     "url": null
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress bootstrap is local only",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "other@example.test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-access/bootstrap",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Create the first Operator from local StagePilot."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress operator lists users",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users",
+    "via": "ingress"
+   },
+   "response": {
+    "body": [
+     {
+      "email": "operator@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Operator"
+     },
+     {
+      "email": "viewer@example.test",
+      "enabled": true,
+      "id": "<masked>",
+      "role": "Viewer"
+     }
+    ],
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress operator creates a user",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "second@example.test",
+     "password": "correct horse battery staple",
+     "role": "Viewer"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/users",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "email": "second@example.test",
+     "enabled": true,
+     "id": "<masked>",
+     "role": "Viewer"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 201
+   }
+  },
+  {
+   "name": "ingress operator deletes that user",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "DELETE",
+    "path": "/api/v1/remote-auth/users/@second_id@",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "ingress login as the viewer",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "viewer@example.test",
+     "password": "another long password here"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "csrf_token": "<masked>"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "set-cookie": "__Host-stagepilot_remote=<token>; HttpOnly; Max-Age=43200; Path=/; SameSite=strict; Secure"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress viewer access",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/access",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "authentication": "password",
+     "capabilities": {
+      "canActivateServices": false,
+      "canBootstrapRemote": false,
+      "canConfigure": false,
+      "canManageRemote": false,
+      "canOperate": false,
+      "canRead": true
+     },
+     "csrf_token": "<masked>",
+     "expires_at": "<float>",
+     "mode": "remote",
+     "user": {
+      "email": "viewer@example.test",
+      "role": "Viewer"
+     }
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress viewer reads health",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/health/live",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "status": "alive"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress viewer cannot read settings",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/settings",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Viewer access is read-only."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress viewer cannot act",
+   "request": {
+    "cookie": "vw",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@vw_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Viewer access is read-only."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress viewer cannot manage remote",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/remote-access",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Viewer access is read-only."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress viewer cannot list users",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/users",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Viewer access is read-only."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 403
+   }
+  },
+  {
+   "name": "ingress viewer logs out",
+   "request": {
+    "cookie": "vw",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@vw_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/logout",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "set-cookie": "__Host-stagepilot_remote=\"\"; expires=<date>; HttpOnly; Max-Age=0; Path=/; SameSite=strict; Secure"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "ingress viewer session is gone",
+   "request": {
+    "cookie": "vw",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/session",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote email/password session required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress operator logs in again",
+   "request": {
+    "cookie": "op",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "Operator@Example.Test",
+     "password": "correct horse battery staple"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "authenticated": true,
+     "csrf_token": "<masked>"
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "set-cookie": "__Host-stagepilot_remote=<token>; HttpOnly; Max-Age=43200; Path=/; SameSite=strict; Secure"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "ingress the replaced session is gone",
+   "request": {
+    "cookie": "op",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/session",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote email/password session required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress revoke all sessions",
+   "request": {
+    "cookie": "op2",
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-CSRF-Token": "@op2_csrf@",
+     "X-StagePilot-Remote": "1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/revoke-sessions",
+    "via": "ingress"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "set-cookie": "__Host-stagepilot_remote=\"\"; expires=<date>; HttpOnly; Max-Age=0; Path=/; SameSite=strict; Secure"
+    },
+    "status": 204
+   }
+  },
+  {
+   "name": "ingress revoked session is gone",
+   "request": {
+    "cookie": "op2",
+    "method": "GET",
+    "path": "/api/v1/remote-auth/session",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Remote email/password session required."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttle miss 1",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 1"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttle miss 2",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 2"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttle miss 3",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 3"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttle miss 4",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 4"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttle miss 5",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 5"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Incorrect email or password."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json"
+    },
+    "status": 401
+   }
+  },
+  {
+   "name": "ingress throttled",
+   "request": {
+    "headers": {
+     "Origin": "https://remote.contract.test",
+     "X-StagePilot-Remote": "1"
+    },
+    "json": {
+     "email": "throttle@example.test",
+     "password": "wrong password 6"
+    },
+    "method": "POST",
+    "path": "/api/v1/remote-auth/login",
+    "via": "ingress"
+   },
+   "response": {
+    "body": {
+     "detail": "Too many login attempts. Try again later."
+    },
+    "headers": {
+     "cache-control": "no-store",
+     "content-type": "application/json",
+     "retry-after": "300"
+    },
+    "status": 429
+   }
+  }
+ ],
+ "static_steps": [
+  {
+   "name": "static index",
+   "request": {
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static index.html",
+   "request": {
+    "method": "GET",
+    "path": "/index.html"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static HEAD index",
+   "request": {
+    "method": "HEAD",
+    "path": "/"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static script",
+   "request": {
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "window.stagepilot = \"contract\";\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "32",
+     "content-type": "text/javascript; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static stylesheet",
+   "request": {
+    "method": "GET",
+    "path": "/assets/style.css"
+   },
+   "response": {
+    "body": "body { margin: 0; }\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "20",
+     "content-type": "text/css; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static icon",
+   "request": {
+    "method": "GET",
+    "path": "/stagepilot-icon.png"
+   },
+   "response": {
+    "body": "not-really-a-png\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "17",
+     "content-type": "image/png",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static json file",
+   "request": {
+    "method": "GET",
+    "path": "/data.json"
+   },
+   "response": {
+    "body": {
+     "contract": true
+    },
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-type": "application/json",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static text file",
+   "request": {
+    "method": "GET",
+    "path": "/empty/file.txt"
+   },
+   "response": {
+    "body": "plain text\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "11",
+     "content-type": "text/plain; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static dot segments collapse",
+   "request": {
+    "method": "GET",
+    "path": "/assets/../index.html"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static directory with an index redirects",
+   "request": {
+    "method": "GET",
+    "path": "/sub"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "content-length": "0",
+     "location": "<base>/sub/"
+    },
+    "status": 307
+   }
+  },
+  {
+   "name": "static directory with an index",
+   "request": {
+    "method": "GET",
+    "path": "/sub/"
+   },
+   "response": {
+    "body": "<p>sub page</p>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "16",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static directory without an index",
+   "request": {
+    "method": "GET",
+    "path": "/empty/"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static assets directory listing is refused",
+   "request": {
+    "method": "GET",
+    "path": "/assets/"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static unknown path is a JSON 404, no SPA fallback",
+   "request": {
+    "method": "GET",
+    "path": "/dashboard/settings"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static unknown asset",
+   "request": {
+    "method": "GET",
+    "path": "/assets/missing.js"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static encoded traversal",
+   "request": {
+    "method": "GET",
+    "path": "/%2e%2e/%2e%2e/etc/passwd"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static traversal",
+   "request": {
+    "method": "GET",
+    "path": "/../../etc/passwd"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static encoded NUL",
+   "request": {
+    "method": "GET",
+    "path": "/index.html%00"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static POST",
+   "request": {
+    "method": "POST",
+    "path": "/"
+   },
+   "response": {
+    "body": {
+     "detail": "Method Not Allowed"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 405
+   }
+  },
+  {
+   "name": "static PUT",
+   "request": {
+    "method": "PUT",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": {
+     "detail": "Method Not Allowed"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 405
+   }
+  },
+  {
+   "name": "static DELETE",
+   "request": {
+    "method": "DELETE",
+    "path": "/index.html"
+   },
+   "response": {
+    "body": {
+     "detail": "Method Not Allowed"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 405
+   }
+  },
+  {
+   "name": "static unknown API route is a 404",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/nope"
+   },
+   "response": {
+    "body": {
+     "detail": "Not Found"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 404
+   }
+  },
+  {
+   "name": "static unknown API route, POST",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/nope"
+   },
+   "response": {
+    "body": {
+     "detail": "Method Not Allowed"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 405
+   }
+  },
+  {
+   "name": "static range",
+   "request": {
+    "headers": {
+     "Range": "bytes=0-5"
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "window",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "6",
+     "content-range": "bytes 0-5/32",
+     "content-type": "text/javascript; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 206
+   }
+  },
+  {
+   "name": "static range suffix",
+   "request": {
+    "headers": {
+     "Range": "bytes=-4"
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "t\";\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "4",
+     "content-range": "bytes 28-31/32",
+     "content-type": "text/javascript; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 206
+   }
+  },
+  {
+   "name": "static range open ended",
+   "request": {
+    "headers": {
+     "Range": "bytes=10-"
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "gepilot = \"contract\";\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "22",
+     "content-range": "bytes 10-31/32",
+     "content-type": "text/javascript; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 206
+   }
+  },
+  {
+   "name": "static range not satisfiable",
+   "request": {
+    "headers": {
+     "Range": "bytes=9999-"
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "content-length": "0",
+     "content-range": "bytes */32",
+     "content-type": "text/plain; charset=utf-8"
+    },
+    "status": 416
+   }
+  },
+  {
+   "name": "static range malformed",
+   "request": {
+    "headers": {
+     "Range": "lines=1-2"
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "Only support bytes range",
+    "headers": {
+     "content-length": "24",
+     "content-type": "text/plain; charset=utf-8"
+    },
+    "status": 400
+   }
+  },
+  {
+   "name": "static range with no ranges",
+   "request": {
+    "headers": {
+     "Range": "bytes="
+    },
+    "method": "GET",
+    "path": "/assets/app.js"
+   },
+   "response": {
+    "body": "Range header: range must be requested",
+    "headers": {
+     "content-length": "37",
+     "content-type": "text/plain; charset=utf-8"
+    },
+    "status": 400
+   }
+  },
+  {
+   "name": "static if-none-match",
+   "request": {
+    "headers": {
+     "If-None-Match": "@etag@"
+    },
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "etag": "<present>"
+    },
+    "status": 304
+   }
+  },
+  {
+   "name": "static if-none-match, other tag",
+   "request": {
+    "headers": {
+     "If-None-Match": "\"0\""
+    },
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "static if-modified-since",
+   "request": {
+    "headers": {
+     "If-Modified-Since": "@modified@"
+    },
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "",
+    "headers": {
+     "etag": "<present>"
+    },
+    "status": 304
+   }
+  },
+  {
+   "name": "static if-range matching",
+   "request": {
+    "headers": {
+     "If-Range": "@etag@",
+     "Range": "bytes=0-3"
+    },
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "<!do",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "4",
+     "content-range": "bytes 0-3/101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
+    },
+    "status": 206
+   }
+  },
+  {
+   "name": "static if-range stale",
+   "request": {
+    "headers": {
+     "If-Range": "\"0\"",
+     "Range": "bytes=0-3"
+    },
+    "method": "GET",
+    "path": "/"
+   },
+   "response": {
+    "body": "<!doctype html>\n<html><head><title>StagePilot contract</title></head><body>login shell</body></html>\n",
+    "headers": {
+     "accept-ranges": "bytes",
+     "content-length": "101",
+     "content-type": "text/html; charset=utf-8",
+     "etag": "<present>",
+     "last-modified": "<present>"
     },
     "status": 200
    }

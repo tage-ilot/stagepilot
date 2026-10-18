@@ -394,6 +394,88 @@ def record_pco() -> list[dict[str, Any]]:
         mock_server.shutdown()
 
 
+def _serve(app: Any) -> tuple[Any, Any, int]:
+    """Serve an ASGI app over real HTTP on a free loopback port (a thread); return (server, thread, port)."""
+
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.1)
+    return server, thread, port
+
+
+def record_remote() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The remote and static profiles, recorded from the Python app over real HTTP.
+
+    The Remote identity store and feature files live in a scratch directory; the trusted ingress is
+    a second listener over the same app. No tunnel, no provider, no network.
+    """
+
+    import tempfile
+
+    import remote_app
+    import remote_profile
+    from stagepilot.api.remote_ingress import RemoteIngress
+
+    with tempfile.TemporaryDirectory() as scratch:
+        app, origin = remote_app.create_remote(Path(scratch))
+        local, local_thread, local_port = _serve(app)
+        edge, edge_thread, edge_port = _serve(RemoteIngress(app, public_origin=origin))
+        urls = {"local": f"http://127.0.0.1:{local_port}", "ingress": f"http://127.0.0.1:{edge_port}"}
+        try:
+            remote = normalise(remote_profile.run(remote_profile.REMOTE_SCENARIOS, urls))
+            static = normalise(remote_profile.run(remote_profile.STATIC_SCENARIOS, urls))
+        finally:
+            for server, thread in ((edge, edge_thread), (local, local_thread)):
+                server.should_exit = True
+                thread.join(timeout=10)
+    return remote, static
+
+
+def record_diagnostics() -> list[dict[str, Any]]:
+    """The diagnostics profile: the Python app uploading to the mock control plane."""
+
+    import tempfile
+
+    import mock_control
+    import remote_app
+    import remote_profile
+
+    from stagepilot.plugins.playback_api.plugin import RECENT_LOG
+
+    # The demo profile ran in this process and its Playback scans filled the (process-wide) log;
+    # a freshly started server, which is what the replay talks to, has none.
+    RECENT_LOG.clear()
+    mock_server, mock_port = mock_control.start()
+    with tempfile.TemporaryDirectory() as scratch:
+        app = remote_app.create_diagnostics(Path(scratch), mock_port)
+        server, thread, port = _serve(app)
+        try:
+            return normalise(
+                remote_profile.run(
+                    remote_profile.DIAGNOSTICS_SCENARIOS,
+                    {"local": f"http://127.0.0.1:{port}"},
+                    f"http://127.0.0.1:{mock_port}",
+                )
+            )
+        finally:
+            server.should_exit = True
+            thread.join(timeout=10)
+            mock_server.shutdown()
+
+
 def _dump(steps: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "volatile_keys": sorted(VOLATILE_KEYS),
@@ -434,8 +516,13 @@ def cmd_record(_: argparse.Namespace) -> int:
     document = _dump(transcripts)
     pco_steps = record_pco()
     outputs = record_outputs()
+    remote_steps, static_steps = record_remote()
+    diagnostics_steps = record_diagnostics()
     document["pco_steps"] = pco_steps
     document["output_steps"] = outputs
+    document["remote_steps"] = remote_steps
+    document["diagnostics_steps"] = diagnostics_steps
+    document["static_steps"] = static_steps
     OUT.mkdir(exist_ok=True)
     TRANSCRIPTS.write_text(
         json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
@@ -443,6 +530,7 @@ def cmd_record(_: argparse.Namespace) -> int:
     )
     print(
         f"recorded {len(transcripts)} steps + {len(pco_steps)} pco steps + {len(outputs)} output steps"
+        f" + {len(remote_steps)} remote + {len(diagnostics_steps)} diagnostics + {len(static_steps)} static steps"
         f" -> {TRANSCRIPTS.relative_to(ROOT)}"
     )
     return 0
@@ -459,6 +547,19 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         golden = document["pco_steps"]
         got = normalise(copy.deepcopy(pco_profile.run_pco(live, args.mock_url)))
+    elif args.profile in ("remote", "diagnostics", "static"):
+        import remote_profile
+
+        urls = {"local": args.base_url, "ingress": args.ingress_url or args.base_url}
+        golden = document[f"{args.profile}_steps"]
+        scenarios_for = {
+            "remote": remote_profile.REMOTE_SCENARIOS,
+            "diagnostics": remote_profile.DIAGNOSTICS_SCENARIOS,
+            "static": remote_profile.STATIC_SCENARIOS,
+        }
+        got = normalise(
+            copy.deepcopy(remote_profile.run(scenarios_for[args.profile], urls, args.mock_url))
+        )
     else:
         if args.profile == "outputs":
             golden = document["output_steps"]
@@ -503,8 +604,9 @@ def main() -> int:
     sub.add_parser("openapi").set_defaults(fn=cmd_openapi)
     rp = sub.add_parser("replay")
     rp.add_argument("base_url")
-    rp.add_argument("--profile", choices=["pco", "outputs"], default=None)
+    rp.add_argument("--profile", choices=["pco", "outputs", "remote", "diagnostics", "static"], default=None)
     rp.add_argument("--mock-url", default=None, help="mock base URL (pco: Planning Center, outputs: ProPresenter)")
+    rp.add_argument("--ingress-url", default=None, help="remote profile: the trusted ingress base URL")
     rp.set_defaults(fn=cmd_replay)
     args = p.parse_args()
     return int(args.fn(args))

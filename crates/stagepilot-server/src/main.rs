@@ -11,9 +11,20 @@
 //!       the "outputs" contract profile: demo plan, fake MIDI devices, ProPresenter at 127.0.0.1:N
 //!       (a mock), OSC to a loopback port nothing listens on. Mirrors `scripts/contract/outputs_app.py`.
 //!
+//!   stagepilot-server --contract-remote --remote-dir D --ingress-port N --web-root W --port N
+//!       the "remote" and "static" contract profiles: demo app, a Remote identity store and
+//!       feature file under D, the fixture dashboard in W, and the same app behind the trusted
+//!       remote ingress (public origin https://remote.contract.test) on N. Mirrors
+//!       `scripts/contract/remote_app.py` (`create_remote`).
+//!
+//!   stagepilot-server --contract-diagnostics --control-port N --remote-dir D --port N
+//!       the "diagnostics" contract profile: a scripted Remote manager enrolled against the mock
+//!       control plane at 127.0.0.1:N. Mirrors `remote_app.py` (`create_diagnostics`).
+//!
 //! The bind address comes from the settings (`STAGEPILOT_HOST` / `STAGEPILOT_PORT` override them);
 //! `--host` and `--port` override both.
 
+use stagepilot_core::auth::RemoteStore;
 use stagepilot_core::config::{
     IntegrationModes, LightingMethod, LightsSettings, MidiSettings, MidiSource,
     ProPresenterSettings, ServiceSource, TimerOutput,
@@ -22,7 +33,14 @@ use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
 use stagepilot_pco::runtime::PcoOptions;
-use stagepilot_server::{build_app, default_web_root, AppOptions, OutputBackends, Runtime};
+use stagepilot_server::remote_fakes::ContractManager;
+use stagepilot_server::{
+    build_app, default_web_root, AppOptions, OutputBackends, RemoteAccess, RemoteFeature,
+    RemoteIngress, Runtime,
+};
+
+/// The public origin of the "remote" contract profile (`remote_profile.ORIGIN`).
+const CONTRACT_PUBLIC_ORIGIN: &str = "https://remote.contract.test";
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -112,7 +130,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let contract_pco = args.iter().any(|a| a == "--contract-pco");
     let contract_outputs = args.iter().any(|a| a == "--contract-outputs");
-    let demo = contract_pco || contract_outputs || args.iter().any(|a| a == "--demo");
+    let contract_remote = args.iter().any(|a| a == "--contract-remote");
+    let contract_diagnostics = args.iter().any(|a| a == "--contract-diagnostics");
+    let demo = contract_pco
+        || contract_outputs
+        || contract_remote
+        || contract_diagnostics
+        || args.iter().any(|a| a == "--demo");
     let service = if contract_pco {
         SettingsService::ephemeral_with_secret(
             contract_pco_settings(),
@@ -149,13 +173,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(runtime.settings.bind_port);
     let address: SocketAddr = format!("{host}:{port}").parse()?;
 
+    let remote_dir = arg(&args, "--remote-dir").map(std::path::PathBuf::from);
+    let mut ingress_listener = None;
+    if contract_remote || contract_diagnostics {
+        let dir = remote_dir.ok_or("the remote contract profiles need --remote-dir")?;
+        let access = RemoteAccess::new(RemoteStore::new(dir.join("identity.sqlite3")));
+        runtime.set_remote_access(Some(access.clone()));
+        if contract_remote {
+            runtime.set_remote_feature(Some(Arc::new(RemoteFeature::new(
+                dir.join("remote").join("remote.json"),
+            ))));
+            let port = arg(&args, "--ingress-port")
+                .and_then(|p| p.parse::<u16>().ok())
+                .ok_or("--contract-remote needs --ingress-port")?;
+            let ingress = RemoteIngress::new(access, CONTRACT_PUBLIC_ORIGIN)?;
+            ingress_listener = Some((
+                tokio::net::TcpListener::bind(SocketAddr::new(address.ip(), port)).await?,
+                ingress,
+            ));
+        } else {
+            let port = arg(&args, "--control-port")
+                .and_then(|p| p.parse::<u16>().ok())
+                .ok_or("--contract-diagnostics needs --control-port")?;
+            runtime.set_remote_manager(Some(Arc::new(ContractManager::new(&format!(
+                "http://127.0.0.1:{port}"
+            )))));
+        }
+    }
+    let web_root = arg(&args, "--web-root")
+        .map(std::path::PathBuf::from)
+        .or_else(default_web_root);
+
     runtime.start().await;
-    let app = build_app(
-        runtime.clone(),
-        AppOptions {
-            web_root: default_web_root(),
-        },
-    );
+    let app = build_app(runtime.clone(), AppOptions { web_root });
+    if let Some((listener, ingress)) = ingress_listener {
+        let wrapped = ingress.wrap(app.clone());
+        tokio::spawn(async move {
+            let _ = axum::serve(
+                listener,
+                wrapped.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await;
+        });
+    }
     let listener = tokio::net::TcpListener::bind(address).await?;
     tracing::info!(%address, "stagepilot_server_listening");
     axum::serve(
