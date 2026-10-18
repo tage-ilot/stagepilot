@@ -311,6 +311,7 @@ async fn ensure_show_idle(rt: &Runtime, message: &str) -> Option<Response> {
 }
 
 /// Hand the current credentials to the running plugin, or apply the saved source when there is none.
+#[allow(clippy::result_large_err)]
 async fn apply_credentials(rt: &Rt) -> Result<(), Response> {
     match rt.pco.plugin() {
         Some(plugin) => {

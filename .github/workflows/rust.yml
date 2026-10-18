@@ -9,6 +9,7 @@ on:
     branches:
       - feat/rust-phase1
       - feat/rust-phase2
+      - feat/rust-phase5
       - main
     paths:
       - "Cargo.toml"
