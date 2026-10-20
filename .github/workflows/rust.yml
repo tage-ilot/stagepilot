@@ -17,6 +17,7 @@ on:
       - feat/rust-phase6b-a
       - feat/rust-phase6c
       - feat/rust-phase6d
+      - docs/rust-rig-a
       - feat/rust-phase6b-b
       - main
     paths:
@@ -95,6 +96,22 @@ jobs:
       - name: Build the rig latency probe (artifact only; nothing is published)
         shell: bash
         run: cargo build --release -p stagepilot-playback --example rig_latency
+
+      - name: Build headless server and midi probe (rig verification A artifact only)
+        shell: bash
+        run: cargo build --release -p stagepilot-headless -p midi-probe
+
+      - name: Upload rig verification binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-headless-${{ matrix.runner }}
+          path: |
+            target/release/stagepilot-headless
+            target/release/stagepilot-headless.exe
+            target/release/midi-probe
+            target/release/midi-probe.exe
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Upload rig latency probe
         uses: actions/upload-artifact@v4
