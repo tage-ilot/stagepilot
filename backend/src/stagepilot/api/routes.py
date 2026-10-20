@@ -17,6 +17,7 @@ from stagepilot.api.remote_retry import RemoteRetryRoute
 from stagepilot.core.config import (
     LightingCue,
     LightingMethod,
+    LightkeySettings,
     LightsSettings,
     MidiSource,
     OscLightingCue,
@@ -31,6 +32,7 @@ from stagepilot.core.events import (
     ServicePlanSelectionPayload,
     new_event,
 )
+from stagepilot.core.lightkey import LightkeyStatus
 from stagepilot.core.lights import LightsSnapshot
 from stagepilot.core.midi import MidiController, MidiInputSnapshot
 from stagepilot.core.propresenter import ProPresenterSnapshot
@@ -52,6 +54,9 @@ from stagepilot.models.api import (
     LightingOscCueTestRequest,
     LightingOutputResponse,
     LightingPadsRequest,
+    LightkeyActionResponse,
+    LightkeyRecordRequest,
+    LightkeySettingsRequest,
     LightsOperationResponse,
     LightsSettingsRequest,
     LightsStatusResponse,
@@ -1090,6 +1095,7 @@ async def update_lights_settings(
             osc_port=(settings.osc_port or current.osc_port) if use_osc else current.osc_port,
             cue_maps=current.cue_maps,
             pads=current.pads,
+            lightkey=current.lightkey,
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from exc
@@ -1194,6 +1200,78 @@ async def update_lighting_pads(
         accepted=True,
         message=f"Saved {len(body.pads)} lighting pads.",
         lights=_lights_response(await controller.snapshot()),
+    )
+
+
+def _lightkey_unavailable() -> HTTPException:
+    return HTTPException(status_code=409, detail="The Lighting plugin is unavailable.")
+
+
+@router.get("/lights/lightkey", response_model=LightkeyStatus)
+async def lightkey_status(request: Request) -> LightkeyStatus:
+    controller = _runtime(request).lights_controller
+    if controller is None:
+        raise _lightkey_unavailable()
+    return await controller.lightkey_status()
+
+
+@router.put("/lights/lightkey/settings", response_model=LightkeyActionResponse)
+async def update_lightkey_settings(
+    body: LightkeySettingsRequest, request: Request
+) -> LightkeyActionResponse:
+    """Save the Lightkey API address and/or the replay switch (the only two settings)."""
+
+    runtime = _runtime(request)
+    controller = runtime.lights_controller
+    if controller is None:
+        raise _lightkey_unavailable()
+    async with _cue_map_lock(request):
+        current = runtime.settings_service.effective_runtime_settings().lights
+        try:
+            lightkey = LightkeySettings(
+                api_url=current.lightkey.api_url if body.api_url is None else body.api_url,
+                replay=current.lightkey.replay if body.replay is None else body.replay,
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=exc.errors(include_url=False, include_context=False)
+            ) from exc
+        updated = current.model_copy(update={"lightkey": lightkey}, deep=True)
+        try:
+            runtime.settings_service.persist_lights(updated)
+        except SettingsFileError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        runtime.settings.lights = updated
+    await controller.lightkey_apply_settings(lightkey)
+    return LightkeyActionResponse(
+        accepted=True, message="Saved.", lightkey=await controller.lightkey_status()
+    )
+
+
+@router.post("/lights/lightkey/recording", response_model=LightkeyActionResponse)
+async def set_lightkey_recording(
+    body: LightkeyRecordRequest, request: Request
+) -> LightkeyActionResponse:
+    controller = _runtime(request).lights_controller
+    if controller is None:
+        raise _lightkey_unavailable()
+    message = await controller.lightkey_set_recording(body.recording)
+    status = await controller.lightkey_status()
+    return LightkeyActionResponse(
+        accepted=status.recording == body.recording, message=message, lightkey=status
+    )
+
+
+@router.delete("/lights/lightkey/takes/{song_key}", response_model=LightkeyActionResponse)
+async def clear_lightkey_take(song_key: str, request: Request) -> LightkeyActionResponse:
+    controller = _runtime(request).lights_controller
+    if controller is None:
+        raise _lightkey_unavailable()
+    removed = await controller.lightkey_clear_take(song_key)
+    return LightkeyActionResponse(
+        accepted=removed,
+        message="Capture cleared." if removed else "That song has no capture.",
+        lightkey=await controller.lightkey_status(),
     )
 
 

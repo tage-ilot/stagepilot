@@ -6,6 +6,12 @@ from stagepilot.plugins.lights.client import (
     MidiOutputPortContract,
     MidoMidiOutputBackend,
 )
+from stagepilot.plugins.lights.lightkey import (
+    FileTakeStore,
+    LightkeyLink,
+    MemoryTakeStore,
+    TakeStore,
+)
 from stagepilot.plugins.lights.osc import (
     OscOutputBackendContract,
     OscOutputBackendFactory,
@@ -15,7 +21,10 @@ from stagepilot.plugins.lights.osc import (
 from stagepilot.plugins.lights.plugin import LightsPlugin
 
 __all__ = [
+    "FileTakeStore",
+    "LightkeyLink",
     "LightsPlugin",
+    "MemoryTakeStore",
     "MidiOutputBackendContract",
     "MidiOutputBackendFactory",
     "MidiOutputPortContract",
@@ -23,5 +32,6 @@ __all__ = [
     "OscOutputBackendContract",
     "OscOutputBackendFactory",
     "OscOutputContract",
+    "TakeStore",
     "UdpOscOutputBackend",
 ]

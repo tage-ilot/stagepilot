@@ -90,6 +90,44 @@ cues from the old timeline. A restart creates one fresh timeline at elapsed
 The large dashboard clock counts down the scheduled remaining time. The smaller
 clock counts elapsed time up from the same start timestamp.
 
+## Lightkey live link: record and replay
+
+Lightkey can be controlled by OSC and MIDI, but it never sends anything back, so
+StagePilot cannot ask it which cues are on. The **Lightkey live link** (in the
+Lighting panel, OSC only) reads that from
+[`lightkey-api`](https://github.com/huntrw6/lightkey-api), a small read-only
+agent that runs on the Lightkey Mac. Install it there first (its README covers
+the one-time macOS permission click).
+
+The strip has three controls:
+
+- **Address and Connect.** Defaults to the Lighting OSC host on port 8770
+  (`10.30.0.211:8770`). The dot shows *Connected*, *Lightkey is closed*, or
+  *Not connected* with the reason. If the answer is "refused", add the wired
+  interface to `allow_interfaces` in the agent's config.
+- **Record from Lightkey.** While on, the next song's countdown is recorded:
+  every cue Lightkey turns on or off is stored with its song time, measured
+  from Lightkey's own DMX output with the clock difference between the two Macs
+  removed. The capture is attached to that song and saved next to the settings
+  (`lightkey-takes.json`). A song is saved only if at least half of it was
+  recorded, so a stray start and stop never replaces a good capture. Moving the
+  playhead during a recording discards it. Turning Record off mid-song saves
+  what was captured, if it was enough.
+- **Replay captured lights.** On by default, and only paused while recording.
+  When a song with a capture plays, StagePilot first sets every captured cue to
+  its recorded state at that point, then sends each change at its time, 40 ms
+  early to absorb the OSC and fade delay (measured: 28 to 52 ms). Seeking and
+  resuming re-sync from the new position.
+
+Replay only ever touches cues that appear in the capture; every other cue stays
+with the Lightkey operator. If the operator changes a cue that replay also
+drives, replay leaves that cue alone for 3 seconds. A cue that changes right
+after replay sent it is treated as replay's own echo, not an operator action.
+
+Replay uses `/live/*/cue/<name>/activate` and `/deactivate` with no fade
+argument, so each cue keeps its own fade. Cue names that contain `/` cannot be
+addressed over OSC and are skipped.
+
 ## Cue board, live capture and the timeline
 
 Cues are easiest to set while the song is running in practice. Under **Song

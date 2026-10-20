@@ -269,6 +269,39 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
 }
 
+/** One song's captured Lightkey changes (summary only; the changes stay on the backend). */
+export interface LightkeyTakeSummary {
+  song_key: string;
+  song_title: string;
+  recorded_at: string;
+  duration_seconds: number;
+  edge_count: number;
+  cue_count: number;
+}
+
+export type LightkeyLink = "off" | "connected" | "lightkey_closed" | "unreachable";
+
+export interface LightkeyStatus {
+  api_url: string;
+  link: LightkeyLink;
+  detail: string | null;
+  active_count: number | null;
+  recording: boolean;
+  recording_song: string | null;
+  replay: boolean;
+  /** Why replay is not running right now (recording, switch off, MIDI, Lighting off); null when it can. */
+  replay_blocked: string | null;
+  replaying_song: string | null;
+  message: string | null;
+  takes: LightkeyTakeSummary[];
+}
+
+export interface LightkeyActionResponse {
+  accepted: boolean;
+  message: string;
+  lightkey: LightkeyStatus;
+}
+
 export interface LightsSettings {
   enabled: boolean;
   /** Older backends omit the OSC fields; a missing method means MIDI. */
