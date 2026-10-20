@@ -1189,8 +1189,8 @@ fn lax_bool(field: &str, value: &Value) -> Result<bool, Value> {
     match value {
         Value::Bool(b) => Ok(*b),
         Value::Number(n) => match n.as_f64() {
-            Some(f) if f == 0.0 => Ok(false),
-            Some(f) if f == 1.0 => Ok(true),
+            Some(0.0) => Ok(false),
+            Some(1.0) => Ok(true),
             _ => parsing(),
         },
         Value::String(text) => match text.to_lowercase().as_str() {

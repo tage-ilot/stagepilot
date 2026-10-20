@@ -982,7 +982,7 @@ impl Inner {
     async fn on_stopped(self: &Arc<Self>, event: &StagePilotEvent) {
         self.cancel_replay().await;
         enum Next {
-            Finish(Session),
+            Finish(Box<Session>),
             Paused(String),
             Nothing,
         }
@@ -1004,7 +1004,7 @@ impl Inner {
                     let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
                     if take_is_worth_keeping(session.last_position, duration) {
                         match st.session.take() {
-                            Some(session) => Next::Finish(session),
+                            Some(session) => Next::Finish(Box::new(session)),
                             None => Next::Nothing,
                         }
                     } else {
@@ -1015,7 +1015,7 @@ impl Inner {
         };
         match next {
             Next::Finish(session) => {
-                self.finish(session, "Song finished.").await;
+                self.finish(*session, "Song finished.").await;
             }
             Next::Paused(title) => {
                 self.say(format!(

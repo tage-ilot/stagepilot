@@ -72,7 +72,11 @@
     "osc_host": "127.0.0.1",
     "osc_port": 21600,
     "cue_maps": {},
-    "pads": []
+    "pads": [],
+    "lightkey": {
+      "api_url": "",
+      "replay": true
+    }
   },
   "propresenter": {
     "enabled": false,
