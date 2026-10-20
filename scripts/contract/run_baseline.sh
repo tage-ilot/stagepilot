@@ -2,6 +2,7 @@
 # Baseline: start the Python backend (demo mode, loopback), replay the golden transcripts, stop it.
 # Then the same for the "pco" profile (Planning Center and the control plane are a local mock).
 # And the same for the "outputs" profile (fake MIDI, mock ProPresenter, dead-end OSC).
+# And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
 # Usage (repo root): scripts/contract/run_baseline.sh [PORT]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -9,6 +10,8 @@ PORT="${1:-47312}"
 PCO_PORT=$((PORT + 100))
 OUT_PORT=$((PORT + 300))
 OMOCK_PORT=$((PORT + 400))
+LK_PORT=$((PORT + 500))
+LKMOCK_PORT=$((PORT + 600))
 MOCK_PORT=$((PORT + 200))
 LOG="$(mktemp)"
 PIDS=()
@@ -47,3 +50,12 @@ PIDS+=($!)
 wait_for "http://127.0.0.1:$OUT_PORT/api/v1/health/live"
 uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$OUT_PORT" \
   --profile outputs --mock-url "http://127.0.0.1:$OMOCK_PORT"
+
+uv run --project backend --frozen python scripts/contract/mock_lightkey.py "$LKMOCK_PORT" >>"$LOG" 2>&1 &
+PIDS+=($!)
+wait_for "http://127.0.0.1:$LKMOCK_PORT/time"
+uv run --project backend --frozen python scripts/contract/serve_python_lightkey.py "$LK_PORT" "$LKMOCK_PORT" >>"$LOG" 2>&1 &
+PIDS+=($!)
+wait_for "http://127.0.0.1:$LK_PORT/api/v1/health/live"
+uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$LK_PORT" \
+  --profile lightkey --mock-url "http://127.0.0.1:$LKMOCK_PORT"

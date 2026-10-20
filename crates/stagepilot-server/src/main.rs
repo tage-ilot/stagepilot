@@ -11,16 +11,23 @@
 //!       the "outputs" contract profile: demo plan, fake MIDI devices, ProPresenter at 127.0.0.1:N
 //!       (a mock), OSC to a loopback port nothing listens on. Mirrors `scripts/contract/outputs_app.py`.
 //!
+//!   stagepilot-server --contract-lightkey --lightkey-port N --port N
+//!       the "lightkey" contract profile: demo plan, simulated MIDI and timer output, Lighting on
+//!       OSC to a loopback port nothing listens on, and the Lightkey link polling a FAKE agent on
+//!       127.0.0.1:N with one seeded take. Mirrors `scripts/contract/lightkey_app.py`.
+//!
 //! The bind address comes from the settings (`STAGEPILOT_HOST` / `STAGEPILOT_PORT` override them);
 //! `--host` and `--port` override both.
 
 use stagepilot_core::config::{
-    IntegrationModes, LightingMethod, LightsSettings, MidiSettings, MidiSource,
+    IntegrationModes, LightingMethod, LightkeySettings, LightsSettings, MidiSettings, MidiSource,
     ProPresenterSettings, ServiceSource, TimerOutput,
 };
 use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
+use stagepilot_lights::lightkey::{LightkeyEdge, LightkeyTake};
+use stagepilot_lights::lightkey_link::{MemoryTakeStore, TakeStore};
 use stagepilot_pco::runtime::PcoOptions;
 use stagepilot_server::{build_app, default_web_root, AppOptions, OutputBackends, Runtime};
 use std::net::SocketAddr;
@@ -102,6 +109,57 @@ fn contract_outputs_settings(propresenter_port: u16) -> PersistentSettings {
     }
 }
 
+/// The "lightkey" contract profile (see `scripts/contract/lightkey_app.py`).
+fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
+    PersistentSettings {
+        integration_modes: IntegrationModes {
+            service_source: ServiceSource::Demo,
+            midi_source: MidiSource::Simulated,
+            timer_output: TimerOutput::Simulated,
+        },
+        lights: LightsSettings {
+            enabled: true,
+            method: LightingMethod::Osc,
+            osc_host: "127.0.0.1".into(),
+            osc_port: 47999,
+            lightkey: LightkeySettings {
+                api_url: format!("http://127.0.0.1:{agent_port}"),
+                replay: true,
+            },
+            ..LightsSettings::default()
+        },
+        ..PersistentSettings::default()
+    }
+}
+
+/// The take the Python profile seeds for the first demo song.
+fn contract_lightkey_store() -> Arc<dyn TakeStore> {
+    let edge = |at: f64, added: &[&str], removed: &[&str]| {
+        LightkeyEdge::new(
+            at,
+            added.iter().map(ToString::to_string).collect(),
+            removed.iter().map(ToString::to_string).collect(),
+        )
+    };
+    let take = LightkeyTake::new(
+        "demo-battle-belongs".into(),
+        "Battle Belongs".into(),
+        chrono::DateTime::parse_from_rfc3339("2026-10-20T20:00:00Z")
+            .map(|d| d.with_timezone(&chrono::Utc))
+            .unwrap_or_default(),
+        281.0,
+        vec!["Warm".into()],
+        vec![
+            edge(10.0, &["Stars"], &[]).expect("seed edge"),
+            edge(40.0, &["Strobe"], &["Stars"]).expect("seed edge"),
+        ],
+    )
+    .expect("seed take");
+    let store = MemoryTakeStore::new();
+    store.set(std::iter::once((take.song_key.clone(), take)).collect());
+    Arc::new(store)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -112,7 +170,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let contract_pco = args.iter().any(|a| a == "--contract-pco");
     let contract_outputs = args.iter().any(|a| a == "--contract-outputs");
-    let demo = contract_pco || contract_outputs || args.iter().any(|a| a == "--demo");
+    let contract_lightkey = args.iter().any(|a| a == "--contract-lightkey");
+    let demo =
+        contract_pco || contract_outputs || contract_lightkey || args.iter().any(|a| a == "--demo");
     let service = if contract_pco {
         SettingsService::ephemeral_with_secret(
             contract_pco_settings(),
@@ -123,6 +183,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|p| p.parse::<u16>().ok())
             .ok_or("--contract-outputs needs --propresenter-port")?;
         SettingsService::ephemeral_persistent(contract_outputs_settings(port))
+    } else if contract_lightkey {
+        let port = arg(&args, "--lightkey-port")
+            .and_then(|p| p.parse::<u16>().ok())
+            .ok_or("--contract-lightkey needs --lightkey-port")?;
+        SettingsService::ephemeral_persistent(contract_lightkey_settings(port))
     } else if demo {
         SettingsService::ephemeral(RuntimeSettings::demo())
     } else {
@@ -137,6 +202,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Runtime::with_pco(Arc::new(service), false, contract_pco_options(port)?)
     } else if contract_outputs {
         Runtime::with_backends(Arc::new(service), false, OutputBackends::fake_midi())
+    } else if contract_lightkey {
+        Runtime::with_backends(
+            Arc::new(service),
+            false,
+            OutputBackends {
+                lightkey_store: Some(contract_lightkey_store()),
+                ..OutputBackends::fake_midi()
+            },
+        )
     } else if demo {
         // In-memory instances never touch the OS keychain.
         Runtime::new(Arc::new(service), false)

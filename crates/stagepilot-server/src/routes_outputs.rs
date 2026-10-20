@@ -13,10 +13,11 @@ use serde_json::{json, Value};
 use stagepilot_core::api::MidiCueName;
 use stagepilot_core::config::{
     round_tenths, value_error, Detail, Errors, LightingCue, LightingMethod, LightingPad,
-    LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
+    LightkeySettings, LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
 };
 use stagepilot_core::settings_errors::parse_body;
 use stagepilot_core::state::{ConnectionStatus, TimerStatus};
+use stagepilot_lights::lightkey::LightkeyActionResponse;
 use stagepilot_lights::models::{
     LightingCaptureRequest, LightingCaptureResponse, LightingCaptureUndoRequest,
     LightingCueMapRequest, LightingCueTestRequest, LightingOscCueTestRequest, LightingPadsRequest,
@@ -61,6 +62,16 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights/capture/undo", post(lights_capture_undo))
         .route("/api/v1/lights/test", post(lights_test))
         .route("/api/v1/lights/test-osc", post(lights_test_osc))
+        .route("/api/v1/lights/lightkey", get(lightkey_status))
+        .route("/api/v1/lights/lightkey/settings", put(lightkey_settings))
+        .route(
+            "/api/v1/lights/lightkey/recording",
+            post(lightkey_recording),
+        )
+        .route(
+            "/api/v1/lights/lightkey/takes/{song_key}",
+            axum::routing::delete(lightkey_clear_take),
+        )
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Value {
@@ -677,6 +688,8 @@ async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
         cue_maps: current.cue_maps.clone(),
         pads: current.pads.clone(),
         transport: current.transport,
+        // The Lightkey block is not part of this request: carry it over untouched.
+        lightkey: current.lightkey.clone(),
     };
     updated.normalise();
     let mut errors = Vec::new();
@@ -1138,4 +1151,221 @@ async fn lights_test_osc(State(rt): State<Rt>, raw: Bytes) -> Json {
 #[allow(dead_code)]
 fn _unused(_: &MidiInput, _: MidiCueName, _: LightingPad, _: &str) {
     let _ = (cue_name_str, PRESENTATION_BUSY);
+}
+
+// ---- Lightkey ----------------------------------------------------------------------------------
+
+async fn lightkey_response(rt: &Runtime, accepted: bool, message: String) -> Json {
+    ok(to_value(&LightkeyActionResponse {
+        accepted,
+        message,
+        lightkey: rt.outputs.lights.lightkey_status().await,
+    }))
+}
+
+async fn lightkey_status(State(rt): State<Rt>) -> Json {
+    ok(to_value(&rt.outputs.lights.lightkey_status().await))
+}
+
+/// `LightkeySettingsRequest`: both fields optional, send only what changed.
+struct LightkeySettingsRequest {
+    api_url: Option<String>,
+    replay: Option<bool>,
+}
+
+/// pydantic's lax `bool`: `true`/`false`, `0`/`1`, and the strings pydantic accepts. `Err` is the
+/// pydantic error for a value that is not a boolean at all (`bool_type`) or a string/number that
+/// cannot be read as one (`bool_parsing`).
+fn lax_bool(field: &str, value: &Value) -> Result<bool, Value> {
+    let parsing = || {
+        Err(field_error(
+            "bool_parsing",
+            field,
+            "Input should be a valid boolean, unable to interpret input".into(),
+            value.clone(),
+            Value::Null,
+        ))
+    };
+    match value {
+        Value::Bool(b) => Ok(*b),
+        Value::Number(n) => match n.as_f64() {
+            Some(f) if f == 0.0 => Ok(false),
+            Some(f) if f == 1.0 => Ok(true),
+            _ => parsing(),
+        },
+        Value::String(text) => match text.to_lowercase().as_str() {
+            "0" | "off" | "f" | "false" | "n" | "no" => Ok(false),
+            "1" | "on" | "t" | "true" | "y" | "yes" => Ok(true),
+            _ => parsing(),
+        },
+        other => Err(field_error(
+            "bool_type",
+            field,
+            "Input should be a valid boolean".into(),
+            other.clone(),
+            Value::Null,
+        )),
+    }
+}
+
+/// `field_error` without a `ctx` key, as pydantic omits it for these types.
+fn plain_error(kind: &str, field: &str, msg: &str, input: &Value) -> Value {
+    json!({"type": kind, "loc": body_loc(field), "msg": msg, "input": input})
+}
+
+fn parse_lightkey_settings(
+    object: &serde_json::Map<String, Value>,
+) -> Result<LightkeySettingsRequest, Vec<Value>> {
+    let mut errors = Vec::new();
+    let api_url = match object.get("api_url") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => Some(text.clone()),
+        Some(other) => {
+            errors.push(plain_error(
+                "string_type",
+                "api_url",
+                "Input should be a valid string",
+                other,
+            ));
+            None
+        }
+    };
+    let replay = match object.get("replay") {
+        None | Some(Value::Null) => None,
+        Some(value) => match lax_bool("replay", value) {
+            Ok(b) => Some(b),
+            Err(error) => {
+                errors.push(strip_ctx(error));
+                None
+            }
+        },
+    };
+    if errors.is_empty() {
+        Ok(LightkeySettingsRequest { api_url, replay })
+    } else {
+        Err(errors)
+    }
+}
+
+fn strip_ctx(mut error: Value) -> Value {
+    if let Some(map) = error.as_object_mut() {
+        map.remove("ctx");
+    }
+    error
+}
+
+/// The 422 of a bad address: `exc.errors(include_url=False, include_context=False)`, the "no
+/// context" form (Python's default detail held a non-serialisable exception object). The `loc` is
+/// the model's own (`["api_url"]`), without a `body` prefix, because the error comes from building
+/// `LightkeySettings` inside the route, not from request parsing.
+fn lightkey_validation_error(raw: &str, settings: &LightkeySettings) -> Option<Json> {
+    let mut errors = Errors::new();
+    settings.validate(&[], &mut errors);
+    if errors.is_empty() {
+        return None;
+    }
+    let detail: Vec<Value> = errors
+        .into_iter()
+        .map(|mut e| {
+            e.ctx = None;
+            if e.kind == "value_error" {
+                e.input = json!(raw);
+            }
+            to_value(&e)
+        })
+        .collect();
+    Some(unprocessable(detail))
+}
+
+async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let request = match object_body(&raw) {
+        Ok(object) => match parse_lightkey_settings(&object) {
+            Ok(request) => request,
+            Err(errors) => return unprocessable(errors),
+        },
+        Err(response) => return response,
+    };
+    let mut errors = Vec::new();
+    if let Some(url) = &request.api_url {
+        length_error(&mut errors, "api_url", url, 0, 300);
+    }
+    if let Err(response) = finish(errors) {
+        return response;
+    }
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let api_url = request
+        .api_url
+        .clone()
+        .unwrap_or_else(|| current.lightkey.api_url.clone());
+    let candidate = LightkeySettings {
+        api_url: stagepilot_core::config::clean_lightkey_api_url(&api_url)
+            .unwrap_or_else(|_| api_url.clone()),
+        replay: request.replay.unwrap_or(current.lightkey.replay),
+    };
+    if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
+        return response;
+    }
+    let lightkey = candidate;
+    let updated = LightsSettings {
+        lightkey: lightkey.clone(),
+        ..current
+    };
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    rt.outputs.lights.lightkey_apply_settings(lightkey).await;
+    lightkey_response(&rt, true, "Saved.".into()).await
+}
+
+/// A request body that must be a JSON object (FastAPI's 422 otherwise).
+fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
+    let parsed: Option<Value> = serde_json::from_slice(raw).ok();
+    match parsed {
+        Some(Value::Object(map)) => Ok(map),
+        other => Err(unprocessable(validation::invalid_body(raw, other.as_ref()))),
+    }
+}
+
+async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let object = match object_body(&raw) {
+        Ok(object) => object,
+        Err(response) => return response,
+    };
+    let recording = match object.get("recording") {
+        None => {
+            return unprocessable(vec![
+                json!({"type": "missing", "loc": body_loc("recording"),
+                "msg": "Field required", "input": Value::Object(object.clone())}),
+            ])
+        }
+        Some(value) => match lax_bool("recording", value) {
+            Ok(b) => b,
+            Err(error) => return unprocessable(vec![strip_ctx(error)]),
+        },
+    };
+    let message = rt.outputs.lights.lightkey_set_recording(recording).await;
+    let status = rt.outputs.lights.lightkey_status().await;
+    ok(to_value(&LightkeyActionResponse {
+        accepted: status.recording == recording,
+        message,
+        lightkey: status,
+    }))
+}
+
+async fn lightkey_clear_take(
+    State(rt): State<Rt>,
+    axum::extract::Path(song_key): axum::extract::Path<String>,
+) -> Json {
+    let removed = rt.outputs.lights.lightkey_clear_take(&song_key).await;
+    lightkey_response(
+        &rt,
+        removed,
+        if removed {
+            "Capture cleared.".into()
+        } else {
+            "That song has no capture.".into()
+        },
+    )
+    .await
 }

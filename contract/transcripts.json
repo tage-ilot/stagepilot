@@ -1,4 +1,3049 @@
 {
+ "lightkey_steps": [
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, connected with the seeded take",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 1,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": null,
+     "recording": false,
+     "recording_song": null,
+     "replay": true,
+     "replay_blocked": null,
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: settings show the default block",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": true,
+       "lightkey": {
+        "api_url": "http://127.0.0.1:<lightkey_port>",
+        "replay": true
+       },
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 47999,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: replay off",
+   "request": {
+    "json": {
+     "replay": false
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "<masked>",
+      "message": null,
+      "recording": false,
+      "recording_song": null,
+      "replay": false,
+      "replay_blocked": "Replay is switched off.",
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Saved."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, replay switched off",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 1,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": null,
+     "recording": false,
+     "recording_song": null,
+     "replay": false,
+     "replay_blocked": "Replay is switched off.",
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: replay on again",
+   "request": {
+    "json": {
+     "replay": true
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "<masked>",
+      "message": null,
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Saved."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: bad address is a 422",
+   "request": {
+    "json": {
+     "api_url": "http://a/b c"
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "http://a/b c",
+       "loc": [
+        "api_url"
+       ],
+       "msg": "Value error, Enter the Lightkey API address as host or host:port, e.g. 10.30.0.211:8770.",
+       "type": "value_error"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: address with a path is a 422",
+   "request": {
+    "json": {
+     "api_url": "10.0.0.5:8770/x"
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "10.0.0.5:8770/x",
+       "loc": [
+        "api_url"
+       ],
+       "msg": "Value error, Enter the Lightkey API address as host or host:port, e.g. 10.30.0.211:8770.",
+       "type": "value_error"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: address too long is a 422",
+   "request": {
+    "json": {
+     "api_url": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "ctx": {
+        "max_length": 300
+       },
+       "input": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+       "loc": [
+        "body",
+        "api_url"
+       ],
+       "msg": "String should have at most 300 characters",
+       "type": "string_too_long"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: replay must be a boolean (422)",
+   "request": {
+    "json": {
+     "replay": "maybe"
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "maybe",
+       "loc": [
+        "body",
+        "replay"
+       ],
+       "msg": "Input should be a valid boolean, unable to interpret input",
+       "type": "bool_parsing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: api_url must be a string (422)",
+   "request": {
+    "json": {
+     "api_url": 5
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": 5,
+       "loc": [
+        "body",
+        "api_url"
+       ],
+       "msg": "Input should be a valid string",
+       "type": "string_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: replay as the string yes is accepted",
+   "request": {
+    "json": {
+     "replay": "yes"
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "<masked>",
+      "message": null,
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Saved."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: empty settings body saves nothing new",
+   "request": {
+    "json": {},
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "<masked>",
+      "message": null,
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Saved."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: settings body must be an object (422)",
+   "request": {
+    "json": [
+     1
+    ],
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": [
+        1
+       ],
+       "loc": [
+        "body"
+       ],
+       "msg": "Input should be a valid dictionary or object to extract fields from",
+       "type": "model_attributes_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: recording on",
+   "request": {
+    "json": {
+     "recording": true
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": 1,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "Recording starts with the next song.",
+      "recording": true,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": "Paused while recording.",
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Recording starts with the next song."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: recording on again",
+   "request": {
+    "json": {
+     "recording": true
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": 1,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "Recording starts with the next song.",
+      "recording": true,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": "Paused while recording.",
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "Recording starts with the next song."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: recording needs a body (422)",
+   "request": {
+    "json": {},
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": {},
+       "loc": [
+        "body",
+        "recording"
+       ],
+       "msg": "Field required",
+       "type": "missing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: recording must be a boolean (422)",
+   "request": {
+    "json": {
+     "recording": "nope"
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": "nope",
+       "loc": [
+        "body",
+        "recording"
+       ],
+       "msg": "Input should be a valid boolean, unable to interpret input",
+       "type": "bool_parsing"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: recording null is not a boolean (422)",
+   "request": {
+    "json": {
+     "recording": null
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "detail": [
+      {
+       "input": null,
+       "loc": [
+        "body",
+        "recording"
+       ],
+       "msg": "Input should be a valid boolean",
+       "type": "bool_type"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 422
+   }
+  },
+  {
+   "name": "lightkey: status, armed and replay paused",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 1,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "Recording starts with the next song.",
+     "recording": true,
+     "recording_song": null,
+     "replay": true,
+     "replay_blocked": "Paused while recording.",
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: start the first song while armed",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/start_next"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "start_next",
+     "message": "Started \"Battle Belongs\".",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "start_next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "connected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the recording to begin",
+   "wait": {
+    "equals": "Battle Belongs",
+    "key": "recording_song",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, recording the song",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 1,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "Recording \"Battle Belongs\".",
+     "recording": true,
+     "recording_song": "Battle Belongs",
+     "replay": true,
+     "replay_blocked": "Paused while recording.",
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the change to be seen",
+   "wait": {
+    "equals": 2,
+    "key": "active_count",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, a change was seen",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "Recording \"Battle Belongs\".",
+     "recording": true,
+     "recording_song": "Battle Belongs",
+     "replay": true,
+     "replay_blocked": "Paused while recording.",
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: stop the timer mid-song",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "connected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": "<int>",
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: status, paused recording",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "Paused \"Battle Belongs\". Recording resumes if the song does.",
+     "recording": true,
+     "recording_song": "Battle Belongs",
+     "replay": true,
+     "replay_blocked": "Paused while recording.",
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: recording off, too short to keep",
+   "request": {
+    "json": {
+     "recording": false
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": 2,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "<masked>",
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: status, the seeded take is untouched",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "<masked>",
+     "recording": false,
+     "recording_song": null,
+     "replay": true,
+     "replay_blocked": null,
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: recording off again",
+   "request": {
+    "json": {
+     "recording": false
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": 2,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "<masked>",
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: back to the start of the plan",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/reset_position"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "reset_position",
+     "message": "Service position and timer reset.",
+     "state": {
+      "application_status": "running",
+      "current_song": null,
+      "current_song_index": null,
+      "last_action": "reset_position",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "connected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": null,
+      "playing_song_index": null,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": null,
+       "last_error": null,
+       "position_seconds": null,
+       "remaining_seconds": null,
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: start the first song, replay runs",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/start_next"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "start_next",
+     "message": "Started \"Battle Belongs\".",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "start_next",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "connected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": null,
+       "started_at": "<str>",
+       "status": "running"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for replay to begin",
+   "wait": {
+    "equals": "Battle Belongs",
+    "key": "replaying_song",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, replaying",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "<masked>",
+     "recording": false,
+     "recording_song": null,
+     "replay": true,
+     "replay_blocked": null,
+     "replaying_song": "Battle Belongs",
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: stop the timer, replay stops",
+   "request": {
+    "method": "POST",
+    "path": "/api/v1/actions/stop_timer"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "action": "stop_timer",
+     "message": "Timer stop requested.",
+     "state": {
+      "application_status": "running",
+      "current_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "current_song_index": 0,
+      "last_action": "stop_timer",
+      "last_successful_plan_reload_at": "<str>",
+      "lights_status": "connected",
+      "midi_status": "disconnected",
+      "next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "plan": {
+       "date": "<str>",
+       "duration_source": "Demo scheduled item length",
+       "id": "demo-service-plan",
+       "service_times": [
+        "09:00",
+        "11:00"
+       ],
+       "service_type": "Weekend Services",
+       "service_type_id": null,
+       "songs": [
+        {
+         "description": null,
+         "duration_seconds": 281,
+         "formatted_duration": "4:41",
+         "id": "demo-battle-belongs",
+         "is_generic": false,
+         "order": 1,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Battle Belongs"
+        },
+        {
+         "description": null,
+         "duration_seconds": 336,
+         "formatted_duration": "5:36",
+         "id": "demo-holy-forever",
+         "is_generic": false,
+         "order": 2,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Holy Forever"
+        },
+        {
+         "description": null,
+         "duration_seconds": 352,
+         "formatted_duration": "5:52",
+         "id": "demo-gratitude",
+         "is_generic": false,
+         "order": 3,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Gratitude"
+        },
+        {
+         "description": null,
+         "duration_seconds": 377,
+         "formatted_duration": "6:17",
+         "id": "demo-firm-foundation",
+         "is_generic": false,
+         "order": 4,
+         "service_sequence": null,
+         "source_song_id": null,
+         "title": "Firm Foundation"
+        }
+       ],
+       "title": "Sunday Worship — Demo"
+      },
+      "planning_center_status": "disconnected",
+      "playing_song": {
+       "description": null,
+       "duration_seconds": 281,
+       "formatted_duration": "4:41",
+       "id": "demo-battle-belongs",
+       "is_generic": false,
+       "order": 1,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Battle Belongs"
+      },
+      "playing_song_index": 0,
+      "plugins": {
+       "demo": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "demo",
+        "status": "running",
+        "version": "<str>"
+       },
+       "lights": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "lights",
+        "status": "running",
+        "version": "<str>"
+       },
+       "playback_api": {
+        "last_activity_at": "<str>",
+        "last_error": null,
+        "name": "playback_api",
+        "status": "running",
+        "version": "<str>"
+       }
+      },
+      "propresenter_status": "disconnected",
+      "recent_errors": [],
+      "recent_events": [
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "api",
+        "timestamp": "<str>",
+        "type": "action.requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "application",
+        "timestamp": "<str>",
+        "type": "application.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.load_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "service.loaded"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "demo",
+        "timestamp": "<str>",
+        "type": "timer.stopped"
+       },
+       {
+        "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "playback_connection",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "plugin_manager",
+        "timestamp": "<str>",
+        "type": "plugin.status_changed"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.selected"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "song.started"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.reset_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       },
+       {
+        "id": "<uuid>",
+        "source": "state_service",
+        "timestamp": "<str>",
+        "type": "timer.stop_requested"
+       }
+      ],
+      "revision": "<int>",
+      "service_load": {
+       "candidates": [],
+       "is_stale": false,
+       "last_attempt_at": "<str>",
+       "message": "Demo service loaded.",
+       "skipped_items": [],
+       "status": "loaded",
+       "target_date": "<today>"
+      },
+      "timer": {
+       "duration_seconds": 281,
+       "last_error": null,
+       "position_seconds": "<float>",
+       "remaining_seconds": "<int>",
+       "started_at": null,
+       "status": "stopped"
+      },
+      "up_next_song": {
+       "description": null,
+       "duration_seconds": 336,
+       "formatted_duration": "5:36",
+       "id": "demo-holy-forever",
+       "is_generic": false,
+       "order": 2,
+       "service_sequence": null,
+       "source_song_id": null,
+       "title": "Holy Forever"
+      },
+      "updated_at": "<str>"
+     }
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for replay to stop",
+   "wait": {
+    "equals": null,
+    "key": "replaying_song",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, no longer replaying",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "<masked>",
+     "recording": false,
+     "recording_song": null,
+     "replay": true,
+     "replay_blocked": null,
+     "replaying_song": null,
+     "takes": [
+      {
+       "cue_count": 3,
+       "duration_seconds": 281.0,
+       "edge_count": 2,
+       "recorded_at": "<str>",
+       "song_key": "demo-battle-belongs",
+       "song_title": "Battle Belongs"
+      }
+     ]
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: clear a missing take",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/lights/lightkey/takes/nope"
+   },
+   "response": {
+    "body": {
+     "accepted": false,
+     "lightkey": {
+      "active_count": 2,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "<masked>",
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": [
+       {
+        "cue_count": 3,
+        "duration_seconds": 281.0,
+        "edge_count": 2,
+        "recorded_at": "<str>",
+        "song_key": "demo-battle-belongs",
+        "song_title": "Battle Belongs"
+       }
+      ]
+     },
+     "message": "<masked>"
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: clear the seeded take",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/lights/lightkey/takes/demo-battle-belongs"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": 2,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "Capture cleared.",
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": []
+     },
+     "message": "Capture cleared."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: clear it again",
+   "request": {
+    "method": "DELETE",
+    "path": "/api/v1/lights/lightkey/takes/demo-battle-belongs"
+   },
+   "response": {
+    "body": {
+     "accepted": false,
+     "lightkey": {
+      "active_count": 2,
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "connected",
+      "message": "Capture cleared.",
+      "recording": false,
+      "recording_song": null,
+      "replay": true,
+      "replay_blocked": null,
+      "replaying_song": null,
+      "takes": []
+     },
+     "message": "That song has no capture."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: replay off before a Lighting save",
+   "request": {
+    "json": {
+     "replay": false
+    },
+    "method": "PUT",
+    "path": "/api/v1/lights/lightkey/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "<masked>",
+      "message": "Capture cleared.",
+      "recording": false,
+      "recording_song": null,
+      "replay": false,
+      "replay_blocked": "Replay is switched off.",
+      "replaying_song": null,
+      "takes": []
+     },
+     "message": "Saved."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: a Lighting save keeps the Lightkey block",
+   "request": {
+    "json": {
+     "enabled": true,
+     "method": "osc",
+     "osc_host": "127.0.0.1",
+     "osc_port": 47999
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lights": {
+      "channel": 1,
+      "connection_status": "connected",
+      "detail": "OSC ready for 127.0.0.1:47999. Nothing sent yet; UDP does not confirm delivery.",
+      "enabled": true,
+      "last_cue": null,
+      "last_cue_at": null,
+      "last_osc_cue": null,
+      "method": "osc",
+      "osc_host": "127.0.0.1",
+      "osc_port": 47999,
+      "output_name": null,
+      "outputs": [],
+      "pulse_ms": 100
+     },
+     "message": "OSC ready for 127.0.0.1:47999. Nothing sent yet; UDP does not confirm delivery."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link",
+   "wait": {
+    "equals": "connected",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: settings still hold the block",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/settings"
+   },
+   "response": {
+    "body": {
+     "planning_center_secret_saved": false,
+     "restart_required": false,
+     "settings": {
+      "integration_modes": {
+       "midi_source": "simulated",
+       "service_source": "demo",
+       "timer_output": "simulated"
+      },
+      "lan_access": false,
+      "lights": {
+       "channel": 1,
+       "cue_maps": {},
+       "enabled": true,
+       "lightkey": {
+        "api_url": "http://127.0.0.1:<lightkey_port>",
+        "replay": false
+       },
+       "method": "osc",
+       "osc_host": "127.0.0.1",
+       "osc_port": 47999,
+       "output_name": null,
+       "pads": [],
+       "pulse_ms": 100,
+       "transport": "local"
+      },
+      "log_level": "INFO",
+      "midi": {
+       "channel": 1,
+       "debounce_ms": 250,
+       "enabled": false,
+       "input_name": null,
+       "mappings": {
+        "next": 103,
+        "previous": 102,
+        "reload_plan": 104,
+        "restart_current": 101,
+        "start_next": 100,
+        "stop_timer": 105
+       },
+       "note": 112,
+       "transport": "local"
+      },
+      "network_midi": {
+       "request_timeout_seconds": 2.0,
+       "socket_path": "/run/stagepilot-midi/midi.sock"
+      },
+      "onboarding": {
+       "general_completed": false
+      },
+      "planning_center": {
+       "app_id": null,
+       "connection_method": "manual",
+       "plan_title_preference": null,
+       "preferred_service_time": null,
+       "request_timeout_seconds": 10.0,
+       "service_type_id": null,
+       "upcoming_lookahead_days": 30
+      },
+      "planning_center_length_undo": [],
+      "playback_api": {
+       "auto_scan": true,
+       "captured_at": null,
+       "captured_version": null,
+       "discovery_duration_seconds": null,
+       "enabled": true,
+       "fast_transport": true,
+       "host": null,
+       "lengths_applied_key": null,
+       "lengths_measured_at": null,
+       "planning_center_update_service_type_id": null,
+       "port": 8080,
+       "scan_plan_key": null,
+       "setlist_id": null,
+       "skipped_plan_song_ids": [],
+       "skipped_song_ids": [],
+       "song_lengths": [],
+       "song_order": []
+      },
+      "propresenter": {
+       "enabled": false,
+       "health_check_interval_seconds": 10.0,
+       "host": "127.0.0.1",
+       "look_id": null,
+       "port": 1025,
+       "reconnect_initial_seconds": 1.0,
+       "reconnect_max_seconds": 30.0,
+       "request_timeout_seconds": 3.0,
+       "timer_name": "Song Countdown"
+      },
+      "schema_version": 2,
+      "server_port": 8765,
+      "timezone": "America/Los_Angeles",
+      "web_dashboard_pin_enabled": true
+     },
+     "warning": null
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: status after the Lighting save",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": 2,
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "connected",
+     "message": "Capture cleared.",
+     "recording": false,
+     "recording_song": null,
+     "replay": false,
+     "replay_blocked": "Replay is switched off.",
+     "replaying_song": null,
+     "takes": []
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: lighting off",
+   "request": {
+    "json": {
+     "enabled": false,
+     "method": "osc"
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/settings"
+   },
+   "response": {
+    "body": {
+     "accepted": true,
+     "lights": {
+      "channel": 1,
+      "connection_status": "disconnected",
+      "detail": "Disconnected. Lighting output is disabled.",
+      "enabled": false,
+      "last_cue": null,
+      "last_cue_at": null,
+      "last_osc_cue": null,
+      "method": "osc",
+      "osc_host": "127.0.0.1",
+      "osc_port": 47999,
+      "output_name": null,
+      "outputs": [],
+      "pulse_ms": 100
+     },
+     "message": "Lighting output disabled."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: wait for the link to read off",
+   "wait": {
+    "equals": "off",
+    "key": "link",
+    "path": "/api/v1/lights/lightkey",
+    "timeout": 20
+   }
+  },
+  {
+   "name": "lightkey: status, lighting off",
+   "request": {
+    "method": "GET",
+    "path": "/api/v1/lights/lightkey"
+   },
+   "response": {
+    "body": {
+     "active_count": "<masked>",
+     "api_url": "http://127.0.0.1:<lightkey_port>",
+     "detail": null,
+     "link": "off",
+     "message": "Capture cleared.",
+     "recording": false,
+     "recording_song": null,
+     "replay": false,
+     "replay_blocked": "Lighting is off.",
+     "replaying_song": null,
+     "takes": []
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  },
+  {
+   "name": "lightkey: recording refused while Lighting is off",
+   "request": {
+    "json": {
+     "recording": true
+    },
+    "method": "POST",
+    "path": "/api/v1/lights/lightkey/recording"
+   },
+   "response": {
+    "body": {
+     "accepted": false,
+     "lightkey": {
+      "active_count": "<masked>",
+      "api_url": "http://127.0.0.1:<lightkey_port>",
+      "detail": null,
+      "link": "off",
+      "message": "Turn Lighting on first.",
+      "recording": false,
+      "recording_song": null,
+      "replay": false,
+      "replay_blocked": "Lighting is off.",
+      "replaying_song": null,
+      "takes": []
+     },
+     "message": "Turn Lighting on first."
+    },
+    "headers": {
+     "content-type": "application/json"
+    },
+    "status": 200
+   }
+  }
+ ],
  "output_steps": [
   {
    "mock_requests": [
@@ -5420,6 +8465,10 @@
         }
        },
        "enabled": true,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 47999,
@@ -5980,6 +9029,10 @@
         }
        },
        "enabled": true,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 47999,
@@ -6286,7 +9339,7 @@
       }
      ],
      "started_at": "<str>",
-     "status": "healthy",
+     "status": "degraded",
      "version": "<str>"
     },
     "headers": {
@@ -6515,7 +9568,7 @@
        }
       ],
       "status": "loaded",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -6565,6 +9618,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -7419,7 +10476,7 @@
        }
       ],
       "status": "loaded",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -7555,6 +10612,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -7690,6 +10751,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -7858,6 +10923,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -7992,6 +11061,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -8093,7 +11166,7 @@
        ],
        "service_type_id": "111",
        "service_type_name": "Weekend Services",
-       "target_date": "<today>",
+       "target_date": "2026-10-18",
        "title": "Sunday Worship"
       },
       {
@@ -8103,13 +11176,13 @@
        ],
        "service_type_id": "222",
        "service_type_name": "Youth",
-       "target_date": "<today>",
+       "target_date": "2026-10-18",
        "title": "Youth Night"
       }
      ],
      "message": "Multiple Planning Center plans match 2026-10-18. Select one to continue.",
      "pending": true,
-     "target_date": "<today>"
+     "target_date": "2026-10-18"
     },
     "headers": {
      "content-type": "application/json"
@@ -8435,7 +11508,7 @@
         ],
         "service_type_id": "111",
         "service_type_name": "Weekend Services",
-        "target_date": "<today>",
+        "target_date": "2026-10-18",
         "title": "Sunday Worship"
        },
        {
@@ -8445,7 +11518,7 @@
         ],
         "service_type_id": "222",
         "service_type_name": "Youth",
-        "target_date": "<today>",
+        "target_date": "2026-10-18",
         "title": "Youth Night"
        }
       ],
@@ -8491,7 +11564,7 @@
        }
       ],
       "status": "ambiguous",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -8945,7 +12018,7 @@
        "message": "Loaded \"Youth Night\" for 2026-10-18 from Planning Center.",
        "skipped_items": [],
        "status": "loaded",
-       "target_date": "<today>"
+       "target_date": "2026-10-18"
       },
       "timer": {
        "duration_seconds": null,
@@ -9343,6 +12416,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -9799,7 +12876,7 @@
       "message": "Loaded \"Youth Night\" for 2026-10-18 from Planning Center.",
       "skipped_items": [],
       "status": "loaded",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -9855,6 +12932,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -10389,7 +13470,7 @@
        }
       ],
       "status": "loaded",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -10444,6 +13525,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11085,7 +14170,7 @@
        }
       ],
       "status": "error",
-      "target_date": "<today>"
+      "target_date": "2026-10-18"
      },
      "timer": {
       "duration_seconds": null,
@@ -11244,6 +14329,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11371,6 +14460,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11837,6 +14930,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -12195,6 +15292,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -12301,6 +15402,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -13614,6 +16719,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -16668,6 +19777,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -16899,6 +20012,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17045,6 +20162,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17171,6 +20292,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17373,6 +20498,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17490,6 +20619,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17601,6 +20734,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17707,6 +20844,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,

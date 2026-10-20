@@ -157,8 +157,14 @@ impl Runtime {
             playback_options,
         ));
         let outputs = Arc::new(
-            Outputs::build(&bus, &state_service, &settings, backends)
-                .unwrap_or_else(|error| panic!("invalid output settings: {error}")),
+            Outputs::build(
+                &bus,
+                &state_service,
+                &settings,
+                backends,
+                settings_service.settings_path(),
+            )
+            .unwrap_or_else(|error| panic!("invalid output settings: {error}")),
         );
         // Registration order is the health order Python reports: lights, services, the Playback
         // input (real MIDI or the Playback API), then ProPresenter.
