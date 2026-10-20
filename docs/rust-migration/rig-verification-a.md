@@ -27,7 +27,7 @@ Latency from the command being sent to the first state snapshot in which the tim
 | pause (10 samples) | 0.034 - 0.095 | 0.066 - 0.084 | 0.959 - 0.991 |
 | first play after song change (5) | 0.042 - 0.070 | 0.061 - 0.085 | 0.478 - 0.508 |
 
-(Pass 1: neither server showed a running timer for the first play because the arrangement/plan song for the current Playback song is unmapped in the demo plan; later passes follow song changes. Not a protocol difference: both behaved the same.)
+(Pass 1's first play is not in the table: neither server showed a running timer for it, probably because the current Playback song was not mapped to a demo-plan song; later plays follow song changes. Both servers behaved the same, but I did not confirm the cause.)
 
 150 s hold (play from 0 on song 29552201, then pause): timer model (`started_at` + position) minus Playback `sequenceTime`, over 149 heartbeats:
 
@@ -109,7 +109,7 @@ One difference: the song position was 32.405 s before the first pass and 30.857 
 ## Surprises
 
 - Playback accepted four simultaneous clients later (live Python, scratch Python, Rust, harness), but my very first scratch-Python launch sat in `not_playback / WSClosed` retries (134 attempts over ~3 minutes) while the live app, Rust and the harness were connected, until I killed it; a later launch connected immediately. I could not reproduce it or find the cause (possible per-client limit or stale socket). That attempt's data was discarded.
-- The Python backend refuses a second launch silently? No: it started fine on another port, but it forks a launcher plus a worker process; the sampler counts both.
+- The Python sidecar runs as a launcher plus a worker process; the resource sampler counts both, which is why its "first" RSS is 9.8 MB and its max 71 MB.
 - The first stress-shape claim ("400 commands in ~270 s") matched: 406 in 278 s.
 
 ## Not verified
