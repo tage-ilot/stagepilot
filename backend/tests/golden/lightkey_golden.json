@@ -1,0 +1,561 @@
+{
+ "take": {
+  "song_key": "s1",
+  "song_title": "Holy Forever",
+  "recorded_at": "2026-10-20T20:00:00Z",
+  "duration_seconds": 300,
+  "initial": [
+   "Warm White",
+   "Wash"
+  ],
+  "edges": [
+   {
+    "at_seconds": 10,
+    "added": [
+     "Stars"
+    ],
+    "removed": []
+   },
+   {
+    "at_seconds": 40,
+    "added": [
+     "Strobe"
+    ],
+    "removed": [
+     "Stars"
+    ]
+   },
+   {
+    "at_seconds": 41.5,
+    "added": [],
+    "removed": [
+     "Strobe"
+    ]
+   },
+   {
+    "at_seconds": 120,
+    "added": [
+     "Stars",
+     "Cue/Odd"
+    ],
+    "removed": [
+     "Wash"
+    ]
+   }
+  ]
+ },
+ "state_at": [
+  {
+   "position": 0,
+   "active": [
+    "Warm White",
+    "Wash"
+   ]
+  },
+  {
+   "position": 10,
+   "active": [
+    "Stars",
+    "Warm White",
+    "Wash"
+   ]
+  },
+  {
+   "position": 39.999,
+   "active": [
+    "Stars",
+    "Warm White",
+    "Wash"
+   ]
+  },
+  {
+   "position": 40,
+   "active": [
+    "Strobe",
+    "Warm White",
+    "Wash"
+   ]
+  },
+  {
+   "position": 100,
+   "active": [
+    "Warm White",
+    "Wash"
+   ]
+  },
+  {
+   "position": 299,
+   "active": [
+    "Cue/Odd",
+    "Stars",
+    "Warm White"
+   ]
+  }
+ ],
+ "managed": [
+  "Cue/Odd",
+  "Stars",
+  "Strobe",
+  "Warm White",
+  "Wash"
+ ],
+ "replay_plan": [
+  {
+   "position": 0,
+   "sync_now": [
+    [
+     "Stars",
+     "deactivate"
+    ],
+    [
+     "Strobe",
+     "deactivate"
+    ],
+    [
+     "Warm White",
+     "activate"
+    ],
+    [
+     "Wash",
+     "activate"
+    ]
+   ],
+   "later": [
+    [
+     10,
+     "Stars",
+     "activate"
+    ],
+    [
+     40,
+     "Stars",
+     "deactivate"
+    ],
+    [
+     40,
+     "Strobe",
+     "activate"
+    ],
+    [
+     41.5,
+     "Strobe",
+     "deactivate"
+    ],
+    [
+     120,
+     "Wash",
+     "deactivate"
+    ],
+    [
+     120,
+     "Stars",
+     "activate"
+    ]
+   ]
+  },
+  {
+   "position": 100,
+   "sync_now": [
+    [
+     "Stars",
+     "deactivate"
+    ],
+    [
+     "Strobe",
+     "deactivate"
+    ],
+    [
+     "Warm White",
+     "activate"
+    ],
+    [
+     "Wash",
+     "activate"
+    ]
+   ],
+   "later": [
+    [
+     120,
+     "Wash",
+     "deactivate"
+    ],
+    [
+     120,
+     "Stars",
+     "activate"
+    ]
+   ]
+  },
+  {
+   "position": 200,
+   "sync_now": [
+    [
+     "Stars",
+     "activate"
+    ],
+    [
+     "Strobe",
+     "deactivate"
+    ],
+    [
+     "Warm White",
+     "activate"
+    ],
+    [
+     "Wash",
+     "deactivate"
+    ]
+   ],
+   "later": []
+  }
+ ],
+ "osc_address": [
+  [
+   "Stars",
+   "activate",
+   "/live/*/cue/Stars/activate"
+  ],
+  [
+   "Warm White, 70%",
+   "deactivate",
+   "/live/*/cue/Warm White, 70%/deactivate"
+  ]
+ ],
+ "build_edges": [
+  {
+   "name": "basic",
+   "baseline": [
+    "A"
+   ],
+   "duration": 100,
+   "observed": [
+    [
+     5,
+     [
+      "B"
+     ],
+     []
+    ],
+    [
+     7,
+     [],
+     [
+      "A"
+     ]
+    ]
+   ],
+   "initial": [
+    "A"
+   ],
+   "edges": [
+    {
+     "at_seconds": 5,
+     "added": [
+      "B"
+     ],
+     "removed": []
+    },
+    {
+     "at_seconds": 7,
+     "added": [],
+     "removed": [
+      "A"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "drops no-ops (already on / already off)",
+   "baseline": [
+    "A"
+   ],
+   "duration": 100,
+   "observed": [
+    [
+     5,
+     [
+      "A"
+     ],
+     []
+    ],
+    [
+     6,
+     [],
+     [
+      "Z"
+     ]
+    ],
+    [
+     8,
+     [
+      "B"
+     ],
+     []
+    ]
+   ],
+   "initial": [
+    "A"
+   ],
+   "edges": [
+    {
+     "at_seconds": 8,
+     "added": [
+      "B"
+     ],
+     "removed": []
+    }
+   ]
+  },
+  {
+   "name": "edge at 0 folds into initial",
+   "baseline": [
+    "A"
+   ],
+   "duration": 100,
+   "observed": [
+    [
+     0,
+     [
+      "B"
+     ],
+     [
+      "A"
+     ]
+    ]
+   ],
+   "initial": [
+    "B"
+   ],
+   "edges": []
+  },
+  {
+   "name": "negative time clamps to 0, late time clamps to duration",
+   "baseline": [],
+   "duration": 50,
+   "observed": [
+    [
+     -0.4,
+     [
+      "A"
+     ],
+     []
+    ],
+    [
+     75,
+     [
+      "B"
+     ],
+     []
+    ]
+   ],
+   "initial": [
+    "A"
+   ],
+   "edges": [
+    {
+     "at_seconds": 50,
+     "added": [
+      "B"
+     ],
+     "removed": []
+    }
+   ]
+  },
+  {
+   "name": "out-of-order arrival is sorted",
+   "baseline": [],
+   "duration": 100,
+   "observed": [
+    [
+     20,
+     [
+      "B"
+     ],
+     []
+    ],
+    [
+     10,
+     [
+      "A"
+     ],
+     []
+    ]
+   ],
+   "initial": [],
+   "edges": [
+    {
+     "at_seconds": 10,
+     "added": [
+      "A"
+     ],
+     "removed": []
+    },
+    {
+     "at_seconds": 20,
+     "added": [
+      "B"
+     ],
+     "removed": []
+    }
+   ]
+  },
+  {
+   "name": "flip within one observation is kept as remove+add",
+   "baseline": [
+    "A"
+   ],
+   "duration": 100,
+   "observed": [
+    [
+     10,
+     [
+      "B"
+     ],
+     [
+      "A"
+     ]
+    ],
+    [
+     20,
+     [
+      "A"
+     ],
+     [
+      "B"
+     ]
+    ]
+   ],
+   "initial": [
+    "A"
+   ],
+   "edges": [
+    {
+     "at_seconds": 10,
+     "added": [
+      "B"
+     ],
+     "removed": [
+      "A"
+     ]
+    },
+    {
+     "at_seconds": 20,
+     "added": [
+      "A"
+     ],
+     "removed": [
+      "B"
+     ]
+    }
+   ]
+  }
+ ],
+ "worth_keeping": [
+  [
+   150,
+   300,
+   true
+  ],
+  [
+   149.99,
+   300,
+   false
+  ],
+  [
+   0,
+   0,
+   false
+  ],
+  [
+   300,
+   300,
+   true
+  ]
+ ],
+ "operator_hold": [
+  {
+   "name": "own echo is not the operator",
+   "steps": [
+    [
+     "sent",
+     "A",
+     0
+    ],
+    [
+     "change",
+     "A",
+     1.0,
+     false
+    ],
+    [
+     "held",
+     "A",
+     1.5,
+     false
+    ]
+   ]
+  },
+  {
+   "name": "unrelated change starts a hold",
+   "steps": [
+    [
+     "change",
+     "A",
+     10,
+     true
+    ],
+    [
+     "held",
+     "A",
+     12.9,
+     true
+    ],
+    [
+     "held",
+     "A",
+     13.1,
+     false
+    ]
+   ]
+  },
+  {
+   "name": "change after the echo window is the operator",
+   "steps": [
+    [
+     "sent",
+     "A",
+     0
+    ],
+    [
+     "change",
+     "A",
+     5.0,
+     true
+    ],
+    [
+     "held",
+     "A",
+     6,
+     true
+    ]
+   ]
+  },
+  {
+   "name": "holds are per cue",
+   "steps": [
+    [
+     "change",
+     "A",
+     10,
+     true
+    ],
+    [
+     "held",
+     "B",
+     11,
+     false
+    ]
+   ]
+  }
+ ]
+}

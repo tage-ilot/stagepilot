@@ -378,6 +378,35 @@ class SongLightingCueMap(BaseModel):
         return self
 
 
+DEFAULT_LIGHTKEY_API_PORT = 8770
+
+
+class LightkeySettings(BaseModel):
+    """Saved Lightkey link settings (part of ``LightsSettings``)."""
+
+    # Empty means "derive from the Lighting OSC host": http://<osc_host>:8770.
+    api_url: str = Field(default="", max_length=300)
+    # Replay is on by default and only ever suspended by this switch (or by recording).
+    replay: bool = True
+
+    @field_validator("api_url", mode="before")
+    @classmethod
+    def api_url_is_clean(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        text = value.strip().rstrip("/")
+        if not text:
+            return ""
+        if not text.startswith(("http://", "https://")):
+            text = f"http://{text}"
+        rest = text.split("://", 1)[1]
+        if not rest or any(character.isspace() for character in text) or "/" in rest:
+            raise ValueError(
+                "Enter the Lightkey API address as host or host:port, e.g. 10.30.0.211:8770."
+            )
+        return text
+
+
 class LightsSettings(BaseModel):
     """Validated lighting output (OSC or MIDI) and per-song cue timelines for Lighting."""
 
@@ -391,6 +420,7 @@ class LightsSettings(BaseModel):
     osc_port: int = Field(default=21_600, ge=1, le=65_535)
     cue_maps: dict[str, SongLightingCueMap] = Field(default_factory=dict)
     pads: list[LightingPad] = Field(default_factory=list, max_length=64)
+    lightkey: LightkeySettings = Field(default_factory=LightkeySettings)
 
     @model_validator(mode="before")
     @classmethod
