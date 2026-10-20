@@ -158,10 +158,19 @@ async fn serve(agent: Shared) -> u16 {
     port
 }
 
-/// A loopback port nothing listens on.
-fn dead_port() -> u16 {
-    let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    socket.local_addr().unwrap().port()
+/// A loopback port whose listener accepts every connection and drops it at once: the link sees a
+/// connection that dies without an answer (never a timeout), the same on every OS. (A closed
+/// port is not usable here: Windows retries a refused connect for about 2 s, which is the link's
+/// own connect timeout.)
+async fn dead_port() -> u16 {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = listener.accept().await {
+            drop(socket);
+        }
+    });
+    port
 }
 
 struct Rig {
@@ -390,7 +399,8 @@ async fn api_url_is_derived_from_the_osc_host_when_unset() {
 async fn unreachable_then_recovers() {
     let rig = Rig::new(&["A"]).await;
     let live = rig.settings.lock().unwrap().3.api_url.clone();
-    rig.set_settings(|s| s.3.api_url = format!("http://127.0.0.1:{}", dead_port()));
+    let dead = format!("http://127.0.0.1:{}", dead_port().await);
+    rig.set_settings(|s| s.3.api_url = dead);
     rig.link.start().await;
     wait_for(|| rig.link.status().link == Link::Unreachable, 3.0).await;
     assert_eq!(
@@ -496,7 +506,8 @@ async fn offset_uses_the_lowest_round_trip_sample() {
 async fn cannot_record_when_not_connected_or_not_osc() {
     let rig = Rig::new(&["A"]).await;
     let live = rig.settings.lock().unwrap().3.api_url.clone();
-    rig.set_settings(|s| s.3.api_url = format!("http://127.0.0.1:{}", dead_port()));
+    let dead = format!("http://127.0.0.1:{}", dead_port().await);
+    rig.set_settings(|s| s.3.api_url = dead);
     rig.link.start().await;
     wait_for(|| rig.link.status().link == Link::Unreachable, 3.0).await;
     assert!(rig
