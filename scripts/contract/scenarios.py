@@ -291,3 +291,86 @@ OUTPUT_SCENARIOS: list[Step] = [
     http("outputs: lights status, disabled", "GET", "/api/v1/lights"),
     http("outputs: health at the end", "GET", "/api/v1/health"),
 ]
+
+
+# ---- the "lightkey" profile -----------------------------------------------------------------------
+# Run against the demo plan with Lighting on OSC (to a loopback UDP port nothing listens on) and a
+# FAKE lightkey-api (scripts/contract/mock_lightkey.py). One take is seeded for "Battle Belongs".
+# Extra step kind: {"mock": "/__change?add=Stars"} changes the fake agent's cue set (not recorded).
+# Steps marked "mask": ["message"] blank a message that quotes how many seconds were recorded.
+
+LIGHTKEY = "/api/v1/lights/lightkey"
+
+
+def lightkey_link_connected() -> Step:
+    return {
+        "name": "lightkey: wait for the link",
+        "wait": {"path": LIGHTKEY, "key": "link", "equals": "connected", "timeout": 20},
+    }
+
+
+LIGHTKEY_SCENARIOS: list[Step] = [
+    mock("/__reset"),
+    lightkey_link_connected(),
+    http("lightkey: status, connected with the seeded take", "GET", LIGHTKEY),
+    http("lightkey: settings show the default block", "GET", "/api/v1/settings"),
+    masked(http("lightkey: replay off", "PUT", f"{LIGHTKEY}/settings", {"replay": False}), "link", "active_count"),
+    lightkey_link_connected(),
+    http("lightkey: status, replay switched off", "GET", LIGHTKEY),
+    masked(http("lightkey: replay on again", "PUT", f"{LIGHTKEY}/settings", {"replay": True}), "link", "active_count"),
+    lightkey_link_connected(),
+    http("lightkey: bad address is a 422", "PUT", f"{LIGHTKEY}/settings", {"api_url": "http://a/b c"}),
+    http("lightkey: address with a path is a 422", "PUT", f"{LIGHTKEY}/settings", {"api_url": "10.0.0.5:8770/x"}),
+    http("lightkey: address too long is a 422", "PUT", f"{LIGHTKEY}/settings", {"api_url": "h" * 301}),
+    http("lightkey: replay must be a boolean (422)", "PUT", f"{LIGHTKEY}/settings", {"replay": "maybe"}),
+    http("lightkey: api_url must be a string (422)", "PUT", f"{LIGHTKEY}/settings", {"api_url": 5}),
+    masked(http("lightkey: replay as the string yes is accepted", "PUT", f"{LIGHTKEY}/settings", {"replay": "yes"}), "link", "active_count"),
+    lightkey_link_connected(),
+    masked(http("lightkey: empty settings body saves nothing new", "PUT", f"{LIGHTKEY}/settings", {}), "link", "active_count"),
+    lightkey_link_connected(),
+    http("lightkey: settings body must be an object (422)", "PUT", f"{LIGHTKEY}/settings", [1]),
+    # ---- recording -----------------------------------------------------------------------------
+    http("lightkey: recording on", "POST", f"{LIGHTKEY}/recording", {"recording": True}),
+    http("lightkey: recording on again", "POST", f"{LIGHTKEY}/recording", {"recording": True}),
+    http("lightkey: recording needs a body (422)", "POST", f"{LIGHTKEY}/recording", {}),
+    http("lightkey: recording must be a boolean (422)", "POST", f"{LIGHTKEY}/recording", {"recording": "nope"}),
+    http("lightkey: recording null is not a boolean (422)", "POST", f"{LIGHTKEY}/recording", {"recording": None}),
+    http("lightkey: status, armed and replay paused", "GET", LIGHTKEY),
+    http("lightkey: start the first song while armed", "POST", "/api/v1/actions/start_next"),
+    {"name": "lightkey: wait for the recording to begin", "wait": {"path": LIGHTKEY, "key": "recording_song", "equals": "Battle Belongs", "timeout": 20}},
+    http("lightkey: status, recording the song", "GET", LIGHTKEY),
+    mock("/__change?add=Stars"),
+    {"name": "lightkey: wait for the change to be seen", "wait": {"path": LIGHTKEY, "key": "active_count", "equals": 2, "timeout": 20}},
+    http("lightkey: status, a change was seen", "GET", LIGHTKEY),
+    http("lightkey: stop the timer mid-song", "POST", "/api/v1/actions/stop_timer"),
+    sleep(0.2),
+    http("lightkey: status, paused recording", "GET", LIGHTKEY),
+    masked(http("lightkey: recording off, too short to keep", "POST", f"{LIGHTKEY}/recording", {"recording": False}), "message"),
+    masked(http("lightkey: status, the seeded take is untouched", "GET", LIGHTKEY), "message"),
+    masked(http("lightkey: recording off again", "POST", f"{LIGHTKEY}/recording", {"recording": False}), "message"),
+    # ---- replay --------------------------------------------------------------------------------
+    http("lightkey: back to the start of the plan", "POST", "/api/v1/actions/reset_position"),
+    http("lightkey: start the first song, replay runs", "POST", "/api/v1/actions/start_next"),
+    {"name": "lightkey: wait for replay to begin", "wait": {"path": LIGHTKEY, "key": "replaying_song", "equals": "Battle Belongs", "timeout": 20}},
+    masked(http("lightkey: status, replaying", "GET", LIGHTKEY), "message"),
+    http("lightkey: stop the timer, replay stops", "POST", "/api/v1/actions/stop_timer"),
+    {"name": "lightkey: wait for replay to stop", "wait": {"path": LIGHTKEY, "key": "replaying_song", "equals": None, "timeout": 20}},
+    masked(http("lightkey: status, no longer replaying", "GET", LIGHTKEY), "message"),
+    # ---- takes ---------------------------------------------------------------------------------
+    masked(http("lightkey: clear a missing take", "DELETE", f"{LIGHTKEY}/takes/nope"), "message"),
+    http("lightkey: clear the seeded take", "DELETE", f"{LIGHTKEY}/takes/demo-battle-belongs"),
+    http("lightkey: clear it again", "DELETE", f"{LIGHTKEY}/takes/demo-battle-belongs"),
+    # ---- Lighting settings keep the Lightkey block ---------------------------------------------
+    masked(http("lightkey: replay off before a Lighting save", "PUT", f"{LIGHTKEY}/settings", {"replay": False}), "link", "active_count"),
+    lightkey_link_connected(),
+    http("lightkey: a Lighting save keeps the Lightkey block", "POST", "/api/v1/lights/settings",
+         {"enabled": True, "method": "osc", "osc_host": "127.0.0.1", "osc_port": 47999}),
+    lightkey_link_connected(),
+    http("lightkey: settings still hold the block", "GET", "/api/v1/settings"),
+    http("lightkey: status after the Lighting save", "GET", LIGHTKEY),
+    http("lightkey: lighting off", "POST", "/api/v1/lights/settings", {"enabled": False, "method": "osc"}),
+    {"name": "lightkey: wait for the link to read off", "wait": {"path": LIGHTKEY, "key": "link", "equals": "off", "timeout": 20}},
+    sleep(0.8),
+    masked(http("lightkey: status, lighting off", "GET", LIGHTKEY), "active_count"),
+    masked(http("lightkey: recording refused while Lighting is off", "POST", f"{LIGHTKEY}/recording", {"recording": True}), "active_count"),
+]

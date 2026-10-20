@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Lighting: a small Lightkey live link. Connect to the `lightkey-api` agent on the Lightkey
+  Mac, record which cues Lightkey turns on and off during a song's countdown, and replay them
+  with that song later. Replay is on by default, has its own switch, pauses while recording and
+  leaves any cue the Lightkey operator changes alone for 3 seconds. OSC only. See
+  `docs/lights.md`.
+
 ## [2.41.1] - 2026-10-16
 
 First published release of the single-channel, plain-version line (2.41.0 was tagged but its

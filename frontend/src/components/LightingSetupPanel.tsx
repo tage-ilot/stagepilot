@@ -35,6 +35,7 @@ import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscPa
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
 import { LightingTimeline } from "./LightingTimeline";
+import { LightkeyStrip } from "./LightkeyStrip";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
   formatElapsed,
@@ -538,6 +539,7 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
+      {savedMethod === "osc" && <LightkeyStrip lightingEnabled={Boolean(lights?.enabled)} />}
       <Disclosure
         aside={(
           <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>

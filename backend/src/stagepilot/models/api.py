@@ -18,6 +18,7 @@ from stagepilot.core.config import (
     validate_osc_address,
 )
 from stagepilot.core.events import ActionName
+from stagepilot.core.lightkey import LightkeyStatus
 from stagepilot.core.midi import MidiCueName, MidiMessageDisposition
 from stagepilot.core.settings import PersistentPlanningCenterSettings, PersistentSettings
 from stagepilot.models.state import (
@@ -363,6 +364,23 @@ class LightingCaptureRequest(BaseModel):
 class LightingCaptureResponse(LightsOperationResponse):
     cue_id: UUID | None = None
     at_seconds: float | None = None
+
+
+class LightkeySettingsRequest(BaseModel):
+    """Both fields optional: send only what changed. An empty ``api_url`` means "derive it"."""
+
+    api_url: str | None = Field(default=None, max_length=300)
+    replay: bool | None = None
+
+
+class LightkeyRecordRequest(BaseModel):
+    recording: bool
+
+
+class LightkeyActionResponse(BaseModel):
+    accepted: bool
+    message: str
+    lightkey: LightkeyStatus
 
 
 class LightingCaptureUndoRequest(BaseModel):

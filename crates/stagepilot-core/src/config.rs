@@ -726,6 +726,76 @@ pub struct SongLightingCueMap {
     pub osc_cues: Vec<OscLightingCue>,
 }
 
+/// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
+pub const DEFAULT_LIGHTKEY_API_PORT: u16 = 8770;
+
+/// Saved Lightkey link settings, part of `LightsSettings` (`LightkeySettings`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeySettings {
+    /// Empty means "derive from the Lighting OSC host": `http://<osc_host>:8770`.
+    #[serde(default)]
+    pub api_url: String,
+    /// Replay is on by default and only ever suspended by this switch (or by recording).
+    #[serde(default = "default_true")]
+    pub replay: bool,
+}
+
+impl Default for LightkeySettings {
+    fn default() -> Self {
+        Self {
+            api_url: String::new(),
+            replay: true,
+        }
+    }
+}
+
+const API_URL_MESSAGE: &str =
+    "Enter the Lightkey API address as host or host:port, e.g. 10.30.0.211:8770.";
+
+/// Python `str.isspace` (also true for the four ASCII separators `\x1c`..`\x1f`).
+fn py_space(c: char) -> bool {
+    c.is_whitespace() || ('\x1c'..='\x1f').contains(&c)
+}
+
+/// The `api_url` validator of `LightkeySettings`: trim, drop trailing `/`, default the scheme to
+/// `http://`, refuse spaces and paths. `Err` carries the validator's message.
+pub fn clean_lightkey_api_url(value: &str) -> Result<String, &'static str> {
+    let text = value
+        .trim_matches(py_space)
+        .trim_end_matches('/')
+        .to_string();
+    if text.is_empty() {
+        return Ok(String::new());
+    }
+    let text = if text.starts_with("http://") || text.starts_with("https://") {
+        text
+    } else {
+        format!("http://{text}")
+    };
+    let rest = text.split_once("://").map_or("", |(_, rest)| rest);
+    if rest.is_empty() || text.chars().any(py_space) || rest.contains('/') {
+        return Err(API_URL_MESSAGE);
+    }
+    Ok(text)
+}
+
+impl LightkeySettings {
+    /// Validate `api_url` as pydantic would after the `before` validator ran. Paths are relative
+    /// to `path` (the `lightkey` object).
+    pub fn validate(&self, path: &[Value], errors: &mut Errors) {
+        match clean_lightkey_api_url(&self.api_url) {
+            Err(message) => value_error(
+                errors,
+                &path_with(path, "api_url"),
+                message,
+                json!(self.api_url),
+            ),
+            Ok(clean) => check_len(errors, path, "api_url", &clean, 0, 300),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LightsSettings {
@@ -749,6 +819,8 @@ pub struct LightsSettings {
     pub cue_maps: BTreeMap<String, SongLightingCueMap>,
     #[serde(default)]
     pub pads: Vec<LightingPad>,
+    #[serde(default)]
+    pub lightkey: LightkeySettings,
 }
 
 fn osc_method() -> LightingMethod {
@@ -780,6 +852,7 @@ impl Default for LightsSettings {
             osc_port: 21_600,
             cue_maps: BTreeMap::new(),
             pads: vec![],
+            lightkey: LightkeySettings::default(),
         }
     }
 }
@@ -790,6 +863,9 @@ impl LightsSettings {
     pub fn normalise(&mut self) {
         self.output_name = trim_or_none(&self.output_name);
         self.osc_host = self.osc_host.trim().to_string();
+        if let Ok(clean) = clean_lightkey_api_url(&self.lightkey.api_url) {
+            self.lightkey.api_url = clean;
+        }
         for pad in &mut self.pads {
             pad.label = pad.label.trim().to_string();
             pad.address = pad.address.as_ref().map(|a| a.trim().to_string());
@@ -868,6 +944,7 @@ impl LightsSettings {
         if self.pads.len() > 64 {
             too_long(errors, path, "pads", self.pads.len(), 64);
         }
+        self.lightkey.validate(&path_with(path, "lightkey"), errors);
         for (i, pad) in self.pads.iter().enumerate() {
             let p = {
                 let mut p = path_with(path, "pads");

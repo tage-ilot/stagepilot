@@ -1,10 +1,12 @@
+use crate::lightkey::LightkeyStatus;
+use crate::lightkey_link::{LightkeyLink, LinkOptions};
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    validate_osc_address, LightingCue, LightingMethod, LightsSettings, OscArgument, OscLightingCue,
-    SongLightingCueMap,
+    validate_osc_address, LightingCue, LightingMethod, LightkeySettings, LightsSettings,
+    OscArgument, OscLightingCue, SongLightingCueMap,
 };
 use stagepilot_core::events::{new_event, EventPayload, EventType, Integration, StagePilotEvent};
 use stagepilot_core::plugin::Plugin;
@@ -39,6 +41,8 @@ pub struct LightsOptions {
     pub midi_backend_factory: MidiOutputBackendFactory,
     pub osc_backend_factory: OscBackendFactory,
     pub monitor_interval: Duration,
+    /// Take store, HTTP client and clock of the Lightkey link (real ones by default).
+    pub lightkey: LinkOptions,
 }
 
 impl LightsOptions {
@@ -47,6 +51,7 @@ impl LightsOptions {
             midi_backend_factory,
             osc_backend_factory: Arc::new(|| Arc::new(UdpOscBackend)),
             monitor_interval: Duration::from_secs(2),
+            lightkey: LinkOptions::default(),
         }
     }
 }
@@ -94,6 +99,8 @@ struct Inner {
     state: Mutex<State>,
     operation_lock: tokio::sync::Mutex<()>,
     stop: tokio::sync::Notify,
+    /// Set once in `LightsPlugin::new` (the link needs a handle back to this struct).
+    lightkey: std::sync::OnceLock<LightkeyLink>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -131,35 +138,90 @@ impl LightsPlugin {
         if options.monitor_interval.is_zero() {
             return Err("Lighting MIDI monitor interval must be positive.".into());
         }
-        Ok(Self {
-            inner: Arc::new(Inner {
-                bus,
-                midi_factory: options.midi_backend_factory,
-                osc_factory: options.osc_backend_factory,
-                monitor_interval: options.monitor_interval,
-                state: Mutex::new(State {
-                    settings,
-                    backend: None,
-                    port: None,
-                    osc_output: None,
-                    subscriptions: Vec::new(),
-                    pending_song: None,
-                    timeline: None,
-                    connection_task: None,
-                    stopping: false,
-                    status: PluginStatus::Stopped,
-                    connection_status: ConnectionStatus::Disconnected,
-                    detail: None,
-                    last_error: None,
-                    last_activity_at: None,
-                    last_cue: None,
-                    last_osc_cue: None,
-                    last_cue_at: None,
-                }),
-                operation_lock: tokio::sync::Mutex::new(()),
-                stop: tokio::sync::Notify::new(),
+        let bus_for_link = bus.clone();
+        let link_options = options.lightkey;
+        let inner = Arc::new(Inner {
+            bus,
+            midi_factory: options.midi_backend_factory,
+            osc_factory: options.osc_backend_factory,
+            monitor_interval: options.monitor_interval,
+            state: Mutex::new(State {
+                settings,
+                backend: None,
+                port: None,
+                osc_output: None,
+                subscriptions: Vec::new(),
+                pending_song: None,
+                timeline: None,
+                connection_task: None,
+                stopping: false,
+                status: PluginStatus::Stopped,
+                connection_status: ConnectionStatus::Disconnected,
+                detail: None,
+                last_error: None,
+                last_activity_at: None,
+                last_cue: None,
+                last_osc_cue: None,
+                last_cue_at: None,
             }),
-        })
+            operation_lock: tokio::sync::Mutex::new(()),
+            stop: tokio::sync::Notify::new(),
+            lightkey: std::sync::OnceLock::new(),
+        });
+        let weak = Arc::downgrade(&inner);
+        let settings_weak = weak.clone();
+        let provider: crate::lightkey_link::SettingsProvider =
+            Arc::new(move || match settings_weak.upgrade() {
+                Some(inner) => {
+                    let st = lock(&inner.state);
+                    (
+                        st.settings.enabled,
+                        st.settings.method == LightingMethod::Osc,
+                        st.settings.osc_host.clone(),
+                        st.settings.lightkey.clone(),
+                    )
+                }
+                None => (false, false, String::new(), Default::default()),
+            });
+        let send: crate::lightkey_link::SendOsc = Arc::new(move |address: String| {
+            let weak = weak.clone();
+            Box::pin(async move {
+                match weak.upgrade() {
+                    Some(inner) => inner.send_raw_osc(address).await,
+                    None => Ok(()),
+                }
+            })
+        });
+        let _ = inner.lightkey.set(LightkeyLink::new(
+            bus_for_link,
+            provider,
+            send,
+            link_options,
+        ));
+        Ok(Self { inner })
+    }
+
+    fn link(&self) -> &LightkeyLink {
+        // Always set by `new`.
+        self.inner.lightkey.get().expect("lightkey link")
+    }
+
+    pub async fn lightkey_status(&self) -> LightkeyStatus {
+        self.link().status()
+    }
+
+    pub async fn lightkey_set_recording(&self, on: bool) -> String {
+        self.link().set_recording(on).await
+    }
+
+    pub async fn lightkey_clear_take(&self, song_key: &str) -> bool {
+        self.link().clear_take(song_key).await
+    }
+
+    /// Apply saved Lightkey settings to the running plugin and make the link re-read them.
+    pub async fn lightkey_apply_settings(&self, lightkey: LightkeySettings) {
+        lock(&self.inner.state).settings.lightkey = lightkey;
+        self.link().settings_changed();
     }
 
     pub async fn snapshot(&self, refresh: bool) -> LightsStatusResponse {
@@ -261,6 +323,9 @@ impl Inner {
         sub!(EventType::TimerFailed, on_timer_stopped);
         self.st().subscriptions.extend(subs);
         self.st().status = PluginStatus::Running;
+        if let Some(link) = self.lightkey.get() {
+            link.start().await;
+        }
         if self.st().settings.enabled {
             self.clone().connect().await;
         } else {
@@ -286,6 +351,9 @@ impl Inner {
             let _ = task.await;
         }
         self.cancel_timeline().await;
+        if let Some(link) = self.lightkey.get() {
+            link.stop().await;
+        }
         let subs: Vec<_> = std::mem::take(&mut self.st().subscriptions);
         for sub in subs {
             self.bus.unsubscribe(&sub);
@@ -409,6 +477,9 @@ impl Inner {
             let _guard = self.operation_lock.lock().await;
             self.close_port_locked().await;
             self.st().settings = settings.clone();
+        }
+        if let Some(link) = self.lightkey.get() {
+            link.settings_changed();
         }
         if !settings.enabled {
             {
@@ -699,6 +770,26 @@ impl Inner {
     }
 
     // ---- sending ------------------------------------------------------------------------------
+
+    /// One-shot OSC through the saved output, address only (used by Lightkey replay).
+    async fn send_raw_osc(&self, address: String) -> Result<(), String> {
+        let output = {
+            let st = self.st();
+            if st.settings.method != LightingMethod::Osc {
+                return Ok(());
+            }
+            st.osc_output.clone()
+        };
+        let Some(output) = output.filter(|o| !o.closed()) else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || output.send_message(&address, &[]))
+            .await
+            .map_err(|_| "OSC send task failed.".to_string())?
+            .map_err(|e| e.message)?;
+        self.st().last_activity_at = Some(Utc::now());
+        Ok(())
+    }
 
     async fn send_osc(&self, cue: &OscLightingCue) -> Result<(), OutputError> {
         let output = {

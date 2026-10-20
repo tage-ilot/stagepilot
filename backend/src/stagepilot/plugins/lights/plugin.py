@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
+
+import httpx
 
 from stagepilot.core.actions import ActionOutcome
 from stagepilot.core.config import (
     LightingCue,
     LightingMethod,
+    LightkeySettings,
     LightsSettings,
     OscArgument,
     OscLightingCue,
@@ -26,6 +29,7 @@ from stagepilot.core.events import (
     TimerPayload,
     new_event,
 )
+from stagepilot.core.lightkey import LightkeyStatus
 from stagepilot.core.lights import LightingOutputSummary, LightsSnapshot
 from stagepilot.core.logging import get_logger
 from stagepilot.core.plugin import Plugin
@@ -37,6 +41,7 @@ from stagepilot.plugins.lights.client import (
     MidiOutputPortContract,
     MidoMidiOutputBackend,
 )
+from stagepilot.plugins.lights.lightkey import LightkeyLink, MemoryTakeStore, TakeStore
 from stagepilot.plugins.lights.osc import (
     OscOutputBackendFactory,
     OscOutputContract,
@@ -65,6 +70,8 @@ class LightsPlugin(Plugin):
         backend_factory: MidiOutputBackendFactory | None = None,
         osc_backend_factory: OscOutputBackendFactory | None = None,
         monitor_interval: float = 2.0,
+        lightkey_store: TakeStore | None = None,
+        lightkey_client_factory: Callable[[], httpx.AsyncClient] | None = None,
     ) -> None:
         super().__init__(event_bus, state_store)
         self._settings = settings
@@ -91,6 +98,44 @@ class LightsPlugin(Plugin):
         self._last_osc_cue: OscLightingCue | None = None
         self._last_cue_at: datetime | None = None
         self._logger = get_logger(self.name)
+        self._lightkey = LightkeyLink(
+            event_bus,
+            self._lightkey_settings,
+            self._send_raw_osc,
+            lightkey_store or MemoryTakeStore(),
+            client_factory=lightkey_client_factory,
+        )
+
+    def _lightkey_settings(self) -> tuple[bool, bool, str, LightkeySettings]:
+        settings = self._settings
+        return (
+            settings.enabled,
+            settings.method is LightingMethod.OSC,
+            settings.osc_host,
+            settings.lightkey,
+        )
+
+    async def _send_raw_osc(self, address: str, args: list[OscArgument]) -> None:
+        """One-shot OSC through the saved output (used by Lightkey replay)."""
+
+        output = self._osc_output
+        if self._settings.method is not LightingMethod.OSC or output is None or output.closed:
+            return
+        await asyncio.to_thread(output.send_message, address, args)
+        self._last_activity_at = datetime.now(UTC)
+
+    async def lightkey_status(self) -> LightkeyStatus:
+        return self._lightkey.status()
+
+    async def lightkey_set_recording(self, on: bool) -> str:
+        return await self._lightkey.set_recording(on)
+
+    async def lightkey_clear_take(self, song_key: str) -> bool:
+        return await self._lightkey.clear_take(song_key)
+
+    async def lightkey_apply_settings(self, lightkey: LightkeySettings) -> None:
+        self._settings = self._settings.model_copy(update={"lightkey": lightkey}, deep=True)
+        self._lightkey.settings_changed()
 
     async def start(self) -> None:
         self._stop_event.clear()
@@ -116,6 +161,7 @@ class LightsPlugin(Plugin):
             ]
         )
         self._status = PluginStatus.RUNNING
+        await self._lightkey.start()
         if self._settings.enabled:
             await self._connect()
         else:
@@ -138,6 +184,7 @@ class LightsPlugin(Plugin):
             with suppress(asyncio.CancelledError):
                 await connection_task
         await self._cancel_timeline()
+        await self._lightkey.stop()
         for subscription in self._subscriptions:
             await self.event_bus.unsubscribe(subscription)
         self._subscriptions.clear()
@@ -197,6 +244,7 @@ class LightsPlugin(Plugin):
         async with self._operation_lock:
             await self._close_port_locked()
             self._settings = settings
+        self._lightkey.settings_changed()
         if not settings.enabled:
             self._status = PluginStatus.RUNNING
             self._last_error = None

@@ -18,7 +18,9 @@ on:
       - feat/rust-phase6c
       - feat/rust-phase6d
       - docs/rust-rig-a
+      - docs/rust-rig-b
       - feat/rust-phase6b-b
+      - feat/rust-lightkey
       - main
     paths:
       - "Cargo.toml"
@@ -30,6 +32,8 @@ on:
       - "contract/**"
       - "scripts/contract/**"
       - "tools/rust-playback/**"
+      - "tools/rust-output/**"
+      - "backend/tests/golden/**"
       - "tools/gen_settings_fixtures.py"
       - "scripts/diff_generated_types.mjs"
       - "backend/src/**"
@@ -153,7 +157,7 @@ jobs:
 
       - name: Generated TypeScript is current
         run: |
-          cargo test -p stagepilot-core -p stagepilot-playback export_bindings
+          cargo test -p stagepilot-core -p stagepilot-playback -p stagepilot-lights export_bindings
           git diff --exit-code -- generated/ts
           test -z "$(git status --porcelain -- generated/ts)"
 
@@ -216,3 +220,10 @@ jobs:
           uv run --frozen python ../tools/rust-output/gen_osc_golden.py
           cd ..
           git diff --exit-code -- crates/stagepilot-osc/tests/fixtures
+
+      - name: Lightkey replay golden packets are current with python-osc
+        run: |
+          cd backend
+          uv run --frozen python ../tools/rust-output/gen_lightkey_osc_golden.py
+          cd ..
+          git diff --exit-code -- crates/stagepilot-lights/tests/fixtures

@@ -11,11 +11,13 @@ from stagepilot.core.actions import ActionOutcome
 from stagepilot.core.config import (
     LightingCue,
     LightingMethod,
+    LightkeySettings,
     LightsSettings,
     OscArgument,
     OscLightingCue,
     SongLightingCueMap,
 )
+from stagepilot.core.lightkey import LightkeyStatus
 from stagepilot.models.state import ConnectionStatus
 
 
@@ -52,3 +54,11 @@ class LightsController(Protocol):
     async def test_cue(self, note: int, velocity: int) -> ActionOutcome: ...
 
     async def replace_cue_map(self, cue_map: SongLightingCueMap) -> None: ...
+
+    async def lightkey_status(self) -> LightkeyStatus: ...
+
+    async def lightkey_set_recording(self, on: bool) -> str: ...
+
+    async def lightkey_clear_take(self, song_key: str) -> bool: ...
+
+    async def lightkey_apply_settings(self, lightkey: LightkeySettings) -> None: ...
