@@ -46,6 +46,7 @@ from stagepilot.core.settings import (
     MemoryCredentialStore,
     SettingsService,
     default_oauth_credential_store,
+    default_settings_path,
 )
 from stagepilot.core.state import StateStore
 from stagepilot.planning_center_oauth import (
@@ -56,9 +57,12 @@ from stagepilot.planning_center_oauth import (
     proactive_refresh_loop,
 )
 from stagepilot.plugins.lights import (
+    FileTakeStore,
     LightsPlugin,
+    MemoryTakeStore,
     MidiOutputBackendFactory,
     OscOutputBackendFactory,
+    TakeStore,
 )
 from stagepilot.plugins.midi_playback import MidiBackendFactory, MidiPlaybackPlugin
 from stagepilot.plugins.planning_center import (
@@ -145,6 +149,7 @@ def create_app(
     playback_client_factory: ClientFactory = default_client,
     lights_backend_factory: MidiOutputBackendFactory | None = None,
     lights_osc_backend_factory: OscOutputBackendFactory | None = None,
+    lightkey_store: TakeStore | None = None,
     propresenter_client_factory: ProPresenterClientFactory | None = None,
     settings_service: SettingsService | None = None,
     dashboard_auth_enforced: bool | None = None,
@@ -211,6 +216,12 @@ def create_app(
         resolved_settings.lights,
         backend_factory=lights_backend_factory,
         osc_backend_factory=lights_osc_backend_factory,
+        lightkey_store=lightkey_store
+        or (
+            MemoryTakeStore()
+            if settings is not None
+            else FileTakeStore(default_settings_path().with_name("lightkey-takes.json"))
+        ),
     )
     plugin_manager.register(lights_plugin)
     resolved_plan_cache_store = plan_cache_store or (
