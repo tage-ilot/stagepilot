@@ -128,7 +128,9 @@ mod tests {
         let Parsed::Print(text) = parse(&args(&["--version"])) else {
             panic!("--version prints");
         };
-        let expected = if cfg!(feature = "midir-backend") {
+        // The midi crate's own feature decides (cargo unifies `--features stagepilot-midi/midir-backend`
+        // without enabling this crate's feature), so key the expectation on what it reports.
+        let expected = if stagepilot_midi::backend_name() == "midir" {
             "midi-backend: midir\n"
         } else {
             "midi-backend: none\n"
