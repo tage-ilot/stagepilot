@@ -5999,6 +5999,10 @@
         }
        },
        "enabled": true,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 47999,
@@ -6559,6 +6563,10 @@
         }
        },
        "enabled": true,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 47999,
@@ -7144,6 +7152,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -8134,6 +8146,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -8269,6 +8285,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -8437,6 +8457,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -8571,6 +8595,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -9922,6 +9950,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -10434,6 +10466,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11023,6 +11059,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11823,6 +11863,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -11950,6 +11994,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -12416,6 +12464,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -12774,6 +12826,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -12880,6 +12936,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -17986,6 +18046,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21040,6 +21104,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21271,6 +21339,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21417,6 +21489,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21543,6 +21619,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21745,6 +21825,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21862,6 +21946,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -21973,6 +22061,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
@@ -22079,6 +22171,10 @@
        "channel": 1,
        "cue_maps": {},
        "enabled": false,
+       "lightkey": {
+        "api_url": "",
+        "replay": true
+       },
        "method": "osc",
        "osc_host": "127.0.0.1",
        "osc_port": 21600,
