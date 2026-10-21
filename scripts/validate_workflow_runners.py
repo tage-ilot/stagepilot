@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Semantically validate that Actions jobs use the correct runner policy.
 
-Policy: Linux jobs must stay pinned to the self-hosted Linux runner
-(`[self-hosted, stagepilot-linux]`) — that runner is free, fast, and already
-proven, so Linux jobs must never silently drift onto a paid hosted
-`ubuntu-*` runner. Native Windows/macOS jobs, however, run on GitHub-hosted
-runners now that the repository is public (hosted Actions minutes are free
-and unlimited for public repos on standard runners), so those jobs may use
-hosted `windows-*`/`macos-*` labels.
+Policy: the repository is public, so GitHub-hosted standard runners are free and
+unlimited, and there is no self-hosted runner. A dead or missing self-hosted
+runner makes every job that targets it queue forever, so `self-hosted` is
+forbidden everywhere. Linux jobs use the pinned hosted image `ubuntu-24.04`;
+native Windows and macOS jobs use hosted `windows-*` / `macos-*` labels.
 """
 
 from __future__ import annotations
@@ -20,8 +18,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
-LINUX_LABELS = ["self-hosted", "stagepilot-linux"]
-UBUNTU_LABEL = re.compile(r"^ubuntu-", re.IGNORECASE)
+LINUX_LABELS = ["ubuntu-24.04"]
 NATIVE_LABEL = re.compile(r"^(?:windows|macos)-", re.IGNORECASE)
 REQUIRED_ACTIONS = {
     "actions/checkout",
@@ -35,6 +32,8 @@ EXPECTED_NATIVE = {
     "macos-signing-stability.yml:stability",
     "release-windows.yml:build",
 }
+# Present only on branches that carry the Rust workspace; optional elsewhere.
+OPTIONAL_NATIVE = {"rust.yml:rust", "spike-rust.yml:rust"}
 
 
 def labels(value: object) -> list[str]:
@@ -63,20 +62,15 @@ def main() -> None:
             assert isinstance(job, dict), f"{workflow_path.name}:{job_id}: job must be a mapping"
             key = f"{workflow_path.name}:{job_id}"
             job_labels = labels(job.get("runs-on"))
-            for label in job_labels:
-                assert not UBUNTU_LABEL.match(label), (
-                    f"{key}: Linux jobs must never move to a hosted ubuntu-* runner: {label}"
-                )
+            assert "self-hosted" not in job_labels, (
+                f"{key}: there is no self-hosted runner; a job that targets one queues forever"
+            )
 
-            if key in EXPECTED_NATIVE:
+            if key in EXPECTED_NATIVE | OPTIONAL_NATIVE:
                 native_jobs.append(key)
                 assert any(
-                    NATIVE_LABEL.match(label) or "matrix.runner" in label
-                    for label in job_labels
+                    NATIVE_LABEL.match(label) or "matrix.runner" in label for label in job_labels
                 ), f"{key}: native job must use a hosted windows-*/macos-* runner label, got {job_labels}"
-                assert "self-hosted" not in job_labels, (
-                    f"{key}: native job must run on a GitHub-hosted runner, not self-hosted"
-                )
             else:
                 linux_jobs.append(key)
                 assert job_labels == LINUX_LABELS, (
@@ -87,8 +81,8 @@ def main() -> None:
                 if isinstance(step, dict) and isinstance(step.get("uses"), str):
                     actions.add(step["uses"].split("@", 1)[0])
 
-    assert set(native_jobs) == EXPECTED_NATIVE, (
-        f"native job inventory changed: expected {sorted(EXPECTED_NATIVE)}, got {native_jobs}"
+    assert EXPECTED_NATIVE <= set(native_jobs) <= EXPECTED_NATIVE | OPTIONAL_NATIVE, (
+        f"native job inventory changed: expected {sorted(EXPECTED_NATIVE)}, got {sorted(native_jobs)}"
     )
     missing_actions = REQUIRED_ACTIONS - actions
     assert not missing_actions, f"required bootstrap actions are no longer allowed/present: {sorted(missing_actions)}"
