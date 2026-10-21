@@ -33,7 +33,7 @@ EXPECTED_NATIVE = {
     "release-windows.yml:build",
 }
 # Present only on branches that carry the Rust workspace; optional elsewhere.
-OPTIONAL_NATIVE = {"rust.yml:rust"}
+OPTIONAL_NATIVE = {"rust.yml:rust", "spike-rust.yml:rust"}
 
 
 def labels(value: object) -> list[str]:
