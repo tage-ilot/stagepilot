@@ -596,6 +596,13 @@ async fn ambiguous_discovery_is_safe_and_reports_error_health() {
             && !snapshot.inputs[1].connected
     );
     assert!(h.backend.open_calls().is_empty());
+    // Health turns Error before the connection event is published, so wait for the event.
+    wait_until("the error connection event", || {
+        h.connection_events()
+            .last()
+            .is_some_and(|(s, _)| *s == ConnectionStatus::Error)
+    })
+    .await;
     let last = h.connection_events().pop().unwrap();
     assert_eq!(last.0, ConnectionStatus::Error);
     assert!(last.1.unwrap().contains("Multiple MIDI inputs"));
