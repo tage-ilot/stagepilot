@@ -162,6 +162,12 @@ jobs:
       - name: Run Linux-compatible desktop tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
 
+      - name: Compile-check the in-process variant — Linux
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
+
+      - name: Run in-process lifecycle tests — Linux
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process
+
       - name: Validate updater and release configuration
         run: npm --prefix desktop run release:test
 
@@ -243,6 +249,12 @@ jobs:
       - name: Run desktop lifecycle tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
 
+      - name: Compile-check the in-process variant — Windows
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
+
+      - name: Run in-process lifecycle tests — Windows
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process
+
       - name: Validate updater and release configuration
         run: npm --prefix desktop run release:test
 
@@ -310,3 +322,9 @@ jobs:
 
       - name: Run macOS desktop lifecycle tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
+
+      - name: Compile-check the in-process variant — macOS
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
+
+      - name: Run in-process lifecycle tests — macOS
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process

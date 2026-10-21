@@ -1,0 +1,6674 @@
+{
+ "components": {
+  "schemas": {
+   "ActionName": {
+    "enum": [
+     "start_next",
+     "restart_current",
+     "previous",
+     "next",
+     "stop_timer",
+     "reload_plan",
+     "reset_position"
+    ],
+    "title": "ActionName",
+    "type": "string"
+   },
+   "ActionResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "action": {
+      "$ref": "#/components/schemas/ActionName"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "state": {
+      "$ref": "#/components/schemas/ApplicationState"
+     }
+    },
+    "required": [
+     "action",
+     "accepted",
+     "message",
+     "state"
+    ],
+    "title": "ActionResponse",
+    "type": "object"
+   },
+   "ApplicationState": {
+    "properties": {
+     "application_status": {
+      "$ref": "#/components/schemas/ApplicationStatus",
+      "default": "starting"
+     },
+     "current_song": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Song"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "current_song_index": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Song Index"
+     },
+     "last_action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Action"
+     },
+     "last_successful_plan_reload_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Successful Plan Reload At"
+     },
+     "lights_status": {
+      "$ref": "#/components/schemas/ConnectionStatus",
+      "default": "disconnected"
+     },
+     "midi_status": {
+      "$ref": "#/components/schemas/ConnectionStatus",
+      "default": "disconnected"
+     },
+     "next_song": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Song"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "plan": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ServicePlan"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "planning_center_status": {
+      "$ref": "#/components/schemas/ConnectionStatus",
+      "default": "disconnected"
+     },
+     "playing_song": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Song"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "playing_song_index": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Playing Song Index"
+     },
+     "plugins": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/PluginHealth"
+      },
+      "title": "Plugins",
+      "type": "object"
+     },
+     "propresenter_status": {
+      "$ref": "#/components/schemas/ConnectionStatus",
+      "default": "disconnected"
+     },
+     "recent_errors": {
+      "items": {
+       "$ref": "#/components/schemas/ErrorSummary"
+      },
+      "title": "Recent Errors",
+      "type": "array"
+     },
+     "recent_events": {
+      "items": {
+       "$ref": "#/components/schemas/EventSummary"
+      },
+      "title": "Recent Events",
+      "type": "array"
+     },
+     "revision": {
+      "default": 0,
+      "minimum": 0.0,
+      "title": "Revision",
+      "type": "integer"
+     },
+     "service_load": {
+      "$ref": "#/components/schemas/ServiceLoadState"
+     },
+     "timer": {
+      "$ref": "#/components/schemas/TimerState"
+     },
+     "up_next_song": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Song"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "title": "ApplicationState",
+    "type": "object"
+   },
+   "ApplicationStatus": {
+    "enum": [
+     "starting",
+     "running",
+     "stopping",
+     "error"
+    ],
+    "title": "ApplicationStatus",
+    "type": "string"
+   },
+   "ArrangementRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "skipped_plan_song_ids": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Skipped Plan Song Ids",
+      "type": "array"
+     },
+     "skipped_song_ids": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 200,
+      "title": "Skipped Song Ids",
+      "type": "array"
+     }
+    },
+    "title": "ArrangementRequest",
+    "type": "object"
+   },
+   "CategoryChoice": {
+    "additionalProperties": false,
+    "properties": {
+     "service_type_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Service Type Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "service_type_id"
+    ],
+    "title": "CategoryChoice",
+    "type": "object"
+   },
+   "ConnectionStatus": {
+    "enum": [
+     "connecting",
+     "connected",
+     "disconnected",
+     "error"
+    ],
+    "title": "ConnectionStatus",
+    "type": "string"
+   },
+   "CreateUserRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "format": "password",
+      "maxLength": 1024,
+      "minLength": 12,
+      "title": "Password",
+      "type": "string",
+      "writeOnly": true
+     },
+     "role": {
+      "$ref": "#/components/schemas/RemoteRole"
+     }
+    },
+    "required": [
+     "email",
+     "password",
+     "role"
+    ],
+    "title": "CreateUserRequest",
+    "type": "object"
+   },
+   "DashboardAccessSettingsRequest": {
+    "properties": {
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "pin": {
+      "anyOf": [
+       {
+        "format": "password",
+        "maxLength": 64,
+        "minLength": 4,
+        "type": "string",
+        "writeOnly": true
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pin"
+     }
+    },
+    "required": [
+     "enabled"
+    ],
+    "title": "DashboardAccessSettingsRequest",
+    "type": "object"
+   },
+   "DashboardAuthLoginRequest": {
+    "properties": {
+     "pin": {
+      "maxLength": 64,
+      "minLength": 4,
+      "title": "Pin",
+      "type": "string"
+     }
+    },
+    "required": [
+     "pin"
+    ],
+    "title": "DashboardAuthLoginRequest",
+    "type": "object"
+   },
+   "DashboardAuthStatusResponse": {
+    "properties": {
+     "authenticated": {
+      "title": "Authenticated",
+      "type": "boolean"
+     },
+     "required": {
+      "title": "Required",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "required",
+     "authenticated"
+    ],
+    "title": "DashboardAuthStatusResponse",
+    "type": "object"
+   },
+   "DiagnosticsSendRequest": {
+    "properties": {
+     "bundle": {
+      "title": "Bundle",
+      "type": "string"
+     }
+    },
+    "required": [
+     "bundle"
+    ],
+    "title": "DiagnosticsSendRequest",
+    "type": "object"
+   },
+   "DiagnosticsSendResponse": {
+    "properties": {
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "message"
+    ],
+    "title": "DiagnosticsSendResponse",
+    "type": "object"
+   },
+   "ErrorSummary": {
+    "properties": {
+     "component": {
+      "title": "Component",
+      "type": "string"
+     },
+     "event_id": {
+      "anyOf": [
+       {
+        "format": "uuid",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Event Id"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+     }
+    },
+    "required": [
+     "component",
+     "message"
+    ],
+    "title": "ErrorSummary",
+    "type": "object"
+   },
+   "EventSummary": {
+    "properties": {
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+     },
+     "type": {
+      "title": "Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type",
+     "timestamp",
+     "source"
+    ],
+    "title": "EventSummary",
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "HealthResponse": {
+    "properties": {
+     "application_status": {
+      "$ref": "#/components/schemas/ApplicationStatus"
+     },
+     "plugins": {
+      "items": {
+       "$ref": "#/components/schemas/PluginHealth"
+      },
+      "title": "Plugins",
+      "type": "array"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "status": {
+      "enum": [
+       "healthy",
+       "degraded"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "version": {
+      "title": "Version",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "version",
+     "application_status",
+     "plugins"
+    ],
+    "title": "HealthResponse",
+    "type": "object"
+   },
+   "IntegrationModes": {
+    "description": "Independent integration modes used for safe mixed-mode testing.",
+    "properties": {
+     "midi_source": {
+      "$ref": "#/components/schemas/MidiSource",
+      "default": "playback_api"
+     },
+     "service_source": {
+      "$ref": "#/components/schemas/ServiceSource",
+      "default": "demo"
+     },
+     "timer_output": {
+      "$ref": "#/components/schemas/TimerOutput",
+      "default": "simulated"
+     }
+    },
+    "title": "IntegrationModes",
+    "type": "object"
+   },
+   "LengthConfirmation": {
+    "additionalProperties": false,
+    "properties": {
+     "confirm": {
+      "const": true,
+      "title": "Confirm",
+      "type": "boolean"
+     },
+     "token": {
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "confirm"
+    ],
+    "title": "LengthConfirmation",
+    "type": "object"
+   },
+   "LengthItemResult": {
+    "properties": {
+     "item_id": {
+      "title": "Item Id",
+      "type": "string"
+     },
+     "new_length": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "New Length"
+     },
+     "old_length": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Old Length"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "status": {
+      "enum": [
+       "updated",
+       "restored",
+       "skipped",
+       "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "item_id",
+     "title",
+     "status"
+    ],
+    "title": "LengthItemResult",
+    "type": "object"
+   },
+   "LengthPreview": {
+    "properties": {
+     "category": {
+      "title": "Category",
+      "type": "string"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/LengthItemResult"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+     },
+     "plan_date": {
+      "title": "Plan Date",
+      "type": "string"
+     },
+     "plan_title": {
+      "title": "Plan Title",
+      "type": "string"
+     },
+     "token": {
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "category",
+     "plan_title",
+     "plan_date",
+     "items"
+    ],
+    "title": "LengthPreview",
+    "type": "object"
+   },
+   "LengthUpdateResult": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/LengthItemResult"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+     },
+     "operation": {
+      "default": "update",
+      "enum": [
+       "update",
+       "restore"
+      ],
+      "title": "Operation",
+      "type": "string"
+     },
+     "reload": {
+      "default": "not_needed",
+      "enum": [
+       "not_needed",
+       "verified",
+       "deferred",
+       "failed",
+       "different_plan"
+      ],
+      "title": "Reload",
+      "type": "string"
+     },
+     "status": {
+      "default": "idle",
+      "enum": [
+       "idle",
+       "running",
+       "done",
+       "partial",
+       "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "title": "LengthUpdateResult",
+    "type": "object"
+   },
+   "LightingCaptureRequest": {
+    "description": "Fires a pad and, when ``song_key`` and ``at_seconds`` are given, adds it to the song.",
+    "properties": {
+     "at_seconds": {
+      "anyOf": [
+       {
+        "maximum": 86399.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At Seconds"
+     },
+     "pad_id": {
+      "format": "uuid",
+      "title": "Pad Id",
+      "type": "string"
+     },
+     "song_key": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Song Key"
+     },
+     "song_title": {
+      "anyOf": [
+       {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Song Title"
+     }
+    },
+    "required": [
+     "pad_id"
+    ],
+    "title": "LightingCaptureRequest",
+    "type": "object"
+   },
+   "LightingCaptureResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "at_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At Seconds"
+     },
+     "cue_id": {
+      "anyOf": [
+       {
+        "format": "uuid",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cue Id"
+     },
+     "lights": {
+      "$ref": "#/components/schemas/LightsStatusResponse"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "lights"
+    ],
+    "title": "LightingCaptureResponse",
+    "type": "object"
+   },
+   "LightingCaptureUndoRequest": {
+    "properties": {
+     "cue_id": {
+      "format": "uuid",
+      "title": "Cue Id",
+      "type": "string"
+     },
+     "song_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Song Key",
+      "type": "string"
+     }
+    },
+    "required": [
+     "song_key",
+     "cue_id"
+    ],
+    "title": "LightingCaptureUndoRequest",
+    "type": "object"
+   },
+   "LightingCue": {
+    "description": "One elapsed-time MIDI pulse sent to the lighting application.",
+    "properties": {
+     "at_seconds": {
+      "maximum": 86399.0,
+      "minimum": 0.0,
+      "title": "At Seconds",
+      "type": "number"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "enum": [
+         "rose",
+         "teal",
+         "amber",
+         "blue",
+         "violet",
+         "green"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Color"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "label": {
+      "default": "",
+      "maxLength": 120,
+      "title": "Label",
+      "type": "string"
+     },
+     "note": {
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Note",
+      "type": "integer"
+     },
+     "velocity": {
+      "default": 127,
+      "maximum": 127.0,
+      "minimum": 1.0,
+      "title": "Velocity",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "at_seconds",
+     "note"
+    ],
+    "title": "LightingCue",
+    "type": "object"
+   },
+   "LightingCueMapRequest": {
+    "description": "Replaces only ``method``'s cue list; the other method's cues are kept untouched.",
+    "properties": {
+     "cues": {
+      "items": {
+       "$ref": "#/components/schemas/LightingCue"
+      },
+      "maxItems": 2000,
+      "title": "Cues",
+      "type": "array"
+     },
+     "method": {
+      "$ref": "#/components/schemas/LightingMethod",
+      "default": "midi"
+     },
+     "osc_cues": {
+      "items": {
+       "$ref": "#/components/schemas/OscLightingCue"
+      },
+      "maxItems": 2000,
+      "title": "Osc Cues",
+      "type": "array"
+     },
+     "song_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Song Key",
+      "type": "string"
+     },
+     "song_title": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Song Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "song_key",
+     "song_title"
+    ],
+    "title": "LightingCueMapRequest",
+    "type": "object"
+   },
+   "LightingCueTestRequest": {
+    "properties": {
+     "note": {
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Note",
+      "type": "integer"
+     },
+     "velocity": {
+      "default": 127,
+      "maximum": 127.0,
+      "minimum": 1.0,
+      "title": "Velocity",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "note"
+    ],
+    "title": "LightingCueTestRequest",
+    "type": "object"
+   },
+   "LightingMethod": {
+    "description": "How Lighting reaches the lighting application. Only the saved method fires.",
+    "enum": [
+     "osc",
+     "midi"
+    ],
+    "title": "LightingMethod",
+    "type": "string"
+   },
+   "LightingOscCueTestRequest": {
+    "properties": {
+     "address": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Address",
+      "type": "string"
+     },
+     "args": {
+      "items": {
+       "$ref": "#/components/schemas/OscArgument"
+      },
+      "maxItems": 16,
+      "title": "Args",
+      "type": "array"
+     }
+    },
+    "required": [
+     "address"
+    ],
+    "title": "LightingOscCueTestRequest",
+    "type": "object"
+   },
+   "LightingOutputResponse": {
+    "properties": {
+     "ambiguous": {
+      "title": "Ambiguous",
+      "type": "boolean"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "name": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "selected": {
+      "title": "Selected",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "ambiguous",
+     "selected",
+     "connected"
+    ],
+    "title": "LightingOutputResponse",
+    "type": "object"
+   },
+   "LightingPad": {
+    "description": "A saved, reusable cue on the cue board. Global (not per song).\n\nA pad holds the payload for one method. A pad whose method is not the saved method is\nkept but disabled in the UI, like the per-song cues of the inactive method.",
+    "properties": {
+     "address": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Address"
+     },
+     "args": {
+      "items": {
+       "$ref": "#/components/schemas/OscArgument"
+      },
+      "maxItems": 16,
+      "title": "Args",
+      "type": "array"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "enum": [
+         "rose",
+         "teal",
+         "amber",
+         "blue",
+         "violet",
+         "green"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Color"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "label": {
+      "maxLength": 60,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+     },
+     "method": {
+      "$ref": "#/components/schemas/LightingMethod"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "velocity": {
+      "default": 127,
+      "maximum": 127.0,
+      "minimum": 1.0,
+      "title": "Velocity",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "label",
+     "method"
+    ],
+    "title": "LightingPad",
+    "type": "object"
+   },
+   "LightingPadsRequest": {
+    "description": "Replaces the whole cue board (create, edit, rename, reorder and delete in one save).",
+    "properties": {
+     "pads": {
+      "items": {
+       "$ref": "#/components/schemas/LightingPad"
+      },
+      "maxItems": 64,
+      "title": "Pads",
+      "type": "array"
+     }
+    },
+    "title": "LightingPadsRequest",
+    "type": "object"
+   },
+   "LightsOperationResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "lights": {
+      "$ref": "#/components/schemas/LightsStatusResponse"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "lights"
+    ],
+    "title": "LightsOperationResponse",
+    "type": "object"
+   },
+   "LightsSettings": {
+    "description": "Validated lighting output (OSC or MIDI) and per-song cue timelines for Lighting.",
+    "properties": {
+     "channel": {
+      "default": 1,
+      "maximum": 15.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "cue_maps": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/SongLightingCueMap"
+      },
+      "title": "Cue Maps",
+      "type": "object"
+     },
+     "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "method": {
+      "$ref": "#/components/schemas/LightingMethod",
+      "default": "osc"
+     },
+     "osc_host": {
+      "default": "127.0.0.1",
+      "maxLength": 253,
+      "minLength": 1,
+      "title": "Osc Host",
+      "type": "string"
+     },
+     "osc_port": {
+      "default": 21600,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Osc Port",
+      "type": "integer"
+     },
+     "output_name": {
+      "anyOf": [
+       {
+        "maxLength": 512,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Output Name"
+     },
+     "pads": {
+      "items": {
+       "$ref": "#/components/schemas/LightingPad"
+      },
+      "maxItems": 64,
+      "title": "Pads",
+      "type": "array"
+     },
+     "pulse_ms": {
+      "default": 100,
+      "maximum": 2000.0,
+      "minimum": 10.0,
+      "title": "Pulse Ms",
+      "type": "integer"
+     },
+     "transport": {
+      "$ref": "#/components/schemas/MidiTransport",
+      "default": "local"
+     }
+    },
+    "title": "LightsSettings",
+    "type": "object"
+   },
+   "LightsSettingsRequest": {
+    "properties": {
+     "channel": {
+      "default": 1,
+      "maximum": 15.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "method": {
+      "$ref": "#/components/schemas/LightingMethod",
+      "default": "midi"
+     },
+     "osc_host": {
+      "anyOf": [
+       {
+        "maxLength": 253,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Osc Host"
+     },
+     "osc_port": {
+      "anyOf": [
+       {
+        "maximum": 65535.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Osc Port"
+     },
+     "output_name": {
+      "anyOf": [
+       {
+        "maxLength": 512,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Output Name"
+     },
+     "pulse_ms": {
+      "default": 100,
+      "maximum": 2000.0,
+      "minimum": 10.0,
+      "title": "Pulse Ms",
+      "type": "integer"
+     }
+    },
+    "title": "LightsSettingsRequest",
+    "type": "object"
+   },
+   "LightsStatusResponse": {
+    "properties": {
+     "channel": {
+      "maximum": 15.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "connection_status": {
+      "$ref": "#/components/schemas/ConnectionStatus"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "last_cue": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LightingCue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "last_cue_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Cue At"
+     },
+     "last_osc_cue": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OscLightingCue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "method": {
+      "$ref": "#/components/schemas/LightingMethod",
+      "default": "osc"
+     },
+     "osc_host": {
+      "default": "127.0.0.1",
+      "title": "Osc Host",
+      "type": "string"
+     },
+     "osc_port": {
+      "default": 21600,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Osc Port",
+      "type": "integer"
+     },
+     "output_name": {
+      "anyOf": [
+       {
+        "maxLength": 512,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Output Name"
+     },
+     "outputs": {
+      "items": {
+       "$ref": "#/components/schemas/LightingOutputResponse"
+      },
+      "title": "Outputs",
+      "type": "array"
+     },
+     "pulse_ms": {
+      "maximum": 2000.0,
+      "minimum": 10.0,
+      "title": "Pulse Ms",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "enabled",
+     "channel",
+     "pulse_ms",
+     "connection_status"
+    ],
+    "title": "LightsStatusResponse",
+    "type": "object"
+   },
+   "LoginRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "format": "password",
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Password",
+      "type": "string",
+      "writeOnly": true
+     }
+    },
+    "required": [
+     "email",
+     "password"
+    ],
+    "title": "LoginRequest",
+    "type": "object"
+   },
+   "MidiCueName": {
+    "enum": [
+     "start_next",
+     "restart_current",
+     "previous",
+     "next",
+     "reload_plan",
+     "stop_timer"
+    ],
+    "title": "MidiCueName",
+    "type": "string"
+   },
+   "MidiCueSimulationRequest": {
+    "properties": {
+     "cue": {
+      "$ref": "#/components/schemas/MidiCueName"
+     }
+    },
+    "required": [
+     "cue"
+    ],
+    "title": "MidiCueSimulationRequest",
+    "type": "object"
+   },
+   "MidiCueSimulationResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "action": {
+      "$ref": "#/components/schemas/ActionName"
+     },
+     "cue": {
+      "$ref": "#/components/schemas/MidiCueName"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "state": {
+      "$ref": "#/components/schemas/ApplicationState"
+     }
+    },
+    "required": [
+     "cue",
+     "action",
+     "accepted",
+     "message",
+     "state"
+    ],
+    "title": "MidiCueSimulationResponse",
+    "type": "object"
+   },
+   "MidiInputResponse": {
+    "properties": {
+     "ambiguous": {
+      "title": "Ambiguous",
+      "type": "boolean"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "id": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[a-f0-9]+$",
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "selected": {
+      "title": "Selected",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "ambiguous",
+     "selected",
+     "connected"
+    ],
+    "title": "MidiInputResponse",
+    "type": "object"
+   },
+   "MidiInputSelectionRequest": {
+    "properties": {
+     "input_id": {
+      "anyOf": [
+       {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]+$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Id"
+     }
+    },
+    "required": [
+     "input_id"
+    ],
+    "title": "MidiInputSelectionRequest",
+    "type": "object"
+   },
+   "MidiInputSelectionResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "midi": {
+      "$ref": "#/components/schemas/MidiInputsResponse"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "midi"
+    ],
+    "title": "MidiInputSelectionResponse",
+    "type": "object"
+   },
+   "MidiInputsResponse": {
+    "properties": {
+     "channel": {
+      "maximum": 16.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "configured_input_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Configured Input Name"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "inputs": {
+      "items": {
+       "$ref": "#/components/schemas/MidiInputResponse"
+      },
+      "title": "Inputs",
+      "type": "array"
+     },
+     "mappings": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "propertyNames": {
+       "$ref": "#/components/schemas/MidiCueName"
+      },
+      "title": "Mappings",
+      "type": "object"
+     },
+     "note": {
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Note",
+      "type": "integer"
+     },
+     "selected_input_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Input Name"
+     }
+    },
+    "required": [
+     "enabled",
+     "channel",
+     "note",
+     "inputs",
+     "mappings"
+    ],
+    "title": "MidiInputsResponse",
+    "type": "object"
+   },
+   "MidiMessageDisposition": {
+    "enum": [
+     "dispatched",
+     "action_rejected",
+     "duplicate",
+     "unmapped",
+     "wrong_channel",
+     "note_release",
+     "queue_full",
+     "error"
+    ],
+    "title": "MidiMessageDisposition",
+    "type": "string"
+   },
+   "MidiMonitorMessageResponse": {
+    "properties": {
+     "action": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ActionName"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "channel": {
+      "maximum": 16.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "detail": {
+      "title": "Detail",
+      "type": "string"
+     },
+     "disposition": {
+      "$ref": "#/components/schemas/MidiMessageDisposition"
+     },
+     "input_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Name"
+     },
+     "message_type": {
+      "enum": [
+       "note_on",
+       "note_off"
+      ],
+      "title": "Message Type",
+      "type": "string"
+     },
+     "note": {
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Note",
+      "type": "integer"
+     },
+     "note_name": {
+      "maxLength": 4,
+      "minLength": 2,
+      "title": "Note Name",
+      "type": "string"
+     },
+     "simulated": {
+      "default": false,
+      "title": "Simulated",
+      "type": "boolean"
+     },
+     "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+     },
+     "velocity": {
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Velocity",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "timestamp",
+     "message_type",
+     "channel",
+     "note",
+     "note_name",
+     "velocity",
+     "disposition",
+     "detail"
+    ],
+    "title": "MidiMonitorMessageResponse",
+    "type": "object"
+   },
+   "MidiMonitorResponse": {
+    "properties": {
+     "messages": {
+      "items": {
+       "$ref": "#/components/schemas/MidiMonitorMessageResponse"
+      },
+      "title": "Messages",
+      "type": "array"
+     }
+    },
+    "required": [
+     "messages"
+    ],
+    "title": "MidiMonitorResponse",
+    "type": "object"
+   },
+   "MidiSettings": {
+    "description": "Validated runtime settings for the Playback MIDI input.",
+    "properties": {
+     "channel": {
+      "default": 1,
+      "maximum": 16.0,
+      "minimum": 1.0,
+      "title": "Channel",
+      "type": "integer"
+     },
+     "debounce_ms": {
+      "default": 250,
+      "maximum": 2000.0,
+      "minimum": 0.0,
+      "title": "Debounce Ms",
+      "type": "integer"
+     },
+     "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "input_name": {
+      "anyOf": [
+       {
+        "maxLength": 512,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Name"
+     },
+     "mappings": {
+      "$ref": "#/components/schemas/MidiVelocityMappings"
+     },
+     "note": {
+      "default": 112,
+      "maximum": 127.0,
+      "minimum": 0.0,
+      "title": "Note",
+      "type": "integer"
+     },
+     "transport": {
+      "$ref": "#/components/schemas/MidiTransport",
+      "default": "local"
+     }
+    },
+    "title": "MidiSettings",
+    "type": "object"
+   },
+   "MidiSource": {
+    "description": "Source used to trigger StagePilot actions.",
+    "enum": [
+     "simulated",
+     "real",
+     "playback_api"
+    ],
+    "title": "MidiSource",
+    "type": "string"
+   },
+   "MidiTransport": {
+    "description": "Physical transport used by a real MIDI integration.",
+    "enum": [
+     "local",
+     "network"
+    ],
+    "title": "MidiTransport",
+    "type": "string"
+   },
+   "MidiVelocityMappings": {
+    "description": "Configurable note-on velocity mappings for Playback cues.",
+    "properties": {
+     "next": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 103,
+      "title": "Next"
+     },
+     "previous": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 102,
+      "title": "Previous"
+     },
+     "reload_plan": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 104,
+      "title": "Reload Plan"
+     },
+     "restart_current": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 101,
+      "title": "Restart Current"
+     },
+     "start_next": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 100,
+      "title": "Start Next"
+     },
+     "stop_timer": {
+      "anyOf": [
+       {
+        "maximum": 127.0,
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": 105,
+      "title": "Stop Timer"
+     }
+    },
+    "title": "MidiVelocityMappings",
+    "type": "object"
+   },
+   "NetworkMidiSettings": {
+    "description": "Private IPC settings shared by server-side network MIDI adapters.",
+    "properties": {
+     "request_timeout_seconds": {
+      "default": 2.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 30.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "socket_path": {
+      "default": "/run/stagepilot-midi/midi.sock",
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Socket Path",
+      "type": "string"
+     }
+    },
+    "title": "NetworkMidiSettings",
+    "type": "object"
+   },
+   "OnboardingSettings": {
+    "additionalProperties": false,
+    "description": "Small persisted markers that cannot be inferred from validated defaults.",
+    "properties": {
+     "general_completed": {
+      "default": false,
+      "title": "General Completed",
+      "type": "boolean"
+     }
+    },
+    "title": "OnboardingSettings",
+    "type": "object"
+   },
+   "OscArgument": {
+    "description": "One typed OSC argument. The type is explicit so 1.0 stays a float and 1 an int.",
+    "properties": {
+     "type": {
+      "enum": [
+       "int",
+       "float",
+       "string",
+       "bool"
+      ],
+      "title": "Type",
+      "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       },
+       {
+        "type": "boolean"
+       }
+      ],
+      "title": "Value"
+     }
+    },
+    "required": [
+     "type",
+     "value"
+    ],
+    "title": "OscArgument",
+    "type": "object"
+   },
+   "OscLightingCue": {
+    "description": "One elapsed-time one-shot OSC message. OSC has no note length or pulse.",
+    "properties": {
+     "address": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Address",
+      "type": "string"
+     },
+     "args": {
+      "items": {
+       "$ref": "#/components/schemas/OscArgument"
+      },
+      "maxItems": 16,
+      "title": "Args",
+      "type": "array"
+     },
+     "at_seconds": {
+      "maximum": 86399.0,
+      "minimum": 0.0,
+      "title": "At Seconds",
+      "type": "number"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "enum": [
+         "rose",
+         "teal",
+         "amber",
+         "blue",
+         "violet",
+         "green"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Color"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "label": {
+      "default": "",
+      "maxLength": 120,
+      "title": "Label",
+      "type": "string"
+     }
+    },
+    "required": [
+     "at_seconds",
+     "address"
+    ],
+    "title": "OscLightingCue",
+    "type": "object"
+   },
+   "PendingPlanSelectionResponse": {
+    "properties": {
+     "candidates": {
+      "items": {
+       "$ref": "#/components/schemas/ServicePlanCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+     },
+     "message": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Message"
+     },
+     "pending": {
+      "title": "Pending",
+      "type": "boolean"
+     },
+     "target_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Date"
+     }
+    },
+    "required": [
+     "pending",
+     "candidates"
+    ],
+    "title": "PendingPlanSelectionResponse",
+    "type": "object"
+   },
+   "PersistentPlanningCenterSettings": {
+    "additionalProperties": false,
+    "description": "Non-secret Planning Center settings safe to write to settings.json.",
+    "properties": {
+     "app_id": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Id"
+     },
+     "connection_method": {
+      "default": "manual",
+      "enum": [
+       "oauth",
+       "manual"
+      ],
+      "title": "Connection Method",
+      "type": "string"
+     },
+     "plan_title_preference": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan Title Preference"
+     },
+     "preferred_service_time": {
+      "anyOf": [
+       {
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Preferred Service Time"
+     },
+     "request_timeout_seconds": {
+      "default": 10.0,
+      "maximum": 60.0,
+      "minimum": 1.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "service_type_id": {
+      "anyOf": [
+       {
+        "maxLength": 128,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Type Id"
+     },
+     "upcoming_lookahead_days": {
+      "default": 30,
+      "maximum": 365.0,
+      "minimum": 0.0,
+      "title": "Upcoming Lookahead Days",
+      "type": "integer"
+     }
+    },
+    "title": "PersistentPlanningCenterSettings",
+    "type": "object"
+   },
+   "PersistentSettings-Input": {
+    "additionalProperties": false,
+    "description": "Versioned ordinary settings persisted outside the repository.",
+    "properties": {
+     "integration_modes": {
+      "$ref": "#/components/schemas/IntegrationModes"
+     },
+     "lan_access": {
+      "default": false,
+      "title": "Lan Access",
+      "type": "boolean"
+     },
+     "lights": {
+      "$ref": "#/components/schemas/LightsSettings"
+     },
+     "log_level": {
+      "default": "INFO",
+      "enum": [
+       "DEBUG",
+       "INFO",
+       "WARNING",
+       "ERROR",
+       "CRITICAL"
+      ],
+      "title": "Log Level",
+      "type": "string"
+     },
+     "midi": {
+      "$ref": "#/components/schemas/MidiSettings"
+     },
+     "network_midi": {
+      "$ref": "#/components/schemas/NetworkMidiSettings"
+     },
+     "onboarding": {
+      "$ref": "#/components/schemas/OnboardingSettings"
+     },
+     "planning_center": {
+      "$ref": "#/components/schemas/PersistentPlanningCenterSettings"
+     },
+     "planning_center_length_undo": {
+      "items": {
+       "$ref": "#/components/schemas/PlanningCenterLengthUndo"
+      },
+      "title": "Planning Center Length Undo",
+      "type": "array"
+     },
+     "playback_api": {
+      "$ref": "#/components/schemas/PlaybackApiSettings"
+     },
+     "propresenter": {
+      "$ref": "#/components/schemas/ProPresenterSettings"
+     },
+     "schema_version": {
+      "const": 2,
+      "default": 2,
+      "title": "Schema Version",
+      "type": "integer"
+     },
+     "server_port": {
+      "default": 8765,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Server Port",
+      "type": "integer"
+     },
+     "timezone": {
+      "default": "America/Los_Angeles",
+      "title": "Timezone",
+      "type": "string"
+     },
+     "web_dashboard_pin_enabled": {
+      "default": true,
+      "title": "Web Dashboard Pin Enabled",
+      "type": "boolean"
+     },
+     "web_dashboard_pin_hash": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Web Dashboard Pin Hash"
+     }
+    },
+    "title": "PersistentSettings",
+    "type": "object"
+   },
+   "PersistentSettings-Output": {
+    "additionalProperties": false,
+    "description": "Versioned ordinary settings persisted outside the repository.",
+    "properties": {
+     "integration_modes": {
+      "$ref": "#/components/schemas/IntegrationModes"
+     },
+     "lan_access": {
+      "default": false,
+      "title": "Lan Access",
+      "type": "boolean"
+     },
+     "lights": {
+      "$ref": "#/components/schemas/LightsSettings"
+     },
+     "log_level": {
+      "default": "INFO",
+      "enum": [
+       "DEBUG",
+       "INFO",
+       "WARNING",
+       "ERROR",
+       "CRITICAL"
+      ],
+      "title": "Log Level",
+      "type": "string"
+     },
+     "midi": {
+      "$ref": "#/components/schemas/MidiSettings"
+     },
+     "network_midi": {
+      "$ref": "#/components/schemas/NetworkMidiSettings"
+     },
+     "onboarding": {
+      "$ref": "#/components/schemas/OnboardingSettings"
+     },
+     "planning_center": {
+      "$ref": "#/components/schemas/PersistentPlanningCenterSettings"
+     },
+     "planning_center_length_undo": {
+      "items": {
+       "$ref": "#/components/schemas/PlanningCenterLengthUndo"
+      },
+      "title": "Planning Center Length Undo",
+      "type": "array"
+     },
+     "playback_api": {
+      "$ref": "#/components/schemas/PlaybackApiSettings"
+     },
+     "propresenter": {
+      "$ref": "#/components/schemas/ProPresenterSettings"
+     },
+     "schema_version": {
+      "const": 2,
+      "default": 2,
+      "title": "Schema Version",
+      "type": "integer"
+     },
+     "server_port": {
+      "default": 8765,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Server Port",
+      "type": "integer"
+     },
+     "timezone": {
+      "default": "America/Los_Angeles",
+      "title": "Timezone",
+      "type": "string"
+     },
+     "web_dashboard_pin_enabled": {
+      "default": true,
+      "title": "Web Dashboard Pin Enabled",
+      "type": "boolean"
+     }
+    },
+    "title": "PersistentSettings",
+    "type": "object"
+   },
+   "PlanSelectionRequest": {
+    "properties": {
+     "plan_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Plan Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "plan_id"
+    ],
+    "title": "PlanSelectionRequest",
+    "type": "object"
+   },
+   "PlanSelectionResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "state": {
+      "$ref": "#/components/schemas/ApplicationState"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "state"
+    ],
+    "title": "PlanSelectionResponse",
+    "type": "object"
+   },
+   "PlanningCenterLengthUndo": {
+    "description": "Write-ahead undo entry; never contains credentials.",
+    "properties": {
+     "item_id": {
+      "title": "Item Id",
+      "type": "string"
+     },
+     "new_length": {
+      "title": "New Length",
+      "type": "integer"
+     },
+     "old_length": {
+      "title": "Old Length",
+      "type": "integer"
+     },
+     "pending_from_length": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pending From Length"
+     },
+     "plan_id": {
+      "title": "Plan Id",
+      "type": "string"
+     },
+     "service_type_id": {
+      "title": "Service Type Id",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     },
+     "written_at": {
+      "format": "date-time",
+      "title": "Written At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "service_type_id",
+     "plan_id",
+     "item_id",
+     "title",
+     "old_length",
+     "new_length",
+     "written_at"
+    ],
+    "title": "PlanningCenterLengthUndo",
+    "type": "object"
+   },
+   "PlanningCenterOAuthCallbackRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "format": "password",
+      "minLength": 1,
+      "title": "Code",
+      "type": "string",
+      "writeOnly": true
+     },
+     "redirect_uri": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Redirect Uri",
+      "type": "string"
+     },
+     "state": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "State",
+      "type": "string"
+     }
+    },
+    "required": [
+     "state",
+     "code",
+     "redirect_uri"
+    ],
+    "title": "PlanningCenterOAuthCallbackRequest",
+    "type": "object"
+   },
+   "PlanningCenterOAuthStartResponse": {
+    "description": "Everything the desktop shell needs to open the consent page.\n\n`authorize_url` deliberately omits `redirect_uri`: only the desktop\nside knows which of the four pre-registered loopback ports was free,\nand it appends that itself before opening the browser.",
+    "properties": {
+     "authorize_url": {
+      "minLength": 1,
+      "title": "Authorize Url",
+      "type": "string"
+     },
+     "state": {
+      "minLength": 1,
+      "title": "State",
+      "type": "string"
+     }
+    },
+    "required": [
+     "authorize_url",
+     "state"
+    ],
+    "title": "PlanningCenterOAuthStartResponse",
+    "type": "object"
+   },
+   "PlanningCenterOAuthStatusResponse": {
+    "properties": {
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "connection_method": {
+      "enum": [
+       "oauth",
+       "manual"
+      ],
+      "title": "Connection Method",
+      "type": "string"
+     },
+     "expires_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expires At"
+     },
+     "needs_reconnect": {
+      "title": "Needs Reconnect",
+      "type": "boolean"
+     },
+     "scope": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scope"
+     }
+    },
+    "required": [
+     "connection_method",
+     "connected",
+     "needs_reconnect"
+    ],
+    "title": "PlanningCenterOAuthStatusResponse",
+    "type": "object"
+   },
+   "PlanningCenterServiceType": {
+    "description": "Service type information safe to expose to setup and selection interfaces.",
+    "properties": {
+     "archived": {
+      "default": false,
+      "title": "Archived",
+      "type": "boolean"
+     },
+     "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "sequence": {
+      "minimum": 0.0,
+      "title": "Sequence",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "sequence"
+    ],
+    "title": "PlanningCenterServiceType",
+    "type": "object"
+   },
+   "PlanningCenterServiceTypeResponse": {
+    "properties": {
+     "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ],
+    "title": "PlanningCenterServiceTypeResponse",
+    "type": "object"
+   },
+   "PlanningCenterSettingsUpdateRequest": {
+    "additionalProperties": false,
+    "description": "Update non-secret settings and optionally replace or remove the saved PAT secret.",
+    "properties": {
+     "app_id": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Id"
+     },
+     "connection_method": {
+      "default": "manual",
+      "enum": [
+       "oauth",
+       "manual"
+      ],
+      "title": "Connection Method",
+      "type": "string"
+     },
+     "plan_title_preference": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan Title Preference"
+     },
+     "preferred_service_time": {
+      "anyOf": [
+       {
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Preferred Service Time"
+     },
+     "remove_secret": {
+      "default": false,
+      "title": "Remove Secret",
+      "type": "boolean"
+     },
+     "request_timeout_seconds": {
+      "default": 10.0,
+      "maximum": 60.0,
+      "minimum": 1.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "secret": {
+      "anyOf": [
+       {
+        "format": "password",
+        "type": "string",
+        "writeOnly": true
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Secret"
+     },
+     "service_type_id": {
+      "anyOf": [
+       {
+        "maxLength": 128,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Type Id"
+     },
+     "upcoming_lookahead_days": {
+      "default": 30,
+      "maximum": 365.0,
+      "minimum": 0.0,
+      "title": "Upcoming Lookahead Days",
+      "type": "integer"
+     }
+    },
+    "title": "PlanningCenterSettingsUpdateRequest",
+    "type": "object"
+   },
+   "PlanningCenterStatusResponse": {
+    "properties": {
+     "app_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Id"
+     },
+     "configured": {
+      "title": "Configured",
+      "type": "boolean"
+     },
+     "connection_method": {
+      "default": "manual",
+      "enum": [
+       "oauth",
+       "manual"
+      ],
+      "title": "Connection Method",
+      "type": "string"
+     },
+     "connection_status": {
+      "$ref": "#/components/schemas/ConnectionStatus"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "oauth_connected": {
+      "default": false,
+      "title": "Oauth Connected",
+      "type": "boolean"
+     },
+     "oauth_needs_reconnect": {
+      "default": false,
+      "title": "Oauth Needs Reconnect",
+      "type": "boolean"
+     },
+     "planning_center_secret_saved": {
+      "title": "Planning Center Secret Saved",
+      "type": "boolean"
+     },
+     "service_type_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Type Id"
+     }
+    },
+    "required": [
+     "connection_status",
+     "configured",
+     "planning_center_secret_saved"
+    ],
+    "title": "PlanningCenterStatusResponse",
+    "type": "object"
+   },
+   "PlanningCenterTestRequest": {
+    "additionalProperties": false,
+    "description": "Temporary credentials used only for one authentication test.",
+    "properties": {
+     "app_id": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "App Id"
+     },
+     "secret": {
+      "anyOf": [
+       {
+        "format": "password",
+        "maxLength": 255,
+        "minLength": 1,
+        "type": "string",
+        "writeOnly": true
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Secret"
+     }
+    },
+    "title": "PlanningCenterTestRequest",
+    "type": "object"
+   },
+   "PlanningCenterTestResponse": {
+    "properties": {
+     "authenticated": {
+      "const": true,
+      "default": true,
+      "title": "Authenticated",
+      "type": "boolean"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "service_types": {
+      "items": {
+       "$ref": "#/components/schemas/PlanningCenterServiceTypeResponse"
+      },
+      "title": "Service Types",
+      "type": "array"
+     }
+    },
+    "required": [
+     "message",
+     "service_types"
+    ],
+    "title": "PlanningCenterTestResponse",
+    "type": "object"
+   },
+   "PlaybackApiSettings": {
+    "additionalProperties": false,
+    "description": "Connection configuration for the primary Playback API input.",
+    "properties": {
+     "auto_scan": {
+      "default": true,
+      "title": "Auto Scan",
+      "type": "boolean"
+     },
+     "captured_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured At"
+     },
+     "captured_version": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured Version"
+     },
+     "discovery_duration_seconds": {
+      "anyOf": [
+       {
+        "exclusiveMinimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Discovery Duration Seconds"
+     },
+     "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "fast_transport": {
+      "default": true,
+      "title": "Fast Transport",
+      "type": "boolean"
+     },
+     "host": {
+      "anyOf": [
+       {
+        "maxLength": 255,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Host"
+     },
+     "lengths_applied_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lengths Applied Key"
+     },
+     "lengths_measured_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lengths Measured At"
+     },
+     "planning_center_update_service_type_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Planning Center Update Service Type Id"
+     },
+     "port": {
+      "default": 8080,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Port",
+      "type": "integer"
+     },
+     "scan_plan_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan Plan Key"
+     },
+     "setlist_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setlist Id"
+     },
+     "skipped_plan_song_ids": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Skipped Plan Song Ids",
+      "type": "array"
+     },
+     "skipped_song_ids": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 200,
+      "title": "Skipped Song Ids",
+      "type": "array"
+     },
+     "song_lengths": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "maxItems": 200,
+      "title": "Song Lengths",
+      "type": "array"
+     },
+     "song_order": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 200,
+      "title": "Song Order",
+      "type": "array"
+     }
+    },
+    "title": "PlaybackApiSettings",
+    "type": "object"
+   },
+   "PlaybackConnection": {
+    "properties": {
+     "active_source": {
+      "enum": [
+       "playback_api",
+       "midi",
+       "none"
+      ],
+      "title": "Active Source",
+      "type": "string"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     },
+     "sources": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/SourceStatus"
+      },
+      "title": "Sources",
+      "type": "object"
+     }
+    },
+    "required": [
+     "active_source",
+     "sources",
+     "connected",
+     "reason"
+    ],
+    "title": "PlaybackConnection",
+    "type": "object"
+   },
+   "PlaybackEvent": {
+    "properties": {
+     "active": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Active"
+     },
+     "continues_playing": {
+      "default": false,
+      "title": "Continues Playing",
+      "type": "boolean"
+     },
+     "message_kind": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Message Kind"
+     },
+     "pad": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pad"
+     },
+     "playing": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Playing"
+     },
+     "position": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Position"
+     },
+     "previous_song_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Song Id"
+     },
+     "previous_version": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Version"
+     },
+     "provisional": {
+      "default": false,
+      "title": "Provisional",
+      "type": "boolean"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "section_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Section Id"
+     },
+     "setlist_version": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setlist Version"
+     },
+     "song_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Song Id"
+     },
+     "timestamp": {
+      "title": "Timestamp",
+      "type": "number"
+     },
+     "type": {
+      "enum": [
+       "state.snapshot",
+       "setlist.changed",
+       "song.selected",
+       "song.changed",
+       "song.ended",
+       "song.started",
+       "song.resumed",
+       "song.paused",
+       "song.stopped",
+       "transport.reverted",
+       "seek",
+       "section.jump",
+       "section.loop",
+       "fade.out",
+       "fade.in",
+       "pad.requested",
+       "pad.on",
+       "pad.off",
+       "position.jump",
+       "message.unknown"
+      ],
+      "title": "Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "timestamp"
+    ],
+    "title": "PlaybackEvent",
+    "type": "object"
+   },
+   "PlaybackEventsResponse": {
+    "properties": {
+     "capacity": {
+      "default": 100,
+      "title": "Capacity",
+      "type": "integer"
+     },
+     "events": {
+      "items": {
+       "$ref": "#/components/schemas/PlaybackMonitorEntry"
+      },
+      "title": "Events",
+      "type": "array"
+     }
+    },
+    "required": [
+     "events"
+    ],
+    "title": "PlaybackEventsResponse",
+    "type": "object"
+   },
+   "PlaybackMonitorEntry": {
+    "properties": {
+     "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+     },
+     "discovery": {
+      "title": "Discovery",
+      "type": "boolean"
+     },
+     "event": {
+      "$ref": "#/components/schemas/PlaybackEvent"
+     }
+    },
+    "required": [
+     "event",
+     "discovery",
+     "at"
+    ],
+    "title": "PlaybackMonitorEntry",
+    "type": "object"
+   },
+   "PlaybackPlanSong": {
+    "properties": {
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "duration_seconds"
+    ],
+    "title": "PlaybackPlanSong",
+    "type": "object"
+   },
+   "PlaybackSettingsRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "auto_scan": {
+      "default": true,
+      "title": "Auto Scan",
+      "type": "boolean"
+     },
+     "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "fast_transport": {
+      "default": true,
+      "title": "Fast Transport",
+      "type": "boolean"
+     },
+     "host": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Host"
+     },
+     "port": {
+      "default": 8080,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Port",
+      "type": "integer"
+     }
+    },
+    "title": "PlaybackSettingsRequest",
+    "type": "object"
+   },
+   "PlaybackStatusResponse": {
+    "properties": {
+     "active_source": {
+      "enum": [
+       "playback_api",
+       "midi",
+       "none"
+      ],
+      "title": "Active Source",
+      "type": "string"
+     },
+     "arrangement_current": {
+      "default": true,
+      "title": "Arrangement Current",
+      "type": "boolean"
+     },
+     "captured_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured At"
+     },
+     "captured_version": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured Version"
+     },
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "discovery": {
+      "enum": [
+       "idle",
+       "running",
+       "failed",
+       "done"
+      ],
+      "title": "Discovery",
+      "type": "string"
+     },
+     "discovery_duration_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Discovery Duration Seconds"
+     },
+     "discovery_song": {
+      "title": "Discovery Song",
+      "type": "integer"
+     },
+     "discovery_total": {
+      "title": "Discovery Total",
+      "type": "integer"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "host": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Host"
+     },
+     "last_error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Error"
+     },
+     "lengths_applied": {
+      "default": false,
+      "title": "Lengths Applied",
+      "type": "boolean"
+     },
+     "lengths_measured_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lengths Measured At"
+     },
+     "plan_changed": {
+      "default": false,
+      "title": "Plan Changed",
+      "type": "boolean"
+     },
+     "plan_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan Date"
+     },
+     "plan_song_count": {
+      "title": "Plan Song Count",
+      "type": "integer"
+     },
+     "plan_songs": {
+      "items": {
+       "$ref": "#/components/schemas/PlaybackPlanSong"
+      },
+      "title": "Plan Songs",
+      "type": "array"
+     },
+     "plan_title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan Title"
+     },
+     "planning_center_connected": {
+      "title": "Planning Center Connected",
+      "type": "boolean"
+     },
+     "planning_center_lengths": {
+      "$ref": "#/components/schemas/LengthUpdateResult"
+     },
+     "planning_center_undo_available": {
+      "title": "Planning Center Undo Available",
+      "type": "boolean"
+     },
+     "planning_center_update_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Planning Center Update Reason"
+     },
+     "planning_center_update_service_type_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Planning Center Update Service Type Id"
+     },
+     "playing": {
+      "title": "Playing",
+      "type": "boolean"
+     },
+     "port": {
+      "title": "Port",
+      "type": "integer"
+     },
+     "progress": {
+      "title": "Progress",
+      "type": "integer"
+     },
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     },
+     "scan": {
+      "$ref": "#/components/schemas/ScanResult"
+     },
+     "selected": {
+      "title": "Selected",
+      "type": "boolean"
+     },
+     "setlist_cloud_version": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setlist Cloud Version"
+     },
+     "settings": {
+      "$ref": "#/components/schemas/PlaybackSettingsRequest"
+     },
+     "skipped_plan_song_ids": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Skipped Plan Song Ids",
+      "type": "array"
+     },
+     "skipped_song_ids": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Skipped Song Ids",
+      "type": "array"
+     },
+     "song_count": {
+      "title": "Song Count",
+      "type": "integer"
+     },
+     "song_lengths": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "title": "Song Lengths",
+      "type": "array"
+     },
+     "song_order": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Song Order",
+      "type": "array"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "enum": [
+         "manual",
+         "loopback",
+         "lan"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source"
+     },
+     "sources": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/SourceStatus"
+      },
+      "title": "Sources",
+      "type": "object"
+     },
+     "stale": {
+      "title": "Stale",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "planning_center_lengths",
+     "planning_center_undo_available",
+     "planning_center_connected",
+     "plan_title",
+     "plan_date",
+     "scan",
+     "selected",
+     "enabled",
+     "connected",
+     "active_source",
+     "sources",
+     "reason",
+     "host",
+     "port",
+     "source",
+     "last_error",
+     "playing",
+     "setlist_cloud_version",
+     "discovery",
+     "progress",
+     "discovery_song",
+     "discovery_total",
+     "song_order",
+     "song_lengths",
+     "skipped_song_ids",
+     "skipped_plan_song_ids",
+     "discovery_duration_seconds",
+     "planning_center_update_service_type_id",
+     "planning_center_update_reason",
+     "lengths_measured_at",
+     "plan_songs",
+     "song_count",
+     "plan_song_count",
+     "captured_version",
+     "captured_at",
+     "stale",
+     "settings"
+    ],
+    "title": "PlaybackStatusResponse",
+    "type": "object"
+   },
+   "PluginHealth": {
+    "properties": {
+     "last_activity_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Activity At"
+     },
+     "last_error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Error"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "status": {
+      "$ref": "#/components/schemas/PluginStatus"
+     },
+     "version": {
+      "title": "Version",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "version",
+     "status"
+    ],
+    "title": "PluginHealth",
+    "type": "object"
+   },
+   "PluginStatus": {
+    "enum": [
+     "stopped",
+     "starting",
+     "running",
+     "stopping",
+     "error"
+    ],
+    "title": "PluginStatus",
+    "type": "string"
+   },
+   "ProPresenterLookResponse": {
+    "properties": {
+     "id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+     },
+     "index": {
+      "minimum": 0.0,
+      "title": "Index",
+      "type": "integer"
+     },
+     "name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "index"
+    ],
+    "title": "ProPresenterLookResponse",
+    "type": "object"
+   },
+   "ProPresenterOperationResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "propresenter": {
+      "$ref": "#/components/schemas/ProPresenterStatusResponse"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "propresenter"
+    ],
+    "title": "ProPresenterOperationResponse",
+    "type": "object"
+   },
+   "ProPresenterSettings": {
+    "description": "Validated runtime settings for ProPresenter's local HTTP API.",
+    "properties": {
+     "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "health_check_interval_seconds": {
+      "default": 10.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 300.0,
+      "title": "Health Check Interval Seconds",
+      "type": "number"
+     },
+     "host": {
+      "default": "127.0.0.1",
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+     },
+     "look_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Look Id"
+     },
+     "port": {
+      "default": 1025,
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Port",
+      "type": "integer"
+     },
+     "reconnect_initial_seconds": {
+      "default": 1.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 60.0,
+      "title": "Reconnect Initial Seconds",
+      "type": "number"
+     },
+     "reconnect_max_seconds": {
+      "default": 30.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 300.0,
+      "title": "Reconnect Max Seconds",
+      "type": "number"
+     },
+     "request_timeout_seconds": {
+      "default": 3.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 60.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "timer_name": {
+      "default": "Song Countdown",
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Timer Name",
+      "type": "string"
+     }
+    },
+    "title": "ProPresenterSettings",
+    "type": "object"
+   },
+   "ProPresenterSettingsRequest": {
+    "properties": {
+     "host": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+     },
+     "look_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Look Id"
+     },
+     "port": {
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Port",
+      "type": "integer"
+     },
+     "request_timeout_seconds": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 60.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "timer_name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Timer Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "host",
+     "port",
+     "timer_name",
+     "request_timeout_seconds"
+    ],
+    "title": "ProPresenterSettingsRequest",
+    "type": "object"
+   },
+   "ProPresenterStatusResponse": {
+    "properties": {
+     "connection_status": {
+      "$ref": "#/components/schemas/ConnectionStatus"
+     },
+     "current_look_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Look Id"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "host": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+     },
+     "last_checked_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Checked At"
+     },
+     "look_found": {
+      "title": "Look Found",
+      "type": "boolean"
+     },
+     "look_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Look Id"
+     },
+     "looks": {
+      "items": {
+       "$ref": "#/components/schemas/ProPresenterLookResponse"
+      },
+      "title": "Looks",
+      "type": "array"
+     },
+     "port": {
+      "maximum": 65535.0,
+      "minimum": 1.0,
+      "title": "Port",
+      "type": "integer"
+     },
+     "request_timeout_seconds": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 60.0,
+      "title": "Request Timeout Seconds",
+      "type": "number"
+     },
+     "selected_timer_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Timer Id"
+     },
+     "timer_found": {
+      "title": "Timer Found",
+      "type": "boolean"
+     },
+     "timer_name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Timer Name",
+      "type": "string"
+     },
+     "timers": {
+      "items": {
+       "$ref": "#/components/schemas/ProPresenterTimerResponse"
+      },
+      "title": "Timers",
+      "type": "array"
+     }
+    },
+    "required": [
+     "enabled",
+     "host",
+     "port",
+     "timer_name",
+     "request_timeout_seconds",
+     "connection_status",
+     "timer_found",
+     "look_found"
+    ],
+    "title": "ProPresenterStatusResponse",
+    "type": "object"
+   },
+   "ProPresenterTimerResponse": {
+    "properties": {
+     "id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+     },
+     "index": {
+      "minimum": 0.0,
+      "title": "Index",
+      "type": "integer"
+     },
+     "is_countdown": {
+      "title": "Is Countdown",
+      "type": "boolean"
+     },
+     "name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "State"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "index",
+     "is_countdown"
+    ],
+    "title": "ProPresenterTimerResponse",
+    "type": "object"
+   },
+   "RemoteRole": {
+    "enum": [
+     "Viewer",
+     "Operator"
+    ],
+    "title": "RemoteRole",
+    "type": "string"
+   },
+   "ScanCandidateModel": {
+    "properties": {
+     "host": {
+      "title": "Host",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "host"
+    ],
+    "title": "ScanCandidateModel",
+    "type": "object"
+   },
+   "ScanResult": {
+    "properties": {
+     "candidates": {
+      "items": {
+       "$ref": "#/components/schemas/ScanCandidateModel"
+      },
+      "title": "Candidates",
+      "type": "array"
+     },
+     "current": {
+      "title": "Current",
+      "type": "integer"
+     },
+     "details": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Details"
+     },
+     "elapsed": {
+      "default": 0.0,
+      "title": "Elapsed",
+      "type": "number"
+     },
+     "error_class": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error Class"
+     },
+     "hosts_probed": {
+      "default": 0,
+      "title": "Hosts Probed",
+      "type": "integer"
+     },
+     "hosts_total": {
+      "default": 0,
+      "title": "Hosts Total",
+      "type": "integer"
+     },
+     "networks": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Networks",
+      "type": "array"
+     },
+     "phase": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Phase"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "settings_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Settings Url"
+     },
+     "state": {
+      "enum": [
+       "idle",
+       "scanning",
+       "found",
+       "not_found"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     },
+     "typed": {
+      "default": false,
+      "title": "Typed",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "state",
+     "candidates",
+     "reason",
+     "current",
+     "total"
+    ],
+    "title": "ScanResult",
+    "type": "object"
+   },
+   "ServiceLoadState": {
+    "description": "Validated projection of the current plan-loading outcome.",
+    "properties": {
+     "candidates": {
+      "items": {
+       "$ref": "#/components/schemas/ServicePlanCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+     },
+     "is_stale": {
+      "default": false,
+      "title": "Is Stale",
+      "type": "boolean"
+     },
+     "last_attempt_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Attempt At"
+     },
+     "message": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Message"
+     },
+     "skipped_items": {
+      "items": {
+       "$ref": "#/components/schemas/SkippedServiceItem"
+      },
+      "title": "Skipped Items",
+      "type": "array"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ServiceLoadStatus",
+      "default": "idle"
+     },
+     "target_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Date"
+     }
+    },
+    "title": "ServiceLoadState",
+    "type": "object"
+   },
+   "ServiceLoadStatus": {
+    "enum": [
+     "idle",
+     "loading",
+     "loaded",
+     "not_found",
+     "ambiguous",
+     "error"
+    ],
+    "title": "ServiceLoadStatus",
+    "type": "string"
+   },
+   "ServicePlan": {
+    "properties": {
+     "date": {
+      "format": "date",
+      "title": "Date",
+      "type": "string"
+     },
+     "duration_source": {
+      "default": "Scheduled item length",
+      "title": "Duration Source",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "service_times": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Service Times",
+      "type": "array"
+     },
+     "service_type": {
+      "title": "Service Type",
+      "type": "string"
+     },
+     "service_type_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Type Id"
+     },
+     "songs": {
+      "items": {
+       "$ref": "#/components/schemas/Song"
+      },
+      "title": "Songs",
+      "type": "array"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "date",
+     "service_type"
+    ],
+    "title": "ServicePlan",
+    "type": "object"
+   },
+   "ServicePlanCandidate": {
+    "properties": {
+     "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+     },
+     "service_times": {
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "title": "Service Times",
+      "type": "array"
+     },
+     "service_type_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Service Type Id",
+      "type": "string"
+     },
+     "service_type_name": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Service Type Name",
+      "type": "string"
+     },
+     "target_date": {
+      "format": "date",
+      "title": "Target Date",
+      "type": "string"
+     },
+     "title": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "service_type_id",
+     "service_type_name",
+     "target_date",
+     "service_times"
+    ],
+    "title": "ServicePlanCandidate",
+    "type": "object"
+   },
+   "ServiceSource": {
+    "description": "Source used to populate the weekly service plan.",
+    "enum": [
+     "demo",
+     "planning_center"
+    ],
+    "title": "ServiceSource",
+    "type": "string"
+   },
+   "SettingsResponse": {
+    "properties": {
+     "planning_center_secret_saved": {
+      "title": "Planning Center Secret Saved",
+      "type": "boolean"
+     },
+     "restart_required": {
+      "default": false,
+      "title": "Restart Required",
+      "type": "boolean"
+     },
+     "settings": {
+      "$ref": "#/components/schemas/PersistentSettings-Output"
+     },
+     "warning": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Warning"
+     }
+    },
+    "required": [
+     "settings",
+     "planning_center_secret_saved"
+    ],
+    "title": "SettingsResponse",
+    "type": "object"
+   },
+   "SkippedServiceItem": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "maxLength": 10000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "item_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Item Id",
+      "type": "string"
+     },
+     "item_type": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Item Type",
+      "type": "string"
+     },
+     "reason": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+     },
+     "sequence": {
+      "minimum": 0.0,
+      "title": "Sequence",
+      "type": "integer"
+     },
+     "title": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "item_id",
+     "title",
+     "item_type",
+     "sequence",
+     "reason"
+    ],
+    "title": "SkippedServiceItem",
+    "type": "object"
+   },
+   "Song": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "maxLength": 10000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "formatted_duration": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "readOnly": true,
+      "title": "Formatted Duration"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "is_generic": {
+      "default": false,
+      "title": "Is Generic",
+      "type": "boolean"
+     },
+     "order": {
+      "minimum": 1.0,
+      "title": "Order",
+      "type": "integer"
+     },
+     "service_sequence": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Sequence"
+     },
+     "source_song_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source Song Id"
+     },
+     "title": {
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "order",
+     "formatted_duration"
+    ],
+    "title": "Song",
+    "type": "object"
+   },
+   "SongLightingCueMap": {
+    "description": "Persistent lighting timeline for one stable Planning Center song.\n\n``cues`` are the MIDI cues (unchanged, so every existing cue map keeps working) and\n``osc_cues`` the OSC cues. Both lists are kept; only the saved method's list fires.",
+    "properties": {
+     "cues": {
+      "items": {
+       "$ref": "#/components/schemas/LightingCue"
+      },
+      "maxItems": 2000,
+      "title": "Cues",
+      "type": "array"
+     },
+     "osc_cues": {
+      "items": {
+       "$ref": "#/components/schemas/OscLightingCue"
+      },
+      "maxItems": 2000,
+      "title": "Osc Cues",
+      "type": "array"
+     },
+     "song_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Song Key",
+      "type": "string"
+     },
+     "song_title": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Song Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "song_key",
+     "song_title"
+    ],
+    "title": "SongLightingCueMap",
+    "type": "object"
+   },
+   "SourceStatus": {
+    "properties": {
+     "connected": {
+      "title": "Connected",
+      "type": "boolean"
+     },
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "required": [
+     "connected",
+     "reason"
+    ],
+    "title": "SourceStatus",
+    "type": "object"
+   },
+   "TimerOutput": {
+    "description": "Destination used for countdown timer output.",
+    "enum": [
+     "simulated",
+     "propresenter"
+    ],
+    "title": "TimerOutput",
+    "type": "string"
+   },
+   "TimerState": {
+    "properties": {
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "last_error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Error"
+     },
+     "position_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Position Seconds"
+     },
+     "remaining_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Remaining Seconds"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "status": {
+      "$ref": "#/components/schemas/TimerStatus",
+      "default": "idle"
+     }
+    },
+    "title": "TimerState",
+    "type": "object"
+   },
+   "TimerStatus": {
+    "enum": [
+     "idle",
+     "running",
+     "stopped",
+     "error"
+    ],
+    "title": "TimerStatus",
+    "type": "string"
+   },
+   "UpdateUserRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "enabled": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Enabled"
+     },
+     "password": {
+      "anyOf": [
+       {
+        "format": "password",
+        "maxLength": 1024,
+        "minLength": 12,
+        "type": "string",
+        "writeOnly": true
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Password"
+     },
+     "role": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RemoteRole"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "title": "UpdateUserRequest",
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   }
+  }
+ },
+ "info": {
+  "title": "StagePilot API",
+  "version": "<application version>"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/api/v1/access": {
+   "get": {
+    "operationId": "access_api_v1_access_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Access Api V1 Access Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Access"
+   }
+  },
+  "/api/v1/actions/{action}": {
+   "post": {
+    "operationId": "perform_action_api_v1_actions__action__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "action",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/ActionName"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Perform Action"
+   }
+  },
+  "/api/v1/dashboard-auth/login": {
+   "post": {
+    "operationId": "login_api_v1_dashboard_auth_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DashboardAuthLoginRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DashboardAuthStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Login"
+   }
+  },
+  "/api/v1/dashboard-auth/settings": {
+   "post": {
+    "operationId": "update_dashboard_access_api_v1_dashboard_auth_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DashboardAccessSettingsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SettingsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Dashboard Access"
+   }
+  },
+  "/api/v1/dashboard-auth/status": {
+   "get": {
+    "operationId": "status_api_v1_dashboard_auth_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DashboardAuthStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Status"
+   }
+  },
+  "/api/v1/diagnostics/send": {
+   "post": {
+    "operationId": "send_diagnostics_api_v1_diagnostics_send_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DiagnosticsSendRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DiagnosticsSendResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Send Diagnostics"
+   }
+  },
+  "/api/v1/health": {
+   "get": {
+    "operationId": "health_api_v1_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HealthResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Health"
+   }
+  },
+  "/api/v1/health/live": {
+   "get": {
+    "description": "Report that the HTTP process and event loop can serve requests.",
+    "operationId": "liveness_api_v1_health_live_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "type": "string"
+         },
+         "title": "Response Liveness Api V1 Health Live Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Liveness"
+   }
+  },
+  "/api/v1/lights": {
+   "get": {
+    "operationId": "lights_status_api_v1_lights_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Lights Status"
+   }
+  },
+  "/api/v1/lights/capture": {
+   "post": {
+    "description": "Fire a pad through the saved method and, if asked, add it to the song's timeline.",
+    "operationId": "capture_lighting_pad_api_v1_lights_capture_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingCaptureRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightingCaptureResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Capture Lighting Pad"
+   }
+  },
+  "/api/v1/lights/capture/undo": {
+   "post": {
+    "operationId": "undo_lighting_capture_api_v1_lights_capture_undo_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingCaptureUndoRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Undo Lighting Capture"
+   }
+  },
+  "/api/v1/lights/cue-map": {
+   "put": {
+    "operationId": "update_lighting_cue_map_api_v1_lights_cue_map_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingCueMapRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Lighting Cue Map"
+   }
+  },
+  "/api/v1/lights/outputs/refresh": {
+   "post": {
+    "operationId": "refresh_lighting_outputs_api_v1_lights_outputs_refresh_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Refresh Lighting Outputs"
+   }
+  },
+  "/api/v1/lights/pads": {
+   "put": {
+    "operationId": "update_lighting_pads_api_v1_lights_pads_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingPadsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Lighting Pads"
+   }
+  },
+  "/api/v1/lights/settings": {
+   "post": {
+    "operationId": "update_lights_settings_api_v1_lights_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightsSettingsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Lights Settings"
+   }
+  },
+  "/api/v1/lights/test": {
+   "post": {
+    "operationId": "test_lighting_cue_api_v1_lights_test_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingCueTestRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Test Lighting Cue"
+   }
+  },
+  "/api/v1/lights/test-osc": {
+   "post": {
+    "operationId": "test_lighting_osc_cue_api_v1_lights_test_osc_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightingOscCueTestRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightsOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Test Lighting Osc Cue"
+   }
+  },
+  "/api/v1/midi/cue-simulation": {
+   "post": {
+    "operationId": "simulate_midi_cue_api_v1_midi_cue_simulation_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MidiCueSimulationRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MidiCueSimulationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Simulate Midi Cue"
+   }
+  },
+  "/api/v1/midi/input-selection": {
+   "post": {
+    "operationId": "select_midi_input_api_v1_midi_input_selection_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MidiInputSelectionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MidiInputSelectionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Select Midi Input"
+   }
+  },
+  "/api/v1/midi/inputs": {
+   "get": {
+    "operationId": "midi_inputs_api_v1_midi_inputs_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MidiInputsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Midi Inputs"
+   }
+  },
+  "/api/v1/midi/inputs/refresh": {
+   "post": {
+    "operationId": "refresh_midi_inputs_api_v1_midi_inputs_refresh_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MidiInputsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Refresh Midi Inputs"
+   }
+  },
+  "/api/v1/midi/messages": {
+   "get": {
+    "operationId": "midi_messages_api_v1_midi_messages_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MidiMonitorResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Midi Messages"
+   }
+  },
+  "/api/v1/planning-center/oauth/callback": {
+   "post": {
+    "operationId": "complete_planning_center_oauth_api_v1_planning_center_oauth_callback_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanningCenterOAuthCallbackRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterOAuthStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Complete Planning Center Oauth"
+   }
+  },
+  "/api/v1/planning-center/oauth/disconnect": {
+   "post": {
+    "operationId": "disconnect_planning_center_oauth_api_v1_planning_center_oauth_disconnect_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterOAuthStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Disconnect Planning Center Oauth"
+   }
+  },
+  "/api/v1/planning-center/oauth/start": {
+   "post": {
+    "operationId": "start_planning_center_oauth_api_v1_planning_center_oauth_start_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterOAuthStartResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Start Planning Center Oauth"
+   }
+  },
+  "/api/v1/planning-center/oauth/status": {
+   "get": {
+    "operationId": "planning_center_oauth_status_api_v1_planning_center_oauth_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterOAuthStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Planning Center Oauth Status"
+   }
+  },
+  "/api/v1/planning-center/plan-selection": {
+   "post": {
+    "operationId": "select_planning_center_plan_api_v1_planning_center_plan_selection_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanSelectionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanSelectionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Select Planning Center Plan"
+   }
+  },
+  "/api/v1/planning-center/plan/reload": {
+   "post": {
+    "operationId": "reload_planning_center_plan_api_v1_planning_center_plan_reload_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Reload Planning Center Plan"
+   }
+  },
+  "/api/v1/planning-center/plans/pending-selection": {
+   "get": {
+    "operationId": "pending_planning_center_plan_selection_api_v1_planning_center_plans_pending_selection_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PendingPlanSelectionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Pending Planning Center Plan Selection"
+   }
+  },
+  "/api/v1/planning-center/plans/select": {
+   "post": {
+    "operationId": "select_planning_center_plan_api_v1_planning_center_plans_select_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanSelectionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanSelectionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Select Planning Center Plan"
+   }
+  },
+  "/api/v1/planning-center/service-types": {
+   "get": {
+    "operationId": "planning_center_service_types_api_v1_planning_center_service_types_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/PlanningCenterServiceTypeResponse"
+         },
+         "title": "Response Planning Center Service Types Api V1 Planning Center Service Types Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Planning Center Service Types"
+   }
+  },
+  "/api/v1/planning-center/settings": {
+   "post": {
+    "operationId": "update_planning_center_settings_api_v1_planning_center_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanningCenterSettingsUpdateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SettingsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Planning Center Settings"
+   }
+  },
+  "/api/v1/planning-center/status": {
+   "get": {
+    "operationId": "planning_center_status_api_v1_planning_center_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Planning Center Status"
+   }
+  },
+  "/api/v1/planning-center/test": {
+   "post": {
+    "operationId": "test_planning_center_api_v1_planning_center_test_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanningCenterTestRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanningCenterTestResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Test Planning Center"
+   }
+  },
+  "/api/v1/playback-api/arrangement": {
+   "put": {
+    "description": "Choose which songs to skip. Neither list is ever reordered.",
+    "operationId": "arrangement_api_v1_playback_api_arrangement_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ArrangementRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Arrangement"
+   }
+  },
+  "/api/v1/playback-api/connection": {
+   "get": {
+    "operationId": "connection_api_v1_playback_api_connection_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackConnection"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Connection"
+   }
+  },
+  "/api/v1/playback-api/discover-song-order": {
+   "post": {
+    "operationId": "discover_api_v1_playback_api_discover_song_order_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "title": "Payload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Discover"
+   }
+  },
+  "/api/v1/playback-api/events": {
+   "get": {
+    "operationId": "events_api_v1_playback_api_events_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackEventsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Events"
+   }
+  },
+  "/api/v1/playback-api/find": {
+   "post": {
+    "description": "Scan, no setup needed: turns Playback on and selects it, then looks for it.",
+    "operationId": "find_api_v1_playback_api_find_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "title": "Payload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Find"
+   }
+  },
+  "/api/v1/playback-api/find/cancel": {
+   "post": {
+    "operationId": "cancel_find_api_v1_playback_api_find_cancel_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Cancel Find"
+   }
+  },
+  "/api/v1/playback-api/planning-center-lengths/categories": {
+   "get": {
+    "operationId": "length_categories_api_v1_playback_api_planning_center_lengths_categories_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/PlanningCenterServiceType"
+         },
+         "title": "Response Length Categories Api V1 Playback Api Planning Center Lengths Categories Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Length Categories"
+   }
+  },
+  "/api/v1/playback-api/planning-center-lengths/category": {
+   "put": {
+    "operationId": "choose_length_category_api_v1_playback_api_planning_center_lengths_category_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CategoryChoice"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Choose Length Category"
+   }
+  },
+  "/api/v1/playback-api/planning-center-lengths/confirm": {
+   "post": {
+    "operationId": "confirm_lengths_api_v1_playback_api_planning_center_lengths_confirm_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LengthConfirmation"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Confirm Lengths"
+   }
+  },
+  "/api/v1/playback-api/planning-center-lengths/preview": {
+   "post": {
+    "operationId": "preview_lengths_api_v1_playback_api_planning_center_lengths_preview_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LengthPreview"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Preview Lengths"
+   }
+  },
+  "/api/v1/playback-api/planning-center-lengths/restore": {
+   "post": {
+    "operationId": "restore_lengths_api_v1_playback_api_planning_center_lengths_restore_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "title": "Payload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Restore Lengths"
+   }
+  },
+  "/api/v1/playback-api/settings": {
+   "put": {
+    "operationId": "settings_api_v1_playback_api_settings_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlaybackSettingsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Settings"
+   }
+  },
+  "/api/v1/playback-api/status": {
+   "get": {
+    "operationId": "status_api_v1_playback_api_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlaybackStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Status"
+   }
+  },
+  "/api/v1/propresenter": {
+   "get": {
+    "operationId": "propresenter_status_api_v1_propresenter_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProPresenterStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Propresenter Status"
+   }
+  },
+  "/api/v1/propresenter/settings": {
+   "post": {
+    "operationId": "update_propresenter_settings_api_v1_propresenter_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProPresenterSettingsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProPresenterOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Propresenter Settings"
+   }
+  },
+  "/api/v1/propresenter/test": {
+   "post": {
+    "operationId": "test_propresenter_api_v1_propresenter_test_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProPresenterOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Test Propresenter"
+   }
+  },
+  "/api/v1/propresenter/timers/refresh": {
+   "post": {
+    "operationId": "refresh_propresenter_timers_api_v1_propresenter_timers_refresh_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProPresenterOperationResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Refresh Propresenter Timers"
+   }
+  },
+  "/api/v1/remote-access": {
+   "get": {
+    "operationId": "status_api_v1_remote_access_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Status Api V1 Remote Access Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Status"
+   }
+  },
+  "/api/v1/remote-access/bootstrap": {
+   "post": {
+    "operationId": "bootstrap_api_v1_remote_access_bootstrap_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Bootstrap Api V1 Remote Access Bootstrap Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Bootstrap"
+   }
+  },
+  "/api/v1/remote-access/disable": {
+   "post": {
+    "operationId": "disable_api_v1_remote_access_disable_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Disable Api V1 Remote Access Disable Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Disable"
+   }
+  },
+  "/api/v1/remote-access/enable": {
+   "post": {
+    "operationId": "enable_api_v1_remote_access_enable_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Enable Api V1 Remote Access Enable Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Enable"
+   }
+  },
+  "/api/v1/remote-access/regenerate": {
+   "post": {
+    "operationId": "regenerate_api_v1_remote_access_regenerate_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Regenerate Api V1 Remote Access Regenerate Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Regenerate"
+   }
+  },
+  "/api/v1/remote-access/reset": {
+   "post": {
+    "description": "Explicit, visible recovery once `enable` has confirmed this\ninstallation's credential is permanently (not transiently) revoked --\nsee `status().permanently_revoked` and `DesktopRemoteManager.reset_identity`.\nDiscards the dead local identity so the next `enable` mints a fresh one;\nnever runs silently/automatically.",
+    "operationId": "reset_api_v1_remote_access_reset_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Reset Api V1 Remote Access Reset Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Reset"
+   }
+  },
+  "/api/v1/remote-auth/login": {
+   "post": {
+    "operationId": "login_api_v1_remote_auth_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Login Api V1 Remote Auth Login Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Login"
+   }
+  },
+  "/api/v1/remote-auth/logout": {
+   "post": {
+    "operationId": "logout_api_v1_remote_auth_logout_post",
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Logout"
+   }
+  },
+  "/api/v1/remote-auth/revoke-sessions": {
+   "post": {
+    "operationId": "logout_api_v1_remote_auth_revoke_sessions_post",
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Logout"
+   }
+  },
+  "/api/v1/remote-auth/session": {
+   "get": {
+    "operationId": "session_api_v1_remote_auth_session_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Session Api V1 Remote Auth Session Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Session"
+   }
+  },
+  "/api/v1/remote-auth/users": {
+   "get": {
+    "operationId": "users_api_v1_remote_auth_users_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "title": "Response Users Api V1 Remote Auth Users Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Users"
+   },
+   "post": {
+    "operationId": "create_user_api_v1_remote_auth_users_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateUserRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Create User Api V1 Remote Auth Users Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Create User"
+   }
+  },
+  "/api/v1/remote-auth/users/{user_id}": {
+   "delete": {
+    "operationId": "delete_user_api_v1_remote_auth_users__user_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Delete User"
+   },
+   "patch": {
+    "operationId": "update_user_api_v1_remote_auth_users__user_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UpdateUserRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update User"
+   }
+  },
+  "/api/v1/settings": {
+   "get": {
+    "operationId": "settings_api_v1_settings_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SettingsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Settings"
+   },
+   "put": {
+    "operationId": "update_settings_api_v1_settings_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PersistentSettings-Input"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SettingsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Settings"
+   }
+  },
+  "/api/v1/state": {
+   "get": {
+    "operationId": "state_api_v1_state_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApplicationState"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "State"
+   }
+  }
+ }
+}

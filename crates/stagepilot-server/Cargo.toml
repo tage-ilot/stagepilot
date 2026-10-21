@@ -1,0 +1,59 @@
+[package]
+name = "stagepilot-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "stagepilot-server"
+path = "src/main.rs"
+
+[features]
+# Real MIDI hardware through midir (see crates/stagepilot-midi). Off by default so a plain
+# `cargo build`/`cargo test` works where ALSA headers are missing (the Linux CI runner).
+midir-backend = ["stagepilot-midi/midir-backend"]
+
+[dependencies]
+stagepilot-core = { path = "../stagepilot-core" }
+stagepilot-pco = { path = "../stagepilot-pco" }
+stagepilot-remote = { path = "../stagepilot-remote" }
+serde_path_to_error = "0.1"
+url = "2"
+stagepilot-playback = { path = "../stagepilot-playback" }
+stagepilot-midi = { path = "../stagepilot-midi" }
+stagepilot-osc = { path = "../stagepilot-osc" }
+stagepilot-lights = { path = "../stagepilot-lights" }
+stagepilot-propresenter = { path = "../stagepilot-propresenter" }
+async-trait = "0.1.89"
+axum = { version = "0.8.9", features = ["ws"] }
+chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }
+futures-util = "0.3.34"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tempfile = "3.23.1"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+chrono-tz = "0.10"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+hex = "0.4"
+httpdate = "1"
+md-5 = "0.10"
+percent-encoding = "2"
+mime_guess = "2"
+# Diagnostics upload (rustls with the pure `ring` provider, as the other HTTP clients here).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "0.10.9"
+subtle = "2.6.1"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tokio-tungstenite = "0.27"
+tower = { version = "0.5", features = ["util"] }

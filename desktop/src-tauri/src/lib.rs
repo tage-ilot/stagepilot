@@ -16,6 +16,7 @@ use tauri::{
     Emitter, Manager, RunEvent, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
+#[cfg(not(feature = "in-process"))]
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
     ShellExt,
@@ -38,6 +39,7 @@ mod pco_oauth;
 const DEFAULT_PORT: u16 = 8765;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const PROBE_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 const RECENT_BACKEND_LINES: usize = 32;
 // A single rotation (keeping .log.1) is enough headroom for a rapid crash
 // loop: at RECENT_BACKEND_LINES=32 lines per failure plus the structured
@@ -134,6 +136,8 @@ enum BackendFailureKind {
     PortOccupied,
     SidecarMissing,
     SidecarExited,
+    /// The in-process server (cargo feature `in-process`) ended on its own.
+    ServerExited,
     MacosCodeSigning,
     Timeout,
 }
@@ -199,8 +203,13 @@ struct BackendSupervisorStatus {
 #[derive(Clone)]
 struct BackendSupervisor {
     status: Arc<Mutex<BackendSupervisorStatus>>,
+    #[cfg(not(feature = "in-process"))]
     child: Arc<Mutex<Option<CommandChild>>>,
+    #[cfg(not(feature = "in-process"))]
     child_pid: Arc<Mutex<Option<u32>>>,
+    /// The in-process server (cargo feature `in-process`): the counterpart of `child`.
+    #[cfg(feature = "in-process")]
+    embedded: Arc<Mutex<Option<stagepilot_server::embedded::EmbeddedServer>>>,
     /// Timestamps of recent classified failures, used for crash-loop
     /// detection. In-memory only; cleared/pruned on a rolling window.
     failure_history: Arc<Mutex<VecDeque<Instant>>>,
@@ -221,8 +230,12 @@ impl BackendSupervisor {
                 failure_kind: None,
                 log_path: None,
             })),
+            #[cfg(not(feature = "in-process"))]
             child: Arc::new(Mutex::new(None)),
+            #[cfg(not(feature = "in-process"))]
             child_pid: Arc::new(Mutex::new(None)),
+            #[cfg(feature = "in-process")]
+            embedded: Arc::new(Mutex::new(None)),
             failure_history: Arc::new(Mutex::new(VecDeque::new())),
             crash_loop_armed: Arc::new(Mutex::new(false)),
         }
@@ -334,6 +347,22 @@ impl BackendSupervisor {
         let _ = self.terminate_child();
     }
 
+    /// Stops the in-process server gracefully (axum drains, then Remote, plugins and the state
+    /// service stop in reverse order); aborts it after `DEFAULT_STOP_GRACE`.
+    #[cfg(feature = "in-process")]
+    fn terminate_child(&self) -> Result<(), String> {
+        let server = self
+            .embedded
+            .lock()
+            .expect("backend embedded-server lock poisoned")
+            .take();
+        if let Some(server) = server {
+            server.stop(stagepilot_server::embedded::DEFAULT_STOP_GRACE);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(feature = "in-process"))]
     fn terminate_child(&self) -> Result<(), String> {
         let pid = self
             .child_pid
@@ -369,6 +398,7 @@ impl BackendSupervisor {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn direct_child_process_ids(parent_pid: u32) -> Vec<u32> {
     let Ok(output) = std::process::Command::new("/usr/bin/pgrep")
         .args(["-P", &parent_pid.to_string()])
@@ -386,6 +416,7 @@ fn direct_child_process_ids(parent_pid: u32) -> Vec<u32> {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn descendant_process_ids(parent_pid: u32) -> Vec<u32> {
     fn collect(parent_pid: u32, descendants: &mut Vec<u32>) {
         for child_pid in direct_child_process_ids(parent_pid) {
@@ -400,6 +431,7 @@ fn descendant_process_ids(parent_pid: u32) -> Vec<u32> {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn process_exists(pid: u32) -> bool {
     std::process::Command::new("/bin/kill")
         .args(["-0", &pid.to_string()])
@@ -408,6 +440,7 @@ fn process_exists(pid: u32) -> bool {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn signal_process(pid: u32, signal: &str) {
     let _ = std::process::Command::new("/bin/kill")
         .args([signal, &pid.to_string()])
@@ -415,6 +448,7 @@ fn signal_process(pid: u32, signal: &str) {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn terminate_process_tree(root_pid: u32) {
     let mut process_ids = descendant_process_ids(root_pid);
     process_ids.push(root_pid);
@@ -718,10 +752,12 @@ fn crash_loop_qualifies(history: &VecDeque<Instant>) -> bool {
     history.len() >= CRASH_LOOP_THRESHOLD
 }
 
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn recent_backend_text(lines: &VecDeque<String>) -> String {
     lines.iter().cloned().collect::<Vec<_>>().join("\n")
 }
 
+#[cfg_attr(feature = "in-process", allow(dead_code))]
 fn backend_exit_failure(
     code: Option<i32>,
     recent_output: &str,
@@ -789,39 +825,13 @@ fn wait_for_backend(
     });
 }
 
-fn start_backend(app: &tauri::AppHandle, supervisor: BackendSupervisor) -> Result<(), String> {
-    let port = supervisor.snapshot().port;
-    match probe_port(port) {
-        PortProbe::StagePilot => {
-            supervisor.update(
-                app,
-                BackendState::External,
-                format!("Connected to an existing StagePilot backend on port {port}."),
-                false,
-            );
-            return Ok(());
-        }
-        PortProbe::Occupied => {
-            supervisor.fail(
-                app,
-                BackendFailureKind::PortOccupied,
-                format!("Port {port} is already in use by another application."),
-                false,
-                None,
-            );
-            return Ok(());
-        }
-        PortProbe::Available => {}
-    }
-
-    let lan_access_enabled = fs::read_to_string(settings_path())
-        .ok()
-        .is_some_and(|settings| lan_access_from_settings(&settings));
-    let bind_host = if lan_access_enabled {
-        "0.0.0.0"
-    } else {
-        "127.0.0.1"
-    };
+#[cfg(not(feature = "in-process"))]
+fn spawn_backend(
+    app: &tauri::AppHandle,
+    supervisor: &BackendSupervisor,
+    port: u16,
+    bind_host: &str,
+) -> Result<Option<String>, String> {
     let command = app
         .shell()
         .sidecar("stagepilot-backend")
@@ -930,29 +940,15 @@ fn start_backend(app: &tauri::AppHandle, supervisor: BackendSupervisor) -> Resul
                         );
                         let (kind, message) =
                             backend_exit_failure(payload.code, &recent, event_log_path.as_deref());
-                        write_crash_log_entry(
-                            event_log_path.as_deref(),
+                        record_backend_failure(
+                            &event_app,
+                            &event_supervisor,
                             &event_app_version,
-                            kind.clone(),
-                            &message,
+                            event_log_path.clone(),
+                            kind,
+                            message,
                             &recent,
                         );
-                        event_supervisor.fail(
-                            &event_app,
-                            kind.clone(),
-                            message.clone(),
-                            true,
-                            event_log_path.clone(),
-                        );
-                        if event_supervisor.note_failure_and_check_crash_loop(Instant::now()) {
-                            let _ = event_app.emit(
-                                "stagepilot://backend-crash-loop-detected",
-                                CrashLoopDetected {
-                                    failure_kind: kind,
-                                    message,
-                                },
-                            );
-                        }
                     }
                     break;
                 }
@@ -960,6 +956,162 @@ fn start_backend(app: &tauri::AppHandle, supervisor: BackendSupervisor) -> Resul
             }
         }
     });
+    Ok(backend_log_path_text)
+}
+
+/// The `in-process` counterpart of the sidecar spawn: the same environment contract, but the
+/// server runs as tasks inside this process (`stagepilot-server`), so there is no child to
+/// signal. Differences from the sidecar are documented in docs/rust-migration/phase6-remaining.md.
+#[cfg(feature = "in-process")]
+fn spawn_backend(
+    app: &tauri::AppHandle,
+    supervisor: &BackendSupervisor,
+    port: u16,
+    bind_host: &str,
+) -> Result<Option<String>, String> {
+    // The server reads its configuration from the environment, exactly as the sidecar does; in
+    // process it is this process's environment.
+    env::set_var("STAGEPILOT_HOST", bind_host);
+    env::set_var("STAGEPILOT_PORT", port.to_string());
+    env::set_var("STAGEPILOT_SETTINGS_PATH", settings_path());
+    env::set_var(
+        "STAGEPILOT_DESKTOP_REMOTE_ROOT",
+        app.path()
+            .app_data_dir()
+            .map_err(|error| format!("Unable to resolve desktop Remote state: {error}"))?
+            .join("remote"),
+    );
+    env::set_var(
+        "STAGEPILOT_CLOUDFLARED_BINARY",
+        app.path()
+            .resource_dir()
+            .map_err(|error| format!("Unable to resolve bundled cloudflared: {error}"))?
+            .join(if cfg!(target_os = "windows") {
+                "cloudflared.exe"
+            } else {
+                "cloudflared"
+            }),
+    );
+    env::set_var("STAGEPILOT_PCO_CLIENT_ID", env!("STAGEPILOT_PCO_CLIENT_ID"));
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let broker = app.state::<NativeCredentialBroker>();
+        env::set_var("STAGEPILOT_CREDENTIAL_BROKER_ORIGIN", &broker.origin);
+        env::set_var("STAGEPILOT_CREDENTIAL_BROKER_TOKEN", &broker.authorization);
+    }
+
+    let backend_log_path = app
+        .path()
+        .app_log_dir()
+        .ok()
+        .map(|directory| directory.join("stagepilot-backend.log"));
+    let backend_log_path_text = backend_log_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
+    if let Some(path) = backend_log_path.as_ref() {
+        if let Some(directory) = path.parent() {
+            let _ = fs::create_dir_all(directory);
+        }
+        rotate_backend_log(path);
+    }
+    let (server, reports) = stagepilot_server::embedded::EmbeddedServer::start(
+        bind_host.to_string(),
+        port,
+        backend_log_path,
+    )
+    .map_err(|error| format!("Unable to start the embedded StagePilot server: {error}"))?;
+    *supervisor
+        .embedded
+        .lock()
+        .expect("backend embedded-server lock poisoned") = Some(server);
+
+    // The server ends on its own only when it crashes or fails to start (a requested stop sends
+    // no report), so this is the in-process analogue of the sidecar's `Terminated` event.
+    let event_app = app.clone();
+    let event_supervisor = supervisor.clone();
+    let event_log_path = backend_log_path_text.clone();
+    let event_app_version = app.package_info().version.to_string();
+    std::thread::spawn(move || {
+        let Ok(report) = reports.recv() else { return };
+        if managed_exit_should_fail(&event_supervisor.snapshot().state) {
+            record_backend_failure(
+                &event_app,
+                &event_supervisor,
+                &event_app_version,
+                event_log_path,
+                BackendFailureKind::ServerExited,
+                report.message(),
+                "",
+            );
+        }
+    });
+    Ok(backend_log_path_text)
+}
+
+/// Shared failure path for both variants: structured crash-log entry, `Failed` status event,
+/// crash-loop detection.
+fn record_backend_failure(
+    app: &tauri::AppHandle,
+    supervisor: &BackendSupervisor,
+    app_version: &str,
+    log_path: Option<String>,
+    kind: BackendFailureKind,
+    message: String,
+    recent_output: &str,
+) {
+    write_crash_log_entry(
+        log_path.as_deref(),
+        app_version,
+        kind.clone(),
+        &message,
+        recent_output,
+    );
+    supervisor.fail(app, kind.clone(), message.clone(), true, log_path);
+    if supervisor.note_failure_and_check_crash_loop(Instant::now()) {
+        let _ = app.emit(
+            "stagepilot://backend-crash-loop-detected",
+            CrashLoopDetected {
+                failure_kind: kind,
+                message,
+            },
+        );
+    }
+}
+
+fn start_backend(app: &tauri::AppHandle, supervisor: BackendSupervisor) -> Result<(), String> {
+    let port = supervisor.snapshot().port;
+    match probe_port(port) {
+        PortProbe::StagePilot => {
+            supervisor.update(
+                app,
+                BackendState::External,
+                format!("Connected to an existing StagePilot backend on port {port}."),
+                false,
+            );
+            return Ok(());
+        }
+        PortProbe::Occupied => {
+            supervisor.fail(
+                app,
+                BackendFailureKind::PortOccupied,
+                format!("Port {port} is already in use by another application."),
+                false,
+                None,
+            );
+            return Ok(());
+        }
+        PortProbe::Available => {}
+    }
+
+    let lan_access_enabled = fs::read_to_string(settings_path())
+        .ok()
+        .is_some_and(|settings| lan_access_from_settings(&settings));
+    let bind_host = if lan_access_enabled {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
+    let backend_log_path_text = spawn_backend(app, &supervisor, port, bind_host)?;
     wait_for_backend(app.clone(), supervisor, port, backend_log_path_text);
     Ok(())
 }
