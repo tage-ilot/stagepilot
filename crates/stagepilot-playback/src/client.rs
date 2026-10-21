@@ -540,6 +540,7 @@ async fn run(
             if options.host_override.is_some() {
                 source = Some(DiscoverySource::Manual);
             }
+            tracing::info!(target: "playback", host = %host, port = options.port, "playback_connected");
             last_good = Some(host.clone());
             last_source = source;
             let generation = {
@@ -616,7 +617,18 @@ async fn run(
         *shared.generation.lock().unwrap() += 1;
         let stopping = *stop.borrow();
         if let (Err(err), false) = (&result, stopping) {
-            let (class, _detail, _step) = classify_error(&err.probe_error());
+            let (class, detail, step) = classify_error(&err.probe_error());
+            // One line per failed attempt (Python logs `playback_connect_failed`); without it a
+            // client stuck against half-closed sockets looks silent (rig D finding).
+            tracing::warn!(
+                target: "playback",
+                host = %host,
+                port = options.port,
+                class = ?class,
+                step = ?step,
+                retry_in_ms = options.reconnect_delay.as_millis() as u64,
+                "playback_connect_failed: {detail}"
+            );
             // A saved address that fails at once may be the OS refusing all local-network use.
             let blocked = matches!(class, ErrorClass::PermissionDenied | ErrorClass::NoRoute)
                 && blocked_check().await;
