@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Semantically validate that Actions jobs use the correct runner policy.
 
-Policy: Linux jobs must stay pinned to the self-hosted Linux runner
-(`[self-hosted, stagepilot-linux]`) — that runner is free, fast, and already
-proven, so Linux jobs must never silently drift onto a paid hosted
-`ubuntu-*` runner. Native Windows/macOS jobs, however, run on GitHub-hosted
-runners now that the repository is public (hosted Actions minutes are free
-and unlimited for public repos on standard runners), so those jobs may use
-hosted `windows-*`/`macos-*` labels.
+Policy: the repository is public, so GitHub-hosted standard runners are free
+and unlimited. Pull-request CI (`ci.yml`) runs its Linux jobs on the pinned
+hosted image `ubuntu-24.04`, so a dead self-hosted runner can never block a
+PR. Operational workflows (control-plane deploys, release publishing) keep
+the self-hosted Linux runner (`[self-hosted, stagepilot-linux]`) because they
+need its network and credentials, and must never drift onto another label.
+Native Windows/macOS jobs use hosted `windows-*`/`macos-*` labels.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 LINUX_LABELS = ["self-hosted", "stagepilot-linux"]
+HOSTED_LINUX_LABELS = ["ubuntu-24.04"]
+HOSTED_LINUX_WORKFLOWS = {"ci.yml"}
 UBUNTU_LABEL = re.compile(r"^ubuntu-", re.IGNORECASE)
 NATIVE_LABEL = re.compile(r"^(?:windows|macos)-", re.IGNORECASE)
 REQUIRED_ACTIONS = {
@@ -63,10 +65,12 @@ def main() -> None:
             assert isinstance(job, dict), f"{workflow_path.name}:{job_id}: job must be a mapping"
             key = f"{workflow_path.name}:{job_id}"
             job_labels = labels(job.get("runs-on"))
+            hosted_linux = workflow_path.name in HOSTED_LINUX_WORKFLOWS and key not in EXPECTED_NATIVE
             for label in job_labels:
-                assert not UBUNTU_LABEL.match(label), (
-                    f"{key}: Linux jobs must never move to a hosted ubuntu-* runner: {label}"
-                )
+                if not hosted_linux:
+                    assert not UBUNTU_LABEL.match(label), (
+                        f"{key}: only {sorted(HOSTED_LINUX_WORKFLOWS)} may use a hosted ubuntu-* runner: {label}"
+                    )
 
             if key in EXPECTED_NATIVE:
                 native_jobs.append(key)
@@ -79,9 +83,8 @@ def main() -> None:
                 )
             else:
                 linux_jobs.append(key)
-                assert job_labels == LINUX_LABELS, (
-                    f"{key}: Linux job must use exactly {LINUX_LABELS}, got {job_labels}"
-                )
+                want = HOSTED_LINUX_LABELS if hosted_linux else LINUX_LABELS
+                assert job_labels == want, f"{key}: Linux job must use exactly {want}, got {job_labels}"
 
             for step in job.get("steps", []):
                 if isinstance(step, dict) and isinstance(step.get("uses"), str):
