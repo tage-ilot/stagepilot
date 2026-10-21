@@ -20,7 +20,7 @@ env:
 jobs:
   validate:
     name: Validate release
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -201,7 +201,7 @@ jobs:
   publish:
     name: Publish release and updater manifest
     needs: build
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
