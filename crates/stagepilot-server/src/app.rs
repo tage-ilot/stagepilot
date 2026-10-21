@@ -230,7 +230,16 @@ async fn health(State(rt): State<Rt>) -> Json {
     let service_ready = if rt.settings.uses_demo_service() {
         state.service_load.status != ServiceLoadStatus::Error
     } else {
-        production_service_ready(&state, local_date(&rt.settings.timezone))
+        production_service_ready(
+            &state,
+            // The pco contract profile pins the clock (Python patches `routes._current_local_date`);
+            // `PcoOptions::today` is only ever set by tests and that profile.
+            rt.pco
+                .today
+                .as_ref()
+                .map(|f| f(rt.settings.timezone.parse().unwrap_or(chrono_tz::UTC)))
+                .unwrap_or_else(|| local_date(&rt.settings.timezone)),
+        )
     };
     // Playback itself is still a stub (phase 3), so only the simulated source or a connected MIDI
     // input can be "ready" (`runtime.playback_input.connection.connected`).
