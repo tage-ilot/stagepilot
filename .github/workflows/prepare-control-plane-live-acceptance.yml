@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   accept:
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: stagepilot-control-plane
     env:

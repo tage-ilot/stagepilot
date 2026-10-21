@@ -14,7 +14,7 @@ jobs:
     # fail to resolve that binding. Either grant the token R2 permissions, or
     # remove the [[r2_buckets]] block from wrangler.toml before merging if R2
     # is not yet provisioned for this account.
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: control-plane
@@ -31,7 +31,7 @@ jobs:
 
   deploy:
     needs: verify
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     environment: stagepilot-control-plane
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
