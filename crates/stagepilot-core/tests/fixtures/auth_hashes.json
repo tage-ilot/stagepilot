@@ -1,0 +1,8 @@
+{
+  "argon2_hash": "$argon2id$v=19$m=65536,t=3,p=1$3jM46s2NLzzleY4d4GmZmA$cxOMzZgr5E6mxVJoyagqNObj3JRhKh+/JNzI5G7pnXI",
+  "argon2_hash_other": "$argon2id$v=19$m=65536,t=3,p=1$9eCPNABlJukaB4i3pz1Jhw$TVHOIlrOw2+ArTA9c5nPq6VwxOGwISgZlSmRLconndE",
+  "argon2_other_password": "another synthetic passphrase",
+  "argon2_password": "correct horse battery staple",
+  "pin": "2468",
+  "pin_hash": "pbkdf2_sha256$210000$LicQUcvMO_QKWL-SHAaKzw==$WdU-6EOFivGBG4pbaya-sFLCGhTUvtw8tjYTNpSL6mM="
+}

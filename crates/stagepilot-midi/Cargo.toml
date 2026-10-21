@@ -1,0 +1,36 @@
+[package]
+name = "stagepilot-midi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The hardware backend (midir). Off by default: on Linux midir links ALSA, which needs
+# `libasound2-dev` + `pkg-config`; the Linux CI runner has neither and nothing may be
+# installed there. CI enables it on Windows and both macOS runners. Without it every behaviour is
+# still tested through the in-memory fake. See docs/rust-migration/phase4.md and linux-midi.md.
+midir-backend = ["dep:midir"]
+
+[dependencies]
+stagepilot-core = { path = "../stagepilot-core" }
+async-trait = "0.1.89"
+futures-util = "0.3.34"
+chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }
+hex = "0.4"
+midir = { version = "0.11.1", optional = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.10.9"
+tokio = { version = "1.53.3", features = ["rt", "macros", "time", "sync"] }
+tracing = "0.1.41"
+ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+async-trait = "0.1.89"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "time", "sync"] }

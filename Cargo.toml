@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/stagepilot-core",
+    "crates/stagepilot-pco",
+    "crates/stagepilot-playback",
+    "crates/stagepilot-server",
+    "crates/stagepilot-headless",
+    "crates/stagepilot-midi",
+    "crates/stagepilot-osc",
+    "crates/stagepilot-lights",
+    "crates/stagepilot-propresenter",
+    "crates/stagepilot-remote",
+    "crates/midi-probe",
+]
+# The Tauri shell keeps its own Cargo.lock and is built by the existing desktop jobs.
+exclude = ["desktop/src-tauri"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.98"
+publish = false
+license = "MIT"
+
+# Shared lints: every crate opts in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

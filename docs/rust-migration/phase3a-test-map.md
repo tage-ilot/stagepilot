@@ -1,0 +1,30 @@
+# Playback tests: Python test file to Rust test mapping (phases 3a and 3b)
+
+Python counts are `def test_` counts (parametrised cases expand at run time); Rust counts are `#[test]` / `#[tokio::test]` counts.
+Paths are under `crates/` unless noted.
+
+| Python test file (count) | Rust coverage | Status |
+|---|---|---|
+| test_playback_scan_diagnostics.py (25) | stagepilot-playback/tests/find.rs (46): classification, diagnosed scan, blocked-address detection, find_playback / scan_candidates, on tokio's paused clock | ported |
+| test_playback_arbitration.py (10) | stagepilot-playback/tests/arbiter.rs (19): arbiter and ArbitratedDispatcher with a hand-driven clock; plugin half in tests/plugin.rs (`midi_connected_but_playback_selected_keeps_playback_in_charge`) | ported |
+| test_playback_arrangement.py (20) | stagepilot-playback/tests/arrangement.rs (8): pairing and length alignment; tests/plugin.rs `arrangement_rules_match_python`; HTTP half in stagepilot-server/tests/playback_api.rs (`discovery_over_http_saves_the_order_and_arrangement_follows`, `arrangement_before_a_scan_asks_for_one_first`) | ported |
+| test_playback_lengths.py (15) | stagepilot-playback/tests/lengths.rs (21): quick/precise measurement, restore, refused-while-playing, discovery walk, against SimPlayback on a virtual clock. HTTP half: playback_api.rs `length_routes_answer_the_not_connected_errors`, `restore_needs_confirmation_and_with_nothing_to_restore_is_a_quiet_success` | Playback half ported; the Planning Center write/preview/confirm/restore half is phase 5 (see below) |
+| test_playback_fast_transport.py (23), test_playback_api_transport.py (14) | stagepilot-playback/tests/client.rs (11), transport.rs (4, crafted byte streams), wire_commands.rs (2), replay.rs / real_replay.rs; setting round trip: playback_api.rs `changing_fast_transport_reconfigures_the_client`, playback_settings.rs `fast_transport_and_identity_persist` | ported |
+| test_playback_reconnect.py (12), test_playback_cancellation.py (3), test_playback_fake_harness.py (8) | stagepilot-playback/tests/client.rs, src/client.rs unit tests, src/testkit.rs (FakePlayback / SimPlayback) replace the Python harness; reconnect/align behaviour end to end: stagepilot-server/tests/playback_resume.rs | ported; harness tests are not ported (the Rust fakes have their own use in every test) |
+| test_playback_mapping.py (12) | stagepilot-playback/tests/mapping.rs (12) over `Mapper::observe` / `Mapper::plan`; the dispatch half is in tests/plugin.rs `song_started_drives_the_timer_and_stop_stops_it`, `a_stale_order_never_starts_a_song_but_stop_still_works` | ported |
+| test_playback_resume_mapping.py (14) | stagepilot-server/tests/playback_resume.rs (10): fake Playback -> real client -> mapper -> real state service, through the server runtime | ported, 3 not (see below) |
+| test_playback_settings.py (12) | stagepilot-core/tests/playback_settings.rs (11) over the real `SettingsFileStore` and `SettingsService`; HTTP half: playback_api.rs `settings_validation_matches_pydantic`, `settings_round_trip_and_turning_on_selects_playback`, `the_general_settings_route_cannot_edit_the_song_order` | ported |
+| test_playback_integration.py (19) | stagepilot-playback/tests/plugin.rs (25: lifecycle, discovery, settings, scan) plus stagepilot-server/tests/playback_api.rs (16) for the HTTP half | ported, 6 not (see below) |
+| test_midi_selection_api.py (6) | none | not ported: it tests `/api/v1/midi/input-selection` and the MIDI plugin, which phase 4 (PR #240) owns |
+
+## Not ported, with the reason
+
+* `test_midi_selection_api.py` (all 6): MIDI input selection belongs to the phase 4 MIDI plugin (PR #240).
+* `test_playback_fake_harness.py` / `test_playback_cancellation.py` cases that only test the Python fake's own scripting (`ScriptedFinder`, `FakeClock`): the Rust fakes are plain structs and are exercised by every test that uses them.
+* `test_playback_resume_mapping.py`, three cases not ported: `test_return_while_stopped_on_same_song_resumes_when_playing`, `test_pause_seek_zero_play_is_the_existing_restart`, `test_return_with_stale_order_is_ignored` (the stale-order half is covered by `stale_order_blocks_resume_and_seek_but_pause_still_stops`, the reconnect-while-stale half is not). `test_arbiter_forwards_position_calls_and_dedupes_against_midi` is covered by `tests/arbiter.rs`. These are gaps in the Rust suite, not behaviour differences; no Rust test asserts them yet.
+* `test_playback_integration.py`, not ported: `test_migrated_install_starts_playback_and_retains_midi_alternative` and `test_scan_switches_explicit_midi_install_and_keeps_midi_settings` (need the real MIDI plugin, phase 4); `test_reconnect_revalidates_and_source_switch_closes_old_listeners`, `test_fake_transport_replay_latency_and_single_dispatch`, `test_pending_start_dropped_across_disconnect_without_invalidating_order`, `test_load_identity_saved_at_discovery_and_same_version_change_stales` (the Rust plugin's reconnect, single-dispatch and generation rules are covered by `queued_observations_die_with_their_generation_and_during_discovery` in `mapping.rs`, `reconnects_after_the_connection_drops` and the discovery tests in `plugin.rs`, but there is no one-to-one port of these four).
+* Planning Center length writer (`planning_center_lengths` service): `preview`, `confirm`, `restore` with real records and `categories` need the Planning Center client, which is phase 5 (`stagepilot-pco`). The routes exist and answer exactly what Python answers while Planning Center is not connected.
+
+## Timing
+
+Discovery, arbiter and lengths tests use tokio's paused clock or a hand-set clock. The tests that need a real socket (`plugin.rs`, `playback_api.rs`, `playback_resume.rs`) poll for the condition they need and return as soon as it holds, with a 15 s ceiling; there is no sleep that a slow runner could outrun and no assertion on elapsed wall time. The one fixed delay left in `plugin.rs` (`a_stale_order_never_starts_a_song_but_stop_still_works`, 400 ms) is a negative check ("nothing happened") whose outcome cannot flip on a slow runner.

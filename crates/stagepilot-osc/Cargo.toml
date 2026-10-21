@@ -1,0 +1,18 @@
+[package]
+name = "stagepilot-osc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+stagepilot-core = { path = "../stagepilot-core" }
+rosc = "0.11.4"
+
+[dev-dependencies]
+serde_json = "1.0.154"
+hex = "0.4"
