@@ -946,7 +946,13 @@ pub struct OsKeychain {
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 impl OsKeychain {
     fn entry(&self) -> Result<keyring::Entry, keyring::Error> {
-        keyring::Entry::new(KEYRING_SERVICE, &self.account)
+        // Rig verification A: STAGEPILOT_KEYRING_SERVICE points a test run at its own scratch
+        // keychain service so it never touches the real StagePilot items.
+        let service = std::env::var("STAGEPILOT_KEYRING_SERVICE")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| KEYRING_SERVICE.to_string());
+        keyring::Entry::new(&service, &self.account)
     }
 }
 
