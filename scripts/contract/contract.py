@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
-from scenarios import OUTPUT_SCENARIOS, SCENARIOS, Step  # noqa: E402
+from scenarios import LIGHTKEY_SCENARIOS, OUTPUT_SCENARIOS, SCENARIOS, Step  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "contract"
@@ -66,6 +66,7 @@ def _is_uuid(value: Any) -> bool:
 
 
 MOCK_PORT: list[int] = []  # the mock ProPresenter port of this run (outputs profile)
+LK_PORT: list[int] = []  # the fake lightkey-api port of this run (lightkey profile)
 
 
 # The mock Planning Center profile pins "today" here (pco_app.TODAY), whatever the wall clock says.
@@ -116,6 +117,8 @@ def normalise(node: Any) -> Any:
     if isinstance(node, str) and node in today_values():
         # Plan dates are "today" (or the pinned PCO date); the transcripts must not expire.
         return "<today>"
+    if isinstance(node, str) and LK_PORT and f"127.0.0.1:{LK_PORT[0]}" in node:
+        return node.replace(f"127.0.0.1:{LK_PORT[0]}", "127.0.0.1:<lightkey_port>")
     return node
 
 
@@ -527,6 +530,51 @@ def record_outputs() -> list[dict[str, Any]]:
         MOCK_PORT[:] = []
 
 
+def record_lightkey() -> list[dict[str, Any]]:
+    """Run the lightkey profile against the Python app served over real HTTP on loopback.
+
+    Like the pco profile it is recorded exactly the way it is replayed: through a real server,
+    because the Lightkey link polls in the background and needs the app's event loop running
+    between requests. The Lightkey agent is the fake in `mock_lightkey.py`.
+    """
+
+    import socket
+    import threading
+    import time
+
+    import lightkey_app
+    import mock_lightkey
+    import uvicorn
+
+    agent, agent_port = mock_lightkey.start()
+    LK_PORT[:] = [agent_port]
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(lightkey_app.create(agent_port), host="127.0.0.1", port=port, log_level="warning")
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.1)
+    try:
+        return normalise(
+            run(
+                Live(f"http://127.0.0.1:{port}"),
+                LIGHTKEY_SCENARIOS,
+                {"mock_url": f"http://127.0.0.1:{agent_port}", "mock_port": agent_port},
+            )
+        )
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+        agent.shutdown()
+        LK_PORT[:] = []
+
+
 def cmd_record(_: argparse.Namespace) -> int:
     transport = InProcess()
     try:
@@ -536,6 +584,7 @@ def cmd_record(_: argparse.Namespace) -> int:
     document = _dump(transcripts)
     pco_steps = record_pco()
     outputs = record_outputs()
+    lightkey = record_lightkey()
     remote_steps, static_steps = record_remote()
     diagnostics_steps = record_diagnostics()
     document["pco_steps"] = pco_steps
@@ -543,6 +592,7 @@ def cmd_record(_: argparse.Namespace) -> int:
     document["remote_steps"] = remote_steps
     document["diagnostics_steps"] = diagnostics_steps
     document["static_steps"] = static_steps
+    document["lightkey_steps"] = lightkey
     OUT.mkdir(exist_ok=True)
     TRANSCRIPTS.write_text(
         json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
@@ -550,7 +600,7 @@ def cmd_record(_: argparse.Namespace) -> int:
     )
     print(
         f"recorded {len(transcripts)} steps + {len(pco_steps)} pco steps + {len(outputs)} output steps"
-        f" + {len(remote_steps)} remote + {len(diagnostics_steps)} diagnostics + {len(static_steps)} static steps"
+        f" + {len(remote_steps)} remote + {len(diagnostics_steps)} diagnostics + {len(static_steps)} static + {len(lightkey)} lightkey steps"
         f" -> {TRANSCRIPTS.relative_to(ROOT)}"
     )
     return 0
@@ -581,7 +631,12 @@ def cmd_replay(args: argparse.Namespace) -> int:
             copy.deepcopy(remote_profile.run(scenarios_for[args.profile], urls, args.mock_url))
         )
     else:
-        if args.profile == "outputs":
+        if args.profile == "lightkey":
+            golden = document["lightkey_steps"]
+            scenarios = LIGHTKEY_SCENARIOS
+            ctx = {"mock_url": args.mock_url, "mock_port": int(args.mock_url.rsplit(":", 1)[1])}
+            LK_PORT[:] = [ctx["mock_port"]]
+        elif args.profile == "outputs":
             golden = document["output_steps"]
             scenarios = OUTPUT_SCENARIOS
             ctx = {"mock_url": args.mock_url, "mock_port": int(args.mock_url.rsplit(":", 1)[1])}
@@ -624,7 +679,7 @@ def main() -> int:
     sub.add_parser("openapi").set_defaults(fn=cmd_openapi)
     rp = sub.add_parser("replay")
     rp.add_argument("base_url")
-    rp.add_argument("--profile", choices=["pco", "outputs", "remote", "diagnostics", "static"], default=None)
+    rp.add_argument("--profile", choices=["pco", "outputs", "remote", "diagnostics", "static", "lightkey"], default=None)
     rp.add_argument("--mock-url", default=None, help="mock base URL (pco: Planning Center, outputs: ProPresenter)")
     rp.add_argument("--ingress-url", default=None, help="remote profile: the trusted ingress base URL")
     rp.set_defaults(fn=cmd_replay)

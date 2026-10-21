@@ -62,3 +62,14 @@ Compared headers: `content-type`, `cache-control`, `retry-after`, `accept-ranges
 `content-length` (not for JSON bodies), and the presence of `etag` / `last-modified`; `set-cookie`
 is compared with the token and date blanked. The Rust server runs the profiles with
 `--contract-remote` and `--contract-diagnostics`.
+
+## Lightkey flows ("lightkey" profile)
+
+`lightkey_steps` (54 steps) covers the Lightkey record/replay routes: status, settings (partial save, 422 forms, lax booleans), recording
+(armed, refused, too short to keep, discarded), replay start and stop, take clearing, and `POST /lights/settings` keeping the `lightkey`
+block. The app is the demo plan with simulated MIDI and timer output, Lighting on OSC to a loopback port nothing listens on, one seeded take
+for the first demo song, and the Lightkey agent replaced by `scripts/contract/mock_lightkey.py` (a deterministic fake of the read-only
+`lightkey-api`: `GET /time`, `GET /log?since=N`, plus runner-only `/__reset` and `/__change`). Like the pco profile it is recorded from the
+Python app over real HTTP, because the link polls in the background. Python: `serve_python_lightkey.py`; Rust: `stagepilot-server
+--contract-lightkey --lightkey-port N`. Settled states are awaited with `wait` steps; the few values that are a race inside Python (the
+link name right after a settings save, how many seconds a too-short recording captured) are masked.

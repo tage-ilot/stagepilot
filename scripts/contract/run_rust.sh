@@ -4,6 +4,7 @@
 # And the same for the "outputs" profile (fake MIDI, mock ProPresenter, dead-end OSC).
 # And the same for the "remote" and "static" profiles (the trusted remote ingress is a second
 # listener) and the "diagnostics" profile (uploads go to a mock control plane).
+# And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
 # Usage (repo root): scripts/contract/run_rust.sh [PORT]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -15,6 +16,8 @@ REM_PORT=$((PORT + 500))
 ING_PORT=$((PORT + 600))
 DIAG_PORT=$((PORT + 700))
 CTRL_PORT=$((PORT + 800))
+LK_PORT=$((PORT + 900))
+LKMOCK_PORT=$((PORT + 1000))
 MOCK_PORT=$((PORT + 200))
 cargo build -p stagepilot-server
 LOG="$(mktemp)"
@@ -77,3 +80,13 @@ PIDS+=($!)
 wait_for "http://127.0.0.1:$DIAG_PORT/api/v1/health/live"
 uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$DIAG_PORT" \
   --profile diagnostics --mock-url "http://127.0.0.1:$CTRL_PORT"
+
+uv run --project backend --frozen python scripts/contract/mock_lightkey.py "$LKMOCK_PORT" >>"$LOG" 2>&1 &
+PIDS+=($!)
+wait_for "http://127.0.0.1:$LKMOCK_PORT/time"
+./target/debug/stagepilot-server --contract-lightkey --lightkey-port "$LKMOCK_PORT" \
+  --host 127.0.0.1 --port "$LK_PORT" >>"$LOG" 2>&1 &
+PIDS+=($!)
+wait_for "http://127.0.0.1:$LK_PORT/api/v1/health/live"
+uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$LK_PORT" \
+  --profile lightkey --mock-url "http://127.0.0.1:$LKMOCK_PORT"
