@@ -109,6 +109,18 @@ pub fn normalise_bytes(bytes: &[u8]) -> Option<MidiMessage> {
     })
 }
 
+/// True when this build can talk to MIDI hardware (the `midir-backend` feature).
+pub const HARDWARE_SUPPORT: bool = cfg!(feature = "midir-backend");
+
+/// Name of the compiled-in MIDI backend, for `--version` and startup logs: `midir`, or `none`.
+pub fn backend_name() -> &'static str {
+    if HARDWARE_SUPPORT {
+        "midir"
+    } else {
+        "none"
+    }
+}
+
 /// The MIDI backend selected at build time: `midir` with the `midir-backend` feature, otherwise
 /// an error saying the build has no MIDI hardware support (the plugin then reports an error and
 /// the supervisor retries, exactly as it would for any backend that cannot start).

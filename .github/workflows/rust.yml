@@ -127,6 +127,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+      # The shipped headless binary must carry the MIDI backend: without it, MIDI settings make
+      # startup fail, and `--version` says `midi-backend: none`. Fail the build if it does.
+      - name: stagepilot-headless lists the midir MIDI backend
+        shell: bash
+        run: |
+          cargo build --release -p stagepilot-headless --features midir-backend
+          bin=target/release/stagepilot-headless
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          "$bin" --version | tee -a "$GITHUB_STEP_SUMMARY"
+          "$bin" --version | grep -qx 'midi-backend: midir'
+
       - name: midir port listing (no MIDI is sent)
         shell: bash
         run: cargo run --release -p midi-probe | tee -a "$GITHUB_STEP_SUMMARY"
@@ -154,6 +165,11 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace --exclude midi-probe
+
+      # The default (no ALSA) build must say so loudly rather than look MIDI-capable.
+      - name: stagepilot-headless reports no MIDI backend without the feature
+        run: |
+          cargo run -q -p stagepilot-headless -- --version | tee /dev/stderr | grep -qx 'midi-backend: none'
 
       - name: Generated TypeScript is current
         run: |

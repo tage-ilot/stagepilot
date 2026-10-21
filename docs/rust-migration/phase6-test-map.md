@@ -10,29 +10,29 @@ Every file under `backend/tests` appears once below (counts are `def test_` per 
 | test_dashboard_auth.py (4) | stagepilot-server/tests/api.rs | ported |
 | test_diagnostics_api.py (7) | stagepilot-server/tests/remote.rs | ported (see rows below) |
 | test_event_bus.py (6) | stagepilot-core/tests/runtime_behaviour.rs | ported |
-| test_keychain_access.py (4) | stagepilot-core/src/settings.rs keychain store (one read per launch, no read when unconfigured) | not ported as a test: needs a fake `keyring` backend. Behaviour is the same by construction; open |
+| test_keychain_access.py (4) | stagepilot-core/src/settings.rs keychain store (one read per launch, no read when unconfigured) | ported: `KeychainBackend` seam with a counting fake (`settings.rs` `keychain_tests`): one read per launch, no read when unconfigured, cache follows writes/removals |
 | test_lights_api.py (8), test_midi_config_api.py (11), test_propresenter_api.py (4) | contract profile `outputs` (75 steps) and stagepilot-lights/-midi/-propresenter plugin tests | ported via contract |
 | test_lights_osc.py (21), test_lights_plugin.py (15) | stagepilot-osc/tests/golden_packets.rs, stagepilot-lights/tests/plugin_behaviour.rs | ported (phase4-test-map.md) |
-| test_lights_settings.py (2) | stagepilot-core settings round trip, contract `outputs` | ported via contract; no dedicated test, open |
-| test_logging.py (1) | none | not ported: `redact_secrets` has no Rust counterpart yet (Rust logs go through `tracing`; the server logs no credentials). Open |
+| test_lights_settings.py (2) | stagepilot-core settings round trip, contract `outputs` | ported: `stagepilot-core/tests/lights_settings.rs` (plus contract `outputs`) |
+| test_logging.py (1) | none | ported: `stagepilot-core/src/redact.rs` (`redact_secrets` equivalent) with its unit tests |
 | test_midi_client.py (7) | stagepilot-midi/src/lib.rs, output.rs unit tests | n/a for the `mido` backend (Python library); Rust uses `midir` behind a trait and the in-memory fake |
 | test_midi_config_api.py, test_midi_plugin.py (14), test_midi_selection_api.py (6) | stagepilot-midi/tests/plugin_behaviour.rs, contract `outputs` | ported |
 | test_plan_cache.py (4) | stagepilot-pco/tests/plan_cache.rs (5) | ported in 6c |
 | test_planning_center_client.py (19), _plan_discovery.py (22) | stagepilot-pco/tests/client.rs (47) | ported (phase 5) |
 | test_planning_center_oauth.py (16) | stagepilot-pco/tests/oauth.rs (23) | ported (phase 5) |
 | test_planning_center_oauth_api.py (9), _setup_api.py (4), _setup_oauth_refresh.py (3), _settings_async.py (1), _settings_live_apply.py (1), _lengths_api.py (7) | contract profile `pco` (96 steps) and its request log | ported via contract; no dedicated Rust test, open |
-| test_planning_center_lengths.py (21), _lengths_retry.py (4) | stagepilot-pco/tests/client.rs (item PATCH/undo cases) | ported in part; retry-queue cases open |
-| test_planning_center_plugin.py (39), _multi_type_integration.py (3) | stagepilot-pco/src/plugin.rs behaviour through the `pco` contract profile | not ported as unit tests; open |
+| test_planning_center_lengths.py (21), _lengths_retry.py (4) | stagepilot-pco/tests/client.rs (item PATCH/undo cases) | ported: client.rs (item PATCH/undo) and `stagepilot-pco/tests/lengths_retry.rs` (retry/reconcile cases) |
+| test_planning_center_plugin.py (39), _multi_type_integration.py (3) | stagepilot-pco/src/plugin.rs behaviour through the `pco` contract profile | ported in part: `stagepilot-pco/tests/plugin.rs` (startup, not-found, safe failure, missing credentials, stop, reconfigure) plus the `pco` contract profile; the cache-expiry and reload-ordering cases remain covered only by `plan_cache.rs`, the contract and `src/plugin.rs` |
 | test_playback_*.py (14 files) | see phase3a-test-map.md | ported |
 | test_plugin_manager.py (4), test_runtime_plugin_lifecycle.py (5) | stagepilot-core/tests/runtime_behaviour.rs | ported |
 | test_propresenter_client.py (8), _plugin.py (4), _recovery.py (4), _config.py (3) | stagepilot-propresenter/tests/client_http.rs, plugin_behaviour.rs | ported (config: models.rs unit tests) |
 | test_rate_anomaly.py (9) | none | not applicable for now: `services/rate_anomaly.py` is imported by no application module (only by its test), so no running code path depends on it. Port when it is wired into the app |
 | test_remote_*.py (13 files) | stagepilot-remote/tests/*.rs, stagepilot-server/tests/remote.rs, stagepilot-server/tests/launch.rs | ported (tables below) |
-| test_restartless_midi.py (6), _presentation.py (9), _serialised.py (5), _services.py (7) | stagepilot-server/tests/api.rs (service source refusal), stagepilot-midi/-propresenter plugin tests, contract `outputs` and `pco` live-apply steps | ported in part; the serialisation-order cases are open |
+| test_restartless_midi.py (6), _presentation.py (9), _serialised.py (5), _services.py (7) | stagepilot-server/tests/api.rs (service source refusal), stagepilot-midi/-propresenter plugin tests, contract `outputs` and `pco` live-apply steps | ported: the serialisation cases are `stagepilot-server/tests/serialised.rs` (presentation storm, timer-running 409); the Services/MIDI storm variants rely on the single `pco.lock` / `reconcile` serialisation and stay covered by api.rs and the contract |
 | test_runtime_plugin_lifecycle.py (5) | stagepilot-core/tests/runtime_behaviour.rs | ported |
 | test_settings_persistence.py (15) | stagepilot-core/tests/settings_compat.rs (19) | ported |
 | test_startup_activation.py (2) | stagepilot-server/tests/launch.rs `activation::*` (3) | ported in 6c |
-| test_state_models.py (10) | stagepilot-core/tests/python_contract.rs, state.rs serde | not applicable: these are pydantic validators; Rust types plus serde enforce the shape. Cases about the load-state invariants are open |
+| test_state_models.py (10) | stagepilot-core/tests/python_contract.rs, state.rs serde | not applicable: these are pydantic validators; Rust types plus serde enforce the shape. Load-state invariants ported: `stagepilot-core/tests/service_load_state.rs` |
 | test_state_service.py (40) | stagepilot-core/tests/runtime_behaviour.rs | ported |
 | conftest.py, playback_fake.py | stagepilot-playback/src/testkit.rs | not applicable: Python fixtures |
 
