@@ -13,7 +13,7 @@
 A plain `gcc` toolchain is also needed to build `alsa-sys`' C shim (the runner has `build-essential`).
 Windows (WinMM) and macOS (CoreMIDI) need nothing extra.
 
-## State of the self-hosted runner (`[self-hosted, stagepilot-linux]`, which is this CT120 host)
+## State of the Linux CI runner (retired 2026-10-21; Linux CI now runs on GitHub-hosted `ubuntu-24.04`)
 
 Checked 2026-10-17, nothing installed or changed:
 
