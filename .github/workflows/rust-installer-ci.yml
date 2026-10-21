@@ -12,6 +12,10 @@ name: Rust installer CI
 
 on:
   workflow_dispatch:
+  # TEMPORARY-FIRST-RUN: a workflow file that is not on main cannot be dispatched yet.
+  push:
+    branches:
+      - feat/rust-installer-prerelease
 
 permissions:
   contents: read
