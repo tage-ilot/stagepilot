@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -19,7 +20,7 @@ function publish(tag, env = {}) {
     const logFile = path.join(dir, "requests.json");
     const result = spawnSync(
       process.execPath,
-      ["--import", path.join(root, "scripts/publish_release_mock_fetch.mjs"), path.join(root, "scripts/publish_release.mjs"), tag, assets],
+      ["--import", pathToFileURL(path.join(root, "scripts/publish_release_mock_fetch.mjs")).href, path.join(root, "scripts/publish_release.mjs"), tag, assets],
       {
         encoding: "utf8",
         env: { ...process.env, GITHUB_REPOSITORY: "tage-ilot/stagepilot", GITHUB_TOKEN: "test-token", MOCK_FETCH_LOG: logFile, ...env },
