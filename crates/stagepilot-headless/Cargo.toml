@@ -15,10 +15,11 @@ path = "src/main.rs"
 
 [features]
 # Real MIDI hardware through midir (see crates/stagepilot-midi).
-midir-backend = ["stagepilot-server/midir-backend"]
+midir-backend = ["stagepilot-server/midir-backend", "stagepilot-midi/midir-backend"]
 
 [dependencies]
 stagepilot-server = { path = "../stagepilot-server" }
+stagepilot-midi = { path = "../stagepilot-midi" }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }

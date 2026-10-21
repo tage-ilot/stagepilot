@@ -36,8 +36,9 @@ fn parse(args: &[String]) -> Parsed {
             "--help" | "-h" => return Parsed::Print(usage().to_string()),
             "--version" | "-V" => {
                 return Parsed::Print(format!(
-                    "stagepilot-headless {}\n",
-                    env!("CARGO_PKG_VERSION")
+                    "stagepilot-headless {}\nmidi-backend: {}\n",
+                    env!("CARGO_PKG_VERSION"),
+                    stagepilot_midi::backend_name()
                 ))
             }
             "--host" => match iter.next() {
@@ -120,6 +121,19 @@ mod tests {
                 port: Some(9000)
             }
         );
+    }
+
+    #[test]
+    fn version_names_the_midi_backend() {
+        let Parsed::Print(text) = parse(&args(&["--version"])) else {
+            panic!("--version prints");
+        };
+        let expected = if cfg!(feature = "midir-backend") {
+            "midi-backend: midir\n"
+        } else {
+            "midi-backend: none\n"
+        };
+        assert!(text.ends_with(expected), "{text}");
     }
 
     #[test]

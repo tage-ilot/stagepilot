@@ -10,6 +10,7 @@ pub mod bus;
 pub mod config;
 pub mod events;
 pub mod plugin;
+pub mod redact;
 pub mod settings;
 pub mod settings_errors;
 pub mod state;

@@ -38,7 +38,7 @@ service. `StdSpawner` also kills a child on drop, so a crash cannot leave a conn
 | In-process shell on a real install: window, tray, updater hand-off (`prepare_for_update` releasing the executable on Windows/NSIS), autostart, macOS Gatekeeper/translocation | needs a real machine on each OS; CI only compiles and runs the unit and lifecycle tests |
 | In-process direct `keyring` credential store | the broker-over-HTTP store is still used in both variants; the direct store needs the real OS keychain on Windows and macOS |
 | Windows job objects / macOS zombie handling for `cloudflared` | needs a real machine on each OS |
-| Python tests with no dedicated Rust port | `test_keychain_access`, `test_logging` (`redact_secrets`), `test_lights_settings`, the PCO API files (covered by the `pco` contract), `test_planning_center_plugin`, `_lengths_retry`, `test_restartless_serialised`, load-state invariants in `test_state_models`. `test_rate_anomaly` is not applicable until the module is wired into the app |
+| ~~Python tests with no dedicated Rust port~~ | Closed: keychain, redact, lights settings, load-state invariants, `_lengths_retry`, `test_planning_center_plugin` (core cases) and `test_restartless_serialised` (presentation cases) are ported; see `phase6-test-map.md` for the exact residue. The PCO API files stay covered by the `pco` contract. `test_rate_anomaly` is not applicable until the module is wired into the app |
 | Command-line entry points of the individual remote modules (`remote_control`, `remote_connector`, ...) | Python runs them as `python -m`; no Rust binary yet. Not needed by the app, which runs them in process |
 | Any real-rig check | the 2026-10-17 rig authorisation has lapsed; rig checks are deferred |
 
@@ -85,3 +85,7 @@ service. `StdSpawner` also kills a child on drop, so a crash cannot leave a conn
 - The headless binary was not run against real saved settings or the OS keychain.
 - Windows file locking (`File::lock`) and the macOS/Windows cargo legs run only in CI.
 - `midi-probe` cannot build on this host (no pkg-config/alsa); the Linux CI job excludes it too.
+
+## Headless MIDI build guard
+
+`stagepilot-headless` built without `--features midir-backend` used to start and silently send no MIDI. Now: `--version` prints `midi-backend: midir|none`, startup logs `stagepilot_midi_backend`, and startup fails with an explicit error when the saved settings use MIDI input or MIDI lights and no backend is compiled in (`midi_build_problem`, tested in `stagepilot-server/tests/launch.rs`). CI builds the release headless with the feature and checks `--version`, and checks that the default build reports `none`.

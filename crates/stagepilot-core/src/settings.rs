@@ -930,31 +930,32 @@ impl CredentialStore for MemoryCredentialStore {
     }
 }
 
-/// OS keychain store. Same service (`StagePilot`) and accounts as the Python app, so a secret
-/// saved by Python is read here and vice versa. Like Python, at most one keychain read per
-/// launch (each read can raise a macOS password prompt); the in-memory copy follows our writes.
-pub struct KeyringCredentialStore {
-    account: String,
-    cache: Mutex<Option<Option<String>>>,
+/// The keychain itself could not be used (locked, denied, missing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeychainUnavailable;
+
+/// One keychain account. The real one is the OS keychain; tests swap in a counting fake.
+pub trait KeychainBackend: Send + Sync {
+    /// `Ok(None)` when no entry exists; `Err` when the keychain itself is unavailable.
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable>;
+    fn write(&self, secret: &str) -> Result<(), KeychainUnavailable>;
+    /// Removing an entry that does not exist is not an error.
+    fn delete(&self) -> Result<(), KeychainUnavailable>;
 }
 
-impl KeyringCredentialStore {
-    pub fn new(account: &str) -> Self {
-        Self {
-            account: account.to_string(),
-            cache: Mutex::new(None),
-        }
-    }
-    pub fn planning_center() -> Self {
-        Self::new(KEYRING_ACCOUNT)
-    }
-    pub fn oauth() -> Self {
-        Self::new(KEYRING_ACCOUNT_OAUTH)
-    }
+/// The OS keychain entry for one account (service `StagePilot`).
+pub struct OsKeychain {
+    #[cfg_attr(
+        not(any(windows, target_os = "macos", target_os = "linux")),
+        allow(dead_code)
+    )]
+    account: String,
+}
 
-    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+impl OsKeychain {
     fn entry(&self) -> Result<keyring::Entry, keyring::Error> {
-        // Rig verification A: STAGEPILOT_KEYRING_SERVICE points a test run at its own scratch
+        // Rig verification: STAGEPILOT_KEYRING_SERVICE points a test run at its own scratch
         // keychain service so it never touches the real StagePilot items.
         let service = std::env::var("STAGEPILOT_KEYRING_SERVICE")
             .ok()
@@ -965,65 +966,95 @@ impl KeyringCredentialStore {
 }
 
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+impl KeychainBackend for OsKeychain {
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+        match self.entry().and_then(|e| e.get_password()) {
+            Ok(v) => Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(_) => Err(KeychainUnavailable),
+        }
+    }
+    fn write(&self, secret: &str) -> Result<(), KeychainUnavailable> {
+        self.entry()
+            .and_then(|e| e.set_password(secret))
+            .map_err(|_| KeychainUnavailable)
+    }
+    fn delete(&self) -> Result<(), KeychainUnavailable> {
+        match self.entry().and_then(|e| e.delete_credential()) {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(KeychainUnavailable),
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+impl KeychainBackend for OsKeychain {
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+        Err(KeychainUnavailable)
+    }
+    fn write(&self, _: &str) -> Result<(), KeychainUnavailable> {
+        Err(KeychainUnavailable)
+    }
+    fn delete(&self) -> Result<(), KeychainUnavailable> {
+        Err(KeychainUnavailable)
+    }
+}
+
+/// OS keychain store. Same service (`StagePilot`) and accounts as the Python app, so a secret
+/// saved by Python is read here and vice versa. Like Python, at most one keychain read per
+/// launch (each read can raise a macOS password prompt); the in-memory copy follows our writes.
+pub struct KeyringCredentialStore {
+    backend: Box<dyn KeychainBackend>,
+    cache: Mutex<Option<Option<String>>>,
+}
+
+impl KeyringCredentialStore {
+    pub fn new(account: &str) -> Self {
+        Self::with_backend(Box::new(OsKeychain {
+            account: account.to_string(),
+        }))
+    }
+    pub fn with_backend(backend: Box<dyn KeychainBackend>) -> Self {
+        Self {
+            backend,
+            cache: Mutex::new(None),
+        }
+    }
+    pub fn planning_center() -> Self {
+        Self::new(KEYRING_ACCOUNT)
+    }
+    pub fn oauth() -> Self {
+        Self::new(KEYRING_ACCOUNT_OAUTH)
+    }
+}
+
 impl CredentialStore for KeyringCredentialStore {
     fn get_secret(&self) -> Result<Option<String>, CredentialStoreError> {
         let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(value) = cache.as_ref() {
             return Ok(value.clone());
         }
-        let value = match self.entry().and_then(|e| e.get_password()) {
-            Ok(v) => Some(v),
-            Err(keyring::Error::NoEntry) => None,
-            Err(_) => {
-                return Err(CredentialStoreError(
-                    "The secure credential store is unavailable.".into(),
-                ))
-            }
-        };
+        let value = self.backend.read().map_err(|_| {
+            CredentialStoreError("The secure credential store is unavailable.".into())
+        })?;
         *cache = Some(value.clone());
         Ok(value)
     }
 
     fn set_secret(&self, secret: &str) -> Result<(), CredentialStoreError> {
-        self.entry()
-            .and_then(|e| e.set_password(secret))
-            .map_err(|_| {
-                CredentialStoreError("The secure credential could not be saved.".into())
-            })?;
+        self.backend.write(secret).map_err(|_| {
+            CredentialStoreError("The secure credential could not be saved.".into())
+        })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(Some(secret.to_string()));
         Ok(())
     }
 
     fn remove_secret(&self) -> Result<(), CredentialStoreError> {
-        match self.entry().and_then(|e| e.delete_credential()) {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(_) => {
-                return Err(CredentialStoreError(
-                    "The secure credential could not be removed.".into(),
-                ))
-            }
-        }
+        self.backend.delete().map_err(|_| {
+            CredentialStoreError("The secure credential could not be removed.".into())
+        })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(None);
         Ok(())
-    }
-}
-
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-impl CredentialStore for KeyringCredentialStore {
-    fn get_secret(&self) -> Result<Option<String>, CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential store is unavailable.".into(),
-        ))
-    }
-    fn set_secret(&self, _: &str) -> Result<(), CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential could not be saved.".into(),
-        ))
-    }
-    fn remove_secret(&self) -> Result<(), CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential could not be removed.".into(),
-        ))
     }
 }
 
@@ -1354,5 +1385,128 @@ pub fn object(value: Value) -> Map<String, Value> {
     match value {
         Value::Object(m) => m,
         _ => Map::new(),
+    }
+}
+
+#[cfg(test)]
+mod keychain_tests {
+    //! `test_keychain_access.py`: every keychain read can raise a macOS password prompt, so reads
+    //! stay minimal.
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    struct FakeKeychain {
+        value: Arc<Mutex<Option<String>>>,
+        reads: Arc<AtomicUsize>,
+    }
+
+    impl FakeKeychain {
+        fn new(value: Option<&str>) -> Self {
+            Self {
+                value: Arc::new(Mutex::new(value.map(str::to_string))),
+                reads: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+        fn reads(&self) -> usize {
+            self.reads.load(Ordering::SeqCst)
+        }
+        fn store(&self) -> KeyringCredentialStore {
+            KeyringCredentialStore::with_backend(Box::new(self.clone()))
+        }
+    }
+
+    impl KeychainBackend for FakeKeychain {
+        fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            Ok(self.value.lock().unwrap().clone())
+        }
+        fn write(&self, secret: &str) -> Result<(), KeychainUnavailable> {
+            *self.value.lock().unwrap() = Some(secret.into());
+            Ok(())
+        }
+        fn delete(&self) -> Result<(), KeychainUnavailable> {
+            *self.value.lock().unwrap() = None;
+            Ok(())
+        }
+    }
+
+    fn service(fake: &FakeKeychain, dir: &tempfile::TempDir) -> SettingsService {
+        SettingsService::new(
+            Box::new(SettingsFileStore::new(dir.path().join("settings.json"))),
+            Box::new(fake.store()),
+            BTreeMap::new(),
+        )
+    }
+
+    #[test]
+    fn repeated_reads_hit_the_keychain_once() {
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let store = fake.store();
+        let got: Vec<_> = (0..5).map(|_| store.get_secret().unwrap()).collect();
+        assert_eq!(got, vec![Some("secret-value".to_string()); 5]);
+        assert_eq!(fake.reads(), 1);
+    }
+
+    #[test]
+    fn cache_follows_our_own_writes_and_removals() {
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let store = fake.store();
+        store.set_secret("new").unwrap();
+        assert_eq!(store.get_secret().unwrap().as_deref(), Some("new"));
+        store.remove_secret().unwrap();
+        assert_eq!(store.get_secret().unwrap(), None);
+        assert_eq!(fake.reads(), 0);
+    }
+
+    #[test]
+    fn no_keychain_read_when_planning_center_is_not_configured() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let service = service(&fake, &dir);
+        service.load();
+        assert_eq!(fake.reads(), 0);
+        service.load();
+        assert_eq!(fake.reads(), 0);
+    }
+
+    #[test]
+    fn configured_planning_center_reads_once_per_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("settings.json"),
+            r#"{"schema_version": 2, "planning_center": {"app_id": "abc"}}"#,
+        )
+        .unwrap();
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let service = service(&fake, &dir);
+        service.load();
+        service.load();
+        assert_eq!(fake.reads(), 1);
+        assert_eq!(
+            service.planning_center_secret().as_deref(),
+            Some("secret-value")
+        );
+    }
+
+    #[test]
+    fn an_unavailable_keychain_is_a_warning_not_a_failure() {
+        struct Broken;
+        impl KeychainBackend for Broken {
+            fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+                Err(KeychainUnavailable)
+            }
+            fn write(&self, _: &str) -> Result<(), KeychainUnavailable> {
+                Err(KeychainUnavailable)
+            }
+            fn delete(&self) -> Result<(), KeychainUnavailable> {
+                Err(KeychainUnavailable)
+            }
+        }
+        let store = KeyringCredentialStore::with_backend(Box::new(Broken));
+        assert!(store.get_secret().is_err());
+        assert!(store.set_secret("x").is_err());
+        assert!(store.remove_secret().is_err());
     }
 }
