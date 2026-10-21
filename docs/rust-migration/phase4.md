@@ -28,7 +28,7 @@ service, as Python's arbiter does with no Playback API connected.
 
 ## Why `midir-backend` is optional
 
-The self-hosted Linux runner has no `libasound2-dev`/`pkg-config` and nothing is installed there.
+The Linux CI runner has no `libasound2-dev`/`pkg-config` and nothing is installed there.
 Linux therefore tests all behaviour through fakes; Windows and both macOS runners build and test
 with `--features stagepilot-midi/midir-backend,stagepilot-server/midir-backend`. See
 `linux-midi.md`. The feature was not compiled locally (no ALSA here); CI on the hosted runners is
