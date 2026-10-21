@@ -196,6 +196,14 @@ if [[ "$VARIANT" == "rust" ]]; then
   find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec ls -l {} + >&2 2>/dev/null || true
   find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec rm -f {} + 2>/dev/null || true
 fi
+LAUNCH_HOME="$HOME"
+if [[ "$VARIANT" == "rust" ]]; then
+  # A pristine profile per launch: the app's logs, Remote bootstrap and window state of an earlier
+  # launch (the .app pass) must not influence this one.
+  LAUNCH_HOME="$TEMP_ROOT/home"
+  mkdir -p "$LAUNCH_HOME"
+fi
+HOME="$LAUNCH_HOME" \
 STAGEPILOT_HOST=127.0.0.1 \
 STAGEPILOT_PORT="$PORT" \
 STAGEPILOT_SETTINGS_PATH="$SETTINGS" \
@@ -250,9 +258,9 @@ if [[ "$VARIANT" == "rust" ]]; then
   lsof -nP -a -p "$BACKEND_PID" -i 2>&1 | head -20 >&2 || true
   ls -l /tmp/*org_stagepilot* >&2 2>/dev/null || true
   sample "$BACKEND_PID" 2 -mayDie 2>&1 | head -90 >&2 || true
-  for f in "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
+  for f in "$LAUNCH_HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
     [[ -f "$f" ]] && { echo "== $f" >&2; tail -n 60 "$f" >&2; }
   done
-  find "$HOME/Library/Application Support/org.stagepilot.desktop" -maxdepth 2 2>/dev/null | head -20 >&2 || true
+  find "$LAUNCH_HOME/Library" -maxdepth 3 2>/dev/null | head -20 >&2 || true
 fi
 exit 1

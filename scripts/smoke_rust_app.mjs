@@ -82,6 +82,7 @@ const child = spawn(exe, [], {
     STAGEPILOT_SETTINGS_PATH: settings,
     // The app writes its own log, crash and Remote state under the OS profile directories.
     XDG_CONFIG_HOME: home,
+    ...(process.platform === "darwin" ? { HOME: home } : {}),
   },
 });
 let exitInfo = null;
