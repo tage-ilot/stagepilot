@@ -306,3 +306,117 @@ test("repository does not track private updater key files", () => {
   const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" });
   assert.doesNotMatch(tracked, /\.(key|pem)$/m);
 });
+
+test("pre-release tags are published as pre-releases and can never become Latest", () => {
+  const publisher = read("scripts/publish_release.mjs");
+  assert.match(publisher, /const prerelease = tag\.includes\("-"\)/);
+  assert.match(publisher, /\(\?:-\(\?:alpha\|beta\|rc\)\\\.\\d\+\)\?/, "only alpha/beta/rc suffixes are accepted");
+  assert.match(publisher, /prerelease \? \{ draft: false, prerelease: true \} : \{ draft: false, make_latest: "true" \}/);
+  // make_latest "true" appears exactly once, on the stable-only branch.
+  assert.equal((publisher.match(/make_latest: "true"/g) ?? []).length, 1);
+  // Request-level behaviour is proven with a mocked fetch in scripts/publish_release.test.mjs.
+  assert.match(read("desktop/package.json"), /publish_release\.test\.mjs/);
+});
+
+test("updater manifest tooling accepts a pre-release version and keeps it under its own tag URL", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stagepilot-rc-manifest-"));
+  try {
+    const version = "2.42.0-rc.1";
+    for (const file of [
+      `StagePilot_${version}_aarch64.app.tar.gz`,
+      `StagePilot_${version}_x64.app.tar.gz`,
+      `StagePilot_${version}_x64-setup.exe`,
+    ]) {
+      fs.writeFileSync(path.join(directory, file), "artifact");
+      fs.writeFileSync(path.join(directory, `${file}.sig`), `signature-${file}`);
+    }
+    const base = "https://github.com/tage-ilot/stagepilot/releases/download";
+    execFileSync(process.execPath, [path.join(root, "scripts/generate_updater_manifest.mjs"), directory, `v${version}`, base]);
+    execFileSync(process.execPath, [path.join(root, "scripts/validate_updater_manifest.mjs"), path.join(directory, "latest.json"), directory, base]);
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, "latest.json"), "utf8"));
+    assert.equal(manifest.version, version);
+    for (const entry of Object.values(manifest.platforms)) {
+      assert.ok(entry.url.startsWith(`${base}/v${version}/`), "assets are addressed by the pre-release's own tag");
+    }
+    // latest.json is itself a release asset of v2.42.0-rc.1: it is served from
+    // /releases/download/v2.42.0-rc.1/latest.json, and /releases/latest/download/latest.json only
+    // ever resolves to the newest non-draft, non-pre-release release.
+    const audit = (v) => execFileSync(process.execPath, [path.join(root, "scripts/audit_release.mjs"), "assets", directory, v], { stdio: "pipe" });
+    fs.writeFileSync(path.join(directory, "release-notes.md"), "notes");
+    for (const name of [`StagePilot_${version}_aarch64.dmg`, `StagePilot_${version}_x64.dmg`]) fs.writeFileSync(path.join(directory, name), "dmg");
+    audit(version);
+    assert.throws(() => audit("2.42.0-nightly.1"), /version is required/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("release workflow selects the Rust variant only for pre-release tags", () => {
+  const workflow = read(".github/workflows/release-macos.yml");
+  assert.match(workflow, /variant: \$\{\{ steps\.variant\.outputs\.variant \}\}/);
+  assert.match(workflow, /\^v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$ \]\]; then\s+echo "variant=python"/);
+  assert.match(workflow, /\(alpha\|beta\|rc\)\\\.\[0-9\]\+\$ \]\]; then\s+echo "variant=rust"/);
+  assert.match(workflow, /rust_command: build:mac:rust/);
+  assert.match(workflow, /rust_command: build:rust/);
+  assert.match(workflow, /--variant "\$VARIANT"/);
+  assert.match(workflow, /build:runtime:rust/);
+  // The Python path is unchanged.
+  assert.match(workflow, /npm --prefix desktop run build:runtime\n/);
+  assert.match(workflow, /npm --prefix desktop run \$\{\{ matrix\.command \}\}/);
+  assert.match(workflow, /command: build:mac\n/);
+});
+
+test("Rust variant overlays bundle no sidecar, keep cloudflared and the frontend, and leave the updater unchanged", () => {
+  const pkg = JSON.parse(read("desktop/package.json")).scripts;
+  const overlays = {
+    "tauri.rust.release.conf.json": "resources/cloudflared.exe",
+    "tauri.rust.ci.conf.json": "resources/cloudflared.exe",
+    "tauri.rust.macos.conf.json": "resources/cloudflared",
+    "tauri.rust.macos.ci.conf.json": "resources/cloudflared",
+  };
+  for (const [file, cloudflared] of Object.entries(overlays)) {
+    const config = JSON.parse(read(`desktop/src-tauri/${file}`));
+    assert.equal(config.bundle.externalBin, undefined, `${file} must not declare a sidecar`);
+    assert.ok(config.bundle.resources[cloudflared], `${file} must stage cloudflared`);
+    assert.equal(config.bundle.resources["../../frontend/dist/"], "stagepilot_web/", `${file} must embed the frontend`);
+    assert.doesNotMatch(JSON.stringify(config), /stagepilot-backend/);
+    const isCi = file.includes(".ci.");
+    if (isCi) assert.equal(config.bundle.createUpdaterArtifacts, false, "CI builds carry no updater signing");
+    else assert.equal(config.plugins.updater.endpoints[0], "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json");
+  }
+  for (const name of ["build:rust", "build:rust:ci", "build:mac:rust", "build:mac:rust:ci", "build:runtime:rust"]) {
+    assert.doesNotMatch(pkg[name], /build:sidecar|build:runtime(?!:rust)|build_backend_sidecar|pyinstaller/i, name);
+  }
+  for (const name of ["build:rust", "build:rust:ci", "build:mac:rust", "build:mac:rust:ci"]) {
+    assert.match(pkg[name], /--features in-process/, name);
+  }
+  // The Python variant is untouched.
+  assert.match(pkg.build, /build:runtime && tauri build --config src-tauri\/tauri\.release\.conf\.json/);
+  assert.match(pkg["build:mac"], /build:runtime && tauri build --config src-tauri\/tauri\.macos\.conf\.json/);
+  assert.deepEqual(JSON.parse(read("desktop/src-tauri/tauri.release.conf.json")).bundle.externalBin, ["binaries/stagepilot-backend"]);
+  assert.deepEqual(JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json")).bundle.externalBin, ["binaries/stagepilot-backend"]);
+});
+
+test("Rust installer CI is manual, unpublished, secret-free and short-lived", () => {
+  const workflow = read(".github/workflows/rust-installer-ci.yml");
+  assert.match(workflow, /on:\s+workflow_dispatch:\s+permissions:\s+contents: read/);
+  assert.doesNotMatch(workflow, /secrets\./);
+  assert.doesNotMatch(workflow, /environment:/);
+  assert.doesNotMatch(workflow, /TAURI_SIGNING|publish_release|gh release/);
+  assert.doesNotMatch(workflow, /self-hosted/);
+  assert.match(workflow, /retention-days: 3/);
+  assert.match(workflow, /--features in-process|build:mac:rust:ci/);
+  assert.match(workflow, /verify_macos_release_bundle\.sh --app .* --variant rust/);
+});
+
+test("macOS verifier keeps the Python sidecar checks and adds a Rust variant without one", () => {
+  const verifier = read("scripts/verify_macos_release_bundle.sh");
+  assert.match(verifier, /VARIANT="python"/, "python stays the default");
+  assert.match(verifier, /Expected exactly one packaged backend sidecar/);
+  assert.match(verifier, /Packaged backend unexpectedly has the Hardened Runtime flag/);
+  assert.match(verifier, /Ad-hoc backend unexpectedly has a TeamIdentifier/);
+  assert.match(verifier, /verify_minos "\$SIDECAR" "StagePilot backend"/);
+  assert.match(verifier, /The Rust variant must not ship a Python backend sidecar/);
+  assert.match(verifier, /stagepilot_web\/index\.html/);
+  assert.match(verifier, /A Python backend process was spawned by the Rust variant/);
+});

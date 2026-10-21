@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": {
+      "resources/cloudflared.exe": "cloudflared.exe",
+      "../../frontend/dist/": "stagepilot_web/"
+    },
+    "createUpdaterArtifacts": false
+  }
+}

@@ -14,8 +14,13 @@
     "build:sidecar": "npm --prefix ../frontend run build && python ../scripts/build_backend_sidecar.py",
     "build:cloudflared": "python ../scripts/stage_cloudflared.py",
     "build:runtime": "npm run build:sidecar && npm run build:cloudflared",
+    "build:runtime:rust": "npm --prefix ../frontend run build && npm run build:cloudflared",
+    "build:rust": "npm run build:runtime:rust && tauri build --features in-process --config src-tauri/tauri.rust.release.conf.json",
+    "build:rust:ci": "npm run build:runtime:rust && tauri build --features in-process --config src-tauri/tauri.rust.ci.conf.json",
+    "build:mac:rust": "npm run build:help && npm run build:runtime:rust && tauri build --features in-process --config src-tauri/tauri.rust.macos.conf.json && STAGEPILOT_VARIANT=rust npm run build:mac:finish",
+    "build:mac:rust:ci": "npm run build:help && npm run build:runtime:rust && tauri build --features in-process --config src-tauri/tauri.rust.macos.ci.conf.json && npm run build:mac:uninstaller",
     "release:validate": "node ../scripts/validate_versions.mjs",
-    "release:test": "node --test ../scripts/release_configuration.test.mjs ../scripts/build_macos_help.test.mjs"
+    "release:test": "node --test ../scripts/release_configuration.test.mjs ../scripts/build_macos_help.test.mjs ../scripts/publish_release.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

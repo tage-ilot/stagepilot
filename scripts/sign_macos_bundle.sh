@@ -39,12 +39,17 @@ sign_one() { # file identifier
 # Inside-out: helper binaries first, then the sidecar, then the bundle itself.
 sign_one "$APP/Contents/Resources/cloudflared" "$CLOUDFLARED_ID"
 SIDECAR="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' -print -quit)"
-[[ -n "$SIDECAR" ]] || { echo "Backend sidecar not found in $APP." >&2; exit 1; }
-sign_one "$SIDECAR" "$BACKEND_ID"
+if [[ "${STAGEPILOT_VARIANT:-python}" == "rust" ]]; then
+  # Rust (in-process) variant: there is no sidecar, and shipping one is a build error.
+  [[ -z "$SIDECAR" ]] || { echo "Unexpected backend sidecar in the Rust variant: $SIDECAR" >&2; exit 1; }
+else
+  [[ -n "$SIDECAR" ]] || { echo "Backend sidecar not found in $APP." >&2; exit 1; }
+  sign_one "$SIDECAR" "$BACKEND_ID"
+fi
 "${SIGN[@]}" --identifier "$APP_ID" "$APP"
 
 codesign --verify --deep --strict --verbose=2 "$APP"
 echo "== designated requirements =="
-for item in "$APP" "$SIDECAR"; do
+for item in "$APP" ${SIDECAR:+"$SIDECAR"}; do
   codesign -d -r- "$item" 2>&1 | grep -E '^designated' || true
 done

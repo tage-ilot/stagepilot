@@ -4,6 +4,10 @@
 
 ### Added
 
+- Release candidates: a `vX.Y.Z-rc.N` tag builds the Rust (in-process) installers, with no Python
+  sidecar, and publishes them as a GitHub pre-release that is never "Latest" and so never reaches
+  the in-app updater. Plain `X.Y.Z` tags are unchanged. A manual **Rust installer CI** workflow
+  builds the same installers without tagging or secrets. `create-release.ps1` accepts `X.Y.Z-rc.N`.
 - Lighting: a small Lightkey live link. Connect to the `lightkey-api` agent on the Lightkey
   Mac, record which cues Lightkey turns on and off during a song's countdown, and replay them
   with that song later. Replay is on by default, has its own switch, pauses while recording and

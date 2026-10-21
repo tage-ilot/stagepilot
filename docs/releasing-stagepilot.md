@@ -89,6 +89,19 @@ either secret is absent. The private key is never passed to frontend code.
    last, then publishes the release. Standalone `.sig` files remain internal
    build inputs because their contents are embedded in `latest.json`.
 
+### Release candidates and the Latest channel
+
+Tags with a pre-release suffix (`vX.Y.Z-rc.N`, `-beta.N`, `-alpha.N`) are built as the
+Rust (in-process) variant and published by `scripts/publish_release.mjs` as GitHub
+**pre-releases**: `prerelease: true`, never `make_latest`. GitHub's
+`/releases/latest` ignores drafts and pre-releases, so
+`.../releases/latest/download/latest.json` (the updater endpoint compiled into every
+installed app) keeps pointing at the last stable release and an rc cannot be offered by
+the in-app updater. Plain `vX.Y.Z` tags are unchanged: Python sidecar build, published
+and marked Latest. See `docs/creating-a-release.md` for the rc procedure, the unsigned
+**Rust installer CI** workflow and rollback (delete the pre-release; production is
+untouched).
+
 Never substitute a checksum for a Tauri signature. The macOS updater payload is
 `.app.tar.gz`, not the `.dmg`.
 

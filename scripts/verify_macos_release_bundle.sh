@@ -2,22 +2,27 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 (--app APP | --dmg DMG | --archive APP_TAR_GZ) --arch (x86_64|arm64)" >&2
+  echo "Usage: $0 (--app APP | --dmg DMG | --archive APP_TAR_GZ) --arch (x86_64|arm64) [--variant python|rust]" >&2
   exit 2
 }
 
 MODE=""
 INPUT=""
 EXPECTED_ARCH=""
+VARIANT="python"
 while (($#)); do
   case "$1" in
     --app|--dmg|--archive) MODE="${1#--}"; INPUT="${2:-}"; shift 2 ;;
     --arch) EXPECTED_ARCH="${2:-}"; shift 2 ;;
+    --variant) VARIANT="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
 [[ -n "$MODE" && -n "$INPUT" && -n "$EXPECTED_ARCH" ]] || usage
 [[ "$EXPECTED_ARCH" == "x86_64" || "$EXPECTED_ARCH" == "arm64" ]] || usage
+# python: the PyInstaller sidecar is the backend (default, unchanged checks).
+# rust:   the in-process Rust server is the backend; no sidecar may be shipped.
+[[ "$VARIANT" == "python" || "$VARIANT" == "rust" ]] || usage
 [[ -e "$INPUT" ]] || { echo "Missing release artifact: $INPUT" >&2; exit 1; }
 
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/stagepilot-release-verify.XXXXXX")"
@@ -65,8 +70,19 @@ case "$MODE" in
 esac
 
 SIDECAR_COUNT="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' | wc -l | tr -d ' ')"
-[[ "$SIDECAR_COUNT" -eq 1 ]] || { echo "Expected exactly one packaged backend sidecar." >&2; exit 1; }
-SIDECAR="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' -print -quit)"
+SIDECAR=""
+if [[ "$VARIANT" == "python" ]]; then
+  [[ "$SIDECAR_COUNT" -eq 1 ]] || { echo "Expected exactly one packaged backend sidecar." >&2; exit 1; }
+  SIDECAR="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' -print -quit)"
+else
+  [[ "$SIDECAR_COUNT" -eq 0 ]] || { echo "The Rust variant must not ship a Python backend sidecar." >&2; exit 1; }
+  [[ -z "$(find "$APP" \( -iname 'stagepilot-backend*' -o -iname 'libpython*' -o -iname 'base_library.zip' \) -print -quit)" ]] || {
+    echo "The Rust variant contains PyInstaller/Python runtime files." >&2
+    exit 1
+  }
+  [[ -s "$APP/Contents/Resources/stagepilot_web/index.html" ]] || { echo "The built frontend (stagepilot_web/index.html) is missing from the Rust variant." >&2; exit 1; }
+fi
+[[ -x "$APP/Contents/Resources/cloudflared" ]] || { echo "Bundled cloudflared is missing or not executable." >&2; exit 1; }
 MAIN_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 MAIN="$APP/Contents/MacOS/$MAIN_NAME"
 [[ -x "$MAIN" ]] || { echo "Missing StagePilot application executable." >&2; exit 1; }
@@ -83,11 +99,12 @@ find "$HELP_ROOT/pages" -type f -name '*.html' -print -quit | grep -q . || {
 }
 
 echo "Application: $APP"
-echo "Backend: $SIDECAR"
+echo "Variant: $VARIANT"
+echo "Backend: ${SIDECAR:-in-process (no sidecar)}"
 file "$MAIN"
-file "$SIDECAR"
+[[ -z "$SIDECAR" ]] || file "$SIDECAR"
 file "$MAIN" | grep -q "$EXPECTED_ARCH" || { echo "Application is not $EXPECTED_ARCH." >&2; exit 1; }
-file "$SIDECAR" | grep -q "$EXPECTED_ARCH" || { echo "Backend is not $EXPECTED_ARCH." >&2; exit 1; }
+[[ -z "$SIDECAR" ]] || file "$SIDECAR" | grep -q "$EXPECTED_ARCH" || { echo "Backend is not $EXPECTED_ARCH." >&2; exit 1; }
 codesign --verify --deep --strict --verbose=4 "$APP"
 # Stable identity: fixed identifiers and a designated requirement pinned to the StagePilot
 # signing certificate (public cert: docs/stagepilot-signing-cert.pem), never a per-build cdhash.
@@ -104,19 +121,28 @@ if [[ "${STAGEPILOT_EXPECT_STABLE_SIGNING:-}" == "1" ]]; then
     }
   }
   check_dr "$APP" "org.stagepilot.desktop"
-  check_dr "$SIDECAR" "org.stagepilot.backend"
+  [[ -z "$SIDECAR" ]] || check_dr "$SIDECAR" "org.stagepilot.backend"
 fi
-SIGNATURE="$(codesign -d --verbose=4 "$SIDECAR" 2>&1)"
-printf '%s\n' "$SIGNATURE"
-codesign -d --entitlements :- "$SIDECAR" 2>/dev/null || true
-grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
-  echo "Packaged backend unexpectedly has the Hardened Runtime flag." >&2
-  exit 1
-}
-grep -Eq '^TeamIdentifier=(.+)$' <<<"$SIGNATURE" && ! grep -q '^TeamIdentifier=not set$' <<<"$SIGNATURE" && {
-  echo "Ad-hoc backend unexpectedly has a TeamIdentifier." >&2
-  exit 1
-}
+if [[ -n "$SIDECAR" ]]; then
+  SIGNATURE="$(codesign -d --verbose=4 "$SIDECAR" 2>&1)"
+  printf '%s\n' "$SIGNATURE"
+  codesign -d --entitlements :- "$SIDECAR" 2>/dev/null || true
+  grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
+    echo "Packaged backend unexpectedly has the Hardened Runtime flag." >&2
+    exit 1
+  }
+  grep -Eq '^TeamIdentifier=(.+)$' <<<"$SIGNATURE" && ! grep -q '^TeamIdentifier=not set$' <<<"$SIGNATURE" && {
+    echo "Ad-hoc backend unexpectedly has a TeamIdentifier." >&2
+    exit 1
+  }
+else
+  SIGNATURE="$(codesign -d --verbose=4 "$MAIN" 2>&1)"
+  printf '%s\n' "$SIGNATURE"
+  grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
+    echo "Application unexpectedly has the Hardened Runtime flag." >&2
+    exit 1
+  }
+fi
 
 verify_minos() {
   local binary="$1"
@@ -150,7 +176,7 @@ print(f"{label} minimum macOS: {value}")
 PY
 }
 verify_minos "$MAIN" "StagePilot"
-verify_minos "$SIDECAR" "StagePilot backend"
+[[ -z "$SIDECAR" ]] || verify_minos "$SIDECAR" "StagePilot backend"
 
 PORT="$(python3 - <<'PY'
 import socket
@@ -164,7 +190,7 @@ printf '{"service_source":"demo","midi_source":"simulated","timer_output":"simul
 STAGEPILOT_HOST=127.0.0.1 \
 STAGEPILOT_PORT="$PORT" \
 STAGEPILOT_SETTINGS_PATH="$SETTINGS" \
-"$SIDECAR" >"$LOG_FILE" 2>&1 &
+"${SIDECAR:-$MAIN}" >"$LOG_FILE" 2>&1 &
 BACKEND_PID="$!"
 
 for _ in {1..120}; do
@@ -188,6 +214,18 @@ for _ in {1..120}; do
     curl --fail --silent --show-error \
       --cookie "$COOKIE_JAR" \
       "http://127.0.0.1:$PORT/api/v1/state" >/dev/null
+    if [[ "$VARIANT" == "rust" ]]; then
+      # The in-process server must be the only backend: no Python/PyInstaller process may exist
+      # under the launched application.
+      if ps -A -o pid=,ppid=,command= | awk -v root="$BACKEND_PID" '$2 == root' | grep -Eiq 'python|stagepilot-backend'; then
+        echo "A Python backend process was spawned by the Rust variant." >&2
+        exit 1
+      fi
+      curl --fail --silent --show-error "http://127.0.0.1:$PORT/" | grep -qi '<script' || {
+        echo "The bundled frontend is not served by the in-process server." >&2
+        exit 1
+      }
+    fi
     echo "Packaged backend health check passed."
     exit 0
   fi

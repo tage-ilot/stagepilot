@@ -31,6 +31,7 @@ EXPECTED_NATIVE = {
     "release-macos.yml:build",
     "macos-signing-stability.yml:stability",
     "release-windows.yml:build",
+    "rust-installer-ci.yml:build",
 }
 # Present only on branches that carry the Rust workspace; optional elsewhere.
 OPTIONAL_NATIVE = {"rust.yml:rust", "spike-rust.yml:rust"}

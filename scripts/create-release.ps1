@@ -156,6 +156,9 @@ if ($Dirty) {
 
 Write-Host "`nRelease plan" -ForegroundColor Yellow
 Write-Host "  Title:       StagePilot $Tag"
+if (Test-PreReleaseVersion $Version) {
+    Write-Host "  Type:        RELEASE CANDIDATE - Rust (in-process) installers, GitHub pre-release, never offered to installed apps" -ForegroundColor Yellow
+}
 Write-Host "  Source:      $CurrentBranch"
 Write-Host "  Destination: origin/$TargetBranch"
 Write-Host "`nCurrent working changes:" -ForegroundColor Yellow
@@ -288,6 +291,9 @@ Invoke-Checked "Push release commit to origin/$TargetBranch" {
 Invoke-Checked "Create release tag $Tag" { git tag -a $Tag -m "StagePilot $Tag" }
 Invoke-Checked "Push release tag $Tag" { git push origin $Tag }
 
+if (Test-PreReleaseVersion $Version) {
+    Write-Host "`nThis is a release candidate: it will be published as a GitHub pre-release and will NOT become Latest or reach the in-app updater." -ForegroundColor Yellow
+}
 Write-Host "`nTag $Tag is pushed. GitHub builds the Windows, Intel Mac and Apple Silicon packages (about 20-40 minutes)." -ForegroundColor Cyan
 $RunId = $null
 for ($attempt = 0; $attempt -lt 12 -and -not $RunId; $attempt += 1) {

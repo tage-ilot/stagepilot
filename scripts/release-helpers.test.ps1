@@ -22,7 +22,21 @@ Check "accepts a new minor" { Assert-ReleaseVersion "2.42.0" $tags }
 Check "rejects an existing tag" { ExpectThrow { Assert-ReleaseVersion "2.41.10" $tags } "*not newer*" }
 Check "rejects a lower version" { ExpectThrow { Assert-ReleaseVersion "2.41.5" $tags } "*not newer*" }
 Check "rejects a two-part version" { ExpectThrow { Assert-ReleaseVersion "2.42" $tags } "*not valid*" }
-Check "rejects a beta/rc version" { ExpectThrow { Assert-ReleaseVersion "2.42.0-beta.1" $tags } "*not valid*" }
+Check "rejects a beta version" { ExpectThrow { Assert-ReleaseVersion "2.42.0-beta.1" $tags } "*not valid*" }
+Check "rejects an alpha version" { ExpectThrow { Assert-ReleaseVersion "2.42.0-alpha.1" $tags } "*not valid*" }
+Check "rejects an rc without a number" { ExpectThrow { Assert-ReleaseVersion "2.42.0-rc" $tags } "*not valid*" }
+Check "accepts the first rc of a new minor" { Assert-ReleaseVersion "2.42.0-rc.1" $tags }
+Check "accepts an rc of the next patch" { Assert-ReleaseVersion "2.41.11-rc.1" $tags }
+Check "rejects an rc of an already released version" { ExpectThrow { Assert-ReleaseVersion "2.41.10-rc.1" $tags } "*not newer than the latest stable*" }
+Check "rejects an rc of an older version" { ExpectThrow { Assert-ReleaseVersion "2.40.0-rc.1" $tags } "*not newer than the latest stable*" }
+$rcTags = $tags + @("v2.42.0-rc.1", "v2.42.0-rc.2")
+Check "rc.3 follows existing rc.1 and rc.2" { Assert-ReleaseVersion "2.42.0-rc.3" $rcTags }
+Check "rejects a repeated rc number" { ExpectThrow { Assert-ReleaseVersion "2.42.0-rc.2" $rcTags } "*not newer than the existing rc*" }
+Check "rejects a lower rc number" { ExpectThrow { Assert-ReleaseVersion "2.42.0-rc.1" $rcTags } "*not newer than the existing rc*" }
+Check "the stable release after its rcs is accepted" { Assert-ReleaseVersion "2.42.0" $rcTags }
+Check "rc tags do not move the suggested stable version" { Expect (Get-NextVersion $rcTags) "2.41.11" }
+Check "Test-PreReleaseVersion: rc" { Expect (Test-PreReleaseVersion "2.42.0-rc.1") $true }
+Check "Test-PreReleaseVersion: stable" { Expect (Test-PreReleaseVersion "2.42.0") $false }
 Check "origin: repo https" { Expect (Test-ReleaseOrigin "https://github.com/tage-ilot/stagepilot.git") $true }
 Check "origin: repo ssh" { Expect (Test-ReleaseOrigin "git@github.com:tage-ilot/stagepilot.git") $true }
 Check "origin: repo no suffix" { Expect (Test-ReleaseOrigin "https://github.com/tage-ilot/stagepilot") $true }
