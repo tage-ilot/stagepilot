@@ -20,7 +20,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +68,26 @@ def _is_uuid(value: Any) -> bool:
 MOCK_PORT: list[int] = []  # the mock ProPresenter port of this run (outputs profile)
 
 
+# The mock Planning Center profile pins "today" here (pco_app.TODAY), whatever the wall clock says.
+PINNED_TODAY = "2026-10-18"
+
+
+def today_values(now: datetime | None = None) -> frozenset[str]:
+    """Every date string that counts as "today" for the normaliser.
+
+    The demo plan uses the date in the configured timezone, which can differ from the host's
+    local date around midnight, so accept the UTC date and the dates one zone-offset either side
+    (UTC-12 .. UTC+14), plus the date the Planning Center profile pins. The set depends only on
+    ``now``, never on the host timezone.
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+    days = {(now + timedelta(hours=h)).date().isoformat() for h in (-12, 0, 14)}
+    return frozenset(days | {PINNED_TODAY})
+
+
 def normalise(node: Any) -> Any:
     if isinstance(node, dict):
         out = {}
@@ -93,8 +113,8 @@ def normalise(node: Any) -> Any:
         return out
     if isinstance(node, list):
         return [normalise(v) for v in node]
-    if isinstance(node, str) and node == date.today().isoformat():
-        # Plan dates are "today"; the transcripts must not expire at midnight.
+    if isinstance(node, str) and node in today_values():
+        # Plan dates are "today" (or the pinned PCO date); the transcripts must not expire.
         return "<today>"
     return node
 

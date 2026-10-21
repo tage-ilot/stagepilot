@@ -51,6 +51,11 @@ class ToMock(httpx.AsyncBaseTransport):
 
 
 def create(mock_port: int) -> Any:
+    # /health judges whether the loaded plan is still current against the real wall clock; pin that
+    # to TODAY as well, or the profile goes "degraded" the day after the pinned plan date.
+    from stagepilot.api import routes
+
+    routes._current_local_date = lambda _zone: TODAY
     os.environ["STAGEPILOT_PCO_CLIENT_ID"] = CLIENT_ID
     settings = Settings(
         integration_modes=IntegrationModes(
