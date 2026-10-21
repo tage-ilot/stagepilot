@@ -258,3 +258,82 @@ async fn failed_connection_checks_for_a_blocked_network_only_for_blocked_classes
     c.stop().await;
     assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
+
+/// Rig D finding: Playback still held half-closed sockets from a previous process, so new
+/// connections were accepted at TCP level but never completed the WebSocket handshake. The
+/// client must bound each attempt and recover within seconds once Playback is healthy again.
+async fn recovers_after_stalled_handshakes(host_override: bool) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
+    // Phase 1: accept and hold every socket open, never answering.
+    let stall = tokio::spawn(async move {
+        let mut held = Vec::new();
+        loop {
+            tokio::select! {
+                _ = stop_rx.changed() => return held,
+                acc = listener.accept() => if let Ok((s, _)) = acc { held.push(s) },
+            }
+        }
+    });
+    let mut o = opts(port);
+    o.heartbeat_timeout = Duration::from_millis(500);
+    if !host_override {
+        o.host_override = None;
+    }
+    let c = PlaybackClient::start(o, None).unwrap();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(!c.status().connected);
+    // Playback "restarts" healthy on the same port; the stalled sockets stay open.
+    let _ = stop_tx.send(true);
+    let held = stall.await.unwrap();
+    assert!(!held.is_empty(), "client attempted to connect");
+    let fake = FakePlayback::start_on(port, None).await;
+    fake.auto_beat(Duration::from_millis(50));
+    let t = std::time::Instant::now();
+    until("connected after stall", || c.status().connected).await;
+    assert!(t.elapsed() < Duration::from_secs(5), "{:?}", t.elapsed());
+    drop(held);
+    c.shutdown().await;
+}
+
+#[tokio::test]
+async fn recovers_after_stalled_handshakes_manual_host() {
+    recovers_after_stalled_handshakes(true).await;
+}
+
+#[tokio::test]
+async fn recovers_after_stalled_handshakes_auto_discovery() {
+    recovers_after_stalled_handshakes(false).await;
+}
+
+#[tokio::test]
+async fn recovers_after_sockets_that_close_or_go_silent_after_accept() {
+    // Variants of the rig D condition: accept then close at once, and a bad (non-WS) reply.
+    use tokio::io::AsyncWriteExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
+    let bad = tokio::spawn(async move {
+        let mut n = 0u32;
+        loop {
+            tokio::select! {
+                _ = stop_rx.changed() => return n,
+                acc = listener.accept() => if let Ok((mut s, _)) = acc {
+                    n += 1;
+                    if n.is_multiple_of(2) { let _ = s.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await; }
+                    drop(s);
+                },
+            }
+        }
+    });
+    let c = PlaybackClient::start(opts(port), None).unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(!c.status().connected);
+    let _ = stop_tx.send(true);
+    assert!(bad.await.unwrap() >= 2, "client retried");
+    let fake = FakePlayback::start_on(port, None).await;
+    fake.auto_beat(Duration::from_millis(50));
+    until("connected after bad accepts", || c.status().connected).await;
+    c.shutdown().await;
+}
