@@ -376,7 +376,9 @@ test("Rust variant overlays bundle no sidecar, keep cloudflared and the frontend
   };
   for (const [file, cloudflared] of Object.entries(overlays)) {
     const config = JSON.parse(read(`desktop/src-tauri/${file}`));
-    assert.equal(config.bundle.externalBin, undefined, `${file} must not declare a sidecar`);
+    // null deletes the sidecar that tauri.macos.conf.json (merged automatically on macOS) declares.
+    assert.ok([undefined, null].includes(config.bundle.externalBin), `${file} must not declare a sidecar`);
+    if (file.includes("macos")) assert.equal(config.bundle.externalBin, null, `${file} must remove the auto-merged macOS sidecar`);
     assert.ok(config.bundle.resources[cloudflared], `${file} must stage cloudflared`);
     assert.equal(config.bundle.resources["../../frontend/dist/"], "stagepilot_web/", `${file} must embed the frontend`);
     assert.doesNotMatch(JSON.stringify(config), /stagepilot-backend/);

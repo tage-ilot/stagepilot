@@ -8,8 +8,12 @@
     }
   },
   "bundle": {
+    "externalBin": null,
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "resources": {
       "generated-help/StagePilot.help/": "StagePilot.help/",
       "resources/cloudflared": "cloudflared",
