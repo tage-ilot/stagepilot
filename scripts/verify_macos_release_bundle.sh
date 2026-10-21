@@ -187,6 +187,15 @@ PY
 )"
 SETTINGS="$TEMP_ROOT/settings.json"
 printf '{"service_source":"demo","midi_source":"simulated","timer_output":"simulated","server_port":%s}\n' "$PORT" > "$SETTINGS"
+if [[ "$VARIANT" == "rust" ]]; then
+  # The Rust variant is the desktop shell itself, and the shell is single-instance: a previous
+  # verification run (the .app pass before the DMG pass) must be fully gone, with its
+  # single-instance socket, or this launch becomes a silent secondary instance with no server.
+  pkill -9 -x "$MAIN_NAME" 2>/dev/null || true
+  sleep 1
+  find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec ls -l {} + >&2 2>/dev/null || true
+  find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec rm -f {} + 2>/dev/null || true
+fi
 STAGEPILOT_HOST=127.0.0.1 \
 STAGEPILOT_PORT="$PORT" \
 STAGEPILOT_SETTINGS_PATH="$SETTINGS" \
@@ -237,7 +246,7 @@ cat "$LOG_FILE" >&2
 if [[ "$VARIANT" == "rust" ]]; then
   echo "--- diagnostics (Rust variant) ---" >&2
   kill -0 "$BACKEND_PID" 2>/dev/null && echo "app still running (pid $BACKEND_PID)" >&2 || echo "app exited" >&2
-  ps -A -o pid=,ppid=,command= | awk -v root="$BACKEND_PID" '$1 == root || $2 == root' >&2 || true
+  ps -A -o pid=,ppid=,etime=,command= | grep -i stagepilot | grep -v grep >&2 || true
   lsof -nP -a -p "$BACKEND_PID" -i 2>&1 | head -20 >&2 || true
   for f in "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
     [[ -f "$f" ]] && { echo "== $f" >&2; tail -n 60 "$f" >&2; }
