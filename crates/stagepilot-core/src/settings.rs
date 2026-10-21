@@ -706,6 +706,11 @@ fn apply_output_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<St
 pub trait SettingsStore: Send + Sync {
     fn load(&self) -> Result<Option<PersistentSettings>, SettingsFileError>;
     fn save(&self, settings: &PersistentSettings) -> Result<(), SettingsFileError>;
+    /// The settings file, when this store is a file (other files, such as the Lightkey takes,
+    /// live next to it). In-memory stores have none.
+    fn path(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 pub fn default_settings_path(environ: &BTreeMap<String, String>) -> PathBuf {
@@ -792,6 +797,10 @@ impl SettingsFileStore {
 const CORRUPT: &str = "Saved settings are corrupt or invalid; built-in defaults were used.";
 
 impl SettingsStore for SettingsFileStore {
+    fn path(&self) -> Option<PathBuf> {
+        Some(self.path.clone())
+    }
+
     fn load(&self) -> Result<Option<PersistentSettings>, SettingsFileError> {
         if !self.path.exists() {
             return Ok(None);
@@ -1137,6 +1146,11 @@ impl SettingsService {
             s.secret = secret;
         }
         service
+    }
+
+    /// Path of the saved settings file; `None` for in-memory settings.
+    pub fn settings_path(&self) -> Option<PathBuf> {
+        self.store.path()
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, ServiceState> {

@@ -1105,6 +1105,236 @@
     "title": "LightingPadsRequest",
     "type": "object"
    },
+   "LightkeyActionResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "lightkey": {
+      "$ref": "#/components/schemas/LightkeyStatus"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     }
+    },
+    "required": [
+     "accepted",
+     "message",
+     "lightkey"
+    ],
+    "title": "LightkeyActionResponse",
+    "type": "object"
+   },
+   "LightkeyRecordRequest": {
+    "properties": {
+     "recording": {
+      "title": "Recording",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "recording"
+    ],
+    "title": "LightkeyRecordRequest",
+    "type": "object"
+   },
+   "LightkeySettings": {
+    "description": "Saved Lightkey link settings (part of ``LightsSettings``).",
+    "properties": {
+     "api_url": {
+      "default": "",
+      "maxLength": 300,
+      "title": "Api Url",
+      "type": "string"
+     },
+     "replay": {
+      "default": true,
+      "title": "Replay",
+      "type": "boolean"
+     }
+    },
+    "title": "LightkeySettings",
+    "type": "object"
+   },
+   "LightkeySettingsRequest": {
+    "description": "Both fields optional: send only what changed. An empty ``api_url`` means \"derive it\".",
+    "properties": {
+     "api_url": {
+      "anyOf": [
+       {
+        "maxLength": 300,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Api Url"
+     },
+     "replay": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Replay"
+     }
+    },
+    "title": "LightkeySettingsRequest",
+    "type": "object"
+   },
+   "LightkeyStatus": {
+    "description": "What the StagePilot Lightkey strip shows.",
+    "properties": {
+     "active_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Active Count"
+     },
+     "api_url": {
+      "title": "Api Url",
+      "type": "string"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "link": {
+      "enum": [
+       "off",
+       "connected",
+       "lightkey_closed",
+       "unreachable"
+      ],
+      "title": "Link",
+      "type": "string"
+     },
+     "message": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Message"
+     },
+     "recording": {
+      "default": false,
+      "title": "Recording",
+      "type": "boolean"
+     },
+     "recording_song": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Recording Song"
+     },
+     "replay": {
+      "default": true,
+      "title": "Replay",
+      "type": "boolean"
+     },
+     "replay_blocked": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Replay Blocked"
+     },
+     "replaying_song": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Replaying Song"
+     },
+     "takes": {
+      "items": {
+       "$ref": "#/components/schemas/LightkeyTakeSummary"
+      },
+      "title": "Takes",
+      "type": "array"
+     }
+    },
+    "required": [
+     "api_url",
+     "link"
+    ],
+    "title": "LightkeyStatus",
+    "type": "object"
+   },
+   "LightkeyTakeSummary": {
+    "properties": {
+     "cue_count": {
+      "title": "Cue Count",
+      "type": "integer"
+     },
+     "duration_seconds": {
+      "title": "Duration Seconds",
+      "type": "number"
+     },
+     "edge_count": {
+      "title": "Edge Count",
+      "type": "integer"
+     },
+     "recorded_at": {
+      "format": "date-time",
+      "title": "Recorded At",
+      "type": "string"
+     },
+     "song_key": {
+      "title": "Song Key",
+      "type": "string"
+     },
+     "song_title": {
+      "title": "Song Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "song_key",
+     "song_title",
+     "recorded_at",
+     "duration_seconds",
+     "edge_count",
+     "cue_count"
+    ],
+    "title": "LightkeyTakeSummary",
+    "type": "object"
+   },
    "LightsOperationResponse": {
     "properties": {
      "accepted": {
@@ -1148,6 +1378,9 @@
       "default": false,
       "title": "Enabled",
       "type": "boolean"
+     },
+     "lightkey": {
+      "$ref": "#/components/schemas/LightkeySettings"
      },
      "method": {
       "$ref": "#/components/schemas/LightingMethod",
@@ -5151,6 +5384,140 @@
      }
     },
     "summary": "Update Lighting Cue Map"
+   }
+  },
+  "/api/v1/lights/lightkey": {
+   "get": {
+    "operationId": "lightkey_status_api_v1_lights_lightkey_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightkeyStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Lightkey Status"
+   }
+  },
+  "/api/v1/lights/lightkey/recording": {
+   "post": {
+    "operationId": "set_lightkey_recording_api_v1_lights_lightkey_recording_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightkeyRecordRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightkeyActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Set Lightkey Recording"
+   }
+  },
+  "/api/v1/lights/lightkey/settings": {
+   "put": {
+    "description": "Save the Lightkey API address and/or the replay switch (the only two settings).",
+    "operationId": "update_lightkey_settings_api_v1_lights_lightkey_settings_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightkeySettingsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightkeyActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Lightkey Settings"
+   }
+  },
+  "/api/v1/lights/lightkey/takes/{song_key}": {
+   "delete": {
+    "operationId": "clear_lightkey_take_api_v1_lights_lightkey_takes__song_key__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "song_key",
+      "required": true,
+      "schema": {
+       "title": "Song Key",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightkeyActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Clear Lightkey Take"
    }
   },
   "/api/v1/lights/outputs/refresh": {

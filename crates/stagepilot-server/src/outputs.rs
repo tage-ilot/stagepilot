@@ -54,6 +54,11 @@ pub struct OutputBackends {
     pub midi_output: MidiOutputBackendFactory,
     pub osc: Arc<dyn Fn() -> Arc<dyn OscBackend> + Send + Sync>,
     pub propresenter: ClientFactory,
+    /// The HTTP client of the Lightkey link (a fake agent in tests, `reqwest` otherwise).
+    pub lightkey_http: stagepilot_lights::lightkey_link::HttpFactory,
+    /// Where Lightkey takes live; `None` means next to the settings file (or in memory when the
+    /// settings are in memory).
+    pub lightkey_store: Option<Arc<dyn stagepilot_lights::lightkey_link::TakeStore>>,
 }
 
 impl Default for OutputBackends {
@@ -63,6 +68,10 @@ impl Default for OutputBackends {
             midi_output: stagepilot_midi::default_output_backend_factory(),
             osc: Arc::new(|| Arc::new(UdpOscBackend)),
             propresenter: http_client_factory(),
+            lightkey_http: Arc::new(|| {
+                Arc::new(stagepilot_lights::lightkey_link::ReqwestLightkeyHttp::new())
+            }),
+            lightkey_store: None,
         }
     }
 }
@@ -303,9 +312,21 @@ impl Outputs {
         state_service: &StateService,
         settings: &RuntimeSettings,
         backends: OutputBackends,
+        settings_path: Option<std::path::PathBuf>,
     ) -> Result<Self, String> {
         let mut lights_options = LightsOptions::new(backends.midi_output.clone());
         lights_options.osc_backend_factory = backends.osc.clone();
+        lights_options.lightkey.http_factory = backends.lightkey_http.clone();
+        // `lightkey-takes.json` sits next to `settings.json`; in-memory settings keep takes in
+        // memory (Python: `MemoryTakeStore` when explicit settings were given).
+        if let Some(store) = backends.lightkey_store.clone() {
+            lights_options.lightkey.store = store;
+        } else if let Some(path) = settings_path {
+            lights_options.lightkey.store =
+                Arc::new(stagepilot_lights::lightkey_link::FileTakeStore::new(
+                    path.with_file_name("lightkey-takes.json"),
+                ));
+        }
         let lights = Arc::new(LightsPlugin::new(
             bus.clone(),
             settings.lights.clone(),
