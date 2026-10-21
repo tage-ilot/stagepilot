@@ -921,13 +921,17 @@ impl CredentialStore for MemoryCredentialStore {
     }
 }
 
+/// The keychain itself could not be used (locked, denied, missing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeychainUnavailable;
+
 /// One keychain account. The real one is the OS keychain; tests swap in a counting fake.
 pub trait KeychainBackend: Send + Sync {
     /// `Ok(None)` when no entry exists; `Err` when the keychain itself is unavailable.
-    fn read(&self) -> Result<Option<String>, ()>;
-    fn write(&self, secret: &str) -> Result<(), ()>;
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable>;
+    fn write(&self, secret: &str) -> Result<(), KeychainUnavailable>;
     /// Removing an entry that does not exist is not an error.
-    fn delete(&self) -> Result<(), ()>;
+    fn delete(&self) -> Result<(), KeychainUnavailable>;
 }
 
 /// The OS keychain entry for one account (service `StagePilot`).
@@ -948,36 +952,36 @@ impl OsKeychain {
 
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 impl KeychainBackend for OsKeychain {
-    fn read(&self) -> Result<Option<String>, ()> {
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
         match self.entry().and_then(|e| e.get_password()) {
             Ok(v) => Ok(Some(v)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(()),
+            Err(_) => Err(KeychainUnavailable),
         }
     }
-    fn write(&self, secret: &str) -> Result<(), ()> {
+    fn write(&self, secret: &str) -> Result<(), KeychainUnavailable> {
         self.entry()
             .and_then(|e| e.set_password(secret))
-            .map_err(|_| ())
+            .map_err(|_| KeychainUnavailable)
     }
-    fn delete(&self) -> Result<(), ()> {
+    fn delete(&self) -> Result<(), KeychainUnavailable> {
         match self.entry().and_then(|e| e.delete_credential()) {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(()),
+            Err(_) => Err(KeychainUnavailable),
         }
     }
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 impl KeychainBackend for OsKeychain {
-    fn read(&self) -> Result<Option<String>, ()> {
-        Err(())
+    fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+        Err(KeychainUnavailable)
     }
-    fn write(&self, _: &str) -> Result<(), ()> {
-        Err(())
+    fn write(&self, _: &str) -> Result<(), KeychainUnavailable> {
+        Err(KeychainUnavailable)
     }
-    fn delete(&self) -> Result<(), ()> {
-        Err(())
+    fn delete(&self) -> Result<(), KeychainUnavailable> {
+        Err(KeychainUnavailable)
     }
 }
 
@@ -1015,7 +1019,7 @@ impl CredentialStore for KeyringCredentialStore {
         if let Some(value) = cache.as_ref() {
             return Ok(value.clone());
         }
-        let value = self.backend.read().map_err(|()| {
+        let value = self.backend.read().map_err(|_| {
             CredentialStoreError("The secure credential store is unavailable.".into())
         })?;
         *cache = Some(value.clone());
@@ -1023,7 +1027,7 @@ impl CredentialStore for KeyringCredentialStore {
     }
 
     fn set_secret(&self, secret: &str) -> Result<(), CredentialStoreError> {
-        self.backend.write(secret).map_err(|()| {
+        self.backend.write(secret).map_err(|_| {
             CredentialStoreError("The secure credential could not be saved.".into())
         })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(Some(secret.to_string()));
@@ -1031,7 +1035,7 @@ impl CredentialStore for KeyringCredentialStore {
     }
 
     fn remove_secret(&self) -> Result<(), CredentialStoreError> {
-        self.backend.delete().map_err(|()| {
+        self.backend.delete().map_err(|_| {
             CredentialStoreError("The secure credential could not be removed.".into())
         })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(None);
@@ -1394,15 +1398,15 @@ mod keychain_tests {
     }
 
     impl KeychainBackend for FakeKeychain {
-        fn read(&self) -> Result<Option<String>, ()> {
+        fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
             self.reads.fetch_add(1, Ordering::SeqCst);
             Ok(self.value.lock().unwrap().clone())
         }
-        fn write(&self, secret: &str) -> Result<(), ()> {
+        fn write(&self, secret: &str) -> Result<(), KeychainUnavailable> {
             *self.value.lock().unwrap() = Some(secret.into());
             Ok(())
         }
-        fn delete(&self) -> Result<(), ()> {
+        fn delete(&self) -> Result<(), KeychainUnavailable> {
             *self.value.lock().unwrap() = None;
             Ok(())
         }
@@ -1470,14 +1474,14 @@ mod keychain_tests {
     fn an_unavailable_keychain_is_a_warning_not_a_failure() {
         struct Broken;
         impl KeychainBackend for Broken {
-            fn read(&self) -> Result<Option<String>, ()> {
-                Err(())
+            fn read(&self) -> Result<Option<String>, KeychainUnavailable> {
+                Err(KeychainUnavailable)
             }
-            fn write(&self, _: &str) -> Result<(), ()> {
-                Err(())
+            fn write(&self, _: &str) -> Result<(), KeychainUnavailable> {
+                Err(KeychainUnavailable)
             }
-            fn delete(&self) -> Result<(), ()> {
-                Err(())
+            fn delete(&self) -> Result<(), KeychainUnavailable> {
+                Err(KeychainUnavailable)
             }
         }
         let store = KeyringCredentialStore::with_backend(Box::new(Broken));

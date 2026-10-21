@@ -243,9 +243,16 @@ mod midi_build_guard {
     }
 
     #[test]
+    fn the_default_playback_api_source_needs_no_hardware() {
+        let mut settings = RuntimeSettings::demo();
+        settings.integration_modes.midi_source = stagepilot_core::config::MidiSource::PlaybackApi;
+        assert!(midi_build_problem(&settings, false).is_none());
+    }
+
+    #[test]
     fn real_midi_input_without_backend_fails_loudly() {
         let mut settings = RuntimeSettings::demo();
-        settings.midi_enabled = true;
+        settings.integration_modes.midi_source = stagepilot_core::config::MidiSource::Real;
         let message = midi_build_problem(&settings, false).expect("must refuse");
         assert!(message.contains("MIDI input"), "{message}");
     }

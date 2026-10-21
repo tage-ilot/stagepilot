@@ -176,7 +176,7 @@ impl Rig {
     /// The Python rig's `reload`: the plan is re-read from "Planning Center" into the store.
     fn wire_reload(bus: &EventBus, state: &StateStore, remote: &Remote) {
         let (state, remote) = (state.clone(), remote.clone());
-        let _ = (bus.subscribe(Some(EventType::ServiceReloadRequested), move |_| {
+        let _ = bus.subscribe(Some(EventType::ServiceReloadRequested), move |_| {
             let (state, remote) = (state.clone(), remote.clone());
             async move {
                 state.mutate(|s| {
@@ -189,7 +189,7 @@ impl Rig {
                 });
                 Ok(())
             }
-        }));
+        });
     }
 
     fn remote(&self, id: &str) -> i64 {

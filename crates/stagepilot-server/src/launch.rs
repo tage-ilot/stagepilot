@@ -273,8 +273,8 @@ pub fn midi_build_problem(
         return None;
     }
     let mut wanted = Vec::new();
-    if settings.midi_enabled {
-        wanted.push("MIDI input (Playback source is real MIDI)");
+    if settings.integration_modes.midi_source == stagepilot_core::config::MidiSource::Real {
+        wanted.push("MIDI input (the MIDI source is Real)");
     }
     if settings.lights.enabled && settings.lights.method == LightingMethod::Midi {
         wanted.push("lights sent as MIDI");
