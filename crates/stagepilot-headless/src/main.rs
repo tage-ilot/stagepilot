@@ -128,12 +128,12 @@ mod tests {
         let Parsed::Print(text) = parse(&args(&["--version"])) else {
             panic!("--version prints");
         };
-        let expected = if cfg!(feature = "midir-backend") {
-            "midi-backend: midir\n"
-        } else {
-            "midi-backend: none\n"
-        };
-        assert!(text.ends_with(expected), "{text}");
+        // The workspace test run enables the backend through stagepilot-midi, not through this
+        // crate's own feature, so the flag cannot be used here; the linked backend is the truth.
+        let name = stagepilot_midi::backend_name();
+        assert!(name == "midir" || name == "none", "{name}");
+        let expected = format!("midi-backend: {name}\n");
+        assert!(text.ends_with(&expected), "{text}");
     }
 
     #[test]
