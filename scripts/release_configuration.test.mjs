@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n");
 
 test("Tauri updater configuration points at the one release feed", () => {
   const config = JSON.parse(read("desktop/src-tauri/tauri.conf.json"));
@@ -401,7 +401,8 @@ test("Rust variant overlays bundle no sidecar, keep cloudflared and the frontend
 
 test("Rust installer CI is manual, unpublished, secret-free and short-lived", () => {
   const workflow = read(".github/workflows/rust-installer-ci.yml");
-  assert.match(workflow, /on:\s+workflow_dispatch:\s+permissions:\s+contents: read/);
+  assert.match(workflow, /on:\s+workflow_dispatch:[\s\S]*?permissions:\s+contents: read/);
+  assert.doesNotMatch(workflow, /pull_request|schedule:|release:|tags:/);
   assert.doesNotMatch(workflow, /secrets\./);
   assert.doesNotMatch(workflow, /environment:/);
   assert.doesNotMatch(workflow, /TAURI_SIGNING|publish_release|gh release/);

@@ -111,7 +111,7 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $dir "stagepilot_web/index.html"))) { throw "frontend resource missing from the install" }
           if (-not (Test-Path (Join-Path $dir "cloudflared.exe"))) { throw "cloudflared.exe missing from the install" }
-          $exe = Get-ChildItem $dir -Filter "*.exe" | Where-Object { $_.Name -notmatch "uninstall" } | Select-Object -First 1
+          $exe = Get-Item (Join-Path $dir "stagepilot-desktop.exe")
           node scripts/smoke_rust_app.mjs --exe $exe.FullName | Tee-Object -FilePath smoke.log
           if ($LASTEXITCODE -ne 0) { throw "smoke failed" }
           $uninstall = Join-Path $dir "uninstall.exe"
