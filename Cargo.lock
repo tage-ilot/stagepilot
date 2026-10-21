@@ -2559,6 +2559,7 @@ dependencies = [
  "keyring",
  "pbkdf2",
  "rand 0.9.5",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2577,6 +2578,7 @@ dependencies = [
 name = "stagepilot-headless"
 version = "0.0.0"
 dependencies = [
+ "stagepilot-midi",
  "stagepilot-server",
  "tokio",
  "tracing",

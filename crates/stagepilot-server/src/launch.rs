@@ -261,6 +261,35 @@ pub async fn shutdown_signal() {
     }
 }
 
+/// The settings ask for real MIDI (MIDI input, or lights sent as MIDI) but `hardware` is false,
+/// i.e. the binary was built without `midir-backend`. Such a build would silently send no MIDI,
+/// so startup refuses with this message instead.
+pub fn midi_build_problem(
+    settings: &stagepilot_core::settings::RuntimeSettings,
+    hardware: bool,
+) -> Option<String> {
+    use stagepilot_core::config::LightingMethod;
+    if hardware {
+        return None;
+    }
+    let mut wanted = Vec::new();
+    if settings.midi_enabled {
+        wanted.push("MIDI input (Playback source is real MIDI)");
+    }
+    if settings.lights.enabled && settings.lights.method == LightingMethod::Midi {
+        wanted.push("lights sent as MIDI");
+    }
+    if wanted.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "the settings use {}, but this binary was built without MIDI hardware support \
+         (cargo feature `midir-backend`); it would send no MIDI. Rebuild with \
+         `--features midir-backend`, or change the settings.",
+        wanted.join(" and ")
+    ))
+}
+
 /// `main.run()`: build the production runtime from saved settings and the keychain, start it,
 /// attach the desktop Remote when the environment configures it, serve until a signal, then stop
 /// in reverse order. The bind address is `runtime.settings` (which already folds in
@@ -289,6 +318,14 @@ where
         Arc::new(service),
         true,
         stagepilot_pco::runtime::PcoOptions::default(),
+    );
+    if let Some(problem) = midi_build_problem(&runtime.settings, stagepilot_midi::HARDWARE_SUPPORT)
+    {
+        return Err(problem.into());
+    }
+    tracing::info!(
+        midi_backend = stagepilot_midi::backend_name(),
+        "stagepilot_midi_backend"
     );
     let host = host.unwrap_or_else(|| runtime.settings.bind_host.clone());
     let port = port.unwrap_or(runtime.settings.bind_port);

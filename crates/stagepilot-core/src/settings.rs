@@ -921,18 +921,83 @@ impl CredentialStore for MemoryCredentialStore {
     }
 }
 
+/// One keychain account. The real one is the OS keychain; tests swap in a counting fake.
+pub trait KeychainBackend: Send + Sync {
+    /// `Ok(None)` when no entry exists; `Err` when the keychain itself is unavailable.
+    fn read(&self) -> Result<Option<String>, ()>;
+    fn write(&self, secret: &str) -> Result<(), ()>;
+    /// Removing an entry that does not exist is not an error.
+    fn delete(&self) -> Result<(), ()>;
+}
+
+/// The OS keychain entry for one account (service `StagePilot`).
+pub struct OsKeychain {
+    #[cfg_attr(
+        not(any(windows, target_os = "macos", target_os = "linux")),
+        allow(dead_code)
+    )]
+    account: String,
+}
+
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+impl OsKeychain {
+    fn entry(&self) -> Result<keyring::Entry, keyring::Error> {
+        keyring::Entry::new(KEYRING_SERVICE, &self.account)
+    }
+}
+
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+impl KeychainBackend for OsKeychain {
+    fn read(&self) -> Result<Option<String>, ()> {
+        match self.entry().and_then(|e| e.get_password()) {
+            Ok(v) => Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(_) => Err(()),
+        }
+    }
+    fn write(&self, secret: &str) -> Result<(), ()> {
+        self.entry()
+            .and_then(|e| e.set_password(secret))
+            .map_err(|_| ())
+    }
+    fn delete(&self) -> Result<(), ()> {
+        match self.entry().and_then(|e| e.delete_credential()) {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(()),
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+impl KeychainBackend for OsKeychain {
+    fn read(&self) -> Result<Option<String>, ()> {
+        Err(())
+    }
+    fn write(&self, _: &str) -> Result<(), ()> {
+        Err(())
+    }
+    fn delete(&self) -> Result<(), ()> {
+        Err(())
+    }
+}
+
 /// OS keychain store. Same service (`StagePilot`) and accounts as the Python app, so a secret
 /// saved by Python is read here and vice versa. Like Python, at most one keychain read per
 /// launch (each read can raise a macOS password prompt); the in-memory copy follows our writes.
 pub struct KeyringCredentialStore {
-    account: String,
+    backend: Box<dyn KeychainBackend>,
     cache: Mutex<Option<Option<String>>>,
 }
 
 impl KeyringCredentialStore {
     pub fn new(account: &str) -> Self {
-        Self {
+        Self::with_backend(Box::new(OsKeychain {
             account: account.to_string(),
+        }))
+    }
+    pub fn with_backend(backend: Box<dyn KeychainBackend>) -> Self {
+        Self {
+            backend,
             cache: Mutex::new(None),
         }
     }
@@ -942,73 +1007,35 @@ impl KeyringCredentialStore {
     pub fn oauth() -> Self {
         Self::new(KEYRING_ACCOUNT_OAUTH)
     }
-
-    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
-    fn entry(&self) -> Result<keyring::Entry, keyring::Error> {
-        keyring::Entry::new(KEYRING_SERVICE, &self.account)
-    }
 }
 
-#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 impl CredentialStore for KeyringCredentialStore {
     fn get_secret(&self) -> Result<Option<String>, CredentialStoreError> {
         let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(value) = cache.as_ref() {
             return Ok(value.clone());
         }
-        let value = match self.entry().and_then(|e| e.get_password()) {
-            Ok(v) => Some(v),
-            Err(keyring::Error::NoEntry) => None,
-            Err(_) => {
-                return Err(CredentialStoreError(
-                    "The secure credential store is unavailable.".into(),
-                ))
-            }
-        };
+        let value = self.backend.read().map_err(|()| {
+            CredentialStoreError("The secure credential store is unavailable.".into())
+        })?;
         *cache = Some(value.clone());
         Ok(value)
     }
 
     fn set_secret(&self, secret: &str) -> Result<(), CredentialStoreError> {
-        self.entry()
-            .and_then(|e| e.set_password(secret))
-            .map_err(|_| {
-                CredentialStoreError("The secure credential could not be saved.".into())
-            })?;
+        self.backend.write(secret).map_err(|()| {
+            CredentialStoreError("The secure credential could not be saved.".into())
+        })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(Some(secret.to_string()));
         Ok(())
     }
 
     fn remove_secret(&self) -> Result<(), CredentialStoreError> {
-        match self.entry().and_then(|e| e.delete_credential()) {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(_) => {
-                return Err(CredentialStoreError(
-                    "The secure credential could not be removed.".into(),
-                ))
-            }
-        }
+        self.backend.delete().map_err(|()| {
+            CredentialStoreError("The secure credential could not be removed.".into())
+        })?;
         *self.cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(None);
         Ok(())
-    }
-}
-
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-impl CredentialStore for KeyringCredentialStore {
-    fn get_secret(&self) -> Result<Option<String>, CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential store is unavailable.".into(),
-        ))
-    }
-    fn set_secret(&self, _: &str) -> Result<(), CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential could not be saved.".into(),
-        ))
-    }
-    fn remove_secret(&self) -> Result<(), CredentialStoreError> {
-        Err(CredentialStoreError(
-            "The secure credential could not be removed.".into(),
-        ))
     }
 }
 
@@ -1334,5 +1361,128 @@ pub fn object(value: Value) -> Map<String, Value> {
     match value {
         Value::Object(m) => m,
         _ => Map::new(),
+    }
+}
+
+#[cfg(test)]
+mod keychain_tests {
+    //! `test_keychain_access.py`: every keychain read can raise a macOS password prompt, so reads
+    //! stay minimal.
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    struct FakeKeychain {
+        value: Arc<Mutex<Option<String>>>,
+        reads: Arc<AtomicUsize>,
+    }
+
+    impl FakeKeychain {
+        fn new(value: Option<&str>) -> Self {
+            Self {
+                value: Arc::new(Mutex::new(value.map(str::to_string))),
+                reads: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+        fn reads(&self) -> usize {
+            self.reads.load(Ordering::SeqCst)
+        }
+        fn store(&self) -> KeyringCredentialStore {
+            KeyringCredentialStore::with_backend(Box::new(self.clone()))
+        }
+    }
+
+    impl KeychainBackend for FakeKeychain {
+        fn read(&self) -> Result<Option<String>, ()> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            Ok(self.value.lock().unwrap().clone())
+        }
+        fn write(&self, secret: &str) -> Result<(), ()> {
+            *self.value.lock().unwrap() = Some(secret.into());
+            Ok(())
+        }
+        fn delete(&self) -> Result<(), ()> {
+            *self.value.lock().unwrap() = None;
+            Ok(())
+        }
+    }
+
+    fn service(fake: &FakeKeychain, dir: &tempfile::TempDir) -> SettingsService {
+        SettingsService::new(
+            Box::new(SettingsFileStore::new(dir.path().join("settings.json"))),
+            Box::new(fake.store()),
+            BTreeMap::new(),
+        )
+    }
+
+    #[test]
+    fn repeated_reads_hit_the_keychain_once() {
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let store = fake.store();
+        let got: Vec<_> = (0..5).map(|_| store.get_secret().unwrap()).collect();
+        assert_eq!(got, vec![Some("secret-value".to_string()); 5]);
+        assert_eq!(fake.reads(), 1);
+    }
+
+    #[test]
+    fn cache_follows_our_own_writes_and_removals() {
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let store = fake.store();
+        store.set_secret("new").unwrap();
+        assert_eq!(store.get_secret().unwrap().as_deref(), Some("new"));
+        store.remove_secret().unwrap();
+        assert_eq!(store.get_secret().unwrap(), None);
+        assert_eq!(fake.reads(), 0);
+    }
+
+    #[test]
+    fn no_keychain_read_when_planning_center_is_not_configured() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let service = service(&fake, &dir);
+        service.load();
+        assert_eq!(fake.reads(), 0);
+        service.load();
+        assert_eq!(fake.reads(), 0);
+    }
+
+    #[test]
+    fn configured_planning_center_reads_once_per_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("settings.json"),
+            r#"{"schema_version": 2, "planning_center": {"app_id": "abc"}}"#,
+        )
+        .unwrap();
+        let fake = FakeKeychain::new(Some("secret-value"));
+        let service = service(&fake, &dir);
+        service.load();
+        service.load();
+        assert_eq!(fake.reads(), 1);
+        assert_eq!(
+            service.planning_center_secret().as_deref(),
+            Some("secret-value")
+        );
+    }
+
+    #[test]
+    fn an_unavailable_keychain_is_a_warning_not_a_failure() {
+        struct Broken;
+        impl KeychainBackend for Broken {
+            fn read(&self) -> Result<Option<String>, ()> {
+                Err(())
+            }
+            fn write(&self, _: &str) -> Result<(), ()> {
+                Err(())
+            }
+            fn delete(&self) -> Result<(), ()> {
+                Err(())
+            }
+        }
+        let store = KeyringCredentialStore::with_backend(Box::new(Broken));
+        assert!(store.get_secret().is_err());
+        assert!(store.set_secret("x").is_err());
+        assert!(store.remove_secret().is_err());
     }
 }

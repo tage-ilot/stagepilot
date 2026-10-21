@@ -208,3 +208,45 @@ mod activation {
         assert_eq!(fake.calls(), vec!["midi_refresh", "restart_failed"]);
     }
 }
+
+mod midi_build_guard {
+    use stagepilot_core::config::LightingMethod;
+    use stagepilot_core::settings::RuntimeSettings;
+    use stagepilot_server::launch::midi_build_problem;
+
+    #[test]
+    fn simulated_settings_need_no_hardware() {
+        let settings = RuntimeSettings::demo();
+        assert!(midi_build_problem(&settings, false).is_none());
+    }
+
+    #[test]
+    fn midi_lights_without_backend_fail_loudly() {
+        let mut settings = RuntimeSettings::demo();
+        settings.lights.enabled = true;
+        settings.lights.method = LightingMethod::Midi;
+        let message = midi_build_problem(&settings, false).expect("must refuse");
+        assert!(message.contains("lights sent as MIDI"), "{message}");
+        assert!(message.contains("midir-backend"), "{message}");
+        assert!(midi_build_problem(&settings, true).is_none());
+    }
+
+    #[test]
+    fn osc_lights_and_disabled_midi_lights_are_fine() {
+        let mut settings = RuntimeSettings::demo();
+        settings.lights.enabled = true;
+        settings.lights.method = LightingMethod::Osc;
+        assert!(midi_build_problem(&settings, false).is_none());
+        settings.lights.enabled = false;
+        settings.lights.method = LightingMethod::Midi;
+        assert!(midi_build_problem(&settings, false).is_none());
+    }
+
+    #[test]
+    fn real_midi_input_without_backend_fails_loudly() {
+        let mut settings = RuntimeSettings::demo();
+        settings.midi_enabled = true;
+        let message = midi_build_problem(&settings, false).expect("must refuse");
+        assert!(message.contains("MIDI input"), "{message}");
+    }
+}
