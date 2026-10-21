@@ -103,7 +103,7 @@ jobs:
 
       - name: Build headless server and midi probe (rig verification A artifact only)
         shell: bash
-        run: cargo build --release -p stagepilot-headless -p midi-probe
+        run: cargo build --release -p stagepilot-headless -p midi-probe --features stagepilot-headless/midir-backend
 
       - name: Upload rig verification binaries
         uses: actions/upload-artifact@v4
