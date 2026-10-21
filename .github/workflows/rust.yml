@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   # Windows, macOS Apple Silicon, macOS Intel. Linux has its own job below because it must run on
-  # the self-hosted runner (scripts/validate_workflow_runners.py).
+  # the Linux CI runner (scripts/validate_workflow_runners.py).
   rust:
     name: Rust — ${{ matrix.name }}
     strategy:
@@ -102,7 +102,7 @@ jobs:
 
   rust-linux:
     name: Rust — Linux
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -112,7 +112,7 @@ jobs:
           rustc --version
           cargo --version
 
-      # midi-probe links ALSA through midir; the self-hosted runner has no libasound2-dev or
+      # midi-probe links ALSA through midir; the Linux CI runner has no libasound2-dev or
       # pkg-config and none are installed here, so Linux builds every other crate.
       # See docs/rust-migration/linux-midi.md.
       - name: cargo fmt --check
@@ -132,7 +132,7 @@ jobs:
 
   contract:
     name: Contract baseline — Python backend (Linux)
-    runs-on: [self-hosted, stagepilot-linux]
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
