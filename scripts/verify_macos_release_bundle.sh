@@ -248,6 +248,8 @@ if [[ "$VARIANT" == "rust" ]]; then
   kill -0 "$BACKEND_PID" 2>/dev/null && echo "app still running (pid $BACKEND_PID)" >&2 || echo "app exited" >&2
   ps -A -o pid=,ppid=,etime=,command= | grep -i stagepilot | grep -v grep >&2 || true
   lsof -nP -a -p "$BACKEND_PID" -i 2>&1 | head -20 >&2 || true
+  ls -l /tmp/*org_stagepilot* >&2 2>/dev/null || true
+  sample "$BACKEND_PID" 2 -mayDie 2>&1 | head -90 >&2 || true
   for f in "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
     [[ -f "$f" ]] && { echo "== $f" >&2; tail -n 60 "$f" >&2; }
   done
