@@ -1,9 +1,8 @@
 // Publish a release and its assets through the GitHub REST API.
 //
-// The publish job runs on the self-hosted Linux runner, which does not have the
-// `gh` CLI installed and which this project cannot modify. Node 22 is already
-// set up in that job and provides global `fetch`, so the release is created,
-// populated and finalized here instead of shelling out to `gh`.
+// The publish job deliberately does not depend on the `gh` CLI. Node 22 is set
+// up in that job and provides global `fetch`, so the release is created,
+// populated and finalized here through the REST API instead of shelling out.
 //
 // Immutability is preserved exactly as before: if a release already exists for
 // the tag, this exits non-zero and uploads nothing.

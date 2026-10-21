@@ -38,8 +38,8 @@ the selected GitHub release.
 
 Native CI packaging is currently deferred: the preserved Windows x64, macOS
 Apple Silicon, and macOS Intel jobs are explicitly disabled until matching
-self-hosted native runners exist. The active `stagepilot-linux` runner performs
-only Linux-compatible Cargo/Tauri checks and must not be treated as native
+self-hosted native runners exist. The Linux CI jobs run on GitHub-hosted
+`ubuntu-24.04` and perform only Linux-compatible Cargo/Tauri checks and must not be treated as native
 packaging or acceptance evidence.
 
 The same build can be run on a Mac with:
