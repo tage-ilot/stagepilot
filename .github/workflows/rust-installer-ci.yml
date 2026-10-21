@@ -76,8 +76,8 @@ jobs:
         run: |
           APP="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           DMG="$(find desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "${{ matrix.arch }}" --variant rust
-          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "${{ matrix.arch }}" --variant rust
+          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "${{ matrix.arch }}" --variant rust --no-launch
+          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "${{ matrix.arch }}" --variant rust --no-launch
       - name: Assert no Python sidecar was built or bundled
         shell: bash
         run: |

@@ -205,9 +205,13 @@ jobs:
           DMG="$(find desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           ARCHIVE="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type f -name '*.app.tar.gz' -print -quit)"
           test -s "$ARCHIVE.sig"
-          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "$EXPECTED_ARCH" --variant "$VARIANT"
-          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "$EXPECTED_ARCH" --variant "$VARIANT"
-          bash scripts/verify_macos_release_bundle.sh --archive "$ARCHIVE" --arch "$EXPECTED_ARCH" --variant "$VARIANT"
+          # The Rust variant is a GUI app launched once, by the smoke step below; the three
+          # artifact passes there are static (a repeat launch of the same bundle never reaches setup).
+          EXTRA=""
+          if [[ "$VARIANT" == "rust" ]]; then EXTRA="--no-launch"; fi
+          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
+          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
+          bash scripts/verify_macos_release_bundle.sh --archive "$ARCHIVE" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
       - name: Smoke the Rust variant — macOS (launch, health, no Python, clean stop)
         if: runner.os == 'macOS' && env.VARIANT == 'rust'
         shell: bash

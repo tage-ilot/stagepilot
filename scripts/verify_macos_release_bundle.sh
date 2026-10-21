@@ -10,11 +10,13 @@ MODE=""
 INPUT=""
 EXPECTED_ARCH=""
 VARIANT="python"
+NO_LAUNCH=0
 while (($#)); do
   case "$1" in
     --app|--dmg|--archive) MODE="${1#--}"; INPUT="${2:-}"; shift 2 ;;
     --arch) EXPECTED_ARCH="${2:-}"; shift 2 ;;
     --variant) VARIANT="${2:-}"; shift 2 ;;
+    --no-launch) NO_LAUNCH=1; shift ;;
     *) usage ;;
   esac
 done
@@ -177,6 +179,14 @@ PY
 }
 verify_minos "$MAIN" "StagePilot"
 [[ -z "$SIDECAR" ]] || verify_minos "$SIDECAR" "StagePilot backend"
+
+if [[ "$NO_LAUNCH" == "1" ]]; then
+  # Static checks only. The Rust variant is a GUI app: a second launch of the same bundle in one
+  # CI login session never reaches setup (the first launch is registered with LaunchServices), so
+  # the single real first-launch is scripts/smoke_rust_app.mjs, run after these static checks.
+  echo "Static checks passed (launch skipped)."
+  exit 0
+fi
 
 PORT="$(python3 - <<'PY'
 import socket
