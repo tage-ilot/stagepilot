@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [features]
 # Real MIDI hardware through midir (see crates/stagepilot-midi). Off by default so a plain
-# `cargo build`/`cargo test` works where ALSA headers are missing (the self-hosted Linux runner).
+# `cargo build`/`cargo test` works where ALSA headers are missing (the Linux CI runner).
 midir-backend = ["stagepilot-midi/midir-backend"]
 
 [dependencies]

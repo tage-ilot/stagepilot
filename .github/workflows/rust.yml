@@ -71,7 +71,7 @@ jobs:
         run: cargo fmt --all --check
 
       # The hosted runners have the platform MIDI stack, so they also build and test the real
-      # midir backend (feature midir-backend). Linux (self-hosted, no ALSA headers) tests every
+      # midir backend (feature midir-backend). Linux (no ALSA dev headers) tests every
       # behaviour through in-memory fakes only.
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend -- -D warnings

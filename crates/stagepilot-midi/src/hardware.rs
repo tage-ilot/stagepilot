@@ -1,4 +1,4 @@
-//! `midir` backends (feature `midir-backend`). Never compiled on the self-hosted Linux runner.
+//! `midir` backends (feature `midir-backend`). Never compiled on the Linux CI runner.
 //!
 //! Matches the Python `Mido*` boundary: exact-name open, ambiguity is an error, the same public
 //! messages. A midir `MidiInput` / `MidiOutput` is created per operation (cheap, and it keeps the
