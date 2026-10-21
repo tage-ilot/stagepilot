@@ -21,7 +21,11 @@ function auditSource() {
 }
 
 function auditAssets(directory, version) {
-  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("A stable X.Y.Z version is required.");
+  // Stable X.Y.Z, or a pre-release X.Y.Z-(alpha|beta|rc).N (a Rust release candidate). The asset
+  // inventory is identical for both; publish_release.mjs keeps pre-releases away from "Latest".
+  if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(version)) {
+    throw new Error("A stable X.Y.Z or pre-release X.Y.Z-(alpha|beta|rc).N version is required.");
+  }
   const required = [
     `StagePilot_${version}_aarch64.dmg`,
     `StagePilot_${version}_x64.dmg`,

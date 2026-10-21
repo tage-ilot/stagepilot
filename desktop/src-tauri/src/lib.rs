@@ -992,6 +992,17 @@ fn spawn_backend(
                 "cloudflared"
             }),
     );
+    // The Rust release variant bundles the built frontend as the `stagepilot_web` resource (the
+    // Python sidecar carries its own copy inside PyInstaller). An explicit override wins, and a
+    // development run without the resource keeps the server's own fallbacks.
+    if env::var_os("STAGEPILOT_WEB_ROOT").is_none() {
+        if let Ok(resources) = app.path().resource_dir() {
+            let web_root = resources.join("stagepilot_web");
+            if web_root.join("index.html").is_file() {
+                env::set_var("STAGEPILOT_WEB_ROOT", web_root);
+            }
+        }
+    }
     env::set_var("STAGEPILOT_PCO_CLIENT_ID", env!("STAGEPILOT_PCO_CLIENT_ID"));
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {

@@ -58,5 +58,62 @@ no changes; a later validation failure leaves changes local without committing,
 tagging, or pushing.
 
 This helper releases `tage-ilot/stagepilot` only, with plain `X.Y.Z` versions
-(for example `2.41.0`; the suggestion is one patch past the highest tag).
+(for example `2.41.0`; the suggestion is one patch past the highest tag) or
+`X.Y.Z-rc.N` release candidates (see below).
 The helper functions are tested with `pwsh -NoProfile -File scripts/release-helpers.test.ps1`.
+
+## Cutting a release candidate (Rust installers)
+
+A release candidate (rc) is a pre-release build of the **Rust (in-process)** variant: the
+app starts the Rust `stagepilot-server` inside the desktop process, ships no Python
+sidecar (no PyInstaller `stagepilot-backend`), and bundles the built frontend plus
+`cloudflared`. Plain `X.Y.Z` tags keep the Python sidecar until phase 7 of the Rust
+migration (`docs/rust-migration/merge-plan.md`).
+
+```powershell
+.\scripts\create-release.ps1 2.42.0-rc.1
+```
+
+Rules enforced by the script: only `X.Y.Z-rc.N`; the base version must be newer than the
+latest stable tag; the rc number must be higher than every existing rc of that base;
+`CHANGELOG.md` needs a `## [2.42.0-rc.1]` heading. rc tags never change the suggested
+next stable version. The manual path is the same as for a stable release
+(`docs/releasing-stagepilot.md`): set the version everywhere with
+`node scripts/set-release-version.mjs 2.42.0-rc.1`, run the validation, commit, then tag
+`v2.42.0-rc.1`. `-alpha.N` / `-beta.N` tags (manual only) behave like rc tags.
+
+What the tag does: `release-macos.yml` reads the tag, selects variant `rust` for a
+pre-release suffix, builds macOS Apple Silicon, macOS Intel and Windows x64 with
+`tauri build --features in-process` (no `build:sidecar`), verifies the bundles
+(`scripts/verify_macos_release_bundle.sh --variant rust` rejects any sidecar or Python
+runtime file, then launches the app's server and checks `/api/v1/health`), smokes the
+built app once, signs the updater payloads as usual, and publishes through
+`scripts/publish_release.mjs`.
+
+### Why an rc never reaches the installed app
+
+The in-app updater reads
+`https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json`. GitHub's
+`/releases/latest` resolves to the most recent release that is neither a draft nor a
+pre-release. `publish_release.mjs` creates a pre-release tag's release with
+`prerelease: true`, never sends `make_latest`, and fails if GitHub reports the published
+release as anything but a pre-release. The rc's own `latest.json` is therefore reachable
+only at `.../releases/download/v2.42.0-rc.1/latest.json`; the production channel keeps
+serving the last stable release. An rc is installed by hand from its release page
+(download the DMG / `-setup.exe`). Because `2.42.0-rc.1` is newer than the current stable
+version, an installed rc does not offer a downgrade; the next stable tag supersedes it.
+
+### Installer artifacts without tagging
+
+Run **Rust installer CI** (`rust-installer-ci.yml`, *Run workflow*) on any branch. It builds
+the same three Rust installers without secrets, publishes nothing, launches each built
+app once (health from the in-process server, no Python process, clean stop) and keeps the
+installers as workflow artifacts for 3 days. These builds are not updater-signed.
+
+### Rolling back a release candidate
+
+Delete the pre-release on GitHub (Releases -> the rc -> Delete, or
+`gh release delete v2.42.0-rc.1 --cleanup-tag`). The production channel is untouched: the
+rc was never "Latest", so `releases/latest/download/latest.json` was never changed. A
+published release tag is not reused; the next attempt is `-rc.2`. Machines that installed
+the rc by hand are reinstalled from the last stable DMG / installer.

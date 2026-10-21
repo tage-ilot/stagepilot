@@ -21,9 +21,16 @@ if (!token) throw new Error("GITHUB_TOKEN is not set.");
 if (!tag || !directory) {
   throw new Error("Usage: node scripts/publish_release.mjs TAG RELEASE_ASSETS_DIR");
 }
-if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag)) {
+// Stable `vX.Y.Z`, or a pre-release `vX.Y.Z-(alpha|beta|rc).N` (the same set validate_versions.mjs accepts).
+if (!/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(tag)) {
   throw new Error(`Invalid release tag: ${tag}`);
 }
+
+// A pre-release is published as a GitHub pre-release and is NEVER marked "Latest". The in-app
+// updater reads https://github.com/<repo>/releases/latest/download/latest.json, and GitHub's
+// /releases/latest resolves to the newest release that is neither a draft nor a pre-release, so a
+// pre-release can only be reached through its own tag URL and never offered to installed apps.
+const prerelease = tag.includes("-");
 
 const api = "https://api.github.com";
 const uploads = "https://uploads.github.com";
@@ -65,6 +72,7 @@ const created = await (
       name: `StagePilot ${tag}`,
       body: fs.readFileSync(notesPath, "utf8"),
       draft: true,
+      ...(prerelease ? { prerelease: true } : {}),
       make_latest: "false",
     }),
   })
@@ -99,9 +107,13 @@ const published = await (
   await request(`${api}/repos/${repository}/releases/${created.id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ draft: false, make_latest: "true" }),
+    // Pre-releases must keep prerelease:true and must not request make_latest at all.
+    body: JSON.stringify(prerelease ? { draft: false, prerelease: true } : { draft: false, make_latest: "true" }),
   })
 ).json();
+if (prerelease && published.prerelease !== true) {
+  throw new Error(`Pre-release ${tag} was not published as a pre-release; refusing to continue.`);
+}
 
 console.log(
   JSON.stringify(
@@ -109,6 +121,7 @@ console.log(
       id: published.id,
       tag: published.tag_name,
       draft: published.draft,
+      prerelease: published.prerelease,
       url: published.html_url,
       assets: published.assets.map((asset) => ({ name: asset.name, size: asset.size })),
     },
