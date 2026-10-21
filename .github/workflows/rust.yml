@@ -21,6 +21,7 @@ on:
       - docs/rust-rig-b
       - feat/rust-phase6b-b
       - feat/rust-lightkey
+      - release/rust-integration
       - main
     paths:
       - "Cargo.toml"
