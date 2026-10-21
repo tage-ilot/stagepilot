@@ -160,8 +160,8 @@ test("release workflow requires secrets and publishes latest.json last", () => {
   assert.doesNotMatch(workflow, /notarytool|notariz/);
   assert.match(workflow, /Copy-Item \$installer\.FullName/);
   assert.match(workflow, /Copy-Item "\$\(\$installer\.FullName\)\.sig"/);
-  // The publish job runs on the self-hosted Linux runner, which has no `gh`
-  // CLI, so the release is created through the REST API by this script. The
+  // The publish job does not depend on the `gh` CLI, so the release is created
+  // through the REST API by this script. The
   // invariants it must preserve are asserted directly against its source.
   const publisher = read("scripts/publish_release.mjs");
   assert.doesNotMatch(workflow, /\bgh release\b/, "the publish job must not depend on the gh CLI");
