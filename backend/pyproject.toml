@@ -64,6 +64,11 @@ files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
+# scripts/contract is put on sys.path by tests/test_contract_today.py; it is not a package.
+module = ["contract", "pco_app"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "uvicorn.*"
 ignore_missing_imports = true
 
