@@ -6,9 +6,10 @@
 # listener) and the "diagnostics" profile (uploads go to a mock control plane).
 # And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
 # Usage (repo root): scripts/contract/run_rust.sh [PORT]
+# Keep the base port and everything derived from it below 32768 (Linux ephemeral range); see run_baseline.sh.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-PORT="${1:-47313}"
+PORT="${1:-27313}"
 PCO_PORT=$((PORT + 100))
 OUT_PORT=$((PORT + 300))
 OMOCK_PORT=$((PORT + 400))
