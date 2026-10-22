@@ -6,6 +6,8 @@ name: Release validation (dry run)
 # a tag: a green run is the gate. See docs/creating-a-release.md.
 on:
   workflow_dispatch:
+  push: # TEMPORARY: lets the branch run before the workflow exists on main; removed before merge
+    branches: [ci/release-validate-script]
 
 permissions:
   contents: read
