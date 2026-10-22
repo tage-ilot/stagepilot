@@ -136,7 +136,9 @@ enum BackendFailureKind {
     PortOccupied,
     SidecarMissing,
     SidecarExited,
-    /// The in-process server (cargo feature `in-process`) ended on its own.
+    /// The in-process server (cargo feature `in-process`) ended on its own. Only that build
+    /// constructs it, so the default (sidecar) build would warn about dead code.
+    #[cfg_attr(not(feature = "in-process"), allow(dead_code))]
     ServerExited,
     MacosCodeSigning,
     Timeout,
