@@ -1,0 +1,57 @@
+name: Release validation (dry run)
+
+# Runs the exact "Validate application" commands of the release workflows
+# (scripts/validate_application.sh) on every release platform and both installer variants,
+# without a tag, secrets, an environment or any publishing. Run it on main before cutting
+# a tag: a green run is the gate. See docs/creating-a-release.md.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate — ${{ matrix.name }} (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: macOS Apple Silicon, runner: macos-15, variant: python}
+          - {name: macOS Apple Silicon, runner: macos-15, variant: rust}
+          - {name: macOS Intel, runner: macos-15-intel, variant: python}
+          - {name: macOS Intel, runner: macos-15-intel, variant: rust}
+          - {name: Windows x64, runner: windows-latest, variant: python}
+          - {name: Windows x64, runner: windows-latest, variant: rust}
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+      VARIANT: ${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          working-directory: backend
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv sync --project backend --extra dev --locked
+          npm ci --prefix frontend
+          npm ci --prefix desktop
+          rustup update stable
+          rustup default stable
+      - name: Generate macOS Help Book
+        if: runner.os == 'macOS'
+        run: npm --prefix desktop run build:help
+      - name: Validate application
+        shell: bash
+        run: bash scripts/validate_application.sh "$VARIANT"

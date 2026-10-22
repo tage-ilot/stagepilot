@@ -116,3 +116,13 @@ state, and quarantine/signing output. Repeat with X.Y.2.
 
 Record results on both Intel and Apple Silicon Macs. The workflow cannot prove
 Gatekeeper behavior without this hardware test.
+
+## Lesson: regular CI and the release path must run the same validation
+
+`v2.42.0-rc.2` failed "Validate application" on all three builds while regular CI was green
+on the same commit, because the release workflows ran a different command sequence than CI
+(a macOS-only Tauri overlay needing a sidecar the rust variant does not build, an Intel
+timing-dependent test, a POSIX-only `time.tzset` that mypy rejects on Windows). The release
+validation is now one script, `scripts/validate_application.sh python|rust`, called by
+`release-macos.yml`, `release-windows.yml`, `create-release.ps1` and the no-tag dry run
+`release-validate.yml`. Run the dry run on `main` before every tag.

@@ -49,6 +49,12 @@ jobs:
           rustup update stable
           rustup default stable
 
+      - name: Validate application
+        shell: bash
+        run: |
+          uv sync --project backend --extra dev --locked
+          bash scripts/validate_application.sh python
+
       - name: Verify Planning Center OAuth client ID is resolved
         shell: pwsh
         env:

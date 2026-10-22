@@ -191,55 +191,33 @@ Invoke-Checked "Install locked backend dependencies" {
 Invoke-Checked "Format backend source" {
     uv run --project backend ruff format backend/src backend/tests
 }
-Invoke-Checked "Verify backend formatting" {
-    uv run --project backend ruff format --check backend/src backend/tests
-}
-Invoke-Checked "Backend lint" {
-    uv run --project backend ruff check backend/src backend/tests
-}
-Invoke-Checked "Backend typecheck" {
-    uv run --project backend python -m mypy --config-file backend/pyproject.toml backend/src backend/tests
-}
-Invoke-Checked "Backend tests" {
-    uv run --project backend python -m pytest -c backend/pyproject.toml backend/tests
-}
-
 Invoke-Checked "Install locked frontend dependencies" {
     Invoke-NpmPackage "frontend" @("ci")
 }
-Invoke-Checked "Frontend lint" {
-    Invoke-NpmPackage "frontend" @("run", "lint")
-}
-Invoke-Checked "Frontend typecheck" {
-    Invoke-NpmPackage "frontend" @("run", "typecheck")
-}
-Invoke-Checked "Frontend tests" {
-    Invoke-NpmPackage "frontend" @("test", "--", "--run")
-}
-Invoke-Checked "Frontend production build" {
-    Invoke-NpmPackage "frontend" @("run", "build")
-}
-
 Invoke-Checked "Install locked desktop dependencies" {
     Invoke-NpmPackage "desktop" @("ci")
-}
-Invoke-Checked "Build packaged backend sidecar" {
-    Invoke-NpmPackage "desktop" @("run", "build:sidecar")
 }
 Invoke-Checked "Format Rust source" {
     cargo fmt --manifest-path desktop/src-tauri/Cargo.toml
 }
-Invoke-Checked "Verify Rust formatting" {
-    cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
+
+# The same command list the release workflows and the release-validate.yml dry run use
+# (scripts/validate_application.sh), so a local pass means the tag's validation passes.
+# Git for Windows ships bash next to git; prefer it over the WSL bash.exe launcher.
+$Bash = $null
+$GitCommand = Get-Command git -ErrorAction SilentlyContinue
+if ($GitCommand) {
+    $GitBash = Join-Path (Split-Path (Split-Path $GitCommand.Source)) "bin/bash.exe"
+    if (Test-Path $GitBash) { $Bash = $GitBash }
 }
-Invoke-Checked "Rust lint" {
-    cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+if (-not $Bash) {
+    $Found = Get-Command bash -ErrorAction SilentlyContinue
+    if (-not $Found) { throw "bash was not found; install Git for Windows (it ships bash)." }
+    $Bash = $Found.Source
 }
-Invoke-Checked "Rust tests" {
-    cargo test --manifest-path desktop/src-tauri/Cargo.toml
-}
-Invoke-Checked "Desktop release configuration tests" {
-    Invoke-NpmPackage "desktop" @("run", "release:test")
+$ValidationVariant = if (Test-PreReleaseVersion $Version) { "rust" } else { "python" }
+Invoke-Checked "Validate application ($ValidationVariant variant)" {
+    & $Bash scripts/validate_application.sh $ValidationVariant
 }
 
 if (Test-Path "tools/multitracks-cues/package.json") {
