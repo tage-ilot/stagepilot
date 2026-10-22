@@ -298,7 +298,7 @@ async def test_missing_song_id_does_not_crash_or_map(rig: Rig) -> None:
     assert timer.status is TimerStatus.RUNNING
     # The invariant: the song-less frame's position 50 is never mapped. The following healthy
     # heartbeat (position 11) may or may not move the timer, so do not pin an exact value.
-    assert timer.position_seconds < 50
+    assert (timer.position_seconds or 0) < 50
     assert not rig.mapper.stale
 
 
