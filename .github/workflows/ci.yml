@@ -151,10 +151,15 @@ jobs:
         run: |
           rustup update stable
           rustup default stable
-          rustup component add rustfmt
+          rustup component add rustfmt clippy
 
       - name: Check Rust formatting
         run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
+
+      - name: Lint desktop shell (same as the release workflow's validation)
+        run: |
+          cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --features in-process -- -D warnings
 
       - name: Compile-check desktop shell on Linux
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
