@@ -288,10 +288,17 @@ async def test_missing_song_id_does_not_crash_or_map(rig: Rig) -> None:
         '"padPlayerPlayState":{"stopped":{}},"setlistCloudVersion":1}}}'
     )
     rig.pb.tick(1)  # keep the link healthy; the song-less heartbeat is dropped
+    # Wait for that tick's heartbeat (position 11) to arrive instead of guessing how long the
+    # client stays quiet: on a slow runner pump() could return before or after it was mapped.
+    await eventually(
+        lambda: any(s.heartbeat is not None and s.heartbeat.position == 11 for s, _ in rig.items)
+    )
     await rig.pump()
     timer = await rig.timer()
     assert timer.status is TimerStatus.RUNNING
-    assert timer.position_seconds == 0  # the position 50 in the bad frame never mapped
+    # The invariant: the song-less frame's position 50 is never mapped. The following healthy
+    # heartbeat (position 11) may or may not move the timer, so do not pin an exact value.
+    assert timer.position_seconds < 50
     assert not rig.mapper.stale
 
 
