@@ -6,9 +6,12 @@
 # listener) and the "diagnostics" profile (uploads go to a mock control plane).
 # And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
 # Usage (repo root): scripts/contract/run_baseline.sh [PORT]
+# The base port and every port derived from it (+100 ... +1000) must stay BELOW 32768, the start of
+# the Linux ephemeral range: a derived port inside it can be held by an earlier outgoing connection
+# and the bind fails with "Address already in use" (seen on the hosted runner at base+1000).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-PORT="${1:-47312}"
+PORT="${1:-27312}"
 PCO_PORT=$((PORT + 100))
 OUT_PORT=$((PORT + 300))
 OMOCK_PORT=$((PORT + 400))
