@@ -111,3 +111,15 @@ within 1.5 s. CI regenerates the file and fails on a diff.
   structurally valid file holding an invalid take.
 - Real Lightkey timing (the PR's 41 ms median OSC-to-DMX, 28-52 ms, n=12) is not re-verified on
   Rust: the rig authorisation has lapsed. Nothing here sends OSC or MIDI anywhere real.
+
+## Fixture capture (lightkey-api 0.4 relay): Rust only, no Python test
+
+See `docs/rust-handoff/lightkey-fixture-relay.md`. There is no Python counterpart: the feature exists
+only in Rust, so these tests are the specification.
+
+| Test file | Covers |
+|---|---|
+| `src/lightkey_fixtures.rs` (unit, 16 tests) | address rules, JSON arg types, packet decode and truncation safety, pong and clock sample, lowest-round-trip estimate, part joining, gap and wrap and restart, numbering of hellos, state ordering, recorder (scope, time zero, clamp), track validation, replay plan |
+| `src/lightkey_relay.rs` (unit) | relay address from the API address |
+| `tests/lightkey_relay_packets.rs` | golden packets from the Python encoder (`tests/fixtures/relay_packets.json`) |
+| `tests/lightkey_fixtures_link.rs` (9 tests) | against a fake UDP relay: subscribe, clock offset, live status, silent relay changes nothing, recording at song time with a 5 s clock offset, lost-packet repair, replay order and timing and release, stop gives fixtures back, replay off or recording armed sends nothing, old takes still load |

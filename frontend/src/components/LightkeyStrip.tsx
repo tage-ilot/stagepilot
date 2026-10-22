@@ -7,7 +7,7 @@ import {
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyLink, LightkeyStatus } from "../types";
+import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus, LightkeyTakeSummary } from "../types";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { StatusDot } from "./ui/StatusDot";
@@ -28,6 +28,21 @@ const linkTone: Record<LightkeyLink, Tone> = {
   lightkey_closed: "warning",
   unreachable: "danger",
 };
+
+const fixtureTone: Record<LightkeyFixtureStatus["link"], Tone> = { waiting: "idle", live: "success", lost: "warning" };
+
+/** The fixture-level line: what is captured besides cues, in words. */
+function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
+  if (fixtures.link === "live") return `Colour and levels: ${fixtures.fixtures} fixture${fixtures.fixtures === 1 ? "" : "s"}`;
+  if (fixtures.link === "waiting") return "Colour and levels: connecting";
+  return fixtures.detail ?? "Colour and levels: not receiving";
+}
+
+function takeDetail(take: LightkeyTakeSummary): string {
+  const cues = `${take.edge_count} change${take.edge_count === 1 ? "" : "s"}`;
+  const levels = take.fixture_event_count ? ` · ${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}` : "";
+  return cues + levels;
+}
 
 /** The line under the switches: the one thing the operator most needs to know right now. */
 export function lightkeyHeadline(status: LightkeyStatus): string {
@@ -118,6 +133,12 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
       {status.link !== "connected" && status.link !== "off" && status.detail && (
         <p className="mt-1 text-type-body-sm text-ink-muted">{status.detail}</p>
       )}
+      {connected && status.fixtures && (
+        <p className="mt-1 inline-flex items-center gap-2 text-type-body-sm text-ink-muted" data-testid="lightkey-fixtures">
+          <StatusDot ignoreAccent label={lightkeyFixtureWord(status.fixtures)} tone={fixtureTone[status.fixtures.link]} />
+          {lightkeyFixtureWord(status.fixtures)}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Input
@@ -166,7 +187,7 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
             <li className="flex items-center justify-between gap-3 text-sm text-ink-body" key={take.song_key}>
               <span className="min-w-0 truncate">
                 {take.song_title}
-                <span className="text-ink-muted"> · {take.edge_count} change{take.edge_count === 1 ? "" : "s"}</span>
+                <span className="text-ink-muted"> · {takeDetail(take)}</span>
               </span>
               <Button
                 aria-label={`Clear capture for ${take.song_title}`}

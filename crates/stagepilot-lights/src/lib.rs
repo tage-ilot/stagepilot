@@ -6,7 +6,9 @@
 //! sent together. Every output sits behind a trait, so all of it is tested without hardware.
 
 pub mod lightkey;
+pub mod lightkey_fixtures;
 pub mod lightkey_link;
+pub mod lightkey_relay;
 pub mod models;
 pub mod plugin;
 

@@ -728,6 +728,8 @@ pub struct SongLightingCueMap {
 
 /// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
 pub const DEFAULT_LIGHTKEY_API_PORT: u16 = 8770;
+/// Default UDP port of the `lightkey-api` OSC relay (`relay_port`), on the same host as the API.
+pub const DEFAULT_LIGHTKEY_RELAY_PORT: u16 = 21700;
 
 /// Saved Lightkey link settings, part of `LightsSettings` (`LightkeySettings`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
