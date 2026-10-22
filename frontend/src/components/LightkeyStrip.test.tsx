@@ -99,6 +99,35 @@ describe("LightkeyStrip", () => {
     await waitFor(() => expect(screen.queryByText(/Holy Forever/)).not.toBeInTheDocument());
   });
 
+  it("shows the fixture stream and what each song captured besides cues", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
+      fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
+      takes: [{ ...take, fixture_count: 12, fixture_event_count: 131 }],
+    }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
+    expect(screen.getByText(/131 colour\/level changes/)).toBeInTheDocument();
+  });
+
+  it("says connecting while the first fixture data is awaited", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: { link: "waiting", detail: null, fixtures: 1, lost_packets: 0, recording: false } }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByText("Colour and levels: connecting")).toBeInTheDocument();
+  });
+
+  it("says in words when the fixture stream stops, and says nothing for an older Lightkey API", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
+      fixtures: { link: "lost", detail: "No fixture data from the Lightkey API.", fixtures: 66, lost_packets: 2, recording: false },
+    }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByText("No fixture data from the Lightkey API.")).toBeInTheDocument();
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByText("Connected");
+    expect(screen.queryByTestId("lightkey-fixtures")).not.toBeInTheDocument();
+  });
+
   it("shows a load failure instead of a blank strip", async () => {
     vi.mocked(api.getLightkeyStatus).mockRejectedValue(new Error("boom"));
     render(<LightkeyStrip lightingEnabled />);

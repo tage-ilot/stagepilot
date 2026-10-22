@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Lighting: the Lightkey live link also captures color, intensity and mover movement. With
+  `lightkey-api` 0.4 or newer it subscribes to the agent's OSC fixture relay, records each fixture
+  change with its song time next to the cue changes, and replays them in Lightkey's own OSC form.
+  Replay clears every fixture it held when the song ends or stops. Older agents keep working with
+  cue capture only. Rust only: the Python backend is not changed. See `docs/lights.md`.
+
 ## [2.42.0-rc.1] - 2026-10-22
 
 Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.

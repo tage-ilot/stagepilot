@@ -128,6 +128,30 @@ Replay uses `/live/*/cue/<name>/activate` and `/deactivate` with no fade
 argument, so each cue keeps its own fade. Cue names that contain `/` cannot be
 addressed over OSC and are skipped.
 
+### Color, intensity and movers
+
+With `lightkey-api` 0.4 or newer, the live link also captures what the fixtures do. That is color,
+intensity, pan and tilt, gobo, zoom and more, not only which cues are on. StagePilot needs no
+setup for this. The agent sends its decoded fixture changes to the same address as the API, on UDP
+port 21700. The strip shows a second line, **Color and levels**, with the number of fixtures.
+
+- **Record.** The same Record switch captures both. Each fixture change is stored with its song
+  time in Lightkey's OSC form, for example `/fixture/MH1/overrides/panAngle 90.0`. Replay needs no
+  conversion. A fixture that never changes during the song is not stored. It stays with the cues
+  and the Lightkey operator. The song's line in the list counts the color and level changes next
+  to the cue changes.
+- **Replay.** Replay sets each captured fixture to its recorded state at that point. Then it sends
+  each change 45 ms before its time. Replay holds those fixtures with overrides. When the song
+  ends, stops, or replay is switched off, StagePilot clears every fixture it held. It sends one
+  clear per fixture, twice. The cues then take over again. Fixtures that were never captured are
+  not touched.
+- **Older agents.** An agent without the fixture relay shows no second line. Recording then
+  captures cues only, as before. If the stream stops during a recording, the cue capture is
+  unaffected, and the message says that levels were not recorded.
+- **Wired network.** The relay uses plain unicast UDP, so it crosses the wired router. Do not use
+  Wi-Fi. Its timing is not steady enough: the agent's multicast over Wi-Fi stalled for up to
+  0.8 s in a test.
+
 ## Cue board, live capture and the timeline
 
 Cues are easiest to set while the song is running in practice. Under **Song

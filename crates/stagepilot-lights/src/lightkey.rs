@@ -124,6 +124,10 @@ pub struct LightkeyTake {
     pub initial: Vec<String>,
     #[serde(default)]
     pub edges: Vec<LightkeyEdge>,
+    /// Fixture state captured from the `lightkey-api` relay (colour, intensity, pan/tilt...).
+    /// Absent in takes recorded before the relay existed, and left out of the file when empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixtures: Option<crate::lightkey_fixtures::FixtureTrack>,
 }
 
 impl LightkeyTake {
@@ -143,6 +147,7 @@ impl LightkeyTake {
             duration_seconds,
             initial,
             edges,
+            fixtures: None,
         };
         take.normalise_and_validate()?;
         Ok(take)
@@ -176,6 +181,9 @@ impl LightkeyTake {
         }
         self.edges
             .sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
+        if let Some(track) = self.fixtures.as_mut() {
+            track.normalise_and_validate().map_err(|e| TakeError(e.0))?;
+        }
         Ok(())
     }
 }
@@ -223,6 +231,14 @@ pub struct LightkeyTakeSummary {
     pub duration_seconds: f64,
     pub edge_count: u32,
     pub cue_count: u32,
+    /// Fixtures the capture drives and how many fixture changes it holds. Left out for takes
+    /// without a fixture capture, so those serialise exactly as before the relay existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fixture_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fixture_event_count: Option<u32>,
 }
 
 /// `LightkeyStatus.link`: off = Lighting disabled; connected = API answered and Lightkey is
@@ -235,6 +251,34 @@ pub enum LightkeyLink {
     Connected,
     LightkeyClosed,
     Unreachable,
+}
+
+/// State of the fixture stream from the `lightkey-api` OSC relay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum FixtureLink {
+    /// Subscribed; nothing received yet.
+    Waiting,
+    /// Packets are arriving and the fixture state is current.
+    Live,
+    /// No packets for a few seconds, or the relay refused us.
+    Lost,
+}
+
+/// The fixture stream, as the strip shows it. `LightkeyStatus.fixtures` is left out until the
+/// relay has answered once, so a Lightkey API older than 0.4 changes nothing on screen.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FixtureStatus {
+    pub link: FixtureLink,
+    pub detail: Option<String>,
+    /// Fixtures the Lightkey project reports.
+    pub fixtures: u32,
+    /// Packets lost since the link started.
+    pub lost_packets: u32,
+    /// This capture records fixture changes against the song.
+    pub recording: bool,
 }
 
 /// What the StagePilot Lightkey strip shows (`LightkeyStatus`).
@@ -252,6 +296,9 @@ pub struct LightkeyStatus {
     pub replaying_song: Option<String>,
     pub message: Option<String>,
     pub takes: Vec<LightkeyTakeSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fixtures: Option<FixtureStatus>,
 }
 
 impl LightkeyStatus {
@@ -455,6 +502,14 @@ pub fn summarize(take: &LightkeyTake) -> LightkeyTakeSummary {
         duration_seconds: take.duration_seconds,
         edge_count: u32::try_from(take.edges.len()).unwrap_or(u32::MAX),
         cue_count: u32::try_from(managed_cues(take).len()).unwrap_or(u32::MAX),
+        fixture_count: take
+            .fixtures
+            .as_ref()
+            .map(|t| u32::try_from(t.fixtures().len()).unwrap_or(u32::MAX)),
+        fixture_event_count: take
+            .fixtures
+            .as_ref()
+            .map(|t| u32::try_from(t.events.len()).unwrap_or(u32::MAX)),
     }
 }
 

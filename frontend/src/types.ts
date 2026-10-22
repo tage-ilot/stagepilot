@@ -277,6 +277,20 @@ export interface LightkeyTakeSummary {
   duration_seconds: number;
   edge_count: number;
   cue_count: number;
+  /** Present only when fixture levels (colour, intensity, movers) were captured with the cues. */
+  fixture_count?: number;
+  fixture_event_count?: number;
+}
+
+export type LightkeyFixtureLink = "waiting" | "live" | "lost";
+
+/** The fixture-level stream from the lightkey-api relay. Absent until the relay has answered once. */
+export interface LightkeyFixtureStatus {
+  link: LightkeyFixtureLink;
+  detail: string | null;
+  fixtures: number;
+  lost_packets: number;
+  recording: boolean;
 }
 
 export type LightkeyLink = "off" | "connected" | "lightkey_closed" | "unreachable";
@@ -294,6 +308,7 @@ export interface LightkeyStatus {
   replaying_song: string | null;
   message: string | null;
   takes: LightkeyTakeSummary[];
+  fixtures?: LightkeyFixtureStatus;
 }
 
 export interface LightkeyActionResponse {

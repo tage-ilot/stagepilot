@@ -3,4 +3,9 @@
 /**
  * `LightkeyTakeSummary`.
  */
-export type LightkeyTakeSummary = { song_key: string, song_title: string, recorded_at: string, duration_seconds: number, edge_count: number, cue_count: number, };
+export type LightkeyTakeSummary = { song_key: string, song_title: string, recorded_at: string, duration_seconds: number, edge_count: number, cue_count: number, 
+/**
+ * Fixtures the capture drives and how many fixture changes it holds. Left out for takes
+ * without a fixture capture, so those serialise exactly as before the relay existed.
+ */
+fixture_count?: number, fixture_event_count?: number, };

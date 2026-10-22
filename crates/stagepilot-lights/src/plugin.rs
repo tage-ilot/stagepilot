@@ -183,6 +183,7 @@ impl LightsPlugin {
                 }
                 None => (false, false, String::new(), Default::default()),
             });
+        let weak_command = weak.clone();
         let send: crate::lightkey_link::SendOsc = Arc::new(move |address: String| {
             let weak = weak.clone();
             Box::pin(async move {
@@ -192,6 +193,17 @@ impl LightsPlugin {
                 }
             })
         });
+        let mut link_options = link_options;
+        link_options.send_command =
+            Some(Arc::new(move |address: String, args: Vec<OscArgument>| {
+                let weak = weak_command.clone();
+                Box::pin(async move {
+                    match weak.upgrade() {
+                        Some(inner) => inner.send_command_osc(address, args).await,
+                        None => Ok(()),
+                    }
+                })
+            }));
         let _ = inner.lightkey.set(LightkeyLink::new(
             bus_for_link,
             provider,
@@ -222,6 +234,7 @@ impl LightsPlugin {
     pub async fn lightkey_apply_settings(&self, lightkey: LightkeySettings) {
         lock(&self.inner.state).settings.lightkey = lightkey;
         self.link().settings_changed();
+        self.link().refresh_replay().await;
     }
 
     pub async fn snapshot(&self, refresh: bool) -> LightsStatusResponse {
@@ -773,6 +786,15 @@ impl Inner {
 
     /// One-shot OSC through the saved output, address only (used by Lightkey replay).
     async fn send_raw_osc(&self, address: String) -> Result<(), String> {
+        self.send_command_osc(address, Vec::new()).await
+    }
+
+    /// One-shot OSC with arguments through the saved output (Lightkey fixture replay).
+    async fn send_command_osc(
+        &self,
+        address: String,
+        args: Vec<OscArgument>,
+    ) -> Result<(), String> {
         let output = {
             let st = self.st();
             if st.settings.method != LightingMethod::Osc {
@@ -783,7 +805,7 @@ impl Inner {
         let Some(output) = output.filter(|o| !o.closed()) else {
             return Ok(());
         };
-        tokio::task::spawn_blocking(move || output.send_message(&address, &[]))
+        tokio::task::spawn_blocking(move || output.send_message(&address, &args))
             .await
             .map_err(|_| "OSC send task failed.".to_string())?
             .map_err(|e| e.message)?;
