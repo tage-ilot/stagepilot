@@ -2,15 +2,38 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "contract"))
-import contract
+_CONTRACT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "contract"
+# The helper scripts import each other by bare name, so the folder stays on sys.path.
+sys.path.insert(0, str(_CONTRACT_DIR))
+
+
+def _load_contract() -> ModuleType:
+    """Load scripts/contract/contract.py by path.
+
+    A plain `import contract` is ambiguous: the repository root also has a `contract/` data
+    folder (openapi.json, transcripts.json). mypy run from the repository root, as the release
+    workflow and create-release.ps1 do, resolves that folder as a namespace package and reports
+    every attribute as missing; run from backend/ (regular CI) it did not. Loading by path
+    type-checks the same from both.
+    """
+    spec = importlib.util.spec_from_file_location("contract", _CONTRACT_DIR / "contract.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["contract"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+contract: ModuleType = _load_contract()
 
 
 @pytest.mark.parametrize("tz", ["UTC", "America/Los_Angeles", "Pacific/Auckland"])
