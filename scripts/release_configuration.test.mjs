@@ -359,9 +359,17 @@ test("release workflow selects the Rust variant only for pre-release tags", () =
   assert.match(workflow, /rust_command: build:mac:rust/);
   assert.match(workflow, /rust_command: build:rust/);
   assert.match(workflow, /--variant "\$VARIANT"/);
-  assert.match(workflow, /build:runtime:rust/);
+  // The validation commands live in one script shared by every release path.
+  const validation = read("scripts/validate_application.sh");
+  assert.match(validation, /build:runtime:rust/);
+  // The rust cargo steps must not require the sidecar that macOS auto-merges.
+  assert.match(validation, /TAURI_CONFIG='\{"bundle":\{"externalBin":null\}\}'/);
   // The Python path is unchanged.
-  assert.match(workflow, /npm --prefix desktop run build:runtime\n/);
+  assert.match(validation, /npm --prefix desktop run build:runtime\n/);
+  for (const file of ["release-macos.yml", "release-windows.yml", "release-validate.yml"]) {
+    assert.match(read(`.github/workflows/${file}`), /scripts\/validate_application\.sh/, file);
+  }
+  assert.match(read("scripts/create-release.ps1"), /validate_application\.sh/);
   assert.match(workflow, /npm --prefix desktop run \$\{\{ matrix\.command \}\}/);
   assert.match(workflow, /command: build:mac\n/);
 });
