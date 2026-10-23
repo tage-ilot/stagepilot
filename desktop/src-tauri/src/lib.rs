@@ -2481,6 +2481,8 @@ mod tests {
 #[cfg(all(test, feature = "in-process", any(windows, target_os = "macos")))]
 mod shipped_build_tests {
     #[test]
+    // The value is a compile-time constant on purpose: that is exactly what this test pins.
+    #[allow(clippy::assertions_on_constants)]
     fn midi_hardware_support_is_compiled_into_the_shipped_build() {
         assert!(
             stagepilot_midi::HARDWARE_SUPPORT,
