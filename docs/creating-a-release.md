@@ -62,6 +62,20 @@ This helper releases `tage-ilot/stagepilot` only, with plain `X.Y.Z` versions
 `X.Y.Z-rc.N` release candidates (see below).
 The helper functions are tested with `pwsh -NoProfile -File scripts/release-helpers.test.ps1`.
 
+## Dry-run the validation before any tag
+
+Run **Release validation (dry run)** (`release-validate.yml`) on `main` before cutting any
+tag: Actions tab -> *Release validation (dry run)* -> *Run workflow*. It has no secrets, no
+environment and publishes nothing. It runs `scripts/validate_application.sh` (the single
+copy of the release's "Validate application" commands, also used by `release-macos.yml`,
+`release-windows.yml` and `create-release.ps1`) on six legs: macOS Apple Silicon
+(`macos-15`), macOS Intel (`macos-15-intel`) and Windows x64 (`windows-latest`), each for
+the `python` variant (plain `X.Y.Z`) and the `rust` variant (`X.Y.Z-rc.N`, in-process, no
+sidecar). Each leg checks backend format, lint, mypy and pytest, frontend lint, typecheck,
+tests and build, the runtime staging, the desktop crate's `cargo fmt`, `clippy` and `test`
+(plus the `in-process` feature for rust), and `npm --prefix desktop run release:test`.
+**A green dry run on all six legs is the gate: do not tag until it is.**
+
 ## Cutting a release candidate (Rust installers)
 
 A release candidate (rc) is a pre-release build of the **Rust (in-process)** variant: the

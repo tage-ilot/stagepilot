@@ -36,6 +36,15 @@ def _load_contract() -> ModuleType:
 contract: ModuleType = _load_contract()
 
 
+def _apply_tz() -> None:
+    """Re-read the TZ environment variable. `time.tzset` does not exist on Windows."""
+    if sys.platform != "win32":  # also keeps mypy on Windows from flagging the attribute
+        time.tzset()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="time.tzset() is POSIX-only; TZ cannot be varied on Windows"
+)
 @pytest.mark.parametrize("tz", ["UTC", "America/Los_Angeles", "Pacific/Auckland"])
 @pytest.mark.parametrize(
     "now",
@@ -46,14 +55,14 @@ contract: ModuleType = _load_contract()
 )
 def test_today_is_stable(monkeypatch: pytest.MonkeyPatch, tz: str, now: datetime) -> None:
     monkeypatch.setenv("TZ", tz)
-    time.tzset()
+    _apply_tz()
     try:
         assert contract.today_values(now) == contract.today_values(now.replace(tzinfo=None))
         assert now.date().isoformat() in contract.today_values(now)
         assert contract.PINNED_TODAY in contract.today_values(now)
     finally:
         monkeypatch.undo()
-        time.tzset()
+        _apply_tz()
 
 
 def test_pinned_date_normalised_after_it_expires(monkeypatch: pytest.MonkeyPatch) -> None:
