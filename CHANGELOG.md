@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.42.0-rc.3] - 2026-10-23
+
+Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.
+
 ### Added
 
 - Lighting: the Lightkey live link also captures color, intensity and mover movement. With

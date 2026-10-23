@@ -4370,7 +4370,7 @@ dependencies = [
 
 [[package]]
 name = "stagepilot-desktop"
-version = "2.42.0-rc.2"
+version = "2.42.0-rc.3"
 dependencies = [
  "getrandom 0.2.17",
  "keyring",
@@ -4399,6 +4399,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "reqwest",
+ "rosc",
  "rustls",
  "serde",
  "serde_json",
