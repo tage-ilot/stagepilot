@@ -52,6 +52,14 @@ VOLATILE_KEYS = {
 # Any key ending in one of these suffixes is also volatile (wall-clock instants such as
 # `last_attempt_at`, `last_successful_plan_reload_at`).
 VOLATILE_SUFFIXES = ("_at",)
+# Rust-only additions. The recorded Python app has no such key; the Rust server may add it, but only
+# with this shape. Anything else extra is still a mismatch. Each entry names why the key exists.
+RUST_EXTENSIONS = {
+    # Lightkey fixture capture/replay (colour, intensity, movers) from the lightkey-api 0.4 relay was
+    # built in Rust only (#262). `fixtures` is the relay link status; it is only reported once the relay
+    # has been tried (in the contract mock it is unreachable, so link is "lost").
+    "fixtures": {"link", "fixtures", "lost_packets", "recording"},
+}
 # Response headers that are compared (everything else, e.g. date/server/content-length, is ignored).
 HEADERS_COMPARED = ("content-type",)
 
@@ -366,6 +374,9 @@ def diff(path: str, want: Any, got: Any, out: list[str]) -> None:
             if k not in got:
                 out.append(f"{path}.{k}: missing from target")
             elif k not in want:
+                shape = RUST_EXTENSIONS.get(k)
+                if shape is not None and isinstance(got[k], dict) and shape <= set(got[k]):
+                    continue
                 out.append(f"{path}.{k}: extra in target ({got[k]!r})")
             else:
                 diff(f"{path}.{k}", want[k], got[k], out)
