@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.42.0-rc.4] - 2026-10-23
+
+Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.
+
+### Fixed
+
+- Release validation: the contract test helper is loaded by path so mypy agrees when run from the repository root (the previous release candidate, v2.42.0-rc.1, failed validation on that and was never published).
+
 ## [2.42.0-rc.3] - 2026-10-23
 
 Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.

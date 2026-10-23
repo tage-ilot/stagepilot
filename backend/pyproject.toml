@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stagepilot"
-version = "2.42.0-rc.3"
+version = "2.42.0-rc.4"
 description = "Event-driven production automation backend for StagePilot"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -4473,7 +4473,7 @@ dependencies = [
 
 [[package]]
 name = "stagepilot-desktop"
-version = "2.42.0-rc.3"
+version = "2.42.0-rc.4"
 dependencies = [
  "getrandom 0.2.17",
  "keyring",
