@@ -2473,3 +2473,18 @@ mod tests {
         server.join().unwrap();
     }
 }
+
+/// The installers are built with `--features in-process` on Windows and macOS. If MIDI hardware
+/// support were off there, the server would refuse to start on any settings that send MIDI
+/// (v2.42.0-rc.3 shipped like that). Unit tests of other crates cannot see this: it is decided by
+/// how the desktop crate depends on the server.
+#[cfg(all(test, feature = "in-process", any(windows, target_os = "macos")))]
+mod shipped_build_tests {
+    #[test]
+    fn midi_hardware_support_is_compiled_into_the_shipped_build() {
+        assert!(
+            stagepilot_midi::HARDWARE_SUPPORT,
+            "the in-process desktop build must enable stagepilot-server/midir-backend"
+        );
+    }
+}

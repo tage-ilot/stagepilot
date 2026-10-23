@@ -21,6 +21,17 @@ in-process = ["dep:stagepilot-server"]
 
 [dependencies]
 stagepilot-server = { path = "../../crates/stagepilot-server", optional = true }
+
+# The installers ship on Windows and macOS, where MIDI hardware goes through midir (WinMM / CoreMIDI).
+# Without this the in-process server refuses to start on any settings that send MIDI ("built without
+# MIDI hardware support"), which is what v2.42.0-rc.3 did. Linux is not shipped and its midir needs
+# ALSA headers the CI runner does not have, so the feature stays off there.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+stagepilot-server = { path = "../../crates/stagepilot-server", optional = true, features = ["midir-backend"] }
+
+# Lets the shell's own tests assert the feature really is on in the build that ships.
+[target.'cfg(any(windows, target_os = "macos"))'.dev-dependencies]
+stagepilot-midi = { path = "../../crates/stagepilot-midi" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
