@@ -34,6 +34,8 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
+/// Closest spacing of two OSC packets: 5 ms = at most 200 packets per second.
+pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
 pub const RETRY_SECONDS: f64 = 2.0;
 pub const OFFSET_SAMPLES: usize = 7;
@@ -182,11 +184,19 @@ pub type SettingsProvider = Arc<dyn Fn() -> LinkSettings + Send + Sync>;
 pub trait TakeStore: Send + Sync {
     fn load(&self) -> Result<BTreeMap<String, LightkeyTake>, std::io::Error>;
     fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error>;
+    /// Whether Record was armed when the app last ran. Unreadable means off.
+    fn load_armed(&self) -> bool {
+        false
+    }
+    fn save_armed(&self, _armed: bool) -> Result<(), std::io::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Default)]
 pub struct MemoryTakeStore {
     takes: Mutex<BTreeMap<String, LightkeyTake>>,
+    armed: Mutex<bool>,
 }
 
 impl MemoryTakeStore {
@@ -207,6 +217,13 @@ impl TakeStore for MemoryTakeStore {
     }
     fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error> {
         self.set(takes.clone());
+        Ok(())
+    }
+    fn load_armed(&self) -> bool {
+        *self.armed.lock().unwrap_or_else(|p| p.into_inner())
+    }
+    fn save_armed(&self, armed: bool) -> Result<(), std::io::Error> {
+        *self.armed.lock().unwrap_or_else(|p| p.into_inner()) = armed;
         Ok(())
     }
 }
@@ -232,6 +249,13 @@ pub struct FileTakeStore {
 impl FileTakeStore {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
+    }
+
+    /// The Record switch lives in its own tiny file so the takes format stays unchanged.
+    fn armed_path(&self) -> PathBuf {
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(".armed");
+        self.path.with_file_name(name)
     }
 
     fn bad_path(&self) -> PathBuf {
@@ -280,6 +304,17 @@ impl TakeStore for FileTakeStore {
                 Ok(BTreeMap::new())
             }
         }
+    }
+
+    fn load_armed(&self) -> bool {
+        std::fs::read_to_string(self.armed_path()).is_ok_and(|text| text.trim() == "armed")
+    }
+
+    fn save_armed(&self, armed: bool) -> Result<(), std::io::Error> {
+        if let Some(parent) = self.path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(self.armed_path(), if armed { "armed" } else { "off" })
     }
 
     fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error> {
@@ -416,6 +451,8 @@ struct Inner {
     send_command: Option<SendCommand>,
     relay_port: u16,
     relay: RelayClient,
+    /// When the next OSC packet may leave (see `pace`).
+    next_send: Mutex<Option<tokio::time::Instant>>,
     state: Mutex<State>,
     wake: Notify,
 }
@@ -470,6 +507,7 @@ impl LightkeyLink {
                 send_command: options.send_command,
                 relay_port: options.relay_port,
                 relay: RelayClient::new(),
+                next_send: Mutex::new(None),
                 state: Mutex::new(State {
                     takes: BTreeMap::new(),
                     subscriptions: Vec::new(),
@@ -647,7 +685,15 @@ impl Inner {
             .ok()
             .and_then(Result::ok)
             .unwrap_or_default();
-        self.st().takes = loaded;
+        let store = self.store.clone();
+        let armed = tokio::task::spawn_blocking(move || store.load_armed())
+            .await
+            .unwrap_or(false);
+        {
+            let mut st = self.st();
+            st.takes = loaded;
+            st.armed = armed;
+        }
         let mut subs = Vec::new();
         macro_rules! sub {
             ($event:expr, $method:ident) => {{
@@ -731,6 +777,7 @@ impl Inner {
                 return self.say("Connect to Lightkey first.");
             }
             self.st().armed = true;
+            self.persist_armed(true).await;
             self.cancel_replay().await;
             return self.say("Recording starts with the next song.");
         }
@@ -739,9 +786,19 @@ impl Inner {
             st.armed = false;
             st.session.take()
         };
+        self.persist_armed(false).await;
         match session {
             Some(session) => self.finish(session, "Recording turned off.").await,
             None => self.say("Recording is off."),
+        }
+    }
+
+    /// Remember the Record switch for the next start. A failure is logged, never fatal.
+    async fn persist_armed(&self, armed: bool) {
+        let store = self.store.clone();
+        let saved = tokio::task::spawn_blocking(move || store.save_armed(armed)).await;
+        if !matches!(saved, Ok(Ok(()))) {
+            tracing::warn!(armed, "lightkey_armed_state_not_saved");
         }
     }
 
@@ -1362,9 +1419,28 @@ impl Inner {
         }
     }
 
+    /// Space packets at least `MIN_SEND_GAP` apart (<= 200 per second). The replay start sends
+    /// the whole fixture state at once; a rig's network side drops a burst that tight. Each
+    /// caller waits for its own slot, so order is kept and an aborted task frees the rest.
+    async fn pace(&self) {
+        let now = tokio::time::Instant::now();
+        let slot = {
+            let mut next = self.next_send.lock().unwrap_or_else(|p| p.into_inner());
+            let slot = next.map_or(now, |at| at.max(now));
+            *next = Some(slot + MIN_SEND_GAP);
+            slot
+        };
+        if slot > now {
+            tokio::time::sleep_until(slot).await;
+        }
+    }
+
     async fn send_fixture(&self, command: &FixtureCommand) -> Result<(), String> {
         match &self.send_command {
-            Some(send) => send(command.a.clone(), command.osc_args()).await,
+            Some(send) => {
+                self.pace().await;
+                send(command.a.clone(), command.osc_args()).await
+            }
             None => Ok(()),
         }
     }
@@ -1380,6 +1456,7 @@ impl Inner {
         };
         for round in 0..2 {
             for name in &held {
+                self.pace().await;
                 if let Err(error) = send(clear_address(name), Vec::new()).await {
                     tracing::warn!(fixture = %name, error = %error, "lightkey_fixture_clear_failed");
                 }
@@ -1436,6 +1513,7 @@ impl Inner {
             }
             st.hold.note_sent(&command.cue, now);
         }
+        self.pace().await;
         (self.send_osc)(osc_address(&command.cue, command.verb)).await
     }
 

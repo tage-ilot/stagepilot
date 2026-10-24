@@ -267,6 +267,22 @@ impl Rig {
         }
     }
 
+    /// A second link on the same settings and take store: what a restart builds.
+    fn restarted_link(&self) -> LightkeyLink {
+        let provider_settings = self.settings.clone();
+        let provider: stagepilot_lights::lightkey_link::SettingsProvider =
+            Arc::new(move || provider_settings.lock().unwrap().clone());
+        LightkeyLink::new(
+            self.bus.clone(),
+            provider,
+            Arc::new(|_address: String| Box::pin(async { Ok(()) })),
+            LinkOptions {
+                store: self.store.clone() as Arc<dyn TakeStore>,
+                ..LinkOptions::default()
+            },
+        )
+    }
+
     fn addresses(&self) -> Vec<String> {
         self.sent
             .lock()
@@ -1051,4 +1067,42 @@ async fn a_message_does_not_outlive_a_replay_switch_change() {
     rig.set_settings(|s| s.3.replay = false);
     assert_eq!(rig.link.status().message, None);
     rig.link.stop().await;
+}
+
+// ------------------------------------------------------------------ armed state survives restart (m4)
+
+#[tokio::test(flavor = "multi_thread")]
+async fn record_stays_armed_across_a_restart_and_disarming_is_remembered() {
+    let rig = Rig::new(&["A"]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    assert!(rig.link.status().recording);
+    rig.link.stop().await;
+
+    let restarted = rig.restarted_link();
+    restarted.start().await;
+    assert!(restarted.status().recording, "armed state was lost");
+    wait_for(|| restarted.status().link == Link::Connected, 3.0).await;
+    restarted.set_recording(false).await;
+    restarted.stop().await;
+
+    let again = rig.restarted_link();
+    again.start().await;
+    assert!(!again.status().recording);
+    again.stop().await;
+}
+
+#[test]
+fn the_file_store_remembers_the_armed_flag_next_to_the_takes() {
+    let dir = std::env::temp_dir().join(format!("sp-armed-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = FileTakeStore::new(dir.join("lightkey_takes.json"));
+    assert!(!store.load_armed());
+    store.save_armed(true).unwrap();
+    assert!(FileTakeStore::new(dir.join("lightkey_takes.json")).load_armed());
+    store.save_armed(false).unwrap();
+    assert!(!store.load_armed());
+    std::fs::write(dir.join("lightkey_takes.json.armed"), "garbage").unwrap();
+    assert!(!store.load_armed()); // unreadable means off, never an error at startup
+    let _ = std::fs::remove_dir_all(&dir);
 }
