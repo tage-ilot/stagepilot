@@ -13,6 +13,7 @@ pub mod plugin;
 pub mod redact;
 pub mod settings;
 pub mod settings_errors;
+pub mod settings_file;
 pub mod state;
 pub mod state_service;
 pub mod store;

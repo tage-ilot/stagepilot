@@ -280,10 +280,15 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
     } else {
         rt.settings_service.effective_snapshot()
     };
+    let degraded = rt.settings_service.degraded();
     json!({
         "settings": settings,
         "planning_center_secret_saved": rt.settings_service.credential_saved(),
         "warning": rt.settings_service.warning(),
+        // Set for the whole run when the saved file was damaged or newer than this build: the
+        // settings in use are defaults and the original is kept as settings.json.corrupt-*.
+        "settings_degraded": degraded.is_some(),
+        "settings_degraded_reason": degraded.map(|d| d.reason),
         "restart_required": restart_required,
     })
 }

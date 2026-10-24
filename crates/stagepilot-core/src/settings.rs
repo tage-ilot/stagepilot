@@ -21,7 +21,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use ts_rs::TS;
 
@@ -712,6 +712,10 @@ pub trait SettingsStore: Send + Sync {
     fn path(&self) -> Option<PathBuf> {
         None
     }
+    /// Set when the saved settings are not in use (corrupt, or from a newer StagePilot).
+    fn degraded(&self) -> Option<SettingsDegraded> {
+        None
+    }
 }
 
 pub fn default_settings_path(environ: &BTreeMap<String, String>) -> PathBuf {
@@ -755,115 +759,7 @@ pub fn process_environment() -> BTreeMap<String, String> {
     std::env::vars().collect()
 }
 
-pub struct SettingsFileStore {
-    pub path: PathBuf,
-    backed_up: Mutex<bool>,
-}
-
-impl SettingsFileStore {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self {
-            path: path.into(),
-            backed_up: Mutex::new(false),
-        }
-    }
-
-    pub fn backup_path(&self) -> PathBuf {
-        let mut name = self
-            .path
-            .file_name()
-            .map(|n| n.to_os_string())
-            .unwrap_or_default();
-        name.push(format!(".{BACKUP_SUFFIX}"));
-        self.path.with_file_name(name)
-    }
-
-    /// Copy the existing file aside once, before the first write of this process, unless a backup
-    /// already exists (an older backup is never overwritten).
-    fn backup_once(&self) -> Result<(), SettingsFileError> {
-        let mut done = self.backed_up.lock().unwrap_or_else(|p| p.into_inner());
-        if *done {
-            return Ok(());
-        }
-        *done = true;
-        let backup = self.backup_path();
-        if self.path.is_file() && !backup.exists() {
-            std::fs::copy(&self.path, &backup)
-                .map_err(|_| SettingsFileError("Settings could not be saved atomically.".into()))?;
-        }
-        Ok(())
-    }
-}
-
-const CORRUPT: &str = "Saved settings are corrupt or invalid; built-in defaults were used.";
-
-impl SettingsStore for SettingsFileStore {
-    fn path(&self) -> Option<PathBuf> {
-        Some(self.path.clone())
-    }
-
-    fn load(&self) -> Result<Option<PersistentSettings>, SettingsFileError> {
-        if !self.path.exists() {
-            return Ok(None);
-        }
-        let text =
-            std::fs::read_to_string(&self.path).map_err(|_| SettingsFileError(CORRUPT.into()))?;
-        let mut payload: Value =
-            serde_json::from_str(&text).map_err(|_| SettingsFileError(CORRUPT.into()))?;
-        if let Value::Object(map) = &mut payload {
-            map.entry("schema_version").or_insert(json!(1));
-        }
-        let (settings, migration) = PersistentSettings::from_value(payload)
-            .map_err(|_| SettingsFileError(CORRUPT.into()))?;
-        if let Some(m) = migration {
-            tracing::warn!(
-                "settings_migration schema={}->2 chose_midi={} midi_source={:?}",
-                m.from_schema,
-                m.chose_midi,
-                m.midi_source
-            );
-            self.save(&settings)?;
-        }
-        Ok(Some(settings))
-    }
-
-    fn save(&self, settings: &PersistentSettings) -> Result<(), SettingsFileError> {
-        use std::io::Write;
-        let failure = || SettingsFileError("Settings could not be saved atomically.".into());
-        self.backup_once()?;
-        let parent = self
-            .path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_default();
-        let name = self
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "settings.json".into());
-        let temporary = parent.join(format!(".{name}.{}.tmp", uuid::Uuid::new_v4().simple()));
-        let result = (|| -> std::io::Result<()> {
-            std::fs::create_dir_all(&parent)?;
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temporary)?;
-            let mut text = serde_json::to_string_pretty(&settings.to_file_value())
-                .map_err(std::io::Error::other)?;
-            text.push('\n');
-            file.write_all(text.as_bytes())?;
-            file.flush()?;
-            file.sync_all()?;
-            drop(file);
-            std::fs::rename(&temporary, &self.path)
-        })();
-        if result.is_err() {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(failure());
-        }
-        Ok(())
-    }
-}
+pub use crate::settings_file::{SettingsDegraded, SettingsFileStore};
 
 #[derive(Default)]
 pub struct MemorySettingsStore {
@@ -1181,6 +1077,11 @@ impl SettingsService {
             names.push("STAGEPILOT_MIDI_ENABLED");
         }
         self.pin(&names)
+    }
+
+    /// Why the saved settings are not in use, if they are not (`settings_degraded` in the API).
+    pub fn degraded(&self) -> Option<SettingsDegraded> {
+        self.store.degraded()
     }
 
     pub fn warning(&self) -> Option<String> {
