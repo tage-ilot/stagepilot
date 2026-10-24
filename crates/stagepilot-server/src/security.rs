@@ -219,3 +219,17 @@ pub fn forwarded_https(headers: &HeaderMap) -> bool {
         .and_then(|v| v.split(',').next())
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("https"))
 }
+
+// ---- 500 log ----------------------------------------------------------------------------------
+
+/// Log a WARN with the method and path of every request the router answered with HTTP 500 (m1):
+/// a 500 used to leave no line at all. No headers, query string or body are logged.
+pub async fn log_server_errors(request: Request, next: Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let response = next.run(request).await;
+    if response.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        tracing::warn!(%method, %path, "http_500");
+    }
+    response
+}

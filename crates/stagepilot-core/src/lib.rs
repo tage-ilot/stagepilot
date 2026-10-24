@@ -9,6 +9,7 @@ pub mod auth;
 pub mod bus;
 pub mod config;
 pub mod events;
+pub mod logging;
 pub mod plugin;
 pub mod redact;
 pub mod settings;

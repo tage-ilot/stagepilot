@@ -108,6 +108,7 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .layer(middleware::from_fn(crate::security::origin_guard))
         .layer(cors())
         .layer(middleware::from_fn(crate::security::security_headers))
+        .layer(middleware::from_fn(crate::security::log_server_errors))
 }
 
 fn cors() -> CorsLayer {

@@ -56,9 +56,8 @@ fn parse(args: &[String]) -> Parsed {
 }
 
 fn init_logging() {
-    let level = std::env::var("STAGEPILOT_LOG_LEVEL")
-        .map(|v| v.to_lowercase())
-        .unwrap_or_else(|_| "info".into());
+    // STAGEPILOT_LOG_LEVEL wins; otherwise the `log_level` saved in the settings file (m1).
+    let level = stagepilot_server::logging::process_startup_filter();
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .or_else(|_| tracing_subscriber::EnvFilter::try_new(&level))
         .unwrap_or_else(|_| "info".into());

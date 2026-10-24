@@ -2,6 +2,8 @@
 //! dashboard auth, actions, every integration and the `/ws` state stream, plus static dashboard
 //! serving. Every route is backed by the real service (`tests/no_stub_routes.rs` keeps it so).
 
+pub use stagepilot_core::logging;
+
 pub mod app;
 pub mod demo;
 pub mod diagnostics;

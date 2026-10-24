@@ -726,6 +726,9 @@ impl Inner {
     // ------------------------------------------------------------ polling
     fn set_link(&self, link: Link, detail: Option<&str>) {
         let mut st = self.st();
+        if st.link != link {
+            tracing::info!(link = ?link, "lightkey_link_changed");
+        }
         st.link = link;
         st.detail = detail.map(str::to_string);
     }
