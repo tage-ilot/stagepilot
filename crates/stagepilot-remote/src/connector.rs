@@ -17,6 +17,9 @@ use crate::platform::{ChildProcess, Clock, PortProbe, ProcessSpawner, SpawnSpec}
 use crate::quick::QuickConnector;
 use crate::status_map;
 
+/// Arguments and extra environment that hand the tunnel token to the child.
+type TokenDelivery = (Vec<String>, Vec<(String, String)>);
+
 pub type TokenProvider = Arc<dyn Fn() -> Res<String> + Send + Sync>;
 
 /// The environment a supervised `cloudflared` runs with (`PATH=os.defpath`, `HOME`).
@@ -117,7 +120,7 @@ impl Connector {
     /// How the child learns the tunnel token: `--token-file <path>` for a private file, or the
     /// `TUNNEL_TOKEN` environment variable of the child alone. The token is never an argument:
     /// every local user can read arguments with `ps` (M5).
-    fn token_arguments(&self) -> Res<(Vec<String>, Vec<(String, String)>)> {
+    fn token_arguments(&self) -> Res<TokenDelivery> {
         if let Some(provider) = &self.token_provider {
             return Ok((Vec::new(), vec![("TUNNEL_TOKEN".into(), provider()?)]));
         }
