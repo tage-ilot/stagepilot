@@ -366,6 +366,20 @@ fn song_key(song: &Song) -> String {
         .unwrap_or_else(|| song.id.clone())
 }
 
+/// How long a status message stays up if nothing changes.
+pub const MESSAGE_SECONDS: f64 = 10.0;
+
+/// A status message with the moment and the state it was said in. It is shown only while that
+/// state still holds and for `MESSAGE_SECONDS`, so it can never go stale on screen.
+struct Message {
+    text: String,
+    at: f64,
+    link: Link,
+    armed: bool,
+    replay: bool,
+    replaying: bool,
+}
+
 struct State {
     takes: BTreeMap<String, LightkeyTake>,
     subscriptions: Vec<Subscription>,
@@ -386,7 +400,7 @@ struct State {
     offset_at: f64,
     armed: bool,
     session: Option<Session>,
-    message: Option<String>,
+    message: Option<Message>,
     replaying: Option<String>,
     hold: OperatorHold,
     pending_song: Option<Song>,
@@ -549,8 +563,34 @@ impl Inner {
 
     fn say(&self, text: impl Into<String>) -> String {
         let text = text.into();
-        self.st().message = Some(text.clone());
+        let replay = (self.settings)().3.replay;
+        let at = self.clock.mono();
+        let mut st = self.st();
+        st.message = Some(Message {
+            text: text.clone(),
+            at,
+            link: st.link,
+            armed: st.armed,
+            replay,
+            replaying: st.replaying.is_some(),
+        });
         text
+    }
+
+    /// The current message, or `None` once it is older than `MESSAGE_SECONDS` or the link,
+    /// the Record switch, the Replay switch or a running replay changed since it was said.
+    fn live_message(&self, st: &mut State, replay: bool) -> Option<String> {
+        let current = st.message.as_ref()?;
+        let fresh = self.clock.mono() - current.at < MESSAGE_SECONDS
+            && current.link == st.link
+            && current.armed == st.armed
+            && current.replay == replay
+            && current.replaying == st.replaying.is_some();
+        if fresh {
+            return Some(current.text.clone());
+        }
+        st.message = None;
+        None
     }
 
     fn replay_blocked_reason(&self, armed: bool) -> Option<String> {
@@ -572,7 +612,8 @@ impl Inner {
 
     fn status(&self) -> LightkeyStatus {
         let (enabled, _osc, osc_host, settings) = (self.settings)();
-        let st = self.st();
+        let mut st = self.st();
+        let message = self.live_message(&mut st, settings.replay);
         let mut takes: Vec<LightkeyTakeSummary> = st.takes.values().map(summarize).collect();
         takes.sort_by_key(|item| item.song_title.to_lowercase());
         LightkeyStatus {
@@ -588,7 +629,7 @@ impl Inner {
             replay: settings.replay,
             replay_blocked: self.replay_blocked_reason(st.armed),
             replaying_song: st.replaying.clone(),
-            message: st.message.clone(),
+            message,
             takes,
             fixtures: self.relay.status(
                 st.session
@@ -669,9 +710,11 @@ impl Inner {
 
     // ------------------------------------------------------------ actions
     async fn set_recording(self: Arc<Self>, on: bool) -> String {
+        let replay = (self.settings)().3.replay;
         let (armed, message, link) = {
-            let st = self.st();
-            (st.armed, st.message.clone(), st.link)
+            let mut st = self.st();
+            let message = self.live_message(&mut st, replay);
+            (st.armed, message, st.link)
         };
         if on == armed {
             return message.unwrap_or_default();

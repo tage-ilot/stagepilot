@@ -19,7 +19,7 @@ use stagepilot_core::events::{new_event, EventPayload, EventType, TimerPayload};
 use stagepilot_core::state::Song;
 use stagepilot_lights::lightkey::{LightkeyEdge, LightkeyLink as Link, LightkeyTake};
 use stagepilot_lights::lightkey_link::{
-    FileTakeStore, LightkeyLink, LinkOptions, LinkSettings, MemoryTakeStore, TakeStore,
+    Clock, FileTakeStore, LightkeyLink, LinkOptions, LinkSettings, MemoryTakeStore, TakeStore,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -173,7 +173,30 @@ async fn dead_port() -> u16 {
     port
 }
 
+/// Real time, plus whatever a test adds with `advance` (to cross the message lifetime fast).
+struct TestClock {
+    started: Instant,
+    extra: Mutex<f64>,
+}
+
+impl TestClock {
+    fn advance(&self, seconds: f64) {
+        *self.extra.lock().unwrap() += seconds;
+    }
+}
+
+impl Clock for TestClock {
+    fn wall(&self) -> f64 {
+        let now = Utc::now();
+        now.timestamp() as f64 + f64::from(now.timestamp_subsec_micros()) / 1e6
+    }
+    fn mono(&self) -> f64 {
+        self.started.elapsed().as_secs_f64() + *self.extra.lock().unwrap()
+    }
+}
+
 struct Rig {
+    clock: Arc<TestClock>,
     agent: Shared,
     port: u16,
     bus: EventBus,
@@ -217,16 +240,22 @@ impl Rig {
         let provider_settings = settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
             Arc::new(move || provider_settings.lock().unwrap().clone());
+        let clock = Arc::new(TestClock {
+            started: Instant::now(),
+            extra: Mutex::new(0.0),
+        });
         let link = LightkeyLink::new(
             bus.clone(),
             provider,
             send,
             LinkOptions {
                 store: store.clone() as Arc<dyn TakeStore>,
+                clock: clock.clone(),
                 ..LinkOptions::default()
             },
         );
         Self {
+            clock,
             agent,
             port,
             bus,
@@ -975,4 +1004,51 @@ fn a_file_with_an_invalid_take_is_renamed_bad_and_ignored() {
     let store = FileTakeStore::new(&path);
     assert!(store.load().unwrap().is_empty());
     assert!(dir.path().join("t.json.bad").exists());
+}
+
+// ------------------------------------------------------------------------- message lifetime (B3)
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_status_message_expires_after_ten_seconds() {
+    let rig = Rig::new(&["A"]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    assert_eq!(
+        rig.link.status().message.as_deref(),
+        Some("Recording starts with the next song.")
+    );
+    rig.clock.advance(9.0);
+    assert!(rig.link.status().message.is_some());
+    rig.clock.advance(2.0);
+    assert_eq!(rig.link.status().message, None);
+    assert!(rig.link.status().recording); // only the text goes, not the state
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn losing_the_link_clears_a_stale_message() {
+    let rig = Rig::new(&["A"]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.link.set_recording(false).await;
+    assert_eq!(
+        rig.link.status().message.as_deref(),
+        Some("Recording is off.")
+    );
+    agent_lock(&rig.agent).status_code = 500;
+    wait_for(|| rig.link.status().link != Link::Connected, 5.0).await;
+    assert_eq!(rig.link.status().message, None);
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_message_does_not_outlive_a_replay_switch_change() {
+    let rig = Rig::new(&["A"]).await;
+    rig.connect().await;
+    with_takes(&rig, vec![stored_take()]);
+    rig.link.set_recording(true).await;
+    assert!(rig.link.status().message.is_some());
+    rig.set_settings(|s| s.3.replay = false);
+    assert_eq!(rig.link.status().message, None);
+    rig.link.stop().await;
 }
