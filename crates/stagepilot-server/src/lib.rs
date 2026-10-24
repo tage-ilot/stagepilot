@@ -1,7 +1,6 @@
-//! StagePilot HTTP/WebSocket server (Rust migration phase 2): the `/api/v1/*` routes for health,
-//! state, settings, dashboard auth, actions and the `/ws` state stream, plus static dashboard
-//! serving. Integrations that later phases port are stubbed with what Python returns while the
-//! plugin is disabled.
+//! StagePilot HTTP/WebSocket server: the `/api/v1/*` routes for health, state, settings,
+//! dashboard auth, actions, every integration and the `/ws` state stream, plus static dashboard
+//! serving. Every route is backed by the real service (`tests/no_stub_routes.rs` keeps it so).
 
 pub mod app;
 pub mod demo;

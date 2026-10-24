@@ -1,6 +1,5 @@
-//! The axum application: the `/api/v1/*` routes in this phase's scope, the `/ws` state stream and
-//! static dashboard serving. Response bodies and status codes follow the Python backend; see
-//! `docs/rust-migration/phase2.md` for the list of routes that are stubs.
+//! The axum application: the `/api/v1/*` routes, the `/ws` state stream and static dashboard
+//! serving. Response bodies and status codes follow the Python backend.
 
 use crate::demo::today;
 use crate::remote_types::RemoteContext;
@@ -607,8 +606,6 @@ async fn perform_action(State(rt): State<Rt>, Path(action): Path<String>) -> Jso
 async fn reload_plan(State(rt): State<Rt>) -> Json {
     run_action(&rt, ActionName::ReloadPlan).await
 }
-
-// ---- stubbed integrations (none left in this module) ----------------------------------------
 
 // ---- WebSocket --------------------------------------------------------------------------------
 

@@ -17,9 +17,9 @@ use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_core::state::ApplicationStatus;
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
+use stagepilot_pco::lengths::LengthService;
 use stagepilot_pco::oauth::{CompleteError, OAUTH_STARTUP_REFRESH_TIMEOUT_SECONDS};
 use stagepilot_pco::runtime::{PcoOptions, PcoRuntime};
-use stagepilot_playback::api::LengthUpdateResult;
 use stagepilot_playback::plugin::{PlaybackPlugin, PluginOptions};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -31,13 +31,13 @@ pub struct Runtime {
     pub plugins: PluginManager,
     pub settings_service: Arc<SettingsService>,
     pub playback: Arc<PlaybackPlugin>,
-    /// Planning Center (phase 5): OAuth, setup service, client factory, the live plugin.
+    /// Planning Center: OAuth, setup service, client factory, the live plugin.
     pub pco: Arc<PcoRuntime>,
     oauth_stop: tokio::sync::watch::Sender<bool>,
     /// The lifespan-owned startup activation task (`stagepilot-startup-activation`).
     activation: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    /// The last Planning Center length operation (always idle until that service is ported).
-    pub lengths_result: Mutex<LengthUpdateResult>,
+    /// The Planning Center song-length writer: preview, confirm and restore (B5).
+    pub lengths: Arc<LengthService>,
     /// MIDI input, lights and ProPresenter (phase 4).
     pub outputs: Arc<Outputs>,
     /// `PluginManager.reconcile_lock`: serialises live connection changes made by routes.
@@ -51,6 +51,47 @@ pub struct Runtime {
     /// The Services source the running plugins were built for (changing it needs a restart here).
     live_service_source: ServiceSource,
     startup_activation: std::sync::atomic::AtomicBool,
+}
+
+/// The length writer, wired to the live Planning Center settings and to the Playback plugin
+/// (Python `PlaybackInputPlugin.__init__`: `is_playing`, `plan_current`, `on_applied`).
+fn length_service(
+    settings: &Arc<SettingsService>,
+    store: &StateStore,
+    state_service: &StateService,
+    pco: &Arc<PcoRuntime>,
+    playback: &Arc<PlaybackPlugin>,
+) -> LengthService {
+    let effective = {
+        let pco = pco.clone();
+        Arc::new(move || pco.effective())
+    };
+    let mut service = LengthService::new(
+        settings.clone(),
+        store.clone(),
+        state_service.clone(),
+        pco.factory.clone(),
+        effective,
+    );
+    let is_playing: Arc<dyn Fn() -> bool + Send + Sync> = {
+        let playback = playback.clone();
+        Arc::new(move || playback.status().heartbeat.is_some_and(|h| h.playing))
+    };
+    service.is_playing = is_playing.clone();
+    service.set_write_allowed(Arc::new(move || !is_playing()));
+    let current = playback.clone();
+    service.plan_current = Arc::new(move || {
+        let current = current.clone();
+        Box::pin(async move { current.scan_plan_is_current() })
+    });
+    let applied = playback.clone();
+    service.on_applied = Arc::new(move |plan_id| {
+        // Never turn a finished write into an error: the times are in Planning Center already.
+        if let Err(error) = applied.mark_lengths_applied(plan_id) {
+            tracing::warn!(%error, "planning_center_lengths_applied_not_saved");
+        }
+    });
+    service
 }
 
 impl Runtime {
@@ -202,6 +243,13 @@ impl Runtime {
         if let Some(plugin) = outputs.startup_propresenter(&settings) {
             register(&plugins, plugin as Arc<dyn Plugin>);
         }
+        let lengths = Arc::new(length_service(
+            &settings_service,
+            &store,
+            &state_service,
+            &pco,
+            &playback,
+        ));
         Arc::new(Self {
             settings,
             bus,
@@ -213,7 +261,7 @@ impl Runtime {
             pco,
             oauth_stop: tokio::sync::watch::channel(false).0,
             activation: Mutex::new(None),
-            lengths_result: Mutex::new(LengthUpdateResult::idle()),
+            lengths,
             outputs,
             reconcile: tokio::sync::Mutex::new(()),
             sessions: DashboardSessionStore::new(),
