@@ -306,7 +306,7 @@ async fn unreachable_playback_reports_how_to_fix_it_and_health_error() {
     );
     assert_eq!(
         health.last_error.as_deref(),
-        Some("Playback unavailable; remote connections may be off")
+        Some("Playback refused the connection; remote connections may be off")
     );
     r.plugin.stop().await.unwrap();
 }
