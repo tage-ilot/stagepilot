@@ -452,3 +452,47 @@ async fn dashboard_pin_is_enforced_on_the_websocket() {
     let (code, _, _) = call(&router, "GET", "/ws", None, &[]).await;
     assert_eq!(code, StatusCode::FORBIDDEN);
 }
+
+/// m14: `/api/v1/health` is reachable without a session (the desktop shell probes it), but plugin
+/// states, error texts and uptime are dashboard data.
+#[tokio::test]
+async fn health_shows_plugin_details_only_to_an_authenticated_dashboard() {
+    let (router, _rt) = app(true).await;
+    let (code, _, public) = call(&router, "GET", "/api/v1/health", None, &[]).await;
+    assert_eq!(code, StatusCode::OK);
+    // What the desktop port probe looks for stays public.
+    assert!(public.get("application_status").is_some() && public.get("version").is_some());
+    assert!(public.get("status").is_some());
+    for hidden in ["plugins", "started_at"] {
+        assert!(public.get(hidden).is_none(), "{hidden} leaked: {public}");
+    }
+    assert!(!public.to_string().contains("last_error"));
+
+    let (_, headers, _) = call(
+        &router,
+        "POST",
+        "/api/v1/dashboard-auth/login",
+        Some(json!({"pin": "1234"})),
+        &[],
+    )
+    .await;
+    let jar = cookie(&headers);
+    let (_, _, full) = call(&router, "GET", "/api/v1/health", None, &[("cookie", &jar)]).await;
+    assert!(
+        full["plugins"].as_array().is_some_and(|p| !p.is_empty()),
+        "{full}"
+    );
+    assert!(full.get("started_at").is_some());
+    assert_eq!(full["version"], public["version"]);
+
+    // The liveness probe stays minimal and public.
+    let (code, _, live) = call(&router, "GET", "/api/v1/health/live", None, &[]).await;
+    assert_eq!((code, live), (StatusCode::OK, json!({"status": "alive"})));
+}
+
+#[tokio::test]
+async fn health_is_complete_when_no_dashboard_pin_is_required() {
+    let (router, _rt) = app(false).await;
+    let (_, _, body) = call(&router, "GET", "/api/v1/health", None, &[]).await;
+    assert!(body["plugins"].as_array().is_some_and(|p| !p.is_empty()));
+}
