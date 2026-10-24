@@ -43,6 +43,8 @@ pub struct Runtime {
     /// `PluginManager.reconcile_lock`: serialises live connection changes made by routes.
     pub reconcile: tokio::sync::Mutex<()>,
     pub sessions: DashboardSessionStore,
+    /// Lockout for wrong dashboard PINs (m13).
+    pub login_throttle: crate::security::LoginThrottle,
     pub dashboard_auth_enforced: bool,
     pub started_at: DateTime<Utc>,
     /// `app.state.remote_access` / `remote_feature` / `remote_manager`: all optional, settable
@@ -265,6 +267,7 @@ impl Runtime {
             outputs,
             reconcile: tokio::sync::Mutex::new(()),
             sessions: DashboardSessionStore::new(),
+            login_throttle: crate::security::LoginThrottle::default(),
             dashboard_auth_enforced,
             started_at: Utc::now(),
             remote: RwLock::new(RemoteWiring::default()),

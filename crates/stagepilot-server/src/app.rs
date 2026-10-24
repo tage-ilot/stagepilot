@@ -103,7 +103,11 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         // Keyed retries of remote one-shot requests (`RemoteRetryRoute`); inside the PIN guard.
         .layer(middleware::from_fn(crate::remote_routes::remote_retry))
         .layer(middleware::from_fn_with_state(runtime, dashboard_guard))
+        // m15: a browser on another origin cannot make the dashboard change anything, and every
+        // response (including CORS preflights) carries the security headers.
+        .layer(middleware::from_fn(crate::security::origin_guard))
         .layer(cors())
+        .layer(middleware::from_fn(crate::security::security_headers))
 }
 
 fn cors() -> CorsLayer {
@@ -281,8 +285,13 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
         rt.settings_service.effective_snapshot()
     };
     let degraded = rt.settings_service.degraded();
+    // True while the dashboard PIN is the factory default (no PIN has ever been set), so the UI
+    // can prompt for a new one.
+    let pin_is_default =
+        settings.web_dashboard_pin_enabled && settings.web_dashboard_pin_hash.is_none();
     json!({
         "settings": settings,
+        "pin_is_default": pin_is_default,
         "planning_center_secret_saved": rt.settings_service.credential_saved(),
         "warning": rt.settings_service.warning(),
         // Set for the whole run when the saved file was damaged or newer than this build: the
@@ -472,16 +481,39 @@ async fn dashboard_status(
     ok(json!({"required": required, "authenticated": authenticated}))
 }
 
-async fn dashboard_login(State(rt): State<Rt>, body: Bytes) -> Response {
+async fn dashboard_login(
+    State(rt): State<Rt>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     let pin = match validation::dashboard_login(&body) {
         Ok(pin) => pin,
         Err(detail) => return unprocessable(detail).into_response(),
     };
+    let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+    // m13: the desktop shell (loopback + its own origin) is never throttled, so the local app can
+    // not be locked out; everyone else is, per address and globally.
+    let exempt = desktop_origin(&headers, peer);
+    let address = peer.map_or_else(|| "unknown".to_string(), |p| p.ip().to_string());
+    if !exempt {
+        if let Err(wait) = rt.login_throttle.check(&address) {
+            return too_many_logins(wait);
+        }
+    }
     let settings = rt.settings_service.snapshot();
     if settings.web_dashboard_pin_enabled
         && !verify_dashboard_pin(&pin, settings.web_dashboard_pin_hash.as_deref())
     {
+        // The address only; never the PIN that was tried.
+        tracing::warn!(address = %address, exempt, "dashboard_login_failed");
+        if !exempt {
+            rt.login_throttle.failure(&address);
+        }
         return http_error(401, "Incorrect dashboard PIN.").into_response();
+    }
+    if !exempt {
+        rt.login_throttle.success(&address);
     }
     let token = rt.sessions.create();
     let mut response = ok(json!({
@@ -489,9 +521,29 @@ async fn dashboard_login(State(rt): State<Rt>, body: Bytes) -> Response {
         "authenticated": true,
     }))
     .into_response();
-    let cookie = format!("{COOKIE_NAME}={token}; HttpOnly; Max-Age=43200; Path=/; SameSite=Strict");
+    // `Secure` only when the browser reached us over HTTPS (through the tunnel): a plain-HTTP LAN
+    // page must still be able to keep its cookie.
+    let secure = if crate::security::forwarded_https(&headers) {
+        "; Secure"
+    } else {
+        ""
+    };
+    let cookie =
+        format!("{COOKIE_NAME}={token}; HttpOnly; Max-Age=43200; Path=/; SameSite=Strict{secure}");
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         response.headers_mut().append(header::SET_COOKIE, value);
+    }
+    response
+}
+
+fn too_many_logins(wait: u64) -> Response {
+    let mut response = http_error(
+        429,
+        &format!("Too many incorrect PIN attempts. Try again in {wait} seconds."),
+    )
+    .into_response();
+    if let Ok(value) = HeaderValue::from_str(&wait.to_string()) {
+        response.headers_mut().insert(header::RETRY_AFTER, value);
     }
     response
 }

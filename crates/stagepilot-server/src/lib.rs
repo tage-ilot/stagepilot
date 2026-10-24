@@ -17,6 +17,7 @@ pub mod remote_routes;
 pub mod remote_types;
 pub mod routes_outputs;
 pub mod runtime;
+pub mod security;
 pub mod startup_activation;
 pub mod static_files;
 pub mod validation;
