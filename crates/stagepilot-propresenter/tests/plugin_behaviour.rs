@@ -12,7 +12,7 @@ use stagepilot_propresenter::{
     ClientFactory, Countdown, Identifier, Look, PpError, ProPresenterPlugin, Timer,
 };
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -62,6 +62,13 @@ struct Fake {
     /// `stop_timer` fails with a 404 for this uuid (recreated-timer test).
     stop_fails_for: Mutex<Option<String>>,
     set_duration_error: Mutex<Option<PpError>>,
+    /// Ids `/v1/look/current` reports after each trigger, in turn (it differs every time).
+    live_ids: Mutex<VecDeque<String>>,
+    /// What `/v1/look/current` reports after a trigger, whatever was triggered.
+    after_trigger: Mutex<Option<Look>>,
+    /// `/v1/timers/current` answer and whether it fails.
+    current_timers: Mutex<Vec<Timer>>,
+    current_timers_fail: AtomicBool,
 }
 
 impl Fake {
@@ -123,14 +130,23 @@ impl ProPresenterClient for Fake {
             .iter()
             .find(|l| l.id.uuid == look_id)
             .cloned();
+        if let Some(forced) = lock(&self.after_trigger).clone() {
+            *lock(&self.current) = Some(forced);
+            return Ok(());
+        }
         if let Some(selected) = selected {
-            *lock(&self.current) = Some(look(
-                "unique-live-look",
-                &selected.id.name,
-                selected.id.index,
-            ));
+            let uuid = lock(&self.live_ids)
+                .pop_front()
+                .unwrap_or_else(|| "unique-live-look".to_string());
+            *lock(&self.current) = Some(look(&uuid, &selected.id.name, selected.id.index));
         }
         Ok(())
+    }
+    async fn current_timers(&self) -> Result<Vec<Timer>, PpError> {
+        if self.current_timers_fail.load(Ordering::SeqCst) {
+            return Err(PpError::Connection("timers/current is down".into()));
+        }
+        Ok(lock(&self.current_timers).clone())
     }
     async fn stop_timer(&self, id: &str) -> Result<(), PpError> {
         self.rec("stop", id);
@@ -642,5 +658,110 @@ async fn missing_timer_reports_connected_with_the_api_connected_but_message() {
     );
     assert!(!snapshot.timer_found);
     assert_eq!(r.plugin.health().await.unwrap().status, PluginStatus::Error);
+    r.plugin.stop().await.unwrap();
+}
+
+// ---- m3: look confirmation ------------------------------------------------------------------------
+
+fn worship_and_sermon(fake: &Fake) {
+    *lock(&fake.looks) = vec![
+        look("E94606BB-0000-4000-8000-000000000001", "Worship", 0),
+        look("AD203048-0000-4000-8000-000000000002", "Sermon", 1),
+    ];
+    *lock(&fake.current) = Some(look("ZZZZ", "Sermon", 1));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_look_is_confirmed_although_current_look_reports_a_new_uuid_every_time() {
+    // Captured on the rig: /v1/looks keeps E94606BB..., /v1/look/current answers 36EDD0F0, CB8B7044,
+    // 15616A88 for the same Look "Worship" at index 0.
+    let fake = Fake::new();
+    worship_and_sermon(&fake);
+    *lock(&fake.live_ids) = VecDeque::from([
+        "36EDD0F0-0000-4000-8000-0000000000AA".to_string(),
+        "CB8B7044-0000-4000-8000-0000000000BB".to_string(),
+        "15616A88-0000-4000-8000-0000000000CC".to_string(),
+    ]);
+    let r = rig_with(vec![fake.clone()], enabled());
+    r.plugin.start().await.unwrap();
+    for _ in 0..3 {
+        r.plugin
+            .apply_look("E94606BB-0000-4000-8000-000000000001")
+            .await
+            .unwrap();
+    }
+    assert_eq!(lock(&fake.triggered).len(), 3);
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_look_with_the_same_index_but_another_name_and_uuid_is_not_a_confirmation() {
+    let fake = Fake::new();
+    worship_and_sermon(&fake);
+    *lock(&fake.after_trigger) = Some(look("OTHER-UUID", "Prayer", 0));
+    let r = rig_with(vec![fake], enabled());
+    r.plugin.start().await.unwrap();
+    let error = r
+        .plugin
+        .apply_look("E94606BB-0000-4000-8000-000000000001")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, PpError::LookNotFound(_)), "{error:?}");
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_look_with_the_same_name_at_another_index_is_not_a_confirmation() {
+    let fake = Fake::new();
+    worship_and_sermon(&fake);
+    *lock(&fake.after_trigger) = Some(look("OTHER-UUID", "Worship", 5));
+    let r = rig_with(vec![fake], enabled());
+    r.plugin.start().await.unwrap();
+    let error = r
+        .plugin
+        .apply_look("E94606BB-0000-4000-8000-000000000001")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, PpError::LookNotFound(_)), "{error:?}");
+    r.plugin.stop().await.unwrap();
+}
+
+// ---- m2: timer state --------------------------------------------------------------------------------
+
+fn with_state(mut t: Timer, state: Option<&str>) -> Timer {
+    t.state = state.map(str::to_string);
+    t
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn timer_state_comes_from_timers_current() {
+    let fake = Fake::new();
+    *lock(&fake.timers) = vec![
+        with_state(timer("Song Countdown", "timer-uuid", 0, true), None),
+        with_state(timer("Message Timer", "other", 1, false), None),
+    ];
+    *lock(&fake.current_timers) = vec![with_state(
+        timer("Song Countdown", "timer-uuid", 0, true),
+        Some("overrunning"),
+    )];
+    let r = rig_with(vec![fake], enabled());
+    r.plugin.start().await.unwrap();
+    let snapshot = r.plugin.snapshot(true).await;
+    let states: Vec<Option<&str>> = snapshot.timers.iter().map(|t| t.state.as_deref()).collect();
+    assert_eq!(states, [Some("overrunning"), None]);
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failing_timers_current_call_does_not_break_the_probe() {
+    let fake = Fake::new();
+    *lock(&fake.timers) = vec![with_state(timer("Song Countdown", "timer-uuid", 0, true), None)];
+    fake.current_timers_fail.store(true, Ordering::SeqCst);
+    let r = rig_with(vec![fake], enabled());
+    r.plugin.start().await.unwrap();
+    let snapshot = r.plugin.snapshot(true).await;
+    assert_eq!(snapshot.connection_status, ConnectionStatus::Connected);
+    assert!(snapshot.timer_found);
+    assert_eq!(snapshot.timers[0].state, None);
     r.plugin.stop().await.unwrap();
 }
