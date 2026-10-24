@@ -180,13 +180,23 @@ fn desktop_token_is_passed_directly_without_creating_a_file() {
     assert_eq!(status(&f)["state"], "connected");
     assert!(!token.exists());
     let spec = f.tp.spawner.specs()[0].clone();
-    let at = spec
-        .args
-        .iter()
-        .position(|a| a == "--token")
-        .expect("--token");
-    assert_eq!(spec.args[at + 1], "test-run-token");
+    // M5: the tunnel token must not be visible in `ps`: never in argv, only in the child's env.
+    assert!(
+        spec.args.iter().all(|a| !a.contains("test-run-token")),
+        "token leaked into argv: {:?}",
+        spec.args
+    );
+    assert!(!spec.args.contains(&"--token".to_owned()));
     assert!(!spec.args.contains(&"--token-file".to_owned()));
+    let tunnel_token: Vec<_> = spec
+        .env
+        .iter()
+        .filter(|(k, _)| k == "TUNNEL_TOKEN")
+        .collect();
+    assert_eq!(tunnel_token.len(), 1);
+    assert_eq!(tunnel_token[0].1, "test-run-token");
+    // The token is not echoed by the spec's Debug output either.
+    assert!(!format!("{spec:?}").contains("test-run-token"));
     assert!(!spec.capture_output);
     f.tp.spawner.children()[0].exit(-9);
     f.connector.step().unwrap();
@@ -474,4 +484,214 @@ fn quick_spawn_failure_reports_error_and_backs_off() {
     quick.step().unwrap();
     assert_eq!(tp.spawner.specs().len(), 1);
     quick.stop();
+}
+
+// ---- B2: a connector left behind by an unclean exit --------------------------------------------
+
+const ORPHAN_PID: u32 = 9001;
+
+fn pidfile(f: &Fix) -> std::path::PathBuf {
+    f.dir.path().join("connector.pid")
+}
+
+/// Write the pidfile an earlier run would have left, and register that process with the fake OS.
+fn leave_orphan(
+    f: &Fix,
+    running_exe: Option<&std::path::Path>,
+    recorded_start: Option<u64>,
+    running_start: Option<u64>,
+    generation: &str,
+) {
+    use stagepilot_remote::orphan::{write_pidfile, PidRecord};
+    write_pidfile(
+        &pidfile(f),
+        &PidRecord {
+            pid: ORPHAN_PID,
+            started_at: recorded_start,
+            exe: f
+                .dir
+                .path()
+                .join("fake-connector")
+                .to_string_lossy()
+                .into_owned(),
+            generation: generation.to_owned(),
+            metrics_port: 18901,
+        },
+    );
+    if let Some(exe) = running_exe {
+        f.tp.inspector.add(ORPHAN_PID, Some(exe), running_start);
+    }
+}
+
+fn bundled(f: &Fix) -> std::path::PathBuf {
+    f.dir.path().join("fake-connector")
+}
+
+#[test]
+fn a_stale_connector_is_terminated_and_a_fresh_one_starts() {
+    let mut f = fixture();
+    f.ready.store(false, Ordering::SeqCst); // the orphan's tunnel is not connected
+    let exe = bundled(&f);
+    leave_orphan(&f, Some(&exe), Some(777), Some(777), "an-old-generation");
+    f.connector.step().unwrap();
+    assert_eq!(*f.tp.inspector.terminated.lock().unwrap(), vec![ORPHAN_PID]);
+    assert!(!f.tp.inspector.is_running(ORPHAN_PID));
+    assert_eq!(
+        f.tp.spawner.specs().len(),
+        1,
+        "a fresh connector was started"
+    );
+    // The pidfile now names the new child.
+    let record = stagepilot_remote::orphan::read_pidfile(&pidfile(&f)).unwrap();
+    assert_eq!(
+        record.pid,
+        f.tp.spawner.children()[0].pid.load(Ordering::SeqCst) as u32
+    );
+    assert_eq!(
+        *f.tp.inspector.bound_to_parent.lock().unwrap(),
+        vec![record.pid]
+    );
+    f.connector.stop();
+    assert!(!pidfile(&f).exists(), "stop removes the pidfile");
+}
+
+#[test]
+fn a_stale_connector_that_ignores_terminate_is_killed() {
+    let mut f = fixture();
+    f.ready.store(false, Ordering::SeqCst);
+    let exe = bundled(&f);
+    leave_orphan(&f, Some(&exe), Some(1), Some(1), "old");
+    f.tp.inspector.stubborn.lock().unwrap().push(ORPHAN_PID);
+    f.connector.step().unwrap();
+    assert_eq!(*f.tp.inspector.killed.lock().unwrap(), vec![ORPHAN_PID]);
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[test]
+fn a_connected_connector_for_the_same_remote_is_adopted() {
+    let mut f = fixture();
+    let exe = bundled(&f);
+    let generation = f.desired.generation.clone();
+    leave_orphan(&f, Some(&exe), Some(5), Some(5), &generation);
+    f.connector.step().unwrap();
+    assert!(f.tp.spawner.specs().is_empty(), "nothing new was spawned");
+    assert!(f.tp.inspector.terminated.lock().unwrap().is_empty());
+    assert_eq!(status(&f)["state"], "connected");
+    assert_eq!(status(&f)["pid"], ORPHAN_PID);
+    // Stopping the supervisor stops the adopted connector too and clears the pidfile.
+    f.connector.stop();
+    assert_eq!(*f.tp.inspector.terminated.lock().unwrap(), vec![ORPHAN_PID]);
+    assert!(!pidfile(&f).exists());
+}
+
+#[test]
+fn an_orphan_that_is_not_connected_is_not_adopted() {
+    let mut f = fixture();
+    f.ready.store(false, Ordering::SeqCst);
+    let exe = bundled(&f);
+    let generation = f.desired.generation.clone();
+    leave_orphan(&f, Some(&exe), Some(5), Some(5), &generation);
+    f.connector.step().unwrap();
+    assert_eq!(*f.tp.inspector.terminated.lock().unwrap(), vec![ORPHAN_PID]);
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[test]
+fn a_pidfile_for_a_dead_process_is_discarded_without_signalling_anything() {
+    let mut f = fixture();
+    leave_orphan(&f, None, Some(5), None, "old");
+    f.connector.step().unwrap();
+    assert!(f.tp.inspector.terminated.lock().unwrap().is_empty());
+    assert!(f.tp.inspector.killed.lock().unwrap().is_empty());
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[test]
+fn a_recycled_pid_running_another_program_is_left_alone() {
+    let mut f = fixture();
+    let other = std::path::Path::new("/usr/bin/some-other-program").to_path_buf();
+    leave_orphan(&f, Some(&other), Some(5), Some(99), "old");
+    f.connector.step().unwrap();
+    assert!(f.tp.inspector.terminated.lock().unwrap().is_empty());
+    assert!(f.tp.inspector.killed.lock().unwrap().is_empty());
+    assert!(
+        f.tp.inspector.is_running(ORPHAN_PID),
+        "the stranger still runs"
+    );
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[test]
+fn a_recycled_pid_running_the_same_binary_for_someone_else_is_left_alone() {
+    // Same program, different start time: another StagePilot's connector reusing the pid.
+    let mut f = fixture();
+    let exe = bundled(&f);
+    leave_orphan(&f, Some(&exe), Some(5), Some(6), "old");
+    f.connector.step().unwrap();
+    assert!(f.tp.inspector.terminated.lock().unwrap().is_empty());
+    assert!(f.tp.inspector.is_running(ORPHAN_PID));
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[test]
+fn an_unreadable_pidfile_is_ignored() {
+    let mut f = fixture();
+    std::fs::write(pidfile(&f), b"not json").unwrap();
+    f.connector.step().unwrap();
+    assert_eq!(f.tp.spawner.specs().len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_child_exits_when_its_parent_is_killed() {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    // `parent` stands for StagePilot, `child` for cloudflared.
+    let mut parent = Command::new("sleep")
+        .arg("60")
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut child = Command::new("sleep")
+        .arg("60")
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    stagepilot_remote::orphan::spawn_parent_watch(parent.id(), child.id());
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "the child lives while the parent does"
+    );
+    parent.kill().unwrap(); // SIGKILL: no cleanup runs
+    parent.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while child.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "the child outlived its parent");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_system_inspector_recognises_a_real_process_and_a_dead_one() {
+    use stagepilot_remote::orphan::{ProcessInspector, SystemInspector};
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("sleep")
+        .arg("60")
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let info = SystemInspector.info(child.id()).expect("running");
+    let exe = info.exe.expect("exe readable");
+    assert!(exe.to_string_lossy().contains("sleep"), "{exe:?}");
+    assert!(info.started_at.is_some());
+    // The same process reports the same start marker twice.
+    assert_eq!(
+        SystemInspector.info(child.id()).unwrap().started_at,
+        info.started_at
+    );
+    SystemInspector.terminate(child.id());
+    child.wait().unwrap();
+    assert!(SystemInspector.info(child.id()).is_none());
 }
