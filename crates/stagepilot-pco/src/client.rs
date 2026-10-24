@@ -31,6 +31,43 @@ pub const API_VERSION: &str = "2018-11-01";
 pub const SERVICE_TYPES_PATH: &str = "services/v2/service_types";
 pub const MAX_PAGE_SIZE: usize = 100;
 pub const MAX_PAGES: usize = 100;
+/// Where and why a 200 collection response was rejected, with no response value in it: the JSON
+/// path (for example `data[3].attributes.title`) and a fixed reason word.
+pub(crate) fn describe_rejection<T>(bytes: &[u8]) -> (String, &'static str)
+where
+    T: DeserializeOwned + Resource,
+{
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    match serde_path_to_error::deserialize::<_, CollectionDocument<T>>(&mut deserializer) {
+        Err(error) => {
+            let path = error.path().to_string();
+            // serde's messages can quote the offending value, so only classify them.
+            let message = error.inner().to_string();
+            let reason = if message.starts_with("invalid type: null") {
+                "unexpected_null"
+            } else if message.starts_with("missing field") {
+                "missing_field"
+            } else if message.starts_with("invalid type") {
+                "wrong_type"
+            } else if message.starts_with("invalid value") || message.starts_with("input") {
+                "invalid_value"
+            } else if error.inner().is_syntax() || error.inner().is_eof() {
+                "malformed_json"
+            } else {
+                "unparseable"
+            };
+            (path, reason)
+        }
+        Ok(document) => {
+            let index = document.data.iter().position(|r| !r.valid());
+            (
+                index.map_or_else(|| "data".to_string(), |i| format!("data[{i}]")),
+                "constraint_failed",
+            )
+        }
+    }
+}
+
 pub const DURATION_SOURCE: &str = "Planning Center scheduled item length";
 
 const PERMISSION_WRITE: &str = "Planning Center did not allow this change. The account or token used by StagePilot can't edit this plan.";
@@ -94,15 +131,63 @@ pub type PcoClientFactory =
 
 /// The factory for the real API, optionally against a different base URL (contract / tests).
 pub fn default_factory(base_url: Option<Url>) -> PcoClientFactory {
+    factory_with_tokens(base_url, None)
+}
+
+/// [`default_factory`] whose OAuth clients read their token from `tokens` on every request.
+pub fn factory_with_tokens(
+    base_url: Option<Url>,
+    tokens: Option<Arc<dyn TokenSource>>,
+) -> PcoClientFactory {
     Arc::new(move |settings| {
-        let client = PcoClient::new(settings, base_url.clone())?;
+        let client = PcoClient::with_token_source(settings, base_url.clone(), tokens.clone())?;
         Ok(Arc::new(client) as Arc<dyn PcoApi>)
     })
 }
 
+/// Where an OAuth client gets its bearer token. The client asks for the current token on every
+/// request, so a refresh by the proactive loop reaches an already-built client (B1: rc.4 copied
+/// the token into the HTTP client once and every request after the ~2 h expiry was a 401).
+#[async_trait]
+pub trait TokenSource: Send + Sync {
+    /// The access token to send now (refreshing first when it is due).
+    async fn current_token(&self) -> Result<String, PcoError>;
+    /// Planning Center answered 401 to `rejected`. Return a different token to retry with once
+    /// (already refreshed by someone else, or refreshed now), or `None` when there is none.
+    async fn token_after_rejection(&self, rejected: &str) -> Option<String>;
+    /// A freshly obtained token was rejected too: the connection needs the user to sign in again.
+    async fn mark_needs_reconnect(&self);
+}
+
 enum Auth {
-    Basic { app_id: String, secret: String },
+    Basic {
+        app_id: String,
+        secret: String,
+    },
+    /// A fixed token already in the default headers (no refresh possible).
     Bearer,
+    /// A live token read per request, with one refresh-and-retry on 401.
+    Refreshing(Arc<dyn TokenSource>),
+}
+
+/// A failure of `send_authorized` before any status is known.
+enum SendFailure {
+    Auth(PcoError),
+    Transport(reqwest::Error),
+}
+
+impl SendFailure {
+    fn into_pco(self, timeout: &str) -> PcoError {
+        match self {
+            SendFailure::Auth(error) => error,
+            SendFailure::Transport(error) if error.is_timeout() => {
+                PcoError::Timeout(timeout.into())
+            }
+            SendFailure::Transport(_) => {
+                PcoError::Transport("Could not connect to Planning Center.".into())
+            }
+        }
+    }
 }
 
 pub struct PcoClient {
@@ -121,6 +206,15 @@ pub(crate) fn install_crypto_provider() {
 
 impl PcoClient {
     pub fn new(settings: &PcoSettings, base_url: Option<Url>) -> Result<Self, PcoError> {
+        Self::with_token_source(settings, base_url, None)
+    }
+
+    /// Like [`PcoClient::new`]; with a token source an OAuth client follows token refreshes.
+    pub fn with_token_source(
+        settings: &PcoSettings,
+        base_url: Option<Url>,
+        token_source: Option<Arc<dyn TokenSource>>,
+    ) -> Result<Self, PcoError> {
         let not_configured =
             || PcoError::configuration("Planning Center credentials are not configured.");
         let mut headers = HeaderMap::new();
@@ -138,11 +232,17 @@ impl PcoClient {
                     (Some(token), ConnectionMethod::Oauth) => token.expose().to_string(),
                     _ => return Err(not_configured()),
                 };
-                let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
-                    .map_err(|_| not_configured())?;
-                value.set_sensitive(true);
-                headers.insert(AUTHORIZATION, value);
-                Auth::Bearer
+                match token_source {
+                    // The token is read per request; this one only proves OAuth is configured.
+                    Some(source) => Auth::Refreshing(source),
+                    None => {
+                        let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
+                            .map_err(|_| not_configured())?;
+                        value.set_sensitive(true);
+                        headers.insert(AUTHORIZATION, value);
+                        Auth::Bearer
+                    }
+                }
             }
             ConnectionMethod::Manual => match (&settings.app_id, &settings.secret) {
                 (Some(app_id), Some(secret)) => Auth::Basic {
@@ -169,12 +269,56 @@ impl PcoClient {
         Ok(Self { http, base, auth })
     }
 
-    fn builder(&self, method: reqwest::Method, url: Url) -> reqwest::RequestBuilder {
-        let request = self.http.request(method, url);
-        match &self.auth {
-            Auth::Basic { app_id, secret } => request.basic_auth(app_id, Some(secret)),
-            Auth::Bearer => request,
+    /// Send one request. With a refreshing OAuth token a 401 triggers one token refresh and one
+    /// retry; a second 401 marks the connection as needing a new sign-in and is returned as is.
+    async fn send_authorized(
+        &self,
+        method: reqwest::Method,
+        url: Url,
+        body: Option<&serde_json::Value>,
+    ) -> Result<reqwest::Response, SendFailure> {
+        for attempt in 0..2 {
+            let mut request = self.http.request(method.clone(), url.clone());
+            if let Some(body) = body {
+                request = request.json(body);
+            }
+            let mut used_token = None;
+            match &self.auth {
+                Auth::Basic { app_id, secret } => {
+                    request = request.basic_auth(app_id, Some(secret))
+                }
+                Auth::Bearer => {}
+                Auth::Refreshing(source) => {
+                    let token = source.current_token().await.map_err(SendFailure::Auth)?;
+                    let mut value =
+                        HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
+                            SendFailure::Auth(PcoError::configuration(
+                                "Planning Center credentials are not configured.",
+                            ))
+                        })?;
+                    value.set_sensitive(true);
+                    request = request.header(AUTHORIZATION, value);
+                    used_token = Some(token);
+                }
+            }
+            let response = request.send().await.map_err(SendFailure::Transport)?;
+            let (Auth::Refreshing(source), Some(token)) = (&self.auth, used_token) else {
+                return Ok(response);
+            };
+            if response.status().as_u16() != 401 {
+                return Ok(response);
+            }
+            if attempt == 1 {
+                source.mark_needs_reconnect().await;
+                return Ok(response);
+            }
+            if source.token_after_rejection(&token).await.is_none() {
+                return Ok(response);
+            }
         }
+        Err(SendFailure::Auth(PcoError::Unexpected(
+            "unreachable".into(),
+        )))
     }
 
     // ---- identifiers ---------------------------------------------------------------------------
@@ -227,19 +371,12 @@ impl PcoClient {
                 ));
             }
             let url = self.join(path)?;
-            let mut request = self.builder(method.clone(), url);
-            if is_patch {
-                request = request.json(&body);
-            }
-            let response = request.send().await.map_err(|error| {
-                if error.is_timeout() {
-                    PcoError::Timeout(
-                        "Planning Center timed out; the change may not be confirmed.".into(),
-                    )
-                } else {
-                    PcoError::Transport("Could not connect to Planning Center.".into())
-                }
-            })?;
+            let response = self
+                .send_authorized(method.clone(), url, is_patch.then_some(&body))
+                .await
+                .map_err(|failure| {
+                    failure.into_pco("Planning Center timed out; the change may not be confirmed.")
+                })?;
             let status = response.status().as_u16();
             if status == 401 || status == 403 {
                 return Err(PcoError::Permission(PERMISSION_WRITE.into()));
@@ -365,17 +502,10 @@ impl PcoClient {
         T: DeserializeOwned + Resource,
     {
         let response = self
-            .builder(reqwest::Method::GET, url)
-            .send()
+            .send_authorized(reqwest::Method::GET, url, None)
             .await
-            .map_err(|error| {
-                if error.is_timeout() {
-                    PcoError::Timeout(
-                        "Planning Center did not respond before the request timeout.".into(),
-                    )
-                } else {
-                    PcoError::Transport("Could not connect to Planning Center.".into())
-                }
+            .map_err(|failure| {
+                failure.into_pco("Planning Center did not respond before the request timeout.")
             })?;
         let status = response.status().as_u16();
         match status {
@@ -416,10 +546,14 @@ impl PcoClient {
         match parsed {
             Ok(document) if document.data.iter().all(Resource::valid) => Ok(document),
             _ => {
-                // Never log bodies, validation inputs, messages or URLs.
+                // Never log bodies, validation inputs, messages or URLs: only the JSON field
+                // path (field names and list positions) and a fixed reason word.
+                let (field_path, reason) = describe_rejection::<T>(&bytes);
                 tracing::warn!(
                     resource_kind = resource_label,
                     http_status = status,
+                    field_path = field_path.as_str(),
+                    reason,
                     "planning_center_response_validation_diagnostic"
                 );
                 Err(invalid())
@@ -963,4 +1097,46 @@ pub fn extract_songs(resources: &[ItemResource]) -> (Vec<Song>, Vec<SkippedPlanI
         songs.push(song);
     }
     (songs, skipped)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_rejection_diagnostic_names_the_field_and_never_a_value() {
+        let secret = "Sunday Worship SECRET-TITLE";
+        let wrong_type = format!(
+            r#"{{"data":[{{"type":"Plan","id":"1","attributes":{{"title":7,"dates":"{secret}"}}}}]}}"#
+        );
+        let (path, reason) = describe_rejection::<PlanResource>(wrong_type.as_bytes());
+        assert_eq!(
+            (path.as_str(), reason),
+            ("data[0].attributes.title", "wrong_type")
+        );
+
+        // Raw text in the wrong place must not be echoed through the reason either.
+        let quoted = format!(r#"{{"data":[{{"type":"Plan","id":"{secret}","attributes":[]}}]}}"#);
+        let (path, reason) = describe_rejection::<PlanResource>(quoted.as_bytes());
+        assert!(
+            !path.contains("SECRET") && !reason.contains("SECRET"),
+            "{path} {reason}"
+        );
+
+        let missing = br#"{"data":[{"type":"Plan","id":"1"}]}"#;
+        assert_eq!(
+            describe_rejection::<PlanResource>(missing),
+            ("data[0]".to_string(), "missing_field")
+        );
+
+        let invalid_constraint = br#"{"data":[{"type":"Other","id":"1","attributes":{}}]}"#;
+        assert_eq!(
+            describe_rejection::<PlanResource>(invalid_constraint),
+            ("data[0]".to_string(), "constraint_failed")
+        );
+        assert_eq!(
+            describe_rejection::<PlanResource>(b"{not json").1,
+            "malformed_json"
+        );
+    }
 }
