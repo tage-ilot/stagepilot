@@ -11,6 +11,7 @@ const words: Array<[ConnectionStatus | "loading", string]> = [
   ["connecting", "Connecting"],
   ["disconnected", "Disconnected"],
   ["error", "Error"],
+  ["ready", "Ready"],
   ["loading", "Disconnected"],
 ];
 

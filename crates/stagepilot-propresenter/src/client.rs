@@ -44,6 +44,11 @@ pub trait ProPresenterClient: Send + Sync {
     async fn list_timers(&self) -> Result<Vec<Timer>, PpError>;
     async fn find_timer(&self, name: &str) -> Result<Timer, PpError>;
     async fn get_timer(&self, timer_id: &str) -> Result<Timer, PpError>;
+    /// `GET /v1/timers/current`: the live state of each timer (`running`, `stopped`,
+    /// `overrunning`), which `GET /v1/timers` does not carry. Clients without it report none.
+    async fn current_timers(&self) -> Result<Vec<Timer>, PpError> {
+        Ok(Vec::new())
+    }
     async fn list_looks(&self) -> Result<Vec<Look>, PpError>;
     async fn current_look(&self) -> Result<Look, PpError>;
     async fn trigger_look(&self, look_id: &str) -> Result<(), PpError>;
@@ -246,6 +251,12 @@ impl ProPresenterClient for HttpProPresenterClient {
                 })
             })
             .collect()
+    }
+
+    async fn current_timers(&self) -> Result<Vec<Timer>, PpError> {
+        let payload = self.get("/v1/timers/current").await?;
+        let raw = Self::extract_list(payload, ["timers", "items", "data"], "timer-list")?;
+        Ok(raw.iter().filter_map(Timer::from_value).collect())
     }
 
     async fn find_timer(&self, name: &str) -> Result<Timer, PpError> {

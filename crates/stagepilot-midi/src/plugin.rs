@@ -269,6 +269,35 @@ impl MidiPlaybackPlugin {
     }
 }
 
+/// The system's MIDI input ports, listed read-only: nothing is opened or connected, nothing is
+/// selected. For the setup panel while the MIDI plugin is off. An unavailable backend gives none.
+pub fn list_system_inputs(factory: &MidiBackendFactory) -> Vec<MidiInputResponse> {
+    let Ok(backend) = factory() else {
+        return Vec::new();
+    };
+    let Ok(names) = backend.list_input_names() else {
+        return Vec::new();
+    };
+    let mut unique: Vec<(String, usize)> = Vec::new();
+    for name in names {
+        match unique.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, count)) => *count += 1,
+            None => unique.push((name, 1)),
+        }
+    }
+    unique.sort_by_key(|(name, _)| name.to_lowercase());
+    unique
+        .into_iter()
+        .map(|(name, count)| MidiInputResponse {
+            id: input_id(&name),
+            ambiguous: count > 1,
+            selected: false,
+            connected: false,
+            name,
+        })
+        .collect()
+}
+
 #[async_trait]
 impl Plugin for MidiPlaybackPlugin {
     fn name(&self) -> &str {

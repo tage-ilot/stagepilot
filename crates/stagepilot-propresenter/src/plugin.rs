@@ -175,9 +175,11 @@ impl ProPresenterPlugin {
         let mut confirmed = None;
         for attempt in 0..LOOK_UPDATE_VERIFICATION_ATTEMPTS {
             let candidate = client.current_look().await?;
-            if candidate.id.index == selected.id.index
-                || casefold(candidate.id.name.trim()) == casefold(selected.id.name.trim())
-            {
+            // /v1/look/current reports a new uuid after every trigger, so the uuid alone cannot
+            // confirm; the index must match, and then the name (or, when it does, the uuid).
+            let same_name = casefold(candidate.id.name.trim()) == casefold(selected.id.name.trim());
+            let same_uuid = candidate.id.uuid == selected.id.uuid;
+            if candidate.id.index == selected.id.index && (same_name || same_uuid) {
                 confirmed = Some(candidate);
                 break;
             }
@@ -196,6 +198,11 @@ impl ProPresenterPlugin {
             st.last_activity_at = Some(Utc::now());
         }
         Ok(self.inner.snapshot())
+    }
+
+    /// Forget a saved Look that ProPresenter does not know, in this session's settings.
+    pub fn set_look_id(&self, look_id: Option<String>) {
+        self.inner.st().settings.look_id = look_id;
     }
 
     pub fn settings(&self) -> ProPresenterSettings {
@@ -561,7 +568,19 @@ impl Inner {
         self.st().last_checked_at = Some(Utc::now());
         let fetched = async {
             let client = self.require_client()?;
-            let timers = client.list_timers().await?;
+            let mut timers = client.list_timers().await?;
+            // One cheap extra call for the live state; a failure here must not fail the probe.
+            if let Ok(live) = client.current_timers().await {
+                for timer in &mut timers {
+                    let state = live
+                        .iter()
+                        .find(|l| l.id.uuid == timer.id.uuid)
+                        .and_then(|l| l.state.clone());
+                    if state.is_some() {
+                        timer.state = state;
+                    }
+                }
+            }
             let looks = client.list_looks().await?;
             let current = client.current_look().await?;
             Ok::<_, PpError>((timers, looks, current))

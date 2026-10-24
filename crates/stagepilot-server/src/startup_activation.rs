@@ -108,10 +108,11 @@ impl ActivationTargets for RuntimeActivation {
         {
             return None;
         }
-        Some(
-            rt.outputs.lights.snapshot(false).await.connection_status
-                == ConnectionStatus::Connected,
-        )
+        // "Ready" (OSC open, nothing sent yet) is a working output too.
+        Some(matches!(
+            rt.outputs.lights.snapshot(false).await.connection_status,
+            ConnectionStatus::Connected | ConnectionStatus::Ready
+        ))
     }
 
     async fn reconfigure_lights(&self) {

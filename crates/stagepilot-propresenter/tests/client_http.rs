@@ -615,3 +615,27 @@ async fn timer_operations_use_get_on_the_documented_paths() {
         ]
     );
 }
+
+#[tokio::test]
+async fn current_timers_reads_the_state_of_each_running_timer() {
+    let responder: Responder = Arc::new(|method, path, _, _| match (method, path) {
+        ("GET", "/v1/timers/current") => json_response(json!([
+            {"id": {"uuid": "timer-uuid", "name": "Song Countdown", "index": 0},
+             "time": "00:04:40", "state": "overrunning"},
+            {"id": {"uuid": "other", "name": "Message Timer", "index": 1},
+             "time": "00:00:00", "state": "stopped"},
+        ])),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    });
+    let mock = serve(responder).await;
+    let timers = client(&mock, fast()).current_timers().await.unwrap();
+    let states: Vec<(String, Option<String>)> =
+        timers.into_iter().map(|t| (t.id.uuid, t.state)).collect();
+    assert_eq!(
+        states,
+        [
+            ("timer-uuid".to_string(), Some("overrunning".to_string())),
+            ("other".to_string(), Some("stopped".to_string())),
+        ]
+    );
+}

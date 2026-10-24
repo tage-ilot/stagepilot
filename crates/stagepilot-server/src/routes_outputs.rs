@@ -196,6 +196,12 @@ fn finish(errors: Vec<Value>) -> Result<(), Json> {
 
 async fn midi_inputs(State(rt): State<Rt>) -> Json {
     let Some(midi) = rt.outputs.midi() else {
+        let factory = rt.outputs.backends.midi.clone();
+        let ports = tokio::task::spawn_blocking(move || {
+            stagepilot_midi::plugin::list_system_inputs(&factory)
+        })
+        .await
+        .unwrap_or_default();
         let settings = &rt.settings.midi;
         let mappings: serde_json::Map<String, Value> = settings
             .mappings
@@ -209,7 +215,8 @@ async fn midi_inputs(State(rt): State<Rt>) -> Json {
             "note": settings.note,
             "configured_input_name": settings.input_name,
             "selected_input_name": null,
-            "inputs": [],
+            // Read-only: the system's ports, so the setup panel is not empty while MIDI is off.
+            "inputs": ports,
             "mappings": mappings,
         }));
     };
@@ -512,37 +519,54 @@ async fn propresenter_settings_body(rt: Rt, raw: Bytes) -> Json {
         };
     };
     let snapshot = plugin.reconfigure(updated.clone()).await;
+    // Apply the Look before saving it: a Look ProPresenter does not know is reported but never
+    // kept, so the previous Look stays saved.
+    let look_outcome = match updated.look_id.clone() {
+        Some(look) => {
+            let result = plugin.apply_look(&look).await;
+            if matches!(
+                result,
+                Err(stagepilot_propresenter::PpError::LookNotFound(_))
+            ) {
+                updated.look_id = current.look_id.clone();
+                plugin.set_look_id(current.look_id.clone());
+            }
+            Some(result)
+        }
+        None => None,
+    };
     rt.outputs.adopt_presentation(updated.clone());
     if let Err(error) = rt.settings_service.persist_propresenter(updated.clone()) {
         return http_error(503, &error.0);
     }
     plugin = rt.outputs.propresenter().unwrap_or(plugin);
-    finish_pp_settings(&rt, plugin, snapshot, updated.look_id).await
+    finish_pp_settings(&rt, plugin, snapshot, look_outcome).await
 }
 
 async fn finish_pp_settings(
     rt: &Runtime,
     plugin: Arc<stagepilot_propresenter::ProPresenterPlugin>,
     mut snapshot: ProPresenterStatusResponse,
-    look_id: Option<String>,
+    look_outcome: Option<Result<ProPresenterStatusResponse, stagepilot_propresenter::PpError>>,
 ) -> Json {
     let _ = rt;
-    if let Some(look) = &look_id {
-        match plugin.apply_look(look).await {
-            Ok(applied) => snapshot = applied,
-            Err(error) if error.is_propresenter_error() => {
-                let snapshot = plugin.snapshot(false).await;
-                return operation(
-                    false,
-                    format!(
-                        "ProPresenter settings were saved, but the Look was not applied: {error}"
-                    ),
-                    snapshot,
-                );
-            }
-            Err(error) => return http_error(500, &error.to_string()),
+    let look_id = match look_outcome {
+        None => None,
+        Some(Ok(applied)) => {
+            let applied_look = applied.look_id.clone();
+            snapshot = applied;
+            applied_look
         }
-    }
+        Some(Err(error)) if error.is_propresenter_error() => {
+            let snapshot = plugin.snapshot(false).await;
+            return operation(
+                false,
+                format!("ProPresenter settings were saved, but the Look was not applied: {error}"),
+                snapshot,
+            );
+        }
+        Some(Err(error)) => return http_error(500, &error.to_string()),
+    };
     let accepted = snapshot.connection_status == ConnectionStatus::Connected
         && snapshot.timer_found
         && snapshot.look_found

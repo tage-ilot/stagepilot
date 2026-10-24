@@ -861,3 +861,25 @@ async fn ownership_hook_rejects_a_cue_when_the_revision_moved_before_it_ran() {
     assert!(h.dispatcher.calls().is_empty());
     h.plugin.stop().await.unwrap();
 }
+
+// ---- m12: read-only port list while the plugin is off --------------------------------------------
+
+#[test]
+fn system_inputs_are_listed_read_only_sorted_and_flag_duplicates() {
+    let backend = FakeMidiBackend::new(&["zeta", "Alpha", "Alpha"]);
+    let factory: MidiBackendFactory = Arc::new(move || Ok(backend.clone() as Arc<dyn MidiBackend>));
+    let inputs = stagepilot_midi::plugin::list_system_inputs(&factory);
+    let names: Vec<(&str, bool)> = inputs
+        .iter()
+        .map(|i| (i.name.as_str(), i.ambiguous))
+        .collect();
+    assert_eq!(names, [("Alpha", true), ("zeta", false)]);
+    assert!(inputs.iter().all(|i| !i.selected && !i.connected));
+    assert_eq!(inputs[0].id, input_id("Alpha"));
+}
+
+#[test]
+fn a_backend_that_cannot_list_gives_an_empty_list_not_an_error() {
+    let factory: MidiBackendFactory = Arc::new(|| Err(MidiError::internal("no ALSA")));
+    assert!(stagepilot_midi::plugin::list_system_inputs(&factory).is_empty());
+}

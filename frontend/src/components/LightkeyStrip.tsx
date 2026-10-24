@@ -56,6 +56,32 @@ export function lightkeyHeadline(status: LightkeyStatus): string {
   return status.takes.length === 1 ? "1 song captured." : `${status.takes.length} songs captured.`;
 }
 
+/** Same text, ignoring quote style and spacing (the backend writes straight quotes, the headline curly ones). */
+export function normaliseLine(text: string): string {
+  return text.replace(/[\u201C\u201D\u201E]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The lines under the switches, top to bottom, never the same thing twice: what just happened (an error or the
+ * backend message), the headline, and, while a recording is armed or running with Replay on, that replay is paused.
+ */
+export function lightkeyLines(status: LightkeyStatus, error: string | null): string[] {
+  const candidates = [
+    error ?? status.message ?? lightkeyHeadline(status),
+    lightkeyHeadline(status),
+    status.recording && status.replay ? "Replay paused while recording." : "",
+  ];
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const line of candidates) {
+    const key = normaliseLine(line);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    lines.push(line);
+  }
+  return lines;
+}
+
 /**
  * Lightkey live link, kept to the minimum: connect, record, replay.
  * Lightkey sends nothing back over OSC or MIDI, so this reads the active cues from the lightkey-api agent on the Lightkey Mac.
@@ -118,6 +144,7 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
     return response;
   });
 
+  const [headline, ...details] = lightkeyLines(status, error);
   return (
     <section aria-label="Lightkey live link" className="mt-6" data-testid="lightkey-strip">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -175,11 +202,11 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
       </div>
 
       <p aria-live="polite" className="mt-1 text-type-body-sm text-ink-muted" data-testid="lightkey-headline">
-        {error ?? status.message ?? lightkeyHeadline(status)}
+        {headline}
       </p>
-      {error === null && status.message && (
-        <p className="text-type-body-sm text-ink-muted">{lightkeyHeadline(status)}</p>
-      )}
+      {details.map((line) => (
+        <p className="text-type-body-sm text-ink-muted" data-testid="lightkey-detail" key={line}>{line}</p>
+      ))}
 
       {status.takes.length > 0 && (
         <ul aria-label="Captured songs" className="mt-2 grid gap-1">

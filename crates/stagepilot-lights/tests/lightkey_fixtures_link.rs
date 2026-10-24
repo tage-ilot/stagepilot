@@ -750,3 +750,64 @@ async fn an_old_take_without_fixtures_still_loads_and_replays_cues_only() {
     let summary = stagepilot_lights::lightkey::summarize(&take);
     assert_eq!(summary.fixture_count, None);
 }
+
+// ------------------------------------------------------------------ paced bursts (m4)
+
+fn big_take(count: usize) -> stagepilot_lights::lightkey::LightkeyTake {
+    use stagepilot_lights::lightkey::LightkeyTake;
+    use stagepilot_lights::lightkey_fixtures::FixtureTrack;
+    let mut take = LightkeyTake::new(
+        "song-1".into(),
+        "Holy Forever".into(),
+        Utc::now(),
+        10.0,
+        vec![],
+        vec![],
+    )
+    .unwrap();
+    take.fixtures = Some(FixtureTrack {
+        initial: (0..count).map(|n| dim(&format!("F{n:02}"), 0.5)).collect(),
+        events: vec![],
+        lead_seconds: 0.045,
+    });
+    take
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_replay_start_burst_is_paced_to_200_packets_a_second_in_order() {
+    let rig = Rig::new(vec![]).await;
+    rig.store
+        .set([("song-1".to_string(), big_take(60))].into_iter().collect());
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.sent.lock().unwrap().len() >= 60, 5.0).await;
+    let sent = rig.sent.lock().unwrap().clone();
+    let expected: Vec<String> = (0..60)
+        .map(|n| format!("/fixture/F{n:02}/overrides/dimmer"))
+        .collect();
+    let got: Vec<String> = sent.iter().take(60).map(|s| s.1.clone()).collect();
+    assert_eq!(got, expected); // order kept
+    let span = sent[59].0 - sent[0].0;
+    // 60 packets at <= 200/s take at least 295 ms (allow timer slack)
+    assert!(span >= 0.27, "60 packets went out in {span:.4} s");
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stopping_mid_burst_cancels_the_rest_of_the_burst() {
+    let rig = Rig::new(vec![]).await;
+    rig.store
+        .set([("song-1".to_string(), big_take(60))].into_iter().collect());
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.sent.lock().unwrap().len() >= 8, 5.0).await;
+    rig.song_stop(&song(10), 0.1).await;
+    pause(0.8).await;
+    let sets = rig
+        .addresses()
+        .iter()
+        .filter(|a| a.ends_with("/overrides/dimmer"))
+        .count();
+    assert!(sets < 60, "{sets} of 60 commands were sent after the stop");
+    rig.link.stop().await;
+}
