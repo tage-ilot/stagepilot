@@ -903,7 +903,17 @@ impl StateService {
                 },
             );
             if event.event_type == EventType::PluginFailed {
-                if let Some(error) = error.as_ref().filter(|e| !e.is_empty()) {
+                // A plugin that reports its own connection error right before the manager
+                // reports the failed start would otherwise be listed twice (m16).
+                let repeats_last = |s: &ApplicationState, error: &str| {
+                    s.recent_errors
+                        .last()
+                        .is_some_and(|last| last.component == *name && last.message == error)
+                };
+                if let Some(error) = error
+                    .as_ref()
+                    .filter(|e| !e.is_empty() && !repeats_last(s, e))
+                {
                     s.recent_errors.push(ErrorSummary {
                         timestamp: Utc::now(),
                         component: name.clone(),

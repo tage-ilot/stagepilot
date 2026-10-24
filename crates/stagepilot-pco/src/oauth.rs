@@ -14,6 +14,7 @@
 //! keyring-backed [`CredentialStore`] (the same `planning-center-oauth` account Python uses, same
 //! JSON blob).
 
+use crate::errors::PcoError;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::RngCore;
@@ -597,6 +598,14 @@ impl OAuthService {
         tokens: Option<OAuthTokens>,
     ) -> Result<OAuthTokens, CompleteError> {
         let _guard = self.refresh_lock.lock().await;
+        self.refresh_locked(tokens).await
+    }
+
+    /// `refresh_now` for a caller that already holds `refresh_lock`.
+    async fn refresh_locked(
+        &self,
+        tokens: Option<OAuthTokens>,
+    ) -> Result<OAuthTokens, CompleteError> {
         let current = match tokens {
             Some(t) => t,
             None => {
@@ -664,6 +673,51 @@ impl OAuthService {
             needs_reconnect: tokens.as_ref().is_some_and(|t| t.needs_reconnect),
             expires_at: tokens.as_ref().map(|t| t.expires_at),
             scope: tokens.map(|t| t.scope),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::client::TokenSource for OAuthService {
+    async fn current_token(&self) -> Result<String, PcoError> {
+        self.valid_access_token()
+            .await
+            .map_err(|error| match error {
+                CompleteError::OAuth(error) if error.permanent => {
+                    PcoError::Authentication(error.message)
+                }
+                CompleteError::OAuth(_) => {
+                    PcoError::Transport("Could not refresh the Planning Center sign-in.".into())
+                }
+                CompleteError::Credential(_) => {
+                    PcoError::configuration("Planning Center credentials are not available.")
+                }
+            })
+    }
+
+    async fn token_after_rejection(&self, rejected: &str) -> Option<String> {
+        // Serialise with every other refresh: Planning Center invalidates the old refresh token
+        // on use, so two racing refreshes would turn a healthy connection into `invalid_grant`.
+        let _guard = self.refresh_lock.lock().await;
+        let store = self.tokens.clone();
+        let stored = blocking(move || store.load()).await.ok()?.ok()??;
+        if stored.needs_reconnect {
+            return None;
+        }
+        if stored.access_token != rejected {
+            // Refreshed meanwhile (for example by the proactive loop).
+            return Some(stored.access_token);
+        }
+        match self.refresh_locked(Some(stored)).await {
+            Ok(fresh) => Some(fresh.access_token),
+            Err(_) => None,
+        }
+    }
+
+    async fn mark_needs_reconnect(&self) {
+        let store = self.tokens.clone();
+        if blocking(move || store.mark_needs_reconnect()).await.is_ok() {
+            tracing::warn!("planning_center_oauth_needs_reconnect");
         }
     }
 }

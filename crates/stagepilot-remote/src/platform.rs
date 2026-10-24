@@ -158,13 +158,28 @@ impl FileLocker for InMemoryLocker {
 
 // ---------------------------------------------------------------- child processes
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SpawnSpec {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
     /// Pipe stdout and stderr (merged by the reader) instead of discarding them.
     pub capture_output: bool,
+}
+
+/// Environment values can hold secrets (the tunnel token), so Debug shows names only.
+impl std::fmt::Debug for SpawnSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SpawnSpec")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field(
+                "env",
+                &self.env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+            )
+            .field("capture_output", &self.capture_output)
+            .finish()
+    }
 }
 
 pub trait ChildProcess: Send {
@@ -447,6 +462,7 @@ impl PortProbe for FakePortProbe {
 /// Every OS-dependent collaborator in one clonable bundle.
 #[derive(Clone)]
 pub struct Platform {
+    pub inspector: Arc<dyn crate::orphan::ProcessInspector>,
     pub clock: Arc<dyn Clock>,
     pub locker: Arc<dyn FileLocker>,
     pub spawner: Arc<dyn ProcessSpawner>,
@@ -457,6 +473,7 @@ pub struct Platform {
 impl Platform {
     pub fn system() -> Self {
         Self {
+            inspector: Arc::new(crate::orphan::SystemInspector),
             clock: Arc::new(SystemClock::new()),
             locker: Arc::new(StdFileLocker),
             spawner: Arc::new(StdSpawner),
