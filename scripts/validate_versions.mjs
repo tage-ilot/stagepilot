@@ -20,6 +20,20 @@ const versions = new Map([
   ["backend runtime settings", matchVersion("backend/src/stagepilot/core/config.py", /^\s+version: str = "([^"]+)"/m)],
 ]);
 
+// The Rust backend and the Planning Center user agent take the version from tauri.conf.json at
+// build time (crates/stagepilot-core/build.rs). A literal version in the source would report the
+// wrong release (rc.4 shipped "2.41.1"), so the injection and the absence of literals is checked.
+const buildRs = read("crates/stagepilot-core/build.rs");
+if (!buildRs.includes("tauri.conf.json") || !buildRs.includes("STAGEPILOT_VERSION")) {
+  throw new Error("crates/stagepilot-core/build.rs no longer injects the version from tauri.conf.json.");
+}
+if (!/pub const APP_VERSION: &str = env!\("STAGEPILOT_VERSION"\);/.test(read("crates/stagepilot-core/src/settings.rs"))) {
+  throw new Error("APP_VERSION in crates/stagepilot-core/src/settings.rs must come from env!(\"STAGEPILOT_VERSION\").");
+}
+if (/StagePilot\/\d/.test(read("crates/stagepilot-pco/src/models.rs"))) {
+  throw new Error("crates/stagepilot-pco/src/models.rs hard-codes a version in the user agent.");
+}
+
 const unique = new Set(versions.values());
 if (unique.size !== 1) {
   for (const [source, version] of versions) console.error(`${source}: ${version}`);

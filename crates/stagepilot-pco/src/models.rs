@@ -48,7 +48,13 @@ impl std::fmt::Debug for Secret {
 
 // ---- runtime settings ------------------------------------------------------------------------------
 
-pub const DEFAULT_USER_AGENT: &str = "StagePilot/2.41.1 (https://github.com/tage-ilot/stagepilot)";
+/// `StagePilot/<version> (<project url>)`, with the build-injected application version.
+pub fn default_user_agent() -> String {
+    format!(
+        "StagePilot/{} (https://github.com/tage-ilot/stagepilot)",
+        stagepilot_core::settings::APP_VERSION
+    )
+}
 
 /// `PlanningCenterSettings`: the runtime settings the client and plugin work from.
 #[derive(Clone, Debug, PartialEq)]
@@ -77,7 +83,7 @@ impl Default for PcoSettings {
             preferred_service_time: None,
             upcoming_lookahead_days: 30,
             request_timeout_seconds: 10.0,
-            user_agent: DEFAULT_USER_AGENT.to_string(),
+            user_agent: default_user_agent(),
         }
     }
 }

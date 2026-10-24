@@ -240,12 +240,16 @@ async fn health(State(rt): State<Rt>) -> Json {
                 .unwrap_or_else(|| local_date(&rt.settings.timezone)),
         )
     };
-    // Playback itself is still a stub (phase 3), so only the simulated source or a connected MIDI
-    // input can be "ready" (`runtime.playback_input.connection.connected`).
+    // `runtime.playback_input.connection.connected`: the simulated source is always ready, real
+    // MIDI needs its link, and the Playback API needs a live Playback link unless Playback is
+    // switched off (then nothing is waiting for it).
     let playback_ready = match rt.settings.integration_modes.midi_source {
         MidiSource::Simulated => true,
         MidiSource::Real => rt.outputs.link.connected(),
-        MidiSource::PlaybackApi => false,
+        MidiSource::PlaybackApi => {
+            rt.playback.publish_connection().await;
+            !rt.playback.config().enabled || rt.playback.connection().connected
+        }
     };
     let healthy = state.application_status == ApplicationStatus::Running
         && plugins.iter().all(|p| p.status == PluginStatus::Running)
