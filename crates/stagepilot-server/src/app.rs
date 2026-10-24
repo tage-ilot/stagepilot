@@ -457,10 +457,11 @@ fn auth_status(rt: &Runtime, headers: &HeaderMap, peer: Option<SocketAddr>) -> (
 
 async fn dashboard_status(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
 ) -> Json {
-    let (required, authenticated) = auth_status(&rt, &headers, Some(peer));
+    let (required, authenticated) =
+        auth_status(&rt, &headers, peer.map(|Extension(ConnectInfo(addr))| addr));
     ok(json!({"required": required, "authenticated": authenticated}))
 }
 
@@ -509,15 +510,17 @@ async fn dashboard_settings(State(rt): State<Rt>, body: Bytes) -> Json {
 
 async fn access(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    // Optional so a listener that serves without peer addresses can never turn this into a 500.
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     remote: Option<Extension<RemoteContext>>,
     headers: HeaderMap,
 ) -> Response {
     if let Some(Extension(context)) = remote {
         return remote_access(&context);
     }
-    let (required, local_authenticated) = auth_status(&rt, &headers, Some(peer));
-    let desktop = desktop_origin(&headers, Some(peer));
+    let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+    let (required, local_authenticated) = auth_status(&rt, &headers, peer);
+    let desktop = desktop_origin(&headers, peer);
     let authenticated = local_authenticated || !rt.dashboard_auth_enforced;
     let mut response = ok(json!({
         "mode": if desktop { "desktop" } else { "lan" },
