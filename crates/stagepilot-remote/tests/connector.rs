@@ -695,3 +695,28 @@ fn the_system_inspector_recognises_a_real_process_and_a_dead_one() {
     child.wait().unwrap();
     assert!(SystemInspector.info(child.id()).is_none());
 }
+
+#[cfg(unix)]
+#[test]
+fn a_quick_tunnel_left_by_an_unclean_exit_is_terminated_before_the_next_start() {
+    use stagepilot_remote::orphan::{write_pidfile, PidRecord};
+    let (dir, tp, feature, mut quick) = quick_fixture(true);
+    let binary = dir.path().join("quick-substitute");
+    write_pidfile(
+        &dir.path().join("quick-connector.pid"),
+        &PidRecord {
+            pid: ORPHAN_PID,
+            started_at: Some(3),
+            exe: binary.to_string_lossy().into_owned(),
+            generation: String::new(),
+            metrics_port: 18903,
+        },
+    );
+    tp.inspector.add(ORPHAN_PID, Some(&binary), Some(3));
+    feature.set_enabled(true).unwrap();
+    quick.step().unwrap();
+    assert_eq!(*tp.inspector.terminated.lock().unwrap(), vec![ORPHAN_PID]);
+    assert_eq!(tp.spawner.specs().len(), 1);
+    quick.stop();
+    assert!(!dir.path().join("quick-connector.pid").exists());
+}
