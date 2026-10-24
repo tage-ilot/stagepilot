@@ -7,9 +7,8 @@ use stagepilot_core::logging::{filter_for_level, saved_log_level, startup_filter
 use stagepilot_core::state::ConnectionStatus;
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
-use std::sync::{Arc, Mutex};
-use tracing::field::{Field, Visit};
-use tracing::{Event, Level, Metadata, Subscriber};
+mod support;
+use tracing::Level;
 
 #[test]
 fn the_saved_level_is_used_and_the_environment_wins() {
@@ -63,39 +62,9 @@ fn the_level_is_read_from_the_settings_file_without_touching_it() {
 
 // ---- integration connection lines -------------------------------------------------------------
 
-#[derive(Clone, Default)]
-struct Logs(Arc<Mutex<Vec<(Level, String)>>>);
-struct Text(String);
-impl Visit for Text {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.0.push_str(&format!("{}={:?} ", field.name(), value));
-    }
-}
-impl Subscriber for Logs {
-    fn enabled(&self, _: &Metadata<'_>) -> bool {
-        true
-    }
-    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-    fn event(&self, event: &Event<'_>) {
-        let mut text = Text(String::new());
-        event.record(&mut text);
-        self.0
-            .lock()
-            .unwrap()
-            .push((*event.metadata().level(), text.0));
-    }
-    fn enter(&self, _: &tracing::span::Id) {}
-    fn exit(&self, _: &tracing::span::Id) {}
-}
-
 #[tokio::test]
 async fn each_integration_connect_and_disconnect_is_one_info_line() {
-    let logs = Logs::default();
-    let _guard = tracing::subscriber::set_default(logs.clone());
+    let logs = support::Capture::start();
     let bus = EventBus::new();
     let service = StateService::new(bus.clone(), StateStore::default(), 50, 50);
     service.start();
@@ -138,12 +107,9 @@ async fn each_integration_connect_and_disconnect_is_one_info_line() {
     )
     .await;
     let lines: Vec<String> = logs
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(l, t)| *l == Level::INFO && t.contains("integration_connection"))
-        .map(|(_, t)| t.clone())
+        .at(Level::INFO)
+        .into_iter()
+        .filter(|t| t.contains("integration_connection"))
         .collect();
     assert_eq!(lines.len(), 4, "{lines:?}");
     assert!(lines[0].contains("playback_api") && lines[0].contains("Connected"));

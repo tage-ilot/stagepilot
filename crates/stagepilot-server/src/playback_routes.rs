@@ -928,7 +928,7 @@ fn length_failure(error: LengthError) -> Json {
 fn pco_failure(error: &PcoError) -> Json {
     match error {
         PcoError::Permission(_) | PcoError::Authentication(_) => http_error(403, DENIED_MESSAGE),
-        PcoError::Api { status } if matches!(status, 401 | 403) => http_error(403, DENIED_MESSAGE),
+        PcoError::Api { status: 401 | 403 } => http_error(403, DENIED_MESSAGE),
         _ => {
             // The reason stays in the log (never the response body, URL or credentials).
             tracing::warn!(

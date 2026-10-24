@@ -5,59 +5,15 @@
 use serde_json::{json, Value};
 use stagepilot_core::settings::*;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use tracing::field::{Field, Visit};
-use tracing::{Event, Level, Metadata, Subscriber};
+use tracing::Level;
 
-// ---- a tiny log capture (no extra dependencies) -----------------------------------------------
-
-#[derive(Clone, Default)]
-struct Logs(Arc<Mutex<Vec<(Level, String)>>>);
-
-struct Text(String);
-impl Visit for Text {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.0.push_str(&format!("{}={:?} ", field.name(), value));
-    }
-}
-
-impl Subscriber for Logs {
-    fn enabled(&self, _: &Metadata<'_>) -> bool {
-        true
-    }
-    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-    fn event(&self, event: &Event<'_>) {
-        let mut text = Text(String::new());
-        event.record(&mut text);
-        self.0
-            .lock()
-            .unwrap()
-            .push((*event.metadata().level(), text.0));
-    }
-    fn enter(&self, _: &tracing::span::Id) {}
-    fn exit(&self, _: &tracing::span::Id) {}
-}
-
-impl Logs {
-    fn at(&self, level: Level) -> Vec<String> {
-        self.0
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(l, _)| *l == level)
-            .map(|(_, t)| t.clone())
-            .collect()
-    }
-}
+mod support;
+use support::Capture as Logs;
 
 /// Run `f` and return what it returned plus everything it logged.
 fn logged<T>(f: impl FnOnce() -> T) -> (T, Logs) {
-    let logs = Logs::default();
-    let out = tracing::subscriber::with_default(logs.clone(), f);
+    let logs = Logs::start();
+    let out = f();
     (out, logs)
 }
 

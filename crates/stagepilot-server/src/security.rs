@@ -88,16 +88,16 @@ impl LoginThrottle {
         let now = self.now();
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.by_address.len() >= MAX_TRACKED && !state.by_address.contains_key(address) {
-            state
-                .by_address
-                .retain(|_, e| e.locked_until > now || e.failures % FAILURES_PER_LOCKOUT != 0);
+            state.by_address.retain(|_, e| {
+                e.locked_until > now || !e.failures.is_multiple_of(FAILURES_PER_LOCKOUT)
+            });
             if state.by_address.len() >= MAX_TRACKED {
                 state.by_address.clear();
             }
         }
         let entry = state.by_address.entry(address.to_string()).or_default();
         entry.failures += 1;
-        if entry.failures % FAILURES_PER_LOCKOUT == 0 {
+        if entry.failures.is_multiple_of(FAILURES_PER_LOCKOUT) {
             let step = (entry.failures / FAILURES_PER_LOCKOUT - 1) as usize;
             entry.locked_until = now + LOCKOUTS[step.min(LOCKOUTS.len() - 1)];
         }

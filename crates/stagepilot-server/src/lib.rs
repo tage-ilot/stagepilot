@@ -3,6 +3,7 @@
 //! serving. Every route is backed by the real service (`tests/no_stub_routes.rs` keeps it so).
 
 pub use stagepilot_core::logging;
+pub use stagepilot_core::settings::APP_VERSION;
 
 pub mod app;
 pub mod demo;

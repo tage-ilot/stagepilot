@@ -12,41 +12,11 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
-use tracing::field::{Field, Visit};
-use tracing::{Event, Level, Metadata, Subscriber};
+use tracing::Level;
 
 const DEFAULT_PIN: &str = "1234";
 
-// ---- log capture ------------------------------------------------------------------------------
-
-#[derive(Clone, Default)]
-struct Logs(Arc<Mutex<Vec<(Level, String)>>>);
-struct Text(String);
-impl Visit for Text {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.0.push_str(&format!("{}={:?} ", field.name(), value));
-    }
-}
-impl Subscriber for Logs {
-    fn enabled(&self, _: &Metadata<'_>) -> bool {
-        true
-    }
-    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-    fn event(&self, event: &Event<'_>) {
-        let mut text = Text(String::new());
-        event.record(&mut text);
-        self.0
-            .lock()
-            .unwrap()
-            .push((*event.metadata().level(), text.0));
-    }
-    fn enter(&self, _: &tracing::span::Id) {}
-    fn exit(&self, _: &tracing::span::Id) {}
-}
+mod support;
 
 // ---- rig --------------------------------------------------------------------------------------
 
@@ -283,17 +253,13 @@ async fn the_desktop_shell_is_never_locked_out() {
 
 #[tokio::test]
 async fn every_failed_login_is_logged_with_the_address_and_never_the_pin() {
-    let logs = Logs::default();
-    let _guard = tracing::subscriber::set_default(logs.clone());
+    let logs = support::Capture::start();
     let r = rig().await;
     r.login("9876-secret", "192.168.1.80", &[]).await;
     let warnings: Vec<String> = logs
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(l, t)| *l == Level::WARN && t.contains("dashboard_login_failed"))
-        .map(|(_, t)| t.clone())
+        .at(Level::WARN)
+        .into_iter()
+        .filter(|t| t.contains("dashboard_login_failed"))
         .collect();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("192.168.1.80"));

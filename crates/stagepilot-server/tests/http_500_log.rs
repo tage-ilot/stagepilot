@@ -6,44 +6,13 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
 use stagepilot_server::security::log_server_errors;
-use std::sync::{Arc, Mutex};
+mod support;
 use tower::ServiceExt;
-use tracing::field::{Field, Visit};
-use tracing::{Event, Level, Metadata, Subscriber};
-
-#[derive(Clone, Default)]
-struct Logs(Arc<Mutex<Vec<(Level, String)>>>);
-struct Text(String);
-impl Visit for Text {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.0.push_str(&format!("{}={:?} ", field.name(), value));
-    }
-}
-impl Subscriber for Logs {
-    fn enabled(&self, _: &Metadata<'_>) -> bool {
-        true
-    }
-    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-    fn event(&self, event: &Event<'_>) {
-        let mut text = Text(String::new());
-        event.record(&mut text);
-        self.0
-            .lock()
-            .unwrap()
-            .push((*event.metadata().level(), text.0));
-    }
-    fn enter(&self, _: &tracing::span::Id) {}
-    fn exit(&self, _: &tracing::span::Id) {}
-}
+use tracing::Level;
 
 #[tokio::test]
 async fn a_500_is_logged_with_method_and_path_only() {
-    let logs = Logs::default();
-    let _guard = tracing::subscriber::set_default(logs.clone());
+    let logs = support::Capture::start();
     let app = Router::new()
         .route(
             "/boom",
@@ -74,14 +43,7 @@ async fn a_500_is_logged_with_method_and_path_only() {
         send("GET", "/missing-handler-state").await,
         StatusCode::SERVICE_UNAVAILABLE
     );
-    let warnings: Vec<String> = logs
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(l, _)| *l == Level::WARN)
-        .map(|(_, t)| t.clone())
-        .collect();
+    let warnings: Vec<String> = logs.at(Level::WARN);
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(
         warnings[0].contains("http_500")

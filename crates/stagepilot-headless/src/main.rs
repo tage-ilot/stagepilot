@@ -37,7 +37,7 @@ fn parse(args: &[String]) -> Parsed {
             "--version" | "-V" => {
                 return Parsed::Print(format!(
                     "stagepilot-headless {}\nmidi-backend: {}\n",
-                    env!("CARGO_PKG_VERSION"),
+                    stagepilot_server::APP_VERSION,
                     stagepilot_midi::backend_name()
                 ))
             }
@@ -120,6 +120,21 @@ mod tests {
                 port: Some(9000)
             }
         );
+    }
+
+    #[test]
+    fn version_is_the_release_version_not_the_crate_version() {
+        let Parsed::Print(text) = parse(&args(&["--version"])) else {
+            panic!("--version prints");
+        };
+        assert!(
+            text.starts_with(&format!(
+                "stagepilot-headless {}\n",
+                stagepilot_server::APP_VERSION
+            )),
+            "{text}"
+        );
+        assert!(!text.contains("0.0.0\n"), "{text}");
     }
 
     #[test]
