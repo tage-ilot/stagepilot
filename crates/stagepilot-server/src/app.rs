@@ -224,7 +224,20 @@ fn local_date(timezone: &str) -> chrono::NaiveDate {
         .unwrap_or_else(|_| today())
 }
 
-async fn health(State(rt): State<Rt>) -> Json {
+async fn health(
+    State(rt): State<Rt>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    remote: Option<Extension<RemoteContext>>,
+    headers: HeaderMap,
+) -> Json {
+    // Plugin states and error texts are dashboard data (m14); the probe fields stay public.
+    let detailed = match &remote {
+        Some(Extension(context)) => context.session.is_some(),
+        None => {
+            let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+            !rt.dashboard_auth_enforced || auth_status(&rt, &headers, peer).1
+        }
+    };
     let state = rt.store.snapshot();
     let plugins = rt.plugins.health().await;
     let service_ready = if rt.settings.uses_demo_service() {
@@ -252,13 +265,16 @@ async fn health(State(rt): State<Rt>) -> Json {
         && plugins.iter().all(|p| p.status == PluginStatus::Running)
         && service_ready
         && playback_ready;
-    ok(json!({
+    let mut body = json!({
         "status": if healthy { "healthy" } else { "degraded" },
         "version": rt.settings.version,
         "application_status": state.application_status,
-        "plugins": plugins,
-        "started_at": rt.started_at,
-    }))
+    });
+    if detailed {
+        body["plugins"] = json!(plugins);
+        body["started_at"] = json!(rt.started_at);
+    }
+    ok(body)
 }
 
 async fn state(State(rt): State<Rt>) -> Json {
@@ -457,10 +473,11 @@ fn auth_status(rt: &Runtime, headers: &HeaderMap, peer: Option<SocketAddr>) -> (
 
 async fn dashboard_status(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
 ) -> Json {
-    let (required, authenticated) = auth_status(&rt, &headers, Some(peer));
+    let (required, authenticated) =
+        auth_status(&rt, &headers, peer.map(|Extension(ConnectInfo(addr))| addr));
     ok(json!({"required": required, "authenticated": authenticated}))
 }
 
@@ -509,15 +526,17 @@ async fn dashboard_settings(State(rt): State<Rt>, body: Bytes) -> Json {
 
 async fn access(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    // Optional so a listener that serves without peer addresses can never turn this into a 500.
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     remote: Option<Extension<RemoteContext>>,
     headers: HeaderMap,
 ) -> Response {
     if let Some(Extension(context)) = remote {
         return remote_access(&context);
     }
-    let (required, local_authenticated) = auth_status(&rt, &headers, Some(peer));
-    let desktop = desktop_origin(&headers, Some(peer));
+    let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+    let (required, local_authenticated) = auth_status(&rt, &headers, peer);
+    let desktop = desktop_origin(&headers, peer);
     let authenticated = local_authenticated || !rt.dashboard_auth_enforced;
     let mut response = ok(json!({
         "mode": if desktop { "desktop" } else { "lan" },

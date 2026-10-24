@@ -2,7 +2,7 @@
 //! plan cache and the (optional) running plugin. Counterpart of the Planning Center parts of
 //! `main.create_app` and `core/runtime.py`.
 
-use crate::client::{default_factory, PcoClientFactory};
+use crate::client::{factory_with_tokens, PcoClientFactory, TokenSource};
 use crate::errors::PcoError;
 use crate::models::PcoSettings;
 use crate::oauth::{ControlPlaneClient, OAuthService, OAuthTokenStore};
@@ -77,9 +77,12 @@ impl PcoRuntime {
             OAuthTokenStore::new(credentials),
             control_plane,
         ));
-        let factory = options
-            .factory
-            .unwrap_or_else(|| default_factory(options.api_base.clone()));
+        let factory = options.factory.unwrap_or_else(|| {
+            factory_with_tokens(
+                options.api_base.clone(),
+                Some(oauth.clone() as Arc<dyn TokenSource>),
+            )
+        });
         let cache = options.plan_cache.unwrap_or_else(|| {
             if options.memory_tokens {
                 Arc::new(MemoryPlanCacheStore::default())

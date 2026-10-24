@@ -124,6 +124,16 @@ pub struct CollectionDocument<T> {
     pub links: CollectionLinks,
 }
 
+/// Planning Center sends an explicit `null` for an unset text attribute (an untitled plan has
+/// `"title": null`). `#[serde(default)]` only covers a missing key, so read null as empty too.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 /// A transport resource whose constraints can be checked after deserialisation.
 pub trait Resource {
     fn resource_id(&self) -> &str;
@@ -163,9 +173,9 @@ impl Resource for ServiceTypeResource {
 
 #[derive(Debug, Deserialize)]
 pub struct PlanAttributes {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub dates: String,
 }
 
@@ -194,7 +204,7 @@ pub struct PlanTimeAttributes {
     pub starts_at: DateTime<FixedOffset>,
     #[serde(default)]
     pub ends_at: Option<DateTime<FixedOffset>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub name: String,
     pub time_type: String,
 }
@@ -240,7 +250,7 @@ pub struct ItemRelationships {
 
 #[derive(Debug, Deserialize)]
 pub struct ItemAttributes {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,

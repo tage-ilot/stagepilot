@@ -29,9 +29,9 @@ jobs:
           set -euo pipefail
           curl --fail --location --retry 3 \
             --output "$CLOUDFLARED_BIN" \
-            https://github.com/cloudflare/cloudflared/releases/download/2026.9.1/cloudflared-linux-amd64
+            https://github.com/cloudflare/cloudflared/releases/download/2026.10.3/cloudflared-linux-amd64
           printf '%s  %s\n' \
-            03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc \
+            053b80b0a23031a038fdbf3c073f59f82b8f1f152aa67971d7383ffafc0dbab0 \
             "$CLOUDFLARED_BIN" | sha256sum --check
           chmod 700 "$CLOUDFLARED_BIN"
           "$CLOUDFLARED_BIN" --version

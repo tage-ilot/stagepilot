@@ -14,7 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSION = "2026.9.1"
+VERSION = "2026.10.3"
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "desktop" / "src-tauri" / "resources"
 
@@ -30,24 +30,24 @@ class Asset:
 ASSETS = {
     ("darwin", "x86_64"): Asset(
         "cloudflared-darwin-amd64.tgz",
-        "ff0d3b51d5ff70eceef89d6b32145fee985018a2174596a5dbe405e2766e2ac4",
+        "81b7b85f2376815c4f59b1aa323887b62e16ce8b67555c2e1577dc23f2a82000",
         "cloudflared",
         True,
     ),
     ("darwin", "arm64"): Asset(
         "cloudflared-darwin-arm64.tgz",
-        "c27ab8fd0aa489449e3d201eb02f957ef460a13b613662928b1b23394bf1bcfe",
+        "1165d14b6f6360a3b8c283d7d1100024d6ec7cd9bc9e32519e96150645f3ec55",
         "cloudflared",
         True,
     ),
     ("windows", "amd64"): Asset(
         "cloudflared-windows-amd64.exe",
-        "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712",
+        "76b2805253d0d6ffacb092a7acfbee99e7af6917835c0c5410e23f3ef5052da2",
         "cloudflared.exe",
     ),
     ("windows", "x86_64"): Asset(
         "cloudflared-windows-amd64.exe",
-        "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712",
+        "76b2805253d0d6ffacb092a7acfbee99e7af6917835c0c5410e23f3ef5052da2",
         "cloudflared.exe",
     ),
 }

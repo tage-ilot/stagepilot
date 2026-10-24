@@ -89,11 +89,16 @@ pub async fn remote_listener(ingress: Router, port: u16) -> Option<RemoteListene
     let addr = listener.local_addr().ok()?;
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(async move {
-        let served = axum::serve(listener, ingress)
-            .with_graceful_shutdown(async move {
-                let _ = stopped.await;
-            })
-            .await;
+        let served = axum::serve(
+            listener,
+            // Handlers read the peer address (`ConnectInfo<SocketAddr>`); without it every
+            // such route answers 500 (B6).
+            ingress.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            let _ = stopped.await;
+        })
+        .await;
         if served.is_err() {
             // Never log request headers, credentials, or provider configuration here.
             tracing::error!("Remote listener stopped unexpectedly; LAN remains available.");
