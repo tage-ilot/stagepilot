@@ -196,6 +196,12 @@ fn finish(errors: Vec<Value>) -> Result<(), Json> {
 
 async fn midi_inputs(State(rt): State<Rt>) -> Json {
     let Some(midi) = rt.outputs.midi() else {
+        let factory = rt.outputs.backends.midi.clone();
+        let ports = tokio::task::spawn_blocking(move || {
+            stagepilot_midi::plugin::list_system_inputs(&factory)
+        })
+        .await
+        .unwrap_or_default();
         let settings = &rt.settings.midi;
         let mappings: serde_json::Map<String, Value> = settings
             .mappings
@@ -209,7 +215,8 @@ async fn midi_inputs(State(rt): State<Rt>) -> Json {
             "note": settings.note,
             "configured_input_name": settings.input_name,
             "selected_input_name": null,
-            "inputs": [],
+            // Read-only: the system's ports, so the setup panel is not empty while MIDI is off.
+            "inputs": ports,
             "mappings": mappings,
         }));
     };
@@ -517,7 +524,10 @@ async fn propresenter_settings_body(rt: Rt, raw: Bytes) -> Json {
     let look_outcome = match updated.look_id.clone() {
         Some(look) => {
             let result = plugin.apply_look(&look).await;
-            if matches!(result, Err(stagepilot_propresenter::PpError::LookNotFound(_))) {
+            if matches!(
+                result,
+                Err(stagepilot_propresenter::PpError::LookNotFound(_))
+            ) {
                 updated.look_id = current.look_id.clone();
                 plugin.set_look_id(current.look_id.clone());
             }

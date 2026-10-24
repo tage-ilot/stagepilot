@@ -629,10 +629,8 @@ async fn current_timers_reads_the_state_of_each_running_timer() {
     });
     let mock = serve(responder).await;
     let timers = client(&mock, fast()).current_timers().await.unwrap();
-    let states: Vec<(String, Option<String>)> = timers
-        .into_iter()
-        .map(|t| (t.id.uuid, t.state))
-        .collect();
+    let states: Vec<(String, Option<String>)> =
+        timers.into_iter().map(|t| (t.id.uuid, t.state)).collect();
     assert_eq!(
         states,
         [

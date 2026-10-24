@@ -503,8 +503,10 @@ export function LightingSetupPanel({
             {savedMethod === "osc" && lights?.connection_status === "error"
               ? lights.detail
               : savedMethod === "osc" && lights?.last_osc_cue
-                ? `Last sent: ${lights.last_osc_cue.address}. UDP does not confirm delivery.`
-                : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
+                ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
+                : savedMethod === "osc" && lights?.connection_status === "ready"
+                  ? "Ready, delivery not confirmed. Nothing sent yet; OSC is sent over UDP. Use Send test cue to check."
+                  : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
           </p>
           {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
         </>

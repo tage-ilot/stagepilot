@@ -776,11 +776,8 @@ fn big_take(count: usize) -> stagepilot_lights::lightkey::LightkeyTake {
 #[tokio::test(flavor = "multi_thread")]
 async fn the_replay_start_burst_is_paced_to_200_packets_a_second_in_order() {
     let rig = Rig::new(vec![]).await;
-    rig.store.set(
-        [("song-1".to_string(), big_take(60))]
-            .into_iter()
-            .collect(),
-    );
+    rig.store
+        .set([("song-1".to_string(), big_take(60))].into_iter().collect());
     rig.connect().await;
     rig.song_start(&song(10)).await;
     wait_for(|| rig.sent.lock().unwrap().len() >= 60, 5.0).await;
@@ -799,11 +796,8 @@ async fn the_replay_start_burst_is_paced_to_200_packets_a_second_in_order() {
 #[tokio::test(flavor = "multi_thread")]
 async fn stopping_mid_burst_cancels_the_rest_of_the_burst() {
     let rig = Rig::new(vec![]).await;
-    rig.store.set(
-        [("song-1".to_string(), big_take(60))]
-            .into_iter()
-            .collect(),
-    );
+    rig.store
+        .set([("song-1".to_string(), big_take(60))].into_iter().collect());
     rig.connect().await;
     rig.song_start(&song(10)).await;
     wait_for(|| rig.sent.lock().unwrap().len() >= 8, 5.0).await;

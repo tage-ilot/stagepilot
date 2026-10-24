@@ -438,18 +438,18 @@ impl Inner {
                 self.clone().connect().await;
             }
         }
+        // The port list is read-only and shown whatever the method is. Only while MIDI is the
+        // method does a listing failure count as an error on the connection.
         let midi_active = self.st().settings.method == LightingMethod::Midi;
-        let names = if midi_active {
-            match self.list_output_names().await {
-                Ok(names) => names,
-                Err(error) => {
+        let names = match self.list_output_names().await {
+            Ok(names) => names,
+            Err(error) => {
+                if midi_active {
                     self.record_midi_error(&error, "Lighting MIDI outputs could not be listed.")
                         .await;
-                    Vec::new()
                 }
+                Vec::new()
             }
-        } else {
-            Vec::new()
         };
         let st = self.st();
         let s = &st.settings;
@@ -831,10 +831,24 @@ impl Inner {
             .await
             .map_err(|_| OutputError::internal("OSC send task failed."))??;
         let now = Utc::now();
-        let mut st = self.st();
-        st.last_osc_cue = Some(cue.clone());
-        st.last_cue_at = Some(now);
-        st.last_activity_at = Some(now);
+        let first_send = {
+            let mut st = self.st();
+            st.last_osc_cue = Some(cue.clone());
+            st.last_cue_at = Some(now);
+            st.last_activity_at = Some(now);
+            st.connection_status == ConnectionStatus::Ready
+        };
+        if first_send {
+            let target = {
+                let st = self.st();
+                format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
+            };
+            self.set_connection(
+                ConnectionStatus::Connected,
+                &format!("Sent {} to {target}.", cue.address),
+            )
+            .await;
+        }
         Ok(())
     }
 
@@ -896,13 +910,23 @@ impl Inner {
                     st.last_activity_at = Some(Utc::now());
                 }
                 // UDP has no handshake: "ready" means the socket opened, not that anything listens.
-                self.set_connection(
-                    ConnectionStatus::Connected,
-                    &format!(
-                        "OSC ready for {target}. Nothing sent yet; UDP does not confirm delivery."
-                    ),
-                )
-                .await;
+                // It stays "ready" until a cue has actually gone out through it.
+                let sent_before = self.st().last_cue_at.is_some();
+                if sent_before {
+                    self.set_connection(
+                        ConnectionStatus::Connected,
+                        &format!("OSC output to {target} reopened. UDP does not confirm delivery."),
+                    )
+                    .await;
+                } else {
+                    self.set_connection(
+                        ConnectionStatus::Ready,
+                        &format!(
+                            "OSC ready for {target}. Nothing sent yet; UDP does not confirm delivery."
+                        ),
+                    )
+                    .await;
+                }
                 true
             }
             Err(error) => {

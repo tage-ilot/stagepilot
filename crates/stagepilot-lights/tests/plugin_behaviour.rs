@@ -707,7 +707,7 @@ async fn osc_only_setup_does_not_need_a_midi_backend() {
     let plugin = LightsPlugin::new(bus, both_methods(LightingMethod::Osc), options).unwrap();
     plugin.start().await.unwrap();
     let snapshot = plugin.snapshot(false).await;
-    assert_eq!(snapshot.connection_status, ConnectionStatus::Connected);
+    assert_eq!(snapshot.connection_status, ConnectionStatus::Ready);
     assert!(snapshot.outputs.is_empty());
     plugin.stop().await.unwrap();
 }
@@ -759,5 +759,45 @@ async fn an_aborted_pulse_still_sends_its_note_off() {
         .await;
     wait_for("note off after cancel", || r.midi.messages().len() == 2).await;
     assert_eq!(r.midi.messages()[1], msg("note_off", 3, 80, 0));
+    r.plugin.stop().await.unwrap();
+}
+
+// ---- m5 / m12: honest status and read-only port list ---------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn osc_is_ready_not_connected_until_the_first_cue_is_sent() {
+    let r = rig(settings(
+        LightingMethod::Osc,
+        vec![],
+        vec![osc_cue(0.0, "/live/go", vec![], "Go")],
+    ));
+    r.plugin.start().await.unwrap();
+    let before = r.plugin.snapshot(false).await;
+    assert_eq!(before.connection_status, ConnectionStatus::Ready);
+    assert_eq!(before.last_cue_at, None);
+    assert!(before.detail.unwrap().contains("Nothing sent yet"));
+    publish_song_start(&r.bus, 300).await;
+    wait_for("the cue", || !r.osc.sent().is_empty()).await;
+    wait_for("connected", || {
+        futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Connected
+    })
+    .await;
+    let after = r.plugin.snapshot(false).await;
+    assert!(after.last_cue_at.is_some());
+    assert!(after.detail.unwrap().contains("/live/go"));
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn midi_ports_are_listed_read_only_while_the_method_is_osc() {
+    let r = rig(both_methods(LightingMethod::Osc));
+    r.plugin.start().await.unwrap();
+    let snapshot = r.plugin.snapshot(false).await;
+    assert_eq!(snapshot.method, LightingMethod::Osc);
+    let names: Vec<&str> = snapshot.outputs.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(names, ["StagePilot to Lightkey"]);
+    assert!(snapshot.outputs.iter().all(|o| !o.connected));
+    assert_eq!(snapshot.connection_status, ConnectionStatus::Ready);
+    assert!(r.midi.ports().is_empty(), "listing must not open a port");
     r.plugin.stop().await.unwrap();
 }

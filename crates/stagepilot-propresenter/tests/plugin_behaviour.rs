@@ -755,7 +755,10 @@ async fn timer_state_comes_from_timers_current() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failing_timers_current_call_does_not_break_the_probe() {
     let fake = Fake::new();
-    *lock(&fake.timers) = vec![with_state(timer("Song Countdown", "timer-uuid", 0, true), None)];
+    *lock(&fake.timers) = vec![with_state(
+        timer("Song Countdown", "timer-uuid", 0, true),
+        None,
+    )];
     fake.current_timers_fail.store(true, Ordering::SeqCst);
     let r = rig_with(vec![fake], enabled());
     r.plugin.start().await.unwrap();
