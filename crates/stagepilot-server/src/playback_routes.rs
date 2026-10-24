@@ -1,8 +1,7 @@
 //! The `/api/v1/playback-api/*` routes: the Rust counterpart of `backend/.../api/playback.py`.
 //!
 //! Status codes, `detail` strings and response bodies follow Python. The Planning Center length
-//! writer is a separate service (phase 5): its routes answer exactly what Python answers while
-//! Planning Center is not connected, and its restore refuses when there is something to restore.
+//! routes (categories, category, preview, confirm, restore) drive `stagepilot_pco::lengths`.
 
 use crate::runtime::Runtime;
 use crate::validation::{http_error, invalid_body, ok, unprocessable, Json};
@@ -14,10 +13,12 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 use stagepilot_core::config::{MidiSource, PlaybackApiSettings};
 use stagepilot_core::state::ConnectionStatus;
+use stagepilot_pco::errors::PcoError;
+use stagepilot_pco::lengths::{LengthError, DENIED_MESSAGE};
 use stagepilot_playback::api::{
-    LengthUpdateResult, PlaybackConnectionResponse, PlaybackEventsResponse, PlaybackMonitorEntry,
-    PlaybackPlanSong, PlaybackSettingsRequest, PlaybackStatusResponse, ScanCandidateModel,
-    ScanResult, SourceStatus, SourcesStatus,
+    LengthItemResult, LengthUpdateResult, PlaybackConnectionResponse, PlaybackEventsResponse,
+    PlaybackMonitorEntry, PlaybackPlanSong, PlaybackSettingsRequest, PlaybackStatusResponse,
+    ScanCandidateModel, ScanResult, SourceStatus, SourcesStatus,
 };
 use stagepilot_playback::arrangement::align_lengths;
 use stagepilot_playback::client::ConnectionOptions;
@@ -27,7 +28,8 @@ use std::sync::Arc;
 
 type Rt = Arc<Runtime>;
 
-const PC_UNAVAILABLE: &str =
+/// What Python answers (503) when Planning Center failed for a reason the operator cannot fix.
+const PC_UNREADABLE: &str =
     "Planning Center could not read this plan. Song order and lengths are saved. Try again later.";
 
 pub fn routes() -> Router<Rt> {
@@ -386,13 +388,14 @@ fn category_choice(raw: &[u8]) -> Result<String, Json> {
 }
 
 /// `LengthConfirmation`: `token: str`, `confirm: Literal[True]`.
-fn length_confirmation(raw: &[u8]) -> Result<(), Json> {
+fn length_confirmation(raw: &[u8]) -> Result<String, Json> {
     let map = body_object(raw)?;
     let whole = Value::Object(map.clone());
     let mut errors = Vec::new();
+    let mut token = String::new();
     match map.get("token") {
         None => errors.push(missing("token", &whole)),
-        Some(Value::String(_)) => {}
+        Some(Value::String(t)) => token = t.clone(),
         Some(v) => errors.push(err(
             "string_type",
             field_loc("token"),
@@ -416,7 +419,7 @@ fn length_confirmation(raw: &[u8]) -> Result<(), Json> {
     }
     extras(&map, &["token", "confirm"], &mut errors);
     if errors.is_empty() {
-        Ok(())
+        Ok(token)
     } else {
         Err(unprocessable(errors))
     }
@@ -539,11 +542,35 @@ fn to_json<T: serde::Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap_or(Value::Null)
 }
 
+/// The length writer's last result in the status response's shape (string-valued enums).
 fn lengths_result(rt: &Runtime) -> LengthUpdateResult {
-    rt.lengths_result
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .clone()
+    let result = rt.lengths.result();
+    LengthUpdateResult {
+        operation: word(&result.operation),
+        status: word(&result.status),
+        message: result.message,
+        items: result
+            .items
+            .into_iter()
+            .map(|item| LengthItemResult {
+                item_id: item.item_id,
+                title: item.title,
+                status: word(&item.status),
+                old_length: item.old_length,
+                new_length: item.new_length,
+                reason: item.reason,
+            })
+            .collect(),
+        reload: word(&result.reload),
+    }
+}
+
+/// The snake_case word a `serde` unit enum serialises to.
+fn word<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
 }
 
 fn lengths_status(rt: &Runtime) -> String {
@@ -890,8 +917,34 @@ async fn discover(State(rt): State<Rt>, body: Bytes) -> Json {
     }
 }
 
-async fn length_categories() -> Json {
-    http_error(503, PC_UNAVAILABLE)
+/// `preview_error`: how a length-service failure is told to the operator.
+fn length_failure(error: LengthError) -> Json {
+    match error {
+        LengthError::Value(message) => http_error(409, &message),
+        LengthError::Pco(error) => pco_failure(&error),
+    }
+}
+
+fn pco_failure(error: &PcoError) -> Json {
+    match error {
+        PcoError::Permission(_) | PcoError::Authentication(_) => http_error(403, DENIED_MESSAGE),
+        PcoError::Api { status: 401 | 403 } => http_error(403, DENIED_MESSAGE),
+        _ => {
+            // The reason stays in the log (never the response body, URL or credentials).
+            tracing::warn!(
+                kind = error.type_name(),
+                "planning_center_lengths_read_failed"
+            );
+            http_error(503, PC_UNREADABLE)
+        }
+    }
+}
+
+async fn length_categories(State(rt): State<Rt>) -> Json {
+    match rt.lengths.categories().await {
+        Ok(categories) => ok(to_json(&categories)),
+        Err(error) => pco_failure(&error),
+    }
 }
 
 fn busy(rt: &Runtime) -> bool {
@@ -899,13 +952,65 @@ fn busy(rt: &Runtime) -> bool {
 }
 
 async fn choose_length_category(State(rt): State<Rt>, body: Bytes) -> Json {
-    if let Err(response) = category_choice(&body) {
-        return response;
-    }
+    let service_type_id = match category_choice(&body) {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
     if busy(&rt) {
         return http_error(409, "Wait for the current operation to finish.");
     }
-    http_error(503, PC_UNAVAILABLE)
+    let categories = match rt.lengths.categories().await {
+        Ok(categories) => categories,
+        Err(error) => return pco_failure(&error),
+    };
+    if !categories.iter().any(|c| c.id == service_type_id) {
+        return http_error(409, "Choose an available Planning Center category.");
+    }
+    match rt.playback.set_update_service_type(&service_type_id) {
+        Ok(()) => ok(status_json(&rt)),
+        Err(error) => failure(error, 409),
+    }
+}
+
+/// The scanned lengths aligned to the loaded plan's songs (skipped songs removed on both sides).
+fn plan_lengths(rt: &Runtime, config: &PlaybackApiSettings) -> Vec<Option<f64>> {
+    match rt.store.snapshot().plan {
+        Some(plan)
+            if !config.skipped_song_ids.is_empty() || !config.skipped_plan_song_ids.is_empty() =>
+        {
+            let ids: Vec<&str> = plan.songs.iter().map(|s| s.id.as_str()).collect();
+            let skipped_plan: Vec<&str> = config
+                .skipped_plan_song_ids
+                .iter()
+                .map(String::as_str)
+                .collect();
+            align_lengths(
+                &ids,
+                &config.song_order,
+                &config.song_lengths,
+                &skipped_plan,
+                &config.skipped_song_ids,
+            )
+        }
+        _ => config.song_lengths.clone(),
+    }
+}
+
+/// `scan_signature`: what the preview was computed from. A confirm only applies when nothing the
+/// preview depended on has changed since.
+fn scan_signature(rt: &Runtime) -> String {
+    let c = rt.playback.config();
+    py_dumps(&json!([
+        c.song_order,
+        c.song_lengths,
+        c.skipped_song_ids,
+        c.skipped_plan_song_ids,
+        c.captured_at.map(|at| at.to_string()),
+        c.captured_version,
+        c.setlist_id,
+        c.planning_center_update_service_type_id,
+        c.scan_plan_key,
+    ]))
 }
 
 async fn preview_lengths(State(rt): State<Rt>) -> Json {
@@ -921,37 +1026,74 @@ async fn preview_lengths(State(rt): State<Rt>) -> Json {
                 .snapshot()
                 .planning_center
                 .service_type_id
-        });
-    if category.is_none_or(|c| c.is_empty()) {
+        })
+        .filter(|c| !c.is_empty());
+    let Some(category) = category else {
         return http_error(409, "Choose a Planning Center category first.");
+    };
+    let lengths = plan_lengths(&rt, &config);
+    match rt
+        .lengths
+        .preview(&category, &lengths, &scan_signature(&rt))
+        .await
+    {
+        Ok(preview) => ok(to_json(&preview)),
+        Err(error) => length_failure(error),
     }
-    // Aligning needs the loaded plan; the Planning Center read itself is not ported (phase 5).
-    if let Some(plan) = rt.store.snapshot().plan {
-        let ids: Vec<&str> = plan.songs.iter().map(|s| s.id.as_str()).collect();
-        let skipped_plan: Vec<&str> = config
-            .skipped_plan_song_ids
-            .iter()
-            .map(String::as_str)
-            .collect();
-        let _ = align_lengths(
-            &ids,
-            &config.song_order,
-            &config.song_lengths,
-            &skipped_plan,
-            &config.skipped_song_ids,
-        );
+}
+
+/// Marks Playback as "Planning Center is being changed" (blocks a rescan and settings edits)
+/// for as long as a write or restore runs, even if the request is dropped half-way.
+struct LengthsRunning<'a>(&'a Runtime);
+
+impl<'a> LengthsRunning<'a> {
+    fn start(rt: &'a Runtime) -> Self {
+        rt.playback.set_lengths_running(true);
+        Self(rt)
     }
-    http_error(503, PC_UNAVAILABLE)
+}
+
+impl Drop for LengthsRunning<'_> {
+    fn drop(&mut self) {
+        self.0.playback.set_lengths_running(false);
+    }
 }
 
 async fn confirm_lengths(State(rt): State<Rt>, body: Bytes) -> Json {
-    if let Err(response) = length_confirmation(&body) {
-        return response;
-    }
+    let token = match length_confirmation(&body) {
+        Ok(token) => token,
+        Err(response) => return response,
+    };
     if let Some(reason) = update_reason(&rt) {
         return http_error(409, &reason);
     }
-    http_error(503, PC_UNAVAILABLE)
+    let signature = scan_signature(&rt);
+    // The write is only allowed while the scan, the arrangement and the category are still the
+    // ones the preview used, and while Playback is not playing.
+    let allowed = {
+        let rt = Arc::downgrade(&rt);
+        let signature = signature.clone();
+        Arc::new(move || {
+            rt.upgrade().is_some_and(|rt| {
+                !rt.playback.mapper_stale()
+                    && !matches!(
+                        rt.playback.discovery_snapshot().state.as_str(),
+                        "running" | "failed"
+                    )
+                    && scan_signature(&rt) == signature
+                    && !rt.playback.status().heartbeat.is_some_and(|h| h.playing)
+            })
+        })
+    };
+    rt.lengths.set_write_allowed(allowed);
+    let outcome = {
+        let _running = LengthsRunning::start(&rt);
+        rt.lengths.confirm(&token, &signature).await
+    };
+    match outcome {
+        Ok(()) => ok(status_json(&rt)),
+        Err(error) => length_failure(error),
+    }
 }
 
 async fn restore_lengths(State(rt): State<Rt>, body: Bytes) -> Json {
@@ -974,23 +1116,9 @@ async fn restore_lengths(State(rt): State<Rt>, body: Bytes) -> Json {
     if rt.playback.status().heartbeat.is_some_and(|h| h.playing) {
         return http_error(409, "Stop Playback before restoring Planning Center times.");
     }
-    if !rt
-        .settings_service
-        .snapshot()
-        .planning_center_length_undo
-        .is_empty()
     {
-        return http_error(
-            503,
-            "Restoring Planning Center times is not available in this build yet.",
-        );
+        let _running = LengthsRunning::start(&rt);
+        rt.lengths.restore().await;
     }
-    *rt.lengths_result.lock().unwrap_or_else(|p| p.into_inner()) = LengthUpdateResult {
-        operation: "restore".into(),
-        status: "done".into(),
-        message: "No Planning Center times needed changing.".into(),
-        items: vec![],
-        reload: "not_needed".into(),
-    };
     ok(status_json(&rt))
 }

@@ -1,5 +1,5 @@
 export type ApplicationStatus = "starting" | "running" | "stopping" | "error";
-export type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
+export type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error" | "ready";
 export type PluginStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 export type TimerStatus = "idle" | "running" | "stopped" | "error";
 export type ServiceLoadStatus =

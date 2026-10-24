@@ -29,6 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 pub const SUBPROTOCOL: &str = "pr-protocol";
 pub const MAX_MESSAGE: usize = 1024 * 1024;
 const UNAVAILABLE: &str = "Playback unavailable; remote connections may be off";
+/// The TCP connection was made (or refused) but Playback ended the WebSocket.
+const REFUSED: &str = "Playback refused the connection; remote connections may be off";
 
 #[derive(Debug, Clone)]
 pub struct ConnectionOptions {
@@ -376,6 +378,24 @@ enum ConnError {
 }
 
 impl ConnError {
+    fn kind(&self) -> ConnErrorKind {
+        match self {
+            ConnError::Closed(m)
+                if m.starts_with("Playback not found") || m.contains("heartbeat") =>
+            {
+                ConnErrorKind::Other
+            }
+            ConnError::Closed(_) => ConnErrorKind::Refused,
+            ConnError::Probe(e) => match classify_error(e).0 {
+                ErrorClass::TimedOut | ErrorClass::NoRoute => ConnErrorKind::Network,
+                ErrorClass::Refused | ErrorClass::NotPlayback | ErrorClass::UnexpectedError => {
+                    ConnErrorKind::Refused
+                }
+                ErrorClass::PermissionDenied | ErrorClass::InvalidAddress => ConnErrorKind::Other,
+            },
+        }
+    }
+
     fn probe_error(&self) -> ProbeError {
         match self {
             ConnError::Closed(m) => ProbeError::Closed((*m).to_string()),
@@ -403,6 +423,31 @@ pub fn unavailable_message(blocked: bool) -> &'static str {
     } else {
         UNAVAILABLE
     }
+}
+
+/// The `last_error` for a failed attempt, told apart by what actually failed (m11): the network
+/// (`Cannot reach ...`) versus Playback ending the connection (`refused ...`), which is the only
+/// case where "remote connections may be off" is the likely cause.
+pub fn failure_message(blocked: bool, host: &str, error: &ConnErrorKind) -> String {
+    if blocked {
+        return SCAN_BLOCK_DETAIL.to_string();
+    }
+    match error {
+        ConnErrorKind::Network => format!("Cannot reach Playback at {host}: network unreachable"),
+        ConnErrorKind::Refused => REFUSED.to_string(),
+        ConnErrorKind::Other => UNAVAILABLE.to_string(),
+    }
+}
+
+/// How a failed attempt is told to the operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnErrorKind {
+    /// The TCP connection timed out or the network has no route.
+    Network,
+    /// Nothing accepted the connection, or Playback closed / rejected the WebSocket.
+    Refused,
+    /// Anything else (no Playback found yet, heartbeat silence, bad address).
+    Other,
 }
 
 /// "Is the OS blocking all local-network use?" asked after a permission/no-route failure.
@@ -448,12 +493,23 @@ async fn connect(
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_MESSAGE))
         .max_frame_size(Some(MAX_MESSAGE));
+    // Two separate deadlines: a TCP connect that never completes is a network problem ("cannot
+    // reach"), while a handshake that Playback never answers means it is there but not talking.
+    let tcp = tokio::time::timeout(timeout, tokio::net::TcpStream::connect((host, port)))
+        .await
+        .map_err(|_| ConnError::Probe(ProbeError::TimedOut))?
+        .map_err(|e| ConnError::Probe(ProbeError::from(e)))?;
+    let _ = tcp.set_nodelay(true);
     let (ws, resp) = tokio::time::timeout(
         timeout,
-        tokio_tungstenite::connect_async_with_config(req, Some(config), true),
+        tokio_tungstenite::client_async_with_config(
+            req,
+            tokio_tungstenite::MaybeTlsStream::Plain(tcp),
+            Some(config),
+        ),
     )
     .await
-    .map_err(|_| ConnError::Probe(ProbeError::TimedOut))?
+    .map_err(|_| ConnError::Closed("Playback did not answer the handshake"))?
     .map_err(|e| ConnError::Probe(map_ws_error(e)))?;
     let negotiated = resp
         .headers()
@@ -640,14 +696,7 @@ async fn run(
                     connected: false,
                     host: Some(host.clone()),
                     port: options.port,
-                    last_error: Some(
-                        if blocked {
-                            SCAN_BLOCK_DETAIL
-                        } else {
-                            UNAVAILABLE
-                        }
-                        .into(),
-                    ),
+                    last_error: Some(failure_message(blocked, &host, &err.kind())),
                     heartbeat: None,
                     setlist_id: None,
                     heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),

@@ -84,6 +84,9 @@ fn v1_migration_preserves_values_and_is_idempotent() {
             ] {
                 assert_eq!(migrated_json[key], original[key], "{key}");
             }
+            // M4: loading never writes; the migration reaches the disk with the next save.
+            assert_eq!(read(&path)["schema_version"], 1);
+            store.save(&migrated).unwrap();
             assert_eq!(read(&path)["schema_version"], 2);
             let encoded = std::fs::read(&path).unwrap();
             assert_eq!(store.load().unwrap().unwrap(), migrated);
@@ -173,8 +176,12 @@ fn unversioned_file_migrates() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("settings.json");
     std::fs::write(&path, r#"{"integration_modes":{"midi_source":"real"}}"#).unwrap();
-    let saved = SettingsFileStore::new(&path).load().unwrap().unwrap();
+    let store = SettingsFileStore::new(&path);
+    let saved = store.load().unwrap().unwrap();
     assert_eq!(saved.integration_modes.midi_source, MidiSource::PlaybackApi);
+    // M4: loading never writes; the next save persists the migration.
+    assert!(read(&path).get("schema_version").is_none());
+    store.save(&saved).unwrap();
     assert_eq!(read(&path)["schema_version"], 2);
 }
 
@@ -216,9 +223,12 @@ fn old_format_files_untouched_default_moves_and_explicit_midi_stays() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(format!("{name}.json"));
         std::fs::write(&path, payload.to_string()).unwrap();
-        let loaded = SettingsFileStore::new(&path).load().unwrap().unwrap();
+        let store = SettingsFileStore::new(&path);
+        let loaded = store.load().unwrap().unwrap();
         assert_eq!(loaded.integration_modes.midi_source, expected, "{name}");
-        // Persisted as v2, so the choice is never re-migrated on the next start.
+        // M4: loading never writes. Saved as v2, the choice is never re-migrated on the next start.
+        assert_eq!(read(&path)["schema_version"], 1);
+        store.save(&loaded).unwrap();
         assert_eq!(read(&path)["schema_version"], 2);
         assert_eq!(
             SettingsFileStore::new(&path).load().unwrap().unwrap(),

@@ -46,4 +46,35 @@ mod tests {
             assert_eq!(note_off_bytes(channel, 72), [0x80 + (channel - 1), 72, 0]);
         }
     }
+
+    /// Every frame mido 1.3.3 produced for 2.41.1's calls (see tests/fixtures/generate_midi_golden.py),
+    /// all 16 channels, several notes and velocities.
+    #[test]
+    fn wire_bytes_match_the_committed_mido_golden_file() {
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/midi_frames_golden.json"))
+                .unwrap();
+        let frames = golden["frames"].as_array().unwrap();
+        assert_eq!(frames.len(), 16 * 5 * 5); // 4 note-on velocities + 1 note-off per note
+        let mut channels = std::collections::BTreeSet::new();
+        for frame in frames {
+            let channel = frame["channel"].as_u64().unwrap() as u8;
+            let note = frame["note"].as_u64().unwrap() as u8;
+            let velocity = frame["velocity"].as_u64().unwrap() as u8;
+            let expected: Vec<u8> = frame["bytes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|b| b.as_u64().unwrap() as u8)
+                .collect();
+            let actual = match frame["kind"].as_str().unwrap() {
+                "note_on" => note_on_bytes(channel, note, velocity),
+                "note_off" => note_off_bytes(channel, note),
+                other => panic!("unknown frame kind {other}"),
+            };
+            assert_eq!(actual.to_vec(), expected, "{frame}");
+            channels.insert(channel);
+        }
+        assert_eq!(channels.len(), 16);
+    }
 }

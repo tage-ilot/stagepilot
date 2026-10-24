@@ -24,6 +24,8 @@ use tauri_plugin_shell::{
 use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
 
+mod log_prune;
+
 #[cfg(target_os = "windows")]
 mod windows_jump_list;
 
@@ -598,6 +600,16 @@ fn rotate_backend_log(path: &std::path::Path) {
         let first_backup = path.with_extension("log.1");
         let _ = fs::remove_file(&first_backup);
         let _ = fs::rename(path, &first_backup);
+    }
+    // Generations the rotation above never touches (the Python backend left 500 MB+ behind):
+    // keep the whole set under the cap, oldest first, never the active file.
+    let pruned = log_prune::prune_backend_logs(path, log_prune::BACKEND_LOG_TOTAL_CAP);
+    if !pruned.is_empty() {
+        eprintln!(
+            "stagepilot: removed {} old backend log file(s) to stay under {} MB",
+            pruned.len(),
+            log_prune::BACKEND_LOG_TOTAL_CAP / (1024 * 1024)
+        );
     }
 }
 

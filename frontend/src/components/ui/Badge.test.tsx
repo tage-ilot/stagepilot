@@ -54,6 +54,7 @@ describe("StatusBadge", () => {
     Connecting: "warning",
     "Disconnected": "idle",
     Error: "danger",
+    Ready: "info",
   };
   it.each(Object.entries(expected))("maps %s to %s", (word, tone) => {
     expect(statusTone[word as StatusWord]).toBe(tone);

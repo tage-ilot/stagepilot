@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 import type { LightkeyStatus } from "../types";
-import { LightkeyStrip, lightkeyHeadline } from "./LightkeyStrip";
+import { LightkeyStrip, lightkeyHeadline, lightkeyLines, normaliseLine } from "./LightkeyStrip";
 
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -146,5 +146,97 @@ describe("lightkeyHeadline", () => {
     expect(lightkeyHeadline(status())).toMatch(/Turn on Record/);
     expect(lightkeyHeadline(status({ takes: [take] }))).toBe("1 song captured.");
     expect(lightkeyHeadline(status({ takes: [take, { ...take, song_key: "s2" }] }))).toBe("2 songs captured.");
+  });
+});
+
+describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
+  const armed = { recording: true, replay: true, replay_blocked: "Paused while recording.", takes: [take] };
+
+  it("Record armed + Replay on: the backend message is not repeated, the paused line follows", () => {
+    expect(lightkeyLines(status({ ...armed, message: "Recording starts with the next song." }), null)).toEqual([
+      "Recording starts with the next song.",
+      "Replay paused while recording.",
+    ]);
+    expect(lightkeyLines(status({ ...armed, message: null }), null)).toEqual([
+      "Recording starts with the next song.",
+      "Replay paused while recording.",
+    ]);
+  });
+
+  it("recording a song: straight and curly quotes count as the same line", () => {
+    expect(lightkeyLines(status({ ...armed, recording_song: "Holy Forever", message: 'Recording "Holy Forever".' }), null)).toEqual([
+      'Recording "Holy Forever".',
+      "Replay paused while recording.",
+    ]);
+    expect(lightkeyLines(status({ ...armed, recording_song: "Holy Forever" }), null)).toEqual([
+      "Recording “Holy Forever”.",
+      "Replay paused while recording.",
+    ]);
+  });
+
+  it("Record armed + Replay off: no paused line", () => {
+    expect(lightkeyLines(status({ recording: true, replay: false, replay_blocked: "Paused while recording.", message: "Recording starts with the next song." }), null)).toEqual([
+      "Recording starts with the next song.",
+    ]);
+  });
+
+  it("Record off + Replay on: no paused line, and it is gone once recording stops", () => {
+    expect(lightkeyLines(status({ takes: [take] }), null)).toEqual(["1 song captured."]);
+    expect(lightkeyLines(status({ takes: [take], replaying_song: "Holy Forever" }), null)).toEqual(["Replaying “Holy Forever”."]);
+  });
+
+  it("Record off + Replay off: says replay is switched off", () => {
+    expect(lightkeyLines(status({ replay: false, replay_blocked: "Replay is switched off.", takes: [take] }), null)).toEqual(["Replay is switched off."]);
+  });
+
+  it("a message that differs from the headline is kept next to it", () => {
+    expect(lightkeyLines(status({ takes: [take], message: "Saved \"Holy Forever\": 14 changes. Song finished." }), null)).toEqual([
+      'Saved "Holy Forever": 14 changes. Song finished.',
+      "1 song captured.",
+    ]);
+  });
+
+  it("an error replaces the message line", () => {
+    expect(lightkeyLines(status({ message: "Capture cleared." }), "Cannot reach the app.")[0]).toBe("Cannot reach the app.");
+  });
+
+  it("normaliseLine ignores quote style and spacing", () => {
+    expect(normaliseLine("Recording  “A”.")).toBe(normaliseLine('Recording "A".'));
+  });
+});
+
+describe("LightkeyStrip lines on screen (B3)", () => {
+  it("armed with both switches on shows exactly two different lines", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay: true, replay_blocked: "Paused while recording.", message: "Recording starts with the next song." }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.getAllByText("Recording starts with the next song.")).toHaveLength(1);
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Recording starts with the next song.");
+    expect(screen.getAllByTestId("lightkey-detail").map((n) => n.textContent)).toEqual(["Replay paused while recording."]);
+  });
+
+  it("recording a song shows the title once and the paused line", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, recording_song: "Holy Forever", replay_blocked: "Paused while recording.", message: 'Recording "Holy Forever".' }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.getAllByText(/Recording .Holy Forever/)).toHaveLength(1);
+    expect(screen.getByText("Replay paused while recording.")).toBeInTheDocument();
+  });
+
+  it("when recording stops the paused line goes and replay is described again", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay_blocked: "Paused while recording." }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ takes: [take], message: null })));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByText("Replay paused while recording.")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("switch", { name: "Record from Lightkey" }));
+    await waitFor(() => expect(screen.queryByText("Replay paused while recording.")).not.toBeInTheDocument());
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 song captured.");
+  });
+
+  it("an expired message (backend sends null) falls back to the headline", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", active_count: null, message: null }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByText("Not connected");
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("0 songs captured.");
   });
 });

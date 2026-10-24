@@ -175,6 +175,20 @@ describe("dashboard integration truthfulness", () => {
     });
   });
 
+  it("shows Lighting OSC as ready, not connected, until a cue has gone out", () => {
+    const base = settings({ service_source: "demo", midi_source: "simulated", timer_output: "simulated" });
+    const oscSettings = { ...base, settings: { ...base.settings, lights: { ...base.settings.lights, enabled: true, method: "osc" as const } } } as SettingsResponse;
+    const views = buildConnectionCardViews({
+      state: state({ lights_status: "ready" }),
+      settings: oscSettings,
+      midi: emptyMidi,
+      propresenter: null,
+      lights: null,
+    });
+    expect(views.lights.status).toBe("ready");
+    expect(views.lights.detail).toBe("Ready, delivery not confirmed");
+  });
+
   it("treats a connected OAuth account with a selected service type as configured", () => {
     const productionSettings = settings({
       service_source: "planning_center",

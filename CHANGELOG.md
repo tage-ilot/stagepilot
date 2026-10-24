@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Planning Center: the plan no longer stops loading about two hours after launch. The app now uses the refreshed sign-in token on every request, and signs in again once if Planning Center rejects it.
+- Planning Center: valid plans with empty title or length fields no longer log a warning at every launch, and a failed start is recorded once.
+- Planning Center lengths: the lengths dialog works again (categories, preview, confirm and restore).
+- Remote access: the remote sign-in page loads again; it returned an error instead of the sign-in form.
+- Remote access: after the app is killed or crashes, the tunnel reconnects on the next launch instead of staying on "reconnecting". The tunnel token is no longer visible in the process list, and the bundled cloudflared is updated to 2026.10.3.
+- Lighting: with Record from Lightkey and Replay captured lights both on, each status line shows once and replay reads "Replay paused while recording." Old status messages clear after 10 seconds or when the state changes.
+- Lighting: Record from Lightkey stays armed across a restart, and replay spreads its OSC messages out instead of sending a burst. Lighting OSC shows "Ready, delivery not confirmed" until a cue is sent.
+- ProPresenter: timers report their running state, look changes are confirmed by index and name or id, and an unknown look is no longer saved.
+- Settings: unknown settings are kept instead of resetting the file, a damaged or newer settings file is copied aside as `settings.json.corrupt-<time>` and reported in the app, and the file is never overwritten when it cannot be read.
+- The app, health report and Planning Center user agent now show the real version instead of 2.41.1, and health no longer always reads "degraded".
+- Playback: a network outage and a refused connection show different messages.
+
+### Security
+
+- The dashboard PIN now locks out after repeated wrong tries, and failed tries are logged. Changing requests from another website origin are refused, and responses carry standard browser security headers.
+- Health details (plugin states and errors) need a signed-in session; the public health check shows only status and version.
+
+### Changed
+
+- The saved log level is honoured. The app logs a line when each output connects or disconnects, and old backend logs are pruned to stay under 100 MB.
+
 ## [2.42.0-rc.4] - 2026-10-23
 
 Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.

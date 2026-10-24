@@ -682,6 +682,16 @@ impl PlaybackPlugin {
         Ok(())
     }
 
+    /// Remember (persistently) which Planning Center category the length update targets.
+    /// The Playback status and the scan key use it straight away (Python `choose_length_category`).
+    pub fn set_update_service_type(&self, service_type_id: &str) -> Result<(), PlaybackError> {
+        let mut config = lock(&self.inner.shared).config.clone();
+        config.planning_center_update_service_type_id = Some(service_type_id.to_string());
+        self.inner.save_playback(config.clone())?;
+        lock(&self.inner.shared).config = config;
+        Ok(())
+    }
+
     pub fn lengths_applied(&self) -> bool {
         let Some(plan) = self.inner.store.snapshot().plan else {
             return false;

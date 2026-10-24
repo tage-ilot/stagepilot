@@ -29,6 +29,8 @@ pub enum ConnectionStatus {
     #[default]
     Disconnected,
     Error,
+    /// The output is open but nothing has proved delivery yet (UDP/OSC before the first cue).
+    Ready,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]

@@ -846,13 +846,15 @@ impl StateService {
             return Ok(());
         }
         let limit = self.inner.recent_error_limit;
+        let mut previous = *status;
         self.inner.store.mutate(|s| {
-            match integration {
-                crate::events::Integration::PlanningCenter => s.planning_center_status = *status,
-                crate::events::Integration::Midi => s.midi_status = *status,
-                crate::events::Integration::Propresenter => s.propresenter_status = *status,
-                crate::events::Integration::Lights => s.lights_status = *status,
-            }
+            let slot = match integration {
+                crate::events::Integration::PlanningCenter => &mut s.planning_center_status,
+                crate::events::Integration::Midi => &mut s.midi_status,
+                crate::events::Integration::Propresenter => &mut s.propresenter_status,
+                crate::events::Integration::Lights => &mut s.lights_status,
+            };
+            previous = std::mem::replace(slot, *status);
             if *status == ConnectionStatus::Error {
                 if let Some(detail) = detail.as_ref().filter(|d| !d.is_empty()) {
                     s.recent_errors.push(ErrorSummary {
@@ -865,6 +867,16 @@ impl StateService {
                 }
             }
         });
+        // One INFO line per real change (m1): OSC, MIDI input/output, ProPresenter, Lightkey and
+        // Playback all report through this event, tagged with the plugin that sent it.
+        if previous != *status {
+            tracing::info!(
+                integration = integration.as_str(),
+                source = %event.source,
+                status = ?status,
+                "integration_connection"
+            );
+        }
         Ok(())
     }
 
@@ -891,7 +903,17 @@ impl StateService {
                 },
             );
             if event.event_type == EventType::PluginFailed {
-                if let Some(error) = error.as_ref().filter(|e| !e.is_empty()) {
+                // A plugin that reports its own connection error right before the manager
+                // reports the failed start would otherwise be listed twice (m16).
+                let repeats_last = |s: &ApplicationState, error: &str| {
+                    s.recent_errors
+                        .last()
+                        .is_some_and(|last| last.component == *name && last.message == error)
+                };
+                if let Some(error) = error
+                    .as_ref()
+                    .filter(|e| !e.is_empty() && !repeats_last(s, e))
+                {
                     s.recent_errors.push(ErrorSummary {
                         timestamp: Utc::now(),
                         component: name.clone(),

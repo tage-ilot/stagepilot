@@ -2,13 +2,14 @@ import type { ReactNode } from "react";
 
 import { connectionWord } from "./ui";
 
-type Status = "connected" | "connecting" | "disconnected" | "error";
+type Status = "connected" | "connecting" | "disconnected" | "error" | "ready";
 
 const statusTextStyles: Record<Status, string> = {
   connected: "text-success-text",
   connecting: "text-warning-text",
   disconnected: "text-ink",
   error: "text-danger-text",
+  ready: "text-info-text",
 };
 
 type Identity = "services" | "presentation" | "playback" | "lighting" | "backend";

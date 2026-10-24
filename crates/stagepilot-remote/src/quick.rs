@@ -117,6 +117,7 @@ impl QuickConnector {
     pub fn stop(&mut self) {
         if let Some(mut child) = self.process.take() {
             stop_child(&mut child);
+            crate::orphan::remove_pidfile(&self.pidfile());
             if let Some(reader) = self.reader.take() {
                 let _ = reader.join();
             }
@@ -136,7 +137,21 @@ impl QuickConnector {
         atomic_write(&self.feature.control, &DesiredRemote::default().to_json())
     }
 
+    fn pidfile(&self) -> PathBuf {
+        self.feature.control.with_file_name("quick-connector.pid")
+    }
+
     fn start(&mut self, port: u16) -> Res<()> {
+        // A previous run's quick tunnel survives a SIGKILL and keeps the metrics port (B2). Its
+        // URL is gone with that run's output, so it is ended rather than adopted.
+        if let crate::orphan::Reaped::Terminated(record) = crate::orphan::reap(
+            &self.pidfile(),
+            &self.binary,
+            &*self.platform.inspector,
+            &|_| false,
+        ) {
+            tracing::info!(pid = record.pid, "remote_connector_stale_terminated");
+        }
         self.platform.ports.check_free(self.metrics_port)?;
         let home = self
             .feature
@@ -161,6 +176,15 @@ impl QuickConnector {
             capture_output: true,
         };
         let mut child = self.platform.spawner.spawn(&spec)?;
+        crate::orphan::record_child(
+            &self.pidfile(),
+            &*self.platform.inspector,
+            &self.binary,
+            child.pid(),
+            "",
+            self.metrics_port,
+        );
+        self.platform.inspector.exit_with_parent(child.pid());
         let epoch = self.next_epoch.fetch_add(1, Ordering::SeqCst);
         self.shared.lock().unwrap().epoch = epoch;
         self.started_at = self.platform.clock.monotonic();

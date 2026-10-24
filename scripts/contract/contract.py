@@ -60,6 +60,15 @@ RUST_EXTENSIONS = {
     # has been tried (in the contract mock it is unreachable, so link is "lost").
     "fixtures": {"link", "fixtures", "lost_packets", "recording"},
 }
+# Rust-only scalar additions to a response body (same rule as above: only with this type).
+# `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);
+# `settings_degraded` / `settings_degraded_reason` say the saved settings file was damaged or newer
+# than this build and defaults are in use (M4).
+RUST_SCALAR_EXTENSIONS = {
+    "pin_is_default": (bool,),
+    "settings_degraded": (bool,),
+    "settings_degraded_reason": (str, type(None)),
+}
 # Response headers that are compared (everything else, e.g. date/server/content-length, is ignored).
 HEADERS_COMPARED = ("content-type",)
 
@@ -376,6 +385,9 @@ def diff(path: str, want: Any, got: Any, out: list[str]) -> None:
             elif k not in want:
                 shape = RUST_EXTENSIONS.get(k)
                 if shape is not None and isinstance(got[k], dict) and shape <= set(got[k]):
+                    continue
+                scalar = RUST_SCALAR_EXTENSIONS.get(k)
+                if scalar is not None and type(got[k]) in scalar:
                     continue
                 out.append(f"{path}.{k}: extra in target ({got[k]!r})")
             else:

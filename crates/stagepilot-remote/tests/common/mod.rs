@@ -366,6 +366,7 @@ impl HttpTransport for FakeControlPlane {
 
 pub struct TestPlatform {
     pub platform: Platform,
+    pub inspector: Arc<stagepilot_remote::orphan::FakeInspector>,
     pub clock: Arc<ManualClock>,
     pub spawner: Arc<FakeSpawner>,
     pub ports: Arc<FakePortProbe>,
@@ -375,7 +376,9 @@ pub fn test_platform(http: Arc<dyn HttpTransport>) -> TestPlatform {
     let clock = Arc::new(ManualClock::new(1_000_000.0));
     let spawner = Arc::new(FakeSpawner::new());
     let ports = Arc::new(FakePortProbe::default());
+    let inspector = Arc::new(stagepilot_remote::orphan::FakeInspector::default());
     let platform = Platform {
+        inspector: inspector.clone(),
         clock: clock.clone(),
         locker: Arc::new(InMemoryLocker::default()),
         spawner: spawner.clone(),
@@ -384,6 +387,7 @@ pub fn test_platform(http: Arc<dyn HttpTransport>) -> TestPlatform {
     };
     TestPlatform {
         platform,
+        inspector,
         clock,
         spawner,
         ports,
@@ -393,6 +397,7 @@ pub fn test_platform(http: Arc<dyn HttpTransport>) -> TestPlatform {
 pub fn real_clock_platform(http: Arc<dyn HttpTransport>) -> (Platform, Arc<FakeSpawner>) {
     let spawner = Arc::new(FakeSpawner::new());
     let platform = Platform {
+        inspector: Arc::new(stagepilot_remote::orphan::FakeInspector::default()),
         clock: Arc::new(SystemClock::new()),
         locker: Arc::new(InMemoryLocker::default()),
         spawner: spawner.clone(),

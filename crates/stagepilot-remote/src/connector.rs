@@ -10,9 +10,15 @@ use crate::error::{RemoteError, Res};
 use crate::feature::RemoteFeature;
 use crate::files::{is_group_or_world_readable, read_desired, safe_status, DesiredRemote};
 use crate::http::{HttpClient, HttpTransport};
+use crate::orphan::{
+    reap, record_child, remove_pidfile, AdoptedChild, PidRecord, ProcessInspector, Reaped,
+};
 use crate::platform::{ChildProcess, Clock, PortProbe, ProcessSpawner, SpawnSpec};
 use crate::quick::QuickConnector;
 use crate::status_map;
+
+/// Arguments and extra environment that hand the tunnel token to the child.
+type TokenDelivery = (Vec<String>, Vec<(String, String)>);
 
 pub type TokenProvider = Arc<dyn Fn() -> Res<String> + Send + Sync>;
 
@@ -43,11 +49,14 @@ pub struct Connector {
     metrics_port: u16,
     token_provider: Option<TokenProvider>,
     token_path: PathBuf,
+    /// `connector.pid`: which `cloudflared` this supervisor started (see [`crate::orphan`]).
+    pidfile: PathBuf,
     process: Option<Box<dyn ChildProcess>>,
     desired: DesiredRemote,
     retry_at: f64,
     delay: f64,
     clock: Arc<dyn Clock>,
+    inspector: Arc<dyn ProcessInspector>,
     spawner: Arc<dyn ProcessSpawner>,
     ports: Arc<dyn PortProbe>,
     http: Arc<dyn HttpTransport>,
@@ -71,11 +80,13 @@ impl Connector {
             metrics_port,
             token_provider,
             token_path: token_path.unwrap_or_else(|| control.with_file_name("connector.token")),
+            pidfile: control.with_file_name("connector.pid"),
             process: None,
             desired: DesiredRemote::default(),
             retry_at: 0.0,
             delay: 1.0,
             clock: platform.clock.clone(),
+            inspector: platform.inspector.clone(),
             spawner: platform.spawner.clone(),
             ports: platform.ports.clone(),
             http: platform.http.clone(),
@@ -93,6 +104,7 @@ impl Connector {
     pub fn stop(&mut self) {
         if let Some(mut child) = self.process.take() {
             stop_child(&mut child);
+            remove_pidfile(&self.pidfile);
         }
         if self.token_provider.is_some() {
             let _ = std::fs::remove_file(&self.token_path);
@@ -105,9 +117,12 @@ impl Connector {
             .is_some_and(|p| !matches!(p.try_wait(), Ok(None)))
     }
 
-    fn token_arguments(&self) -> Res<Vec<String>> {
+    /// How the child learns the tunnel token: `--token-file <path>` for a private file, or the
+    /// `TUNNEL_TOKEN` environment variable of the child alone. The token is never an argument:
+    /// every local user can read arguments with `ps` (M5).
+    fn token_arguments(&self) -> Res<TokenDelivery> {
         if let Some(provider) = &self.token_provider {
-            return Ok(vec!["--token".into(), provider()?]);
+            return Ok((Vec::new(), vec![("TUNNEL_TOKEN".into(), provider()?)]));
         }
         let token = &self.token_path;
         let private = std::fs::symlink_metadata(token)
@@ -123,14 +138,45 @@ impl Connector {
                 "Installation token is missing or not private",
             ));
         }
-        Ok(vec![
-            "--token-file".into(),
-            token.to_string_lossy().into_owned(),
-        ])
+        Ok((
+            vec!["--token-file".into(), token.to_string_lossy().into_owned()],
+            Vec::new(),
+        ))
+    }
+
+    /// A connector an earlier run left behind is worth keeping only when it was started for the
+    /// current desired Remote on the same metrics port and its tunnel is connected right now.
+    fn adoptable(&self, record: &PidRecord) -> bool {
+        record.metrics_port == self.metrics_port
+            && record.generation == self.desired.generation
+            && HttpClient::new(
+                &format!("http://127.0.0.1:{}", self.metrics_port),
+                1.0,
+                self.http.clone(),
+            )
+            .get("/ready")
+            .is_ok_and(|r| r.status == 200)
     }
 
     fn start(&mut self) -> Res<()> {
-        let token_arguments = self.token_arguments()?;
+        let (token_args, token_env) = self.token_arguments()?;
+        // A SIGKILL leaves the previous run's cloudflared alive and holding the metrics port.
+        match reap(&self.pidfile, &self.binary, &*self.inspector, &|record| {
+            self.adoptable(record)
+        }) {
+            Reaped::Alive(record) => {
+                tracing::info!(pid = record.pid, "remote_connector_adopted");
+                self.process = Some(Box::new(AdoptedChild::new(
+                    record.pid,
+                    self.inspector.clone(),
+                )));
+                return Ok(());
+            }
+            Reaped::Terminated(record) => {
+                tracing::info!(pid = record.pid, "remote_connector_stale_terminated");
+            }
+            Reaped::Nothing => {}
+        }
         // Do not mistake another local service's /ready for our connector.
         self.ports.check_free(self.metrics_port)?;
         let mut args = vec![
@@ -140,15 +186,29 @@ impl Connector {
             format!("127.0.0.1:{}", self.metrics_port),
             "run".into(),
         ];
-        args.extend(token_arguments);
+        args.extend(token_args);
         let home = self.control.parent().unwrap_or(Path::new("")).to_path_buf();
+        let mut env = child_env(&home);
+        env.extend(token_env);
         let spec = SpawnSpec {
             program: self.binary.clone(),
             args,
-            env: child_env(&home),
+            env,
             capture_output: false,
         };
-        self.process = Some(self.spawner.spawn(&spec)?);
+        let child = self.spawner.spawn(&spec)?;
+        let pid = child.pid();
+        self.process = Some(child);
+        record_child(
+            &self.pidfile,
+            &*self.inspector,
+            &self.binary,
+            pid,
+            &self.desired.generation,
+            self.metrics_port,
+        );
+        // If StagePilot is killed without cleaning up, the child follows it.
+        self.inspector.exit_with_parent(pid);
         Ok(())
     }
 
@@ -217,6 +277,7 @@ impl Drop for Connector {
     fn drop(&mut self) {
         if let Some(mut child) = self.process.take() {
             stop_child(&mut child);
+            remove_pidfile(&self.pidfile);
         }
     }
 }

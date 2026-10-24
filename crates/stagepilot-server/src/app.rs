@@ -1,6 +1,5 @@
-//! The axum application: the `/api/v1/*` routes in this phase's scope, the `/ws` state stream and
-//! static dashboard serving. Response bodies and status codes follow the Python backend; see
-//! `docs/rust-migration/phase2.md` for the list of routes that are stubs.
+//! The axum application: the `/api/v1/*` routes, the `/ws` state stream and static dashboard
+//! serving. Response bodies and status codes follow the Python backend.
 
 use crate::demo::today;
 use crate::remote_types::RemoteContext;
@@ -104,7 +103,12 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         // Keyed retries of remote one-shot requests (`RemoteRetryRoute`); inside the PIN guard.
         .layer(middleware::from_fn(crate::remote_routes::remote_retry))
         .layer(middleware::from_fn_with_state(runtime, dashboard_guard))
+        // m15: a browser on another origin cannot make the dashboard change anything, and every
+        // response (including CORS preflights) carries the security headers.
+        .layer(middleware::from_fn(crate::security::origin_guard))
         .layer(cors())
+        .layer(middleware::from_fn(crate::security::security_headers))
+        .layer(middleware::from_fn(crate::security::log_server_errors))
 }
 
 fn cors() -> CorsLayer {
@@ -224,7 +228,20 @@ fn local_date(timezone: &str) -> chrono::NaiveDate {
         .unwrap_or_else(|_| today())
 }
 
-async fn health(State(rt): State<Rt>) -> Json {
+async fn health(
+    State(rt): State<Rt>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    remote: Option<Extension<RemoteContext>>,
+    headers: HeaderMap,
+) -> Json {
+    // Plugin states and error texts are dashboard data (m14); the probe fields stay public.
+    let detailed = match &remote {
+        Some(Extension(context)) => context.session.is_some(),
+        None => {
+            let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+            !rt.dashboard_auth_enforced || auth_status(&rt, &headers, peer).1
+        }
+    };
     let state = rt.store.snapshot();
     let plugins = rt.plugins.health().await;
     let service_ready = if rt.settings.uses_demo_service() {
@@ -241,24 +258,31 @@ async fn health(State(rt): State<Rt>) -> Json {
                 .unwrap_or_else(|| local_date(&rt.settings.timezone)),
         )
     };
-    // Playback itself is still a stub (phase 3), so only the simulated source or a connected MIDI
-    // input can be "ready" (`runtime.playback_input.connection.connected`).
+    // `runtime.playback_input.connection.connected`: the simulated source is always ready, real
+    // MIDI needs its link, and the Playback API needs a live Playback link unless Playback is
+    // switched off (then nothing is waiting for it).
     let playback_ready = match rt.settings.integration_modes.midi_source {
         MidiSource::Simulated => true,
         MidiSource::Real => rt.outputs.link.connected(),
-        MidiSource::PlaybackApi => false,
+        MidiSource::PlaybackApi => {
+            rt.playback.publish_connection().await;
+            !rt.playback.config().enabled || rt.playback.connection().connected
+        }
     };
     let healthy = state.application_status == ApplicationStatus::Running
         && plugins.iter().all(|p| p.status == PluginStatus::Running)
         && service_ready
         && playback_ready;
-    ok(json!({
+    let mut body = json!({
         "status": if healthy { "healthy" } else { "degraded" },
         "version": rt.settings.version,
         "application_status": state.application_status,
-        "plugins": plugins,
-        "started_at": rt.started_at,
-    }))
+    });
+    if detailed {
+        body["plugins"] = json!(plugins);
+        body["started_at"] = json!(rt.started_at);
+    }
+    ok(body)
 }
 
 async fn state(State(rt): State<Rt>) -> Json {
@@ -277,10 +301,20 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
     } else {
         rt.settings_service.effective_snapshot()
     };
+    let degraded = rt.settings_service.degraded();
+    // True while the dashboard PIN is the factory default (no PIN has ever been set), so the UI
+    // can prompt for a new one.
+    let pin_is_default =
+        settings.web_dashboard_pin_enabled && settings.web_dashboard_pin_hash.is_none();
     json!({
         "settings": settings,
+        "pin_is_default": pin_is_default,
         "planning_center_secret_saved": rt.settings_service.credential_saved(),
         "warning": rt.settings_service.warning(),
+        // Set for the whole run when the saved file was damaged or newer than this build: the
+        // settings in use are defaults and the original is kept as settings.json.corrupt-*.
+        "settings_degraded": degraded.is_some(),
+        "settings_degraded_reason": degraded.map(|d| d.reason),
         "restart_required": restart_required,
     })
 }
@@ -457,23 +491,47 @@ fn auth_status(rt: &Runtime, headers: &HeaderMap, peer: Option<SocketAddr>) -> (
 
 async fn dashboard_status(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
 ) -> Json {
-    let (required, authenticated) = auth_status(&rt, &headers, Some(peer));
+    let (required, authenticated) =
+        auth_status(&rt, &headers, peer.map(|Extension(ConnectInfo(addr))| addr));
     ok(json!({"required": required, "authenticated": authenticated}))
 }
 
-async fn dashboard_login(State(rt): State<Rt>, body: Bytes) -> Response {
+async fn dashboard_login(
+    State(rt): State<Rt>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     let pin = match validation::dashboard_login(&body) {
         Ok(pin) => pin,
         Err(detail) => return unprocessable(detail).into_response(),
     };
+    let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+    // m13: the desktop shell (loopback + its own origin) is never throttled, so the local app can
+    // not be locked out; everyone else is, per address and globally.
+    let exempt = desktop_origin(&headers, peer);
+    let address = peer.map_or_else(|| "unknown".to_string(), |p| p.ip().to_string());
+    if !exempt {
+        if let Err(wait) = rt.login_throttle.check(&address) {
+            return too_many_logins(wait);
+        }
+    }
     let settings = rt.settings_service.snapshot();
     if settings.web_dashboard_pin_enabled
         && !verify_dashboard_pin(&pin, settings.web_dashboard_pin_hash.as_deref())
     {
+        // The address only; never the PIN that was tried.
+        tracing::warn!(address = %address, exempt, "dashboard_login_failed");
+        if !exempt {
+            rt.login_throttle.failure(&address);
+        }
         return http_error(401, "Incorrect dashboard PIN.").into_response();
+    }
+    if !exempt {
+        rt.login_throttle.success(&address);
     }
     let token = rt.sessions.create();
     let mut response = ok(json!({
@@ -481,9 +539,29 @@ async fn dashboard_login(State(rt): State<Rt>, body: Bytes) -> Response {
         "authenticated": true,
     }))
     .into_response();
-    let cookie = format!("{COOKIE_NAME}={token}; HttpOnly; Max-Age=43200; Path=/; SameSite=Strict");
+    // `Secure` only when the browser reached us over HTTPS (through the tunnel): a plain-HTTP LAN
+    // page must still be able to keep its cookie.
+    let secure = if crate::security::forwarded_https(&headers) {
+        "; Secure"
+    } else {
+        ""
+    };
+    let cookie =
+        format!("{COOKIE_NAME}={token}; HttpOnly; Max-Age=43200; Path=/; SameSite=Strict{secure}");
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         response.headers_mut().append(header::SET_COOKIE, value);
+    }
+    response
+}
+
+fn too_many_logins(wait: u64) -> Response {
+    let mut response = http_error(
+        429,
+        &format!("Too many incorrect PIN attempts. Try again in {wait} seconds."),
+    )
+    .into_response();
+    if let Ok(value) = HeaderValue::from_str(&wait.to_string()) {
+        response.headers_mut().insert(header::RETRY_AFTER, value);
     }
     response
 }
@@ -509,15 +587,17 @@ async fn dashboard_settings(State(rt): State<Rt>, body: Bytes) -> Json {
 
 async fn access(
     State(rt): State<Rt>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    // Optional so a listener that serves without peer addresses can never turn this into a 500.
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     remote: Option<Extension<RemoteContext>>,
     headers: HeaderMap,
 ) -> Response {
     if let Some(Extension(context)) = remote {
         return remote_access(&context);
     }
-    let (required, local_authenticated) = auth_status(&rt, &headers, Some(peer));
-    let desktop = desktop_origin(&headers, Some(peer));
+    let peer = peer.map(|Extension(ConnectInfo(addr))| addr);
+    let (required, local_authenticated) = auth_status(&rt, &headers, peer);
+    let desktop = desktop_origin(&headers, peer);
     let authenticated = local_authenticated || !rt.dashboard_auth_enforced;
     let mut response = ok(json!({
         "mode": if desktop { "desktop" } else { "lan" },
@@ -607,8 +687,6 @@ async fn perform_action(State(rt): State<Rt>, Path(action): Path<String>) -> Jso
 async fn reload_plan(State(rt): State<Rt>) -> Json {
     run_action(&rt, ActionName::ReloadPlan).await
 }
-
-// ---- stubbed integrations (none left in this module) ----------------------------------------
 
 // ---- WebSocket --------------------------------------------------------------------------------
 

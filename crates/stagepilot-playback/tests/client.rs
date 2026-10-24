@@ -239,7 +239,7 @@ async fn garbage_messages_do_not_refresh_heartbeat_deadline() {
 #[tokio::test]
 async fn failed_connection_checks_for_a_blocked_network_only_for_blocked_classes() {
     // client.py: `saved_address_blocked` is consulted only after permission_denied / no_route.
-    // A refused connection (nothing listening) must NOT trigger it and keeps the generic text.
+    // A refused connection (nothing listening) must NOT trigger it; since m11 it says "refused".
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
@@ -253,7 +253,7 @@ async fn failed_connection_checks_for_a_blocked_network_only_for_blocked_classes
     until("unavailable", || c.status().last_error.is_some()).await;
     assert_eq!(
         c.status().last_error.as_deref(),
-        Some("Playback unavailable; remote connections may be off")
+        Some("Playback refused the connection; remote connections may be off")
     );
     c.stop().await;
     assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0);

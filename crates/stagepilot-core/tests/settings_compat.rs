@@ -80,6 +80,9 @@ fn v1_untouched_install_moves_to_playback_and_rewrites_the_file() {
     );
     assert_eq!(settings.schema_version, 2);
     assert_eq!(settings.timezone, "America/Denver");
+    // M4: loading never writes; the migrated file is written by the next save.
+    assert!(!store.backup_path().exists());
+    store.save(&settings).unwrap();
     let written = read(&path);
     assert_eq!(written["schema_version"], 2);
     assert_eq!(written["integration_modes"]["midi_source"], "playback_api");
@@ -106,8 +109,13 @@ fn migration_is_one_way_and_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let path = staged(&dir, "python_v1_untouched.json");
     let store = SettingsFileStore::new(&path);
-    store.load().unwrap();
+    // Loading migrates in memory only (M4: loading never writes); the next save writes it.
+    let original = read(&path);
+    let settings = store.load().unwrap().unwrap();
+    assert_eq!(read(&path), original);
+    store.save(&settings).unwrap();
     let migrated = read(&path);
+    assert_ne!(migrated, original);
     // Loading the migrated file again changes nothing.
     SettingsFileStore::new(&path).load().unwrap();
     assert_eq!(read(&path), migrated);
@@ -127,15 +135,13 @@ fn legacy_release_channel_is_dropped_on_load_and_save() {
 }
 
 #[test]
-fn unknown_keys_are_rejected_and_the_file_is_left_alone() {
+fn unknown_keys_are_kept_and_the_file_is_left_alone() {
+    // rc.4 rejected the whole file here; M4 keeps the unknown key (see settings_loader_matrix).
     let dir = tempfile::tempdir().unwrap();
     let path = staged(&dir, "python_v2_unknown_key.json");
     let before = std::fs::read(&path).unwrap();
-    let error = SettingsFileStore::new(&path).load().unwrap_err();
-    assert_eq!(
-        error.0,
-        "Saved settings are corrupt or invalid; built-in defaults were used."
-    );
+    let settings = SettingsFileStore::new(&path).load().unwrap();
+    assert!(settings.is_some());
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 

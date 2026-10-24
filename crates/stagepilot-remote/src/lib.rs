@@ -17,6 +17,7 @@ pub mod files;
 pub mod health;
 pub mod health_alert;
 pub mod http;
+pub mod orphan;
 pub mod platform;
 pub mod provider;
 pub mod quick;
