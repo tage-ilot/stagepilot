@@ -17,6 +17,7 @@ import argparse
 import copy
 import http.cookiejar
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -69,6 +70,31 @@ RUST_SCALAR_EXTENSIONS = {
     "settings_degraded": (bool,),
     "settings_degraded_reason": (str, type(None)),
 }
+# Reviewed, intentional differences from the Python 2.41.1 recording (rc.4 audit fixes). Each entry
+# is a regex over one diff line plus the reason. Anything not listed still fails the replay, so keep
+# this list short and specific; when Python is retired the transcripts should be re-recorded and
+# this list emptied.
+APPROVED_DIVERGENCES = [
+    (r"\.(lights_status|connection_status): 'connected' != 'ready'$",
+     "m5: Lighting OSC is 'ready' (socket open, delivery unconfirmed) until a cue is sent"),
+    (r"\.outputs: length 0 != 1$",
+     "m12: MIDI ports are listed read-only even when the MIDI output is not in use"),
+    (r"lights\.detail: 'OSC ready for .* != 'OSC output to .* reopened\.|body\.message: 'OSC ready for .* != 'OSC output to .* reopened\.",
+     "m5: after a cue was sent, a reopened OSC output reports connected"),
+    (r"^(outputs: )?(mock saw the startup probe|mock log before the settings flows|ProPresenter calls for the settings save)\.mock_requests",
+     "m2: the ProPresenter probe also reads GET /v1/timers/current for the timer state"),
+    (r"^(outputs: )?propresenter settings, an unknown Look is refused after saving\.response\.body\.propresenter\.(look_found|look_id): ",
+     "m3: an unknown ProPresenter look is refused and not saved"),
+    (r"\.message: type str != NoneType \('Capture cleared\.' vs None\)$",
+     "B3: Lightkey status messages expire after 10 s or on a state change"),
+]
+_APPROVED = [(re.compile(pattern), reason) for pattern, reason in APPROVED_DIVERGENCES]
+
+
+def approved(problem: str) -> bool:
+    return any(pattern.search(problem) for pattern, _ in _APPROVED)
+
+
 # Response headers that are compared (everything else, e.g. date/server/content-length, is ignored).
 HEADERS_COMPARED = ("content-type",)
 
@@ -669,6 +695,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     for want, have in zip(golden, got):
         found: list[str] = []
         diff(want["name"], want, have, found)
+        found = [line for line in found if not approved(line)]
         problems.extend(found)
         print(("PASS " if not found else "FAIL ") + want["name"])
     if len(golden) != len(got):

@@ -646,6 +646,18 @@ impl OAuthService {
 
     /// A usable access token, refreshing first when it is due.
     pub async fn valid_access_token(&self) -> Result<String, CompleteError> {
+        self.access_token(REFRESH_MARGIN_SECONDS).await
+    }
+
+    /// The token a request should carry now. Background loads use the stored token while it is
+    /// still valid (Python only refreshes inside the 15 minute margin from explicit routes and the
+    /// proactive loop; the golden transcripts pin that order). A token that has really expired is
+    /// refreshed first, and a 401 refreshes once more (see `token_after_rejection`).
+    async fn request_token(&self) -> Result<String, CompleteError> {
+        self.access_token(0.0).await
+    }
+
+    async fn access_token(&self, margin_seconds: f64) -> Result<String, CompleteError> {
         let store = self.tokens.clone();
         let current = blocking(move || store.load())
             .await?
@@ -659,7 +671,7 @@ impl OAuthService {
             )
             .into());
         }
-        if current.needs_refresh(self.now()) {
+        if current.expires_in(self.now()) <= margin_seconds {
             return Ok(self.refresh_now(Some(current)).await?.access_token);
         }
         Ok(current.access_token)
@@ -680,19 +692,17 @@ impl OAuthService {
 #[async_trait::async_trait]
 impl crate::client::TokenSource for OAuthService {
     async fn current_token(&self) -> Result<String, PcoError> {
-        self.valid_access_token()
-            .await
-            .map_err(|error| match error {
-                CompleteError::OAuth(error) if error.permanent => {
-                    PcoError::Authentication(error.message)
-                }
-                CompleteError::OAuth(_) => {
-                    PcoError::Transport("Could not refresh the Planning Center sign-in.".into())
-                }
-                CompleteError::Credential(_) => {
-                    PcoError::configuration("Planning Center credentials are not available.")
-                }
-            })
+        self.request_token().await.map_err(|error| match error {
+            CompleteError::OAuth(error) if error.permanent => {
+                PcoError::Authentication(error.message)
+            }
+            CompleteError::OAuth(_) => {
+                PcoError::Transport("Could not refresh the Planning Center sign-in.".into())
+            }
+            CompleteError::Credential(_) => {
+                PcoError::configuration("Planning Center credentials are not available.")
+            }
+        })
     }
 
     async fn token_after_rejection(&self, rejected: &str) -> Option<String> {

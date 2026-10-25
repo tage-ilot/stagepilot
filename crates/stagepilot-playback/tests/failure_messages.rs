@@ -41,7 +41,11 @@ async fn nothing_listening_says_playback_refused() {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
-    let mut c = PlaybackClient::start(opts("127.0.0.1", port), None).unwrap();
+    // Windows takes about 2 s to refuse a closed loopback port; a shorter connect timeout would
+    // read that as the network being unreachable.
+    let mut options = opts("127.0.0.1", port);
+    options.heartbeat_timeout = Duration::from_secs(10);
+    let mut c = PlaybackClient::start(options, None).unwrap();
     assert_eq!(first_error(&c).await, REFUSED);
     c.stop().await;
 }
