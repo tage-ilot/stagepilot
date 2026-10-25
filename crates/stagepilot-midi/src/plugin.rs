@@ -377,10 +377,13 @@ impl Inner {
                 return Err("The MIDI backend could not be initialized.".into());
             }
         };
+        // The backend must be in place before the tasks run: on a multi-thread runtime the
+        // supervisor can start at once and would otherwise find no backend, report a false
+        // "Could not enumerate MIDI input ports." error and wait out a retry delay.
+        self.st().backend = Some(backend);
         let consumer = tokio::spawn(self.clone().consume(rx));
         let supervisor = tokio::spawn(self.clone().supervise());
         let mut st = self.st();
-        st.backend = Some(backend);
         st.consumer = Some(consumer);
         st.supervisor = Some(supervisor);
         Ok(())
