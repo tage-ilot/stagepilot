@@ -627,6 +627,14 @@ fn status_json(rt: &Runtime) -> Value {
     let scan = rt.playback.scan_snapshot();
     let discovery = rt.playback.discovery_snapshot();
     let (song_order, captured_version) = rt.playback.mapper_view();
+    // Only skips that exist in the scanned order: a stale id from an earlier setlist would be sent
+    // back by the save screen and rejected (422) on every save.
+    let skipped_song_ids: Vec<i64> = config
+        .skipped_song_ids
+        .iter()
+        .copied()
+        .filter(|id| song_order.contains(id))
+        .collect();
     let stale = rt.playback.mapper_stale();
     let plan_changed = rt.playback.plan_changed();
     let outdated = stale || plan_changed;
@@ -731,7 +739,7 @@ fn status_json(rt: &Runtime) -> Value {
         } else {
             config.song_lengths.clone()
         },
-        skipped_song_ids: config.skipped_song_ids.clone(),
+        skipped_song_ids,
         skipped_plan_song_ids: config.skipped_plan_song_ids.clone(),
         arrangement_current,
         lengths_measured_at: if outdated {

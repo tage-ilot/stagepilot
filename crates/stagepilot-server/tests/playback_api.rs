@@ -631,3 +631,89 @@ async fn shutdown_while_connected_is_clean() {
     let health = r.runtime.plugins.health().await;
     assert!(health.iter().any(|h| h.name == "playback_api"));
 }
+
+#[tokio::test]
+async fn a_rescan_of_a_new_setlist_drops_skips_that_are_no_longer_in_the_order() {
+    // rc.5 on the rig: a skip saved for an earlier setlist stayed in the settings, the save screen
+    // sent it back and every Playback save failed with "A skipped Playback song is not in the
+    // scanned song order." A scan must forget skips whose song is gone.
+    let r = rig().await;
+    let fake = FakePlayback::start().await;
+    three_songs(&fake);
+    r.connect(&fake).await;
+    let scan = || {
+        r.call(
+            "POST",
+            "/api/v1/playback-api/discover-song-order",
+            Some(json!({"confirm": true})),
+        )
+    };
+    let (code, status) = scan().await;
+    assert_eq!(
+        (code, &status["discovery"]),
+        (StatusCode::OK, &json!("done"))
+    );
+    r.until("order valid", |s| s["stale"] == false).await;
+    let put = |body: Value| r.call("PUT", "/api/v1/playback-api/arrangement", Some(body));
+    let (code, body) = put(json!({"skipped_song_ids": [103, 101]})).await;
+    assert_eq!(
+        (code, &body["skipped_song_ids"]),
+        (StatusCode::OK, &json!([103, 101]))
+    );
+
+    // A new setlist: 103 is gone, 101 is still there.
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.songs = vec![101, 201, 202];
+        s.song = 201;
+        s.version += 1;
+    }
+    r.until("the new setlist is seen", |s| s["stale"] == true)
+        .await;
+    let (code, status) = scan().await;
+    assert_eq!(
+        (code, &status["discovery"]),
+        (StatusCode::OK, &json!("done")),
+        "{status}"
+    );
+    assert_eq!(status["song_order"], json!([101, 201, 202]));
+    assert_eq!(
+        status["skipped_song_ids"],
+        json!([101]),
+        "stale 103 is gone: {status}"
+    );
+    // What the save screen sends back is accepted.
+    let (code, body) = put(json!({"skipped_song_ids": [101, 202]})).await;
+    assert_eq!(code, StatusCode::OK, "{body}");
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn a_stale_saved_skip_is_not_reported_so_the_save_screen_cannot_send_it_back() {
+    // A settings file written by rc.5 or Python can already hold a skip that is not in the order.
+    let r = rig().await;
+    let fake = FakePlayback::start().await;
+    three_songs(&fake);
+    r.connect(&fake).await;
+    r.call(
+        "POST",
+        "/api/v1/playback-api/discover-song-order",
+        Some(json!({"confirm": true})),
+    )
+    .await;
+    r.until("order valid", |s| s["stale"] == false).await;
+    let mut seeded = r.runtime.settings_service.snapshot();
+    seeded.playback_api.skipped_song_ids = vec![555, 102];
+    r.runtime
+        .settings_service
+        .save(seeded)
+        .expect("seed a stale skip");
+    r.runtime
+        .playback
+        .reconfigure()
+        .await
+        .expect("reload the saved settings");
+    let status = r.status().await;
+    assert_eq!(status["skipped_song_ids"], json!([102]), "{status}");
+    r.runtime.stop().await;
+}

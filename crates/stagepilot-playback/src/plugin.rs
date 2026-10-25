@@ -1509,6 +1509,14 @@ impl Inner {
         config.song_lengths = done.lengths.clone();
         config.discovery_duration_seconds = Some(started.elapsed().as_secs_f64());
         config.lengths_measured_at = Some(Utc::now());
+        // A new setlist has new Playback song ids. A saved skip that is not in the scanned order
+        // can never match a song again, and it would make every later arrangement save fail with
+        // "A skipped Playback song is not in the scanned song order."
+        let kept = config.skipped_song_ids.len();
+        config.skipped_song_ids.retain(|id| done.order.contains(id));
+        if config.skipped_song_ids.len() != kept {
+            config.lengths_applied_key = None;
+        }
         self.save_playback(config.clone())
             .map_err(|e| e.to_string())?;
         let mut s = lock(&self.shared);
