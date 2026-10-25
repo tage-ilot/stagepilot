@@ -74,18 +74,24 @@ const mount = (props: {
 
 describe("cue board and live capture", () => {
   it("captures at the elapsed time rounded to 0.1 s while the song runs", async () => {
-    const { onPressPad } = mount({ state: runningState(72.04) });
-    await userEvent.click(screen.getByRole("button", { name: /Chorus/ }));
-    await waitFor(() => expect(onPressPad).toHaveBeenCalledTimes(1));
-    const [padId, capture] = onPressPad.mock.calls[0]!;
-    expect(padId).toBe("p1");
-    expect(capture.song_key).toBe("song-1");
-    expect(capture.song_title).toBe("Holy Forever");
-    expect(capture.at_seconds).toBeGreaterThanOrEqual(72);
-    expect(capture.at_seconds).toBeLessThan(73);
-    expect(Number.isInteger(Math.round(capture.at_seconds * 10))).toBe(true);
-    expect(Math.abs(capture.at_seconds * 10 - Math.round(capture.at_seconds * 10))).toBeLessThan(1e-9); // whole tenths
-    expect(await screen.findByTestId("capture-status")).toHaveTextContent(/Added at 01:12/);
+    // Freeze Date only: with the real clock a slow runner used up the 1 s margin between mounting
+    // and the click and the capture read exactly 73 s.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-25T00:00:00Z") });
+    try {
+      const { onPressPad } = mount({ state: runningState(72.04) });
+      await userEvent.click(screen.getByRole("button", { name: /Chorus/ }));
+      await waitFor(() => expect(onPressPad).toHaveBeenCalledTimes(1));
+      const [padId, capture] = onPressPad.mock.calls[0]!;
+      expect(padId).toBe("p1");
+      expect(capture.song_key).toBe("song-1");
+      expect(capture.song_title).toBe("Holy Forever");
+      expect(capture.at_seconds).toBe(72);
+      expect(Number.isInteger(Math.round(capture.at_seconds * 10))).toBe(true);
+      expect(Math.abs(capture.at_seconds * 10 - Math.round(capture.at_seconds * 10))).toBeLessThan(1e-9); // whole tenths
+      expect(await screen.findByTestId("capture-status")).toHaveTextContent(/Added at 01:12/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("Preview only fires without writing to the song", async () => {
