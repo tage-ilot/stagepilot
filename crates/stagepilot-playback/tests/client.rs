@@ -249,7 +249,11 @@ async fn failed_connection_checks_for_a_blocked_network_only_for_blocked_classes
         a.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async { true })
     });
-    let mut c = PlaybackClient::start_with(opts(port), None, check).unwrap();
+    // Windows takes about 2 s to refuse a closed loopback port, so the connect timeout must be
+    // longer than that or the refusal is read as a timeout (network unreachable).
+    let mut options = opts(port);
+    options.heartbeat_timeout = Duration::from_secs(10);
+    let mut c = PlaybackClient::start_with(options, None, check).unwrap();
     until("unavailable", || c.status().last_error.is_some()).await;
     assert_eq!(
         c.status().last_error.as_deref(),
