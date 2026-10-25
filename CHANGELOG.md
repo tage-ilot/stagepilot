@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.42.0-rc.5] - 2026-10-25
+
+Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.
+
 ### Fixed
 
 - Planning Center: the plan no longer stops loading about two hours after launch. The app now uses the refreshed sign-in token on every request, and signs in again once if Planning Center rejects it.
