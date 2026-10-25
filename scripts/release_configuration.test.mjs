@@ -351,11 +351,11 @@ test("updater manifest tooling accepts a pre-release version and keeps it under 
   }
 });
 
-test("release workflow selects the Rust variant only for pre-release tags", () => {
+test("release workflow builds the Rust variant for stable and pre-release tags", () => {
   const workflow = read(".github/workflows/release-macos.yml");
   assert.match(workflow, /variant: \$\{\{ steps\.variant\.outputs\.variant \}\}/);
-  assert.match(workflow, /\^v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$ \]\]; then\s+echo "variant=python"/);
-  assert.match(workflow, /\(alpha\|beta\|rc\)\\\.\[0-9\]\+\$ \]\]; then\s+echo "variant=rust"/);
+  assert.match(workflow, /\(-\(alpha\|beta\|rc\)\\\.\[0-9\]\+\)\?\$ \]\]; then\s+echo "variant=rust"/);
+  assert.doesNotMatch(workflow, /echo "variant=python"/, "no tag builds the Python sidecar any more");
   assert.match(workflow, /rust_command: build:mac:rust/);
   assert.match(workflow, /rust_command: build:rust/);
   assert.match(workflow, /--variant "\$VARIANT"/);
