@@ -34,12 +34,11 @@ jobs:
       - name: Select installer variant
         id: variant
         run: |
-          # X.Y.Z keeps the Python sidecar until phase 7. A pre-release suffix
-          # (X.Y.Z-rc.N, -beta.N, -alpha.N) builds the Rust in-process variant and is published
-          # as a GitHub pre-release that never becomes "Latest" (scripts/publish_release.mjs).
-          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "variant=python" >> "$GITHUB_OUTPUT"
-          elif [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$ ]]; then
+          # Every release is the Rust in-process app (no Python sidecar): stable X.Y.Z from 2.42.0
+          # on, and pre-releases (X.Y.Z-rc.N, -beta.N, -alpha.N). A pre-release is published as a
+          # GitHub pre-release that never becomes "Latest"; a stable tag becomes "Latest" and is
+          # what the in-app updater reads (scripts/publish_release.mjs).
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
             echo "variant=rust" >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unsupported release tag $RELEASE_TAG."

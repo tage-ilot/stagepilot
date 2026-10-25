@@ -215,7 +215,8 @@ if (-not $Bash) {
     if (-not $Found) { throw "bash was not found; install Git for Windows (it ships bash)." }
     $Bash = $Found.Source
 }
-$ValidationVariant = if (Test-PreReleaseVersion $Version) { "rust" } else { "python" }
+# Every release is the Rust in-process app (stable and pre-release alike).
+$ValidationVariant = "rust"
 Invoke-Checked "Validate application ($ValidationVariant variant)" {
     & $Bash scripts/validate_application.sh $ValidationVariant
 }

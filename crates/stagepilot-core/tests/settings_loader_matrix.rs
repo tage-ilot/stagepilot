@@ -384,3 +384,37 @@ fn the_settings_service_reports_a_degraded_start() {
 
 #[allow(dead_code)]
 fn _unused(_: &Path) {}
+
+#[test]
+fn a_skip_for_a_song_that_is_not_in_the_saved_order_does_not_spoil_the_file() {
+    // rc.5 on the rig: a scan of a new setlist left a skipped song from the old one. The loader
+    // judged the whole `playback_api` section invalid, called the file corrupt and the app ran on
+    // defaults (no song order, no modes) until the file was edited by hand.
+    let mut value = valid_value();
+    value["timezone"] = json!("America/Los_Angeles");
+    value["playback_api"]["song_order"] = json!([11, 12, 13]);
+    value["playback_api"]["skipped_song_ids"] = json!([99, 12]);
+    let c = case(&text(&value));
+    let store = SettingsFileStore::new(&c.path);
+    let (loaded, logs) = logged(|| store.load());
+    let settings = loaded
+        .expect("a stale skip must not make the file unreadable")
+        .unwrap();
+    assert_eq!(
+        settings.timezone, "America/Los_Angeles",
+        "the rest of the file is used"
+    );
+    assert_eq!(settings.playback_api.song_order, vec![11, 12, 13]);
+    assert_eq!(
+        settings.playback_api.skipped_song_ids,
+        vec![12],
+        "only the stale skip is dropped"
+    );
+    assert!(store.degraded().is_none(), "not degraded");
+    assert!(
+        logs.at(Level::ERROR).is_empty(),
+        "no settings_corrupt error"
+    );
+    assert_eq!(c.on_disk(), c.original, "loading never writes");
+    assert_eq!(c.files(), ["settings.json"], "nothing quarantined");
+}

@@ -525,6 +525,11 @@ impl Default for PlaybackApiSettings {
 impl PlaybackApiSettings {
     pub fn normalise(&mut self) {
         self.host = trim_or_none(&self.host);
+        // A scan of a new setlist replaces the song order but used to leave skips for songs that
+        // are gone. Such a skip can never match a song, and keeping it made the whole settings
+        // file invalid on the next launch (the app then ran on defaults). Drop it on load.
+        let order = &self.song_order;
+        self.skipped_song_ids.retain(|id| order.contains(id));
     }
 
     pub fn validate(&self, path: &[Value], errors: &mut Errors) {
