@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [2.42.0] - 2026-10-25
+
+StagePilot 2.42.0 is the first release that runs on the new Rust backend. The backend is now part of the app itself: there is no separate Python program to start, update or sign, and the app is ready within about a second of opening it. Your settings, Planning Center sign-in, Playback song order and Lightkey takes carry over unchanged, and the in-app updater offers this update to earlier versions.
+
+### Changed
+
+- The backend is built into the app. Opening StagePilot starts everything, including the remote-access tunnel.
+- The saved log level is honoured. The log records when each output (lighting, MIDI, ProPresenter, Lightkey, Playback, Planning Center) connects or disconnects, and old backend logs are pruned so they stay under 100 MB.
+- Lighting over OSC reads "Ready, delivery not confirmed" until the first cue is sent. MIDI ports are listed in the Lighting setup even when OSC is the chosen method.
+
+### Fixed
+
+- Planning Center: the plan keeps loading past the sign-in token's two-hour life. The app uses the refreshed token on every request and signs in again once if Planning Center rejects it.
+- Planning Center: valid plans with empty title or length fields no longer log a warning at every launch, and a failed start is recorded once.
+- Planning Center lengths: the lengths dialog works (categories, preview, confirm and restore).
+- Remote access: the remote sign-in page loads again. After the app is killed or crashes, the tunnel reconnects at the next launch instead of staying on "reconnecting". The tunnel token is no longer visible in the process list, and the bundled cloudflared is updated to 2026.10.3.
+- Lighting: with Record from Lightkey and Replay captured lights both on, each status line shows once and replay reads "Replay paused while recording." Old status messages clear after 10 seconds or when the state changes. Record from Lightkey stays armed across a restart, and replay spreads its OSC messages out instead of sending a burst.
+- ProPresenter: timers report their running state, look changes are confirmed by position and name or id, and an unknown look is no longer saved.
+- Playback: after scanning a new setlist, skipped songs that are no longer in it are dropped. Saving the song arrangement works again, and the settings file is no longer treated as damaged at the next launch.
+- Settings: unknown settings are kept instead of resetting the file. A damaged or newer settings file is copied aside as `settings.json.corrupt-<time>`, reported in the app, and never overwritten.
+- The app, the health report and the Planning Center user agent show the real version, and health no longer always reads "degraded".
+- Playback: a network outage and a refused connection show different messages.
+
+### Security
+
+- The dashboard PIN locks out after repeated wrong tries from one address, and failed tries are logged. Changing requests from another website origin are refused, and responses carry standard browser security headers.
+- Health details (plugin states and errors) need a signed-in session; the public health check shows only status and version.
+
+### Known limits
+
+- The Windows installer is not code-signed, so Windows SmartScreen shows a warning the first time. The macOS apps are signed with the project's own certificate and are not notarized.
+- The default dashboard PIN is still 1234. Change it in the dashboard settings.
+
 ## [2.42.0-rc.5] - 2026-10-25
 
 Release candidate. This is the first build whose backend is the Rust server linked into the app (no bundled Python). It is published as a GitHub pre-release, is never offered to installed apps by the updater, and the stable line stays on v2.41.1.

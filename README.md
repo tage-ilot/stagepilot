@@ -11,7 +11,7 @@ Production desktop builds check the signed
 stays unchanged when StagePilot is current; an **Update** button appears beside
 the logo only when a newer signed release is available. There is one release channel: every install follows the releases on this page.
 
-## Download StagePilot 2.42.0-rc.5
+## Download StagePilot 2.42.0
 
 Download the installer for your computer from the [StagePilot v2.42.0-rc.1 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.42.0-rc.5-rc.4-rc.3-rc.2-rc.1):
 
