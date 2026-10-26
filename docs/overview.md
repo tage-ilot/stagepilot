@@ -132,9 +132,6 @@ Why four steps? ProPresenter has **one reusable timer**. StagePilot re-points it
 | --- | --- |
 | The lights never started, but the countdown did | Lighting only starts after ProPresenter confirms the timer started. If that confirmation didn't arrive, there's no lighting timeline. |
 | A restart made the lights "jump back" | Restart cancels every remaining cue from the old timeline and creates a fresh one at 0:00. This is on purpose. |
-| A lighting cue never fired | Cues set later than the song's duration are not scheduled. |
-| The lights drift from the audio | The lights follow StagePilot's own clock from the confirmed start, not Playback's position in the audio. MIDI Clock isn't used because it carries tempo, not a timestamp. |
-| Stop didn't clear ProPresenter's duration | Stop keeps the configured duration. **Reset Position** is the one that sets it back to 0:00. |
 
 ---
 
@@ -166,7 +163,7 @@ flowchart LR
 Ways to think about it:
 
 - **A pad is a reusable button.** Press it mid-song and it both fires the cue and writes it into this song's timeline at the current time, so you can program lights by playing along. Switch on **Preview only** to test pads without saving anything.
-- **Record and replay** is for lighting that is more than "turn a cue on". With the optional `lightkey-api` agent running on the Lightkey Mac, StagePilot can record cues, colors, intensity and mover positions along with their timing, and play them back on later runs. Replay only touches what was recorded. Everything else stays with the Lightkey operator.
+- **Record and replay** (optional, needs the `lightkey-api` agent on the Lightkey Mac) captures cues, colors and mover positions from a live run and plays them back on later runs. Replay only touches what was recorded.
 
 ### Only one method fires, never both
 
@@ -189,36 +186,6 @@ UDP has no reply, so StagePilot can't know whether Lightkey received a cue. It d
 
 ---
 
-## "Nothing happened when the song started"
-
-Start at the top and stop when you find your problem.
-
-```mermaid
-flowchart TD
-  S(["A song started in Playback,<br/>but StagePilot did nothing"]) --> Q1{"Does the header status<br/>say <b>Ready</b>?"}
-
-  Q1 -->|"No"| F1["Open the card that isn't connected<br/>and run its connection test"]
-  Q1 -->|"Yes"| Q2{"Which connection method<br/>are you using?"}
-
-  Q2 -->|"Playback API"| Q3{"Does the Playback card say<br/>Connected?"}
-  Q3 -->|"No"| F2["In Playback, check that Remote Connections<br/>is on. Playback can turn it off<br/>when it restarts."]
-  Q3 -->|"Yes"| F3["Is the song order confirmed? If the lists<br/>might not line up, StagePilot holds back.<br/>Check Song arrangement."]
-
-  Q2 -->|"MIDI"| Q4{"Do messages appear in the<br/>MIDI log?"}
-  Q4 -->|"No"| F4["Check the MIDI input and the route<br/>from Playback"]
-  Q4 -->|"Yes, but marked wrong_channel"| F5["Set the same channel<br/>in both apps"]
-  Q4 -->|"Yes, but rejected"| F6["Velocity is probably higher than the number<br/>of songs in the plan"]
-
-  F1 --> LOG["Still stuck? Open Recent Event Stream,<br/>then attach <code>stagepilot-backend.log</code> to an issue"]
-  F2 --> LOG
-  F3 --> LOG
-  F4 --> LOG
-  F5 --> LOG
-  F6 --> LOG
-```
-
----
-
 ## Go deeper
 
 | I want to... | Read |
@@ -228,5 +195,3 @@ flowchart TD
 | Set up ProPresenter and the timer | [ProPresenter](propresenter.md) |
 | Set up Lightkey, pads, record and replay | [Lighting](lights.md) |
 | Look up a setting or MIDI velocity | [Configuration](configuration.md) |
-| Write a plugin | [Plugins](plugins.md) |
-| Lock the dashboard down for the network | [Security](security.md) |
