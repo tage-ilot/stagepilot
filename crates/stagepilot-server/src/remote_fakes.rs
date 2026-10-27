@@ -1,5 +1,5 @@
 //! Test doubles for the Remote traits in [`crate::remote_types`]. The real manager and bootstrap
-//! store are phase 6b-B; the routes only see the traits, so these fakes are all the route tests
+//! store live in `stagepilot-remote`; the routes only see the traits, so these fakes are all the route tests
 //! and the contract profile need. They hold no secrets and touch no files or network.
 
 use crate::remote_types::{ActiveEnrollment, DiagnosticsBootstrap, ManagerError, RemoteManager};

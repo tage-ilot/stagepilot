@@ -1,13 +1,12 @@
-//! Output plugins (phase 4): MIDI input, lights and ProPresenter, built from the resolved settings
+//! Output plugins: MIDI input, lights and ProPresenter, built from the resolved settings
 //! and registered with the plugin manager, plus the live Presentation (ProPresenter) switch.
 //!
 //! Registration order is the health order Python reports: lights, services (demo), the Playback
-//! input (`midi_playback` when MIDI is the real source, otherwise the `playback_api` placeholder
-//! phase 3 replaces), then ProPresenter when the timer output is ProPresenter.
+//! input (`midi_playback` when MIDI is the real source, otherwise the `playback_api` placeholder), then ProPresenter when the timer output is ProPresenter.
 //!
-//! The Playback source arbiter (phase 3) is not wired in here. With MIDI as the selected source and
+//! The Playback source arbiter is not wired in here. With MIDI as the selected source and
 //! no Playback API connected, Python's `ArbitratedDispatcher` forwards every MIDI action straight to
-//! the state service, which is what this module does (see `docs/rust-migration/phase4.md`).
+//! the state service, which is what this module does (see `docs/archive/rust-migration/phase4.md`).
 
 use crate::demo::{DemoPlugin, PLAYBACK_DISCONNECTED_REASON};
 use async_trait::async_trait;

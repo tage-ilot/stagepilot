@@ -6,7 +6,7 @@
 # listener) and the "diagnostics" profile (uploads go to a mock control plane).
 # And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
 # Usage (repo root): scripts/contract/run_rust.sh [PORT]
-# Keep the base port and everything derived from it below 32768 (Linux ephemeral range); see run_baseline.sh.
+# Keep the base port and everything derived from it below 32768 (Linux ephemeral range).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 PORT="${1:-27313}"
@@ -40,26 +40,26 @@ wait_for() {
 ./target/debug/stagepilot-server --demo --host 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$PORT"
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$PORT"
 
-uv run --project backend --frozen python scripts/contract/mock_pco.py "$MOCK_PORT" >>"$LOG" 2>&1 &
+python3 scripts/contract/mock_pco.py "$MOCK_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$MOCK_PORT/__log"
 ./target/debug/stagepilot-server --contract-pco --pco-port "$MOCK_PORT" \
   --host 127.0.0.1 --port "$PCO_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$PCO_PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$PCO_PORT" \
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$PCO_PORT" \
   --profile pco --mock-url "http://127.0.0.1:$MOCK_PORT"
 
-uv run --project backend --frozen python scripts/contract/mock_propresenter.py "$OMOCK_PORT" >>"$LOG" 2>&1 &
+python3 scripts/contract/mock_propresenter.py "$OMOCK_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$OMOCK_PORT/__log"
 ./target/debug/stagepilot-server --contract-outputs --propresenter-port "$OMOCK_PORT" \
   --host 127.0.0.1 --port "$OUT_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$OUT_PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$OUT_PORT" \
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$OUT_PORT" \
   --profile outputs --mock-url "http://127.0.0.1:$OMOCK_PORT"
 
 mkdir -p "$SCRATCH/remote" "$SCRATCH/diagnostics"
@@ -68,26 +68,26 @@ WEB="$PWD/scripts/contract/web"
   --ingress-port "$ING_PORT" --host 127.0.0.1 --port "$REM_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$REM_PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$REM_PORT" \
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$REM_PORT" \
   --profile remote --ingress-url "http://127.0.0.1:$ING_PORT"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$REM_PORT" --profile static
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$REM_PORT" --profile static
 
-uv run --project backend --frozen python scripts/contract/mock_control.py "$CTRL_PORT" >>"$LOG" 2>&1 &
+python3 scripts/contract/mock_control.py "$CTRL_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$CTRL_PORT/__log"
 ./target/debug/stagepilot-server --contract-diagnostics --control-port "$CTRL_PORT" \
   --remote-dir "$SCRATCH/diagnostics" --host 127.0.0.1 --port "$DIAG_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$DIAG_PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$DIAG_PORT" \
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$DIAG_PORT" \
   --profile diagnostics --mock-url "http://127.0.0.1:$CTRL_PORT"
 
-uv run --project backend --frozen python scripts/contract/mock_lightkey.py "$LKMOCK_PORT" >>"$LOG" 2>&1 &
+python3 scripts/contract/mock_lightkey.py "$LKMOCK_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$LKMOCK_PORT/time"
 ./target/debug/stagepilot-server --contract-lightkey --lightkey-port "$LKMOCK_PORT" \
   --host 127.0.0.1 --port "$LK_PORT" >>"$LOG" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$LK_PORT/api/v1/health/live"
-uv run --project backend --frozen python scripts/contract/contract.py replay "http://127.0.0.1:$LK_PORT" \
+python3 scripts/contract/contract.py replay "http://127.0.0.1:$LK_PORT" \
   --profile lightkey --mock-url "http://127.0.0.1:$LKMOCK_PORT"

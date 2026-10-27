@@ -6,8 +6,8 @@
 //! an error status; reconnect after a fixed 1 s; status is published before the
 //! events of each message; a fresh normalizer on every reconnect; 100-event history.
 //!
-//! Not ported in this spike: LAN scan / discovery (`find.py`), arbitration, length
-//! measurement. Discovery is "manual host, else loopback".
+//! Address discovery (manual host, loopback, LAN scan) is in `find.rs`; arbitration and length
+//! measurement are in `arbiter.rs` and `lengths.rs`.
 
 use crate::find::{
     classify_error, find_playback, saved_address_blocked, CancelToken, DiscoverySource, ErrorClass,

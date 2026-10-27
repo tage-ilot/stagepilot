@@ -14,10 +14,8 @@ const versions = new Map([
   ["desktop/src-tauri/tauri.conf.json", jsonVersion("desktop/src-tauri/tauri.conf.json")],
   ["desktop/package.json", jsonVersion("desktop/package.json")],
   ["frontend/package.json", jsonVersion("frontend/package.json")],
-  ["backend/pyproject.toml", matchVersion("backend/pyproject.toml", /^version = "([^"]+)"/m)],
   ["desktop/src-tauri/Cargo.toml", matchVersion("desktop/src-tauri/Cargo.toml", /^version = "([^"]+)"/m)],
-  ["backend/src/stagepilot/__init__.py", matchVersion("backend/src/stagepilot/__init__.py", /__version__ = "([^"]+)"/)],
-  ["backend runtime settings", matchVersion("backend/src/stagepilot/core/config.py", /^\s+version: str = "([^"]+)"/m)],
+  ["desktop/src-tauri/Cargo.lock", matchVersion("desktop/src-tauri/Cargo.lock", /name = "stagepilot-desktop"\r?\nversion = "([^"]+)"/)],
 ]);
 
 // The Rust backend and the Planning Center user agent take the version from tauri.conf.json at
@@ -62,25 +60,6 @@ for (const file of ["desktop/src-tauri/tauri.release.conf.json", "desktop/src-ta
   if (overlay.plugins?.updater?.endpoints?.[0] !== updaterEndpoint) {
     throw new Error(`The updater endpoint is missing or changed in ${file}.`);
   }
-}
-
-// `uv.lock` records the project version in PEP 440 normalized form, so it is
-// checked separately from the semantic-version sources above. If it drifts,
-// every `uv sync --locked` step fails with "The lockfile at `uv.lock` needs to
-// be updated" — on the native runners, after the expensive toolchain install.
-// Catching it here keeps that failure on the cheap Linux validate job.
-const pep440 = (() => {
-  const match = /^(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?$/.exec(version);
-  if (!match) throw new Error(`Cannot map ${version} to a PEP 440 version.`);
-  const [, release, phase, number] = match;
-  if (!phase) return release;
-  return `${release}${phase === "alpha" ? "a" : phase === "beta" ? "b" : "rc"}${number}`;
-})();
-const lockVersion = matchVersion("backend/uv.lock", /name = "stagepilot"\r?\nversion = "([^"]+)"/);
-if (lockVersion !== pep440) {
-  throw new Error(
-    `backend/uv.lock records stagepilot ${lockVersion} but version ${version} normalizes to ${pep440}. Run \`uv lock\` in backend/.`,
-  );
 }
 
 const tracked = process.env.STAGEPILOT_TRACKED_FILES?.split("\n").filter(Boolean) ?? [];

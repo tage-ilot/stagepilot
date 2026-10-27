@@ -12,17 +12,17 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: tauri.openUrl }));
 import { backendStartupTitle, hideDesktopWindow, openExternalUrl } from "./desktop";
 
 describe("backend startup labels", () => {
-  it("distinguishes actionable packaged-backend failures", () => {
+  it("distinguishes actionable backend failures", () => {
     expect(
       backendStartupTitle({
         state: "failed",
-        message: "blocked",
+        message: "stopped",
         port: 8765,
         managed: true,
-        failure_kind: "macos_code_signing",
+        failure_kind: "server_exited",
         log_path: "/tmp/backend.log",
       }),
-    ).toBe("macOS blocked the packaged backend");
+    ).toBe("The StagePilot server stopped");
     expect(
       backendStartupTitle({
         state: "failed",

@@ -1,5 +1,5 @@
-# Rust migration (see docs/rust-migration/). Builds and tests the Cargo workspace on every platform
-# the app ships on, and runs the Linux-only contract and generated-types checks.
+# Builds and tests the Cargo workspace on every platform the app ships on, and runs the
+# Linux-only contract replay and generated-types checks.
 # Isolated from the release workflows: nothing here is packaged or published.
 name: rust
 
@@ -7,21 +7,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/rust-phase1
-      - feat/rust-phase2
-      - feat/rust-phase5
-      - feat/rust-phase3a
-      - feat/rust-phase3b
-      - feat/rust-phase4
-      - feat/rust-phase6
-      - feat/rust-phase6b-a
-      - feat/rust-phase6c
-      - feat/rust-phase6d
-      - docs/rust-rig-a
-      - docs/rust-rig-b
-      - feat/rust-phase6b-b
-      - feat/rust-lightkey
-      - release/rust-integration
       - main
     paths:
       - "Cargo.toml"
@@ -32,12 +17,19 @@ on:
       - "generated/**"
       - "contract/**"
       - "scripts/contract/**"
-      - "tools/rust-playback/**"
-      - "tools/rust-output/**"
-      - "backend/tests/golden/**"
-      - "tools/gen_settings_fixtures.py"
       - "scripts/diff_generated_types.mjs"
-      - "backend/src/**"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "crates/**"
+      - "generated/**"
+      - "contract/**"
+      - "scripts/contract/**"
+      - "scripts/diff_generated_types.mjs"
       - ".github/workflows/rust.yml"
 
 permissions:
@@ -157,7 +149,7 @@ jobs:
 
       # midi-probe links ALSA through midir; the Linux CI runner has no libasound2-dev or
       # pkg-config and none are installed here, so Linux builds every other crate.
-      # See docs/rust-migration/linux-midi.md.
+      # See docs/archive/rust-migration/linux-midi.md.
       - name: cargo fmt --check
         run: cargo fmt --all --check
 
@@ -179,68 +171,26 @@ jobs:
           test -z "$(git status --porcelain -- generated/ts)"
 
   contract:
-    name: Contract baseline — Python backend (Linux)
+    name: Contract replay (Linux)
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install Python (replay scripts and mocks)
+        uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
-          working-directory: backend
 
-      - name: Install locked backend dependencies
-        run: uv sync --project backend --frozen --extra dev
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
-      - name: Frozen OpenAPI and transcripts are current
-        run: |
-          uv run --project backend --frozen python scripts/contract/contract.py openapi
-          uv run --project backend --frozen python scripts/contract/contract.py record
-          git diff --exit-code -- contract
-
-      - name: Replay golden transcripts against the Python backend
-        run: scripts/contract/run_baseline.sh
-
+      # The golden transcripts in contract/ were recorded once from the Python 2.41.1 app; the
+      # Rust server must keep answering the same way.
       - name: Replay golden transcripts against the Rust server
         run: scripts/contract/run_rust.sh
 
-      - name: Settings and auth fixtures are valid for the Python app that wrote them
-        run: |
-          cd backend
-          uv run --frozen python - <<'PY'
-          import json, pathlib
-          from stagepilot.core.settings import PersistentSettings
-          root = pathlib.Path("../crates/stagepilot-core/tests/fixtures")
-          PersistentSettings.model_validate(json.loads((root / "python_written_v2.json").read_text()))
-          PersistentSettings.model_validate(json.loads((root / "python_v1_untouched.json").read_text()))
-          PY
-
       - name: Generated types vs frontend types (report only)
-        run: |
-          if command -v node >/dev/null; then node scripts/diff_generated_types.mjs; else echo "node not installed on this runner; skipped"; fi
-
-      - name: Rust fixtures are current with the Python normalizer
-        run: |
-          cd backend
-          uv run --frozen python ../tools/rust-playback/gen_replay.py
-          uv run --frozen python ../tools/rust-playback/gen_real_replay.py
-          uv run --frozen python ../tools/rust-playback/gen_transport_cases.py
-          cd ..
-          git diff --exit-code -- crates/stagepilot-playback/tests/fixtures
-
-      - name: OSC golden packets are current with python-osc
-        run: |
-          cd backend
-          uv run --frozen python ../tools/rust-output/gen_osc_golden.py
-          cd ..
-          git diff --exit-code -- crates/stagepilot-osc/tests/fixtures
-
-      - name: Lightkey replay golden packets are current with python-osc
-        run: |
-          cd backend
-          uv run --frozen python ../tools/rust-output/gen_lightkey_osc_golden.py
-          cd ..
-          git diff --exit-code -- crates/stagepilot-lights/tests/fixtures
+        run: node scripts/diff_generated_types.mjs

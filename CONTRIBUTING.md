@@ -5,11 +5,12 @@ tests matter as much as the happy path. Small, reviewable changes are preferred.
 
 ## Set up a development environment
 
-Install Python 3.12+, uv, a current Node.js LTS release, and npm. Rust stable and
-the Tauri v2 system prerequisites are needed only for desktop work.
+Install a stable Rust toolchain (`rust-toolchain.toml` pins the channel), a current
+Node.js LTS release, and npm. The Tauri v2 system prerequisites are needed only for
+desktop work. Python 3 is used only by a few build and replay scripts under
+`scripts/` and needs no packages.
 
 ```sh
-uv sync --project backend --extra dev
 cd frontend
 npm install
 cd ../desktop
@@ -17,9 +18,9 @@ npm install
 cd ..
 ```
 
-Run the backend and frontend in separate terminals using the commands in
-[README.md](README.md). Demo mode should remain usable without vendor accounts or
-production equipment.
+The server is the Rust workspace under `crates/`. For development, run it headless
+with `cargo run -p stagepilot-headless` (demo mode needs no vendor accounts or
+production equipment) and the frontend with `npm --prefix frontend run dev`.
 
 ## Branches and commits
 
@@ -41,12 +42,10 @@ build outputs, or log files.
 Before opening a pull request, run the checks relevant to the changed workspace:
 
 ```sh
-cd backend
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy
-uv run pytest
-cd ..
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --exclude midi-probe
+scripts/contract/run_rust.sh
 
 npm --prefix frontend run lint
 npm --prefix frontend test
@@ -57,7 +56,7 @@ cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
 cargo check --manifest-path desktop/src-tauri/Cargo.toml
 ```
 
-Use `ruff format` or `cargo fmt` without `--check` to apply formatting. Frontend
+Use `cargo fmt` without `--check` to apply formatting. Frontend
 formatting follows the scripts and configuration committed in that workspace.
 Run `npm --prefix frontend run lint` before pushing frontend changes.
 
@@ -74,7 +73,7 @@ A pull request should:
 - include or update tests for behavioral changes;
 - update public documentation and the changelog when appropriate;
 - identify unverified platform or vendor assumptions;
-- pass backend, frontend, and desktop checks affected by the change; and
+- pass the Rust, frontend, and desktop checks affected by the change; and
 - avoid unrelated formatting or generated-file churn.
 
 Reviewers may ask for reliability evidence beyond unit tests when a change can

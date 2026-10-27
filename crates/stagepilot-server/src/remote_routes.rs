@@ -11,7 +11,7 @@
 #![allow(clippy::result_large_err)]
 
 use crate::diagnostics;
-use crate::remote_types::{RemoteAccess, RemoteContext, RemoteWiring, AUTH_PREFIX, COOKIE_NAME};
+use crate::remote_types::{RemoteAccess, RemoteContext, RemoteWiring, COOKIE_NAME};
 use crate::runtime::Runtime;
 use crate::validation::Json as JsonReply;
 use axum::body::Body;
@@ -787,6 +787,3 @@ pub async fn remote_retry(request: Request, next: Next) -> Response {
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
-
-#[allow(dead_code)]
-const _PREFIX: &str = AUTH_PREFIX;

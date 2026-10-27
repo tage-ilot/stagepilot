@@ -4,7 +4,7 @@
 //! transport) that reports cue changes with a timestamp on ITS clock, which runs a fixed offset
 //! ahead of ours, so the clock-offset conversion is exercised too. The link uses its real
 //! `reqwest` client and the real clock; OSC goes to an in-memory recorder (nothing is sent
-//! anywhere). Mapping: `docs/rust-migration/lightkey-test-map.md`.
+//! anywhere). Mapping: `docs/archive/rust-migration/lightkey-test-map.md`.
 
 use axum::extract::{Query, State};
 use axum::http::StatusCode;

@@ -13,7 +13,7 @@ workspace = true
 # The hardware backend (midir). Off by default: on Linux midir links ALSA, which needs
 # `libasound2-dev` + `pkg-config`; the Linux CI runner has neither and nothing may be
 # installed there. CI enables it on Windows and both macOS runners. Without it every behaviour is
-# still tested through the in-memory fake. See docs/rust-migration/phase4.md and linux-midi.md.
+# still tested through the in-memory fake. See docs/archive/rust-migration/phase4.md and linux-midi.md.
 midir-backend = ["dep:midir"]
 
 [dependencies]

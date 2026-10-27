@@ -200,7 +200,6 @@ function useCursorPopover(text: string | null | undefined, warmup?: HoverPreview
     const rect = popoverRef.current.getBoundingClientRect();
     sizeRef.current = { width: rect.width, height: rect.height };
     setPosition(clampPosition(lastPointerRef.current.x, lastPointerRef.current.y));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, text]);
 
   const openAt = (clientX: number, clientY: number) => {

@@ -14,12 +14,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Extension;
 use axum::Router;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::{json, Value};
 use stagepilot_core::auth::verify_dashboard_pin;
-use stagepilot_core::config::{MidiSource, ServiceSource};
+use stagepilot_core::config::MidiSource;
 use stagepilot_core::events::ActionName;
-use stagepilot_core::settings::{PersistentSettings, UpdateError};
+use stagepilot_core::settings::PersistentSettings;
 use stagepilot_core::state::{ApplicationState, ApplicationStatus, ConnectionStatus, PluginStatus};
 use stagepilot_core::state::{ServiceLoadStatus, TimerStatus};
 use stagepilot_playback::plugin::PlaybackError;
@@ -80,9 +80,9 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .route("/api/v1/actions/{action}", post(perform_action))
         .route("/api/v1/planning-center/plan/reload", post(reload_plan))
         .merge(crate::pco_routes::router())
-        // MIDI, ProPresenter and lights (phase 4).
+        // MIDI, ProPresenter and lights.
         .merge(crate::routes_outputs::routes())
-        // Remote access, remote auth and diagnostics (phase 6b-A).
+        // Remote access, remote auth and diagnostics.
         .merge(crate::remote_routes::routes())
         .route("/ws", get(ws_state))
         .merge(crate::playback_routes::routes())
@@ -825,6 +825,3 @@ async fn state_stream(rt: Rt, mut socket: WebSocket) {
         })))
         .await;
 }
-
-#[allow(dead_code)]
-fn _unused(_: DateTime<Utc>, _: ServiceSource, _: UpdateError) {}

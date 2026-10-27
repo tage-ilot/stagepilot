@@ -1,6 +1,6 @@
-//! The shared golden vectors of the Lightkey rules: `backend/tests/golden/lightkey_golden.json` is
+//! The shared golden vectors of the Lightkey rules: `tests/fixtures/lightkey_golden.json` is
 //! what Python's `tests/test_lightkey_core.py` runs; this file runs the SAME file, unchanged.
-//! Mapping to the Python tests: `docs/rust-migration/lightkey-test-map.md`.
+//! Mapping to the Python tests: `docs/archive/rust-migration/lightkey-test-map.md`.
 
 use serde_json::Value;
 use stagepilot_core::config::{clean_lightkey_api_url, LightkeySettings, LightsSettings};
@@ -10,7 +10,7 @@ use stagepilot_lights::lightkey::{
 };
 use std::collections::BTreeSet;
 
-const GOLDEN_TEXT: &str = include_str!("../../../backend/tests/golden/lightkey_golden.json");
+const GOLDEN_TEXT: &str = include_str!("fixtures/lightkey_golden.json");
 
 fn golden() -> Value {
     serde_json::from_str(GOLDEN_TEXT).expect("golden json")

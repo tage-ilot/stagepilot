@@ -23,7 +23,7 @@ NATIVE_LABEL = re.compile(r"^(?:windows|macos)-", re.IGNORECASE)
 REQUIRED_ACTIONS = {
     "actions/checkout",
     "actions/setup-node",
-    "astral-sh/setup-uv",
+    "actions/setup-python",
 }
 EXPECTED_NATIVE = {
     "ci.yml:desktop",

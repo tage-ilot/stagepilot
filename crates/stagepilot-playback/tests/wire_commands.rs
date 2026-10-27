@@ -1,5 +1,5 @@
 //! Command wire shapes, asserted against the live rig capture (`fixtures/real/rig-commands.jsonl`,
-//! recorded 2026-10-17 on Playback 8.5.4; see docs/rust-migration/captures.md).
+//! recorded 2026-10-17 on Playback 8.5.4; see docs/archive/rust-migration/captures.md).
 //!
 //! The capture holds every command the test script SENT (`kind: sent`) and what a second,
 //! listening connection RECEIVED from Playback (`kind: frame`). Playback relays commands it

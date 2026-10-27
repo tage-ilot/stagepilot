@@ -1,6 +1,6 @@
 //! Behaviour tests for the Playback MIDI input plugin, ported from `backend/tests/test_midi_plugin.py`
 //! (and the plugin-level parts of `test_midi_selection_api.py`). All hardware is the in-memory
-//! fake. The mapping to the Python tests is in `docs/rust-migration/phase4-test-map.md`.
+//! fake. The mapping to the Python tests is in `docs/archive/rust-migration/phase4-test-map.md`.
 
 use async_trait::async_trait;
 use stagepilot_core::api::MidiCueName;

@@ -101,9 +101,6 @@ test("desktop Remote packages cloudflared and uses only native platform credenti
   const macOS = JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json"));
   const cargo = read("desktop/src-tauri/Cargo.toml");
   const broker = read("desktop/src-tauri/src/native_credentials.rs");
-  const bootstrap = read("backend/src/stagepilot/remote_bootstrap.py");
-  const connector = read("backend/src/stagepilot/remote_connector.py");
-  const specification = read("backend/stagepilot.spec");
   assert.equal(windows.bundle.resources["resources/cloudflared.exe"], "cloudflared.exe");
   assert.equal(
     windowsCI.bundle.resources["resources/cloudflared.exe"],
@@ -122,10 +119,6 @@ test("desktop Remote packages cloudflared and uses only native platform credenti
   assert.match(cargo, /features = \["apple-native"\]/);
   assert.match(broker, /org\.stagepilot\.desktop\.remote/);
   assert.match(broker, /Cache-Control: no-store/);
-  assert.doesNotMatch(bootstrap, /import keyring|keyring\.get_password|keyring\.set_password/);
-  assert.match(connector, /token_arguments = \["--token", self\.token_provider\(\)\]/);
-  assert.doesNotMatch(connector, /atomic_write\(token/);
-  assert.match(specification, /keyring/, "other desktop integrations still use Python keyring");
 });
 
 test("release workflow requires secrets and publishes latest.json last", () => {
@@ -232,11 +225,10 @@ test("release automation targets only this repo, suggests the next patch and con
   assert.doesNotMatch(helpers, /beta/i);
 });
 
-test("macOS final-artifact verifier rejects hardened sidecars and starts packaged backends", () => {
+test("macOS final-artifact verifier checks signing, minimum macOS, Help and the running app", () => {
   const verifier = read("scripts/verify_macos_release_bundle.sh");
   assert.match(verifier, /codesign --verify --deep --strict/);
   assert.match(verifier, /flags=\.\*runtime/);
-  assert.match(verifier, /TeamIdentifier/);
   assert.match(verifier, /vtool -show-build/);
   assert.match(verifier, /LC_VERSION_MIN_MACOSX/);
   assert.match(verifier, /otool -l/);
@@ -248,14 +240,6 @@ test("macOS final-artifact verifier rejects hardened sidecars and starts package
   assert.match(verifier, /api\/v1\/state/);
   assert.match(verifier, /hdiutil attach/);
   assert.match(verifier, /tar -xzf/);
-});
-
-test("PyInstaller uses ordinary ad-hoc signing without a custom identity or entitlements", () => {
-  const specification = read("backend/stagepilot.spec");
-  assert.match(specification, /codesign_identity=None/);
-  assert.match(specification, /entitlements_file=None/);
-  assert.doesNotMatch(specification, /Developer ID Application/);
-  assert.doesNotMatch(specification, /disable-library-validation/);
 });
 
 test("manifest generator requires artifacts and signatures for every platform", () => {
@@ -351,42 +335,35 @@ test("updater manifest tooling accepts a pre-release version and keeps it under 
   }
 });
 
-test("release workflow builds the Rust variant for stable and pre-release tags", () => {
+test("release workflow builds the same app for stable and pre-release tags", () => {
   const workflow = read(".github/workflows/release-macos.yml");
-  assert.match(workflow, /variant: \$\{\{ steps\.variant\.outputs\.variant \}\}/);
-  assert.match(workflow, /\(-\(alpha\|beta\|rc\)\\\.\[0-9\]\+\)\?\$ \]\]; then\s+echo "variant=rust"/);
-  assert.doesNotMatch(workflow, /echo "variant=python"/, "no tag builds the Python sidecar any more");
-  assert.match(workflow, /rust_command: build:mac:rust/);
-  assert.match(workflow, /rust_command: build:rust/);
-  assert.match(workflow, /--variant "\$VARIANT"/);
+  assert.match(workflow, /\(-\(alpha\|beta\|rc\)\\\.\[0-9\]\+\)\?\$ \]\]/, "stable and pre-release tags are both accepted");
+  assert.doesNotMatch(workflow, /variant/i, "there is one installer build");
+  assert.doesNotMatch(workflow, /setup-uv|uv sync/, "no Python project is installed");
   // The validation commands live in one script shared by every release path.
   const validation = read("scripts/validate_application.sh");
-  assert.match(validation, /build:runtime:rust/);
-  // The rust cargo steps must not require the sidecar that macOS auto-merges.
-  assert.match(validation, /TAURI_CONFIG='\{"bundle":\{"externalBin":null\}\}'/);
-  // The Python path is unchanged.
   assert.match(validation, /npm --prefix desktop run build:runtime\n/);
+  assert.doesNotMatch(validation, /uv run|pytest|ruff|mypy|backend\//);
   for (const file of ["release-macos.yml", "release-windows.yml", "release-validate.yml"]) {
     assert.match(read(`.github/workflows/${file}`), /scripts\/validate_application\.sh/, file);
   }
   assert.match(read("scripts/create-release.ps1"), /validate_application\.sh/);
   assert.match(workflow, /npm --prefix desktop run \$\{\{ matrix\.command \}\}/);
   assert.match(workflow, /command: build:mac\n/);
+  assert.match(workflow, /verify_macos_release_bundle\.sh --app .* --no-launch/);
 });
 
-test("Rust variant overlays bundle no sidecar, keep cloudflared and the frontend, and leave the updater unchanged", () => {
+test("installer configs bundle no sidecar, keep cloudflared and the frontend, and leave the updater unchanged", () => {
   const pkg = JSON.parse(read("desktop/package.json")).scripts;
-  const overlays = {
-    "tauri.rust.release.conf.json": "resources/cloudflared.exe",
-    "tauri.rust.ci.conf.json": "resources/cloudflared.exe",
-    "tauri.rust.macos.conf.json": "resources/cloudflared",
-    "tauri.rust.macos.ci.conf.json": "resources/cloudflared",
+  const configs = {
+    "tauri.release.conf.json": "resources/cloudflared.exe",
+    "tauri.ci.conf.json": "resources/cloudflared.exe",
+    "tauri.macos.conf.json": "resources/cloudflared",
+    "tauri.macos.ci.conf.json": "resources/cloudflared",
   };
-  for (const [file, cloudflared] of Object.entries(overlays)) {
+  for (const [file, cloudflared] of Object.entries(configs)) {
     const config = JSON.parse(read(`desktop/src-tauri/${file}`));
-    // null deletes the sidecar that tauri.macos.conf.json (merged automatically on macOS) declares.
-    assert.ok([undefined, null].includes(config.bundle.externalBin), `${file} must not declare a sidecar`);
-    if (file.includes("macos")) assert.equal(config.bundle.externalBin, null, `${file} must remove the auto-merged macOS sidecar`);
+    assert.equal(config.bundle.externalBin, undefined, `${file} must not declare a sidecar`);
     assert.ok(config.bundle.resources[cloudflared], `${file} must stage cloudflared`);
     assert.equal(config.bundle.resources["../../frontend/dist/"], "stagepilot_web/", `${file} must embed the frontend`);
     assert.doesNotMatch(JSON.stringify(config), /stagepilot-backend/);
@@ -394,20 +371,18 @@ test("Rust variant overlays bundle no sidecar, keep cloudflared and the frontend
     if (isCi) assert.equal(config.bundle.createUpdaterArtifacts, false, "CI builds carry no updater signing");
     else assert.equal(config.plugins.updater.endpoints[0], "https://github.com/tage-ilot/stagepilot/releases/latest/download/latest.json");
   }
-  for (const name of ["build:rust", "build:rust:ci", "build:mac:rust", "build:mac:rust:ci", "build:runtime:rust"]) {
-    assert.doesNotMatch(pkg[name], /build:sidecar|build:runtime(?!:rust)|build_backend_sidecar|pyinstaller/i, name);
+  for (const name of ["build", "build:ci", "build:mac", "build:mac:ci", "build:runtime"]) {
+    assert.doesNotMatch(pkg[name], /sidecar|build_backend|pyinstaller|--features/i, name);
   }
-  for (const name of ["build:rust", "build:rust:ci", "build:mac:rust", "build:mac:rust:ci"]) {
-    assert.match(pkg[name], /--features in-process/, name);
-  }
-  // The Python variant is untouched.
+  assert.equal(pkg["build:runtime"], "npm --prefix ../frontend run build && npm run build:cloudflared");
   assert.match(pkg.build, /build:runtime && tauri build --config src-tauri\/tauri\.release\.conf\.json/);
+  assert.match(pkg["build:ci"], /build:runtime && tauri build --config src-tauri\/tauri\.ci\.conf\.json/);
   assert.match(pkg["build:mac"], /build:runtime && tauri build --config src-tauri\/tauri\.macos\.conf\.json/);
-  assert.deepEqual(JSON.parse(read("desktop/src-tauri/tauri.release.conf.json")).bundle.externalBin, ["binaries/stagepilot-backend"]);
-  assert.deepEqual(JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json")).bundle.externalBin, ["binaries/stagepilot-backend"]);
+  assert.match(pkg["build:mac:ci"], /build:runtime && tauri build --config src-tauri\/tauri\.macos\.ci\.conf\.json/);
+  for (const name of Object.keys(pkg)) assert.ok(!/rust|sidecar/.test(name), `${name}: no variant-specific scripts remain`);
 });
 
-test("Rust installer CI is manual, unpublished, secret-free and short-lived", () => {
+test("installer CI is manual, unpublished, secret-free and short-lived", () => {
   const workflow = read(".github/workflows/rust-installer-ci.yml");
   assert.match(workflow, /on:\s+workflow_dispatch:[\s\S]*?permissions:\s+contents: read/);
   assert.doesNotMatch(workflow, /pull_request|schedule:|release:|tags:/);
@@ -416,18 +391,15 @@ test("Rust installer CI is manual, unpublished, secret-free and short-lived", ()
   assert.doesNotMatch(workflow, /TAURI_SIGNING|publish_release|gh release/);
   assert.doesNotMatch(workflow, /self-hosted/);
   assert.match(workflow, /retention-days: 3/);
-  assert.match(workflow, /--features in-process|build:mac:rust:ci/);
-  assert.match(workflow, /verify_macos_release_bundle\.sh --app .* --variant rust/);
+  assert.match(workflow, /build:mac:ci/);
+  assert.match(workflow, /verify_macos_release_bundle\.sh --app .* --no-launch/);
 });
 
-test("macOS verifier keeps the Python sidecar checks and adds a Rust variant without one", () => {
+test("macOS verifier requires the in-process server and rejects any Python backend", () => {
   const verifier = read("scripts/verify_macos_release_bundle.sh");
-  assert.match(verifier, /VARIANT="python"/, "python stays the default");
-  assert.match(verifier, /Expected exactly one packaged backend sidecar/);
-  assert.match(verifier, /Packaged backend unexpectedly has the Hardened Runtime flag/);
-  assert.match(verifier, /Ad-hoc backend unexpectedly has a TeamIdentifier/);
-  assert.match(verifier, /verify_minos "\$SIDECAR" "StagePilot backend"/);
-  assert.match(verifier, /The Rust variant must not ship a Python backend sidecar/);
+  assert.doesNotMatch(verifier, /VARIANT|--variant/);
+  assert.match(verifier, /separate backend executable or Python runtime files/);
   assert.match(verifier, /stagepilot_web\/index\.html/);
-  assert.match(verifier, /A Python backend process was spawned by the Rust variant/);
+  assert.match(verifier, /A Python backend process was spawned by StagePilot/);
+  assert.match(verifier, /Application unexpectedly has the Hardened Runtime flag/);
 });

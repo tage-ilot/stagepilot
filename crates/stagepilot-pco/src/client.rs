@@ -5,7 +5,7 @@
 //! Python. Error text never contains a response body, URL, header or credential, and nothing in
 //! this module logs one.
 //!
-//! Differences from the Python client (listed in `docs/rust-migration/phase5.md`):
+//! Differences from the Python client (listed in `docs/archive/rust-migration/phase5.md`):
 //! * the timeout is one total deadline per request (plus the same value as connect timeout);
 //!   httpx applies the value to connect, read, write and pool separately;
 //! * a pagination link must have the *same origin* (scheme, host, port) as the API base URL;

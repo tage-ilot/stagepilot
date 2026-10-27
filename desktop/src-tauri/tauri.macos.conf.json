@@ -9,11 +9,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "externalBin": ["binaries/stagepilot-backend"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "resources": {
       "generated-help/StagePilot.help/": "StagePilot.help/",
-      "resources/cloudflared": "cloudflared"
+      "resources/cloudflared": "cloudflared",
+      "../../frontend/dist/": "stagepilot_web/"
     },
     "macOS": {
       "signingIdentity": "-",

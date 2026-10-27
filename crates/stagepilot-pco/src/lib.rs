@@ -1,4 +1,4 @@
-//! Planning Center for StagePilot (Rust migration phase 5): the OAuth sign-in, the Services API
+//! Planning Center for StagePilot: the OAuth sign-in, the Services API
 //! client, the plan-loading plugin, the setup service and the song-length writer, ported from the
 //! Python `planning_center` package. Nothing here contacts the real Planning Center unless a
 //! caller builds a client against the default base URL.

@@ -14,8 +14,8 @@ vi.mock("../diagnostics", async (original) => ({
 import { CrashLoopAlertDialog } from "./CrashLoopAlertDialog";
 
 const crashLoop: BackendCrashLoopDetected = {
-  failure_kind: "sidecar_exited",
-  message: "The packaged StagePilot backend exited before it became ready (exit code 1).",
+  failure_kind: "server_exited",
+  message: "The StagePilot server exited before it became ready (exit code 1).",
 };
 
 describe("CrashLoopAlertDialog", () => {
@@ -26,7 +26,7 @@ describe("CrashLoopAlertDialog", () => {
     render(<CrashLoopAlertDialog crashLoop={crashLoop} onDismiss={vi.fn()} />);
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(screen.getByText("StagePilot\u2019s backend keeps crashing")).toBeInTheDocument();
-    expect(screen.getByText("The packaged backend keeps exiting.")).toBeInTheDocument();
+    expect(screen.getByText("The StagePilot server keeps stopping.")).toBeInTheDocument();
   });
 
   it("renders nothing when there is no crash-loop payload", () => {

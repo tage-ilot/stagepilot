@@ -1,7 +1,7 @@
 //! Shared Remote types: the worker-limited store handle (`RemoteAccess`), the per-request
 //! context the trusted ingress attaches, the wiring handed to the router, and the traits the
-//! OS-facing Remote modules (phase 6b-B: manager, bootstrap store, credential broker,
-//! `cloudflared`) will implement. Python counterparts: `api/remote_ingress.py` (`RemoteAccess`,
+//! OS-facing Remote modules (manager, bootstrap store, credential broker,
+//! `cloudflared`, in `stagepilot-remote`) implement. Python counterparts: `api/remote_ingress.py` (`RemoteAccess`,
 //! `RemoteContext`), `api/remote_feature.py` (the `manager`/`feature` lookups) and
 //! `api/diagnostics.py` (`DesktopBootstrapStore`).
 
@@ -81,7 +81,7 @@ pub enum ManagerError {
     Value(String),
 }
 
-/// `DesktopRemoteManager` as the routes use it. Phase 6b-B implements this; tests use
+/// `DesktopRemoteManager` as the routes use it. `stagepilot-remote` implements this; tests use
 /// `remote_fakes::FakeManager`. `reset_identity` and `regenerate` are optional in Python
 /// (`callable(getattr(...))`), hence the `supports_*` switches.
 #[async_trait]

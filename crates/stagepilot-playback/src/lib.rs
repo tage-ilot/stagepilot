@@ -1,4 +1,4 @@
-//! Playback WebSocket client, normalizer and (phase 3a) discovery, arbiter and lengths.
+//! Playback WebSocket client, normalizer, discovery, arbiter and lengths.
 pub mod api;
 pub mod arbiter;
 pub mod arrangement;

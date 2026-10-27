@@ -1,6 +1,6 @@
 //! Song-order discovery with length measurement: mirrors `PlaybackInputPlugin.discover_song_order`
 //! and `_step` in `plugin.py` (the navigation/measurement core only; settings persistence,
-//! mapper installation and HTTP status belong to the plugin glue, phase 3b).
+//! mapper installation and HTTP status belong to the plugin glue).
 //!
 //! Python semantics kept: walk `Previous` to the first song, then for each song measure its
 //! length and step `Next`; the end of the list is recognised by a step that does not change the

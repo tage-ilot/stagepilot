@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "resources": {
+      "generated-help/StagePilot.help/": "StagePilot.help/",
+      "resources/cloudflared": "cloudflared",
+      "../../frontend/dist/": "stagepilot_web/"
+    },
+    "createUpdaterArtifacts": false,
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

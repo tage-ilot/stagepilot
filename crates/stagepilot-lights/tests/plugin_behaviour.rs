@@ -1,6 +1,6 @@
 //! Behaviour tests for the lights plugin, ported from `backend/tests/test_lights_plugin.py` and the
 //! plugin parts of `test_lights_osc.py`. All outputs are in-memory fakes except one real loopback
-//! UDP socket test. Mapping: `docs/rust-migration/phase4-test-map.md`.
+//! UDP socket test. Mapping: `docs/archive/rust-migration/phase4-test-map.md`.
 
 use stagepilot_core::bus::EventBus;
 use stagepilot_core::config::{

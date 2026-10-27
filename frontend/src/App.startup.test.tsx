@@ -6,10 +6,10 @@ const desktop = vi.hoisted(() => ({
   status: {
     state: "failed" as "failed" | "starting",
     message:
-      "The packaged StagePilot backend was blocked by macOS code-signing policy. This application build is invalid.",
+      "The StagePilot server stopped unexpectedly.",
     port: 8765,
     managed: true,
-    failure_kind: "macos_code_signing" as const,
+    failure_kind: "server_exited" as const,
     log_path: "/tmp/stagepilot-backend.log",
   },
 }));
@@ -38,7 +38,7 @@ vi.mock("./components/Dashboard", () => ({ Dashboard: () => null }));
 
 import App from "./App";
 
-describe("packaged backend startup recovery", () => {
+describe("backend startup recovery", () => {
   beforeEach(() => {
     desktop.restartDesktopBackend.mockClear();
     desktop.status.state = "failed";
@@ -50,18 +50,18 @@ describe("packaged backend startup recovery", () => {
 
     expect(await screen.findByText("Starting the local backend")).toBeInTheDocument();
     expect(
-      screen.queryByText(/blocked by macOS code-signing policy/),
+      screen.queryByText(/server stopped unexpectedly/),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Live connection interrupted; reconnecting."),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the specific signing failure instead of a reconnect loop", async () => {
+  it("shows the specific server failure instead of a reconnect loop", async () => {
     render(<App />);
 
-    expect(await screen.findByText("macOS blocked the packaged backend")).toBeInTheDocument();
-    expect(screen.getByText(/This application build is invalid/)).toBeInTheDocument();
+    expect(await screen.findByText("The StagePilot server stopped")).toBeInTheDocument();
+    expect(screen.getByText(/The StagePilot server stopped unexpectedly/)).toBeInTheDocument();
     expect(screen.queryByText("Live connection interrupted; reconnecting.")).not.toBeInTheDocument();
     const progress = screen.getByRole("progressbar", { name: "StagePilot startup progress" });
     expect(progress).toHaveClass("loading-progress-track--failed");

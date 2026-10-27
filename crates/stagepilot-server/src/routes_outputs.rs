@@ -1,7 +1,6 @@
-//! `/api/v1/*` routes for MIDI input, ProPresenter and lights (phase 4). Status codes, JSON and
+//! `/api/v1/*` routes for MIDI input, ProPresenter and lights. Status codes, JSON and
 //! message texts follow `api/routes.py`; the contract replays prove the shapes against Python.
 
-use crate::outputs::{MidiInput, PRESENTATION_BUSY};
 use crate::runtime::Runtime;
 use crate::validation::{self, http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
@@ -10,10 +9,9 @@ use axum::routing::{get, post, put};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-use stagepilot_core::api::MidiCueName;
 use stagepilot_core::config::{
-    round_tenths, value_error, Detail, Errors, LightingCue, LightingMethod, LightingPad,
-    LightkeySettings, LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
+    round_tenths, value_error, Detail, Errors, LightingCue, LightingMethod, LightkeySettings,
+    LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
 };
 use stagepilot_core::settings_errors::parse_body;
 use stagepilot_core::state::{ConnectionStatus, TimerStatus};
@@ -24,8 +22,8 @@ use stagepilot_lights::models::{
     LightsOperationResponse, LightsSettingsRequest, LightsStatusResponse,
 };
 use stagepilot_midi::models::{
-    cue_action, cue_name_str, MidiCueSimulationRequest, MidiCueSimulationResponse,
-    MidiInputSelectionRequest, MidiInputSelectionResponse, MidiMonitorResponse,
+    cue_action, MidiCueSimulationRequest, MidiCueSimulationResponse, MidiInputSelectionRequest,
+    MidiInputSelectionResponse, MidiMonitorResponse,
 };
 use stagepilot_propresenter::{
     ProPresenterOperationResponse, ProPresenterSettingsRequest, ProPresenterStatusResponse,
@@ -1170,11 +1168,6 @@ async fn lights_test_osc(State(rt): State<Rt>, raw: Bytes) -> Json {
         .test_osc_cue(request.address.trim(), request.args)
         .await;
     lights_operation(&rt, outcome.accepted, outcome.message).await
-}
-
-#[allow(dead_code)]
-fn _unused(_: &MidiInput, _: MidiCueName, _: LightingPad, _: &str) {
-    let _ = (cue_name_str, PRESENTATION_BUSY);
 }
 
 // ---- Lightkey ----------------------------------------------------------------------------------

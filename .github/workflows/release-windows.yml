@@ -23,12 +23,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install Python (build scripts)
+        uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
-          working-directory: backend
 
       - name: Install Node
         uses: actions/setup-node@v6
@@ -51,9 +49,7 @@ jobs:
 
       - name: Validate application
         shell: bash
-        run: |
-          uv sync --project backend --extra dev --locked
-          bash scripts/validate_application.sh python
+        run: bash scripts/validate_application.sh
 
       - name: Verify Planning Center OAuth client ID is resolved
         shell: pwsh

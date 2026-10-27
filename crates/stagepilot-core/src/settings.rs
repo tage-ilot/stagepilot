@@ -416,7 +416,7 @@ pub struct RuntimeSettings {
     pub recent_error_limit: usize,
     /// The MIDI, lighting and ProPresenter sections as resolved for this run: saved settings with
     /// the `STAGEPILOT_MIDI_*`, `STAGEPILOT_LIGHTS_*` and `STAGEPILOT_PROPRESENTER_*` overrides
-    /// applied (phase 4).
+    /// applied.
     pub midi: MidiSettings,
     pub lights: LightsSettings,
     pub propresenter: ProPresenterSettings,
@@ -473,8 +473,7 @@ fn truthy(value: &str) -> bool {
 }
 
 /// The `STAGEPILOT_*` overrides ported so far: host, port, log level, timezone, integration modes
-/// and (phase 4) the MIDI, lighting and ProPresenter sections. Planning Center overrides arrive
-/// with that integration.
+/// and the MIDI, lighting and ProPresenter sections.
 pub fn apply_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<String, String>) {
     apply_output_environment(runtime, environ);
     if let Some(v) = environ.get("STAGEPILOT_HOST") {

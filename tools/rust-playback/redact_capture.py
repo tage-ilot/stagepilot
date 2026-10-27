@@ -1,7 +1,7 @@
 """Redact a raw Playback capture (JSON lines: {t, kind, raw|msg}) into a committable fixture.
 
 Raw captures stay out of git (~/AgentHub-data/projects/stagepilot-rust-migration/captures/).
-Redaction rules (see docs/rust-migration/captures.md):
+Redaction rules (see docs/archive/rust-migration/captures.md):
   - setlistName                         -> "Redacted setlist <n>"
   - setlistID                           -> 7000001, 7000002, ... (stable per distinct id)
   - setlistSongID                       -> 101, 102, ... (stable per distinct id)

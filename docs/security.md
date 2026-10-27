@@ -6,17 +6,17 @@ completed a production security review.
 
 ## Current defaults
 
-- FastAPI binds to `127.0.0.1:8765` unless LAN dashboard access is explicitly enabled.
+- The server binds to `127.0.0.1:8765` unless LAN dashboard access is explicitly enabled.
 - Browser dashboard access requires a PIN by default; replace the initial
   `1234` PIN before enabling LAN access.
 - Demo mode is enabled and needs no external credentials.
 - Local environment and configuration files are ignored by Git.
 - The Tauri window receives only `core:default`; shell execution and broad file
   system capabilities are not granted.
-- The Tauri content security policy limits connections to the local backend and
+- The Tauri content security policy limits connections to the local server and
   local Vite development server.
-- Desktop bundling is disabled until sidecar supervision, icons, signing, and
-  release configuration are implemented and verified.
+- The server runs inside the desktop process (no separate backend executable), so the
+  shell supervises it directly; see `desktop-packaging.md`.
 
 Loopback binding reduces exposure but is not authentication. Another process
 running as the same user may still be able to call a local service.
@@ -78,10 +78,10 @@ bounded retries so a malicious or broken peer cannot exhaust workers forever.
 
 ## Desktop packaging
 
-The Milestone 1 Tauri shell is a development host, not a signed release. Future
-packaging must define and test:
+Release packaging is described in `desktop-packaging.md` and `macos-adhoc-signing.md`;
+it must keep defining and testing:
 
-- Python backend sidecar provenance and lifecycle;
+- server lifecycle supervision;
 - per-platform code signing and notarization;
 - update signature verification and rollback behavior;
 - minimum Tauri capability permissions;

@@ -10,39 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  backend:
-    name: Backend — Python 3.12
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: backend
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          version: "0.11.28"
-          python-version: "3.12"
-          working-directory: backend
-
-      - name: Install locked dependencies
-        run: uv sync --locked --extra dev
-
-      - name: Run tests
-        run: uv run --frozen pytest
-
-      - name: Run lint
-        run: uv run --frozen ruff check .
-
-      - name: Check formatting
-        run: uv run --frozen ruff format --check .
-
-      - name: Run type checking
-        run: uv run --frozen mypy
-
   frontend:
     name: Frontend — Node 22
     runs-on: ubuntu-24.04
@@ -114,10 +81,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install Python (build scripts)
+        uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
 
       - name: Install Node
@@ -135,7 +101,9 @@ jobs:
           npm ci --prefix desktop
 
       - name: Validate workflow runner policy with parsed YAML
-        run: uv run --with PyYAML==6.0.3 python scripts/validate_workflow_runners.py
+        run: |
+          python -m pip install PyYAML==6.0.3
+          python scripts/validate_workflow_runners.py
 
       - name: Build frontend assets
         run: npm --prefix frontend run build
@@ -157,21 +125,13 @@ jobs:
         run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
 
       - name: Lint desktop shell (same as the release workflow's validation)
-        run: |
-          cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
-          cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --features in-process -- -D warnings
+        run: cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Compile-check desktop shell on Linux
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
 
       - name: Run Linux-compatible desktop tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
-
-      - name: Compile-check the in-process variant — Linux
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
-
-      - name: Run in-process lifecycle tests — Linux
-        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process
 
       - name: Validate updater and release configuration
         run: npm --prefix desktop run release:test
@@ -214,12 +174,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install Python (build scripts)
+        uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
-          working-directory: backend
 
       - name: Install Node
         uses: actions/setup-node@v6
@@ -235,11 +193,6 @@ jobs:
           npm ci --prefix frontend
           npm ci --prefix desktop
 
-      - name: Run packaged Remote lifecycle on Windows
-        run: |
-          uv sync --project backend --locked --extra dev
-          uv run --project backend --frozen pytest backend/tests/test_remote_bootstrap.py backend/tests/test_remote_feature.py
-
       - name: Select stable Rust
         run: |
           rustup update stable
@@ -253,12 +206,6 @@ jobs:
 
       - name: Run desktop lifecycle tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
-
-      - name: Compile-check the in-process variant — Windows
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
-
-      - name: Run in-process lifecycle tests — Windows
-        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process
 
       - name: Validate updater and release configuration
         run: npm --prefix desktop run release:test
@@ -301,12 +248,10 @@ jobs:
           npm ci --prefix frontend
           npm --prefix frontend run build
 
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install Python (build scripts)
+        uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
-          working-directory: backend
 
       - name: Select stable Rust
         run: |
@@ -327,9 +272,3 @@ jobs:
 
       - name: Run macOS desktop lifecycle tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
-
-      - name: Compile-check the in-process variant — macOS
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --features in-process
-
-      - name: Run in-process lifecycle tests — macOS
-        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --features in-process
