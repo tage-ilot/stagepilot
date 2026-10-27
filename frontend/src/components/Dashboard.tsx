@@ -9,6 +9,7 @@ import propresenterIcon from "../assets/propresenter-icon.png";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
 import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
+import { useRemoteOffline } from "../hooks/useRemoteOffline";
 import { landLogo } from "../startup/logoLanding";
 import type {
   AccessCapabilities,
@@ -44,6 +45,7 @@ import { latestActiveError } from "./dashboard/dashboardActiveError";
 import {
   buildConnectionCardViews,
   buildReadinessChecks,
+  readinessWarnings,
   readinessErrorCauses,
   readinessHasError,
   readinessPassed,
@@ -748,6 +750,7 @@ export function Dashboard({
     propresenter,
     lights,
   });
+  const remoteOffline = useRemoteOffline(canConfigure);
   const checks = buildReadinessChecks({
     state,
     stateOnly: !canConfigure,
@@ -755,9 +758,12 @@ export function Dashboard({
     propresenter,
     live,
     views: connectionViews,
+    remoteOffline,
   });
   const ready = readinessPassed(checks);
   const systemError = readinessHasError(checks);
+  // Ready, but something optional is down (today only Remote Access): same alarm colours, its own words.
+  const warning = ready ? readinessWarnings(checks)[0] : undefined;
   const pinnedError = latestActiveError(state);
   const activeErrorEventId = pinnedError?.event_id;
   const EVENT_DISPLAY_WINDOW_MS = 300_000;
@@ -895,9 +901,9 @@ export function Dashboard({
             </div>
           </div>
           )}
-          statusClass={ready ? "border-success-soft text-success-text" : "border-danger-edge text-danger-pill"}
-          statusLabel={!canConfigure ? "Live status" : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
-          title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : undefined}
+          statusClass={ready && !warning ? "border-success-soft text-success-text" : "border-danger-edge text-danger-pill"}
+          statusLabel={!canConfigure ? "Live status" : warning ? warning.label : ready ? "Ready" : systemError ? `Error: ${readinessErrorCauses(checks)[0]?.label}` : "Check system"}
+          title={systemError ? `Error: ${readinessErrorCauses(checks).map((check) => check.detail ?? check.label).join("; ")}` : warning ? warning.detail : undefined}
           wrapProps={readinessHover.hoverProps}
           wrapRef={readinessHover.containerRef}
         />

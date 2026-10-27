@@ -10,7 +10,9 @@ import type {
 import {
   buildConnectionCardViews,
   buildReadinessChecks,
+  readinessErrorCauses,
   readinessPassed,
+  readinessWarnings,
 } from "./dashboardReadiness";
 
 const state = (overrides: Partial<ApplicationState> = {}): ApplicationState => ({
@@ -397,4 +399,33 @@ describe("dashboard integration truthfulness", () => {
       expect(entry("midi", { midiSource, midiStatus, lightsMethod: "midi", lightsStatus: "disconnected" }).label).toBe(label);
     });
   });
+
+  describe("Remote Access item", () => {
+    const freshSettings = settings({ service_source: "demo", midi_source: "simulated", timer_output: "simulated" });
+    const base = () => {
+      const views = buildConnectionCardViews({ state: state(), settings: freshSettings, midi: emptyMidi, propresenter: null, lights: null });
+      return { state: state(), settings: freshSettings, propresenter: null, live: true, views };
+    };
+
+    it("is not listed unless Remote Access has stayed offline", () => {
+      expect(buildReadinessChecks(base()).some((check) => check.id === "remote-access")).toBe(false);
+      expect(buildReadinessChecks({ ...base(), remoteOffline: false }).some((check) => check.id === "remote-access")).toBe(false);
+    });
+
+    it("is listed as an optional problem that neither blocks Ready nor turns the system red", () => {
+      const checks = buildReadinessChecks({ ...base(), remoteOffline: true });
+      const item = checks.find((check) => check.id === "remote-access");
+      expect(item).toMatchObject({ label: "Remote access offline", required: false, passed: false, severity: "warning" });
+      expect(readinessErrorCauses(checks)).toEqual([]);
+      expect(readinessWarnings(checks)).toEqual([item]);
+      const withoutIt = buildReadinessChecks(base());
+      expect(readinessPassed(checks)).toBe(readinessPassed(withoutIt));
+    });
+
+    it("is not added to the live-status view Viewers get", () => {
+      const checks = buildReadinessChecks({ ...base(), stateOnly: true, remoteOffline: true });
+      expect(checks.some((check) => check.id === "remote-access")).toBe(false);
+    });
+  });
+
 });

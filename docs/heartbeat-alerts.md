@@ -1,40 +1,48 @@
-# Connector heartbeat stale alert
+# Remote Access offline alert
 
-StagePilot's private Remote connector fails closed when its status heartbeat goes stale
-(`crates/stagepilot-remote/src/health.rs`, `check_status()`). On top of that check,
-`crates/stagepilot-remote/src/health_alert.rs` can send one outbound webhook POST when the
-heartbeat is judged stale, so an operator is notified of a broken tunnel instead of having to
-notice it.
+If the user has turned Remote Access on and it cannot be reached, the dashboard says so. There is
+nothing to configure and no outside service involved.
 
-## What exists
+## What the user sees
 
-- `health_alert::check_and_alert` reuses `check_status()` unchanged (same status file, same
-  staleness threshold, no new threshold) and POSTs a small JSON payload to an
-  operator-configured webhook URL when the check reports unhealthy. With no webhook URL
-  configured, alerting is a no-op.
-- The payload is generic: `source`, `event`, `state`, `age_seconds`, `detail`. It carries no
-  secrets and never echoes the webhook URL back.
-- Tests in `crates/stagepilot-remote/tests/feature.rs` cover staleness triggering the alert,
-  freshness not triggering it, no webhook configured not calling the sender, and the HTTP call
-  against a local fake (no real network call).
+- The system check (hover or tap the status pill in the header) gets an extra line, **Remote access
+  offline**, marked *Optional*. It is listed only while the problem exists.
+- The pill itself changes from **Ready** to **Remote access offline** in the alarm colours. The
+  system is still ready for a service: the line is optional and does not block anything, and the
+  other lines in the check keep their own state. If something required is also wrong, the pill
+  keeps showing that problem and the Remote line is just in the list.
+- Hovering the pill explains it: Remote Access is turned on but cannot be reached; StagePilot keeps
+  retrying; this computer is unaffected.
+- When the tunnel is back, the line and the pill change disappear by themselves (within 5 seconds).
 
-## Running it
+## When it appears
 
-`stagepilot-remote-health-alert` (built from `crates/stagepilot-remote`, `cargo build --release -p
-stagepilot-remote --bin stagepilot-remote-health-alert`) runs one check and exits. It is not
-shipped in the desktop installers; build it where the alert should run (for example the host that
-keeps the connector status file).
+Only when **all** of these hold:
 
-    STAGEPILOT_HEARTBEAT_ALERT_WEBHOOK_URL=<url> \
-      stagepilot-remote-health-alert --status-file /abs/path/connector-status.json --max-age-seconds 10
+1. Remote Access is switched on (`enabled` in `GET /api/v1/remote-access`).
+2. Its state is anything other than `connected` (`enabling`, `reconnecting` or `error`).
+3. That has been true for **2 continuous minutes** (`REMOTE_OFFLINE_GRACE_MS` in
+   `frontend/src/hooks/useRemoteOffline.ts`). The tunnel retries on its own with a delay that
+   doubles up to 30 seconds, and takes a few seconds after every launch, so shorter blips and a
+   normal start-up never show it.
+4. The viewer is the local operator (someone who can change settings). Viewers and remote sessions
+   do not poll and never see it: a remote session proves the tunnel works.
 
-- Put the webhook URL in an environment file (systemd `EnvironmentFile=`), not on the command line:
-  the optional `--webhook-url` flag wins when both are set but shows up in `ps` and shell history.
-- It prints one JSON line (`healthy`, `state`, `age_seconds`, `detail`, `alerted`, plus
-  `alert_error` when the webhook could not be reached). The webhook URL is never printed.
-- Exit codes: 0 healthy, 1 stale, stopped, invalid status file or undeliverable alert, 2 bad
-  arguments. Run it from a systemd timer or cron; a non-zero exit marks the unit failed.
-- With no webhook configured it still checks and exits 1 when unhealthy, but sends nothing.
+It never appears while Remote Access is off, and a failed status request (StagePilot itself not
+answering) neither raises nor clears it; that case already shows as "StagePilot disconnected".
 
-The earlier Python entry point (`python -m stagepilot.remote_health_alert`, last present at tag
-`v2.41.1`) took the same options and printed the same JSON line.
+The dashboard checks every 5 seconds. The timer is kept in the open dashboard, so it restarts when
+the page is reloaded or reopened (after a reload the line can take up to 2 more minutes to show
+for an outage that began earlier).
+
+## Related code
+
+`frontend/src/hooks/useRemoteOffline.ts` (the rule), `buildReadinessChecks` in
+`frontend/src/components/dashboard/dashboardReadiness.ts` (the line), `Dashboard.tsx` (the pill).
+The connector status itself comes from `crates/stagepilot-remote` (`health.rs` checks that its
+heartbeat file is fresh). `crates/stagepilot-remote/src/health_alert.rs` can post a webhook for a
+stale heartbeat but nothing calls it; it is kept as a library function only.
+
+The Python entry point that used to run it from a timer (`python -m stagepilot.remote_health_alert`)
+last existed at tag `v2.41.1`. The CT120 beta machine still runs it from its old checkout; that is
+separate from the app.
