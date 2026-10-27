@@ -13,6 +13,8 @@ import type {
 import type { UpdaterController } from "../hooks/useUpdater";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { playbackStatus } from "../test/playbackFixtures";
+import * as api from "../api";
+import { REMOTE_OFFLINE_GRACE_MS } from "../hooks/useRemoteOffline";
 import { Dashboard } from "./Dashboard";
 
 const loadedPlan: ServicePlan = {
@@ -674,6 +676,40 @@ describe("Dashboard Planning Center plan states", () => {
     });
 
     expect(screen.getByText("Check system")).toBeInTheDocument();
+  });
+
+  it("tells the operator when Remote Access is on but has stayed unreachable, and stays Ready otherwise", async () => {
+    vi.useFakeTimers();
+    let get: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      const remote = (state: api.RemoteStatus["state"], enabled = true): api.RemoteStatus => ({
+        available: true, provisioned: true, credential_available: true, enabled, state, url: null,
+        needs_operator: false, message: null, temporary_url: false, permanently_revoked: false,
+      });
+      get = vi.spyOn(api, "getRemoteStatus").mockResolvedValue(remote("reconnecting"));
+      renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { plugins: {} }) });
+      // Reconnecting is normal for a while: still "Ready".
+      await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS / 2); });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      // Through the retries and still down: the pill says so, and the list names it as optional.
+      await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS); });
+      const pill = screen.getByRole("button", { name: /^Remote access offline$/ });
+      expect(pill).toHaveClass("border-danger-edge");
+      expect(screen.queryByRole("button", { name: /^Ready$/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("Remote access offline");
+      // It comes back: back to Ready.
+      get.mockResolvedValue(remote("connected"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      // Turned off by the user: never mentioned.
+      get.mockResolvedValue(remote("off", false));
+      await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS * 2); });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      expect(screen.queryByText("Remote access offline")).not.toBeInTheDocument();
+    } finally {
+      get?.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("does not require the demo integration in production mode", async () => {

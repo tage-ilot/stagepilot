@@ -217,6 +217,7 @@ export function buildReadinessChecks({
   live,
   views,
   stateOnly = false,
+  remoteOffline = false,
 }: {
   state: ApplicationState;
   stateOnly?: boolean;
@@ -224,6 +225,8 @@ export function buildReadinessChecks({
   propresenter: ProPresenterStatusResponse | null;
   live: boolean;
   views: DashboardIntegrationViews;
+  /** Remote Access is turned on but has stayed unreachable through its retries (see useRemoteOffline). */
+  remoteOffline?: boolean;
 }): ReadinessCheck[] {
   if (stateOnly) {
     return [
@@ -332,8 +335,22 @@ export function buildReadinessChecks({
     severity: "blocking",
     status: live ? "connected" : "disconnected",
   });
+  // Listed only when it is a problem. Not required: an offline tunnel must not stop a service from starting.
+  if (remoteOffline) checks.push({
+    id: "remote-access",
+    label: "Remote access offline",
+    passed: false,
+    required: false,
+    severity: "warning",
+    status: "error",
+    detail: "Remote Access is turned on but cannot be reached. StagePilot keeps retrying; this computer is unaffected.",
+  });
   return checks;
 }
+
+/** Optional items that are failing: they do not block "Ready", but the user should still hear about them. */
+export const readinessWarnings = (checks: ReadinessCheck[]) =>
+  checks.filter((check) => !check.required && !check.passed);
 
 export const readinessPassed = (checks: ReadinessCheck[]) =>
   checks.filter((check) => check.required).every((check) => check.passed);
