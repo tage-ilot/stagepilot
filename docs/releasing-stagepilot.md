@@ -51,17 +51,14 @@ either secret is absent. The private key is never passed to frontend code.
 
 ## Publication
 
-1. Update versions in Tauri config, Cargo, desktop/frontend packages, backend
-   package, backend runtime settings, and backend `__version__`.
+1. Update versions in the Tauri config, the desktop Cargo manifest and lockfile, and the
+   desktop and frontend packages (`node scripts/set-release-version.mjs X.Y.Z` does it all;
+   the Rust crates take the version from `tauri.conf.json` at build time).
 2. Update `CHANGELOG.md`.
 3. Run:
 
    ```powershell
    node scripts/validate_versions.mjs vX.Y.Z
-   uv run --project backend ruff format --check backend/src backend/tests
-   uv run --project backend ruff check backend/src backend/tests
-   uv run --project backend python -m mypy --config-file backend/pyproject.toml backend/src backend/tests
-   uv run --project backend python -m pytest -c backend/pyproject.toml backend/tests
    npm --prefix frontend run lint
    npm --prefix frontend run typecheck
    npm --prefix frontend test -- --run
@@ -91,14 +88,14 @@ either secret is absent. The private key is never passed to frontend code.
 
 ### Release candidates and the Latest channel
 
-Tags with a pre-release suffix (`vX.Y.Z-rc.N`, `-beta.N`, `-alpha.N`) are built as the
-Rust (in-process) variant and published by `scripts/publish_release.mjs` as GitHub
+Tags with a pre-release suffix (`vX.Y.Z-rc.N`, `-beta.N`, `-alpha.N`) are built exactly
+like stable tags and published by `scripts/publish_release.mjs` as GitHub
 **pre-releases**: `prerelease: true`, never `make_latest`. GitHub's
 `/releases/latest` ignores drafts and pre-releases, so
 `.../releases/latest/download/latest.json` (the updater endpoint compiled into every
 installed app) keeps pointing at the last stable release and an rc cannot be offered by
-the in-app updater. Plain `vX.Y.Z` tags are unchanged: Python sidecar build, published
-and marked Latest. See `docs/creating-a-release.md` for the rc procedure, the unsigned
+the in-app updater. Plain `vX.Y.Z` tags are published and marked Latest. See
+`docs/creating-a-release.md` for the rc procedure, the unsigned
 **Rust installer CI** workflow and rollback (delete the pre-release; production is
 untouched).
 
@@ -121,8 +118,8 @@ Gatekeeper behavior without this hardware test.
 
 `v2.42.0-rc.2` failed "Validate application" on all three builds while regular CI was green
 on the same commit, because the release workflows ran a different command sequence than CI
-(a macOS-only Tauri overlay needing a sidecar the rust variant does not build, an Intel
-timing-dependent test, a POSIX-only `time.tzset` that mypy rejects on Windows). The release
-validation is now one script, `scripts/validate_application.sh python|rust`, called by
+(a macOS-only Tauri overlay needing a sidecar the Rust build does not have, an Intel
+timing-dependent test, a POSIX-only call that failed type checking on Windows). The release
+validation is now one script, `scripts/validate_application.sh`, called by
 `release-macos.yml`, `release-windows.yml`, `create-release.ps1` and the no-tag dry run
 `release-validate.yml`. Run the dry run on `main` before every tag.

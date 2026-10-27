@@ -149,7 +149,7 @@ jobs:
 
       # midi-probe links ALSA through midir; the Linux CI runner has no libasound2-dev or
       # pkg-config and none are installed here, so Linux builds every other crate.
-      # See docs/rust-migration/linux-midi.md.
+      # See docs/archive/rust-migration/linux-midi.md.
       - name: cargo fmt --check
         run: cargo fmt --all --check
 

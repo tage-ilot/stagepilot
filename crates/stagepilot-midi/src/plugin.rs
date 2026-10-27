@@ -1,7 +1,7 @@
 //! Resilient Playback MIDI input plugin and cue-to-action translation: port of
 //! `plugins/midi_playback/plugin.py`.
 //!
-//! Behaviour kept from Python (see `docs/rust-migration/phase4-test-map.md`):
+//! Behaviour kept from Python (see `docs/archive/rust-migration/phase4-test-map.md`):
 //!
 //! * **Connection activation.** A callback carries the id of the connection that produced it. A
 //!   message whose connection is not the *active* one is dropped as stale. The active id is set

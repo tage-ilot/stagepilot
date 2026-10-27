@@ -1,6 +1,6 @@
 //! The shared golden vectors of the Lightkey rules: `tests/fixtures/lightkey_golden.json` is
 //! what Python's `tests/test_lightkey_core.py` runs; this file runs the SAME file, unchanged.
-//! Mapping to the Python tests: `docs/rust-migration/lightkey-test-map.md`.
+//! Mapping to the Python tests: `docs/archive/rust-migration/lightkey-test-map.md`.
 
 use serde_json::Value;
 use stagepilot_core::config::{clean_lightkey_api_url, LightkeySettings, LightsSettings};

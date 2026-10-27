@@ -36,8 +36,8 @@ registration still take effect after the backend restarts.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `STAGEPILOT_HOST` | `127.0.0.1` | API bind address. Keep loopback-only by default. |
-| `STAGEPILOT_PORT` | `8765` | Local FastAPI port, from 1 through 65535. |
-| `STAGEPILOT_LOG_LEVEL` | `INFO` | Backend structured-log threshold. |
+| `STAGEPILOT_PORT` | `8765` | Local server port, from 1 through 65535. |
+| `STAGEPILOT_LOG_LEVEL` | `INFO` | Structured-log threshold. |
 | `STAGEPILOT_SERVICE_SOURCE` | `demo` | `demo` or `planning_center`. |
 | `STAGEPILOT_MIDI_SOURCE` | `playback_api` | `playback_api`, `simulated`, or `real` (native/network MIDI alternative). |
 | `STAGEPILOT_TIMER_OUTPUT` | `simulated` | `simulated` or `propresenter`. |
@@ -55,13 +55,13 @@ PowerShell example:
 
 ```powershell
 $env:STAGEPILOT_LOG_LEVEL = "DEBUG"
-uv run --project backend stagepilot
+cargo run -p stagepilot-headless
 ```
 
 POSIX shell example:
 
 ```sh
-STAGEPILOT_LOG_LEVEL=DEBUG uv run --project backend stagepilot
+STAGEPILOT_LOG_LEVEL=DEBUG cargo run -p stagepilot-headless
 ```
 
 ## Playback input default and migration
@@ -117,8 +117,8 @@ monitor fields, safety guarantees and protocol limitations.
 | `STAGEPILOT_PCO_USER_AGENT` | StagePilot project URL | Required identifying header sent to Planning Center. |
 
 The application ID may be saved in ordinary settings. The PAT secret is stored
-under the `StagePilot` service in Windows Credential Manager through Python's
-`keyring` package. An incomplete credential set is valid while onboarding is in
+under the `StagePilot` service in Windows Credential Manager (the macOS Keychain on
+macOS). An incomplete credential set is valid while onboarding is in
 progress, but Planning Center will not connect until both values are present.
 The secret remains absent from the settings file, public application state,
 URLs, logs, API responses, and outward-facing credential-backend errors.
@@ -157,7 +157,7 @@ $env:STAGEPILOT_PCO_APP_ID = "<your application id>"
 $env:STAGEPILOT_PCO_SECRET = "<your secret>"
 $env:STAGEPILOT_PCO_SERVICE_TYPE_ID = "<your service type id>"
 $env:STAGEPILOT_PCO_LOOKAHEAD_DAYS = "30"
-uv run --project backend stagepilot
+cargo run -p stagepilot-headless
 ```
 
 An unsuccessful refresh leaves the last valid current or upcoming plan in
@@ -241,7 +241,7 @@ discover available ports:
 $env:STAGEPILOT_MIDI_SOURCE = "real"
 $env:STAGEPILOT_MIDI_CHANNEL = "1"
 Remove-Item Env:STAGEPILOT_MIDI_INPUT_NAME -ErrorAction SilentlyContinue
-uv run --project backend stagepilot
+cargo run -p stagepilot-headless
 ```
 
 The dashboard MIDI panel edits channel 1–16, fixed note 0–127, debounce 0–2000

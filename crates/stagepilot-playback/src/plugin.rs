@@ -7,8 +7,8 @@
 //! `connection.changed` onto the event bus. Scanning, song-order discovery and the settings it
 //! persists are here too; the HTTP routes that call them are a later card.
 //!
-//! Differences from Python that are on purpose (see `docs/rust-migration/phase3b.md`):
-//! * Python's `MidiPlaybackPlugin` wrapper (`midi_source = real`) is phase 4's MIDI input plugin;
+//! Differences from Python that are on purpose (see `docs/archive/rust-migration/phase3b.md`):
+//! * Python's `MidiPlaybackPlugin` wrapper (`midi_source = real`) is the MIDI input plugin in `stagepilot-midi`;
 //!   this plugin only exposes [`PlaybackPlugin::set_midi_connected`] and
 //!   [`PlaybackPlugin::midi_guard`] for it to plug into.
 //! * Planning Center length writing is its own service; this plugin only exposes the

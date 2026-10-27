@@ -1,5 +1,5 @@
 //! Behaviour tests for the Services API client: ports of `test_planning_center_client.py` and the
-//! discovery cases of `test_planning_center_plan_discovery.py` (see docs/rust-migration/phase5-test-map.md).
+//! discovery cases of `test_planning_center_plan_discovery.py` (see docs/archive/rust-migration/phase5-test-map.md).
 
 mod support;
 

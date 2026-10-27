@@ -1,4 +1,4 @@
-//! MIDI for StagePilot (Rust migration, phase 4): the Playback MIDI input plugin
+//! MIDI for StagePilot: the Playback MIDI input plugin
 //! (`plugins/midi_playback`) and the MIDI **output** boundary the lights plugin uses
 //! (`plugins/lights/client.py`).
 //!
@@ -6,7 +6,7 @@
 //! Everything in the plugin is tested against the in-memory [`fake`] backends; the real
 //! implementation ([`hardware`], `midir`) is compiled only with the `midir-backend` feature.
 //!
-//! Platform notes (also in `docs/rust-migration/phase4.md`):
+//! Platform notes (also in `docs/archive/rust-migration/phase4.md`):
 //!
 //! * **Windows** (WinMM): needs nothing, but a port can be opened by one process at a time. The
 //!   device list only changes when a device is plugged in; names are the WinMM product names and

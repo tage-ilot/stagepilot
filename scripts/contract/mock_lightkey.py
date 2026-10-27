@@ -2,7 +2,7 @@
 
 Both backends poll this same server (Python through httpx, Rust through reqwest). It reports one
 active cue set and a sequence number, and answers `GET /time` and `GET /log?since=N` in the shape the
-real agent uses (docs/rust-handoff/lightkey-record-replay.md). Control endpoints for the runner:
+real agent uses (docs/archive/rust-handoff/lightkey-record-replay.md). Control endpoints for the runner:
 
   GET /__reset                       back to the starting set ("Warm"), seq 1, no events
   GET /__change?add=A,B&remove=C     change the active set (one event with a DMX timestamp)

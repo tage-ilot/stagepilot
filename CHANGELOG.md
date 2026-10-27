@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Developer-facing only, no change to the app: the retired Python backend (`backend/`), its CI jobs, the `python`/`rust` installer variants and the Python fixture generators are removed. Every build is the in-process Rust app. The 2.41.1 sources remain at the `v2.41.1` tag, and the migration notes moved to `docs/archive/`.
+
 ## [2.42.0] - 2026-10-25
 
 StagePilot 2.42.0 is the first release that runs on the new Rust backend. The backend is now part of the app itself: there is no separate Python program to start, update or sign, and the app is ready within about a second of opening it. Your settings, Planning Center sign-in, Playback song order and Lightkey takes carry over unchanged, and the in-app updater offers this update to earlier versions.

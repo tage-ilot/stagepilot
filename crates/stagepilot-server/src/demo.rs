@@ -1,9 +1,9 @@
-//! The demo Services plugin and the placeholders for plugins later phases port.
+//! The demo Services plugin and the placeholder Playback input.
 //!
 //! `DemoPlugin` is a port of `plugins/demo/plugin.py`. `PlaybackStub` only reproduces what the
 //! Python Playback input publishes at start-up while nothing is selected (a disconnected
 //! `connection.changed`), so the state snapshot and `/health` match. Lights, MIDI and
-//! ProPresenter are real since phase 4 (`outputs.rs`).
+//! ProPresenter are real plugins (`outputs.rs`).
 
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};

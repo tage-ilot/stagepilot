@@ -1,7 +1,7 @@
 //! HTTP surface of the Lightkey link and the saved settings it adds to Lighting: the Rust
 //! counterpart of `backend/tests/test_lightkey_api.py`. The agent is an in-process fake behind the
 //! link's injected HTTP trait; OSC goes to the in-memory fake. Mapping:
-//! `docs/rust-migration/lightkey-test-map.md`.
+//! `docs/archive/rust-migration/lightkey-test-map.md`.
 
 use async_trait::async_trait;
 use axum::body::Body;

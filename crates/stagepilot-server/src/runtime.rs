@@ -38,7 +38,7 @@ pub struct Runtime {
     activation: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The Planning Center song-length writer: preview, confirm and restore (B5).
     pub lengths: Arc<LengthService>,
-    /// MIDI input, lights and ProPresenter (phase 4).
+    /// MIDI input, lights and ProPresenter.
     pub outputs: Arc<Outputs>,
     /// `PluginManager.reconcile_lock`: serialises live connection changes made by routes.
     pub reconcile: tokio::sync::Mutex<()>,

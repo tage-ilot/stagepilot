@@ -20,8 +20,8 @@ changes anything. It then:
 1. Shows the release title, source branch, destination branch, and current changes.
 2. Requires one final typed confirmation: `YES`.
 3. Updates every StagePilot application and lockfile version.
-4. Refreshes the Python, frontend, and desktop lockfiles.
-5. Runs backend, frontend, desktop/Rust, and MultiTracks CLI validation.
+4. Refreshes the frontend and desktop lockfiles.
+5. Runs frontend, desktop/Rust, and MultiTracks CLI validation.
 6. Displays the release diff without opening an interactive pager.
 7. Commits and pushes all intended changes to the confirmed destination.
 8. Creates and pushes the version tag.
@@ -68,21 +68,18 @@ Run **Release validation (dry run)** (`release-validate.yml`) on `main` before c
 tag: Actions tab -> *Release validation (dry run)* -> *Run workflow*. It has no secrets, no
 environment and publishes nothing. It runs `scripts/validate_application.sh` (the single
 copy of the release's "Validate application" commands, also used by `release-macos.yml`,
-`release-windows.yml` and `create-release.ps1`) on six legs: macOS Apple Silicon
-(`macos-15`), macOS Intel (`macos-15-intel`) and Windows x64 (`windows-latest`), each for
-the `python` variant (plain `X.Y.Z`) and the `rust` variant (`X.Y.Z-rc.N`, in-process, no
-sidecar). Each leg checks backend format, lint, mypy and pytest, frontend lint, typecheck,
-tests and build, the runtime staging, the desktop crate's `cargo fmt`, `clippy` and `test`
-(plus the `in-process` feature for rust), and `npm --prefix desktop run release:test`.
-**A green dry run on all six legs is the gate: do not tag until it is.**
+`release-windows.yml` and `create-release.ps1`) on three legs: macOS Apple Silicon
+(`macos-15`), macOS Intel (`macos-15-intel`) and Windows x64 (`windows-latest`). Each leg
+checks frontend lint, typecheck, tests and build, the runtime staging, the desktop crate's
+`cargo fmt`, `clippy` and `test`, and `npm --prefix desktop run release:test`.
+**A green dry run on all three legs is the gate: do not tag until it is.** The Rust
+workspace has its own gate: the `rust` workflow (`rust.yml`) must be green on the branch.
 
-## Cutting a release candidate (Rust installers)
+## Cutting a release candidate
 
-A release candidate (rc) is a pre-release build of the **Rust (in-process)** variant: the
-app starts the Rust `stagepilot-server` inside the desktop process, ships no Python
-sidecar (no PyInstaller `stagepilot-backend`), and bundles the built frontend plus
-`cloudflared`. Plain `X.Y.Z` tags keep the Python sidecar until phase 7 of the Rust
-migration (`docs/rust-migration/merge-plan.md`).
+Every release, stable or not, is the same app: it starts the Rust `stagepilot-server`
+inside the desktop process and bundles the built frontend plus `cloudflared`. A release
+candidate (rc) is simply a pre-release tag of it.
 
 ```powershell
 .\scripts\create-release.ps1 2.42.0-rc.1
@@ -96,13 +93,12 @@ next stable version. The manual path is the same as for a stable release
 `node scripts/set-release-version.mjs 2.42.0-rc.1`, run the validation, commit, then tag
 `v2.42.0-rc.1`. `-alpha.N` / `-beta.N` tags (manual only) behave like rc tags.
 
-What the tag does: `release-macos.yml` reads the tag, selects variant `rust` for a
-pre-release suffix, builds macOS Apple Silicon, macOS Intel and Windows x64 with
-`tauri build --features in-process` (no `build:sidecar`), verifies the bundles
-(`scripts/verify_macos_release_bundle.sh --variant rust` rejects any sidecar or Python
-runtime file, then launches the app's server and checks `/api/v1/health`), smokes the
-built app once, signs the updater payloads as usual, and publishes through
-`scripts/publish_release.mjs`.
+What the tag does: `release-macos.yml` checks the tag, builds macOS Apple Silicon, macOS
+Intel and Windows x64, verifies the bundles (`scripts/verify_macos_release_bundle.sh`
+rejects any separate backend or Python runtime file), smokes the built app once (launch,
+`/api/v1/health`, no Python process, clean stop), signs the updater payloads as usual,
+and publishes through `scripts/publish_release.mjs`. A pre-release suffix makes it a GitHub
+pre-release; a plain `X.Y.Z` tag becomes "Latest" and is what the in-app updater reads.
 
 ### Why an rc never reaches the installed app
 
@@ -120,7 +116,7 @@ version, an installed rc does not offer a downgrade; the next stable tag superse
 ### Installer artifacts without tagging
 
 Run **Rust installer CI** (`rust-installer-ci.yml`, *Run workflow*) on any branch. It builds
-the same three Rust installers without secrets, publishes nothing, launches each built
+the same three installers without secrets, publishes nothing, launches each built
 app once (health from the in-process server, no Python process, clean stop) and keeps the
 installers as workflow artifacts for 3 days. These builds are not updater-signed.
 

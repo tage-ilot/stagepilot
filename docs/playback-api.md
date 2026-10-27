@@ -14,8 +14,7 @@ manual host it checks `127.0.0.1` first, then attached IPv4 /24s (or smaller
 attached networks) when `auto_scan` is enabled. A manual host, for example
 `192.0.2.10`, exclusively overrides both local and LAN discovery. Port defaults
 to 8080. Address discovery validates the handshake and heartbeat and sends no
-Playback application commands. The copied transport uses only the Python
-standard library; no dependency or MIDI transport implementation was changed.
+Playback application commands.
 
 When Playback is not reachable StagePilot reconnects by itself (Remote Connections
 turned off and on, a network drop, or a Playback restart). It re-probes the manual
@@ -245,11 +244,11 @@ Playback/hardware validation, deployment, release or merge has been performed.
 
 If Scan Network reports that macOS blocked StagePilot, open **System Settings >
 Privacy & Security > Local Network** and turn on every StagePilot entry
-(including `stagepilot-backend` if listed), then quit and reopen StagePilot. The
+(including any other StagePilot entry that is listed), then quit and reopen StagePilot. The
 scan result's "Copy diagnostic details" and "Send logs to developer" include the
 last scan (networks, probed counts, per-class errors, loopback/gateway self-test).
 Backend log lines are `playback_scan_start`, `playback_scan_result`,
-`playback_connect_failed` and `sidecar_identity` in
+and `playback_connect_failed` in
 `~/Library/Logs/org.stagepilot.desktop/stagepilot-backend.log`.
 
 
