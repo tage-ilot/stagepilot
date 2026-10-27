@@ -1,6 +1,6 @@
 name: Rust installer CI
 
-# Manually dispatched. Builds the Rust (in-process) installer variant exactly as a pre-release tag
+# Manually dispatched. Builds the installers exactly as a pre-release tag
 # (X.Y.Z-rc.N) would in release-macos.yml, but:
 #   - publishes nothing and creates no tag or release,
 #   - has no `environment` and uses none of the release secrets (no updater signing key, no macOS
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: Rust installer — ${{ matrix.name }}
+    name: Installer — ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
@@ -27,17 +27,17 @@ jobs:
             runner: macos-15
             platform: darwin-aarch64
             arch: arm64
-            command: build:mac:rust:ci
+            command: build:mac:ci
           - name: macOS Intel
             runner: macos-15-intel
             platform: darwin-x86_64
             arch: x86_64
-            command: build:mac:rust:ci
+            command: build:mac:ci
           - name: Windows x64
             runner: windows-latest
             platform: windows-x86_64
             arch: x86_64
-            command: build:rust:ci
+            command: build:ci
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
@@ -50,12 +50,10 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             desktop/package-lock.json
-      # stage_cloudflared.py is plain Python; no uv project or PyInstaller is involved.
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      # stage_cloudflared.py is a plain build script.
+      - uses: actions/setup-python@v6
         with:
-          version: "0.11.28"
           python-version: "3.12"
-          working-directory: backend
       - name: Install dependencies
         shell: bash
         run: |
@@ -63,28 +61,27 @@ jobs:
           npm ci --prefix desktop
           rustup update stable
           rustup default stable
-      - name: Build the Rust installer (tauri build --features in-process, no sidecar)
+      - name: Build the installer
         shell: bash
         run: npm --prefix desktop run ${{ matrix.command }}
-      - name: Verify macOS application, DMG and app bundle (Rust variant)
+      - name: Verify macOS application and DMG
         if: runner.os == 'macOS'
         shell: bash
         run: |
           APP="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           DMG="$(find desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "${{ matrix.arch }}" --variant rust --no-launch
-          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "${{ matrix.arch }}" --variant rust --no-launch
+          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "${{ matrix.arch }}" --no-launch
+          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "${{ matrix.arch }}" --no-launch
       - name: Assert no Python sidecar was built or bundled
         shell: bash
         run: |
-          test ! -e desktop/src-tauri/binaries/stagepilot-backend* || { ls desktop/src-tauri/binaries; exit 1; }
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             ROOT="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           else
             ROOT=desktop/src-tauri/target/release
           fi
           if find "$ROOT" -maxdepth 3 \( -iname 'stagepilot-backend*' -o -iname 'libpython*' \) | grep -q .; then
-            echo "::error::Python sidecar files found in the Rust variant"; exit 1
+            echo "::error::Python sidecar files found in the bundle"; exit 1
           fi
       - name: First-launch smoke — macOS
         if: runner.os == 'macOS'
@@ -120,10 +117,10 @@ jobs:
         run: |
           mkdir -p ci-assets
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            cp desktop/src-tauri/target/release/bundle/dmg/*.dmg "ci-assets/StagePilot-rust_${{ matrix.platform }}.dmg"
-            tar -czf "ci-assets/StagePilot-rust_${{ matrix.platform }}.app.tar.gz" -C desktop/src-tauri/target/release/bundle/macos StagePilot.app
+            cp desktop/src-tauri/target/release/bundle/dmg/*.dmg "ci-assets/StagePilot_${{ matrix.platform }}.dmg"
+            tar -czf "ci-assets/StagePilot_${{ matrix.platform }}.app.tar.gz" -C desktop/src-tauri/target/release/bundle/macos StagePilot.app
           else
-            cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe "ci-assets/StagePilot-rust_${{ matrix.platform }}-setup.exe"
+            cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe "ci-assets/StagePilot_${{ matrix.platform }}-setup.exe"
           fi
           cp smoke.log "ci-assets/smoke-${{ matrix.platform }}.log" || true
           {
@@ -134,7 +131,7 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: rust-installer-${{ matrix.platform }}
+          name: installer-${{ matrix.platform }}
           path: ci-assets/*
           if-no-files-found: error
           retention-days: 3

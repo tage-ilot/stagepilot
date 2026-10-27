@@ -2,29 +2,24 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 (--app APP | --dmg DMG | --archive APP_TAR_GZ) --arch (x86_64|arm64) [--variant python|rust]" >&2
+  echo "Usage: $0 (--app APP | --dmg DMG | --archive APP_TAR_GZ) --arch (x86_64|arm64) [--no-launch]" >&2
   exit 2
 }
 
 MODE=""
 INPUT=""
 EXPECTED_ARCH=""
-VARIANT="python"
 NO_LAUNCH=0
 while (($#)); do
   case "$1" in
     --app|--dmg|--archive) MODE="${1#--}"; INPUT="${2:-}"; shift 2 ;;
     --arch) EXPECTED_ARCH="${2:-}"; shift 2 ;;
-    --variant) VARIANT="${2:-}"; shift 2 ;;
     --no-launch) NO_LAUNCH=1; shift ;;
     *) usage ;;
   esac
 done
 [[ -n "$MODE" && -n "$INPUT" && -n "$EXPECTED_ARCH" ]] || usage
 [[ "$EXPECTED_ARCH" == "x86_64" || "$EXPECTED_ARCH" == "arm64" ]] || usage
-# python: the PyInstaller sidecar is the backend (default, unchanged checks).
-# rust:   the in-process Rust server is the backend; no sidecar may be shipped.
-[[ "$VARIANT" == "python" || "$VARIANT" == "rust" ]] || usage
 [[ -e "$INPUT" ]] || { echo "Missing release artifact: $INPUT" >&2; exit 1; }
 
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/stagepilot-release-verify.XXXXXX")"
@@ -71,19 +66,13 @@ case "$MODE" in
   *) usage ;;
 esac
 
-SIDECAR_COUNT="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' | wc -l | tr -d ' ')"
-SIDECAR=""
-if [[ "$VARIANT" == "python" ]]; then
-  [[ "$SIDECAR_COUNT" -eq 1 ]] || { echo "Expected exactly one packaged backend sidecar." >&2; exit 1; }
-  SIDECAR="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -name 'stagepilot-backend*' -print -quit)"
-else
-  [[ "$SIDECAR_COUNT" -eq 0 ]] || { echo "The Rust variant must not ship a Python backend sidecar." >&2; exit 1; }
-  [[ -z "$(find "$APP" \( -iname 'stagepilot-backend*' -o -iname 'libpython*' -o -iname 'base_library.zip' \) -print -quit)" ]] || {
-    echo "The Rust variant contains PyInstaller/Python runtime files." >&2
-    exit 1
-  }
-  [[ -s "$APP/Contents/Resources/stagepilot_web/index.html" ]] || { echo "The built frontend (stagepilot_web/index.html) is missing from the Rust variant." >&2; exit 1; }
-fi
+# The in-process Rust server is the backend: no separate backend executable or Python runtime
+# may be shipped, and the built frontend must be bundled.
+[[ -z "$(find "$APP" \( -iname 'stagepilot-backend*' -o -iname 'libpython*' -o -iname 'base_library.zip' \) -print -quit)" ]] || {
+  echo "The bundle contains a separate backend executable or Python runtime files." >&2
+  exit 1
+}
+[[ -s "$APP/Contents/Resources/stagepilot_web/index.html" ]] || { echo "The built frontend (stagepilot_web/index.html) is missing." >&2; exit 1; }
 [[ -x "$APP/Contents/Resources/cloudflared" ]] || { echo "Bundled cloudflared is missing or not executable." >&2; exit 1; }
 MAIN_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 MAIN="$APP/Contents/MacOS/$MAIN_NAME"
@@ -101,12 +90,8 @@ find "$HELP_ROOT/pages" -type f -name '*.html' -print -quit | grep -q . || {
 }
 
 echo "Application: $APP"
-echo "Variant: $VARIANT"
-echo "Backend: ${SIDECAR:-in-process (no sidecar)}"
 file "$MAIN"
-[[ -z "$SIDECAR" ]] || file "$SIDECAR"
 file "$MAIN" | grep -q "$EXPECTED_ARCH" || { echo "Application is not $EXPECTED_ARCH." >&2; exit 1; }
-[[ -z "$SIDECAR" ]] || file "$SIDECAR" | grep -q "$EXPECTED_ARCH" || { echo "Backend is not $EXPECTED_ARCH." >&2; exit 1; }
 codesign --verify --deep --strict --verbose=4 "$APP"
 # Stable identity: fixed identifiers and a designated requirement pinned to the StagePilot
 # signing certificate (public cert: docs/stagepilot-signing-cert.pem), never a per-build cdhash.
@@ -123,28 +108,13 @@ if [[ "${STAGEPILOT_EXPECT_STABLE_SIGNING:-}" == "1" ]]; then
     }
   }
   check_dr "$APP" "org.stagepilot.desktop"
-  [[ -z "$SIDECAR" ]] || check_dr "$SIDECAR" "org.stagepilot.backend"
 fi
-if [[ -n "$SIDECAR" ]]; then
-  SIGNATURE="$(codesign -d --verbose=4 "$SIDECAR" 2>&1)"
-  printf '%s\n' "$SIGNATURE"
-  codesign -d --entitlements :- "$SIDECAR" 2>/dev/null || true
-  grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
-    echo "Packaged backend unexpectedly has the Hardened Runtime flag." >&2
-    exit 1
-  }
-  grep -Eq '^TeamIdentifier=(.+)$' <<<"$SIGNATURE" && ! grep -q '^TeamIdentifier=not set$' <<<"$SIGNATURE" && {
-    echo "Ad-hoc backend unexpectedly has a TeamIdentifier." >&2
-    exit 1
-  }
-else
-  SIGNATURE="$(codesign -d --verbose=4 "$MAIN" 2>&1)"
-  printf '%s\n' "$SIGNATURE"
-  grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
-    echo "Application unexpectedly has the Hardened Runtime flag." >&2
-    exit 1
-  }
-fi
+SIGNATURE="$(codesign -d --verbose=4 "$MAIN" 2>&1)"
+printf '%s\n' "$SIGNATURE"
+grep -q 'flags=.*runtime' <<<"$SIGNATURE" && {
+  echo "Application unexpectedly has the Hardened Runtime flag." >&2
+  exit 1
+}
 
 verify_minos() {
   local binary="$1"
@@ -152,8 +122,7 @@ verify_minos() {
   local minos
   minos="$(xcrun vtool -show-build "$binary" 2>/dev/null | awk '/minos / {print $2}' | sort -Vu | tail -1)"
   if [[ -z "$minos" ]]; then
-    # PyInstaller's macOS bootloader can use the older
-    # LC_VERSION_MIN_MACOSX command rather than LC_BUILD_VERSION.
+    # Older toolchains write LC_VERSION_MIN_MACOSX rather than LC_BUILD_VERSION.
     minos="$(
       otool -l "$binary" 2>/dev/null |
         awk '
@@ -178,10 +147,9 @@ print(f"{label} minimum macOS: {value}")
 PY
 }
 verify_minos "$MAIN" "StagePilot"
-[[ -z "$SIDECAR" ]] || verify_minos "$SIDECAR" "StagePilot backend"
 
 if [[ "$NO_LAUNCH" == "1" ]]; then
-  # Static checks only. The Rust variant is a GUI app: a second launch of the same bundle in one
+  # Static checks only. StagePilot is a GUI app: a second launch of the same bundle in one
   # CI login session never reaches setup (the first launch is registered with LaunchServices), so
   # the single real first-launch is scripts/smoke_rust_app.mjs, run after these static checks.
   echo "Static checks passed (launch skipped)."
@@ -197,32 +165,27 @@ PY
 )"
 SETTINGS="$TEMP_ROOT/settings.json"
 printf '{"service_source":"demo","midi_source":"simulated","timer_output":"simulated","server_port":%s}\n' "$PORT" > "$SETTINGS"
-if [[ "$VARIANT" == "rust" ]]; then
-  # The Rust variant is the desktop shell itself, and the shell is single-instance: a previous
-  # verification run (the .app pass before the DMG pass) must be fully gone, with its
-  # single-instance socket, or this launch becomes a silent secondary instance with no server.
-  pkill -9 -x "$MAIN_NAME" 2>/dev/null || true
-  sleep 1
-  find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec ls -l {} + >&2 2>/dev/null || true
-  find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec rm -f {} + 2>/dev/null || true
-fi
-LAUNCH_HOME="$HOME"
-if [[ "$VARIANT" == "rust" ]]; then
-  # A pristine profile per launch: the app's logs, Remote bootstrap and window state of an earlier
-  # launch (the .app pass) must not influence this one.
-  LAUNCH_HOME="$TEMP_ROOT/home"
-  mkdir -p "$LAUNCH_HOME"
-fi
+# The desktop shell is single-instance: a previous verification run (the .app pass before the
+# DMG pass) must be fully gone, with its single-instance socket, or this launch becomes a silent
+# secondary instance with no server.
+pkill -9 -x "$MAIN_NAME" 2>/dev/null || true
+sleep 1
+find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec ls -l {} + >&2 2>/dev/null || true
+find "${TMPDIR:-/tmp}" -maxdepth 1 -name '*org.stagepilot.desktop*' -exec rm -f {} + 2>/dev/null || true
+# A pristine profile per launch: the app's logs, Remote bootstrap and window state of an earlier
+# launch (the .app pass) must not influence this one.
+LAUNCH_HOME="$TEMP_ROOT/home"
+mkdir -p "$LAUNCH_HOME"
 HOME="$LAUNCH_HOME" \
 STAGEPILOT_HOST=127.0.0.1 \
 STAGEPILOT_PORT="$PORT" \
 STAGEPILOT_SETTINGS_PATH="$SETTINGS" \
-"${SIDECAR:-$MAIN}" >"$LOG_FILE" 2>&1 &
+"$MAIN" >"$LOG_FILE" 2>&1 &
 BACKEND_PID="$!"
 
 for _ in {1..120}; do
   if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-    echo "Packaged backend exited before readiness." >&2
+    echo "StagePilot exited before readiness." >&2
     cat "$LOG_FILE" >&2
     exit 1
   fi
@@ -241,36 +204,32 @@ for _ in {1..120}; do
     curl --fail --silent --show-error \
       --cookie "$COOKIE_JAR" \
       "http://127.0.0.1:$PORT/api/v1/state" >/dev/null
-    if [[ "$VARIANT" == "rust" ]]; then
-      # The in-process server must be the only backend: no Python/PyInstaller process may exist
-      # under the launched application.
-      if ps -A -o pid=,ppid=,command= | awk -v root="$BACKEND_PID" '$2 == root' | grep -Eiq 'python|stagepilot-backend'; then
-        echo "A Python backend process was spawned by the Rust variant." >&2
-        exit 1
-      fi
-      curl --fail --silent --show-error "http://127.0.0.1:$PORT/" | grep -qi '<script' || {
-        echo "The bundled frontend is not served by the in-process server." >&2
-        exit 1
-      }
+    # The in-process server must be the only backend: no Python process may exist under the
+    # launched application.
+    if ps -A -o pid=,ppid=,command= | awk -v root="$BACKEND_PID" '$2 == root' | grep -Eiq 'python|stagepilot-backend'; then
+      echo "A Python backend process was spawned by StagePilot." >&2
+      exit 1
     fi
-    echo "Packaged backend health check passed."
+    curl --fail --silent --show-error "http://127.0.0.1:$PORT/" | grep -qi '<script' || {
+      echo "The bundled frontend is not served by the in-process server." >&2
+      exit 1
+    }
+    echo "Health check passed."
     exit 0
   fi
   sleep 0.25
 done
 
-echo "Timed out waiting for packaged backend health." >&2
+echo "Timed out waiting for StagePilot health." >&2
 cat "$LOG_FILE" >&2
-if [[ "$VARIANT" == "rust" ]]; then
-  echo "--- diagnostics (Rust variant) ---" >&2
-  kill -0 "$BACKEND_PID" 2>/dev/null && echo "app still running (pid $BACKEND_PID)" >&2 || echo "app exited" >&2
-  ps -A -o pid=,ppid=,etime=,command= | grep -i stagepilot | grep -v grep >&2 || true
-  lsof -nP -a -p "$BACKEND_PID" -i 2>&1 | head -20 >&2 || true
-  ls -l /tmp/*org_stagepilot* >&2 2>/dev/null || true
-  sample "$BACKEND_PID" 2 -mayDie 2>&1 | head -90 >&2 || true
-  for f in "$LAUNCH_HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
-    [[ -f "$f" ]] && { echo "== $f" >&2; tail -n 60 "$f" >&2; }
-  done
-  find "$LAUNCH_HOME/Library" -maxdepth 3 2>/dev/null | head -20 >&2 || true
-fi
+echo "--- diagnostics ---" >&2
+kill -0 "$BACKEND_PID" 2>/dev/null && echo "app still running (pid $BACKEND_PID)" >&2 || echo "app exited" >&2
+ps -A -o pid=,ppid=,etime=,command= | grep -i stagepilot | grep -v grep >&2 || true
+lsof -nP -a -p "$BACKEND_PID" -i 2>&1 | head -20 >&2 || true
+ls -l /tmp/*org_stagepilot* >&2 2>/dev/null || true
+sample "$BACKEND_PID" 2 -mayDie 2>&1 | head -90 >&2 || true
+for f in "$LAUNCH_HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/org.stagepilot.desktop/* "$HOME"/Library/Logs/DiagnosticReports/stagepilot* ; do
+  [[ -f "$f" ]] && { echo "== $f" >&2; tail -n 60 "$f" >&2; }
+done
+find "$LAUNCH_HOME/Library" -maxdepth 3 2>/dev/null | head -20 >&2 || true
 exit 1

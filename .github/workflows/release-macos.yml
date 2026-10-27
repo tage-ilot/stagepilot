@@ -21,8 +21,6 @@ jobs:
   validate:
     name: Validate release
     runs-on: ubuntu-24.04
-    outputs:
-      variant: ${{ steps.variant.outputs.variant }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -31,16 +29,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - name: Select installer variant
-        id: variant
+      - name: Check the release tag
         run: |
-          # Every release is the Rust in-process app (no Python sidecar): stable X.Y.Z from 2.42.0
-          # on, and pre-releases (X.Y.Z-rc.N, -beta.N, -alpha.N). A pre-release is published as a
-          # GitHub pre-release that never becomes "Latest"; a stable tag becomes "Latest" and is
-          # what the in-app updater reads (scripts/publish_release.mjs).
-          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
-            echo "variant=rust" >> "$GITHUB_OUTPUT"
-          else
+          # Stable X.Y.Z, or a pre-release (X.Y.Z-rc.N, -beta.N, -alpha.N). A pre-release is
+          # published as a GitHub pre-release that never becomes "Latest"; a stable tag becomes
+          # "Latest" and is what the in-app updater reads (scripts/publish_release.mjs).
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
             echo "::error::Unsupported release tag $RELEASE_TAG."
             exit 1
           fi
@@ -81,33 +75,24 @@ jobs:
             platform: darwin-aarch64
             suffix: aarch64
             command: build:mac
-            rust_command: build:mac:rust
           - name: macOS Intel
             runner: macos-15-intel
             platform: darwin-x86_64
             suffix: x64
             command: build:mac
-            rust_command: build:mac:rust
           - name: Windows x64
             runner: windows-latest
             platform: windows-x86_64
             suffix: x64
             command: build
-            rust_command: build:rust
     runs-on: ${{ matrix.runner }}
     environment: stagepilot-control-plane
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
-      VARIANT: ${{ needs.validate.outputs.variant }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.release_tag || github.ref }}
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
-        with:
-          version: "0.11.28"
-          python-version: "3.12"
-          working-directory: backend
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
@@ -118,7 +103,6 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          uv sync --project backend --extra dev --locked
           npm ci --prefix frontend
           npm ci --prefix desktop
           rustup update stable
@@ -128,7 +112,7 @@ jobs:
         run: npm --prefix desktop run build:help
       - name: Validate application
         shell: bash
-        run: bash scripts/validate_application.sh "$VARIANT"
+        run: bash scripts/validate_application.sh
       - name: Test macOS uninstaller script
         if: runner.os == 'macOS'
         shell: bash
@@ -161,12 +145,7 @@ jobs:
           MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
           MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
         shell: bash
-        run: |
-          if [[ "$VARIANT" == "rust" ]]; then
-            npm --prefix desktop run ${{ matrix.rust_command }}
-          else
-            npm --prefix desktop run ${{ matrix.command }}
-          fi
+        run: npm --prefix desktop run ${{ matrix.command }}
       - name: Verify final macOS application, DMG, and updater archive
         if: runner.os == 'macOS'
         shell: bash
@@ -182,15 +161,13 @@ jobs:
           DMG="$(find desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           ARCHIVE="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type f -name '*.app.tar.gz' -print -quit)"
           test -s "$ARCHIVE.sig"
-          # The Rust variant is a GUI app launched once, by the smoke step below; the three
-          # artifact passes there are static (a repeat launch of the same bundle never reaches setup).
-          EXTRA=""
-          if [[ "$VARIANT" == "rust" ]]; then EXTRA="--no-launch"; fi
-          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
-          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
-          bash scripts/verify_macos_release_bundle.sh --archive "$ARCHIVE" --arch "$EXPECTED_ARCH" --variant "$VARIANT" $EXTRA
-      - name: Smoke the Rust variant — macOS (launch, health, no Python, clean stop)
-        if: runner.os == 'macOS' && env.VARIANT == 'rust'
+          # StagePilot is a GUI app launched once, by the smoke step below; the three artifact
+          # passes here are static (a repeat launch of the same bundle never reaches setup).
+          bash scripts/verify_macos_release_bundle.sh --app "$APP" --arch "$EXPECTED_ARCH" --no-launch
+          bash scripts/verify_macos_release_bundle.sh --dmg "$DMG" --arch "$EXPECTED_ARCH" --no-launch
+          bash scripts/verify_macos_release_bundle.sh --archive "$ARCHIVE" --arch "$EXPECTED_ARCH" --no-launch
+      - name: Smoke the app — macOS (launch, health, no Python, clean stop)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           APP="$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"

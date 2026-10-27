@@ -55,7 +55,7 @@ function Invoke-NpmPackage {
     }
 }
 
-foreach ($command in @("git", "gh", "node", "npm", "uv", "cargo")) {
+foreach ($command in @("git", "gh", "node", "npm", "cargo")) {
     Require-Command $command
 }
 
@@ -157,7 +157,7 @@ if ($Dirty) {
 Write-Host "`nRelease plan" -ForegroundColor Yellow
 Write-Host "  Title:       StagePilot $Tag"
 if (Test-PreReleaseVersion $Version) {
-    Write-Host "  Type:        RELEASE CANDIDATE - Rust (in-process) installers, GitHub pre-release, never offered to installed apps" -ForegroundColor Yellow
+    Write-Host "  Type:        RELEASE CANDIDATE - installers, GitHub pre-release, never offered to installed apps" -ForegroundColor Yellow
 }
 Write-Host "  Source:      $CurrentBranch"
 Write-Host "  Destination: origin/$TargetBranch"
@@ -174,7 +174,6 @@ if (-not $Yes) {
 Invoke-Checked "Update all StagePilot version sources" {
     node scripts/set-release-version.mjs $Version
 }
-Invoke-Checked "Refresh the Python lockfile" { uv lock --project backend }
 Invoke-Checked "Refresh the frontend lockfile" {
     Invoke-NpmPackage "frontend" @("install", "--package-lock-only", "--ignore-scripts")
 }
@@ -185,12 +184,6 @@ Invoke-Checked "Validate version and updater configuration" {
     node scripts/validate_versions.mjs $Tag
 }
 
-Invoke-Checked "Install locked backend dependencies" {
-    uv sync --project backend --extra dev --locked
-}
-Invoke-Checked "Format backend source" {
-    uv run --project backend ruff format backend/src backend/tests
-}
 Invoke-Checked "Install locked frontend dependencies" {
     Invoke-NpmPackage "frontend" @("ci")
 }
@@ -215,10 +208,8 @@ if (-not $Bash) {
     if (-not $Found) { throw "bash was not found; install Git for Windows (it ships bash)." }
     $Bash = $Found.Source
 }
-# Every release is the Rust in-process app (stable and pre-release alike).
-$ValidationVariant = "rust"
-Invoke-Checked "Validate application ($ValidationVariant variant)" {
-    & $Bash scripts/validate_application.sh $ValidationVariant
+Invoke-Checked "Validate application" {
+    & $Bash scripts/validate_application.sh
 }
 
 if (Test-Path "tools/multitracks-cues/package.json") {

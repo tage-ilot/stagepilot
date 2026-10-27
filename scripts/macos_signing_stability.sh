@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Signing-identity stability check (macOS only). Builds two DIFFERENT fake StagePilot
-# bundles (app + PyInstaller-like sidecar + helper), signs both with the same identity via
+# bundles (app + helper), signs both with the same identity via
 # sign_macos_bundle.sh, and fails if any designated requirement or identifier differs, if
 # the cdhash-only (ad-hoc) requirement slipped in, or if either bundle fails verification.
 # With --identity/--keychain it uses that identity; otherwise it creates a throwaway one.
@@ -52,7 +52,7 @@ make_bundle() { # dir marker
 <key>CFBundleVersion</key><string>$2</string>
 </dict></plist>
 PL
-  for bin in "$app/Contents/MacOS/stagepilot-desktop" "$app/Contents/MacOS/stagepilot-backend" "$app/Contents/Resources/cloudflared"; do
+  for bin in "$app/Contents/MacOS/stagepilot-desktop" "$app/Contents/Resources/cloudflared"; do
     printf 'int main(void){return %s;}\n' "$2" | cc -x c - -o "$bin"
   done
 }
@@ -66,7 +66,7 @@ bash "$HERE/sign_macos_bundle.sh" --app "$WORK/a/StagePilot.app" "${SIG_ARGS[@]}
 bash "$HERE/sign_macos_bundle.sh" --app "$WORK/b/StagePilot.app" "${SIG_ARGS[@]}" >/dev/null
 
 fail=0
-for rel in "" "Contents/MacOS/stagepilot-backend" "Contents/Resources/cloudflared"; do
+for rel in "" "Contents/Resources/cloudflared"; do
   A="$WORK/a/StagePilot.app/$rel"; B="$WORK/b/StagePilot.app/$rel"
   da="$(dr "$A")"; db="$(dr "$B")"; ia="$(ident "$A")"; ib="$(ident "$B")"
   echo "[$rel] id=$ia | $da"
