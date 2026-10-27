@@ -10,9 +10,7 @@ export type BackendSupervisorStatus = {
   managed: boolean;
   failure_kind?:
     | "port_occupied"
-    | "sidecar_missing"
-    | "sidecar_exited"
-    | "macos_code_signing"
+    | "server_exited"
     | "timeout"
     | null;
   log_path?: string | null;
@@ -26,12 +24,8 @@ export const backendStartupTitle = (status: BackendSupervisorStatus | null): str
   switch (status.failure_kind) {
     case "port_occupied":
       return "Backend port is occupied";
-    case "sidecar_missing":
-      return "Packaged backend is missing";
-    case "sidecar_exited":
-      return "Packaged backend exited";
-    case "macos_code_signing":
-      return "macOS blocked the packaged backend";
+    case "server_exited":
+      return "The StagePilot server stopped";
     case "timeout":
       return "Backend startup timed out";
     default:
@@ -56,9 +50,7 @@ export const listenForDesktopBackend = async (
 export type BackendCrashLoopDetected = {
   failure_kind:
     | "port_occupied"
-    | "sidecar_missing"
-    | "sidecar_exited"
-    | "macos_code_signing"
+    | "server_exited"
     | "timeout"
     | null;
   message: string;

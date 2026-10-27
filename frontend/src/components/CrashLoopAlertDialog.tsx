@@ -8,12 +8,8 @@ const failureKindLabel = (kind: BackendCrashLoopDetected["failure_kind"]): strin
   switch (kind) {
     case "port_occupied":
       return "The backend port is occupied.";
-    case "sidecar_missing":
-      return "The packaged backend is missing.";
-    case "sidecar_exited":
-      return "The packaged backend keeps exiting.";
-    case "macos_code_signing":
-      return "macOS is blocking the packaged backend.";
+    case "server_exited":
+      return "The StagePilot server keeps stopping.";
     case "timeout":
       return "The backend keeps timing out on startup.";
     default:

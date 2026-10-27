@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Contract runner: record golden transcripts from the Python backend, replay them against any base URL.
+"""Contract replay: run the scripted scenarios against a StagePilot server and diff the result.
 
-  record   run the scenarios IN PROCESS through FastAPI's TestClient (the harness the backend tests
-           use) against `create_app(Settings(demo_mode=True))` and write contract/transcripts.json
-  replay   run the same scenarios against BASE_URL over real HTTP/WebSocket, normalise volatile
-           fields on both sides and diff against the golden transcripts (exit 1 on any difference)
-  openapi  write contract/openapi.json (the /api/v1/* subset of the FastAPI schema)
+The golden transcripts in contract/transcripts.json were recorded once from the Python 2.41.1
+backend; the Rust server must keep answering the same way. This tool only replays them (standard
+library only, Python 3.9+):
 
-Run through the backend environment:  uv run --project backend --frozen python scripts/contract/contract.py replay http://127.0.0.1:PORT
-Volatile fields are listed in VOLATILE_KEYS below and documented in docs/contract/README.md.
+    python3 scripts/contract/contract.py replay http://127.0.0.1:PORT [--profile NAME] [--mock-url URL]
+
+It normalises volatile fields on both sides and exits 1 on any difference that is not listed in
+APPROVED_DIVERGENCES. scripts/contract/run_rust.sh starts the Rust server and the mocks for every
+profile and calls it. Volatile fields are listed in VOLATILE_KEYS below.
 """
 
 from __future__ import annotations
@@ -31,7 +32,6 @@ from scenarios import LIGHTKEY_SCENARIOS, OUTPUT_SCENARIOS, SCENARIOS, Step  # n
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "contract"
 TRANSCRIPTS = OUT / "transcripts.json"
-OPENAPI = OUT / "openapi.json"
 
 # Values that legitimately differ between runs/builds. They must be present (same type) but their value
 # is not compared. Matching is by JSON key name at any depth.
@@ -72,8 +72,8 @@ RUST_SCALAR_EXTENSIONS = {
 }
 # Reviewed, intentional differences from the Python 2.41.1 recording (rc.4 audit fixes). Each entry
 # is a regex over one diff line plus the reason. Anything not listed still fails the replay, so keep
-# this list short and specific; when Python is retired the transcripts should be re-recorded and
-# this list emptied.
+# this list short and specific; each entry should be dropped when the transcripts are next
+# re-recorded from the Rust server.
 APPROVED_DIVERGENCES = [
     (r"\.(lights_status|connection_status): 'connected' != 'ready'$",
      "m5: Lighting OSC is 'ready' (socket open, delivery unconfirmed) until a cue is sent"),
@@ -177,44 +177,12 @@ def clean_headers(headers: Any) -> dict[str, str]:
 # ---- transports ---------------------------------------------------------------------------------
 
 
-class InProcess:
-    """The backend test harness: FastAPI TestClient over create_app(demo)."""
-
-    def __init__(self, app: Any = None) -> None:
-        from fastapi.testclient import TestClient
-        from stagepilot.core.config import Settings
-        from stagepilot.main import create_app
-
-        self._cm = TestClient(
-            app if app is not None else create_app(Settings(demo_mode=True), dashboard_auth_enforced=False)
-        )
-        self.client = self._cm.__enter__()
-
-    def close(self) -> None:
-        self._cm.__exit__(None, None, None)
-
-    def http(self, step: Step) -> dict[str, Any]:
-        r = self.client.request(step["method"], step["path"], json=step.get("json"))
-        return _exchange(r.status_code, r.headers, r.content)
-
-    def ws(self, step: Step) -> list[Any]:
-        messages: list[Any] = []
-        with self.client.websocket_connect(step["ws"]) as sock:
-            for _ in range(step["receive"]):
-                messages.append(sock.receive_json())
-            for sub in step.get("after_receive", []):
-                self.http(sub)
-            for _ in range(step.get("then_receive", 0)):
-                messages.append(sock.receive_json())
-        return messages
-
-
 class Live:
-    """A real server at BASE_URL (HTTP via urllib, WebSocket via the `websockets` package)."""
+    """A real server at BASE_URL (HTTP via urllib, WebSocket via the small client below)."""
 
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
-        # The TestClient keeps cookies between steps, so the live replay does too (dashboard PIN session).
+        # The recorded session kept its cookies between steps, so the live replay does too (dashboard PIN session).
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
         )
@@ -237,18 +205,99 @@ class Live:
             return _exchange(err.code, err.headers, err.read())
 
     def ws(self, step: Step) -> list[Any]:
-        from websockets.sync.client import connect
-
         url = "ws" + self.base[4:] + step["ws"]
         messages: list[Any] = []
-        with connect(url, open_timeout=15) as sock:
+        sock = _WebSocket(url)
+        try:
             for _ in range(step["receive"]):
                 messages.append(json.loads(sock.recv(timeout=15)))
             for sub in step.get("after_receive", []):
                 self.http(sub)
             for _ in range(step.get("then_receive", 0)):
                 messages.append(json.loads(sock.recv(timeout=15)))
+        finally:
+            sock.close()
         return messages
+
+
+class _WebSocket:
+    """A minimal blocking WebSocket client (text frames, RFC 6455), standard library only."""
+
+    def __init__(self, url: str, timeout: float = 15) -> None:
+        import base64
+        import os
+        import socket
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(url)
+        self.sock = socket.create_connection((parts.hostname, parts.port or 80), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+        self.sock.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\nHost: {parts.hostname}:{parts.port or 80}\r\n"
+                f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n\r\n"
+            ).encode()
+        )
+        response = b""
+        while b"\r\n\r\n" not in response:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise RuntimeError("WebSocket closed during the handshake")
+            response += chunk
+        head, _, self._buffer = response.partition(b"\r\n\r\n")
+        status_line = head.split(b"\r\n")[0]
+        if b" 101 " not in status_line:
+            raise RuntimeError("WebSocket upgrade refused: " + repr(status_line))
+
+    def _read(self, size: int) -> bytes:
+        while len(self._buffer) < size:
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise RuntimeError("WebSocket closed")
+            self._buffer += chunk
+        data, self._buffer = self._buffer[:size], self._buffer[size:]
+        return data
+
+    def _send(self, opcode: int, payload: bytes) -> None:
+        import os
+
+        mask = os.urandom(4)
+        header = bytes((0x80 | opcode,))
+        if len(payload) < 126:
+            header += bytes((0x80 | len(payload),))
+        else:
+            header += bytes((0x80 | 126,)) + len(payload).to_bytes(2, "big")
+        self.sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+
+    def recv(self, timeout: float = 15) -> str:
+        self.sock.settimeout(timeout)
+        message = b""
+        while True:
+            first, second = self._read(2)
+            size = second & 127
+            if size == 126:
+                size = int.from_bytes(self._read(2), "big")
+            elif size == 127:
+                size = int.from_bytes(self._read(8), "big")
+            payload = self._read(size)
+            opcode = first & 15
+            if opcode == 9:  # ping
+                self._send(10, payload)
+            elif opcode == 8:  # close
+                raise RuntimeError("WebSocket closed by the server")
+            elif opcode in (1, 2, 0):
+                message += payload
+                if first & 0x80:
+                    return message.decode("utf-8")
+
+    def close(self) -> None:
+        try:
+            self._send(8, b"")
+        except OSError:
+            pass
+        self.sock.close()
 
 
 def _exchange(status: int, headers: Any, body: bytes) -> dict[str, Any]:
@@ -264,15 +313,15 @@ FAKE_PORT = 47901
 
 
 class Fakes:
-    """The scripted fake Playback (backend/tests/playback_fake.py) driven by `fake` steps."""
+    """The scripted fake Playback (scripts/contract/playback_fake.py) driven by `fake` steps."""
 
     def __init__(self) -> None:
         self.fake: Any = None
 
     def do(self, op: str, args: list[Any]) -> None:
         if op == "start":
-            sys.path.insert(0, str(ROOT / "backend" / "tests"))
-            from playback_fake import FakePlayback  # type: ignore[import-not-found]
+            sys.path.insert(0, str(Path(__file__).parent))
+            from playback_fake import FakePlayback
 
             self.fake = FakePlayback()
             self.fake.start(FAKE_PORT)
@@ -427,234 +476,6 @@ def diff(path: str, want: Any, got: Any, out: list[str]) -> None:
         out.append(f"{path}: {want!r} != {got!r}")
 
 
-def record_pco() -> list[dict[str, Any]]:
-    """Run the pco profile against the Python app served over real HTTP on loopback.
-
-    The Planning Center plugin awaits its refresh task from inside the request, which the
-    in-process TestClient portal cancels mid-flight, so this profile (unlike the demo profile) is
-    recorded exactly the way it is replayed: through a real server. Planning Center and the
-    control plane are the mock.
-    """
-
-    import socket
-    import threading
-    import time
-
-    import mock_pco
-    import pco_app
-    import pco_profile
-    import uvicorn
-
-    mock_server, mock_port = mock_pco.start()
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    server = uvicorn.Server(
-        uvicorn.Config(pco_app.create(mock_port), host="127.0.0.1", port=port, log_level="warning")
-    )
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        if server.started:
-            break
-        time.sleep(0.1)
-    try:
-        return normalise(pco_profile.run_pco(Live(f"http://127.0.0.1:{port}"), f"http://127.0.0.1:{mock_port}"))
-    finally:
-        server.should_exit = True
-        thread.join(timeout=10)
-        mock_server.shutdown()
-
-
-def _serve(app: Any) -> tuple[Any, Any, int]:
-    """Serve an ASGI app over real HTTP on a free loopback port (a thread); return (server, thread, port)."""
-
-    import socket
-    import threading
-    import time
-
-    import uvicorn
-
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        if server.started:
-            break
-        time.sleep(0.1)
-    return server, thread, port
-
-
-def record_remote() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """The remote and static profiles, recorded from the Python app over real HTTP.
-
-    The Remote identity store and feature files live in a scratch directory; the trusted ingress is
-    a second listener over the same app. No tunnel, no provider, no network.
-    """
-
-    import tempfile
-
-    import remote_app
-    import remote_profile
-    from stagepilot.api.remote_ingress import RemoteIngress
-
-    with tempfile.TemporaryDirectory() as scratch:
-        app, origin = remote_app.create_remote(Path(scratch))
-        local, local_thread, local_port = _serve(app)
-        edge, edge_thread, edge_port = _serve(RemoteIngress(app, public_origin=origin))
-        urls = {"local": f"http://127.0.0.1:{local_port}", "ingress": f"http://127.0.0.1:{edge_port}"}
-        try:
-            remote = normalise(remote_profile.run(remote_profile.REMOTE_SCENARIOS, urls))
-            static = normalise(remote_profile.run(remote_profile.STATIC_SCENARIOS, urls))
-        finally:
-            for server, thread in ((edge, edge_thread), (local, local_thread)):
-                server.should_exit = True
-                thread.join(timeout=10)
-    return remote, static
-
-
-def record_diagnostics() -> list[dict[str, Any]]:
-    """The diagnostics profile: the Python app uploading to the mock control plane."""
-
-    import tempfile
-
-    import mock_control
-    import remote_app
-    import remote_profile
-
-    from stagepilot.plugins.playback_api.plugin import RECENT_LOG
-
-    # The demo profile ran in this process and its Playback scans filled the (process-wide) log;
-    # a freshly started server, which is what the replay talks to, has none.
-    RECENT_LOG.clear()
-    mock_server, mock_port = mock_control.start()
-    with tempfile.TemporaryDirectory() as scratch:
-        app = remote_app.create_diagnostics(Path(scratch), mock_port)
-        server, thread, port = _serve(app)
-        try:
-            return normalise(
-                remote_profile.run(
-                    remote_profile.DIAGNOSTICS_SCENARIOS,
-                    {"local": f"http://127.0.0.1:{port}"},
-                    f"http://127.0.0.1:{mock_port}",
-                )
-            )
-        finally:
-            server.should_exit = True
-            thread.join(timeout=10)
-            mock_server.shutdown()
-
-
-def _dump(steps: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "volatile_keys": sorted(VOLATILE_KEYS),
-        "volatile_suffixes": list(VOLATILE_SUFFIXES),
-        "steps": normalise(steps),
-    }
-
-
-def record_outputs() -> list[dict[str, Any]]:
-    """Run the outputs profile in process: fake MIDI, mock ProPresenter, OSC to a dead loopback port."""
-
-    import mock_propresenter
-    import outputs_app
-
-    server, port = mock_propresenter.start()
-    MOCK_PORT[:] = [port]
-    transport = InProcess(outputs_app.create(port))
-    try:
-        return normalise(
-            run(
-                transport,
-                OUTPUT_SCENARIOS,
-                {"mock_url": f"http://127.0.0.1:{port}", "mock_port": port},
-            )
-        )
-    finally:
-        transport.close()
-        server.shutdown()
-        MOCK_PORT[:] = []
-
-
-def record_lightkey() -> list[dict[str, Any]]:
-    """Run the lightkey profile against the Python app served over real HTTP on loopback.
-
-    Like the pco profile it is recorded exactly the way it is replayed: through a real server,
-    because the Lightkey link polls in the background and needs the app's event loop running
-    between requests. The Lightkey agent is the fake in `mock_lightkey.py`.
-    """
-
-    import socket
-    import threading
-    import time
-
-    import lightkey_app
-    import mock_lightkey
-    import uvicorn
-
-    agent, agent_port = mock_lightkey.start()
-    LK_PORT[:] = [agent_port]
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    server = uvicorn.Server(
-        uvicorn.Config(lightkey_app.create(agent_port), host="127.0.0.1", port=port, log_level="warning")
-    )
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        if server.started:
-            break
-        time.sleep(0.1)
-    try:
-        return normalise(
-            run(
-                Live(f"http://127.0.0.1:{port}"),
-                LIGHTKEY_SCENARIOS,
-                {"mock_url": f"http://127.0.0.1:{agent_port}", "mock_port": agent_port},
-            )
-        )
-    finally:
-        server.should_exit = True
-        thread.join(timeout=10)
-        agent.shutdown()
-        LK_PORT[:] = []
-
-
-def cmd_record(_: argparse.Namespace) -> int:
-    transport = InProcess()
-    try:
-        transcripts = run(transport)
-    finally:
-        transport.close()
-    document = _dump(transcripts)
-    pco_steps = record_pco()
-    outputs = record_outputs()
-    lightkey = record_lightkey()
-    remote_steps, static_steps = record_remote()
-    diagnostics_steps = record_diagnostics()
-    document["pco_steps"] = pco_steps
-    document["output_steps"] = outputs
-    document["remote_steps"] = remote_steps
-    document["diagnostics_steps"] = diagnostics_steps
-    document["static_steps"] = static_steps
-    document["lightkey_steps"] = lightkey
-    OUT.mkdir(exist_ok=True)
-    TRANSCRIPTS.write_text(
-        json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    print(
-        f"recorded {len(transcripts)} steps + {len(pco_steps)} pco steps + {len(outputs)} output steps"
-        f" + {len(remote_steps)} remote + {len(diagnostics_steps)} diagnostics + {len(static_steps)} static + {len(lightkey)} lightkey steps"
-        f" -> {TRANSCRIPTS.relative_to(ROOT)}"
-    )
-    return 0
-
-
 def cmd_replay(args: argparse.Namespace) -> int:
     document = json.loads(TRANSCRIPTS.read_text(encoding="utf-8"))
     golden = document["steps"]
@@ -707,26 +528,9 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
-def cmd_openapi(_: argparse.Namespace) -> int:
-    from stagepilot.core.config import Settings
-    from stagepilot.main import create_app
-
-    schema = create_app(Settings(demo_mode=True), dashboard_auth_enforced=False).openapi()
-    schema = copy.deepcopy(schema)
-    schema["paths"] = {p: v for p, v in schema["paths"].items() if p.startswith("/api/v1/")}
-    # The application version changes every release and is not part of the contract.
-    schema["info"]["version"] = "<application version>"
-    OUT.mkdir(exist_ok=True)
-    OPENAPI.write_text(json.dumps(schema, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"{len(schema['paths'])} paths -> {OPENAPI.relative_to(ROOT)}")
-    return 0
-
-
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("record").set_defaults(fn=cmd_record)
-    sub.add_parser("openapi").set_defaults(fn=cmd_openapi)
     rp = sub.add_parser("replay")
     rp.add_argument("base_url")
     rp.add_argument("--profile", choices=["pco", "outputs", "remote", "diagnostics", "static", "lightkey"], default=None)

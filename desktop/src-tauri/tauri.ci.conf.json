@@ -3,9 +3,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "externalBin": ["binaries/stagepilot-backend"],
     "resources": {
-      "resources/cloudflared.exe": "cloudflared.exe"
+      "resources/cloudflared.exe": "cloudflared.exe",
+      "../../frontend/dist/": "stagepilot_web/"
     },
     "createUpdaterArtifacts": false
   }

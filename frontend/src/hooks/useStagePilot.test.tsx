@@ -400,7 +400,7 @@ describe("useStagePilot", () => {
     expect(result.current.error).toBe("Live connection interrupted; reconnecting.");
   });
 
-  it("loads settings only after the packaged backend health probe succeeds", async () => {
+  it("loads settings only after the backend health probe succeeds", async () => {
     const startupHealth = deferred<HealthResponse>();
     mockedGetHealth.mockReturnValueOnce(startupHealth.promise);
 

@@ -93,7 +93,7 @@ SCENARIOS: list[Step] = [
     http("settings PUT, non-object body is a 422", "PUT", "/api/v1/settings", [1, 2]),
 
     # ---- phase 3b-B: Playback routes -----------------------------------------------------------
-    # Recorded from Python. Steps with `fake` drive backend/tests/playback_fake.py (a scripted
+    # Recorded from Python. Steps with `fake` drive scripts/contract/playback_fake.py (a scripted
     # loopback Playback on FAKE_PORT); steps with `wait` poll a GET until the connection settles.
     # No Planning Center, so the length routes answer their "not connected" errors.
     http("playback settings, out of range port is a 422", "PUT", "/api/v1/playback-api/settings", {"port": 0}),

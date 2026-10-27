@@ -6,7 +6,7 @@
 //! is armed, every change of the active-cue set is stored as an *edge* at a song time; on a later
 //! run of the same song the edges are replayed as OSC `activate` / `deactivate` commands. Nothing
 //! here uses `tokio`, so every rule is tested without a runtime against
-//! `backend/tests/golden/lightkey_golden.json`, the file Python is tested with.
+//! `tests/fixtures/lightkey_golden.json`, the file Python is tested with.
 
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};

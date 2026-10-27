@@ -16,11 +16,6 @@ use tauri::{
     Emitter, Manager, RunEvent, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
-#[cfg(not(feature = "in-process"))]
-use tauri_plugin_shell::{
-    process::{CommandChild, CommandEvent},
-    ShellExt,
-};
 use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
 
@@ -41,10 +36,8 @@ mod pco_oauth;
 const DEFAULT_PORT: u16 = 8765;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const PROBE_INTERVAL: Duration = Duration::from_millis(250);
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-const RECENT_BACKEND_LINES: usize = 32;
 // A single rotation (keeping .log.1) is enough headroom for a rapid crash
-// loop: at RECENT_BACKEND_LINES=32 lines per failure plus the structured
+// loop: at a few lines per failure plus the structured
 // failure entry, dozens of failures fit well inside BACKEND_LOG_MAX_BYTES
 // before even one rotation, and the failing entry itself is always written
 // to the *current* (active) file before any rotation check runs for the
@@ -136,13 +129,8 @@ enum BackendState {
 #[serde(rename_all = "snake_case")]
 enum BackendFailureKind {
     PortOccupied,
-    SidecarMissing,
-    SidecarExited,
-    /// The in-process server (cargo feature `in-process`) ended on its own. Only that build
-    /// constructs it, so the default (sidecar) build would warn about dead code.
-    #[cfg_attr(not(feature = "in-process"), allow(dead_code))]
+    /// The in-process server could not start, or ended on its own.
     ServerExited,
-    MacosCodeSigning,
     Timeout,
 }
 
@@ -163,37 +151,6 @@ fn managed_exit_should_fail(state: &BackendState) -> bool {
     matches!(state, BackendState::Starting | BackendState::Ready)
 }
 
-#[cfg(any(target_os = "windows", test))]
-fn tasklist_has_stagepilot_backend(output: &[u8]) -> bool {
-    String::from_utf8_lossy(output)
-        .to_ascii_lowercase()
-        .contains("stagepilot-backend.exe")
-}
-
-#[cfg(target_os = "windows")]
-fn windows_backend_process_running() -> Result<bool, String> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let output = std::process::Command::new("tasklist.exe")
-        .args([
-            "/FI",
-            "IMAGENAME eq stagepilot-backend.exe",
-            "/FO",
-            "CSV",
-            "/NH",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|error| {
-            format!("Unable to verify that the StagePilot backend stopped: {error}")
-        })?;
-    if !output.status.success() {
-        return Err("Windows could not verify that the StagePilot backend stopped.".to_string());
-    }
-    Ok(tasklist_has_stagepilot_backend(&output.stdout))
-}
-
 #[derive(Clone, Debug, Serialize)]
 struct BackendSupervisorStatus {
     state: BackendState,
@@ -207,12 +164,7 @@ struct BackendSupervisorStatus {
 #[derive(Clone)]
 struct BackendSupervisor {
     status: Arc<Mutex<BackendSupervisorStatus>>,
-    #[cfg(not(feature = "in-process"))]
-    child: Arc<Mutex<Option<CommandChild>>>,
-    #[cfg(not(feature = "in-process"))]
-    child_pid: Arc<Mutex<Option<u32>>>,
-    /// The in-process server (cargo feature `in-process`): the counterpart of `child`.
-    #[cfg(feature = "in-process")]
+    /// The in-process server.
     embedded: Arc<Mutex<Option<stagepilot_server::embedded::EmbeddedServer>>>,
     /// Timestamps of recent classified failures, used for crash-loop
     /// detection. In-memory only; cleared/pruned on a rolling window.
@@ -234,11 +186,6 @@ impl BackendSupervisor {
                 failure_kind: None,
                 log_path: None,
             })),
-            #[cfg(not(feature = "in-process"))]
-            child: Arc::new(Mutex::new(None)),
-            #[cfg(not(feature = "in-process"))]
-            child_pid: Arc::new(Mutex::new(None)),
-            #[cfg(feature = "in-process")]
             embedded: Arc::new(Mutex::new(None)),
             failure_history: Arc::new(Mutex::new(VecDeque::new())),
             crash_loop_armed: Arc::new(Mutex::new(false)),
@@ -353,7 +300,6 @@ impl BackendSupervisor {
 
     /// Stops the in-process server gracefully (axum drains, then Remote, plugins and the state
     /// service stop in reverse order); aborts it after `DEFAULT_STOP_GRACE`.
-    #[cfg(feature = "in-process")]
     fn terminate_child(&self) -> Result<(), String> {
         let server = self
             .embedded
@@ -364,106 +310,6 @@ impl BackendSupervisor {
             server.stop(stagepilot_server::embedded::DEFAULT_STOP_GRACE);
         }
         Ok(())
-    }
-
-    #[cfg(not(feature = "in-process"))]
-    fn terminate_child(&self) -> Result<(), String> {
-        let pid = self
-            .child_pid
-            .lock()
-            .expect("backend child PID lock poisoned")
-            .take();
-        #[cfg(target_os = "windows")]
-        if let Some(pid) = pid {
-            use std::os::windows::process::CommandExt;
-
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            let _ = std::process::Command::new("taskkill.exe")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .creation_flags(CREATE_NO_WINDOW)
-                .status();
-        }
-        #[cfg(target_os = "macos")]
-        if let Some(pid) = pid {
-            terminate_process_tree(pid);
-        }
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        let _ = pid;
-        if let Some(child) = self
-            .child
-            .lock()
-            .expect("backend child lock poisoned")
-            .take()
-        {
-            let _ = child.kill();
-        }
-        Ok(())
-    }
-}
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn direct_child_process_ids(parent_pid: u32) -> Vec<u32> {
-    let Ok(output) = std::process::Command::new("/usr/bin/pgrep")
-        .args(["-P", &parent_pid.to_string()])
-        .output()
-    else {
-        return Vec::new();
-    };
-    if !output.status.success() {
-        return Vec::new();
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|value| value.trim().parse().ok())
-        .collect()
-}
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn descendant_process_ids(parent_pid: u32) -> Vec<u32> {
-    fn collect(parent_pid: u32, descendants: &mut Vec<u32>) {
-        for child_pid in direct_child_process_ids(parent_pid) {
-            collect(child_pid, descendants);
-            descendants.push(child_pid);
-        }
-    }
-
-    let mut descendants = Vec::new();
-    collect(parent_pid, &mut descendants);
-    descendants
-}
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn process_exists(pid: u32) -> bool {
-    std::process::Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn signal_process(pid: u32, signal: &str) {
-    let _ = std::process::Command::new("/bin/kill")
-        .args([signal, &pid.to_string()])
-        .status();
-}
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn terminate_process_tree(root_pid: u32) {
-    let mut process_ids = descendant_process_ids(root_pid);
-    process_ids.push(root_pid);
-    for pid in &process_ids {
-        signal_process(*pid, "-TERM");
-    }
-    std::thread::sleep(Duration::from_millis(300));
-    for pid in process_ids {
-        if process_exists(pid) {
-            signal_process(pid, "-KILL");
-        }
     }
 }
 
@@ -766,46 +612,6 @@ fn crash_loop_qualifies(history: &VecDeque<Instant>) -> bool {
     history.len() >= CRASH_LOOP_THRESHOLD
 }
 
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn recent_backend_text(lines: &VecDeque<String>) -> String {
-    lines.iter().cloned().collect::<Vec<_>>().join("\n")
-}
-
-#[cfg_attr(feature = "in-process", allow(dead_code))]
-fn backend_exit_failure(
-    code: Option<i32>,
-    recent_output: &str,
-    log_path: Option<&str>,
-) -> (BackendFailureKind, String) {
-    let signing_rejection = [
-        "Failed to load Python shared library",
-        "mapped file has no Team ID",
-        "not valid for use in process",
-    ]
-    .iter()
-    .any(|needle| recent_output.contains(needle));
-    let log_hint = log_path
-        .map(|path| format!(" See the backend log at {path}."))
-        .unwrap_or_default();
-    if signing_rejection {
-        return (
-            BackendFailureKind::MacosCodeSigning,
-            format!(
-                "The packaged StagePilot backend was blocked by macOS code-signing policy. \
-                 This application build is invalid.{log_hint}"
-            ),
-        );
-    }
-    (
-        BackendFailureKind::SidecarExited,
-        format!(
-            "The packaged StagePilot backend exited before it became ready (exit code {}).{}",
-            code.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
-            log_hint
-        ),
-    )
-}
-
 fn wait_for_backend(
     app: tauri::AppHandle,
     supervisor: BackendSupervisor,
@@ -839,152 +645,14 @@ fn wait_for_backend(
     });
 }
 
-#[cfg(not(feature = "in-process"))]
+/// Starts the StagePilot server as tasks inside this process (`stagepilot-server`). It reads its
+/// configuration from this process's environment, set below.
 fn spawn_backend(
     app: &tauri::AppHandle,
     supervisor: &BackendSupervisor,
     port: u16,
     bind_host: &str,
 ) -> Result<Option<String>, String> {
-    let command = app
-        .shell()
-        .sidecar("stagepilot-backend")
-        .map_err(|error| format!("Unable to locate the packaged backend sidecar: {error}"))?
-        .env("STAGEPILOT_HOST", bind_host)
-        .env("STAGEPILOT_PORT", port.to_string())
-        .env("STAGEPILOT_SETTINGS_PATH", settings_path())
-        .env(
-            "STAGEPILOT_DESKTOP_REMOTE_ROOT",
-            app.path()
-                .app_data_dir()
-                .map_err(|error| format!("Unable to resolve desktop Remote state: {error}"))?
-                .join("remote"),
-        )
-        .env(
-            "STAGEPILOT_CLOUDFLARED_BINARY",
-            app.path()
-                .resource_dir()
-                .map_err(|error| format!("Unable to resolve bundled cloudflared: {error}"))?
-                .join(if cfg!(target_os = "windows") {
-                    "cloudflared.exe"
-                } else {
-                    "cloudflared"
-                }),
-        )
-        .env(
-            "STAGEPILOT_PCO_CLIENT_ID",
-            // Baked in at compile time by build.rs from the
-            // STAGEPILOT_PCO_CLIENT_ID build-time env var (release
-            // workflows source it from the PLANNING_CENTER_CLIENT_ID repo
-            // secret). Not a secret itself — see build.rs for rationale.
-            env!("STAGEPILOT_PCO_CLIENT_ID"),
-        );
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    let command = {
-        let broker = app.state::<NativeCredentialBroker>();
-        command
-            .env("STAGEPILOT_CREDENTIAL_BROKER_ORIGIN", &broker.origin)
-            .env("STAGEPILOT_CREDENTIAL_BROKER_TOKEN", &broker.authorization)
-    };
-    let (mut events, child) = command
-        .spawn()
-        .map_err(|error| format!("Unable to start the packaged backend sidecar: {error}"))?;
-    *supervisor
-        .child_pid
-        .lock()
-        .expect("backend child PID lock poisoned") = Some(child.pid());
-    *supervisor
-        .child
-        .lock()
-        .expect("backend child lock poisoned") = Some(child);
-
-    let backend_log_path = app
-        .path()
-        .app_log_dir()
-        .ok()
-        .map(|directory| directory.join("stagepilot-backend.log"));
-    let backend_log_path_text = backend_log_path
-        .as_ref()
-        .map(|path| path.to_string_lossy().into_owned());
-    let backend_log = backend_log_path.as_ref().and_then(|path| {
-        let directory = path.parent()?;
-        fs::create_dir_all(directory).ok()?;
-        rotate_backend_log(path);
-        OpenOptions::new().create(true).append(true).open(path).ok()
-    });
-    let backend_log = Arc::new(Mutex::new(backend_log));
-    let recent_output = Arc::new(Mutex::new(VecDeque::<String>::new()));
-
-    let event_app = app.clone();
-    let event_supervisor = supervisor.clone();
-    let event_log_path = backend_log_path_text.clone();
-    let event_app_version = app.package_info().version.to_string();
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = events.recv().await {
-            match event {
-                CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
-                    let text = String::from_utf8_lossy(&line).trim().to_string();
-                    if !text.is_empty() {
-                        let mut recent = recent_output
-                            .lock()
-                            .expect("backend recent-output lock poisoned");
-                        recent.push_back(text);
-                        while recent.len() > RECENT_BACKEND_LINES {
-                            recent.pop_front();
-                        }
-                    }
-                    if let Some(file) = backend_log
-                        .lock()
-                        .expect("backend log lock poisoned")
-                        .as_mut()
-                    {
-                        let _ = file.write_all(&line);
-                        if !line.ends_with(b"\n") {
-                            let _ = file.write_all(b"\n");
-                        }
-                        let _ = file.flush();
-                    }
-                }
-                CommandEvent::Terminated(payload) => {
-                    if managed_exit_should_fail(&event_supervisor.snapshot().state) {
-                        let recent = recent_backend_text(
-                            &recent_output
-                                .lock()
-                                .expect("backend recent-output lock poisoned"),
-                        );
-                        let (kind, message) =
-                            backend_exit_failure(payload.code, &recent, event_log_path.as_deref());
-                        record_backend_failure(
-                            &event_app,
-                            &event_supervisor,
-                            &event_app_version,
-                            event_log_path.clone(),
-                            kind,
-                            message,
-                            &recent,
-                        );
-                    }
-                    break;
-                }
-                _ => {}
-            }
-        }
-    });
-    Ok(backend_log_path_text)
-}
-
-/// The `in-process` counterpart of the sidecar spawn: the same environment contract, but the
-/// server runs as tasks inside this process (`stagepilot-server`), so there is no child to
-/// signal. Differences from the sidecar are documented in docs/rust-migration/phase6-remaining.md.
-#[cfg(feature = "in-process")]
-fn spawn_backend(
-    app: &tauri::AppHandle,
-    supervisor: &BackendSupervisor,
-    port: u16,
-    bind_host: &str,
-) -> Result<Option<String>, String> {
-    // The server reads its configuration from the environment, exactly as the sidecar does; in
-    // process it is this process's environment.
     env::set_var("STAGEPILOT_HOST", bind_host);
     env::set_var("STAGEPILOT_PORT", port.to_string());
     env::set_var("STAGEPILOT_SETTINGS_PATH", settings_path());
@@ -1006,9 +674,8 @@ fn spawn_backend(
                 "cloudflared"
             }),
     );
-    // The Rust release variant bundles the built frontend as the `stagepilot_web` resource (the
-    // Python sidecar carries its own copy inside PyInstaller). An explicit override wins, and a
-    // development run without the resource keeps the server's own fallbacks.
+    // The release build bundles the built frontend as the `stagepilot_web` resource. An explicit
+    // override wins, and a development run without the resource keeps the server's own fallbacks.
     if env::var_os("STAGEPILOT_WEB_ROOT").is_none() {
         if let Ok(resources) = app.path().resource_dir() {
             let web_root = resources.join("stagepilot_web");
@@ -1051,7 +718,7 @@ fn spawn_backend(
         .expect("backend embedded-server lock poisoned") = Some(server);
 
     // The server ends on its own only when it crashes or fails to start (a requested stop sends
-    // no report), so this is the in-process analogue of the sidecar's `Terminated` event.
+    // no report).
     let event_app = app.clone();
     let event_supervisor = supervisor.clone();
     let event_log_path = backend_log_path_text.clone();
@@ -1073,7 +740,7 @@ fn spawn_backend(
     Ok(backend_log_path_text)
 }
 
-/// Shared failure path for both variants: structured crash-log entry, `Failed` status event,
+/// Failure path: structured crash-log entry, `Failed` status event,
 /// crash-loop detection.
 fn record_backend_failure(
     app: &tauri::AppHandle,
@@ -1507,18 +1174,16 @@ async fn prepare_for_update(
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
             let port_available = probe_port(supervisor.snapshot().port) == PortProbe::Available;
-            let process_stopped = !windows_backend_process_running()?;
-            if port_available && process_stopped {
-                // Windows can retain the executable mapping briefly after the process
-                // disappears. Give the loader time to release the sidecar before NSIS
-                // attempts to replace it.
+            if port_available {
+                // Give the server time to release its listener and files before NSIS
+                // attempts to replace the application.
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         Err(
-            "The StagePilot backend did not release its executable before update installation."
+            "The StagePilot backend did not release its port before update installation."
                 .to_string(),
         )
     }
@@ -1820,7 +1485,6 @@ pub fn run() {
                 let _ = restore_main_window(app, false);
             }
         }))
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -1880,12 +1544,13 @@ pub fn run() {
             restore_main_window(app.handle(), true).map_err(std::io::Error::other)?;
             install_tray(app).map_err(std::io::Error::other)?;
             if let Err(message) = start_backend(app.handle(), supervisor.clone()) {
-                let kind = if message.contains("locate the packaged backend sidecar") {
-                    BackendFailureKind::SidecarMissing
-                } else {
-                    BackendFailureKind::SidecarExited
-                };
-                supervisor.fail(app.handle(), kind, message, true, None);
+                supervisor.fail(
+                    app.handle(),
+                    BackendFailureKind::ServerExited,
+                    message,
+                    true,
+                    None,
+                );
             }
             Ok(())
         })
@@ -2070,16 +1735,6 @@ mod tests {
     }
 
     #[test]
-    fn detects_stagepilot_backend_in_windows_task_list_output() {
-        assert!(tasklist_has_stagepilot_backend(
-            br#""stagepilot-backend.exe","8420","Console","1","72,000 K""#,
-        ));
-        assert!(!tasklist_has_stagepilot_backend(
-            b"INFO: No tasks are running which match the specified criteria.",
-        ));
-    }
-
-    #[test]
     fn saved_server_port_is_validated() {
         assert_eq!(port_from_settings(r#"{"server_port": 9123}"#), Some(9123));
         assert_eq!(port_from_settings(r#"{"server_port": 0}"#), None);
@@ -2189,39 +1844,18 @@ mod tests {
     }
 
     #[test]
-    fn macos_library_validation_failure_is_actionable() {
-        let (kind, message) = backend_exit_failure(
-            Some(255),
-            "Failed to load Python shared library: mapped file has no Team ID and is not valid for use in process",
-            Some("/tmp/stagepilot-backend.log"),
-        );
-        assert_eq!(kind, BackendFailureKind::MacosCodeSigning);
-        assert!(message.contains("blocked by macOS code-signing policy"));
-        assert!(message.contains("/tmp/stagepilot-backend.log"));
-    }
-
-    #[test]
-    fn ordinary_early_exit_includes_code_and_log() {
-        let (kind, message) =
-            backend_exit_failure(Some(7), "ordinary error", Some("/tmp/backend.log"));
-        assert_eq!(kind, BackendFailureKind::SidecarExited);
-        assert!(message.contains("exit code 7"));
-        assert!(message.contains("/tmp/backend.log"));
-    }
-
-    #[test]
     fn crash_log_entry_contains_structured_fields_and_redacts_secrets() {
         let recent = "starting up\nAuthorization: Bearer super-secret-token\nboom";
         let entry = BackendCrashLogEntry::new(
             "1.2.3",
-            BackendFailureKind::SidecarExited,
-            "The packaged StagePilot backend exited before it became ready (exit code 1).",
+            BackendFailureKind::ServerExited,
+            "The StagePilot server exited before it became ready (exit code 1).",
             recent,
         );
         let rendered = entry.render();
         assert!(rendered.contains("app_version: 1.2.3"));
         assert!(rendered.contains(&format!("os: {}", env::consts::OS)));
-        assert!(rendered.contains("failure_kind: SidecarExited"));
+        assert!(rendered.contains("failure_kind: ServerExited"));
         assert!(rendered.contains("exit code 1"));
         assert!(rendered.contains("boom"));
         assert!(!rendered.contains("super-secret-token"));
@@ -2246,15 +1880,15 @@ mod tests {
         write_crash_log_entry(
             Some(&log_path_text),
             "9.9.9",
-            BackendFailureKind::MacosCodeSigning,
-            "macOS blocked the backend.",
+            BackendFailureKind::PortOccupied,
+            "The port is occupied.",
             "access_token=abc123\nharmless line",
         );
 
         let contents = fs::read_to_string(&log_path).unwrap();
         assert!(contents.contains("app_version: 9.9.9"));
-        assert!(contents.contains("failure_kind: MacosCodeSigning"));
-        assert!(contents.contains("macOS blocked the backend."));
+        assert!(contents.contains("failure_kind: PortOccupied"));
+        assert!(contents.contains("The port is occupied."));
         assert!(contents.contains("harmless line"));
         assert!(!contents.contains("abc123"));
 
@@ -2346,7 +1980,6 @@ mod tests {
         assert!(has("updater:default"));
         assert!(has("process:allow-restart"));
         assert!(has("window-state:default"));
-        assert!(!has("shell:allow-execute"));
         assert!(!has("fs:default"));
     }
 
@@ -2436,39 +2069,6 @@ mod tests {
         server.join().unwrap();
     }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn nested_backend_process_tree_is_terminated() {
-        let mut root = std::process::Command::new("/bin/sh")
-            .args(["-c", "/bin/sh -c '/bin/sleep 30 & wait' & wait"])
-            .spawn()
-            .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(3);
-        let descendants = loop {
-            let descendants = descendant_process_ids(root.id());
-            if descendants.len() >= 2 || Instant::now() >= deadline {
-                break descendants;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        };
-        assert!(
-            descendants.len() >= 2,
-            "expected a nested child process tree"
-        );
-
-        terminate_process_tree(root.id());
-        let _ = root.wait();
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while Instant::now() < deadline
-            && (process_exists(root.id()) || descendants.iter().any(|pid| process_exists(*pid)))
-        {
-            std::thread::sleep(Duration::from_millis(50));
-        }
-
-        assert!(!process_exists(root.id()));
-        assert!(descendants.iter().all(|pid| !process_exists(*pid)));
-    }
-
     #[test]
     fn unrelated_listener_is_reported_as_occupied() {
         let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
@@ -2486,11 +2086,11 @@ mod tests {
     }
 }
 
-/// The installers are built with `--features in-process` on Windows and macOS. If MIDI hardware
+/// The installers are built for Windows and macOS. If MIDI hardware
 /// support were off there, the server would refuse to start on any settings that send MIDI
 /// (v2.42.0-rc.3 shipped like that). Unit tests of other crates cannot see this: it is decided by
 /// how the desktop crate depends on the server.
-#[cfg(all(test, feature = "in-process", any(windows, target_os = "macos")))]
+#[cfg(all(test, any(windows, target_os = "macos")))]
 mod shipped_build_tests {
     #[test]
     // The value is a compile-time constant on purpose: that is exactly what this test pins.
@@ -2498,7 +2098,7 @@ mod shipped_build_tests {
     fn midi_hardware_support_is_compiled_into_the_shipped_build() {
         assert!(
             stagepilot_midi::HARDWARE_SUPPORT,
-            "the in-process desktop build must enable stagepilot-server/midir-backend"
+            "the desktop build must enable stagepilot-server/midir-backend"
         );
     }
 }
