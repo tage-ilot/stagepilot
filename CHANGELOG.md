@@ -5,6 +5,8 @@
 ### Changed
 
 - Developer-facing only, no change to the app: the retired Python backend (`backend/`), its CI jobs, the `python`/`rust` installer variants and the Python fixture generators are removed. Every build is the in-process Rust app. The 2.41.1 sources remain at the `v2.41.1` tag, and the migration notes moved to `docs/archive/`.
+- New `stagepilot-remote-health-alert` command (build it from `crates/stagepilot-remote`): checks the Remote connector heartbeat and posts a webhook when it is stale. It replaces the Python module of the same purpose, which nothing ran after the move to Rust. Not part of the installers.
+- A lights test no longer races the plugin recording its last cue on slow runners.
 
 ## [2.42.0] - 2026-10-25
 

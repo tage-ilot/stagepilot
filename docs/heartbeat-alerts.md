@@ -18,14 +18,23 @@ notice it.
   freshness not triggering it, no webhook configured not calling the sender, and the HTTP call
   against a local fake (no real network call).
 
-## What does not exist
+## Running it
 
-There is no command-line entry point or scheduled runner for this in the Rust workspace. The
-earlier Python entry point (`python -m stagepilot.remote_health_alert`) was removed together
-with the Python backend (last present at tag `v2.41.1`). Any host that still runs it from an
-old checkout keeps working from that checkout, but nothing in this repository invokes the
-Rust function periodically. If alerting is wanted again, add a small binary (or a flag on
-`stagepilot-headless`) that calls `check_and_alert` with `--status-file`,
-`--max-age-seconds` and the webhook URL read from `STAGEPILOT_HEARTBEAT_ALERT_WEBHOOK_URL`
-(from an environment file, never the command line, to keep it out of `ps` and shell history),
-and run it from a systemd timer or cron.
+`stagepilot-remote-health-alert` (built from `crates/stagepilot-remote`, `cargo build --release -p
+stagepilot-remote --bin stagepilot-remote-health-alert`) runs one check and exits. It is not
+shipped in the desktop installers; build it where the alert should run (for example the host that
+keeps the connector status file).
+
+    STAGEPILOT_HEARTBEAT_ALERT_WEBHOOK_URL=<url> \
+      stagepilot-remote-health-alert --status-file /abs/path/connector-status.json --max-age-seconds 10
+
+- Put the webhook URL in an environment file (systemd `EnvironmentFile=`), not on the command line:
+  the optional `--webhook-url` flag wins when both are set but shows up in `ps` and shell history.
+- It prints one JSON line (`healthy`, `state`, `age_seconds`, `detail`, `alerted`, plus
+  `alert_error` when the webhook could not be reached). The webhook URL is never printed.
+- Exit codes: 0 healthy, 1 stale, stopped, invalid status file or undeliverable alert, 2 bad
+  arguments. Run it from a systemd timer or cron; a non-zero exit marks the unit failed.
+- With no webhook configured it still checks and exits 1 when unhealthy, but sends nothing.
+
+The earlier Python entry point (`python -m stagepilot.remote_health_alert`, last present at tag
+`v2.41.1`) took the same options and printed the same JSON line.

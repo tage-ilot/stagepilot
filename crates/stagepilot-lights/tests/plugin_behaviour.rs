@@ -202,6 +202,12 @@ async fn timer_start_sends_elapsed_cue_as_note_on_off_pulse() {
     r.plugin.start().await.unwrap();
     publish_song_start(&r.bus, 300).await;
     wait_for("the pulse", || r.midi.messages().len() == 2).await;
+    // The plugin records `last_cue` just after the note-off goes out; wait for it instead of
+    // reading the snapshot in that gap (it flaked on a slow runner).
+    wait_for("the recorded cue", || {
+        futures_block(r.plugin.snapshot(false)).last_cue.is_some()
+    })
+    .await;
     let snapshot = r.plugin.snapshot(false).await;
     r.plugin.stop().await.unwrap();
     assert_eq!(
