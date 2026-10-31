@@ -16,9 +16,9 @@ use stagepilot_core::state::ConnectionStatus;
 use stagepilot_pco::errors::PcoError;
 use stagepilot_pco::lengths::{LengthError, DENIED_MESSAGE};
 use stagepilot_playback::api::{
-    LengthItemResult, LengthUpdateResult, PlaybackConnectionResponse, PlaybackEventsResponse,
-    PlaybackMonitorEntry, PlaybackPlanSong, PlaybackSettingsRequest, PlaybackStatusResponse,
-    ScanCandidateModel, ScanResult, SourceStatus, SourcesStatus,
+    LearnedSongModel, LengthItemResult, LengthUpdateResult, PlaybackConnectionResponse,
+    PlaybackEventsResponse, PlaybackMonitorEntry, PlaybackPlanSong, PlaybackSettingsRequest,
+    PlaybackStatusResponse, ScanCandidateModel, ScanResult, SourceStatus, SourcesStatus,
 };
 use stagepilot_playback::arrangement::align_lengths;
 use stagepilot_playback::client::ConnectionOptions;
@@ -161,6 +161,8 @@ struct SettingsRequest {
     port: u16,
     auto_scan: bool,
     fast_transport: bool,
+    /// `None` when the body does not mention it: older clients keep the saved choice.
+    learn_order: Option<bool>,
 }
 
 fn settings_request(raw: &[u8]) -> Result<SettingsRequest, Json> {
@@ -227,9 +229,19 @@ fn settings_request(raw: &[u8]) -> Result<SettingsRequest, Json> {
     };
     let auto_scan = flag("auto_scan", true, &mut errors);
     let fast_transport = flag("fast_transport", true, &mut errors);
+    let learn_order = map
+        .get("learn_order")
+        .map(|_| flag("learn_order", true, &mut errors));
     extras(
         &map,
-        &["enabled", "host", "port", "auto_scan", "fast_transport"],
+        &[
+            "enabled",
+            "host",
+            "port",
+            "auto_scan",
+            "fast_transport",
+            "learn_order",
+        ],
         &mut errors,
     );
     let _ = whole;
@@ -240,6 +252,7 @@ fn settings_request(raw: &[u8]) -> Result<SettingsRequest, Json> {
             port,
             auto_scan,
             fast_transport,
+            learn_order,
         })
     } else {
         Err(unprocessable(errors))
@@ -636,6 +649,7 @@ fn status_json(rt: &Runtime) -> Value {
         .filter(|id| song_order.contains(id))
         .collect();
     let stale = rt.playback.mapper_stale();
+    let (order_mode, learned, order_note) = rt.playback.order_view();
     let plan_changed = rt.playback.plan_changed();
     let outdated = stale || plan_changed;
     let blocked = scan.error_class.as_deref() == Some("permission_denied");
@@ -734,6 +748,17 @@ fn status_json(rt: &Runtime) -> Value {
         discovery_total: discovery.total as u32,
         song_count: song_order.len() as u32,
         song_order,
+        order_mode: order_mode.as_str().to_string(),
+        learned_songs: learned
+            .iter()
+            .map(|l| LearnedSongModel {
+                song_id: l.song_id,
+                plan_position: l.plan_position as u32,
+                confirmed: l.confirmed,
+                doubtful: l.doubtful,
+            })
+            .collect(),
+        order_note,
         song_lengths: if outdated {
             vec![]
         } else {
@@ -771,6 +796,7 @@ fn status_json(rt: &Runtime) -> Value {
             port: config.port,
             auto_scan: config.auto_scan,
             fast_transport: config.fast_transport,
+            learn_order: config.learn_order,
         },
     };
     to_json(&response)
@@ -898,6 +924,9 @@ async fn settings(State(rt): State<Rt>, body: Bytes) -> Json {
     updated.port = request.port;
     updated.auto_scan = request.auto_scan;
     updated.fast_transport = request.fast_transport;
+    if let Some(learn_order) = request.learn_order {
+        updated.learn_order = learn_order;
+    }
     updated.normalise();
     let mut next = previous.clone();
     next.playback_api = updated;

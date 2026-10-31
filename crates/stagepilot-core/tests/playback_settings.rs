@@ -250,6 +250,10 @@ fn old_playback_settings_load_new_defaults() {
     .unwrap();
     let loaded = SettingsFileStore::new(&path).load().unwrap().unwrap();
     assert!(loaded.playback_api.fast_transport);
+    assert!(
+        loaded.playback_api.learn_order,
+        "a file from before learn_order loads with it on"
+    );
     assert_eq!(loaded.playback_api.setlist_id, None);
     assert_eq!(loaded.playback_api.song_order, vec![101, 202]);
 }
@@ -261,6 +265,7 @@ fn fast_transport_and_identity_persist() {
     let settings = PersistentSettings {
         playback_api: PlaybackApiSettings {
             fast_transport: false,
+            learn_order: false,
             setlist_id: Some(SetlistId::Int(93_000_001)),
             song_order: vec![101],
             captured_version: Some(11),

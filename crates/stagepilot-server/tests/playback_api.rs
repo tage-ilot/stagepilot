@@ -265,7 +265,7 @@ async fn settings_round_trip_and_turning_on_selects_playback() {
     assert_eq!(
         body["settings"],
         json!({"enabled": false, "host": "10.1.2.3", "port": 9001,
-            "auto_scan": false, "fast_transport": false})
+            "auto_scan": false, "fast_transport": false, "learn_order": true})
     );
     assert_eq!(body["selected"], false, "disabled does not select");
     let (_, body) = r
@@ -716,4 +716,51 @@ async fn a_stale_saved_skip_is_not_reported_so_the_save_screen_cannot_send_it_ba
     let status = r.status().await;
     assert_eq!(status["skipped_song_ids"], json!([102]), "{status}");
     r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn learn_order_is_a_setting_and_the_status_reports_the_order_mode() {
+    let r = rig().await;
+    let (_, body) = r.call("GET", "/api/v1/playback-api/status", None).await;
+    assert_eq!(body["settings"]["learn_order"], true, "on by default");
+    assert_eq!(body["order_mode"], "none");
+    assert_eq!(body["learned_songs"], json!([]));
+    assert!(body["order_note"].is_null() || body["order_note"].is_string());
+    let put = |learn: Option<bool>| {
+        let mut b = json!({"enabled": false, "host": "10.1.2.3", "port": 9001,
+            "auto_scan": false, "fast_transport": true});
+        if let Some(learn) = learn {
+            b["learn_order"] = json!(learn);
+        }
+        b
+    };
+    let (code, body) = r
+        .call(
+            "PUT",
+            "/api/v1/playback-api/settings",
+            Some(put(Some(false))),
+        )
+        .await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(body["settings"]["learn_order"], false);
+    assert!(
+        !r.runtime
+            .settings_service
+            .snapshot()
+            .playback_api
+            .learn_order
+    );
+    // A client that does not know the field keeps the saved choice.
+    let (_, body) = r
+        .call("PUT", "/api/v1/playback-api/settings", Some(put(None)))
+        .await;
+    assert_eq!(body["settings"]["learn_order"], false);
+    let (code, _) = r
+        .call(
+            "PUT",
+            "/api/v1/playback-api/settings",
+            Some(json!({"enabled": false, "learn_order": "maybe"})),
+        )
+        .await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
 }

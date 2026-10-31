@@ -468,6 +468,10 @@ pub struct PlaybackApiSettings {
     pub auto_scan: bool,
     #[serde(default = "default_true")]
     pub fast_transport: bool,
+    /// Learn which Playback song is which plan song while songs play (until a scan gives the
+    /// exact order). Older settings files do not have it and get the default, on.
+    #[serde(default = "default_true")]
+    pub learn_order: bool,
     #[serde(default)]
     pub planning_center_update_service_type_id: Option<String>,
     #[serde(default)]
@@ -506,6 +510,7 @@ impl Default for PlaybackApiSettings {
             port: 8080,
             auto_scan: true,
             fast_transport: true,
+            learn_order: true,
             planning_center_update_service_type_id: None,
             song_order: vec![],
             captured_version: None,

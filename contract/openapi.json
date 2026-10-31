@@ -525,6 +525,34 @@
     "title": "IntegrationModes",
     "type": "object"
    },
+   "LearnedSongModel": {
+    "properties": {
+     "confirmed": {
+      "default": false,
+      "title": "Confirmed",
+      "type": "boolean"
+     },
+     "doubtful": {
+      "default": false,
+      "title": "Doubtful",
+      "type": "boolean"
+     },
+     "plan_position": {
+      "title": "Plan Position",
+      "type": "integer"
+     },
+     "song_id": {
+      "title": "Song Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "song_id",
+     "plan_position"
+    ],
+    "title": "LearnedSongModel",
+    "type": "object"
+   },
    "LengthConfirmation": {
     "additionalProperties": false,
     "properties": {
@@ -3096,6 +3124,11 @@
       ],
       "title": "Host"
      },
+     "learn_order": {
+      "default": true,
+      "title": "Learn Order",
+      "type": "boolean"
+     },
      "lengths_applied_key": {
       "anyOf": [
        {
@@ -3515,6 +3548,11 @@
       ],
       "title": "Host"
      },
+     "learn_order": {
+      "default": true,
+      "title": "Learn Order",
+      "type": "boolean"
+     },
      "port": {
       "default": 8080,
       "maximum": 65535.0,
@@ -3624,6 +3662,13 @@
       ],
       "title": "Last Error"
      },
+     "learned_songs": {
+      "items": {
+       "$ref": "#/components/schemas/LearnedSongModel"
+      },
+      "title": "Learned Songs",
+      "type": "array"
+     },
      "lengths_applied": {
       "default": false,
       "title": "Lengths Applied",
@@ -3640,6 +3685,22 @@
        }
       ],
       "title": "Lengths Measured At"
+     },
+     "order_mode": {
+      "default": "none",
+      "title": "Order Mode",
+      "type": "string"
+     },
+     "order_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Order Note"
      },
      "plan_changed": {
       "default": false,
