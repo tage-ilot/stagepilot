@@ -14,6 +14,9 @@ use crate::client::{Command, TransportPort};
 use crate::find::CancelToken;
 use crate::lengths::{measure_song_length, MeasureOptions};
 use crate::normalizer::Heartbeat;
+
+/// Plain-language refusal while Playback is connected but has no song selected yet.
+pub const LOADING_SETLIST: &str = "Playback is still loading the setlist.";
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -84,6 +87,9 @@ impl<P: TransportPort> Walk<'_, P> {
     /// Python `_check_discovery`.
     fn check(&self, version: Option<i64>) -> Result<Heartbeat, DiscoveryError> {
         let status = self.port.status();
+        if status.connected && status.loading_setlist {
+            return conflict(LOADING_SETLIST);
+        }
         let Some(hb) = status.heartbeat.filter(|_| status.connected) else {
             return conflict(
                 "Playback is disconnected. Enable remote connections and connect first.",

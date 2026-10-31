@@ -95,6 +95,8 @@ pub struct PlaybackStatus {
     /// Valid heartbeats seen over the client's whole life; changes exactly when Python's
     /// `status.heartbeat is not previous` would (the plugin's "fresh heartbeat" test).
     pub heartbeat_serial: u64,
+    /// Connected, but Playback is still loading a setlist and has no song yet.
+    pub loading_setlist: bool,
     /// How the address was found (Python `PlaybackStatus.source`).
     pub source: Option<DiscoverySource>,
 }
@@ -158,6 +160,12 @@ impl Command {
         }
     }
 
+    /// Controls that act on the current song; refused while Playback has none yet.
+    /// `SelectSong` stays allowed (it is how a song gets chosen).
+    fn needs_song(&self) -> bool {
+        self.needs_stopped() || matches!(self, Command::Play(_) | Command::Seek(_))
+    }
+
     /// Python only allows its four discovery commands while stopped.
     fn needs_stopped(&self) -> bool {
         matches!(
@@ -174,6 +182,8 @@ pub enum ClientError {
     Disconnected,
     /// Command refused locally: Playback is (or may be) playing.
     NotStopped,
+    /// Connected, but Playback has no song selected yet (it is loading a setlist).
+    LoadingSetlist,
 }
 
 impl std::fmt::Display for ClientError {
@@ -182,6 +192,7 @@ impl std::fmt::Display for ClientError {
             ClientError::Invalid(m) => f.write_str(m),
             ClientError::Disconnected => f.write_str("Playback is disconnected"),
             ClientError::NotStopped => f.write_str("Stop Playback before discovering song order"),
+            ClientError::LoadingSetlist => f.write_str("Playback is still loading the setlist."),
         }
     }
 }
@@ -309,6 +320,9 @@ impl PlaybackClient {
             let st = self.shared.status.lock().unwrap();
             if !st.connected {
                 return Err(ClientError::Disconnected);
+            }
+            if command.needs_song() && st.loading_setlist {
+                return Err(ClientError::LoadingSetlist);
             }
             if command.needs_stopped() && st.heartbeat.is_none_or(|h| h.playing) {
                 return Err(ClientError::NotStopped);
@@ -625,6 +639,8 @@ async fn run(
                         let r = if !allowed {
                             Err(if req.generation != generation || !shared.status.lock().unwrap().connected {
                                 ClientError::Disconnected
+                            } else if shared.status.lock().unwrap().loading_setlist {
+                                ClientError::LoadingSetlist
                             } else { ClientError::NotStopped })
                         } else {
                             ws.send(Message::text(req.command.payload()))
@@ -645,6 +661,7 @@ async fn run(
                             Some(Err(e)) => return Err(ConnError::Probe(map_ws_error(e))),
                         };
                         let before = norm.heartbeat_serial;
+                        let before_songless = norm.songless_serial;
                         let ts = epoch.elapsed().as_secs_f64();
                         let events = norm.feed(raw.as_str(), ts);
                         if norm.heartbeat_serial != before {
@@ -653,15 +670,21 @@ async fn run(
                             shared.heartbeat_serial.fetch_add(1, Ordering::SeqCst);
                             *shared.last_heartbeat_at.lock().unwrap() = tokio::time::Instant::now();
                         }
+                        if norm.songless_serial != before_songless {
+                            // Alive but no song yet: liveness only, no song events.
+                            last_heartbeat = Instant::now();
+                            valid_heartbeat = true;
+                        }
                         if *stop.borrow() { return Ok(()); }
                         publish(&shared, &observer, options.history_capacity, PlaybackStatus {
                             connected: valid_heartbeat,
                             host: Some(host.clone()),
                             port: options.port,
                             last_error: None,
-                            heartbeat: norm.heartbeat,
+                            heartbeat: if norm.loading_setlist { None } else { norm.heartbeat },
                             setlist_id: norm.setlist_id.clone(),
                             heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
+                            loading_setlist: norm.loading_setlist,
                             source,
                         }, &events);
                     }
@@ -700,6 +723,7 @@ async fn run(
                     heartbeat: None,
                     setlist_id: None,
                     heartbeat_serial: shared.heartbeat_serial.load(Ordering::SeqCst),
+                    loading_setlist: false,
                     source,
                 },
                 &[],

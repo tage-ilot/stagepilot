@@ -341,3 +341,55 @@ async fn recovers_after_sockets_that_close_or_go_silent_after_accept() {
     until("connected after bad accepts", || c.status().connected).await;
     c.shutdown().await;
 }
+
+fn songless_heartbeat() -> &'static str {
+    r#"{"heartbeat":{"stateData":{"sequenceTime":0.0,"sequencerPlayState":{"stopped":{}},"padPlayerPlayState":{"stopped":{}},"setlistCloudVersion":3}}}"#
+}
+
+#[tokio::test]
+async fn songless_heartbeats_are_liveness_not_a_disconnect() {
+    // Real Playback omits `setlistSongID` while it loads a setlist (operator-25min.jsonl:
+    // 509 of 1,499 heartbeats). Those beats must keep the link up for longer than the
+    // 2 s timeout without reconnecting, and must not start anything.
+    let fake = FakePlayback::start().await;
+    fake.stall(true);
+    let mut c = PlaybackClient::start(opts(fake.port), None).unwrap();
+    until("handshake", || *fake.connections.lock().unwrap() >= 1).await;
+    for _ in 0..30 {
+        fake.send_raw(songless_heartbeat());
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        c.status().connected,
+        "song-less heartbeats keep the link connected"
+    );
+    assert_eq!(*fake.connections.lock().unwrap(), 1, "no reconnect cycle");
+    assert!(c.status().heartbeat.is_none(), "no song yet");
+    assert!(
+        c.status().loading_setlist,
+        "status says the setlist is loading"
+    );
+    assert!(c.events().is_empty(), "no song events");
+    let refused = c.send(Command::Next).await;
+    assert!(
+        matches!(&refused, Err(e) if e.to_string() == "Playback is still loading the setlist."),
+        "{refused:?}"
+    );
+    c.stop().await;
+}
+
+#[test]
+fn songless_detection_requires_an_otherwise_valid_beat_and_no_song_field() {
+    use stagepilot_playback::normalizer::{is_songless_heartbeat, parse_heartbeat, parse_message};
+    let body = |raw: &str| parse_message(raw).unwrap().1;
+    let ok = body(songless_heartbeat());
+    assert!(is_songless_heartbeat(&ok) && parse_heartbeat(&ok).is_none());
+    // A malformed (present) song id is not "no song yet".
+    let bad = body(
+        r#"{"heartbeat":{"stateData":{"setlistSongID":"x","sequenceTime":0.0,"sequencerPlayState":{"stopped":{}},"padPlayerPlayState":{"stopped":{}}}}}"#,
+    );
+    assert!(!is_songless_heartbeat(&bad));
+    // Missing transport state is garbage, not liveness.
+    let junk = body(r#"{"heartbeat":{"stateData":{"sequenceTime":0.0}}}"#);
+    assert!(!is_songless_heartbeat(&junk));
+}

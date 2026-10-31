@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Playback no longer shows Disconnected and reconnects every few seconds while it is still loading a setlist. Playback sends heartbeats without a song during that time; they now count as "connected, no song yet", and Discover Song Order says "Playback is still loading the setlist." until a song is loaded.
+
 ### Changed
 
 - Developer-facing only, no change to the app: the retired Python backend (`backend/`), its CI jobs, the `python`/`rust` installer variants and the Python fixture generators are removed. Every build is the in-process Rust app. The 2.41.1 sources remain at the `v2.41.1` tag, and the migration notes moved to `docs/archive/`.
