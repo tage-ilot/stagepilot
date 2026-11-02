@@ -203,7 +203,6 @@ struct Rig {
     agent: Shared,
     port: u16,
     bus: EventBus,
-    sent: Arc<Mutex<Vec<(f64, String)>>>,
     settings: Arc<Mutex<LinkSettings>>,
     store: Arc<MemoryTakeStore>,
     link: LightkeyLink,
@@ -227,20 +226,7 @@ impl Rig {
             },
         )));
         let bus = EventBus::new();
-        let sent: Arc<Mutex<Vec<(f64, String)>>> = Arc::default();
-        let t0 = Arc::new(Mutex::new(Instant::now()));
         let store = Arc::new(MemoryTakeStore::new());
-        let (sent_in, t0_in) = (sent.clone(), t0.clone());
-        let send: stagepilot_lights::lightkey_link::SendCommand = Arc::new(
-            move |address: String, _args: Vec<stagepilot_core::config::OscArgument>| {
-                let (sent, t0) = (sent_in.clone(), t0_in.clone());
-                Box::pin(async move {
-                    let at = t0.lock().unwrap().elapsed().as_secs_f64();
-                    sent.lock().unwrap().push((at, address));
-                    Ok(())
-                })
-            },
-        );
         let provider_settings = settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
             Arc::new(move || provider_settings.lock().unwrap().clone());
@@ -254,7 +240,6 @@ impl Rig {
             LinkOptions {
                 store: store.clone() as Arc<dyn TakeStore>,
                 clock: clock.clone(),
-                send_command: Some(send),
                 ..LinkOptions::default()
             },
         );
@@ -263,7 +248,6 @@ impl Rig {
             agent,
             port,
             bus,
-            sent,
             settings,
             store,
             link,
@@ -283,15 +267,6 @@ impl Rig {
                 ..LinkOptions::default()
             },
         )
-    }
-
-    fn addresses(&self) -> Vec<String> {
-        self.sent
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(_, a)| a.clone())
-            .collect()
     }
 
     fn set_settings(&self, edit: impl FnOnce(&mut LinkSettings)) {
@@ -711,13 +686,11 @@ async fn a_new_song_finishes_the_one_before() {
 // ------------------------------------------------------------------------------- replay
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_switch_off_sends_nothing() {
+async fn replay_switch_off_is_reported_in_the_status() {
     let rig = Rig::with(&["Warm"], false).await;
     with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.song_start(&song(10), None).await;
-    pause(0.8).await;
-    assert!(rig.addresses().is_empty());
     assert_eq!(
         rig.link.status().replay_blocked.as_deref(),
         Some("Replay is switched off.")
@@ -726,14 +699,12 @@ async fn replay_switch_off_sends_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_does_not_run_while_recording_armed() {
+async fn recording_armed_is_reported_as_the_replay_blocker() {
     let rig = Rig::new(&["Warm"]).await;
     with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(10), None).await;
-    pause(0.8).await;
-    assert!(rig.addresses().is_empty());
     assert_eq!(
         rig.link.status().replay_blocked.as_deref(),
         Some("Paused while recording.")
@@ -770,35 +741,6 @@ async fn replay_blocked_strings_are_exact_and_ordered() {
     assert_eq!(rig.link.status().replay_blocked, None);
     rig.link.stop().await;
 }
-
-#[tokio::test(flavor = "multi_thread")]
-async fn stop_cancels_remaining_replay() {
-    let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.connect().await;
-    let s = song(10);
-    rig.song_start(&s, None).await;
-    pause(0.2).await;
-    rig.song_stop(&s, 0.2).await;
-    let count = rig.addresses().len();
-    pause(1.0).await;
-    assert_eq!(rig.addresses().len(), count);
-    assert_eq!(rig.link.status().replaying_song, None);
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_song_without_a_take_sends_nothing() {
-    let rig = Rig::new(&["Warm"]).await;
-    rig.connect().await;
-    rig.song_start(&song(10), None).await;
-    pause(0.4).await;
-    assert!(rig.addresses().is_empty());
-    assert_eq!(rig.link.status().replaying_song, None);
-    rig.link.stop().await;
-}
-
-// ------------------------------------------------------------------- agent and take store
 
 #[tokio::test(flavor = "multi_thread")]
 async fn agent_restart_resets_the_sequence_without_a_false_change() {

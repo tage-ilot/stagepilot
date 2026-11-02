@@ -685,6 +685,61 @@ pub struct OscLightingCue {
     pub label: String,
     #[serde(default)]
     pub color: Option<PadColor>,
+    /// A "look": several OSC messages sent together at this row's time. When non-empty they are
+    /// sent instead of `address`/`args`. Left out of the saved file while empty, so a plain cue
+    /// saves exactly as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<OscMessage>>")]
+    pub messages: Vec<OscMessage>,
+    /// Where the row came from. Left out of the saved file while `manual`.
+    #[serde(default, skip_serializing_if = "OscCueSource::is_manual")]
+    #[ts(optional, as = "Option<OscCueSource>")]
+    pub source: OscCueSource,
+}
+
+/// One OSC message of a look row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct OscMessage {
+    pub address: String,
+    #[serde(default)]
+    pub args: Vec<OscArgument>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum OscCueSource {
+    #[default]
+    Manual,
+    Captured,
+}
+
+impl OscCueSource {
+    pub fn is_manual(&self) -> bool {
+        *self == OscCueSource::Manual
+    }
+}
+
+/// Most messages one look row may hold (a rig has about 106 fixture addresses; headroom).
+pub const MAX_OSC_MESSAGES_PER_ROW: usize = 256;
+/// Most OSC rows one song may hold (sized for about 400 rows, with headroom).
+pub const MAX_OSC_ROWS_PER_SONG: usize = 1_000;
+/// Most look messages one song may hold in total (sized for about 6,000, with headroom).
+pub const MAX_OSC_MESSAGES_PER_SONG: usize = 15_000;
+
+impl OscLightingCue {
+    /// What the row sends: its `messages`, or else the single address and arguments.
+    pub fn outgoing(&self) -> Vec<OscMessage> {
+        if self.messages.is_empty() {
+            vec![OscMessage {
+                address: self.address.clone(),
+                args: self.args.clone(),
+            }]
+        } else {
+            self.messages.clone()
+        }
+    }
 }
 
 pub fn validate_osc_address(value: &str) -> Result<(), &'static str> {
@@ -698,6 +753,21 @@ pub fn validate_osc_address(value: &str) -> Result<(), &'static str> {
         return Err("An OSC address can be at most 256 characters.");
     }
     Ok(())
+}
+
+/// Address rule for a look message. Same as `validate_osc_address`, except that a
+/// `/fixture/...` address may contain spaces: Lightkey fixture names do ("Moving Head 1").
+pub fn validate_osc_message_address(value: &str) -> Result<(), &'static str> {
+    if value.starts_with("/fixture/") {
+        if value.chars().any(|c| (c as u32) < 32) {
+            return Err("An OSC address cannot contain control characters.");
+        }
+        if value.chars().count() > 256 {
+            return Err("An OSC address can be at most 256 characters.");
+        }
+        return Ok(());
+    }
+    validate_osc_address(value)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -894,6 +964,9 @@ impl LightsSettings {
                 cue.at_seconds = round_tenths(cue.at_seconds);
                 cue.address = cue.address.trim().to_string();
                 cue.label = cue.label.trim().to_string();
+                for message in &mut cue.messages {
+                    message.address = message.address.trim().to_string();
+                }
             }
             map.cues.sort_by(|a, b| {
                 a.at_seconds
@@ -1037,9 +1110,45 @@ impl LightsSettings {
                     Some(86_399.0),
                     None,
                 );
-                if let Err(m) = validate_osc_address(&cue.address) {
-                    value_error(errors, &mp, m, json!(cue.address));
+                // A look row's own address is not sent, so it is only checked for a plain row.
+                if cue.messages.is_empty() {
+                    if let Err(m) = validate_osc_address(&cue.address) {
+                        value_error(errors, &mp, m, json!(cue.address));
+                    }
                 }
+                if cue.messages.len() > MAX_OSC_MESSAGES_PER_ROW {
+                    too_long(
+                        errors,
+                        &mp,
+                        "messages",
+                        cue.messages.len(),
+                        MAX_OSC_MESSAGES_PER_ROW,
+                    );
+                }
+                for message in &cue.messages {
+                    if let Err(m) = validate_osc_message_address(&message.address) {
+                        value_error(errors, &mp, m, json!(message.address));
+                    }
+                }
+            }
+            if map.osc_cues.len() > MAX_OSC_ROWS_PER_SONG {
+                too_long(
+                    errors,
+                    &mp,
+                    "osc_cues",
+                    map.osc_cues.len(),
+                    MAX_OSC_ROWS_PER_SONG,
+                );
+            }
+            let message_total: usize = map.osc_cues.iter().map(|c| c.messages.len()).sum();
+            if message_total > MAX_OSC_MESSAGES_PER_SONG {
+                too_long(
+                    errors,
+                    &mp,
+                    "messages",
+                    message_total,
+                    MAX_OSC_MESSAGES_PER_SONG,
+                );
             }
             let ids =
                 |v: Vec<Uuid>| v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len();

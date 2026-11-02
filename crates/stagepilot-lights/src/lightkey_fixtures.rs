@@ -717,38 +717,6 @@ impl FixtureRecorder {
     }
 }
 
-// --------------------------------------------------------------------------------- replay
-
-/// What to send for a start or reposition at some song position.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FixtureReplay {
-    /// Force every managed fixture to its captured state at the position, at once.
-    pub sync_now: Vec<FixtureCommand>,
-    /// Changes after the position, in time order.
-    pub later: Vec<FixtureEvent>,
-    /// Every fixture the track drives: these are cleared when replay ends.
-    pub fixtures: BTreeSet<String>,
-}
-
-/// Plan the replay of `track` from `position`.
-pub fn fixture_replay_plan(track: &FixtureTrack, position: f64) -> FixtureReplay {
-    let mut state = FixtureState::new();
-    state.apply_all(&track.initial);
-    let mut later = Vec::new();
-    for event in &track.events {
-        if event.at_seconds <= position {
-            state.apply_all(&event.osc);
-        } else {
-            later.push(event.clone());
-        }
-    }
-    FixtureReplay {
-        sync_now: state.commands(),
-        later,
-        fixtures: track.fixtures().into_iter().collect(),
-    }
-}
-
 // ------------------------------------------------------------------------------------ tests
 
 #[cfg(test)]
@@ -1246,41 +1214,7 @@ mod tests {
     }
 
     #[test]
-    fn replay_plan_syncs_state_at_the_position_and_keeps_later_events() {
-        let track = FixtureTrack {
-            initial: vec![dim("P1", 0.0), col("P1", 0.0, 0.0, 0.0)],
-            events: vec![
-                FixtureEvent {
-                    at_seconds: 2.0,
-                    osc: vec![dim("P1", 1.0)],
-                },
-                FixtureEvent {
-                    at_seconds: 6.0,
-                    osc: vec![col("P1", 1.0, 0.0, 0.0), dim("P2", 0.5)],
-                },
-                FixtureEvent {
-                    at_seconds: 9.0,
-                    osc: vec![dim("P1", 0.0)],
-                },
-            ],
-            lead_seconds: 0.045,
-        };
-        let plan = fixture_replay_plan(&track, 6.0);
-        assert_eq!(
-            plan.sync_now,
-            vec![dim("P1", 1.0), col("P1", 1.0, 0.0, 0.0), dim("P2", 0.5)]
-        );
-        assert_eq!(plan.later.len(), 1);
-        assert_eq!(
-            plan.fixtures.iter().cloned().collect::<Vec<_>>(),
-            vec!["P1", "P2"]
-        );
-        let start = fixture_replay_plan(&track, 0.0);
-        assert_eq!(
-            start.sync_now,
-            vec![dim("P1", 0.0), col("P1", 0.0, 0.0, 0.0)]
-        );
-        assert_eq!(start.later.len(), 3);
+    fn clear_address_names_the_fixture() {
         assert_eq!(clear_address("MH 1"), "/fixture/MH 1/overrides/clear");
     }
 }

@@ -266,3 +266,63 @@ async fn the_four_lightkey_routes_validate_their_bodies_like_fastapi() {
     assert_eq!(body["detail"][0]["type"], "string_too_long");
     rt.stop().await;
 }
+
+// ------------------------------------------------------------------------------ look rows
+
+#[tokio::test]
+async fn a_look_row_round_trips_through_the_cue_map_api_and_the_saved_settings() {
+    let (router, rt) = app(osc_lights()).await;
+    let look = json!({
+        "id": "6f0e2f0e-7a8e-4c52-9c7d-5f3f0f0f0f01",
+        "at_seconds": 12.5,
+        "address": "",
+        "args": [],
+        "label": "Look - 2 fixtures",
+        "color": null,
+        "messages": [
+            {"address": "/fixture/MH 1/overrides/dimmer", "args": [{"type": "float", "value": 0.5}]},
+            {"address": "/fixture/MH 2/overrides/dimmer", "args": [{"type": "float", "value": 1.0}]}
+        ],
+        "source": "captured"
+    });
+    let plain = json!({
+        "id": "6f0e2f0e-7a8e-4c52-9c7d-5f3f0f0f0f02",
+        "at_seconds": 20.0,
+        "address": "/live/cue/1",
+        "args": [],
+        "label": "Verse",
+        "color": null
+    });
+    let (code, body) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(json!({
+            "song_key": "s1", "song_title": "Song", "method": "osc",
+            "osc_cues": [look.clone(), plain.clone()]
+        })),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK, "{body}");
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    let saved = &settings["settings"]["lights"]["cue_maps"]["s1"]["osc_cues"];
+    assert_eq!(saved[0], look, "look row saved as sent");
+    assert_eq!(saved[1], plain, "plain row gains no new keys");
+    // Over the per-row cap the API answers 422.
+    let many: Vec<Value> = (0..=stagepilot_core::config::MAX_OSC_MESSAGES_PER_ROW)
+        .map(|_| json!({"address": "/a", "args": []}))
+        .collect();
+    let mut too_big = look.clone();
+    too_big["messages"] = json!(many);
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(
+            json!({"song_key": "s1", "song_title": "Song", "method": "osc", "osc_cues": [too_big]}),
+        ),
+    )
+    .await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+}
