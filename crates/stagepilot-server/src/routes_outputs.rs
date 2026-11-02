@@ -1259,7 +1259,13 @@ fn parse_lightkey_settings(
             }
         },
     };
-    let detail = match object.get("detail") {
+    // The frontend sends `detail_level` (status field of the same name); `detail` stays accepted.
+    let detail_key = if object.contains_key("detail_level") {
+        "detail_level"
+    } else {
+        "detail"
+    };
+    let detail = match object.get(detail_key) {
         None | Some(Value::Null) => None,
         Some(Value::String(text)) => match text.as_str() {
             "fine" => Some(stagepilot_core::config::LightkeyDetail::Fine),
@@ -1268,7 +1274,7 @@ fn parse_lightkey_settings(
             _ => {
                 errors.push(plain_error(
                     "enum",
-                    "detail",
+                    detail_key,
                     "Input should be 'fine', 'normal' or 'coarse'",
                     &json!(text),
                 ));
@@ -1278,7 +1284,7 @@ fn parse_lightkey_settings(
         Some(other) => {
             errors.push(plain_error(
                 "enum",
-                "detail",
+                detail_key,
                 "Input should be 'fine', 'normal' or 'coarse'",
                 other,
             ));

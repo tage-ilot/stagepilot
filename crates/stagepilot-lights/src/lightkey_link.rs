@@ -508,6 +508,7 @@ impl Inner {
             replay_blocked: self.replay_blocked_reason(st.armed),
             replaying_song: st.replaying.clone(),
             message,
+            detail_level: settings.detail,
             captured: st.captured.clone(),
             fixtures: self.relay.status(
                 st.session

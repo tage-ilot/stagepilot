@@ -233,6 +233,47 @@ async fn detail_is_saved_and_validated() {
 }
 
 #[tokio::test]
+async fn frontend_detail_level_round_trips_through_settings_and_status() {
+    // The exact body `saveLightkeySettings({ detail_level })` sends (frontend/src/api.ts), and the
+    // status field `LightkeyStrip` reads back (`status.detail_level`).
+    let (router, rt) = app(osc_lights()).await;
+    for (sent, expect_status) in [("fine", json!("fine")), ("coarse", json!("coarse"))] {
+        let (code, body) = call(
+            &router,
+            "PUT",
+            &format!("{LK}/settings"),
+            Some(json!({ "detail_level": sent })),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(body["lightkey"]["detail_level"], expect_status);
+        let (_, status) = call(&router, "GET", LK, None).await;
+        assert_eq!(status["detail_level"], expect_status);
+        let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+        assert_eq!(settings["settings"]["lights"]["lightkey"]["detail"], sent);
+    }
+    // normal is the default: left out of the status, so the frontend's `?? "normal"` applies
+    let (_, body) = call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({ "detail_level": "normal" })),
+    )
+    .await;
+    assert!(body["lightkey"].get("detail_level").is_none());
+    let (code, body) = call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({ "detail_level": "Fine" })),
+    )
+    .await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["detail"][0]["loc"], json!(["body", "detail_level"]));
+}
+
+#[tokio::test]
 async fn saving_lighting_settings_keeps_the_lightkey_block() {
     let (router, rt) = app(LightsSettings {
         enabled: true,
