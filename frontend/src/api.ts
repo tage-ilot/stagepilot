@@ -367,6 +367,8 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+export const releaseLightkeyLights = () =>
+  requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/release", { method: "POST" });
 export const setLightkeyRecording = (recording: boolean) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/recording", {
     method: "POST",

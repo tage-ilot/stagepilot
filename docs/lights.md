@@ -187,6 +187,35 @@ A held fixture returns to Lightkey only when:
 Each release sends one `overrides/clear` per fixture, twice, paced at no more than
 200 packets a second. Fixtures that were never captured are never touched.
 
+### The operator always wins, per fixture
+
+Lightkey's own controls beat the replay. While the replay holds a fixture, a DMX
+change on it that is **not** the echo of something the replay just sent (same
+fixture and property within about half a second; the value is ignored because
+wheel slots are approximate) is taken as the operator's. StagePilot then stops
+sending to that fixture, sends **no clear** (the operator's change stays), and
+keeps replaying every other fixture. The strip shows "Holding N fixtures" and
+"M yielded to the operator".
+
+After 30 seconds with no further operator change on that fixture the replay takes
+it back: while the song runs, it sends the fixture's latest message at or before
+the current position and carries on with its later rows; while the song is paused
+or stopped it waits and takes the fixture back at the resume or seek re-sync. Every
+new operator change on the fixture restarts its 30 seconds. The relay's own
+keyframes and hello packets, repeated packets, bursts at a re-sync and a relay
+reconnect are never treated as operator input.
+
+**Limit.** Manual control changes (faders, overrides, a pad that moves a
+property) show up as DMX changes and are detected. A cue the operator activates on
+a fixture the replay is holding is probably invisible in DMX, because the replay's
+override sits on top of it. Use **Release lights** for that.
+
+**Release lights** (button in the Lightkey strip, `POST /api/v1/lights/lightkey/release`)
+sends the double `overrides/clear` to every fixture held right now and empties the
+held set. It is disabled when nothing is held. Fixtures already yielded to the
+operator are not cleared. A running song picks a fixture up again at that
+fixture's next look row.
+
 ### Wired network
 
 The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired

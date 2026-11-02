@@ -1,6 +1,7 @@
 use crate::lightkey::LightkeyStatus;
-use crate::lightkey_fixtures::{clear_address, fixture_of};
-use crate::lightkey_link::{LightkeyLink, LinkOptions, MIN_SEND_GAP};
+use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
+use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
+use crate::lightkey_operator::OperatorTracker;
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -15,10 +16,11 @@ use stagepilot_core::state::{ConnectionStatus, PluginHealth, PluginStatus, Song}
 use stagepilot_midi::output::{MidiOutputBackend, MidiOutputBackendFactory, MidiOutputPort};
 use stagepilot_midi::MidiError;
 use stagepilot_osc::{OscBackend, OscOutput, OutputError, UdpOscBackend};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::task::{JoinHandle, JoinSet};
+use tokio::time::Instant;
 use uuid::Uuid;
 
 /// How many seconds before its time a row with fixture-override messages (a "look") leaves, so
@@ -26,6 +28,10 @@ use uuid::Uuid;
 pub const LOOK_LEAD_SECONDS: f64 = 0.045;
 /// Pause between the two rounds of `overrides/clear` a release sends per fixture.
 const RELEASE_ROUND_GAP: Duration = Duration::from_millis(150);
+
+/// A fixture the operator took over goes back to the replay after this many seconds without a
+/// further operator change on it. Each new operator change restarts the count.
+pub const OPERATOR_TAKE_BACK_SECONDS: f64 = 30.0;
 
 /// `ActionOutcome` for the lighting controller.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +106,29 @@ struct State {
     /// Fixtures the timeline holds with overrides. Kept across pause, stop and song end; emptied
     /// only by a release. A set of names so per-fixture state can grow from it.
     held_fixtures: BTreeSet<String>,
+    /// Echo matching and the fixtures the operator has taken over.
+    operator: OperatorTracker,
+    /// Quiet-time watchers, one per yielded fixture.
+    watchers: HashMap<String, JoinHandle<()>>,
+    /// The song the timeline is playing, for taking a fixture back mid-song.
+    playback: Option<Playback>,
+}
+
+/// Where the running song is: `position` seconds at `at`.
+struct Playback {
+    cues: Vec<AnyCue>,
+    position: f64,
+    at: Instant,
+    end: f64,
+}
+
+impl Playback {
+    fn now(&self) -> f64 {
+        self.position
+            + Instant::now()
+                .saturating_duration_since(self.at)
+                .as_secs_f64()
+    }
 }
 
 struct Inner {
@@ -152,7 +181,7 @@ impl LightsPlugin {
             return Err("Lighting MIDI monitor interval must be positive.".into());
         }
         let bus_for_link = bus.clone();
-        let link_options = options.lightkey;
+        let mut link_options = options.lightkey;
         let inner = Arc::new(Inner {
             bus,
             midi_factory: options.midi_backend_factory,
@@ -177,6 +206,9 @@ impl LightsPlugin {
                 last_osc_cue: None,
                 last_cue_at: None,
                 held_fixtures: BTreeSet::new(),
+                operator: OperatorTracker::new(),
+                watchers: HashMap::new(),
+                playback: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
             stop: tokio::sync::Notify::new(),
@@ -184,6 +216,18 @@ impl LightsPlugin {
             lightkey: std::sync::OnceLock::new(),
         });
         let weak = Arc::downgrade(&inner);
+        let tap_weak = weak.clone();
+        link_options.fixture_tap = Some(Arc::new(move |event: FixtureEvent<'_>| {
+            let Some(inner) = tap_weak.upgrade() else {
+                return;
+            };
+            match event {
+                FixtureEvent::Changed { commands, keyframe } => {
+                    inner.operator_changes(commands, keyframe);
+                }
+                FixtureEvent::StreamReset => inner.operator_stream_reset(),
+            }
+        }));
         let settings_weak = weak.clone();
         let provider: crate::lightkey_link::SettingsProvider =
             Arc::new(move || match settings_weak.upgrade() {
@@ -210,7 +254,40 @@ impl LightsPlugin {
     }
 
     pub async fn lightkey_status(&self) -> LightkeyStatus {
-        self.link().status()
+        let mut status = self.link().status();
+        let st = lock(&self.inner.state);
+        let some = |n: usize| (n > 0).then(|| u32::try_from(n).unwrap_or(u32::MAX));
+        status.holding_fixtures = some(st.held_fixtures.len());
+        status.yielded_fixtures = some(st.operator.yielded_count());
+        status
+    }
+
+    /// Fixture properties changed on the Lightkey Mac (relay stream). A change on a held fixture
+    /// that is not the replay's own echo is the operator's: the fixture is given up.
+    pub fn lightkey_fixture_changes(&self, commands: Vec<FixtureCommand>, keyframe: bool) {
+        self.inner.operator_changes(&commands, keyframe);
+    }
+
+    /// The relay stream restarted: judge nothing for a few seconds.
+    pub fn lightkey_stream_reset(&self) {
+        self.inner.operator_stream_reset();
+    }
+
+    /// "Release lights": the double clear for every fixture held right now. Fixtures the
+    /// operator has taken stay as they are.
+    pub async fn lightkey_release_lights(&self) -> (bool, String) {
+        let held = lock(&self.inner.state).held_fixtures.len();
+        if held == 0 {
+            return (false, "No fixtures are held.".into());
+        }
+        self.inner.release_held_except(&BTreeSet::new()).await;
+        (
+            true,
+            format!(
+                "Released {held} fixture{}.",
+                if held == 1 { "" } else { "s" }
+            ),
+        )
     }
 
     pub async fn lightkey_set_recording(&self, on: bool) -> String {
@@ -679,6 +756,7 @@ impl Inner {
             return;
         };
         let active = self.active_cues(&song);
+        self.take_back_due();
         // A new song: fixtures the last look held that this song does not use go back to
         // Lightkey. The ones it does use are taken over by its own rows.
         let used = if self.replay_allowed() {
@@ -729,6 +807,7 @@ impl Inner {
         if !self.st().settings.enabled || active.is_empty() {
             return;
         }
+        self.take_back_due();
         let total = position + f64::from(payload.duration_seconds);
         if !self.output_ready() && !self.clone().connect().await {
             return;
@@ -759,10 +838,17 @@ impl Inner {
         keep_to: f64,
         remaining: f64,
     ) {
+        let cues_for_playback = cues.clone();
         let plan = plan_cues(cues, now, keep_from, keep_to, self.replay_allowed());
         if plan.sync.is_empty() && plan.rows.is_empty() {
             return;
         }
+        self.st().playback = Some(Playback {
+            cues: cues_for_playback.clone(),
+            position: now,
+            at: Instant::now(),
+            end: now + remaining,
+        });
         let replaying = plan.has_fixtures().then(|| song.title.clone());
         if let Some(link) = self.lightkey.get() {
             link.set_replaying(replaying.clone());
@@ -838,13 +924,126 @@ impl Inner {
     }
 
     async fn cancel_timeline(&self) {
-        let task = self.st().timeline.take();
+        let task = {
+            let mut st = self.st();
+            st.playback = None;
+            st.timeline.take()
+        };
         if let Some(task) = task {
             task.abort();
             let _ = task.await;
         }
         if let Some(link) = self.lightkey.get() {
             link.set_replaying(None);
+        }
+    }
+
+    // ---- operator override ---------------------------------------------------------------------
+
+    fn operator_stream_reset(&self) {
+        self.st().operator.stream_reset(Instant::now());
+    }
+
+    fn operator_changes(self: &Arc<Self>, commands: &[FixtureCommand], keyframe: bool) {
+        if !self.replay_allowed() {
+            return;
+        }
+        let now = Instant::now();
+        let verdict = {
+            let mut guard = self.st();
+            let st = &mut *guard;
+            st.operator
+                .observe(&mut st.held_fixtures, commands, keyframe, now)
+        };
+        for fixture in verdict.newly_yielded.iter().chain(&verdict.restarted) {
+            self.ensure_watcher(fixture);
+        }
+    }
+
+    /// One watcher per yielded fixture; a finished one (song paused when it ran out) is replaced.
+    fn ensure_watcher(self: &Arc<Self>, fixture: &str) {
+        let mut st = self.st();
+        if st.watchers.get(fixture).is_some_and(|h| !h.is_finished()) {
+            return;
+        }
+        let inner = self.clone();
+        let name = fixture.to_string();
+        let handle = tokio::spawn(async move { inner.watch_quiet(name).await });
+        st.watchers.insert(fixture.to_string(), handle);
+    }
+
+    /// Wait out the quiet time (it restarts with every operator change), then take the fixture
+    /// back if the song is running. Otherwise it stays due until the song resumes.
+    async fn watch_quiet(self: Arc<Self>, fixture: String) {
+        let quiet = Duration::from_secs_f64(OPERATOR_TAKE_BACK_SECONDS);
+        loop {
+            let Some(deadline) = self.st().operator.deadline(&fixture, quiet) else {
+                return;
+            };
+            if Instant::now() >= deadline {
+                break;
+            }
+            tokio::time::sleep_until(deadline).await;
+        }
+        self.take_back(&fixture).await;
+    }
+
+    /// Replay takes `fixture` back: its latest message at or before the position, then its
+    /// later rows (already scheduled) carry on.
+    async fn take_back(&self, fixture: &str) {
+        let (sync, ok) = {
+            let mut st = self.st();
+            let Some(playback) = st.playback.as_ref() else {
+                return;
+            };
+            let position = playback.now();
+            if position > playback.end {
+                return;
+            }
+            let only: Vec<AnyCue> = playback
+                .cues
+                .iter()
+                .filter_map(|cue| match cue {
+                    AnyCue::Osc(cue) => {
+                        let mut row = cue.clone();
+                        row.messages = cue
+                            .outgoing()
+                            .into_iter()
+                            .filter(|m| {
+                                fixture_override(&m.address).is_some_and(|(n, _)| n == fixture)
+                            })
+                            .collect();
+                        (!row.messages.is_empty()).then_some(AnyCue::Osc(row))
+                    }
+                    AnyCue::Midi(_) => None,
+                })
+                .collect();
+            let ok = st.operator.take_back(fixture);
+            st.watchers.remove(fixture);
+            (
+                plan_cues(only, position, f64::NEG_INFINITY, f64::NEG_INFINITY, true).sync,
+                ok,
+            )
+        };
+        if !ok || !self.replay_allowed() || sync.is_empty() {
+            return;
+        }
+        let first = self.reserve_slots(sync.len());
+        if let Err(error) = self.send_sync(sync, first).await {
+            tracing::warn!(fixture, error = %error.message, "lightkey_take_back_failed");
+        }
+    }
+
+    /// Resume, seek or a new song: fixtures whose quiet time ran out are the replay's again (the
+    /// re-sync that follows sends them); the others stay with the operator.
+    fn take_back_due(&self) {
+        let quiet = Duration::from_secs_f64(OPERATOR_TAKE_BACK_SECONDS);
+        let mut st = self.st();
+        for fixture in st.operator.due(quiet, Instant::now()) {
+            st.operator.take_back(&fixture);
+            if let Some(handle) = st.watchers.remove(&fixture) {
+                handle.abort();
+            }
         }
     }
 
@@ -873,6 +1072,27 @@ impl Inner {
     /// Give back to Lightkey every held fixture that is not in `keep`. One clear per fixture,
     /// repeated once: a single wildcard clear was seen to leave fixtures held on a real rig.
     async fn release_fixtures_except(&self, keep: &BTreeSet<String>) {
+        {
+            // Nothing held means nothing left to take back either.
+            let mut st = self.st();
+            st.operator.retain_yielded(keep);
+            let stale: Vec<String> = st
+                .watchers
+                .keys()
+                .filter(|name| !keep.contains(*name))
+                .cloned()
+                .collect();
+            for name in stale {
+                if let Some(handle) = st.watchers.remove(&name) {
+                    handle.abort();
+                }
+            }
+        }
+        self.release_held_except(keep).await;
+    }
+
+    /// The double clear for held fixtures not in `keep`; the operator's fixtures are not touched.
+    async fn release_held_except(&self, keep: &BTreeSet<String>) {
         let released: Vec<String> = {
             let mut st = self.st();
             let release: Vec<String> = st.held_fixtures.difference(keep).cloned().collect();
@@ -946,8 +1166,11 @@ impl Inner {
             let mut st = self.st();
             if property == "clear" {
                 st.held_fixtures.remove(name);
+            } else if st.operator.is_yielded(name) {
+                return Ok(()); // the operator has this fixture
             } else {
                 st.held_fixtures.insert(name.to_string());
+                st.operator.note_send(&message.address, Instant::now());
             }
         }
         self.send_osc(&message.address, &message.args).await

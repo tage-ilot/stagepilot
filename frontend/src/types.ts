@@ -307,6 +307,10 @@ export interface LightkeyStatus {
   /** The song most recently saved to the timeline; absent until one has been. */
   captured?: LightkeyCaptured;
   fixtures?: LightkeyFixtureStatus;
+  /** Fixtures the replay holds with overrides; absent when none. */
+  holding_fixtures?: number;
+  /** Fixtures the replay gave to the operator (taken back after 30 s of quiet); absent when none. */
+  yielded_fixtures?: number;
 }
 
 export interface LightkeyActionResponse {

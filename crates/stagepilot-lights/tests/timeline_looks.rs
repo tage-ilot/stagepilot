@@ -632,3 +632,246 @@ async fn recorded_rows_replay_through_the_scheduler_next_to_a_manual_row() {
     }
     assert!(sent.iter().any(|(_, a)| a == &dim("B")));
 }
+
+// ------------------------------------------------------------------ operator override (L3)
+
+use stagepilot_lights::plugin::OPERATOR_TAKE_BACK_SECONDS;
+
+fn dmx(address: &str, x: f64) -> FixtureCommand {
+    FixtureCommand::new(address, vec![FixtureArg::Float(x)])
+}
+
+fn pan(name: &str) -> String {
+    format!("/fixture/{name}/overrides/panAngle")
+}
+
+/// Two fixtures, A and B, each with a dimmer row at 1 s and 10 s, and a pan row for A at 40 s.
+fn two_fixture_song() -> Vec<OscLightingCue> {
+    vec![
+        look(1.0, vec![msg(&dim("A"), 0.1), msg(&dim("B"), 0.1)]),
+        look(10.0, vec![msg(&dim("A"), 0.2), msg(&dim("B"), 0.2)]),
+        look(20.0, vec![msg(&dim("A"), 0.3), msg(&dim("B"), 0.3)]),
+        look(40.0, vec![msg(&dim("A"), 0.4), msg(&dim("B"), 0.4)]),
+        look(60.0, vec![msg(&dim("A"), 0.5), msg(&dim("B"), 0.5)]),
+    ]
+}
+
+fn count(r: &Rig, address: &str) -> usize {
+    r.addresses().iter().filter(|a| *a == address).count()
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_operator_change_yields_that_fixture_without_a_clear() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    r.forget();
+    run_for(16.0).await; // the 10 s and 20 s rows go out (not past 30 s of take-back)
+    assert_eq!(count(&r, &dim("A")), 0, "no more sends to A");
+    assert_eq!(count(&r, &dim("B")), 2, "B keeps replaying");
+    assert!(
+        r.clears().is_empty(),
+        "the operator's change is not cleared"
+    );
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.yielded_fixtures, Some(1));
+    assert_eq!(status.holding_fixtures, Some(1));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_replays_own_echo_never_yields() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(1.0).await; // rows at 1 s go out at 0.955 s
+                        // The relay repeats what was sent about 45 ms later, and may repeat it twice.
+    run_for(0.045).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.1), dmx(&dim("B"), 0.1)], false);
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.1)], false);
+    // Wheel slots are approximate: a different value of the same property is still an echo.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.1004)], false);
+    run_for(12.0).await;
+    assert_eq!(count(&r, &dim("A")), 2, "A still replays");
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.yielded_fixtures, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_change_with_no_matching_send_yields_but_one_for_another_property_too() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(10.0).await; // the 10 s row went out at 9.955 s
+                         // A pan nobody sent is the operator's, even right after a dimmer send to the same fixture.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("A"), 12.0)], false);
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(1));
+    // An echo older than the window no longer excuses a change.
+    run_for(0.6).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("B"), 0.8)], false);
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(2));
+}
+
+#[tokio::test(start_paused = true)]
+async fn replay_takes_the_fixture_back_after_the_quiet_time() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    r.forget();
+    // 5 s + 30 s = 35 s into the song: the latest A row at or before then is the 0.3 at 20 s.
+    run_for(OPERATOR_TAKE_BACK_SECONDS - 1.0).await;
+    assert_eq!(count(&r, &dim("A")), 0, "still the operator's");
+    run_for(1.5).await;
+    let a: Vec<_> = r
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, address, _)| *address == dim("A"))
+        .map(|(_, _, args)| args.clone())
+        .collect();
+    assert_eq!(
+        a,
+        vec![f(0.3)],
+        "re-synced to the latest message at the position"
+    );
+    assert!(r.clears().is_empty());
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    run_for(10.0).await; // the 40 s row (sent at 39.955) continues
+    assert_eq!(count(&r, &dim("A")), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn every_new_operator_change_restarts_the_quiet_time() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    run_for(20.0).await;
+    // Still yielded: the operator moves A again, even though nothing is held now.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.8)], false);
+    r.forget();
+    run_for(OPERATOR_TAKE_BACK_SECONDS - 1.0).await;
+    assert_eq!(count(&r, &dim("A")), 0, "30 s count from the last change");
+    run_for(1.5).await;
+    assert!(count(&r, &dim("A")) >= 1, "taken back after 30 s of quiet");
+}
+
+#[tokio::test(start_paused = true)]
+async fn keyframes_and_reconnects_do_not_yield() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    // A keyframe-detected difference (a missed packet) is not operator input.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9), dmx(&dim("B"), 0.9)], true);
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    // A reconnect makes the state unknown; the link tells the plugin so, and the changes that
+    // follow while it re-learns the state are not operator input either.
+    r.plugin.lightkey_stream_reset();
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9), dmx(&dim("B"), 0.9)], false);
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    run_for(7.0).await;
+    assert_eq!(r.plugin.lightkey_status().await.holding_fixtures, Some(2));
+}
+
+#[tokio::test(start_paused = true)]
+async fn release_lights_clears_exactly_the_held_fixtures() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    // Nothing held yet: nothing to release.
+    let (accepted, _) = r.plugin.lightkey_release_lights().await;
+    assert!(!accepted);
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false); // A is the operator's
+    r.forget();
+    let (accepted, message) = r.plugin.lightkey_release_lights().await;
+    assert!(accepted, "{message}");
+    assert_eq!(
+        r.clears(),
+        vec![clear("B"), clear("B")],
+        "only the held fixture, twice"
+    );
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.holding_fixtures, None);
+    assert_eq!(status.yielded_fixtures, Some(1));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_paused_song_waits_to_take_back_until_resume() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    r.at(EventType::TimerStopRequested, "s", 5.0, false).await;
+    r.forget();
+    run_for(OPERATOR_TAKE_BACK_SECONDS + 20.0).await;
+    assert!(r.addresses().is_empty(), "paused: nothing is sent");
+    // Resume at 20 s: the 30 s have passed, so the re-sync covers A again.
+    r.at(EventType::TimerResumed, "s", 20.0, true).await;
+    run_for(1.0).await;
+    let a: Vec<_> = r
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, address, _)| *address == dim("A"))
+        .map(|(_, _, args)| args.clone())
+        .collect();
+    assert_eq!(a, vec![f(0.3)]);
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_seek_keeps_a_fixture_the_operator_still_has() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    r.forget();
+    run_for(3.0).await;
+    r.at(EventType::TimerSeeked, "s", 30.0, true).await;
+    run_for(1.0).await;
+    assert_eq!(
+        count(&r, &dim("A")),
+        0,
+        "within 30 s: A stays the operator's"
+    );
+    assert_eq!(count(&r, &dim("B")), 1, "B is re-synced");
+    run_for(OPERATOR_TAKE_BACK_SECONDS).await;
+    assert!(count(&r, &dim("A")) >= 1, "then taken back");
+}
+
+#[tokio::test(start_paused = true)]
+async fn replay_off_gives_everything_back_and_forgets_the_operator() {
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("A"), 0.9)], false);
+    r.forget();
+    let mut lightkey = r.plugin.settings().lightkey;
+    lightkey.replay = false;
+    r.plugin.lightkey_apply_settings(lightkey).await;
+    assert_eq!(r.clears(), vec![clear("B"), clear("B")]);
+    // Replay is off: the operator's changes are nobody's business, and nothing is taken back.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("B"), 0.9)], false);
+    run_for(OPERATOR_TAKE_BACK_SECONDS + 5.0).await;
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.yielded_fixtures, None);
+    assert_eq!(status.holding_fixtures, None);
+    assert_eq!(r.clears().len(), 2);
+}

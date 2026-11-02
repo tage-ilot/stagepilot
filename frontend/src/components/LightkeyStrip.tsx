@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getLightkeyStatus,
+  releaseLightkeyLights,
   saveLightkeySettings,
   setLightkeyRecording,
 } from "../api";
@@ -76,6 +77,16 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null): str
     lines.push(line);
   }
   return lines;
+}
+
+/** "Holding 5 fixtures. 2 yielded to the operator." or "" when there is nothing to say. */
+function lightkeyHolding(status: LightkeyStatus): string {
+  const holding = status.holding_fixtures ?? 0;
+  const yielded = status.yielded_fixtures ?? 0;
+  const parts: string[] = [];
+  if (holding > 0) parts.push(`Holding ${holding} fixture${holding === 1 ? "" : "s"}.`);
+  if (yielded > 0) parts.push(`${yielded} yielded to the operator.`);
+  return parts.join(" ");
 }
 
 /**
@@ -192,6 +203,20 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
           label="Replay captured lights"
           onChange={(event) => void run(() => saveLightkeySettings({ replay: event.target.checked }))}
         />
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          disabled={busy || !(status.holding_fixtures && status.holding_fixtures > 0)}
+          onClick={() => void run(() => releaseLightkeyLights())}
+          variant="secondary"
+          tone="lighting"
+        >
+          Release lights
+        </Button>
+        {lightkeyHolding(status) && (
+          <span className="text-type-body-sm text-ink-muted" data-testid="lightkey-holding">{lightkeyHolding(status)}</span>
+        )}
       </div>
 
       <p aria-live="polite" className="mt-1 text-type-body-sm text-ink-muted" data-testid="lightkey-headline">

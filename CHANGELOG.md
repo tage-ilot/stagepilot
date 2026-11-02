@@ -7,6 +7,10 @@
 - Lightkey replay: pausing, stopping or finishing a song no longer hands the lights back to Lightkey's cues. The last look is held; resuming or seeking re-syncs the fixtures. They are released only when replay or Lighting is switched off, the app shuts down, or a new song starts that does not use them.
 - Lightkey recording: a take that ran past the song's scheduled end no longer loses its whole fixture track ("A fixture change can hold at most 2048 commands"). Changes after the end are dropped, an oversize change is split, and one bad change never discards a take.
 
+### Added
+
+- Lightkey replay: the operator wins per fixture. A change made in Lightkey on a fixture the replay holds (not the replay's own echo) makes replay stop sending to that fixture without a clear; replay takes it back after 30 seconds without a further operator change, or at the next resume if the song is paused. The Lightkey strip shows "Holding N fixtures" and "M yielded to the operator" and has a **Release lights** button (`POST /api/v1/lights/lightkey/release`) that gives every held fixture back. A cue activated in Lightkey on a held fixture is probably not visible in DMX; use Release lights.
+
 ### Changed
 
 - Lightkey recording now saves to the song's timeline instead of a separate take. When a song ends (or Record is turned off with at least half recorded) the fixture changes are thinned to the Detail setting (Fine 0.25 s, Normal 0.5 s, Coarse 1 s) and merged into a few look rows on that grid, saved as the song's captured rows (manual rows stay), and the raw data is discarded. A rig-shaped take (109k commands, 63 addresses) becomes about 357 rows and 5,900 messages at Normal. The takes list, its Clear buttons, the takes route and `lightkey-takes.json` are gone; an old takes file is ignored and left alone. Status now reads `Recording <song>.`, `Saved N looks to <song>'s timeline.` and `Not saved: only X of Y seconds recorded.`

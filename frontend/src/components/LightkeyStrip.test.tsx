@@ -11,6 +11,7 @@ vi.mock("../api", async (original) => ({
   getLightkeyStatus: vi.fn(),
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
+  releaseLightkeyLights: vi.fn(),
 }));
 
 const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
@@ -228,5 +229,40 @@ describe("LightkeyStrip lines on screen (B3)", () => {
     render(<LightkeyStrip lightingEnabled />);
     await screen.findByText("Not connected");
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("No lights captured yet.");
+  });
+});
+
+describe("LightkeyStrip operator override", () => {
+  it("shows what the replay holds and what the operator has", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ holding_fixtures: 5, yielded_fixtures: 2 }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 5 fixtures. 2 yielded to the operator.");
+  });
+
+  it("uses the singular and hides the line when nothing is held or yielded", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ holding_fixtures: 1 }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 1 fixture.");
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByTestId("lightkey-holding")).not.toBeInTheDocument();
+  });
+
+  it("Release lights is disabled when nothing is held", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ yielded_fixtures: 2 }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByRole("button", { name: "Release lights" })).toBeDisabled();
+  });
+
+  it("Release lights calls the backend and shows the new status", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ holding_fixtures: 3 }));
+    vi.mocked(api.releaseLightkeyLights).mockResolvedValue(respond(status(), true, "Released 3 fixtures."));
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Release lights" }));
+    await waitFor(() => expect(api.releaseLightkeyLights).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId("lightkey-holding")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Release lights" })).toBeDisabled();
   });
 });
