@@ -118,26 +118,62 @@ describe("LightkeyStrip", () => {
     expect(vi.mocked(api.getLightkeyStatus).mock.calls.length).toBeGreaterThan(1);
   });
 
-  it("lists captured songs and clears one", async () => {
-    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ takes: [take] }));
-    vi.mocked(api.clearLightkeyTake).mockResolvedValue(respond(status()));
-    render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText(/Holy Forever/)).toBeInTheDocument();
-    expect(screen.getByText(/14 colour\/level changes/)).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Clear capture for Holy Forever" }));
-    await waitFor(() => expect(api.clearLightkeyTake).toHaveBeenCalledWith("s1"));
-    await waitFor(() => expect(screen.queryByText(/Holy Forever/)).not.toBeInTheDocument());
-  });
-
-  it("shows the fixture stream and what each song captured", async () => {
+  it("shows the fixture stream and says how many looks the song holds, with no take list", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
       fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
-      takes: [{ ...take, fixture_count: 12, fixture_event_count: 131 }, { ...take, song_key: "s2", song_title: "Old Cue Take", fixture_count: undefined, fixture_event_count: undefined }],
+      takes: [take],
     }));
-    render(<LightkeyStrip lightingEnabled />);
+    render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
     expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
-    expect(screen.getByText(/131 colour\/level changes/)).toBeInTheDocument();
-    expect(screen.getByText(/no fixture capture/)).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured looks on this song");
+    expect(screen.queryByRole("list", { name: "Captured songs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Clear capture/ })).toBeNull();
+  });
+
+  it("says 1 captured look in the singular", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
+    render(<LightkeyStrip lightingEnabled looks={{ count: 1, edited: false }} />);
+    expect(await screen.findByText("1 captured look on this song")).toBeInTheDocument();
+  });
+
+  it("shows the Detail setting only for Record, with its one-line explanation", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: false }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByTestId("lightkey-detail-setting")).toBeNull();
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, detail_level: "normal" }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-detail-setting")).toHaveTextContent("Finer detail replays motion smoother but makes more rows.");
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
+    await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));
+  });
+
+  it("Record asks first when the song has edited captured looks, and does nothing on Cancel", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "connected" }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true })));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<LightkeyStrip lightingEnabled looks={{ count: 12, edited: true }} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("radio", { name: "Record" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recording replaces this song's captured looks, including your edits"));
+    expect(api.setLightkeyRecording).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("radio", { name: "Record" }));
+    await waitFor(() => expect(api.setLightkeyRecording).toHaveBeenCalledWith(true));
+    confirm.mockRestore();
+  });
+
+  it("Record does not ask when no captured look was edited", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "connected" }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true })));
+    const confirm = vi.spyOn(window, "confirm");
+    render(<LightkeyStrip lightingEnabled looks={{ count: 12, edited: false }} />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
+    await waitFor(() => expect(api.setLightkeyRecording).toHaveBeenCalledWith(true));
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 
   it("says connecting while the first fixture data is awaited", async () => {
@@ -170,18 +206,18 @@ describe("lightkeyHeadline", () => {
   it("puts recording first, then replaying, then why replay is paused", () => {
     expect(lightkeyHeadline(status({ recording: true, recording_song: "Holy Forever" }))).toBe("Recording “Holy Forever”.");
     expect(lightkeyHeadline(status({ recording: true }))).toBe("Recording starts with the next song.");
-    expect(lightkeyHeadline(status({ replaying_song: "Holy Forever", takes: [take] }))).toBe("Replaying “Holy Forever”.");
-    expect(lightkeyHeadline(status({ replay_blocked: "Replay is switched off.", takes: [take] }))).toBe("Replay is switched off.");
+    expect(lightkeyHeadline(status({ replaying_song: "Holy Forever" }), { count: 1, edited: false })).toBe("Replaying “Holy Forever”.");
+    expect(lightkeyHeadline(status({ replay_blocked: "Replay is switched off." }), { count: 1, edited: false })).toBe("Replay is switched off.");
   });
   it("tells a first-time operator what to do, then counts captures", () => {
     expect(lightkeyHeadline(status())).toMatch(/Switch to Record/);
-    expect(lightkeyHeadline(status({ takes: [take] }))).toBe("1 song captured.");
-    expect(lightkeyHeadline(status({ takes: [take, { ...take, song_key: "s2" }] }))).toBe("2 songs captured.");
+    expect(lightkeyHeadline(status(), { count: 1, edited: false })).toBe("1 captured look on this song");
+    expect(lightkeyHeadline(status(), { count: 2, edited: false })).toBe("2 captured looks on this song");
   });
 });
 
 describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
-  const armed = { recording: true, replay: true, replay_blocked: "Paused while recording.", takes: [take] };
+  const armed = { recording: true, replay: true, replay_blocked: "Paused while recording." };
 
   it("Record armed: the backend message is not repeated and no paused line is added", () => {
     expect(lightkeyLines(status({ ...armed, message: "Recording starts with the next song." }), null)).toEqual([
@@ -208,18 +244,18 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   });
 
   it("Record off + Replay on: no paused line, and it is gone once recording stops", () => {
-    expect(lightkeyLines(status({ takes: [take] }), null)).toEqual(["1 song captured."]);
-    expect(lightkeyLines(status({ takes: [take], replaying_song: "Holy Forever" }), null)).toEqual(["Replaying “Holy Forever”."]);
+    expect(lightkeyLines(status(), null, { count: 1, edited: false })).toEqual(["1 captured look on this song"]);
+    expect(lightkeyLines(status({ replaying_song: "Holy Forever" }), null, { count: 1, edited: false })).toEqual(["Replaying “Holy Forever”."]);
   });
 
   it("Record off + Replay off: says replay is switched off", () => {
-    expect(lightkeyLines(status({ replay: false, replay_blocked: "Replay is switched off.", takes: [take] }), null)).toEqual(["Replay is switched off."]);
+    expect(lightkeyLines(status({ replay: false, replay_blocked: "Replay is switched off." }), null, { count: 1, edited: false })).toEqual(["Replay is switched off."]);
   });
 
   it("a message that differs from the headline is kept next to it", () => {
-    expect(lightkeyLines(status({ takes: [take], message: "Saved \"Holy Forever\": 14 fixture changes. Song finished." }), null)).toEqual([
+    expect(lightkeyLines(status({ message: "Saved \"Holy Forever\": 14 fixture changes. Song finished." }), null, { count: 1, edited: false })).toEqual([
       'Saved "Holy Forever": 14 fixture changes. Song finished.',
-      "1 song captured.",
+      "1 captured look on this song",
     ]);
   });
 
@@ -254,15 +290,15 @@ describe("LightkeyStrip lines on screen (B3)", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay_blocked: "Paused while recording." }));
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ takes: [take], message: null })));
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ takes: [take], message: null })));
-    render(<LightkeyStrip lightingEnabled />);
+    render(<LightkeyStrip lightingEnabled looks={{ count: 1, edited: false }} />);
     await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
-    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 song captured."));
+    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 captured look on this song"));
   });
 
   it("an expired message (backend sends null) falls back to the headline", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", active_count: null, message: null }));
     render(<LightkeyStrip lightingEnabled />);
     await screen.findByText("Not connected");
-    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("0 songs captured.");
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("0 captured looks on this song");
   });
 });

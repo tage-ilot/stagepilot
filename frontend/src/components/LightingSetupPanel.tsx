@@ -5,6 +5,7 @@ import type {
   LightingCaptureResponse,
   LightingCue,
   LightingMethod,
+  LightkeyDetail,
   LightingPad,
   OscArgument,
   OscLightingCue,
@@ -31,11 +32,16 @@ import { accentClasses } from "./ui/accent";
 import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
-import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import {
+  capturedCount, detailLabels, hasEditedCaptured, isCaptured, isLook, lookLabel, markEdited, mergeRows,
+  removeFixtureFromRows, simplifyCaptured,
+} from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
+import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
   formatElapsed,
@@ -307,7 +313,19 @@ export function LightingSetupPanel({
     if (selectedSong) onSaveCues(selectedSong, sortedCues, "midi");
   };
 
-  const persistOscCues = (nextCues: OscLightingCue[]) => {
+  // One step of undo for merge, simplify and remove-fixture. Any other edit forgets it.
+  const [undo, setUndo] = useState<{ cues: OscLightingCue[]; text: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [simplify, setSimplify] = useState<{ detail: LightkeyDetail } | null>(null);
+  useEffect(() => { setUndo(null); setSelectedIds([]); setSimplify(null); setPage(0); setFocusId(null); }, [selectedSongKey]);
+  useEffect(() => {
+    setSelectedIds((ids) => (ids.every((id) => oscCues.some((cue) => cue.id === id)) ? ids : ids.filter((id) => oscCues.some((cue) => cue.id === id))));
+  }, [oscCues]);
+
+  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false) => {
+    if (!keepUndo) setUndo(null);
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setOscCues(sortedCues);
     if (selectedSong) onSaveCues(selectedSong, sortedCues, "osc");
@@ -315,7 +333,7 @@ export function LightingSetupPanel({
 
   // Timeline edits go through the same save as the cue rows, so the two stay in sync.
   const moveCue = (id: string, at: number) => {
-    if (method === "osc") persistOscCues(oscCues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
+    if (method === "osc") persistOscCues(oscCues.map((cue) => cue.id === id ? markEdited({ ...cue, at_seconds: at }) : cue));
     else persistCues(cues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
   };
   const removeCue = (id: string) => {
@@ -342,6 +360,48 @@ export function LightingSetupPanel({
     ]);
   };
 
+  // A look row changed by hand. A new message has no address yet, so it is only shown until the address is valid.
+  const commitLook = (next: OscLightingCue) => {
+    const messages = next.messages ?? [];
+    if (!messages.length) { persistOscCues(oscCues.filter((cue) => cue.id !== next.id)); return; }
+    const edited = markEdited(next);
+    if (messages.some((message) => message.address === "")) setOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
+    else persistOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
+  };
+  const mergeSelected = (ids: string[]) => {
+    const result = mergeRows(oscCues, ids);
+    if (!result) return;
+    if (result.changedAddresses.length && !confirmMergeChangesValues(result.changedAddresses)) return;
+    const before = oscCues;
+    persistOscCues(result.cues, true);
+    setUndo({ cues: before, text: `Undo merge of ${ids.length} rows` });
+    setSelectedIds([]);
+  };
+  const removeFixture = (fixture: string) => {
+    if (!selectedSong || !confirmRemoveFixture(fixture, selectedSong.title)) return;
+    const before = oscCues;
+    persistOscCues(removeFixtureFromRows(oscCues, fixture), true);
+    setUndo({ cues: before, text: `Undo removing ${fixture}` });
+  };
+  const simplifyCount = useMemo(
+    () => (simplify ? simplifyCaptured(oscCues, simplify.detail).filter(isCaptured).length : 0),
+    [oscCues, simplify],
+  );
+  const applySimplify = () => {
+    if (!simplify) return;
+    const before = oscCues;
+    persistOscCues(simplifyCaptured(oscCues, simplify.detail), true);
+    setUndo({ cues: before, text: "Undo simplify" });
+    setSimplify(null);
+  };
+  const undoLast = () => {
+    if (!undo) return;
+    persistOscCues(undo.cues, true);
+    setUndo(null);
+  };
+  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) };
+  const PAGE_SIZE = 40;
+
   const addOscCue = () => {
     persistOscCuesLocal([...oscCues, newOscCue(newCueId())]);
   };
@@ -366,6 +426,15 @@ export function LightingSetupPanel({
     }
   };
 
+  const pageCount = Math.max(1, Math.ceil(oscCues.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const shownPage = oscCues.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  useEffect(() => {
+    if (!focusId) return;
+    const index = oscCues.findIndex((cue) => cue.id === focusId);
+    if (index >= 0) setPage(Math.floor(index / PAGE_SIZE));
+    document.getElementById(`look-row-${focusId}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownCues = method === "osc" ? oscCues : cues;
   const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
     (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
@@ -383,7 +452,7 @@ export function LightingSetupPanel({
   ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = method === "osc"
-    ? oscCues.filter((cue) => cue.address !== "").map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || cue.address, color: cue.color ?? null }))
+    ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => ({ id: cue.id, at: cue.at_seconds, label: isLook(cue) ? lookLabel(cue) : cue.label || cue.address, color: cue.color ?? null, captured: isCaptured(cue) }))
     : cues.map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || `Note ${cue.note}`, color: cue.color ?? null }));
   const savedLighting = settings?.settings.lights ?? lights;
   const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
@@ -548,7 +617,7 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
-      {savedMethod === "osc" && <LightkeyStrip lightingEnabled={Boolean(lights?.enabled)} />}
+      {savedMethod === "osc" && <LightkeyStrip lightingEnabled={Boolean(lights?.enabled)} looks={looks} />}
       <Disclosure
         aside={(
           <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
@@ -662,11 +731,38 @@ export function LightingSetupPanel({
           <LightingTimeline
             disabled={pendingOperation !== null}
             markers={timelineMarkers}
+            onMerge={mergeSelected}
             onMove={moveCue}
             onRemove={removeCue}
+            onSelect={(id) => setFocusId(id)}
+            onSelectionChange={setSelectedIds}
+            selectedIds={selectedIds}
             playhead={elapsed}
             songLength={songLength}
           />
+        )}
+
+        {method === "osc" && (looks.count > 0 || undo || selectedIds.length > 1) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="look-tools">
+            <Button disabled={selectedIds.length < 2 || pendingOperation !== null} onClick={() => mergeSelected(selectedIds)} variant="tinted">
+              {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
+            </Button>
+            {looks.count > 0 && <Button disabled={pendingOperation !== null} onClick={() => setSimplify(simplify ? null : { detail: "normal" })} variant="tinted">Simplify this song</Button>}
+            {undo && <Button onClick={undoLast} variant="secondary">{undo.text}</Button>}
+            {selectedIds.length < 2 && <span className="text-type-body-sm text-ink-muted">Tick two or more rows, or Shift-click markers, to merge them.</span>}
+          </div>
+        )}
+        {method === "osc" && simplify && (
+          <div className="mt-2 flex flex-wrap items-end gap-3 rounded-ds-lg border border-edge-medium bg-surface-panel p-3" data-testid="simplify-panel" role="group" aria-label="Simplify this song">
+            <Field label="Detail">
+              <Select onChange={(event) => setSimplify({ detail: event.target.value as LightkeyDetail })} value={simplify.detail}>
+                {(Object.keys(detailLabels) as LightkeyDetail[]).map((detail) => <option key={detail} value={detail}>{detailLabels[detail]}</option>)}
+              </Select>
+            </Field>
+            <p className="text-ink" data-testid="simplify-preview">{looks.count} rows → {simplifyCount}</p>
+            <Button disabled={simplifyCount >= looks.count} onClick={applySimplify} variant="tinted">Apply</Button>
+            <Button onClick={() => setSimplify(null)} variant="secondary">Cancel</Button>
+          </div>
         )}
 
         {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
@@ -680,7 +776,20 @@ export function LightingSetupPanel({
           role={shownCues.length > 0 ? "region" : undefined}
           tabIndex={shownCues.length > 0 ? 0 : undefined}
         >
-          {method === "osc" && oscCues.map((cue) => (
+          {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
+            <LookRow
+              cue={cue}
+              disabled={pendingOperation !== null}
+              highlight={cue.id === focusId}
+              key={cue.id}
+              onCommit={commitLook}
+              onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
+              onRemoveFixture={removeFixture}
+              onToggleSelect={() => setSelectedIds((ids) => ids.includes(cue.id) ? ids.filter((id) => id !== cue.id) : [...ids, cue.id])}
+              selected={selectedIds.includes(cue.id)}
+              songDuration={selectedSong?.duration_seconds ?? null}
+            />
+          ) : (
             <OscCueRow
               canTest={savedMethod === "osc" && !draftDiffersFromSaved}
               cue={cue}
@@ -720,6 +829,13 @@ export function LightingSetupPanel({
           )}
           {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
         </ScrollRegion>
+        {method === "osc" && pageCount > 1 && (
+          <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
+            <Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} variant="tinted">Previous</Button>
+            <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(oscCues.length, (safePage + 1) * PAGE_SIZE)} of {oscCues.length}</span>
+            <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
+          </nav>
+        )}
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>

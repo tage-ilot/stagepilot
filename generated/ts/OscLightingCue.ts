@@ -14,4 +14,9 @@ messages?: Array<OscMessage>,
 /**
  * Where the row came from. Left out of the saved file while `manual`.
  */
-source?: OscCueSource, };
+source?: OscCueSource, 
+/**
+ * Set when someone changed a captured look by hand, so a later recording does not replace it
+ * silently. Left out of the saved file while false.
+ */
+edited?: boolean, };

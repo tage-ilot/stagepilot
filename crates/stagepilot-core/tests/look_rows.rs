@@ -37,6 +37,7 @@ fn look(at: f64, messages: Vec<OscMessage>) -> OscLightingCue {
         color: None,
         messages,
         source: OscCueSource::Captured,
+        edited: false,
     }
 }
 

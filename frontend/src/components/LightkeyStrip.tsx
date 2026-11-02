@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  clearLightkeyTake,
   getLightkeyStatus,
   saveLightkeySettings,
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus, LightkeyTakeSummary } from "../types";
+import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyDetail, LightkeyLink, LightkeyStatus } from "../types";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
+import { confirmRerecordLooks } from "./lightingCueConfirmations";
 import { Input } from "./ui/Input";
 import { StatusDot } from "./ui/StatusDot";
 import type { Tone } from "./ui/types";
@@ -38,22 +38,29 @@ function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
   return fixtures.detail ?? "Colour and levels: not receiving";
 }
 
-function takeDetail(take: LightkeyTakeSummary): string {
-  if (!take.fixture_event_count) return "no fixture capture";
-  return `${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}`;
-}
-
 /** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
-export function lightkeyHeadline(status: LightkeyStatus): string {
+export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): string {
   if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
-  if (status.replay_blocked && status.takes.length > 0) return status.replay_blocked;
-  if (status.link === "connected" && status.takes.length === 0) {
-    return "Switch to Record, then start a song. Its lights are captured with the countdown.";
-  }
-  return status.takes.length === 1 ? "1 song captured." : `${status.takes.length} songs captured.`;
+  const count = looks?.count ?? 0;
+  if (status.replay_blocked && count > 0) return status.replay_blocked;
+  if (count > 0) return capturedLooksText(count);
+  if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
+  return capturedLooksText(0);
 }
+
+/** What the selected song holds: captured look rows, and whether any were changed by hand. */
+export interface SongLooks { count: number; edited: boolean }
+
+export const capturedLooksText = (count: number): string =>
+  `${count} captured look${count === 1 ? "" : "s"} on this song`;
+
+const detailChoices: { value: LightkeyDetail; label: string }[] = [
+  { value: "fine", label: "Fine" },
+  { value: "normal", label: "Normal" },
+  { value: "coarse", label: "Coarse" },
+];
 
 /** Same text, ignoring quote style and spacing (the backend writes straight quotes, the headline curly ones). */
 export function normaliseLine(text: string): string {
@@ -61,10 +68,10 @@ export function normaliseLine(text: string): string {
 }
 
 /** The lines under the toggle, top to bottom, never the same thing twice: what just happened (an error or the backend message), then the headline. */
-export function lightkeyLines(status: LightkeyStatus, error: string | null): string[] {
+export function lightkeyLines(status: LightkeyStatus, error: string | null, looks?: SongLooks): string[] {
   const candidates = [
-    error ?? status.message ?? lightkeyHeadline(status),
-    lightkeyHeadline(status),
+    error ?? status.message ?? lightkeyHeadline(status, looks),
+    lightkeyHeadline(status, looks),
   ];
   const lines: string[] = [];
   const seen = new Set<string>();
@@ -81,7 +88,7 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null): str
  * Lightkey live link, kept to the minimum: connect, record, replay.
  * Captures the fixtures' colour and levels from the lightkey-api agent on the Lightkey Mac and holds them with overrides on replay.
  */
-export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean }) {
+export function LightkeyStrip({ lightingEnabled, looks }: { lightingEnabled: boolean; looks?: SongLooks }) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null); // null = untouched, show the saved one
@@ -158,7 +165,7 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
     }
   };
 
-  const [headline, ...details] = lightkeyLines(status, error);
+  const [headline, ...details] = lightkeyLines(status, error, looks);
   return (
     <section aria-label="Lightkey live link" className="mt-6" data-testid="lightkey-strip">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -201,7 +208,11 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         className="mt-[-1.25rem]"
         disabled={busy}
         label="Lightkey mode"
-        onChange={(mode) => void (mode === "record" ? run(() => setLightkeyRecording(true)) : run(backToReplay))}
+        onChange={(mode) => {
+          if (mode !== "record") { void run(backToReplay); return; }
+          if (looks?.edited && !confirmRerecordLooks()) return;
+          void run(() => setLightkeyRecording(true));
+        }}
         options={[
           { value: "replay", label: "Replay" },
           { value: "record", label: "Record", disabled: !status.recording && !connected },
@@ -216,25 +227,17 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         <p className="text-type-body-sm text-ink-muted" data-testid="lightkey-detail" key={line}>{line}</p>
       ))}
 
-      {status.takes.length > 0 && (
-        <ul aria-label="Captured songs" className="mt-2 grid gap-1">
-          {status.takes.map((take) => (
-            <li className="flex items-center justify-between gap-3 text-sm text-ink-body" key={take.song_key}>
-              <span className="min-w-0 truncate">
-                {take.song_title}
-                <span className="text-ink-muted"> · {takeDetail(take)}</span>
-              </span>
-              <Button
-                aria-label={`Clear capture for ${take.song_title}`}
-                disabled={busy}
-                onClick={() => void run(() => clearLightkeyTake(take.song_key))}
-                variant="secondary"
-              >
-                Clear
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {status.recording && (
+        <div className="mt-2" data-testid="lightkey-detail-setting">
+          <ConnectionMethod
+            disabled={busy}
+            label="Detail"
+            onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
+            options={detailChoices}
+            value={status.detail_level ?? "normal"}
+          />
+          <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>
+        </div>
       )}
     </section>
   );

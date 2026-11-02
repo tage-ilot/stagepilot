@@ -695,6 +695,15 @@ pub struct OscLightingCue {
     #[serde(default, skip_serializing_if = "OscCueSource::is_manual")]
     #[ts(optional, as = "Option<OscCueSource>")]
     pub source: OscCueSource,
+    /// Set when someone changed a captured look by hand, so a later recording does not replace it
+    /// silently. Left out of the saved file while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub edited: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// One OSC message of a look row.

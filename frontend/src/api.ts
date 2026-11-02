@@ -11,6 +11,7 @@ import type {
   LightingCaptureResponse,
   LightingPad,
   LightkeyActionResponse,
+  LightkeyDetail,
   LightkeyStatus,
   LightsOperationResponse,
   LightsSettingsInput,
@@ -360,7 +361,7 @@ export const undoLightingCapture = (songKey: string, cueId: string) =>
   });
 
 export const getLightkeyStatus = () => requestJson<LightkeyStatus>("/api/v1/lights/lightkey");
-export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean }) =>
+export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail_level?: LightkeyDetail }) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
