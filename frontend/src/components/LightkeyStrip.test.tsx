@@ -11,6 +11,7 @@ vi.mock("../api", async (original) => ({
   getLightkeyStatus: vi.fn(),
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
+  setLightkeyAudioMeter: vi.fn().mockResolvedValue({ available: false, reason: "No input.", devices: [], selected: null, note: null, level: null, metering: false }),
 }));
 
 const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({

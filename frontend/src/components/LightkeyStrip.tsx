@@ -10,6 +10,7 @@ import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyDetail, Lig
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
+import { LoudnessPicker } from "./LoudnessPicker";
 import { Input } from "./ui/Input";
 import { StatusDot } from "./ui/StatusDot";
 import type { Tone } from "./ui/types";
@@ -88,7 +89,12 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null, look
  * Lightkey live link, kept to the minimum: connect, record, replay.
  * Captures the fixtures' colour and levels from the lightkey-api agent on the Lightkey Mac and holds them with overrides on replay.
  */
-export function LightkeyStrip({ lightingEnabled, looks }: { lightingEnabled: boolean; looks?: SongLooks }) {
+export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
+  lightingEnabled: boolean;
+  looks?: SongLooks;
+  /** The selected song's loudness: whether it has any, and how to clear it. */
+  loudness?: { present: boolean; onClear?: () => void; disabled?: boolean };
+}) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null); // null = untouched, show the saved one
@@ -238,6 +244,9 @@ export function LightkeyStrip({ lightingEnabled, looks }: { lightingEnabled: boo
           />
           <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>
         </div>
+      )}
+      {status.recording && (
+        <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
       )}
     </section>
   );

@@ -17,4 +17,9 @@ replay: boolean,
  * How finely a recording is kept as timeline rows (see `LightkeyDetail`). Left out of the
  * saved file while `normal`, so an older file saves back unchanged.
  */
-detail?: LightkeyDetail, };
+detail?: LightkeyDetail, 
+/**
+ * Name of the audio input that measures loudness while recording. Unset means the system
+ * default input; a name that is no longer present falls back to the default.
+ */
+audio_device?: string, };

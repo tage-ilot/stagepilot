@@ -278,6 +278,31 @@ export interface SongLightingCueMap {
   cues: LightingCue[];
   /** OSC cues. Kept when MIDI is the saved method. */
   osc_cues?: OscLightingCue[];
+  /** How loud the room was while the song was recorded (levels only, never audio). Absent until recorded. */
+  loudness?: SongLoudness | null;
+}
+
+/**
+ * A loudness envelope: one byte per `step_seconds`. 0 = no data (a pause); 1..255 = -60..0 dBFS.
+ * dBFS is a digital level, not sound pressure. `takes` recordings are averaged in (at most 8).
+ */
+export interface SongLoudness {
+  step_seconds: number;
+  values: number[];
+  takes: number;
+}
+
+/** The input picker's data (`GET`/`POST /api/v1/lights/lightkey/audio`). */
+export interface LightkeyAudio {
+  /** False in a build or on a machine that cannot listen; `reason` says why in one line. */
+  available: boolean;
+  reason: string | null;
+  devices: string[];
+  /** The saved input; null = the system default. */
+  selected: string | null;
+  note: string | null;
+  level: { rms_db: number | null; peak_db: number | null; value: number } | null;
+  metering: boolean;
 }
 
 /** What the cue-map PUT sends: only the cue list of `method` is replaced. */

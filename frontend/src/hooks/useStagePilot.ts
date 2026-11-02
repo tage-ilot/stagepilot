@@ -25,6 +25,7 @@ import {
   testLightingCue,
   captureLightingPad,
   undoLightingCapture,
+  clearLightingLoudness,
   updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
@@ -997,6 +998,23 @@ export function useStagePilot() {
     }
   }, [claim, release, canOperate]);
 
+  const clearLightingLoudness_ = useCallback(async (songKey: string): Promise<boolean> => {
+    if (!canOperate) return false;
+    if (!claim("lights-loudness")) return false;
+    try {
+      const response = await clearLightingLoudness(songKey);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      setSettings(await getSettings());
+      return response.accepted;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Loudness could not be cleared."));
+      return false;
+    } finally {
+      release("lights-loudness");
+    }
+  }, [claim, release, canOperate]);
+
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -1137,6 +1155,7 @@ export function useStagePilot() {
     saveLightingPads,
     pressLightingPad,
     undoLightingCapture: undoLightingCapture_,
+    clearLightingLoudness: clearLightingLoudness_,
     clearAllLightingCues,
     activateConfiguredServices,
   };

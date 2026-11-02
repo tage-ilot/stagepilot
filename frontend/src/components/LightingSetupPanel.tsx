@@ -84,6 +84,8 @@ export interface LightingPanelActions {
     capture?: { song_key: string; song_title: string; at_seconds: number },
   ) => Promise<LightingCaptureResponse | null>;
   onUndoCapture: (songKey: string, cueId: string) => Promise<boolean>;
+  /** Removes the selected song's loudness envelope (nothing else). */
+  onClearLoudness?: (songKey: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
 }
 
@@ -108,6 +110,7 @@ export function LightingSetupPanel({
   onClearAllCues,
   onPressPad,
   onUndoCapture,
+  onClearLoudness,
   onSavePads,
 }: {
   connectionStatus?: ConnectionStatus;
@@ -617,7 +620,15 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
-      {savedMethod === "osc" && <LightkeyStrip lightingEnabled={Boolean(lights?.enabled)} looks={looks} />}
+      {savedMethod === "osc" && <LightkeyStrip
+        lightingEnabled={Boolean(lights?.enabled)}
+        looks={looks}
+        loudness={{
+          present: Boolean(savedCueMap?.loudness),
+          disabled: pendingOperation !== null,
+          onClear: onClearLoudness && selectedSongKey ? () => void onClearLoudness(selectedSongKey) : undefined,
+        }}
+      />}
       <Disclosure
         aside={(
           <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
@@ -738,6 +749,7 @@ export function LightingSetupPanel({
             onSelectionChange={setSelectedIds}
             selectedIds={selectedIds}
             playhead={elapsed}
+            loudness={savedCueMap?.loudness ?? null}
             songLength={songLength}
           />
         )}
