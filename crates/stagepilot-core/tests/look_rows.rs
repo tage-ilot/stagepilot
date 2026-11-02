@@ -116,9 +116,9 @@ fn look_message_addresses_follow_the_address_rules() {
 
 #[test]
 fn caps_are_named_and_sized_for_a_400_row_6k_message_song() {
-    assert!(MAX_OSC_ROWS_PER_SONG >= 400 * 2);
-    assert!(MAX_OSC_MESSAGES_PER_SONG >= 6_000 * 2);
-    assert!(MAX_OSC_MESSAGES_PER_ROW >= 106);
+    const { assert!(MAX_OSC_ROWS_PER_SONG >= 400 * 2) };
+    const { assert!(MAX_OSC_MESSAGES_PER_SONG >= 6_000 * 2) };
+    const { assert!(MAX_OSC_MESSAGES_PER_ROW >= 106) };
 }
 
 #[test]

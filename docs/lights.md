@@ -210,3 +210,7 @@ more complex and less reliable for a seconds-based timeline. StagePilot uses a
 local monotonic clock for `mm:ss` cues. MIDI Clock can be added later as a
 separate optional input for beat- or bar-based lighting effects without changing
 the seconds-based scheduler.
+
+## Look rows and the timeline as replay source
+
+A song lighting row (`osc_cues`) may carry `messages` (a list of `{address, args}`) and a `source` of `manual` or `captured`. A row sends its `messages` when non-empty, otherwise its single address/args. Caps: `MAX_OSC_MESSAGES_PER_ROW`, `MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`. Fixture look rows fire about 45 ms early and are paced to at most 200 packets/s. On start, resume or seek, the latest `/fixture/<name>/overrides/<prop>` message at or before the position is re-sent once. Pause, stop, end and reset hold the last look; fixtures are released (double `overrides/clear`) only when replay is switched off, Lighting is disabled, on shutdown, or when the next song does not use them.
