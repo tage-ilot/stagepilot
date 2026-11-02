@@ -570,6 +570,7 @@ impl Inner {
             color: None,
             messages: Vec::new(),
             source: Default::default(),
+            edited: false,
         };
         if let Err(error) = self.send_osc(&address, &args).await {
             self.record_osc_error(&error, "OSC test cue failed.").await;

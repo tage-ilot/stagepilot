@@ -172,6 +172,7 @@ fn contract_lightkey_cue_maps(
             args: vec![OscArgument::Float(level)],
         }],
         source: OscCueSource::Captured,
+        edited: false,
     };
     let map = SongLightingCueMap {
         song_key: "demo-battle-belongs".into(),
