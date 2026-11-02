@@ -9,7 +9,7 @@ import type {
   PlaybackStatusResponse,
 } from "../../types";
 import { connectionWord } from "../ui/statusWord";
-import { playbackConnectionDetail, playbackOrderNotice } from "../playbackStatus";
+import { playbackConnectionDetail, playbackOrderMode, playbackOrderModeText, playbackOrderNotice } from "../playbackStatus";
 
 export type ConnectionCardView = {
   status: ConnectionStatus;
@@ -127,7 +127,9 @@ export function buildConnectionCardViews({
     midi: playback && !midiIsSimulated
       ? {
           status: playback.connected ? "connected" : "disconnected",
-          detail: playbackConnectionDetail(playback),
+          detail: playback.active_source === "playback_api" && playbackOrderMode(playback) === "learned"
+            ? `${playbackConnectionDetail(playback)} ${playbackOrderModeText(playback)}.`
+            : playbackConnectionDetail(playback),
           configured: playback.selected ? playback.enabled : Boolean(selectedMidi),
           mode: "real",
           actionNotice: playback.active_source === "playback_api" ? playbackOrderNotice(playback) : null,

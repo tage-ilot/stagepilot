@@ -842,3 +842,69 @@ describe("outdated scan removes the Planning Center update and asks for a new sc
     expect(updateButton()).toBeEnabled();
   });
 });
+
+describe("Learned song order", () => {
+  const learned = (extra = {}) => playbackStatus({
+    song_order: [], song_count: 6, plan_song_count: 6, order_mode: "learned",
+    learned_songs: [{ song_id: 7, plan_position: 0, confirmed: true, doubtful: false }, { song_id: 9, plan_position: 1, confirmed: false, doubtful: false }],
+    settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: true }, ...extra,
+  });
+
+  it("learned: says the order is being learned, with the count, and never says saved", () => {
+    render(<PlaybackApiPanel playback={controller({ status: learned() })} />);
+    expect(screen.getByTestId("order-mode")).toHaveTextContent("Learning the order as songs play (2 of 6 placed)");
+    expect(screen.queryByText(/Song order saved/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set up song order" })).toBeVisible();
+  });
+
+  it("scanned: Order scanned", () => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_mode: "scanned", learned_songs: [] }) })} />);
+    expect(screen.getByTestId("order-mode")).toHaveTextContent("Order scanned");
+  });
+
+  it("none: asks for Up next or a scan", () => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ song_order: [], song_count: 0, order_mode: "none", learned_songs: [], settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: true } }) })} />);
+    expect(screen.getByTestId("order-mode")).toHaveTextContent("No order yet - set Up next or scan");
+  });
+
+  it("shows the note and the doubtful-song hint only when they apply", () => {
+    const view = render(<PlaybackApiPanel playback={controller({ status: learned({ order_note: "Playback song not placed; set Up next or run a scan" }) })} />);
+    expect(screen.getByText("Playback song not placed; set Up next or run a scan")).toBeVisible();
+    expect(screen.queryByText(/Check the order/)).not.toBeInTheDocument();
+    view.rerender(<PlaybackApiPanel playback={controller({ status: learned({ learned_songs: [{ song_id: 7, plan_position: 0, confirmed: true, doubtful: true }] }) })} />);
+    expect(screen.getByText(/Check the order: a song's length differs from the plan\. Run a scan\./)).toBeVisible();
+  });
+
+  it("the switch explains itself and reflects the saved setting", () => {
+    const view = render(<PlaybackApiPanel playback={controller({ status: learned() })} />);
+    expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).toBeChecked();
+    expect(screen.getByText("A scan always replaces the learned order.")).toBeVisible();
+    view.rerender(<PlaybackApiPanel playback={controller({ status: learned({ order_mode: "none", learned_songs: [], settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: false } }) })} />);
+    expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).not.toBeChecked();
+  });
+
+  it("toggling saves the whole settings with learn_order flipped, and the switch follows the saved status", async () => {
+    const save = vi.fn().mockResolvedValue(true);
+    const playback = controller({ status: learned(), save });
+    const view = render(<PlaybackApiPanel playback={playback} />);
+    await userEvent.setup().click(screen.getByRole("switch", { name: "Learn the order as songs play" }));
+    expect(save).toHaveBeenCalledWith({ enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: false });
+    view.rerender(<PlaybackApiPanel playback={controller({ status: learned({ settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: false } }), save })} />);
+    expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).not.toBeChecked();
+  });
+
+  it("a failed save puts the switch back and shows the controller error", async () => {
+    const save = vi.fn().mockResolvedValue(false);
+    render(<PlaybackApiPanel playback={controller({ status: learned(), save, error: "Couldn't save" })} />);
+    const toggle = screen.getByRole("switch", { name: "Learn the order as songs play" });
+    await userEvent.setup().click(toggle);
+    expect(save).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(toggle).toBeChecked());
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't save");
+  });
+
+  it("the switch is disabled while a save is running", () => {
+    render(<PlaybackApiPanel playback={controller({ status: learned(), pending: "save" })} />);
+    expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).toBeDisabled();
+  });
+});
