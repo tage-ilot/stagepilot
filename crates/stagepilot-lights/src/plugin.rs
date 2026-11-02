@@ -557,6 +557,16 @@ impl Inner {
                     .unwrap_or_else(|| "Disconnected. OSC output is unavailable.".into()),
             );
         }
+        let test_cue = OscLightingCue {
+            id: Uuid::new_v4(),
+            at_seconds: 0.0,
+            address: address.clone(),
+            args: args.clone(),
+            label: "Test cue".into(),
+            color: None,
+            messages: Vec::new(),
+            source: Default::default(),
+        };
         if let Err(error) = self.send_osc(&address, &args).await {
             self.record_osc_error(&error, "OSC test cue failed.").await;
             return LightingOutcome::new(
@@ -567,6 +577,7 @@ impl Inner {
                     .unwrap_or_else(|| "OSC test cue failed.".into()),
             );
         }
+        self.st().last_osc_cue = Some(test_cue); // the status shows the last cue sent, tests included
         let target = {
             let st = self.st();
             format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
