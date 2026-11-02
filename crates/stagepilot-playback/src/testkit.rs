@@ -434,6 +434,7 @@ impl TransportPort for SimPlayback {
             }),
             setlist_id: s.setlist_id.map(SetlistId::Int),
             heartbeat_serial: 0,
+            loading_setlist: false,
             source: None,
         }
     }

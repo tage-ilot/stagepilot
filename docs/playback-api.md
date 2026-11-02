@@ -112,6 +112,10 @@ revalidates the saved order. The protocol does not prove unique setlist identity
 or detect every same-version reorder with the same IDs. Rediscover after known
 setlist/plan reorder changes; StagePilot does not claim that stronger guarantee.
 
+### Heartbeats with no song yet
+
+While Playback loads a setlist it keeps sending valid heartbeats (position, transport and pad state, setlist version) but omits `setlistSongID`. StagePilot treats such a beat as liveness only: the connection stays up and the 5 s heartbeat timer resets, the status reports `loading_setlist`, and no song, state or transport event is produced and nothing is queued. It is not an unknown song id, so a saved Discover Song Order stays valid. Discover Song Order, song-length measurement and any control that needs a current song refuse with "Playback is still loading the setlist." until a beat with a song id arrives. A beat whose `setlistSongID` is present but malformed is still rejected.
+
 ## Event mapping
 
 | Observation | StagePilot action |

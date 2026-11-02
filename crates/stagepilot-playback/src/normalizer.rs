@@ -180,6 +180,21 @@ pub fn parse_message(raw: &str) -> Option<(String, Map<String, Value>)> {
 pub fn parse_heartbeat(body: &Map<String, Value>) -> Option<Heartbeat> {
     let state = object(body.get("stateData"))?;
     let song = integer(state.get("setlistSongID"))?;
+    parse_heartbeat_with_song(state, song)
+}
+
+/// A heartbeat with no `setlistSongID` at all that is otherwise fully valid: Playback is
+/// alive but has no song selected yet (it is loading a setlist). A present-but-malformed
+/// song id is NOT song-less.
+pub fn is_songless_heartbeat(body: &Map<String, Value>) -> bool {
+    let Some(state) = object(body.get("stateData")) else {
+        return false;
+    };
+    matches!(state.get("setlistSongID"), None | Some(Value::Null))
+        && parse_heartbeat_with_song(state, 0).is_some()
+}
+
+fn parse_heartbeat_with_song(state: &Map<String, Value>, song: i64) -> Option<Heartbeat> {
     let position = number(state.get("sequenceTime"))?;
     let transport = object(state.get("sequencerPlayState"))?;
     let pad = object(state.get("padPlayerPlayState"))?;
@@ -214,6 +229,10 @@ pub struct Normalizer {
     pub heartbeat: Option<Heartbeat>,
     /// Incremented for every valid heartbeat (Python compares object identity).
     pub heartbeat_serial: u64,
+    /// Incremented for every valid song-less heartbeat (liveness only).
+    pub songless_serial: u64,
+    /// True while the latest heartbeat had no song (Playback is loading a setlist).
+    pub loading_setlist: bool,
     pub setlist_id: Option<SetlistId>,
     fast_transport: bool,
     expected: Option<bool>,
@@ -249,6 +268,8 @@ impl Normalizer {
         Normalizer {
             heartbeat: None,
             heartbeat_serial: 0,
+            songless_serial: 0,
+            loading_setlist: false,
             setlist_id: None,
             fast_transport,
             expected: None,
@@ -273,8 +294,13 @@ impl Normalizer {
         match kind.as_str() {
             "heartbeat" => {
                 let Some(current) = parse_heartbeat(&body) else {
+                    if is_songless_heartbeat(&body) {
+                        self.songless_serial += 1;
+                        self.loading_setlist = true;
+                    }
                     return vec![];
                 };
+                self.loading_setlist = false;
                 let armed = self.armed;
                 let events = self.on_heartbeat(current, ts);
                 if !self.pending.is_empty() {

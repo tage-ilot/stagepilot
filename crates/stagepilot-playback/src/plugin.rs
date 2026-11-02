@@ -411,6 +411,7 @@ struct Shared {
     active: bool,
     connection: bool,
     heartbeat: Option<Heartbeat>,
+    loading_setlist: bool,
     seen_serial: u64,
     published: Option<(bool, String)>,
     ownership_revision: u64,
@@ -504,6 +505,7 @@ impl PlaybackPlugin {
             active: false,
             connection: false,
             heartbeat: None,
+            loading_setlist: false,
             seen_serial: 0,
             published: None,
             ownership_revision: 0,
@@ -1237,6 +1239,12 @@ impl Inner {
                 s.heartbeat = status.heartbeat;
                 s.seen_serial = status.heartbeat_serial;
             }
+            s.loading_setlist = status.connected && status.loading_setlist;
+            if s.loading_setlist {
+                // No song yet: forget the previous one; not an unknown id, so the saved
+                // order stays valid.
+                s.heartbeat = None;
+            }
             if !status.connected {
                 s.heartbeat = None;
                 s.mapper.discard_pending();
@@ -1472,10 +1480,13 @@ impl Inner {
 
     /// Python `_check_discovery` before a run starts.
     fn check_discovery(&self) -> Result<Heartbeat, PlaybackError> {
-        let (active, heartbeat) = {
+        let (active, heartbeat, loading) = {
             let s = lock(&self.shared);
-            (s.active, s.heartbeat)
+            (s.active, s.heartbeat, s.loading_setlist)
         };
+        if active && loading {
+            return conflict(crate::discovery::LOADING_SETLIST);
+        }
         let connected = self.with_arbiter(|a| a.snapshot().playback_api.connected);
         let Some(heartbeat) = heartbeat.filter(|_| active && connected) else {
             return conflict(
