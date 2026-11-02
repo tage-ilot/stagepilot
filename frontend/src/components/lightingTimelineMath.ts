@@ -1,3 +1,4 @@
+import type { CueTypeId } from "./lightingCueTypes";
 import type { LightingMethod, LightingPad, PadColor } from "../types";
 
 /** Cue times are kept to 0.1 s everywhere (capture, drag, nudge, the cue rows). */
@@ -33,6 +34,12 @@ export interface TimelineMarker {
   color: PadColor | null;
   /** A look recorded from Lightkey (drawn differently from rows made by hand). */
   captured?: boolean;
+  /** What the cue is (bar style, glyph, legend filter). Missing = derived from `captured`. */
+  type?: CueTypeId;
+  /** MIDI accidental: striped bar and a sharp sign in the glyph box. */
+  sharp?: boolean;
+  /** Full spoken name, without the time; the time is added by the timeline (it follows drags). */
+  spokenLabel?: string;
 }
 
 /** Ruler tick spacing in seconds for a song of this length. */
@@ -49,6 +56,9 @@ export const padIsActive = (pad: LightingPad, viewMethod: LightingMethod, savedM
 
 /** Pads for the method on screen are kept; the others are dimmed, not hidden or deleted. */
 export const padIsDimmed = (pad: LightingPad, viewMethod: LightingMethod): boolean => pad.method !== viewMethod;
+
+/** The type a marker is drawn as. */
+export const markerType = (marker: TimelineMarker): CueTypeId => marker.type ?? (marker.captured ? "look-captured" : "look-manual");
 
 /** Class strings are written out in full so Tailwind can see them. */
 export const padColorClasses: Record<PadColor, { pad: string; marker: string; swatch: string; label: string }> = {

@@ -26,6 +26,9 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
 ];
 
 /** Host and UDP port. The port has no default to guess at: each app listens on its own, so it is typed in. */
+import { CueTypeBadge } from "./CueTypeParts";
+import { classifyOscCue } from "./lightingCueTypes";
+
 export function OscConnectionFields({
   host, port, held, attempted, onHost, onPort,
 }: {
@@ -152,6 +155,7 @@ export function OscCueRow({
   const testReason = testDisabledReason ? testReasonId : undefined;
   return (
     <div className="lighting-osc-cue grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0" data-testid="osc-cue-row">
+      <CueTypeBadge type={classifyOscCue(cue)} />
       <div className="lighting-osc-cue-fields grid gap-2">
         <Field error={touched ? timeError ?? undefined : undefined} label="Cue elapsed time">
           <Input
@@ -292,6 +296,7 @@ export function LookRow({
           <input aria-label={`Select look at ${at}`} checked={selected} className="h-5 w-5" disabled={disabled} onChange={onToggleSelect} type="checkbox" />
         </label>
         <Button aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} look at ${at}`} onClick={() => setOpen(!open)} variant="tinted">{open ? "Hide" : "Edit"}</Button>
+        <CueTypeBadge type={classifyOscCue(cue)} />
         <span className="font-semibold text-ink">{label}</span>
         <span className="font-mono tabular-nums text-ink-body">{at}</span>
         <span className={`rounded-ds-full border px-2 text-type-body-sm ${captured ? "border-integration-lighting-osc-soft/60 bg-integration-lighting-osc-soft/15 text-ink-body" : "border-edge-medium text-ink-muted"}`} data-testid="look-badge">

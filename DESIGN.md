@@ -68,6 +68,20 @@ colors:
   integration-lighting-osc: "#2f9e8f"         # DECIDED (owner, 2026-10-15): the OSC method inside the Lighting panel wears a teal, clearly apart from the MIDI blue-violet (integration-playback-midi) and the Lighting pink-red
   integration-lighting-osc-soft: "#2f9e8f"    # same as the base
   integration-lighting-osc-text: "#7fcdc1"
+  # Lighting timeline cue types (DECIDED direction, owner 2026-11-01): >= 3:1 on the track background; never colour alone (bar style + glyph + name)
+  cue-look-captured: "#1fb0e0"   # Lighting timeline: captured look (cyan bar, ◆)
+  cue-look-edited: "#f0a030"   # edited captured look (amber, ◆✎)
+  cue-look-manual: "#7c8cff"   # manual look (indigo, ◇)
+  cue-live: "#a8e830"   # Lightkey cue on (solid) and off (hollow) (lime, ▶ / ■)
+  cue-fixture: "#f08ae8"   # single fixture message (magenta, ◐)
+  cue-other: "#94a3b8"   # other OSC (grey, dashed, ○)
+  cue-note-c: "#ff5d5d"   # MIDI note letters C D E F G A B repeat through every octave; sharps keep the letter colour with a striped bar and a ♯
+  cue-note-d: "#ff9d3c"
+  cue-note-e: "#f2d33c"
+  cue-note-f: "#5fd36a"
+  cue-note-g: "#27c9c0"
+  cue-note-a: "#5b8cff"
+  cue-note-b: "#d0b0ff"
   integration-backend: "#c7231d"          # DECIDED (owner, 2026-10-12): the StagePilot status card and its configuration panel. SAME HEX as primary: see "Colour collisions"
   integration-backend-soft: "#c7231d"
   integration-backend-text: "#e28d89"

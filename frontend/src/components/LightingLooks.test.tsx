@@ -257,7 +257,7 @@ describe("timeline clustering and touch", () => {
     const clusters = screen.getAllByTestId("lighting-cluster");
     expect(clusters.length).toBeGreaterThan(0);
     expect(screen.queryAllByTestId("lighting-marker").length + clusters.length).toBeLessThan(400);
-    const total = clusters.reduce((n, c) => n + Number(c.textContent), 0) + screen.queryAllByTestId("lighting-marker").length;
+    const total = clusters.reduce((n, c) => n + Number(c.getAttribute("data-count")), 0) + screen.queryAllByTestId("lighting-marker").length;
     expect(total).toBe(400);
     const before = clusters.length;
     await userEvent.setup().click(screen.getByRole("button", { name: "Zoom in" }));

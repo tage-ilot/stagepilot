@@ -41,6 +41,10 @@ import {
 } from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
+import { CueTypeBadge } from "./CueTypeParts";
+import { useHiddenCueTypes } from "./useHiddenCueTypes";
+import type { CueTypeId } from "./lightingCueTypes";
+import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpokenLabel } from "./lightingCueTypes";
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
@@ -56,9 +60,6 @@ import {
   type OscArgumentDraft,
 } from "./lightingOsc";
 
-const midiNoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
-const midiNoteName = (note: number) =>
-  `${midiNoteNames[note % midiNoteNames.length]}${Math.floor(note / 12) - 2}`;
 
 type NoteDisplayMode = "music" | "numeric";
 
@@ -445,16 +446,22 @@ export function LightingSetupPanel({
     }
   };
 
-  const pageCount = Math.max(1, Math.ceil(oscCues.length / PAGE_SIZE));
+  // Hidden types only change what is drawn and listed; the cue maps and replay never see them.
+  const typeFilter = useHiddenCueTypes();
+  const keepRows = new Set([...selectedIds, ...(focusId ? [focusId] : [])]);
+  const rowVisible = (id: string, type: CueTypeId) => !typeFilter.hidden.has(type) || keepRows.has(id);
+  const listedOsc = oscCues.filter((cue) => rowVisible(cue.id, classifyOscCue(cue)));
+  const listedMidi = cues.filter((cue) => rowVisible(cue.id, classifyMidiCue(cue).type));
+  const pageCount = Math.max(1, Math.ceil(listedOsc.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const shownPage = oscCues.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const shownPage = listedOsc.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
   useEffect(() => {
     if (!focusId) return;
-    const index = oscCues.findIndex((cue) => cue.id === focusId);
+    const index = listedOsc.findIndex((cue) => cue.id === focusId);
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE));
     document.getElementById(`look-row-${focusId}`)?.scrollIntoView?.({ block: "nearest" });
   }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownCues = method === "osc" ? oscCues : cues;
+  const shownCues = method === "osc" ? listedOsc : listedMidi;
   const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
     (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
   ).length;
@@ -471,8 +478,20 @@ export function LightingSetupPanel({
   ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = method === "osc"
-    ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => ({ id: cue.id, at: cue.at_seconds, label: isLook(cue) ? lookLabel(cue) : cue.label || cue.address, color: cue.color ?? null, captured: isCaptured(cue) }))
-    : cues.map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || `Note ${cue.note}`, color: cue.color ?? null }));
+    ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => {
+      const type = classifyOscCue(cue);
+      const label = isLook(cue) ? lookLabel(cue) : cue.label || cue.address;
+      return { id: cue.id, at: cue.at_seconds, label, color: cue.color ?? null, captured: isCaptured(cue), type, spokenLabel: typeSpokenLabel(type, label) };
+    })
+    : cues.map((cue) => {
+      const { type, sharp } = classifyMidiCue(cue);
+      const text = cue.label || `Note ${cue.note}`;
+      return {
+        id: cue.id, at: cue.at_seconds, color: cue.color ?? null, type, sharp,
+        label: noteDisplayMode === "music" ? `${midiNoteName(cue.note)} ${text}` : `${cue.note} ${text}`,
+        spokenLabel: midiSpokenLabel(cue.note, text),
+      };
+    });
   const savedLighting = settings?.settings.lights ?? lights;
   const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
   const savedOutputName = savedLighting?.output_name ?? null;
@@ -766,6 +785,10 @@ export function LightingSetupPanel({
             selectedIds={selectedIds}
             playhead={elapsed}
             loudness={savedCueMap?.loudness ?? null}
+            hiddenTypes={typeFilter.hidden}
+            method={method}
+            onShowAllTypes={typeFilter.showAll}
+            onToggleType={typeFilter.toggle}
             songLength={songLength}
           />
         )}
@@ -836,8 +859,9 @@ export function LightingSetupPanel({
           ))}
           {method === "midi" && (
           <>
-          {cues.map((cue) => (
-            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
+          {listedMidi.map((cue) => (
+            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[auto_7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" data-testid="midi-cue-row" key={cue.id}>
+              <span className="self-end pb-2"><CueTypeBadge sharp={classifyMidiCue(cue).sharp} type={classifyMidiCue(cue).type} /></span>
               <Field label="Elapsed time">
                 <Input aria-label="Elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
               </Field>
@@ -863,7 +887,7 @@ export function LightingSetupPanel({
         {method === "osc" && pageCount > 1 && (
           <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
             <Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} variant="tinted">Previous</Button>
-            <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(oscCues.length, (safePage + 1) * PAGE_SIZE)} of {oscCues.length}</span>
+            <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(listedOsc.length, (safePage + 1) * PAGE_SIZE)} of {listedOsc.length}</span>
             <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
           </nav>
         )}
