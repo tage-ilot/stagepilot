@@ -103,6 +103,7 @@ fn settings(songs: Vec<(&str, Vec<OscLightingCue>)>) -> LightsSettings {
                 song_title: key.into(),
                 cues: vec![],
                 osc_cues,
+                captured_edited: false,
             },
         );
     }
@@ -599,6 +600,7 @@ async fn recorded_rows_replay_through_the_scheduler_next_to_a_manual_row() {
         song_title: "s".into(),
         cues: vec![],
         osc_cues: vec![plain(1.0, "/live/cue/1")],
+        captured_edited: false,
     };
     let saved = replace_captured(Some(&existing), "s", "s", rows.clone()).unwrap();
     assert!(saved

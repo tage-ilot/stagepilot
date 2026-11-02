@@ -108,6 +108,21 @@ pub struct LightkeyActionResponse {
     pub lightkey: LightkeyStatus,
 }
 
+/// `LightkeySimplifyResponse`: what "Simplify this song" would do (`applied = false`) or did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeySimplifyResponse {
+    /// The request was valid and the song has captured rows to simplify.
+    pub accepted: bool,
+    /// The simplified rows were saved (always false for a preview).
+    pub applied: bool,
+    pub message: String,
+    pub rows_before: u32,
+    pub rows_after: u32,
+    pub messages_before: u32,
+    pub messages_after: u32,
+}
+
 // ------------------------------------------------------------------ pure logic
 
 /// `effective_api_url`: the saved address, else the OSC host on the default API port.

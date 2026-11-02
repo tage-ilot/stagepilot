@@ -372,9 +372,11 @@ pub fn replace_captured(
         song_title: song_title.to_string(),
         cues: Vec::new(),
         osc_cues: Vec::new(),
+        captured_edited: false,
     });
     map.osc_cues
         .retain(|row| row.source != OscCueSource::Captured);
+    map.captured_edited = false;
     map.osc_cues.extend(rows);
     let messages: usize = map
         .osc_cues
@@ -385,6 +387,88 @@ pub fn replace_captured(
         return None;
     }
     Some(map)
+}
+
+/// What simplifying a song's captured rows does.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Simplified {
+    /// The song's whole cue map after the change.
+    pub map: SongLightingCueMap,
+    pub rows_before: usize,
+    pub rows_after: usize,
+    pub messages_before: usize,
+    pub messages_after: usize,
+}
+
+fn fixture_arg(arg: &stagepilot_core::config::OscArgument) -> FixtureArg {
+    use stagepilot_core::config::OscArgument;
+    match arg {
+        OscArgument::Int(v) => FixtureArg::Int(*v),
+        OscArgument::Float(v) => FixtureArg::Float(*v),
+        OscArgument::String(v) => FixtureArg::Text(v.clone()),
+        OscArgument::Bool(v) => FixtureArg::Bool(*v),
+    }
+}
+
+/// A captured row that can be thinned again: it has messages and every one is a replayable
+/// fixture override.
+fn simplifiable(row: &OscLightingCue) -> bool {
+    row.source == OscCueSource::Captured
+        && !row.messages.is_empty()
+        && row.messages.iter().all(|m| {
+            is_replayable(&FixtureCommand::new(
+                m.address.clone(),
+                m.args.iter().map(fixture_arg).collect(),
+            ))
+        })
+}
+
+/// "Simplify this song": run the recording's own thin + merge step over the song's captured
+/// rows at `interval` seconds (the Detail grid). Manual rows, MIDI cues and captured rows that
+/// are not fixture overrides stay exactly as they are. The result is not checked against the
+/// per-song caps here; `None` means the song has no captured rows to simplify.
+pub fn simplify_song(map: &SongLightingCueMap, interval: f64) -> Option<Simplified> {
+    let mut rows: Vec<&OscLightingCue> = map.osc_cues.iter().filter(|r| simplifiable(r)).collect();
+    if rows.is_empty() {
+        return None;
+    }
+    rows.sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
+    let changes: Vec<(f64, FixtureCommand)> = rows
+        .iter()
+        .flat_map(|row| {
+            row.messages.iter().map(|m| {
+                (
+                    row.at_seconds,
+                    FixtureCommand::new(m.address.clone(), m.args.iter().map(fixture_arg).collect()),
+                )
+            })
+        })
+        .collect();
+    let duration = rows.last().map_or(0.0, |r| r.at_seconds) + interval;
+    let fresh = look_rows(&simplify(&[], &changes, duration, interval));
+    let rows_before = rows.len();
+    let messages_before: usize = rows.iter().map(|r| r.messages.len()).sum();
+    let rows_after = fresh.len();
+    let messages_after: usize = fresh.iter().map(|r| r.messages.len()).sum();
+    let mut out = map.clone();
+    out.osc_cues.retain(|row| !simplifiable(row));
+    out.osc_cues.extend(fresh);
+    out.osc_cues
+        .sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
+    out.captured_edited = map.captured_edited;
+    Some(Simplified {
+        map: out,
+        rows_before,
+        rows_after,
+        messages_before,
+        messages_after,
+    })
+}
+
+/// Whether a cue map is within the per-song row and message caps.
+pub fn within_caps(map: &SongLightingCueMap) -> bool {
+    let messages: usize = map.osc_cues.iter().map(|r| r.messages.len().max(1)).sum();
+    map.osc_cues.len() <= MAX_OSC_ROWS_PER_SONG && messages <= MAX_OSC_MESSAGES_PER_SONG
 }
 
 #[cfg(test)]
@@ -827,6 +911,7 @@ mod tests {
             song_title: "Song".into(),
             cues: vec![],
             osc_cues: std::iter::once(manual.clone()).chain(old_look).collect(),
+            captured_edited: false,
         };
         let fresh = look_rows(&[Look {
             at_seconds: 2.0,

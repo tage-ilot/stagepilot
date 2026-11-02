@@ -799,6 +799,15 @@ pub struct SongLightingCueMap {
     pub cues: Vec<LightingCue>,
     #[serde(default)]
     pub osc_cues: Vec<OscLightingCue>,
+    /// Captured look rows of this song were changed by hand (a whole row deleted, for one):
+    /// Record asks before replacing them. Left out while false; a new recording clears it.
+    #[serde(default, skip_serializing_if = "flag_unset")]
+    #[ts(optional, as = "Option<bool>")]
+    pub captured_edited: bool,
+}
+
+fn flag_unset(value: &bool) -> bool {
+    !*value
 }
 
 /// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
