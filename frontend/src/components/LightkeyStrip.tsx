@@ -232,7 +232,7 @@ export function LightkeyStrip({ lightingEnabled, looks }: { lightingEnabled: boo
           <ConnectionMethod
             disabled={busy}
             label="Detail"
-            onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
+            onChange={(detail) => void run(() => saveLightkeySettings({ detail }))}
             options={detailChoices}
             value={status.detail_level ?? "normal"}
           />

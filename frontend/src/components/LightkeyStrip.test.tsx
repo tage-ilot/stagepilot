@@ -11,7 +11,6 @@ vi.mock("../api", async (original) => ({
   getLightkeyStatus: vi.fn(),
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
-  clearLightkeyTake: vi.fn(),
 }));
 
 const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
@@ -25,10 +24,8 @@ const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
   replay_blocked: null,
   replaying_song: null,
   message: null,
-  takes: [],
   ...over,
 });
-const take = { song_key: "s1", song_title: "Holy Forever", recorded_at: "2026-10-20T00:00:00Z", duration_seconds: 300, fixture_count: 4, fixture_event_count: 14 };
 const respond = (lightkey: LightkeyStatus, accepted = true, message = "ok") => ({ accepted, message, lightkey });
 
 beforeEach(() => { vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });
@@ -121,7 +118,7 @@ describe("LightkeyStrip", () => {
   it("shows the fixture stream and says how many looks the song holds, with no take list", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
       fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
-      takes: [take],
+      
     }));
     render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
     expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
@@ -147,7 +144,7 @@ describe("LightkeyStrip", () => {
     expect(await screen.findByTestId("lightkey-detail-setting")).toHaveTextContent("Finer detail replays motion smoother but makes more rows.");
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
     await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail: "fine" }));
   });
 
   it("Record asks first when the song has edited captured looks, and does nothing on Cancel", async () => {
@@ -288,8 +285,8 @@ describe("LightkeyStrip lines on screen (B3)", () => {
 
   it("when recording stops the headline describes the captures again", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay_blocked: "Paused while recording." }));
-    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ takes: [take], message: null })));
-    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ takes: [take], message: null })));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({  message: null })));
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({  message: null })));
     render(<LightkeyStrip lightingEnabled looks={{ count: 1, edited: false }} />);
     await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
     await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 captured look on this song"));

@@ -15,7 +15,7 @@ use stagepilot_core::bus::EventBus;
 use stagepilot_core::config::{MidiSettings, MidiSource, ProPresenterSettings, TimerOutput};
 use stagepilot_core::events::{new_event, EventPayload, EventType, Integration};
 use stagepilot_core::plugin::{Plugin, PluginManager};
-use stagepilot_core::settings::RuntimeSettings;
+use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_core::state::{ConnectionStatus, PluginHealth, PluginStatus};
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
@@ -55,9 +55,9 @@ pub struct OutputBackends {
     pub propresenter: ClientFactory,
     /// The HTTP client of the Lightkey link (a fake agent in tests, `reqwest` otherwise).
     pub lightkey_http: stagepilot_lights::lightkey_link::HttpFactory,
-    /// Where Lightkey takes live; `None` means next to the settings file (or in memory when the
-    /// settings are in memory).
-    pub lightkey_store: Option<Arc<dyn stagepilot_lights::lightkey_link::TakeStore>>,
+    /// Where the Lightkey Record switch is remembered; `None` means next to the settings file
+    /// (or in memory when the settings are in memory).
+    pub lightkey_armed: Option<Arc<dyn stagepilot_lights::lightkey_link::ArmedStore>>,
 }
 
 impl Default for OutputBackends {
@@ -70,7 +70,7 @@ impl Default for OutputBackends {
             lightkey_http: Arc::new(|| {
                 Arc::new(stagepilot_lights::lightkey_link::ReqwestLightkeyHttp::new())
             }),
-            lightkey_store: None,
+            lightkey_armed: None,
         }
     }
 }
@@ -289,6 +289,44 @@ impl Plugin for MidiInput {
     }
 }
 
+/// The Lightkey link's way to save a recording: replace the song's captured rows in its cue map
+/// (manual rows stay), write the settings, then hand the new map to the running plugin. It takes
+/// the cue-map lock, so it never interleaves with a capture, an undo or a cue-map save.
+fn looks_sink(
+    cue_lock: Arc<tokio::sync::Mutex<()>>,
+    settings_service: Arc<SettingsService>,
+    plugin: Arc<std::sync::OnceLock<std::sync::Weak<LightsPlugin>>>,
+) -> stagepilot_lights::lightkey_link::LooksSink {
+    use stagepilot_lights::lightkey_link::{LooksError, SongLooks};
+    Arc::new(move |looks: SongLooks| {
+        let (cue_lock, settings_service, plugin) =
+            (cue_lock.clone(), settings_service.clone(), plugin.clone());
+        Box::pin(async move {
+            let _guard = cue_lock.lock().await;
+            let mut lights = settings_service.effective_runtime_settings().lights;
+            let existing = lights.cue_maps.get(&looks.song_key);
+            let Some(map) = stagepilot_lights::lightkey_looks::replace_captured(
+                existing,
+                &looks.song_key,
+                &looks.song_title,
+                looks.rows,
+            ) else {
+                return Err(LooksError::TooLarge);
+            };
+            lights.cue_maps.insert(looks.song_key.clone(), map);
+            lights.normalise();
+            let merged = lights.cue_maps.get(&looks.song_key).cloned();
+            settings_service
+                .persist_lights(lights)
+                .map_err(|error| LooksError::Failed(error.0))?;
+            if let (Some(merged), Some(plugin)) = (merged, plugin.get().and_then(|w| w.upgrade())) {
+                plugin.replace_cue_map(merged).await;
+            }
+            Ok(())
+        })
+    })
+}
+
 /// Everything the routes and the runtime need from the output plugins.
 pub struct Outputs {
     pub backends: OutputBackends,
@@ -298,7 +336,9 @@ pub struct Outputs {
     pub midi_input: Option<Arc<MidiInput>>,
     /// One lock for every cue-map read-modify-write, so a capture, an undo and a cue-map save
     /// never interleave and drop each other's cues.
-    pub cue_lock: tokio::sync::Mutex<()>,
+    pub cue_lock: Arc<tokio::sync::Mutex<()>>,
+    /// How a finished Lightkey recording is saved to a song's timeline (also used by tests).
+    pub looks_sink: stagepilot_lights::lightkey_link::LooksSink,
     presentation: Mutex<Option<Arc<ProPresenterPlugin>>>,
     applied: Mutex<Option<ProPresenterSettings>>,
     demo: Mutex<Option<Arc<DemoPlugin>>>,
@@ -311,26 +351,34 @@ impl Outputs {
         state_service: &StateService,
         settings: &RuntimeSettings,
         backends: OutputBackends,
-        settings_path: Option<std::path::PathBuf>,
+        settings_service: Arc<SettingsService>,
     ) -> Result<Self, String> {
+        let settings_path = settings_service.settings_path();
+        let cue_lock = Arc::new(tokio::sync::Mutex::new(()));
+        // The Lightkey link saves a finished recording through the same lock and the same
+        // settings write as a cue-map save, then tells the running plugin.
+        let plugin_cell: Arc<std::sync::OnceLock<std::sync::Weak<LightsPlugin>>> = Arc::default();
         let mut lights_options = LightsOptions::new(backends.midi_output.clone());
         lights_options.osc_backend_factory = backends.osc.clone();
         lights_options.lightkey.http_factory = backends.lightkey_http.clone();
-        // `lightkey-takes.json` sits next to `settings.json`; in-memory settings keep takes in
-        // memory (Python: `MemoryTakeStore` when explicit settings were given).
-        if let Some(store) = backends.lightkey_store.clone() {
-            lights_options.lightkey.store = store;
+        // The Record switch sits next to `settings.json`; in-memory settings keep it in memory.
+        // (An old `lightkey-takes.json` is neither read nor deleted: it is ignored.)
+        if let Some(store) = backends.lightkey_armed.clone() {
+            lights_options.lightkey.armed_store = store;
         } else if let Some(path) = settings_path {
-            lights_options.lightkey.store =
-                Arc::new(stagepilot_lights::lightkey_link::FileTakeStore::new(
-                    path.with_file_name("lightkey-takes.json"),
+            lights_options.lightkey.armed_store =
+                Arc::new(stagepilot_lights::lightkey_link::FileArmedStore::new(
+                    path.with_file_name("lightkey-record-armed"),
                 ));
         }
+        let sink = looks_sink(cue_lock.clone(), settings_service, plugin_cell.clone());
+        lights_options.lightkey.looks_sink = Some(sink.clone());
         let lights = Arc::new(LightsPlugin::new(
             bus.clone(),
             settings.lights.clone(),
             lights_options,
         )?);
+        let _ = plugin_cell.set(Arc::downgrade(&lights));
         let link = Arc::new(MidiLink::new(bus.clone()));
         let mut midi_input = None;
         if settings.integration_modes.midi_source == MidiSource::Real {
@@ -353,7 +401,8 @@ impl Outputs {
             lights,
             link,
             midi_input,
-            cue_lock: tokio::sync::Mutex::new(()),
+            cue_lock,
+            looks_sink: sink,
             presentation: Mutex::new(None),
             applied: Mutex::new(None),
             demo: Mutex::new(None),

@@ -361,7 +361,7 @@ export const undoLightingCapture = (songKey: string, cueId: string) =>
   });
 
 export const getLightkeyStatus = () => requestJson<LightkeyStatus>("/api/v1/lights/lightkey");
-export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail_level?: LightkeyDetail }) =>
+export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail?: LightkeyDetail }) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -372,8 +372,4 @@ export const setLightkeyRecording = (recording: boolean) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recording }),
-  });
-export const clearLightkeyTake = (songKey: string) =>
-  requestJson<LightkeyActionResponse>(`/api/v1/lights/lightkey/takes/${encodeURIComponent(songKey)}`, {
-    method: "DELETE",
   });

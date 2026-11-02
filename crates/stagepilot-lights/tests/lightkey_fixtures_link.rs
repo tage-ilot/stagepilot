@@ -11,14 +11,15 @@ use chrono::Utc;
 use rosc::{encoder, OscBundle, OscMessage, OscPacket, OscTime, OscType};
 use serde_json::json;
 use stagepilot_core::bus::EventBus;
-use stagepilot_core::config::LightkeySettings;
+use stagepilot_core::config::{LightkeySettings, OscCueSource};
 use stagepilot_core::events::{new_event, EventPayload, EventType, TimerPayload};
 use stagepilot_core::state::Song;
 use stagepilot_lights::lightkey::{FixtureLink, LightkeyLink as Link};
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand};
 use stagepilot_lights::lightkey_link::{
-    LightkeyLink, LinkOptions, LinkSettings, MemoryTakeStore, TakeStore,
+    LightkeyLink, LinkOptions, LinkSettings, LooksSink, SongLooks,
 };
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -285,7 +286,7 @@ async fn serve_http(active: Active) -> u16 {
 struct Rig {
     relay: FakeRelay,
     bus: EventBus,
-    store: Arc<MemoryTakeStore>,
+    saved: Arc<Mutex<Vec<SongLooks>>>,
     settings: Arc<Mutex<LinkSettings>>,
     link: LightkeyLink,
 }
@@ -318,18 +319,24 @@ impl Rig {
             LightkeySettings {
                 api_url: format!("http://127.0.0.1:{http_port}"),
                 replay: true,
+                ..LightkeySettings::default()
             },
         )));
         let bus = EventBus::new();
         let provider_settings = settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
             Arc::new(move || provider_settings.lock().unwrap().clone());
-        let store = Arc::new(MemoryTakeStore::new());
+        let saved: Arc<Mutex<Vec<SongLooks>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink_saved = saved.clone();
+        let sink: LooksSink = Arc::new(move |looks| {
+            sink_saved.lock().unwrap().push(looks);
+            Box::pin(async { Ok(()) })
+        });
         let link = LightkeyLink::new(
             bus.clone(),
             provider,
             LinkOptions {
-                store: store.clone() as Arc<dyn TakeStore>,
+                looks_sink: Some(sink),
                 relay_port: relay.port,
                 ..LinkOptions::default()
             },
@@ -337,7 +344,7 @@ impl Rig {
         Self {
             relay,
             bus,
-            store,
+            saved,
             settings,
             link,
         }
@@ -488,7 +495,7 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
     rig.song_start(&song(2)).await;
     assert_eq!(
         rig.link.status().message.as_deref(),
-        Some("Recording \"Holy Forever\".")
+        Some("Recording Holy Forever.")
     );
     assert!(rig.link.status().fixtures.unwrap().recording);
     pause(0.5).await;
@@ -499,31 +506,43 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
         .await;
     pause(1.2).await;
     rig.song_stop(&song(2), 2.0).await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    let take = rig.store.takes().remove("song-1").unwrap();
-    let track = take.fixtures.expect("fixture track");
-    assert_eq!(track.events.len(), 2);
-    // the Lightkey clock is 5 s ahead: song times still come out right
-    assert!(
-        (track.events[0].at_seconds - 0.5).abs() < 0.25,
-        "{:?}",
-        track.events[0]
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert_eq!(saved.song_key, "song-1");
+    assert_eq!(saved.song_title, "Holy Forever");
+    assert!(saved
+        .rows
+        .iter()
+        .all(|row| row.source == OscCueSource::Captured && row.color.is_none()));
+    let dimmer = |row: &stagepilot_core::config::OscLightingCue| {
+        row.messages
+            .iter()
+            .any(|m| m.address == "/fixture/P1/overrides/dimmer")
+    };
+    // the starting state at 0.0, then the dimmer at about 0.5 s and the colour at about 1 s on
+    // the 0.5 s grid; the Lightkey clock is 5 s ahead and song times still come out right
+    let times: Vec<f64> = saved.rows.iter().map(|r| r.at_seconds).collect();
+    assert_eq!(times.len(), 3, "{times:?}");
+    assert_eq!(times[0], 0.0);
+    assert!((times[1] - 0.5).abs() <= 0.2, "{times:?}");
+    assert!((times[2] - 1.0).abs() <= 0.3, "{times:?}");
+    assert!(dimmer(&saved.rows[1]));
+    assert_eq!(saved.rows[2].messages.len(), 1);
+    assert_eq!(
+        saved.rows[2].messages[0].address,
+        "/fixture/P1/overrides/color"
     );
-    assert!(
-        (track.events[1].at_seconds - 1.1).abs() < 0.25,
-        "{:?}",
-        track.events[1]
+    // P2 never moved: it stays with Lightkey's cues
+    assert!(saved
+        .rows
+        .iter()
+        .all(|r| r.messages.iter().all(|m| !m.address.contains("/P2/"))));
+    assert_eq!(saved.rows[0].label, "Look - 1 fixture");
+    assert_eq!(
+        rig.link.status().message.as_deref(),
+        Some("Saved 3 looks to Holy Forever's timeline.")
     );
-    assert_eq!(track.events[1].osc, vec![color("P1", 1.0, 0.0, 0.0)]);
-    // P2 never moved: it stays with the cues
-    assert_eq!(track.fixtures(), vec!["P1"]);
-    assert!(track.initial.iter().all(|c| c.fixture() == Some("P1")));
-    assert!(rig
-        .link
-        .status()
-        .message
-        .unwrap()
-        .contains("2 fixture changes"));
+    assert_eq!(rig.link.status().captured.unwrap().looks, 3);
     rig.link.stop().await;
 }
 
@@ -552,14 +571,50 @@ async fn a_recording_stores_fixture_data_only() {
     rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
     pause(1.8).await;
     rig.song_stop(&song(2), 2.0).await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    let take = rig.store.takes().remove("song-1").unwrap();
-    let json = serde_json::to_string(&take).unwrap();
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let json = format!("{:?}", saved.rows);
     assert!(!json.contains("Warm"), "cue names were stored: {json}");
+    assert!(saved.rows.iter().all(|r| r
+        .messages
+        .iter()
+        .all(|m| m.address.starts_with("/fixture/"))));
+    rig.link.stop().await;
+}
+
+/// A recording that runs on past the song's scheduled length (events after the end) used to
+/// pile into one oversize event and lose the whole capture on the rig.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recording_past_the_song_end_with_a_huge_change_still_saves() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(1.9).await; // past the 2 s the song was scheduled for
+                      // 2500 distinct addresses change after the end
+    for batch in 0..50 {
+        let late: Vec<FixtureCommand> = (0..50)
+            .map(|n| dim(&format!("L{batch}x{n}"), 0.7))
+            .collect();
+        rig.relay.change(late, 0.0, 0).await;
+    }
+    pause(0.3).await;
+    rig.song_stop(&song(2), 2.2).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert!(saved.rows.iter().any(|r| r
+        .messages
+        .iter()
+        .any(|m| m.address == "/fixture/P1/overrides/dimmer")));
+    assert!(saved.rows.iter().all(|r| r.at_seconds <= 2.0));
     assert!(
-        !json.contains("\"edges\"") && !json.contains("\"initial\":[\""),
-        "{json}"
+        saved
+            .rows
+            .iter()
+            .all(|r| r.messages.iter().all(|m| !m.address.contains("/L"))),
+        "after the end: dropped"
     );
-    assert!(take.fixtures.is_some());
     rig.link.stop().await;
 }

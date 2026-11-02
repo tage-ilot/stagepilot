@@ -1127,6 +1127,24 @@
     "title": "LightkeyActionResponse",
     "type": "object"
    },
+   "LightkeyCaptured": {
+    "properties": {
+     "song_title": {
+      "title": "Song Title",
+      "type": "string"
+     },
+     "looks": {
+      "title": "Looks",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "song_title",
+     "looks"
+    ],
+    "title": "LightkeyCaptured",
+    "type": "object"
+   },
    "LightkeyRecordRequest": {
     "properties": {
      "recording": {
@@ -1153,6 +1171,16 @@
       "default": true,
       "title": "Replay",
       "type": "boolean"
+     },
+     "detail": {
+      "default": "normal",
+      "enum": [
+       "fine",
+       "normal",
+       "coarse"
+      ],
+      "title": "Detail",
+      "type": "string"
      }
     },
     "title": "LightkeySettings",
@@ -1183,6 +1211,22 @@
        }
       ],
       "title": "Replay"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "enum": [
+         "fine",
+         "normal",
+         "coarse"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
      }
     },
     "title": "LightkeySettingsRequest",
@@ -1281,12 +1325,16 @@
       ],
       "title": "Replaying Song"
      },
-     "takes": {
-      "items": {
-       "$ref": "#/components/schemas/LightkeyTakeSummary"
-      },
-      "title": "Takes",
-      "type": "array"
+     "captured": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LightkeyCaptured"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured"
      }
     },
     "required": [
@@ -1294,35 +1342,6 @@
      "link"
     ],
     "title": "LightkeyStatus",
-    "type": "object"
-   },
-   "LightkeyTakeSummary": {
-    "properties": {
-     "duration_seconds": {
-      "title": "Duration Seconds",
-      "type": "number"
-     },
-     "recorded_at": {
-      "format": "date-time",
-      "title": "Recorded At",
-      "type": "string"
-     },
-     "song_key": {
-      "title": "Song Key",
-      "type": "string"
-     },
-     "song_title": {
-      "title": "Song Title",
-      "type": "string"
-     }
-    },
-    "required": [
-     "song_key",
-     "song_title",
-     "recorded_at",
-     "duration_seconds"
-    ],
-    "title": "LightkeyTakeSummary",
     "type": "object"
    },
    "LightsOperationResponse": {
@@ -5469,45 +5488,6 @@
      }
     },
     "summary": "Update Lightkey Settings"
-   }
-  },
-  "/api/v1/lights/lightkey/takes/{song_key}": {
-   "delete": {
-    "operationId": "clear_lightkey_take_api_v1_lights_lightkey_takes__song_key__delete",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "song_key",
-      "required": true,
-      "schema": {
-       "title": "Song Key",
-       "type": "string"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/LightkeyActionResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Clear Lightkey Take"
    }
   },
   "/api/v1/lights/outputs/refresh": {

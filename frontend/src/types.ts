@@ -285,17 +285,6 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
 }
 
-/** One song's captured Lightkey fixture changes (summary only; the changes stay on the backend). */
-export interface LightkeyTakeSummary {
-  song_key: string;
-  song_title: string;
-  recorded_at: string;
-  duration_seconds: number;
-  /** Present only when fixture levels (colour, intensity, movers) were captured; absent = "no fixture capture". */
-  fixture_count?: number;
-  fixture_event_count?: number;
-}
-
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
 
 /** The fixture-level stream from the lightkey-api relay. Absent until the relay has answered once. */
@@ -321,7 +310,6 @@ export interface LightkeyStatus {
   replay_blocked: string | null;
   replaying_song: string | null;
   message: string | null;
-  takes: LightkeyTakeSummary[];
   /** Recording detail (the backend's thinning setting). Absent on backends without it. */
   detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;

@@ -66,10 +66,6 @@ pub fn routes() -> Router<Rt> {
             "/api/v1/lights/lightkey/recording",
             post(lightkey_recording),
         )
-        .route(
-            "/api/v1/lights/lightkey/takes/{song_key}",
-            axum::routing::delete(lightkey_clear_take),
-        )
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Value {
@@ -1190,10 +1186,11 @@ async fn lightkey_status(State(rt): State<Rt>) -> Json {
     ok(to_value(&rt.outputs.lights.lightkey_status().await))
 }
 
-/// `LightkeySettingsRequest`: both fields optional, send only what changed.
+/// `LightkeySettingsRequest`: every field optional, send only what changed.
 struct LightkeySettingsRequest {
     api_url: Option<String>,
     replay: Option<bool>,
+    detail: Option<stagepilot_core::config::LightkeyDetail>,
 }
 
 /// pydantic's lax `bool`: `true`/`false`, `0`/`1`, and the strings pydantic accepts. `Err` is the
@@ -1263,8 +1260,38 @@ fn parse_lightkey_settings(
             }
         },
     };
+    let detail = match object.get("detail") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => match text.as_str() {
+            "fine" => Some(stagepilot_core::config::LightkeyDetail::Fine),
+            "normal" => Some(stagepilot_core::config::LightkeyDetail::Normal),
+            "coarse" => Some(stagepilot_core::config::LightkeyDetail::Coarse),
+            _ => {
+                errors.push(plain_error(
+                    "enum",
+                    "detail",
+                    "Input should be 'fine', 'normal' or 'coarse'",
+                    &json!(text),
+                ));
+                None
+            }
+        },
+        Some(other) => {
+            errors.push(plain_error(
+                "enum",
+                "detail",
+                "Input should be 'fine', 'normal' or 'coarse'",
+                other,
+            ));
+            None
+        }
+    };
     if errors.is_empty() {
-        Ok(LightkeySettingsRequest { api_url, replay })
+        Ok(LightkeySettingsRequest {
+            api_url,
+            replay,
+            detail,
+        })
     } else {
         Err(errors)
     }
@@ -1325,6 +1352,7 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
         api_url: stagepilot_core::config::clean_lightkey_api_url(&api_url)
             .unwrap_or_else(|_| api_url.clone()),
         replay: request.replay.unwrap_or(current.lightkey.replay),
+        detail: request.detail.unwrap_or(current.lightkey.detail),
     };
     if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
         return response;
@@ -1374,21 +1402,4 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
         message,
         lightkey: status,
     }))
-}
-
-async fn lightkey_clear_take(
-    State(rt): State<Rt>,
-    axum::extract::Path(song_key): axum::extract::Path<String>,
-) -> Json {
-    let removed = rt.outputs.lights.lightkey_clear_take(&song_key).await;
-    lightkey_response(
-        &rt,
-        removed,
-        if removed {
-            "Capture cleared.".into()
-        } else {
-            "That song has no capture.".into()
-        },
-    )
-    .await
 }

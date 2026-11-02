@@ -213,7 +213,7 @@ impl Runtime {
                 &state_service,
                 &settings,
                 backends,
-                settings_service.settings_path(),
+                settings_service.clone(),
             )
             .unwrap_or_else(|error| panic!("invalid output settings: {error}")),
         );
