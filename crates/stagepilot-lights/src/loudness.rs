@@ -174,7 +174,9 @@ impl LoudnessRecorder {
 /// Folds a new recording into the song's saved envelope. Per slot the two levels average in the
 /// linear power domain, weighted by their `takes`; a slot only one of them has is kept as is.
 /// `takes` adds up but stops at 8 so the envelope can still adapt. A different step replaces.
-pub fn merge_loudness(existing: Option<&SongLoudness>, new: SongLoudness) -> SongLoudness {
+pub fn merge_loudness(existing: Option<&SongLoudness>, mut new: SongLoudness) -> SongLoudness {
+    new.values.truncate(MAX_LOUDNESS_VALUES);
+    new.takes = new.takes.clamp(1, MAX_LOUDNESS_TAKES);
     let Some(old) = existing.filter(|old| (old.step_seconds - new.step_seconds).abs() < 1e-9)
     else {
         return new;

@@ -17,6 +17,8 @@ path = "src/main.rs"
 # Real MIDI hardware through midir (see crates/stagepilot-midi). Off by default so a plain
 # `cargo build`/`cargo test` works where ALSA headers are missing (the Linux CI runner).
 midir-backend = ["stagepilot-midi/midir-backend"]
+# Real audio input (room loudness while recording) through cpal. Off by default for the same reason.
+cpal-backend = ["stagepilot-lights/cpal-backend"]
 
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }

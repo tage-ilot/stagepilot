@@ -204,3 +204,10 @@ fn meter_reads_since_last_and_repeats() {
     meter.clear();
     assert!(meter.read().is_none());
 }
+
+#[test]
+fn merge_enforces_the_caps_on_a_first_recording() {
+    let big = SongLoudness { step_seconds: 0.25, values: vec![9; 5000], takes: 50 };
+    let m = merge_loudness(None, big);
+    assert_eq!((m.values.len(), m.takes), (4000, 8));
+}

@@ -213,6 +213,11 @@ impl LightsPlugin {
         self.link().status()
     }
 
+    /// The audio input hub behind the picker and the meter; `None` in a build without audio.
+    pub fn lightkey_audio(&self) -> Option<Arc<crate::audio::AudioHub>> {
+        self.link().audio()
+    }
+
     pub async fn lightkey_set_recording(&self, on: bool) -> String {
         let message = self.link().set_recording(on).await;
         // Arming the recorder switches replay off: give back what the timeline was holding.

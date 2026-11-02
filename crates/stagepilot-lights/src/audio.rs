@@ -70,6 +70,19 @@ impl AudioInput for UnavailableInput {
     }
 }
 
+/// The input of this build: the real device through cpal when the `cpal-backend` feature is on,
+/// otherwise one that says why there is none.
+pub fn default_input() -> Arc<dyn AudioInput> {
+    #[cfg(feature = "cpal-backend")]
+    {
+        Arc::new(crate::audio_cpal::CpalInput)
+    }
+    #[cfg(not(feature = "cpal-backend"))]
+    {
+        Arc::new(UnavailableInput(UNAVAILABLE_TEXT.into()))
+    }
+}
+
 pub const UNAVAILABLE_TEXT: &str = "Loudness needs the desktop app: this build cannot listen to an audio input.";
 /// How long the meter stays on after the picker last asked for it.
 pub const METER_SECONDS: f64 = 5.0;
