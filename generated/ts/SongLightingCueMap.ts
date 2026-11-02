@@ -2,4 +2,9 @@
 import type { LightingCue } from "./LightingCue";
 import type { OscLightingCue } from "./OscLightingCue";
 
-export type SongLightingCueMap = { song_key: string, song_title: string, cues: Array<LightingCue>, osc_cues: Array<OscLightingCue>, };
+export type SongLightingCueMap = { song_key: string, song_title: string, cues: Array<LightingCue>, osc_cues: Array<OscLightingCue>, 
+/**
+ * Captured look rows of this song were changed by hand (a whole row deleted, for one):
+ * Record asks before replacing them. Left out while false; a new recording clears it.
+ */
+captured_edited?: boolean, };

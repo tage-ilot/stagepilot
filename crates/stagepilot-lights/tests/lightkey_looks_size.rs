@@ -169,3 +169,51 @@ fn thinning_keeps_every_address_near_where_it_was() {
     assert!(worst_level < 0.5, "worst dimmer error {worst_level}");
     assert!(tolerance_for("/fixture/A/overrides/dimmer") > 0.0);
 }
+
+/// The per-song caps the timeline enforces (`MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`).
+fn within_the_caps(looks: &[Look]) -> bool {
+    use stagepilot_lights::lightkey_looks::{look_rows, replace_captured};
+    replace_captured(None, "s", "S", look_rows(looks)).is_some()
+}
+
+/// A denser rig than any take seen so far: 150k commands over 300 s on 200 addresses. The size
+/// targets (<= 400 rows, <= 6,000 messages at Normal) are for the rig-shaped takes above; here the
+/// requirement is the caps: the capture is kept, at twice the spacing when it has to be, and the
+/// spacing used is the one the status message reports.
+#[test]
+fn a_much_denser_song_still_saves_under_the_caps_at_twice_the_spacing() {
+    use stagepilot_core::config::{MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG};
+    use stagepilot_lights::lightkey_looks::look_rows;
+    let changes = synthetic(200, 150_000, 300.0, 23);
+    assert!(changes.len() >= 135_000, "{} commands", changes.len());
+    println!("--- reports (rows / messages after merge) ---");
+    report("dense", &changes, 300.0);
+    let mut interval = 0.25; // Fine: 15,246 messages, over the 15,000 cap
+    let mut tries = 0;
+    let saved = loop {
+        let looks = merge(thin(&[], &changes, 300.0, interval));
+        if within_the_caps(&looks) {
+            break looks;
+        }
+        interval *= 2.0;
+        tries += 1;
+        assert!(tries <= 6, "never fit");
+    };
+    let (rows, messages) = counts(&saved);
+    println!("dense: saved at {interval} s after {tries} retries: {rows} rows / {messages} messages (caps {MAX_OSC_ROWS_PER_SONG} / {MAX_OSC_MESSAGES_PER_SONG})");
+    assert_eq!(
+        (tries, interval),
+        (1, 0.5),
+        "Fine is refused once, Normal fits"
+    );
+    assert!(rows > 0 && rows <= MAX_OSC_ROWS_PER_SONG);
+    assert!(messages <= MAX_OSC_MESSAGES_PER_SONG);
+    assert!(!look_rows(&saved).is_empty());
+    // every address that moved in the song is still in the capture
+    let moved: std::collections::HashSet<_> = changes.iter().map(|c| c.1.a.as_str()).collect();
+    let kept: std::collections::HashSet<_> = saved
+        .iter()
+        .flat_map(|l| l.messages.iter().map(|m| m.a.as_str()))
+        .collect();
+    assert_eq!(moved, kept);
+}

@@ -439,7 +439,10 @@ pub fn simplify_song(map: &SongLightingCueMap, interval: f64) -> Option<Simplifi
             row.messages.iter().map(|m| {
                 (
                     row.at_seconds,
-                    FixtureCommand::new(m.address.clone(), m.args.iter().map(fixture_arg).collect()),
+                    FixtureCommand::new(
+                        m.address.clone(),
+                        m.args.iter().map(fixture_arg).collect(),
+                    ),
                 )
             })
         })

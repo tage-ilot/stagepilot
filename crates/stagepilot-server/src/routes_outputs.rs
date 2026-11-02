@@ -1445,10 +1445,8 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
             )])
         }
         None => {
-            return unprocessable(vec![
-                json!({"type": "missing", "loc": body_loc("song_key"),
-                "msg": "Field required", "input": Value::Object(object.clone())}),
-            ])
+            return unprocessable(vec![json!({"type": "missing", "loc": body_loc("song_key"),
+                "msg": "Field required", "input": Value::Object(object.clone())})])
         }
     };
     let detail = match parse_lightkey_settings(&object) {
@@ -1477,11 +1475,9 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
             messages_after: n(counts[3]),
         }))
     };
-    let Some(result) = current
-        .cue_maps
-        .get(&song_key)
-        .and_then(|map| stagepilot_lights::lightkey_looks::simplify_song(map, detail.interval_seconds()))
-    else {
+    let Some(result) = current.cue_maps.get(&song_key).and_then(|map| {
+        stagepilot_lights::lightkey_looks::simplify_song(map, detail.interval_seconds())
+    }) else {
         return respond(
             false,
             false,

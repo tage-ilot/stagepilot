@@ -116,7 +116,8 @@ The strip has three controls:
   recorded and at least one fixture changed. Changes after the song's scheduled
   end are dropped, an oversize change never discards the capture, and moving the
   playhead during a recording discards it. Messages: `Recording <song>.`,
-  `Saved N looks to <song>'s timeline.`, `Not saved: only X of Y seconds recorded.`
+  `Saved N looks to <song>'s timeline.` (`... (reduced detail, 0.5 s).` when the song was
+  too large for the chosen Detail and was saved at a coarser spacing), `Not saved: only X of Y seconds recorded.`
 - **Replay captured lights.** On by default, and only paused while recording.
   Saved rows replay through the normal timeline scheduler (see below).
 
@@ -129,7 +130,9 @@ An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or delete
 
 `lights.lightkey.detail` is `fine` (0.25 s), `normal` (0.5 s, default) or
 `coarse` (1 s); it can be changed through `PUT /api/v1/lights/lightkey/settings`
-(`{"detail": "fine"}`). The same value is the interval and the row grid.
+(`{"detail_level": "fine"}`; `detail` is accepted as an older spelling). The status
+(`GET /api/v1/lights/lightkey`) reports it as `detail_level` and leaves it out while
+`normal`. Values are lower case. The same value is the interval and the row grid.
 
 1. **Thin.** Per address a change is kept only if at least one interval has
    passed since the last kept one. The last value of a run is always kept, and so
@@ -150,8 +153,30 @@ An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or delete
 
 A song that would still pass the per-song caps (1,000 rows, 15,000 messages
 including the manual rows) is saved at twice the interval, up to six times.
+The status message then says which spacing was used (`Saved 88 looks to <song>'s
+timeline (reduced detail, 1 s).`); the capture is never dropped for size.
 Motion is steppier on replay than the original (0.5 s steps at Normal); Fine is
 the remedy.
+
+### Simplify this song (backend)
+
+`POST /api/v1/lights/lightkey/simplify` `{"song_key": "...", "detail_level": "coarse",
+"apply": false}` runs the same thin + merge step over the song's captured rows at
+the chosen Detail (the saved Detail when omitted) and answers `rows_before`,
+`rows_after`, `messages_before`, `messages_after` (the timeline shows
+"412 rows -> 190"). Without `apply` nothing is changed. With `apply: true` the new
+rows are saved through the serialized cue-map save. Manual rows, MIDI cues and
+captured rows that are not fixture overrides are never touched. Nothing is saved
+when the result would not be smaller or would still pass the per-song caps.
+
+### Edited captured looks
+
+Deleting a whole captured row leaves no row to carry an "edited" mark, so the
+song's cue map has a flag `captured_edited` (left out while false). The cue-map
+save sets it when a captured row disappears, it stays until a recording replaces
+the captured rows, and it clears when no captured rows are left. Record asks
+"Recording replaces this song's captured looks, including your edits" while it
+is set.
 
 Size on synthetic data shaped like real takes (25 ms steps, mostly colour, pan
 and dimmer sweeps over 255 s):
@@ -164,6 +189,9 @@ and dimmer sweeps over 255 s):
 | 51k commands, 106 addresses | Fine | 228 / 5,518 | 224 / 5,169 |
 | | Normal | 116 / 2,976 | 114 / 2,774 |
 | | Coarse | 61 / 1,718 | 60 / 1,593 |
+| 150k commands, 200 addresses, 300 s | Fine | 361 / 16,150 | 348 / 15,246 (over the 15,000 cap: saved at 0.5 s) |
+| | Normal | 181 / 8,723 | 175 / 8,179 |
+| | Coarse | 92 / 4,957 | 88 / 4,590 |
 
 ### Pause, stop and song end hold the last look
 

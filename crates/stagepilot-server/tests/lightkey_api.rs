@@ -587,7 +587,11 @@ async fn simplify_previews_then_applies_and_leaves_manual_rows_alone() {
     let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
     let saved = rows(&settings);
     let saved = saved.as_array().unwrap();
-    assert_eq!(saved.len() as u64, after + 1, "captured rows + the manual row");
+    assert_eq!(
+        saved.len() as u64,
+        after + 1,
+        "captured rows + the manual row"
+    );
     assert_eq!(
         saved.iter().filter(|r| r["label"] == "Strobe").count(),
         1,
@@ -659,12 +663,24 @@ async fn deleting_a_whole_captured_row_sets_the_song_flag_and_a_recording_clears
     let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
     assert_eq!(flag(&settings), Value::Null, "omitted while false");
     // dropping one captured row flags the song
-    let (code, _) = call(&router, "PUT", "/api/v1/lights/cue-map", Some(put(&ids[..3]))).await;
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(put(&ids[..3])),
+    )
+    .await;
     assert_eq!(code, StatusCode::OK);
     let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
     assert_eq!(flag(&settings), json!(true));
     // the flag survives a later unchanged save
-    call(&router, "PUT", "/api/v1/lights/cue-map", Some(put(&ids[..3]))).await;
+    call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(put(&ids[..3])),
+    )
+    .await;
     let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
     assert_eq!(flag(&settings), json!(true));
     // a new recording replaces the captured rows and clears it
