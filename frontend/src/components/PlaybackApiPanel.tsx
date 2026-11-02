@@ -13,7 +13,8 @@ import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
-import { playbackActivityText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
+import { Switch } from "./ui/Switch";
+import { DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 
 const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-playback-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-playback active:text-integration-playback-text";
 const toneClass = {
@@ -36,6 +37,8 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
   const [confirm, setConfirm] = useState(false);
+  // Shown optimistically while the save runs; a failed save puts it back.
+  const [learnDraft, setLearnDraft] = useState<boolean | null>(null);
   useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
 
   const scan = status?.scan;
@@ -57,6 +60,15 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
   // A dialog never outlives the state that allowed it (e.g. Playback started playing).
   const canDiscover = apiConnected && !status?.playing && !running;
   useEffect(() => { if (!canDiscover) setConfirm(false); }, [canDiscover]);
+
+  const learnSaved = status?.settings.learn_order !== false;
+  const learnOn = learnDraft ?? learnSaved;
+  const toggleLearn = async (next: boolean) => {
+    if (!status) return;
+    setLearnDraft(next);
+    // The controller reports the failure (error line); either way the switch then follows the saved status.
+    try { await playback?.save({ ...status.settings, learn_order: next }); } finally { setLearnDraft(null); }
+  };
 
   const [copied, setCopied] = useState(false);
   const copyDetails = async (text: string) => {
@@ -157,6 +169,13 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
       {status && (
         <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
           <h3 id="song-order-heading" className="font-bold text-ink">Song order</h3>
+          <p className="text-sm font-semibold text-integration-playback-text" data-testid="order-mode">{playbackOrderModeText(status)}</p>
+          {playbackOrderMode(status) !== "scanned" && status.order_note && <p className="text-sm text-warning-text">{status.order_note}</p>}
+          {playbackHasDoubtfulSong(status) && <p className="text-sm text-warning-text">{DOUBTFUL_ORDER_HINT}</p>}
+          <div>
+            <Switch label={LEARN_SWITCH_LABEL} checked={learnOn} disabled={playback?.pending === "save"} onChange={(event) => void toggleLearn(event.target.checked)} />
+            <p className="text-xs text-ink-muted">{LEARN_SWITCH_HELP}</p>
+          </div>
           <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>
           {!apiConnected ? <p className="text-sm text-ink-body">Connect to Playback first.</p>

@@ -19,10 +19,34 @@ export function validPlaybackHost(host: string): boolean {
 export const playbackConnectionDetail = (status: PlaybackConnection) => status.reason;
 export const STALE_SETLIST_NOTICE = "Your Playback setlist changed. Scan the setlist again before updating Planning Center.";
 export const STALE_PLAN_NOTICE = "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center.";
-export const playbackOrderNotice = (status: PlaybackStatusResponse) =>
-  status.stale && status.song_order.length > 0 ? STALE_SETLIST_NOTICE
+export const LEARN_SWITCH_LABEL = "Learn the order as songs play";
+export const LEARN_SWITCH_HELP = "A scan always replaces the learned order.";
+export const DOUBTFUL_ORDER_HINT = "Check the order: a song's length differs from the plan. Run a scan.";
+
+// Learning is on unless the saved setting says off. Older backends send no order_mode: they only ever have a scanned order.
+const learnsOrder = (status: PlaybackStatusResponse) => status.settings.learn_order !== false;
+export const playbackOrderMode = (status: PlaybackStatusResponse): "scanned" | "learned" | "none" =>
+  status.order_mode ?? (status.song_order.length > 0 ? "scanned" : "none");
+
+// One sentence for the order, used by the panel (and anything else that names the order).
+export function playbackOrderModeText(status: PlaybackStatusResponse): string {
+  const mode = playbackOrderMode(status);
+  if (mode === "learned") return `Learning the order as songs play (${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed)`;
+  if (mode === "scanned") return "Order scanned";
+  return learnsOrder(status) && status.order_mode !== undefined ? "No order yet - set Up next or scan" : "No order yet - scan to set it up";
+}
+
+export const playbackHasDoubtfulSong = (status: PlaybackStatusResponse) => playbackOrderMode(status) === "learned" && Boolean(status.learned_songs?.some((song) => song.doubtful));
+
+// Blocking notice for the dashboard / setup checklist. A learned order counts down, so it is not a blocker and is never called scanned.
+export const playbackOrderNotice = (status: PlaybackStatusResponse) => {
+  const mode = playbackOrderMode(status);
+  if (mode === "learned") return null;
+  if (mode === "none" && status.order_mode !== undefined && learnsOrder(status)) return null;
+  return status.stale && status.song_order.length > 0 ? STALE_SETLIST_NOTICE
     : status.plan_changed && status.song_order.length > 0 ? STALE_PLAN_NOTICE
     : status.song_order.length === 0 ? "Song order isn't set up yet." : null;
+};
 
 export function playbackSongCountMismatch(status: PlaybackStatusResponse): string | null {
   const playback = status.song_count;

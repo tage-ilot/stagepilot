@@ -61,11 +61,42 @@ existing behavior. Rejected actions do not reserve a successful-action key.
 
 ## Discover Song Order: the sole control exception
 
-Opaque song IDs do not encode position. StagePilot never infers absolute song
-numbers from passive transitions, sorts IDs, or matches them to plan titles.
-The operator must run Discover Song Order while Playback is stopped. Confirm
+Opaque song IDs do not encode position. StagePilot never sorts IDs or matches
+them to plan titles. A scan is the only way to get the exact order and measured
+lengths: run Discover Song Order while Playback is stopped, after confirming
 that the complete Playback setlist order matches the StagePilot plan order.
 Number N is the discovered list index plus one (the existing MIDI position path).
+
+### Learned order (provisional, before a scan)
+
+With **Learn the order as songs play** on (the default; `playback_api.learn_order`),
+StagePilot may pair a Playback song with a plan position while no valid scanned
+order exists. The Playback panel labels this "Learning the order as songs play
+(N of M placed)"; a scanned order reads "Order scanned"; with neither it reads
+"No order yet - set Up next or scan". A scan always replaces the learned order.
+
+When a song starts, the first matching rule applies:
+
+1. A song already bound to a plan position keeps that position (starting it
+   again is a restart).
+2. An auto-advance from a bound song takes the next plan position.
+3. Otherwise the song takes the plan's Up next position, if that position is not
+   bound to another song. Set Up next (Previous/Next) before pressing play.
+4. Otherwise it is not placed: the panel says so and nothing is started.
+
+A new binding is tentative until the song has played for 10 s of heartbeat time.
+Stopping, pausing or starting another song before that releases it and puts Up
+next back, so accidental plays do not consume plan slots. Learned bindings reset
+when the Playback setlist id or version changes, when a different plan is loaded,
+on a conflict (one song, two positions or the reverse) and when the switch is
+turned off. Pause, resume and seek use a learned binding like a scanned one.
+A song whose length differs from the Planning Center length by more than the
+larger of 20 s and 15% is marked doubtful; the panel then suggests a scan.
+
+Known limits: extra Playback songs that are not in the plan shift later
+placements (use the Skip arrangement with a scan); connecting mid-service needs
+Up next set correctly; a Planning Center song without a length still cannot
+count down. Older StagePilot versions reject the `learn_order` setting key.
 
 The confirmed operation sends only Previous/Next, `transportReturnToStart`, and
 `waveformSeek {"sequenceTime":86400.0}` over the current connection. It remembers the original
