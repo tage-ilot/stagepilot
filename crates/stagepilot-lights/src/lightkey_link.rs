@@ -526,6 +526,7 @@ impl Inner {
             replay_blocked: self.replay_blocked_reason(st.armed),
             replaying_song: st.replaying.clone(),
             message,
+            detail_level: settings.detail,
             captured: st.captured.clone(),
             fixtures: self.relay.status(
                 st.session
@@ -1089,7 +1090,8 @@ impl Inner {
             return self.say("Could not save the looks to the timeline.");
         };
         let recorder = Arc::new(recorder);
-        let mut interval = (self.settings)().3.detail.interval_seconds();
+        let wanted = (self.settings)().3.detail.interval_seconds();
+        let mut interval = wanted;
         // A song that would pass the timeline caps is saved coarser, never dropped.
         for _ in 0..MAX_COARSER_TRIES {
             let thin = recorder.clone();
@@ -1116,10 +1118,7 @@ impl Inner {
                         song_title: title.clone(),
                         looks: u32::try_from(count).unwrap_or(u32::MAX),
                     });
-                    return self.say(format!(
-                        "Saved {count} look{} to {title}'s timeline.",
-                        if count == 1 { "" } else { "s" }
-                    ));
+                    return self.say(saved_message(count, &title, wanted, interval));
                 }
                 Err(LooksError::TooLarge) => interval *= 2.0,
                 Err(LooksError::Failed(error)) => {
@@ -1129,6 +1128,17 @@ impl Inner {
             }
         }
         self.say("Could not save the looks to the timeline: the song has too many rows.")
+    }
+}
+
+/// "Saved N looks to X's timeline." and, when the song was too large for the chosen Detail and
+/// was saved at a coarser spacing, which spacing was used.
+fn saved_message(count: usize, title: &str, wanted: f64, used: f64) -> String {
+    let plural = if count == 1 { "" } else { "s" };
+    if used > wanted {
+        format!("Saved {count} look{plural} to {title}'s timeline (reduced detail, {used} s).")
+    } else {
+        format!("Saved {count} look{plural} to {title}'s timeline.")
     }
 }
 

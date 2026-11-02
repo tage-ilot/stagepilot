@@ -287,6 +287,7 @@ struct Rig {
     relay: FakeRelay,
     bus: EventBus,
     saved: Arc<Mutex<Vec<SongLooks>>>,
+    attempts: Arc<Mutex<usize>>,
     settings: Arc<Mutex<LinkSettings>>,
     link: LightkeyLink,
 }
@@ -309,6 +310,12 @@ fn color(name: &str, r: f64, g: f64, b: f64) -> FixtureCommand {
 
 impl Rig {
     async fn new(initial: Vec<FixtureCommand>) -> Self {
+        Self::with_row_limit(initial, usize::MAX).await
+    }
+
+    /// A rig whose timeline refuses a song of more than `limit` rows (`LooksError::TooLarge`),
+    /// as the real one does past its caps. Every attempt is counted in `attempts`.
+    async fn with_row_limit(initial: Vec<FixtureCommand>, limit: usize) -> Self {
         let relay = FakeRelay::start(initial).await;
         let active: Active = Arc::new(Mutex::new(vec!["Warm".into()]));
         let http_port = serve_http(active).await;
@@ -328,9 +335,21 @@ impl Rig {
             Arc::new(move || provider_settings.lock().unwrap().clone());
         let saved: Arc<Mutex<Vec<SongLooks>>> = Arc::new(Mutex::new(Vec::new()));
         let sink_saved = saved.clone();
+        let attempts = Arc::new(Mutex::new(0usize));
+        let sink_attempts = attempts.clone();
         let sink: LooksSink = Arc::new(move |looks| {
-            sink_saved.lock().unwrap().push(looks);
-            Box::pin(async { Ok(()) })
+            *sink_attempts.lock().unwrap() += 1;
+            let refused = looks.rows.len() > limit;
+            if !refused {
+                sink_saved.lock().unwrap().push(looks);
+            }
+            Box::pin(async move {
+                if refused {
+                    Err(stagepilot_lights::lightkey_link::LooksError::TooLarge)
+                } else {
+                    Ok(())
+                }
+            })
         });
         let link = LightkeyLink::new(
             bus.clone(),
@@ -345,6 +364,7 @@ impl Rig {
             relay,
             bus,
             saved,
+            attempts,
             settings,
             link,
         }
@@ -616,5 +636,41 @@ async fn a_recording_past_the_song_end_with_a_huge_change_still_saves() {
             .all(|r| r.messages.iter().all(|m| !m.address.contains("/L"))),
         "after the end: dropped"
     );
+    rig.link.stop().await;
+}
+
+/// A song too large for the chosen Detail is saved at twice the spacing, not dropped, and the
+/// status message says so.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_song_too_large_for_the_detail_is_saved_at_twice_the_spacing_and_says_so() {
+    use stagepilot_core::config::LightkeyDetail;
+    let rig = Rig::with_row_limit(vec![dim("P1", 0.0)], 5).await;
+    rig.settings.lock().unwrap().3.detail = LightkeyDetail::Fine;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(2.0).await;
+    // a steady fade in 60 ms steps, delivered with the song time it happened at
+    for k in 0..30u32 {
+        let at = 1.9 - f64::from(k) * 0.06;
+        rig.relay
+            .change(vec![dim("P1", 0.1 + f64::from(k) * 0.03)], at, 0)
+            .await;
+    }
+    pause(0.2).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
+    assert!(
+        *rig.attempts.lock().unwrap() >= 2,
+        "the first try at Fine was refused"
+    );
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(
+        message.contains("(reduced detail, 0.5 s)"),
+        "message: {message}"
+    );
+    assert!(message.starts_with("Saved "), "message: {message}");
     rig.link.stop().await;
 }

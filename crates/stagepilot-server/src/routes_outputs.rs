@@ -62,6 +62,7 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights/test-osc", post(lights_test_osc))
         .route("/api/v1/lights/lightkey", get(lightkey_status))
         .route("/api/v1/lights/lightkey/settings", put(lightkey_settings))
+        .route("/api/v1/lights/lightkey/simplify", post(lightkey_simplify))
         .route(
             "/api/v1/lights/lightkey/recording",
             post(lightkey_recording),
@@ -772,6 +773,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: song_title.clone(),
         cues: request.cues.clone(),
         osc_cues: request.osc_cues.clone(),
+        captured_edited: false,
     };
     let mut check = LightsSettings::default();
     check.cue_maps.insert(song_key.clone(), probe);
@@ -797,6 +799,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             song_title: song_title.clone(),
             cues: vec![],
             osc_cues: vec![],
+            captured_edited: false,
         });
     let _ = value;
 
@@ -817,6 +820,11 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         } else {
             existing.map(|m| m.osc_cues.clone()).unwrap_or_default()
         },
+        captured_edited: false,
+    };
+    let merged = SongLightingCueMap {
+        captured_edited: captured_edited_after_save(existing, &merged, is_midi),
+        ..merged
     };
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
@@ -839,6 +847,32 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         format!("Removed the lighting cue map for \"{song_title}\".")
     };
     lights_operation(&rt, true, message).await
+}
+
+/// The song-level "captured looks were changed by hand" flag after a cue-map save. Deleting a
+/// whole captured row leaves no row to carry the per-row `edited` mark, so the flag keeps it. It
+/// stays set until a recording replaces the captured rows, and clears when none are left.
+fn captured_edited_after_save(
+    existing: Option<&SongLightingCueMap>,
+    saved: &SongLightingCueMap,
+    midi_only: bool,
+) -> bool {
+    let Some(existing) = existing else {
+        return false;
+    };
+    let captured = |map: &SongLightingCueMap| {
+        map.osc_cues
+            .iter()
+            .filter(|row| row.source == stagepilot_core::config::OscCueSource::Captured)
+            .map(|row| row.id)
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let before = captured(existing);
+    let after = captured(saved);
+    if after.is_empty() {
+        return false;
+    }
+    existing.captured_edited || (!midi_only && before.iter().any(|id| !after.contains(id)))
 }
 
 async fn lights_pads(State(rt): State<Rt>, raw: Bytes) -> Json {
@@ -1020,6 +1054,10 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                 song_title: song_title.trim().to_string(),
                 cues: midi_cues,
                 osc_cues,
+                captured_edited: current
+                    .cue_maps
+                    .get(song_key)
+                    .is_some_and(|m| m.captured_edited),
             },
         );
         updated.normalise();
@@ -1087,6 +1125,7 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: existing.song_title.clone(),
         cues,
         osc_cues,
+        captured_edited: existing.captured_edited,
     };
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
@@ -1260,7 +1299,13 @@ fn parse_lightkey_settings(
             }
         },
     };
-    let detail = match object.get("detail") {
+    // The frontend sends `detail_level` (status field of the same name); `detail` stays accepted.
+    let detail_key = if object.contains_key("detail_level") {
+        "detail_level"
+    } else {
+        "detail"
+    };
+    let detail = match object.get(detail_key) {
         None | Some(Value::Null) => None,
         Some(Value::String(text)) => match text.as_str() {
             "fine" => Some(stagepilot_core::config::LightkeyDetail::Fine),
@@ -1269,7 +1314,7 @@ fn parse_lightkey_settings(
             _ => {
                 errors.push(plain_error(
                     "enum",
-                    "detail",
+                    detail_key,
                     "Input should be 'fine', 'normal' or 'coarse'",
                     &json!(text),
                 ));
@@ -1279,7 +1324,7 @@ fn parse_lightkey_settings(
         Some(other) => {
             errors.push(plain_error(
                 "enum",
-                "detail",
+                detail_key,
                 "Input should be 'fine', 'normal' or 'coarse'",
                 other,
             ));
@@ -1382,6 +1427,108 @@ fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
 async fn lightkey_release(State(rt): State<Rt>) -> Json {
     let (accepted, message) = rt.outputs.lights.lightkey_release_lights().await;
     lightkey_response(&rt, accepted, message).await
+}
+
+/// `POST /api/v1/lights/lightkey/simplify` `{song_key, detail_level?, apply?}`: the recording's
+/// thin + merge step over a song's captured rows. Without `apply` it only counts ("412 rows ->
+/// 190"); with it the simplified rows are saved through the same serialized cue-map path as a
+/// recording. Manual rows are never touched.
+async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
+    use stagepilot_lights::lightkey::LightkeySimplifyResponse;
+    let object = match object_body(&raw) {
+        Ok(object) => object,
+        Err(response) => return response,
+    };
+    let song_key = match object.get("song_key") {
+        Some(Value::String(text)) if !text.trim().is_empty() && text.len() <= 256 => {
+            text.trim().to_string()
+        }
+        Some(other) => {
+            return unprocessable(vec![plain_error(
+                "string_type",
+                "song_key",
+                "Input should be a non-empty string of at most 256 characters",
+                other,
+            )])
+        }
+        None => {
+            return unprocessable(vec![json!({"type": "missing", "loc": body_loc("song_key"),
+                "msg": "Field required", "input": Value::Object(object.clone())})])
+        }
+    };
+    let detail = match parse_lightkey_settings(&object) {
+        Ok(request) => request.detail,
+        Err(errors) => return unprocessable(errors),
+    };
+    let apply = match object.get("apply") {
+        None | Some(Value::Null) => false,
+        Some(value) => match lax_bool("apply", value) {
+            Ok(b) => b,
+            Err(error) => return unprocessable(vec![strip_ctx(error)]),
+        },
+    };
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let detail = detail.unwrap_or(current.lightkey.detail);
+    let respond = |accepted: bool, applied: bool, message: String, counts: [usize; 4]| {
+        let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
+        ok(to_value(&LightkeySimplifyResponse {
+            accepted,
+            applied,
+            message,
+            rows_before: n(counts[0]),
+            rows_after: n(counts[1]),
+            messages_before: n(counts[2]),
+            messages_after: n(counts[3]),
+        }))
+    };
+    let Some(result) = current.cue_maps.get(&song_key).and_then(|map| {
+        stagepilot_lights::lightkey_looks::simplify_song(map, detail.interval_seconds())
+    }) else {
+        return respond(
+            false,
+            false,
+            "This song has no captured looks to simplify.".into(),
+            [0; 4],
+        );
+    };
+    let counts = [
+        result.rows_before,
+        result.rows_after,
+        result.messages_before,
+        result.messages_after,
+    ];
+    let summary = format!("{} rows -> {}", result.rows_before, result.rows_after);
+    if result.rows_after >= result.rows_before {
+        return respond(
+            false,
+            false,
+            format!("Nothing to simplify at this detail ({summary})."),
+            counts,
+        );
+    }
+    if !stagepilot_lights::lightkey_looks::within_caps(&result.map) {
+        return respond(
+            false,
+            false,
+            format!("Still too many looks at this detail ({summary}); choose a coarser one."),
+            counts,
+        );
+    }
+    if !apply {
+        return respond(true, false, summary, counts);
+    }
+    let mut updated = current.clone();
+    updated.cue_maps.insert(song_key.clone(), result.map);
+    updated.normalise();
+    let merged = updated.cue_maps.get(&song_key).cloned();
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    if let Some(merged) = merged {
+        rt.outputs.lights.replace_cue_map(merged).await;
+    }
+    respond(true, true, format!("Simplified: {summary}."), counts)
 }
 
 async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {

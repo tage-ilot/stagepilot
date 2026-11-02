@@ -6,7 +6,7 @@
 //! timeline then replays like any other row. Nothing here uses `tokio`.
 
 use serde::{Deserialize, Serialize};
-use stagepilot_core::config::{LightkeySettings, DEFAULT_LIGHTKEY_API_PORT};
+use stagepilot_core::config::{LightkeyDetail, LightkeySettings, DEFAULT_LIGHTKEY_API_PORT};
 use stagepilot_core::state::ConnectionStatus;
 use ts_rs::TS;
 
@@ -76,6 +76,10 @@ pub struct LightkeyStatus {
     pub replay_blocked: Option<String>,
     pub replaying_song: Option<String>,
     pub message: Option<String>,
+    /// How finely recordings are kept (the saved Detail setting), left out while `normal`.
+    #[serde(default, skip_serializing_if = "LightkeyDetail::is_normal")]
+    #[ts(optional, as = "Option<LightkeyDetail>")]
+    pub detail_level: LightkeyDetail,
     /// The song most recently saved to the timeline, left out until one has been.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -110,6 +114,21 @@ pub struct LightkeyActionResponse {
     pub accepted: bool,
     pub message: String,
     pub lightkey: LightkeyStatus,
+}
+
+/// `LightkeySimplifyResponse`: what "Simplify this song" would do (`applied = false`) or did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeySimplifyResponse {
+    /// The request was valid and the song has captured rows to simplify.
+    pub accepted: bool,
+    /// The simplified rows were saved (always false for a preview).
+    pub applied: bool,
+    pub message: String,
+    pub rows_before: u32,
+    pub rows_after: u32,
+    pub messages_before: u32,
+    pub messages_after: u32,
 }
 
 // ------------------------------------------------------------------ pure logic
