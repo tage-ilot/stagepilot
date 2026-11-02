@@ -707,7 +707,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -3466,7 +3467,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -9107,7 +9109,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": true,
@@ -9692,7 +9695,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": true,
@@ -10260,7 +10264,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -11254,7 +11259,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -11393,7 +11399,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -11565,7 +11572,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -11703,7 +11711,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -13058,7 +13067,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -13574,7 +13584,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -14167,7 +14178,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -14971,7 +14983,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -15102,7 +15115,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -15572,7 +15586,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -15934,7 +15949,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -16044,7 +16060,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -21154,7 +21171,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -21409,7 +21427,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": null,
-      "port": 8080
+      "port": 8080,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -21427,7 +21446,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -24212,7 +24234,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -24447,7 +24470,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -24597,7 +24621,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -24727,7 +24752,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -24933,7 +24959,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -25054,7 +25081,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -25169,7 +25197,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -25279,7 +25308,8 @@
        "skipped_plan_song_ids": [],
        "skipped_song_ids": [],
        "song_lengths": [],
-       "song_order": []
+       "song_order": [],
+       "learn_order": true
       },
       "propresenter": {
        "enabled": false,
@@ -25626,7 +25656,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": null,
-      "port": 8080
+      "port": 8080,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -25644,7 +25675,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -25952,7 +25986,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": null,
-      "port": 8080
+      "port": 8080,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -25970,7 +26005,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26211,7 +26249,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26229,7 +26268,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26359,7 +26401,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26377,7 +26420,10 @@
        "reason": "Playback is connected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26483,7 +26529,8 @@
       "enabled": true,
       "fast_transport": true,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26501,7 +26548,17 @@
        "reason": "Playback is connected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [
+      {
+       "confirmed": false,
+       "doubtful": false,
+       "plan_position": 1,
+       "song_id": 101
+      }
+     ],
+     "order_mode": "learned",
+     "order_note": "Learning the order as songs play (1 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26602,7 +26659,8 @@
       "enabled": true,
       "fast_transport": false,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26620,7 +26678,17 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [
+      {
+       "confirmed": false,
+       "doubtful": false,
+       "plan_position": 1,
+       "song_id": 101
+      }
+     ],
+     "order_mode": "learned",
+     "order_note": "Learning the order as songs play (1 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26737,7 +26805,8 @@
       "enabled": true,
       "fast_transport": false,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26755,7 +26824,10 @@
        "reason": "Playback is connected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26862,7 +26934,8 @@
       "enabled": true,
       "fast_transport": false,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26880,7 +26953,10 @@
        "reason": "Playback is connected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -26979,7 +27055,8 @@
       "enabled": true,
       "fast_transport": false,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -26997,7 +27074,10 @@
        "reason": "Playback is connected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -27136,7 +27216,8 @@
       "enabled": true,
       "fast_transport": false,
       "host": "127.0.0.1",
-      "port": 47901
+      "port": 47901,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -27154,7 +27235,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -27358,7 +27442,8 @@
       "enabled": false,
       "fast_transport": true,
       "host": null,
-      "port": 8080
+      "port": 8080,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -27376,7 +27461,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"
@@ -27475,7 +27563,8 @@
       "enabled": false,
       "fast_transport": true,
       "host": null,
-      "port": 8080
+      "port": 8080,
+      "learn_order": true
      },
      "skipped_plan_song_ids": [],
      "skipped_song_ids": [],
@@ -27493,7 +27582,10 @@
        "reason": "Playback is disconnected."
       }
      },
-     "stale": true
+     "stale": true,
+     "learned_songs": [],
+     "order_mode": "none",
+     "order_note": "Learning the order as songs play (0 of 4 placed). Scan for exact order and lengths."
     },
     "headers": {
      "content-type": "application/json"

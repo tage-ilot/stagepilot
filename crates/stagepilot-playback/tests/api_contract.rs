@@ -60,6 +60,7 @@ fn settings() -> PlaybackSettingsRequest {
         port: 8080,
         auto_scan: true,
         fast_transport: true,
+        learn_order: true,
     }
 }
 
@@ -172,6 +173,9 @@ fn the_status_response_matches_openapi() {
         discovery_song: 0,
         discovery_total: 0,
         song_order: vec![],
+        order_mode: "none".into(),
+        learned_songs: vec![],
+        order_note: None,
         song_lengths: vec![],
         skipped_song_ids: vec![],
         skipped_plan_song_ids: vec![],

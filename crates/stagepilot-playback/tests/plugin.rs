@@ -92,6 +92,7 @@ fn settings_for(
     midi_source: MidiSource,
     host: Option<&str>,
     port: u16,
+    learn_order: bool,
 ) -> (Arc<SettingsService>, RuntimeSettings) {
     let persistent = PersistentSettings {
         integration_modes: IntegrationModes {
@@ -102,6 +103,7 @@ fn settings_for(
             host: host.map(String::from),
             port,
             auto_scan: false,
+            learn_order,
             ..PlaybackApiSettings::default()
         },
         ..PersistentSettings::default()
@@ -118,7 +120,17 @@ async fn rig_with(
     port: u16,
     scanner: Option<Arc<dyn Scanner>>,
 ) -> Rig {
-    let (settings, runtime) = settings_for(midi_source, host, port);
+    rig_learning(midi_source, host, port, scanner, true).await
+}
+
+async fn rig_learning(
+    midi_source: MidiSource,
+    host: Option<&str>,
+    port: u16,
+    scanner: Option<Arc<dyn Scanner>>,
+    learn_order: bool,
+) -> Rig {
+    let (settings, runtime) = settings_for(midi_source, host, port, learn_order);
     let bus = EventBus::new();
     let store = StateStore::default();
     let service = StateService::new(
@@ -571,11 +583,85 @@ async fn song_started_drives_the_timer_and_stop_stops_it() {
 }
 
 #[tokio::test]
+async fn cold_start_learns_the_first_song_from_up_next_and_a_blip_gives_it_back() {
+    // Learned order: no scan, the plan's Up next is where the first Playback song lands; a play
+    // that stops inside 10 s releases the slot and puts Up next back.
+    let fake = FakePlayback::start().await;
+    songs(&fake);
+    let r = rig(&fake).await;
+    r.load_plan().await;
+    r.plugin.start().await.unwrap();
+    until("connected", || r.plugin.connection().connected).await;
+    assert!(r.plugin.mapper_stale(), "no scan");
+    assert_eq!(r.plugin.order_view().0.as_str(), "none");
+    until("up next is song 1", || {
+        r.store.snapshot().up_next_song.map(|s| s.id) == Some("a".into())
+    })
+    .await;
+
+    fake.send_raw(r#"{"setlistSelectSong":{"setlistSongID":102}}"#);
+    until("selection observed", || {
+        r.plugin
+            .events()
+            .iter()
+            .any(|e| e.event.kind == stagepilot_playback::normalizer::EventType::SongSelected)
+    })
+    .await;
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.playing = true;
+        s.position = 0.5;
+    }
+    fake.beat();
+    until("first plan song playing", || {
+        r.store.snapshot().playing_song_index == Some(0)
+    })
+    .await;
+    let (mode, learned, note) = r.plugin.order_view();
+    assert_eq!(mode.as_str(), "learned");
+    assert_eq!(
+        learned
+            .iter()
+            .map(|l| (l.song_id, l.plan_position, l.confirmed))
+            .collect::<Vec<_>>(),
+        [(102, 1, false)]
+    );
+    assert!(note.unwrap().contains("1 of 3 placed"));
+    assert_eq!(
+        r.store.snapshot().up_next_song.map(|s| s.id),
+        Some("b".into())
+    );
+
+    // Stopped long before 10 s: the binding is released and Up next is back on song 1.
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.playing = false;
+        s.position = 1.0;
+    }
+    fake.beat();
+    until("up next restored", || {
+        r.store.snapshot().up_next_song.map(|s| s.id) == Some("a".into())
+    })
+    .await;
+    assert!(r.plugin.order_view().1.is_empty());
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_stale_order_never_starts_a_song_but_stop_still_works() {
     // mapping.py: stale -> no start; stop works even while stale.
     let fake = FakePlayback::start().await;
     songs(&fake);
-    let r = rig(&fake).await;
+    // Learning off: this is the scanned-only behaviour (with learning on, the first song
+    // would be placed at Up next; see the cold-start test above).
+    let r = rig_learning(
+        MidiSource::PlaybackApi,
+        Some("127.0.0.1"),
+        fake.port,
+        None,
+        false,
+    )
+    .await;
     r.load_plan().await;
     r.plugin.start().await.unwrap();
     until("connected", || r.plugin.connection().connected).await;

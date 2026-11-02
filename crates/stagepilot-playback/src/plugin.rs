@@ -26,7 +26,7 @@ use crate::find::{
     scan_network, CancelToken, ScanCandidate, ScanHooks, ScanOutcome, ScanReport, SystemNetwork,
     DEFAULT_TIMEOUT, SCAN_BLOCK_DETAIL,
 };
-use crate::mapping::{Mapper, Observation, Plan};
+use crate::mapping::{LearnedSong, Mapper, Observation, OrderMode, Plan};
 use crate::normalizer::{Heartbeat, PlaybackEvent, SetlistId};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -432,6 +432,7 @@ struct Shared {
 struct Inner {
     bus: EventBus,
     store: StateStore,
+    state_service: StateService,
     settings: Arc<SettingsService>,
     options: PluginOptions,
     arbiter: Arc<Mutex<PlaybackSourceArbiter>>,
@@ -479,6 +480,7 @@ impl PlaybackPlugin {
         let effective = settings.effective_snapshot();
         let selected = effective.integration_modes.midi_source == MidiSource::PlaybackApi;
         let mut mapper = Mapper::new();
+        mapper.set_learning(effective.playback_api.learn_order);
         let saved = &effective.playback_api;
         if !saved.song_order.is_empty() {
             if let Some(version) = saved.captured_version {
@@ -522,7 +524,7 @@ impl PlaybackPlugin {
         }));
         let mut dispatcher = ArbitratedDispatcher::new(
             arbiter.clone(),
-            CoreDispatcher::new(state_service),
+            CoreDispatcher::new(state_service.clone()),
             CoreState::new(store.clone()),
         );
         let s = shared.clone();
@@ -533,6 +535,7 @@ impl PlaybackPlugin {
             inner: Arc::new(Inner {
                 bus,
                 store,
+                state_service,
                 settings,
                 options,
                 arbiter,
@@ -597,6 +600,22 @@ impl PlaybackPlugin {
     /// The saved playback settings as the running plugin sees them.
     pub fn config(&self) -> PlaybackApiSettings {
         lock(&self.inner.shared).config.clone()
+    }
+
+    /// Where the song pairing comes from, the learned pairings and the operator note.
+    pub fn order_view(&self) -> (OrderMode, Vec<LearnedSong>, Option<String>) {
+        let plan_songs = self
+            .inner
+            .store
+            .snapshot()
+            .plan
+            .map_or(0, |p| p.songs.len());
+        let s = lock(&self.inner.shared);
+        (
+            s.mapper.order_mode(),
+            s.mapper.learned_songs(),
+            s.mapper.learned_note(plan_songs),
+        )
     }
 
     pub fn mapper_stale(&self) -> bool {
@@ -1212,6 +1231,7 @@ impl Inner {
         let running = {
             let mut s = lock(&self.shared);
             s.midi_source = new.0;
+            s.mapper.set_learning(new.1.learn_order);
             s.config = new.1;
             s.client = None;
             s.running
@@ -1261,6 +1281,8 @@ impl Inner {
             } else {
                 None
             };
+            let plan_id = self.store.snapshot().plan.map(|p| p.id);
+            s.mapper.note_plan(plan_id.as_deref());
             let observations = s.mapper.observe(hb, events, setlist);
             if s.mapper.stale
                 && s.discovery != DiscoveryState::Running
@@ -1348,8 +1370,12 @@ impl Inner {
     /// Execute what the mapper decides (Python `PlaybackMapper.dispatch`).
     async fn dispatch(&self, observation: &Observation) {
         let state = self.store.snapshot();
-        let plan = lock(&self.shared).mapper.plan(observation, &state);
-        let Some(plan) = plan else { return };
+        let decision = lock(&self.shared).mapper.decide(observation, &state);
+        if let Some(index) = decision.restore_up_next {
+            // A provisional binding was released before the song really played.
+            let _ = self.state_service.restore_up_next(index);
+        }
+        let Some(plan) = decision.plan else { return };
         let source = "playback_api";
         let d = &self.dispatcher;
         let _ = match plan {

@@ -393,6 +393,8 @@ export interface PlaybackSettingsInput {
   port: number;
   auto_scan: boolean;
   fast_transport: boolean;
+  /** Learn the song order from songs as they play (until a scan). Omitted = keep the saved choice. */
+  learn_order?: boolean;
 }
 
 export interface LengthRow { item_id: string; title: string; old_length: number | null; new_length: number | null; status: "updated" | "restored" | "skipped" | "failed"; reason: string | null }
@@ -464,6 +466,10 @@ export interface PlaybackStatusResponse extends PlaybackConnection {
   song_count: number;
   plan_song_count: number;
   song_order: number[];
+  /** Where the Playback song -> plan song pairing comes from. */
+  order_mode?: "scanned" | "learned" | "none";
+  learned_songs?: { song_id: number; plan_position: number; confirmed: boolean; doubtful: boolean }[];
+  order_note?: string | null;
   captured_version: number | null;
   captured_at: string | null;
   stale: boolean;

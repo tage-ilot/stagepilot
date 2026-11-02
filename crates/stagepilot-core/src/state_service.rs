@@ -484,6 +484,25 @@ impl StateService {
         ActionOutcome::ok(format!("Started song {position}, \"{}\".", song.title))
     }
 
+    /// Put Up next back where it was (zero-based plan index; `None` is past the last song).
+    /// Used when a provisional Playback song binding is released before it really played: it
+    /// changes nothing but the Up next pointer and its label.
+    pub fn restore_up_next(&self, index: Option<usize>) -> ActionOutcome {
+        let len = self
+            .inner
+            .store
+            .snapshot()
+            .plan
+            .map_or(0, |p| p.songs.len());
+        if len == 0 {
+            return ActionOutcome::rejected("No songs are loaded.");
+        }
+        let target = index.unwrap_or(len).min(len);
+        self.set_pending(target);
+        self.set_labels(Playing::Keep);
+        ActionOutcome::ok("Up next restored.")
+    }
+
     async fn restart_current(&self) -> ActionOutcome {
         let state = self.inner.store.snapshot();
         let (Some(song), Some(index)) = (state.current_song, state.current_song_index) else {

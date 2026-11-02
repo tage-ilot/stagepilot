@@ -45,6 +45,7 @@
     "port": 8080,
     "auto_scan": true,
     "fast_transport": true,
+    "learn_order": true,
     "planning_center_update_service_type_id": null,
     "song_order": [],
     "captured_version": null,

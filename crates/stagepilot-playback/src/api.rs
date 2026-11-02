@@ -90,6 +90,17 @@ pub struct PlaybackSettingsRequest {
     pub port: u16,
     pub auto_scan: bool,
     pub fast_transport: bool,
+    pub learn_order: bool,
+}
+
+/// One Playback song paired with a plan position while the order is being learned.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct LearnedSongModel {
+    pub song_id: i64,
+    pub plan_position: u32,
+    pub confirmed: bool,
+    pub doubtful: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -151,6 +162,10 @@ pub struct PlaybackStatusResponse {
     pub discovery_song: u32,
     pub discovery_total: u32,
     pub song_order: Vec<i64>,
+    /// `scanned`, `learned` or `none`: where the Playback song -> plan song pairing comes from.
+    pub order_mode: String,
+    pub learned_songs: Vec<LearnedSongModel>,
+    pub order_note: Option<String>,
     pub song_lengths: Vec<Option<f64>>,
     pub skipped_song_ids: Vec<i64>,
     pub skipped_plan_song_ids: Vec<String>,
