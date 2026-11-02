@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Lighting: **room loudness behind the timeline.** While Record is chosen and a song runs, StagePilot measures how loud the room is (0.25 s windows, -60 to 0 dBFS) and draws it as a faint filled envelope behind the look rows, scaled to the song's own loudest moment and zooming with the timeline ("Loudness: peak at 02:10" for screen readers). Choose the audio input (built-in microphone by default, or an audio interface) in the Lightkey strip with a live level meter, and clear a song's loudness with **Clear loudness**. Only the numbers are saved: audio is never stored or sent. Recording a song again averages the loudness together (at most eight recordings, so it can still adapt). Where audio is unavailable (Docker or headless, no input, permission refused) the picker is hidden with one line saying why, and the lights capture is never affected. macOS asks for microphone permission once (`NSMicrophoneUsageDescription`; see `docs/lights.md`).
+
 ### Fixed
 
 - Lightkey replay: pausing, stopping or finishing a song no longer hands the lights back to Lightkey's cues. The last look is held; resuming or seeking re-syncs the fixtures. They are released only when replay or Lighting is switched off, the app shuts down, or a new song starts that does not use them.
