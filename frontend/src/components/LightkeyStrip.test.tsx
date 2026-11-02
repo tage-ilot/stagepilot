@@ -46,7 +46,7 @@ describe("LightkeyStrip", () => {
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
     expect(screen.getByText("Cannot reach the Lightkey API.")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Record from Lightkey" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Record" })).toBeDisabled();
   });
 
   it("Connect saves the typed address", async () => {
@@ -61,31 +61,61 @@ describe("LightkeyStrip", () => {
     await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "10.30.0.211:8770" }));
   });
 
-  it("Record switch starts recording and shows the answer", async () => {
+  it("Record mode starts recording and shows the answer", async () => {
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true, message: "Recording starts with the next song." })));
     render(<LightkeyStrip lightingEnabled />);
-    await userEvent.setup().click(await screen.findByRole("switch", { name: "Record from Lightkey" }));
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
     await waitFor(() => expect(api.setLightkeyRecording).toHaveBeenCalledWith(true));
-    expect(await screen.findByRole("switch", { name: "Record from Lightkey" })).toBeChecked();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Record" })).toBeChecked());
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Recording starts with the next song.");
   });
 
-  it("a refused record request shows the reason and the switch stays off", async () => {
+  it("a refused record request shows the reason and the toggle stays on Replay", async () => {
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status(), false, "Recording needs Lighting set to OSC."));
     render(<LightkeyStrip lightingEnabled />);
-    await userEvent.setup().click(await screen.findByRole("switch", { name: "Record from Lightkey" }));
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
     expect(await screen.findByText("Recording needs Lighting set to OSC.")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Record from Lightkey" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Replay" })).toBeChecked();
   });
 
-  it("Replay switch is on by default and can be turned off", async () => {
-    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ replay: false, replay_blocked: "Replay is switched off." })));
+  it("one Replay | Record toggle replaces the two switches, Replay by default", async () => {
     render(<LightkeyStrip lightingEnabled />);
-    const toggle = await screen.findByRole("switch", { name: "Replay captured lights" });
-    expect(toggle).toBeChecked();
-    await userEvent.setup().click(toggle);
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ replay: false }));
-    expect(await screen.findByRole("switch", { name: "Replay captured lights" })).not.toBeChecked();
+    expect(await screen.findByRole("radiogroup", { name: "Lightkey mode" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Replay" })).toBeChecked();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("Record back to Replay: recording off first, then replay on; errors revert and show the message", async () => {
+    const calls: string[] = [];
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay: false }));
+    vi.mocked(api.setLightkeyRecording).mockImplementation(async () => { calls.push("recording-off"); return respond(status({ replay: false })); });
+    vi.mocked(api.saveLightkeySettings).mockImplementation(async () => { calls.push("replay-on"); return respond(status()); });
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
+    await waitFor(() => expect(calls).toEqual(["recording-off", "replay-on"]));
+    expect(api.setLightkeyRecording).toHaveBeenCalledWith(false);
+    expect(api.saveLightkeySettings).toHaveBeenCalledWith({ replay: true });
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Replay" })).toBeChecked());
+  });
+
+  it("Record back to Replay: a refused stop keeps Record and shows why", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true }), false, "Cannot stop right now."));
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
+    expect(await screen.findByText("Cannot stop right now.")).toBeInTheDocument();
+    expect(api.saveLightkeySettings).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: "Record" })).toBeChecked();
+  });
+
+  it("Record back to Replay: a failed replay-on shows the message and re-reads the real state", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay: false }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ replay: false })));
+    vi.mocked(api.saveLightkeySettings).mockRejectedValue(new Error("Network down"));
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
+    expect(await screen.findByText(/Network down|That did not work/)).toBeInTheDocument();
+    expect(vi.mocked(api.getLightkeyStatus).mock.calls.length).toBeGreaterThan(1);
   });
 
   it("lists captured songs and clears one", async () => {
@@ -144,7 +174,7 @@ describe("lightkeyHeadline", () => {
     expect(lightkeyHeadline(status({ replay_blocked: "Replay is switched off.", takes: [take] }))).toBe("Replay is switched off.");
   });
   it("tells a first-time operator what to do, then counts captures", () => {
-    expect(lightkeyHeadline(status())).toMatch(/Turn on Record/);
+    expect(lightkeyHeadline(status())).toMatch(/Switch to Record/);
     expect(lightkeyHeadline(status({ takes: [take] }))).toBe("1 song captured.");
     expect(lightkeyHeadline(status({ takes: [take, { ...take, song_key: "s2" }] }))).toBe("2 songs captured.");
   });
@@ -153,25 +183,21 @@ describe("lightkeyHeadline", () => {
 describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   const armed = { recording: true, replay: true, replay_blocked: "Paused while recording.", takes: [take] };
 
-  it("Record armed + Replay on: the backend message is not repeated, the paused line follows", () => {
+  it("Record armed: the backend message is not repeated and no paused line is added", () => {
     expect(lightkeyLines(status({ ...armed, message: "Recording starts with the next song." }), null)).toEqual([
       "Recording starts with the next song.",
-      "Replay paused while recording.",
     ]);
     expect(lightkeyLines(status({ ...armed, message: null }), null)).toEqual([
       "Recording starts with the next song.",
-      "Replay paused while recording.",
     ]);
   });
 
   it("recording a song: straight and curly quotes count as the same line", () => {
     expect(lightkeyLines(status({ ...armed, recording_song: "Holy Forever", message: 'Recording "Holy Forever".' }), null)).toEqual([
       'Recording "Holy Forever".',
-      "Replay paused while recording.",
     ]);
     expect(lightkeyLines(status({ ...armed, recording_song: "Holy Forever" }), null)).toEqual([
       "Recording “Holy Forever”.",
-      "Replay paused while recording.",
     ]);
   });
 
@@ -207,31 +233,30 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
 });
 
 describe("LightkeyStrip lines on screen (B3)", () => {
-  it("armed with both switches on shows exactly two different lines", async () => {
+  it("armed shows the one headline and no paused line", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay: true, replay_blocked: "Paused while recording.", message: "Recording starts with the next song." }));
     render(<LightkeyStrip lightingEnabled />);
     await screen.findByTestId("lightkey-headline");
     expect(screen.getAllByText("Recording starts with the next song.")).toHaveLength(1);
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Recording starts with the next song.");
-    expect(screen.getAllByTestId("lightkey-detail").map((n) => n.textContent)).toEqual(["Replay paused while recording."]);
+    expect(screen.queryAllByTestId("lightkey-detail")).toHaveLength(0);
   });
 
-  it("recording a song shows the title once and the paused line", async () => {
+  it("recording a song shows the title once", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, recording_song: "Holy Forever", replay_blocked: "Paused while recording.", message: 'Recording "Holy Forever".' }));
     render(<LightkeyStrip lightingEnabled />);
     await screen.findByTestId("lightkey-headline");
     expect(screen.getAllByText(/Recording .Holy Forever/)).toHaveLength(1);
-    expect(screen.getByText("Replay paused while recording.")).toBeInTheDocument();
+    expect(screen.queryByText("Replay paused while recording.")).toBeNull();
   });
 
-  it("when recording stops the paused line goes and replay is described again", async () => {
+  it("when recording stops the headline describes the captures again", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, replay_blocked: "Paused while recording." }));
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ takes: [take], message: null })));
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ takes: [take], message: null })));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Replay paused while recording.")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("switch", { name: "Record from Lightkey" }));
-    await waitFor(() => expect(screen.queryByText("Replay paused while recording.")).not.toBeInTheDocument());
-    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 song captured.");
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
+    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 song captured."));
   });
 
   it("an expired message (backend sends null) falls back to the headline", async () => {

@@ -99,7 +99,7 @@ newer, a small read-only agent that runs on the Lightkey Mac. Install it there
 first (its README covers the one-time macOS permission click). A capture holds
 fixture data only: **cues are neither recorded nor replayed**.
 
-The strip has three controls:
+The strip has these controls:
 
 - **Address and Connect.** Defaults to the Lighting OSC host on port 8770
   (`10.30.0.211:8770`). The dot shows *Connected*, *Lightkey is closed*, or
@@ -154,6 +154,12 @@ over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
 recording, the message says that levels were not recorded.
 
 ## Cue board, live capture and the timeline
+
+The timeline follows the live song (or the last song that played) and switches
+when a new song starts. If you pick another song by hand, it stays on your pick
+until the next song starts; the line beside the song picker then reads "Showing
+<title>" with a **Follow live** button to jump back at once. With no song played
+yet it shows the first song of the plan.
 
 Cues are easiest to set while the song is running in practice. Under **Song
 lighting timeline** the panel has a **Cue board** and a visual **Timeline**; the
