@@ -1444,7 +1444,6 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
     }))
 }
 
-
 // ---- Loudness ----------------------------------------------------------------------------------
 
 /// The input picker's data: devices, the saved choice, the live meter. `available: false` with a
@@ -1515,7 +1514,9 @@ async fn lights_loudness_clear(State(rt): State<Rt>, raw: Bytes) -> Json {
     if map.cues.is_empty() && map.osc_cues.is_empty() {
         updated.cue_maps.remove(&request.song_key);
     } else {
-        updated.cue_maps.insert(request.song_key.clone(), map.clone());
+        updated
+            .cue_maps
+            .insert(request.song_key.clone(), map.clone());
     }
     if let Err(response) = persist_lights(&rt, updated) {
         return response;

@@ -11,13 +11,13 @@
 //! Replay is not done here: the song-lighting timeline in `crate::plugin` is the one replay
 //! engine. This link keeps the recorder, the relay client and the status the Lighting panel shows.
 
+use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
     effective_api_url, recording_is_worth_keeping, LightkeyCaptured, LightkeyLink as Link,
     LightkeyStatus,
 };
 use crate::lightkey_fixtures::FixtureCommand;
 use crate::lightkey_looks::{look_rows, LookRecorder};
-use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey_relay::{relay_target, RelayClient};
 use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
@@ -1121,7 +1121,11 @@ impl Inner {
         if session.running {
             covered = covered.max(self.clock.wall() - session.started_at);
         }
-        let covered = if duration > 0.0 { covered.min(duration) } else { covered };
+        let covered = if duration > 0.0 {
+            covered.min(duration)
+        } else {
+            covered
+        };
         if !recording_is_worth_keeping(covered, duration) {
             return None;
         }

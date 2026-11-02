@@ -98,7 +98,7 @@ fn a_pause_leaves_a_gap_and_resume_moves_the_clock() {
     feed(&mut rec, 100.0, 1.0, 0.1); // song 0..1
     rec.set_running(false);
     feed(&mut rec, 101.0, 2.0, 0.5); // paused: nothing collected
-    // Resume at song position 1.0, wall 103.0: song time 0 is now wall 102.0.
+                                     // Resume at song position 1.0, wall 103.0: song time 0 is now wall 102.0.
     rec.set_started_at(102.0);
     rec.set_running(true);
     feed(&mut rec, 103.0, 1.0, 0.1); // song 1..2
@@ -106,7 +106,10 @@ fn a_pause_leaves_a_gap_and_resume_moves_the_clock() {
     assert!(l.values[..8].iter().all(|v| *v != 0), "{:?}", l.values);
     assert!(l.values[8..].iter().all(|v| *v == 0), "{:?}", l.values);
     // The paused 0.5 never shows (it would be -6 dBFS).
-    assert!(l.values.iter().all(|v| byte_db(*v).is_none_or(|d| d < -15.0)));
+    assert!(l
+        .values
+        .iter()
+        .all(|v| byte_db(*v).is_none_or(|d| d < -15.0)));
 }
 
 #[test]
@@ -135,7 +138,11 @@ fn cannot_exceed_the_value_cap() {
 }
 
 fn lo(values: &[u8], takes: u32) -> SongLoudness {
-    SongLoudness { step_seconds: 0.25, values: values.to_vec(), takes }
+    SongLoudness {
+        step_seconds: 0.25,
+        values: values.to_vec(),
+        takes,
+    }
 }
 
 #[test]
@@ -183,7 +190,11 @@ fn slots_missing_in_one_recording_keep_the_other() {
 fn first_recording_and_step_change_replace() {
     let n = lo(&[10], 1);
     assert_eq!(merge_loudness(None, n.clone()), n);
-    let other = SongLoudness { step_seconds: 0.5, values: vec![200], takes: 4 };
+    let other = SongLoudness {
+        step_seconds: 0.5,
+        values: vec![200],
+        takes: 4,
+    };
     assert_eq!(merge_loudness(Some(&other), n.clone()), n);
 }
 
@@ -207,7 +218,11 @@ fn meter_reads_since_last_and_repeats() {
 
 #[test]
 fn merge_enforces_the_caps_on_a_first_recording() {
-    let big = SongLoudness { step_seconds: 0.25, values: vec![9; 5000], takes: 50 };
+    let big = SongLoudness {
+        step_seconds: 0.25,
+        values: vec![9; 5000],
+        takes: 50,
+    };
     let m = merge_loudness(None, big);
     assert_eq!((m.values.len(), m.takes), (4000, 8));
 }

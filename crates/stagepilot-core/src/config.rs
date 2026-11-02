@@ -1242,7 +1242,13 @@ impl LightsSettings {
                     None,
                 );
                 if loudness.values.len() > MAX_LOUDNESS_VALUES {
-                    too_long(errors, &mp, "values", loudness.values.len(), MAX_LOUDNESS_VALUES);
+                    too_long(
+                        errors,
+                        &mp,
+                        "values",
+                        loudness.values.len(),
+                        MAX_LOUDNESS_VALUES,
+                    );
                 }
             }
             let ids =

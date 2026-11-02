@@ -52,7 +52,9 @@ impl LightkeyHttp for FakeHttp {
         if url.ends_with("/time") {
             return Ok(json!({"t": ms}));
         }
-        Ok(json!({"events": [], "state": {"online": true, "active": [], "seq": 1, "server_time": ms}}))
+        Ok(
+            json!({"events": [], "state": {"online": true, "active": [], "seq": 1, "server_time": ms}}),
+        )
     }
 }
 
@@ -142,12 +144,18 @@ fn at(wall: f64) -> DateTime<Utc> {
 
 impl Rig {
     async fn new(input: Arc<FakeInput>) -> Self {
-        let clock = Arc::new(FakeClock { wall: Mutex::new(1_800_000_000.0), started: Instant::now() });
+        let clock = Arc::new(FakeClock {
+            wall: Mutex::new(1_800_000_000.0),
+            started: Instant::now(),
+        });
         let settings = Arc::new(Mutex::new((
             true,
             true,
             "127.0.0.1".to_string(),
-            LightkeySettings { api_url: "http://127.0.0.1:1".into(), ..LightkeySettings::default() },
+            LightkeySettings {
+                api_url: "http://127.0.0.1:1".into(),
+                ..LightkeySettings::default()
+            },
         )));
         let provider_settings = settings.clone();
         let saved: Arc<Mutex<Vec<SongLoudnessTake>>> = Arc::default();
@@ -169,7 +177,14 @@ impl Rig {
                 ..LinkOptions::default()
             },
         );
-        Self { bus, clock, input, saved, link, settings }
+        Self {
+            bus,
+            clock,
+            input,
+            saved,
+            link,
+            settings,
+        }
     }
 
     async fn armed(input: Arc<FakeInput>) -> Self {
@@ -182,7 +197,9 @@ impl Rig {
     }
 
     async fn publish(&self, kind: EventType, payload: TimerPayload) {
-        self.bus.publish(new_event(kind, "t", EventPayload::Timer(payload))).await;
+        self.bus
+            .publish(new_event(kind, "t", EventPayload::Timer(payload)))
+            .await;
     }
 
     /// The song starts at the clock's current second.
@@ -191,7 +208,10 @@ impl Rig {
             .publish(new_event(
                 EventType::SongStarted,
                 "t",
-                EventPayload::Song { song: s.clone(), index: 0 },
+                EventPayload::Song {
+                    song: s.clone(),
+                    index: 0,
+                },
             ))
             .await;
         self.publish(
@@ -281,19 +301,38 @@ async fn windows_follow_the_song_clock_and_are_saved() {
     let rig = Rig::armed(input.clone()).await;
     let s = song(8);
     rig.start(&s).await;
-    assert_eq!(input.open_count(), 1, "the input opens when the song starts");
+    assert_eq!(
+        input.open_count(),
+        1,
+        "the input opens when the song starts"
+    );
     rig.hear(1.0, 0.1); // -20 dBFS for song 0..1
     rig.hear(3.0, 0.01); // -40 dBFS for song 1..4
     rig.stop(&s, 4.0).await; // 4 of 8 s = half: kept
     let saved = rig.saved.lock().unwrap().clone();
     assert_eq!(saved.len(), 1, "{:?}", rig.link.status().message);
     let l = &saved[0].loudness;
-    assert_eq!((saved[0].song_key.as_str(), l.step_seconds, l.takes), ("song-1", 0.25, 1));
+    assert_eq!(
+        (saved[0].song_key.as_str(), l.step_seconds, l.takes),
+        ("song-1", 0.25, 1)
+    );
     assert_eq!(l.values.len(), 32);
-    assert!((0..4).all(|i| (db(l, i) + 20.0).abs() < 0.4), "{:?}", l.values);
-    assert!((4..16).all(|i| (db(l, i) + 40.0).abs() < 0.4), "{:?}", l.values);
+    assert!(
+        (0..4).all(|i| (db(l, i) + 20.0).abs() < 0.4),
+        "{:?}",
+        l.values
+    );
+    assert!(
+        (4..16).all(|i| (db(l, i) + 40.0).abs() < 0.4),
+        "{:?}",
+        l.values
+    );
     assert!(l.values[16..].iter().all(|v| *v == 0));
-    assert_eq!(input.open_count(), 0, "the input closes when the recording ends");
+    assert_eq!(
+        input.open_count(),
+        0,
+        "the input closes when the recording ends"
+    );
 }
 
 #[tokio::test]
@@ -305,7 +344,10 @@ async fn under_half_the_song_saves_nothing() {
     rig.hear(4.0, 0.1);
     rig.stop(&s, 4.0).await;
     assert!(rig.saved.lock().unwrap().is_empty());
-    assert!(rig.link.status().message.unwrap().starts_with("Paused"), "a short stop is only a pause");
+    assert!(
+        rig.link.status().message.unwrap().starts_with("Paused"),
+        "a short stop is only a pause"
+    );
 }
 
 #[tokio::test]
@@ -322,7 +364,11 @@ async fn a_pause_is_a_gap_and_resume_continues_in_place() {
     rig.stop(&s, 6.0).await;
     let l = rig.saved.lock().unwrap()[0].loudness.clone();
     assert!(l.values[..24].iter().all(|v| *v != 0), "{:?}", l.values);
-    assert!(l.values.iter().all(|v| db_ok(*v)), "the paused 0.5 (-6 dBFS) leaked: {:?}", l.values);
+    assert!(
+        l.values.iter().all(|v| db_ok(*v)),
+        "the paused 0.5 (-6 dBFS) leaked: {:?}",
+        l.values
+    );
 }
 
 fn db_ok(v: u8) -> bool {
@@ -337,7 +383,11 @@ async fn moving_the_playhead_discards_the_recording() {
     rig.start(&s).await;
     rig.hear(3.0, 0.1);
     rig.seek(&s, 8.0).await;
-    assert_eq!(input.open_count(), 0, "a discarded recording releases the input");
+    assert_eq!(
+        input.open_count(),
+        0,
+        "a discarded recording releases the input"
+    );
     rig.hear(2.0, 0.1);
     rig.stop(&s, 10.0).await;
     assert!(rig.saved.lock().unwrap().is_empty());
@@ -352,15 +402,25 @@ async fn a_refused_microphone_never_breaks_the_lights_recording() {
     let s = song(4);
     rig.start(&s).await;
     let status = rig.link.status();
-    assert_eq!(status.recording_song.as_deref(), Some("Holy Forever"), "lights still record");
+    assert_eq!(
+        status.recording_song.as_deref(),
+        Some("Holy Forever"),
+        "lights still record"
+    );
     let message = status.message.unwrap();
     assert!(message.contains("Loudness is not recorded"), "{message}");
-    assert!(message.contains("Microphone access was refused"), "{message}");
+    assert!(
+        message.contains("Microphone access was refused"),
+        "{message}"
+    );
     rig.clock.set(rig.clock.get() + 4.0);
     rig.stop(&s, 4.0).await;
     assert!(rig.saved.lock().unwrap().is_empty());
     let message = rig.link.status().message.unwrap();
-    assert!(message.contains("Not saved: no fixture changes"), "the lights path still ran: {message}");
+    assert!(
+        message.contains("Not saved: no fixture changes"),
+        "the lights path still ran: {message}"
+    );
     assert!(message.contains("Loudness not saved"), "{message}");
 }
 
@@ -374,7 +434,11 @@ async fn nothing_opens_while_record_is_off_or_no_song_runs() {
     rig.start(&s).await; // Record is not armed
     assert_eq!(input.open_count(), 0);
     rig.link.set_recording(true).await;
-    assert_eq!(input.open_count(), 0, "armed but no song running: still closed");
+    assert_eq!(
+        input.open_count(),
+        0,
+        "armed but no song running: still closed"
+    );
     assert!(input.opened.lock().unwrap().is_empty());
 }
 
@@ -386,7 +450,10 @@ async fn the_saved_device_is_used_and_a_vanished_one_falls_back_to_the_default()
     rig.link.settings_changed();
     let s = song(4);
     rig.start(&s).await;
-    assert_eq!(input.opened.lock().unwrap().last().unwrap().as_deref(), Some("Scarlett 2i2"));
+    assert_eq!(
+        input.opened.lock().unwrap().last().unwrap().as_deref(),
+        Some("Scarlett 2i2")
+    );
     rig.stop(&s, 1.0).await;
 
     // The interface is unplugged: the default input is opened and the picker says so.
@@ -401,7 +468,10 @@ async fn the_saved_device_is_used_and_a_vanished_one_falls_back_to_the_default()
 #[tokio::test]
 async fn the_meter_opens_on_request_reads_levels_and_closes() {
     let input = FakeInput::new(&["Mic"]);
-    let clock = Arc::new(FakeClock { wall: Mutex::new(100.0), started: Instant::now() });
+    let clock = Arc::new(FakeClock {
+        wall: Mutex::new(100.0),
+        started: Instant::now(),
+    });
     let hub = AudioHub::new(input.clone(), clock.clone());
     assert_eq!(input.open_count(), 0);
     assert!(hub.info().level.is_none());
@@ -424,19 +494,30 @@ async fn the_meter_opens_on_request_reads_levels_and_closes() {
 #[tokio::test]
 async fn a_lost_device_is_reported_as_a_short_line() {
     let input = FakeInput::new(&["Mic"]);
-    let clock = Arc::new(FakeClock { wall: Mutex::new(100.0), started: Instant::now() });
+    let clock = Arc::new(FakeClock {
+        wall: Mutex::new(100.0),
+        started: Instant::now(),
+    });
     let hub = AudioHub::new(input.clone(), clock);
     hub.set_meter(true);
     let errors = input.errors.lock().unwrap().clone().unwrap();
     errors(AudioError::DeviceLost("Mic".into()));
-    assert_eq!(hub.info().reason.as_deref(), Some("The audio input Mic was lost."));
+    assert_eq!(
+        hub.info().reason.as_deref(),
+        Some("The audio input Mic was lost.")
+    );
 }
 
 #[tokio::test]
 async fn a_build_without_audio_says_why() {
-    let clock = Arc::new(FakeClock { wall: Mutex::new(100.0), started: Instant::now() });
+    let clock = Arc::new(FakeClock {
+        wall: Mutex::new(100.0),
+        started: Instant::now(),
+    });
     let hub = AudioHub::new(
-        Arc::new(stagepilot_lights::audio::UnavailableInput("No input here.".into())),
+        Arc::new(stagepilot_lights::audio::UnavailableInput(
+            "No input here.".into(),
+        )),
         clock,
     );
     let info = hub.info();

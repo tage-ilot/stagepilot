@@ -73,7 +73,9 @@ impl AudioInput for CpalInput {
                 let _ = stop_rx.recv();
                 drop(stream);
             })
-            .map_err(|error| AudioError::Other(format!("The audio input could not start: {error}")))?;
+            .map_err(|error| {
+                AudioError::Other(format!("The audio input could not start: {error}"))
+            })?;
         match ready_rx.recv() {
             Ok(Ok(())) => Ok(Box::new(Handle {
                 stop: Some(stop_tx),
@@ -130,10 +132,18 @@ fn build(
         move |error: cpal::Error| errors(map_error(&error, &name))
     };
     let stream = match format {
-        SampleFormat::F32 => stream::<f32>(&device, stream_config, channels, rate, samples, on_error),
-        SampleFormat::I16 => stream::<i16>(&device, stream_config, channels, rate, samples, on_error),
-        SampleFormat::U16 => stream::<u16>(&device, stream_config, channels, rate, samples, on_error),
-        SampleFormat::I32 => stream::<i32>(&device, stream_config, channels, rate, samples, on_error),
+        SampleFormat::F32 => {
+            stream::<f32>(&device, stream_config, channels, rate, samples, on_error)
+        }
+        SampleFormat::I16 => {
+            stream::<i16>(&device, stream_config, channels, rate, samples, on_error)
+        }
+        SampleFormat::U16 => {
+            stream::<u16>(&device, stream_config, channels, rate, samples, on_error)
+        }
+        SampleFormat::I32 => {
+            stream::<i32>(&device, stream_config, channels, rate, samples, on_error)
+        }
         SampleFormat::I8 => stream::<i8>(&device, stream_config, channels, rate, samples, on_error),
         other => Err(AudioError::Other(format!(
             "The audio input uses an unsupported sample format ({other})."

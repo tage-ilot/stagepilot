@@ -83,7 +83,8 @@ pub fn default_input() -> Arc<dyn AudioInput> {
     }
 }
 
-pub const UNAVAILABLE_TEXT: &str = "Loudness needs the desktop app: this build cannot listen to an audio input.";
+pub const UNAVAILABLE_TEXT: &str =
+    "Loudness needs the desktop app: this build cannot listen to an audio input.";
 /// How long the meter stays on after the picker last asked for it.
 pub const METER_SECONDS: f64 = 5.0;
 
@@ -191,7 +192,11 @@ impl AudioHub {
         let _ = self.reconcile();
         let (devices, available, mut reason) = match self.input.devices() {
             Ok(devices) => (devices, true, None),
-            Err(error) => (Vec::new(), !matches!(error, AudioError::Unavailable(_)), Some(error.message())),
+            Err(error) => (
+                Vec::new(),
+                !matches!(error, AudioError::Unavailable(_)),
+                Some(error.message()),
+            ),
         };
         let state = lock(&self.state);
         let level = self.shared.meter.read().map(|w| MeterLevel {

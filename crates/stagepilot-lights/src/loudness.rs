@@ -185,7 +185,11 @@ pub fn merge_loudness(existing: Option<&SongLoudness>, mut new: SongLoudness) ->
         f64::from(old.takes.clamp(1, MAX_LOUDNESS_TAKES)),
         f64::from(new.takes.clamp(1, MAX_LOUDNESS_TAKES)),
     );
-    let len = old.values.len().max(new.values.len()).min(MAX_LOUDNESS_VALUES);
+    let len = old
+        .values
+        .len()
+        .max(new.values.len())
+        .min(MAX_LOUDNESS_VALUES);
     let values = (0..len)
         .map(|i| {
             let a = old.values.get(i).copied().unwrap_or(0);
