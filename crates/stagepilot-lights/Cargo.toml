@@ -9,11 +9,17 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Real audio input through cpal (CoreAudio / WASAPI / ALSA). Off by default so headless and Docker
+# builds need no audio libraries; the desktop app turns it on.
+cpal-backend = ["dep:cpal"]
+
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }
 stagepilot-midi = { path = "../stagepilot-midi" }
 stagepilot-osc = { path = "../stagepilot-osc" }
 async-trait = "0.1.89"
+cpal = { version = "0.18.2", optional = true }
 chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }
 reqwest = { version = "0.13.4", default-features = false }
 # Cargo unifies reqwest features across the workspace: with Planning Center in the build, reqwest

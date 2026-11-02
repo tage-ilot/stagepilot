@@ -771,6 +771,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: song_title.clone(),
         cues: request.cues.clone(),
         osc_cues: request.osc_cues.clone(),
+        loudness: None,
     };
     let mut check = LightsSettings::default();
     check.cue_maps.insert(song_key.clone(), probe);
@@ -796,6 +797,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             song_title: song_title.clone(),
             cues: vec![],
             osc_cues: vec![],
+            loudness: None,
         });
     let _ = value;
 
@@ -816,6 +818,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         } else {
             existing.map(|m| m.osc_cues.clone()).unwrap_or_default()
         },
+        loudness: None,
     };
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
@@ -1020,6 +1023,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                 song_title: song_title.trim().to_string(),
                 cues: midi_cues,
                 osc_cues,
+                loudness: None,
             },
         );
         updated.normalise();
@@ -1087,6 +1091,7 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: existing.song_title.clone(),
         cues,
         osc_cues,
+        loudness: None,
     };
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
@@ -1353,6 +1358,7 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
             .unwrap_or_else(|_| api_url.clone()),
         replay: request.replay.unwrap_or(current.lightkey.replay),
         detail: request.detail.unwrap_or(current.lightkey.detail),
+        audio_device: None,
     };
     if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
         return response;

@@ -5,11 +5,15 @@
 //! pulses, the inactive method's cues stay saved but are never scheduled and the two are never
 //! sent together. Every output sits behind a trait, so all of it is tested without hardware.
 
+pub mod audio;
+#[cfg(feature = "cpal-backend")]
+pub mod audio_cpal;
 pub mod lightkey;
 pub mod lightkey_fixtures;
 pub mod lightkey_link;
 pub mod lightkey_looks;
 pub mod lightkey_relay;
+pub mod loudness;
 pub mod models;
 pub mod plugin;
 

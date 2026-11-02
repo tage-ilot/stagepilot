@@ -271,6 +271,7 @@ async fn old_settings_without_a_lightkey_block_load_with_replay_on() {
             api_url: String::new(),
             replay: true,
             detail: stagepilot_core::config::LightkeyDetail::Normal,
+            audio_device: None,
         }
     );
     // And a whole saved settings file from before the feature loads the same way.
@@ -383,6 +384,7 @@ fn captured_row(at: f64, address: &str, x: f64) -> stagepilot_core::config::OscL
             args: vec![OscArgument::Float(x)],
         }],
         source: OscCueSource::Captured,
+        edited: false,
     }
 }
 
@@ -411,6 +413,7 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
             song_title: "Holy Forever".into(),
             cues: vec![],
             osc_cues: vec![manual],
+            loudness: None,
         },
     );
     rt.settings_service.persist_lights(lights).unwrap();

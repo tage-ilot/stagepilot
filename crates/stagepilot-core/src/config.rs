@@ -808,6 +808,27 @@ pub struct SongLightingCueMap {
     pub cues: Vec<LightingCue>,
     #[serde(default)]
     pub osc_cues: Vec<OscLightingCue>,
+    /// How loud the room was while the song was recorded (levels only, never audio). Absent
+    /// until a recording captured it, so older files load and save back unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub loudness: Option<SongLoudness>,
+}
+
+/// Most loudness values one song keeps (0.25 s steps cover a 1000 s song).
+pub const MAX_LOUDNESS_VALUES: usize = 4_000;
+/// Recordings averaged into one loudness envelope; capped so it can still adapt.
+pub const MAX_LOUDNESS_TAKES: u32 = 8;
+
+/// A song's loudness envelope: one byte per `step_seconds` slot. `0` means "no data" (a pause or
+/// a missed slot); `1..=255` maps -60..0 dBFS. dBFS is a digital level, not sound pressure (SPL).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SongLoudness {
+    pub step_seconds: f64,
+    pub values: Vec<u8>,
+    /// How many recordings are averaged in (1 to 8).
+    pub takes: u32,
 }
 
 /// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
@@ -830,6 +851,11 @@ pub struct LightkeySettings {
     #[serde(default, skip_serializing_if = "LightkeyDetail::is_normal")]
     #[ts(optional, as = "Option<LightkeyDetail>")]
     pub detail: LightkeyDetail,
+    /// Name of the audio input that measures loudness while recording. Unset means the system
+    /// default input; a name that is no longer present falls back to the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub audio_device: Option<String>,
 }
 
 impl Default for LightkeySettings {
@@ -838,6 +864,7 @@ impl Default for LightkeySettings {
             api_url: String::new(),
             replay: true,
             detail: LightkeyDetail::default(),
+            audio_device: None,
         }
     }
 }
@@ -1194,6 +1221,29 @@ impl LightsSettings {
                     message_total,
                     MAX_OSC_MESSAGES_PER_SONG,
                 );
+            }
+            if let Some(loudness) = &map.loudness {
+                check_range(
+                    errors,
+                    &mp,
+                    "step_seconds",
+                    loudness.step_seconds,
+                    Some(0.05),
+                    Some(10.0),
+                    None,
+                );
+                check_range(
+                    errors,
+                    &mp,
+                    "takes",
+                    loudness.takes,
+                    Some(1.0),
+                    Some(f64::from(MAX_LOUDNESS_TAKES)),
+                    None,
+                );
+                if loudness.values.len() > MAX_LOUDNESS_VALUES {
+                    too_long(errors, &mp, "values", loudness.values.len(), MAX_LOUDNESS_VALUES);
+                }
             }
             let ids =
                 |v: Vec<Uuid>| v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len();

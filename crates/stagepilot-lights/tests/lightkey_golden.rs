@@ -69,6 +69,7 @@ fn replay_defaults_on_and_old_settings_load_with_replay_on() {
             api_url: String::new(),
             replay: true,
             detail: LightkeyDetail::Normal,
+            audio_device: None,
         }
     );
     // A partial block keeps the other field's default.
