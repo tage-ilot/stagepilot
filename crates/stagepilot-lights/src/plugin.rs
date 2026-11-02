@@ -184,15 +184,6 @@ impl LightsPlugin {
                 None => (false, false, String::new(), Default::default()),
             });
         let weak_command = weak.clone();
-        let send: crate::lightkey_link::SendOsc = Arc::new(move |address: String| {
-            let weak = weak.clone();
-            Box::pin(async move {
-                match weak.upgrade() {
-                    Some(inner) => inner.send_raw_osc(address).await,
-                    None => Ok(()),
-                }
-            })
-        });
         let mut link_options = link_options;
         link_options.send_command =
             Some(Arc::new(move |address: String, args: Vec<OscArgument>| {
@@ -204,12 +195,9 @@ impl LightsPlugin {
                     }
                 })
             }));
-        let _ = inner.lightkey.set(LightkeyLink::new(
-            bus_for_link,
-            provider,
-            send,
-            link_options,
-        ));
+        let _ = inner
+            .lightkey
+            .set(LightkeyLink::new(bus_for_link, provider, link_options));
         Ok(Self { inner })
     }
 
@@ -783,11 +771,6 @@ impl Inner {
     }
 
     // ---- sending ------------------------------------------------------------------------------
-
-    /// One-shot OSC through the saved output, address only (used by Lightkey replay).
-    async fn send_raw_osc(&self, address: String) -> Result<(), String> {
-        self.send_command_osc(address, Vec::new()).await
-    }
 
     /// One-shot OSC with arguments through the saved output (Lightkey fixture replay).
     async fn send_command_osc(

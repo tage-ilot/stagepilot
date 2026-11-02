@@ -269,15 +269,13 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
 }
 
-/** One song's captured Lightkey changes (summary only; the changes stay on the backend). */
+/** One song's captured Lightkey fixture changes (summary only; the changes stay on the backend). */
 export interface LightkeyTakeSummary {
   song_key: string;
   song_title: string;
   recorded_at: string;
   duration_seconds: number;
-  edge_count: number;
-  cue_count: number;
-  /** Present only when fixture levels (colour, intensity, movers) were captured with the cues. */
+  /** Present only when fixture levels (colour, intensity, movers) were captured; absent = "no fixture capture". */
   fixture_count?: number;
   fixture_event_count?: number;
 }

@@ -36,7 +36,10 @@ use stagepilot_core::config::{
 use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
-use stagepilot_lights::lightkey::{LightkeyEdge, LightkeyTake};
+use stagepilot_lights::lightkey::LightkeyTake;
+use stagepilot_lights::lightkey_fixtures::{
+    FixtureArg, FixtureCommand, FixtureEvent, FixtureTrack,
+};
 use stagepilot_lights::lightkey_link::{MemoryTakeStore, TakeStore};
 use stagepilot_pco::runtime::PcoOptions;
 use stagepilot_server::remote_fakes::ContractManager;
@@ -149,29 +152,37 @@ fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
     }
 }
 
-/// The take the Python profile seeds for the first demo song.
+/// The take the contract profile seeds for the first demo song: one fixture, two changes.
 fn contract_lightkey_store() -> Arc<dyn TakeStore> {
-    let edge = |at: f64, added: &[&str], removed: &[&str]| {
-        LightkeyEdge::new(
-            at,
-            added.iter().map(ToString::to_string).collect(),
-            removed.iter().map(ToString::to_string).collect(),
+    let dimmer = |level: f64| {
+        FixtureCommand::new(
+            "/fixture/Par 1/overrides/dimmer",
+            vec![FixtureArg::Float(level)],
         )
     };
-    let take = LightkeyTake::new(
+    let mut take = LightkeyTake::new(
         "demo-battle-belongs".into(),
         "Battle Belongs".into(),
         chrono::DateTime::parse_from_rfc3339("2026-10-20T20:00:00Z")
             .map(|d| d.with_timezone(&chrono::Utc))
             .unwrap_or_default(),
         281.0,
-        vec!["Warm".into()],
-        vec![
-            edge(10.0, &["Stars"], &[]).expect("seed edge"),
-            edge(40.0, &["Strobe"], &["Stars"]).expect("seed edge"),
-        ],
     )
     .expect("seed take");
+    take.fixtures = Some(FixtureTrack {
+        initial: vec![dimmer(0.0)],
+        events: vec![
+            FixtureEvent {
+                at_seconds: 10.0,
+                osc: vec![dimmer(1.0)],
+            },
+            FixtureEvent {
+                at_seconds: 40.0,
+                osc: vec![dimmer(0.25)],
+            },
+        ],
+        lead_seconds: 0.045,
+    });
     let store = MemoryTakeStore::new();
     store.set(std::iter::once((take.song_key.clone(), take)).collect());
     Arc::new(store)

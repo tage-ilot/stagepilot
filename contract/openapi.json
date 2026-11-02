@@ -1298,17 +1298,9 @@
    },
    "LightkeyTakeSummary": {
     "properties": {
-     "cue_count": {
-      "title": "Cue Count",
-      "type": "integer"
-     },
      "duration_seconds": {
       "title": "Duration Seconds",
       "type": "number"
-     },
-     "edge_count": {
-      "title": "Edge Count",
-      "type": "integer"
      },
      "recorded_at": {
       "format": "date-time",
@@ -1328,9 +1320,7 @@
      "song_key",
      "song_title",
      "recorded_at",
-     "duration_seconds",
-     "edge_count",
-     "cue_count"
+     "duration_seconds"
     ],
     "title": "LightkeyTakeSummary",
     "type": "object"

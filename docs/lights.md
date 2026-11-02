@@ -92,12 +92,12 @@ clock counts elapsed time up from the same start timestamp.
 
 ## Lightkey live link: record and replay
 
-Lightkey can be controlled by OSC and MIDI, but it never sends anything back, so
-StagePilot cannot ask it which cues are on. The **Lightkey live link** (in the
-Lighting panel, OSC only) reads that from
-[`lightkey-api`](https://github.com/huntrw6/lightkey-api), a small read-only
-agent that runs on the Lightkey Mac. Install it there first (its README covers
-the one-time macOS permission click).
+The **Lightkey live link** (in the Lighting panel, OSC only) records what the
+fixtures do during a song and plays it back on later runs. It reads the fixture
+changes from [`lightkey-api`](https://github.com/huntrw6/lightkey-api) 0.4 or
+newer, a small read-only agent that runs on the Lightkey Mac. Install it there
+first (its README covers the one-time macOS permission click). A capture holds
+fixture data only: **cues are neither recorded nor replayed**.
 
 The strip has three controls:
 
@@ -106,51 +106,52 @@ The strip has three controls:
   *Not connected* with the reason. If the answer is "refused", add the wired
   interface to `allow_interfaces` in the agent's config.
 - **Record from Lightkey.** While on, the next song's countdown is recorded:
-  every cue Lightkey turns on or off is stored with its song time, measured
-  from Lightkey's own DMX output with the clock difference between the two Macs
-  removed. The capture is attached to that song and saved next to the settings
-  (`lightkey-takes.json`). A song is saved only if at least half of it was
-  recorded, so a stray start and stop never replaces a good capture. Moving the
-  playhead during a recording discards it. Turning Record off mid-song saves
-  what was captured, if it was enough.
+  every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
+  stored with its song time, measured from Lightkey's own DMX output with the
+  clock difference between the two Macs removed. The capture is attached to that
+  song and saved next to the settings (`lightkey-takes.json`). A song is saved
+  only if at least half of it was recorded and at least one fixture changed, so
+  a stray start and stop never replaces a good capture. Changes recorded after
+  the song's scheduled end are dropped. Moving the playhead during a recording
+  discards it. Turning Record off mid-song saves what was captured, if it was
+  enough.
 - **Replay captured lights.** On by default, and only paused while recording.
-  When a song with a capture plays, StagePilot first sets every captured cue to
-  its recorded state at that point, then sends each change at its time, 40 ms
-  early to absorb the OSC and fade delay (measured: 28 to 52 ms). Seeking and
-  resuming re-sync from the new position.
+  When a song with a capture plays, StagePilot first sets each captured fixture
+  to its recorded state at that point, then sends each change at its time, 45 ms
+  early to absorb the OSC delay. Replay holds those fixtures with overrides.
 
-Replay only ever touches cues that appear in the capture; every other cue stays
-with the Lightkey operator. If the operator changes a cue that replay also
-drives, replay leaves that cue alone for 3 seconds. A cue that changes right
-after replay sent it is treated as replay's own echo, not an operator action.
+A song listed as **no fixture capture** (for example a capture made before cues
+were dropped) replays nothing. Captures made earlier still load; the cue data in
+them is ignored and is not written back.
 
-Replay uses `/live/*/cue/<name>/activate` and `/deactivate` with no fade
-argument, so each cue keeps its own fade. Cue names that contain `/` cannot be
-addressed over OSC and are skipped.
+### Pause, stop and song end hold the last look
 
-### Color, intensity and movers
+Pausing, stopping, resetting the countdown or reaching the end of the song only
+cancels the changes still scheduled. StagePilot sends **no clear**: the fixtures
+keep the look they had, and Lightkey's own cues do not take over. Resuming at the
+same place, or seeking, sets the fixtures to the song's state at the new position
+and carries on from there.
 
-With `lightkey-api` 0.4 or newer, the live link also captures what the fixtures do. That is color,
-intensity, pan and tilt, gobo, zoom and more, not only which cues are on. StagePilot needs no
-setup for this. The agent sends its decoded fixture changes to the same address as the API, on UDP
-port 21700. The strip shows a second line, **Color and levels**, with the number of fixtures.
+### When the lights are given back
 
-- **Record.** The same Record switch captures both. Each fixture change is stored with its song
-  time in Lightkey's OSC form, for example `/fixture/MH1/overrides/panAngle 90.0`. Replay needs no
-  conversion. A fixture that never changes during the song is not stored. It stays with the cues
-  and the Lightkey operator. The song's line in the list counts the color and level changes next
-  to the cue changes.
-- **Replay.** Replay sets each captured fixture to its recorded state at that point. Then it sends
-  each change 45 ms before its time. Replay holds those fixtures with overrides. When the song
-  ends, stops, or replay is switched off, StagePilot clears every fixture it held. It sends one
-  clear per fixture, twice. The cues then take over again. Fixtures that were never captured are
-  not touched.
-- **Older agents.** An agent without the fixture relay shows no second line. Recording then
-  captures cues only, as before. If the stream stops during a recording, the cue capture is
-  unaffected, and the message says that levels were not recorded.
-- **Wired network.** The relay uses plain unicast UDP, so it crosses the wired router. Do not use
-  Wi-Fi. Its timing is not steady enough: the agent's multicast over Wi-Fi stalled for up to
-  0.8 s in a test.
+A held fixture returns to Lightkey only when:
+
+- Replay is switched off, or Recording is turned on (replay pauses while
+  recording);
+- Lighting is turned off;
+- StagePilot, or the Lighting plugin, shuts down;
+- a new song starts: fixtures the new song's capture does not use are released.
+  Fixtures it does use are simply taken over by its first sync, without a clear.
+
+Each release sends one `overrides/clear` per fixture, twice, paced at no more than
+200 packets a second. Fixtures that were never captured are never touched.
+
+### Wired network
+
+The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired
+router. Do not use Wi-Fi. Its timing is not steady enough: the agent's multicast
+over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
+recording, the message says that levels were not recorded.
 
 ## Cue board, live capture and the timeline
 

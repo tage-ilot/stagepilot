@@ -31,7 +31,7 @@ const linkTone: Record<LightkeyLink, Tone> = {
 
 const fixtureTone: Record<LightkeyFixtureStatus["link"], Tone> = { waiting: "idle", live: "success", lost: "warning" };
 
-/** The fixture-level line: what is captured besides cues, in words. */
+/** The fixture-level line: what is captured, in words. */
 function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
   if (fixtures.link === "live") return `Colour and levels: ${fixtures.fixtures} fixture${fixtures.fixtures === 1 ? "" : "s"}`;
   if (fixtures.link === "waiting") return "Colour and levels: connecting";
@@ -39,9 +39,8 @@ function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
 }
 
 function takeDetail(take: LightkeyTakeSummary): string {
-  const cues = `${take.edge_count} change${take.edge_count === 1 ? "" : "s"}`;
-  const levels = take.fixture_event_count ? ` · ${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}` : "";
-  return cues + levels;
+  if (!take.fixture_event_count) return "no fixture capture";
+  return `${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}`;
 }
 
 /** The line under the switches: the one thing the operator most needs to know right now. */
@@ -84,7 +83,7 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null): str
 
 /**
  * Lightkey live link, kept to the minimum: connect, record, replay.
- * Lightkey sends nothing back over OSC or MIDI, so this reads the active cues from the lightkey-api agent on the Lightkey Mac.
+ * Captures the fixtures' colour and levels from the lightkey-api agent on the Lightkey Mac and holds them with overrides on replay.
  */
 export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean }) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
@@ -152,9 +151,6 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         <span className="inline-flex items-center gap-2 text-sm text-ink-body" data-testid="lightkey-link">
           <StatusDot ignoreAccent label={linkWord[status.link]} tone={linkTone[status.link]} />
           {linkWord[status.link]}
-          {connected && status.active_count !== null && (
-            <span className="text-ink-muted">· {status.active_count} cue{status.active_count === 1 ? "" : "s"} on</span>
-          )}
         </span>
       </div>
       {status.link !== "connected" && status.link !== "off" && status.detail && (
