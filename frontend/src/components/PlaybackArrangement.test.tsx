@@ -92,7 +92,7 @@ describe("Song arrangement", () => {
     const row = within(box as HTMLElement).getByRole("switch").closest("label")!;
     expect(row).toHaveTextContent(/^Skip$/);
     expect(row).toHaveClass("self-end", "mt-auto");
-    expect(screen.getAllByRole("switch")).toHaveLength(10);
+    expect(screen.getAllByRole("switch").filter((s) => /^Skip /.test(s.getAttribute("aria-label") ?? ""))).toHaveLength(10);
   });
 
   it("holds the choice until Save configuration, then saves both lists and settles", async () => {
