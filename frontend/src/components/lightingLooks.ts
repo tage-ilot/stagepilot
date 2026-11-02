@@ -1,5 +1,4 @@
 import type { LightkeyDetail, OscArgument, OscLightingCue, OscMessage } from "../types";
-import { snapTenths } from "./lightingTimelineMath";
 
 /** A row with several messages is a "look". */
 export const isLook = (cue: OscLightingCue): boolean => (cue.messages?.length ?? 0) > 0;
@@ -108,39 +107,7 @@ export const mergeRows = (cues: OscLightingCue[], ids: string[]): MergeResult | 
 export const rowsInRange = (cues: OscLightingCue[], from: number, to: number): string[] =>
   cues.filter((cue) => cue.at_seconds >= from && cue.at_seconds <= to).map((cue) => cue.id);
 
-export const detailSeconds: Record<LightkeyDetail, number> = { fine: 0.3, normal: 0.5, coarse: 1 };
 export const detailLabels: Record<LightkeyDetail, string> = { fine: "Fine", normal: "Normal", coarse: "Coarse" };
-
-/**
- * Re-thins the captured rows to a Detail: rows that fall in the same time slot become one (at the earliest time,
- * latest value per address), and a message that repeats the address's previous value is dropped. Manual rows stay.
- */
-export const simplifyCaptured = (cues: OscLightingCue[], detail: LightkeyDetail): OscLightingCue[] => {
-  const slot = detailSeconds[detail];
-  const captured = cues.filter((cue) => isCaptured(cue) && isLook(cue)).sort((a, b) => a.at_seconds - b.at_seconds);
-  const buckets = new Map<number, OscLightingCue[]>();
-  for (const cue of captured) {
-    const key = Math.floor(snapTenths(cue.at_seconds) / slot + 1e-9);
-    buckets.set(key, [...(buckets.get(key) ?? []), cue]);
-  }
-  const lastValue = new Map<string, OscArgument[]>();
-  const out: OscLightingCue[] = [];
-  for (const group of buckets.values()) {
-    const latest = new Map<string, OscMessage>();
-    for (const cue of group) for (const message of cue.messages!) { latest.delete(message.address); latest.set(message.address, message); }
-    const messages = [...latest.values()].filter((message) => {
-      const previous = lastValue.get(message.address);
-      return !previous || !sameArgs(previous, message.args);
-    });
-    for (const message of latest.values()) lastValue.set(message.address, message.args);
-    if (!messages.length) continue;
-    const first = group[0]!;
-    out.push({ ...first, messages, edited: group.some((cue) => cue.edited) || undefined });
-    if (!out[out.length - 1]!.edited) delete out[out.length - 1]!.edited;
-  }
-  const others = cues.filter((cue) => !(isCaptured(cue) && isLook(cue)));
-  return [...others, ...out].sort((a, b) => a.at_seconds - b.at_seconds);
-};
 
 export interface MarkerLike { id: string; at: number }
 export type MarkerItem<T extends MarkerLike> =

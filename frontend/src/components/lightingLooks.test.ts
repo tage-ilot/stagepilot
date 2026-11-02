@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OscLightingCue } from "../types";
 import {
-  clusterMarkers, groupByFixture, hasEditedCaptured, isLook, lookLabel, mergeRows, removeFixtureFromRows, simplifyCaptured,
+  clusterMarkers, groupByFixture, hasEditedCaptured, isLook, lookLabel, mergeRows, removeFixtureFromRows,
 } from "./lightingLooks";
 
 const f = (value: number) => [{ type: "float" as const, value }];
@@ -52,27 +52,6 @@ describe("mergeRows", () => {
   it("a merge that includes a manual row is a manual row", () => {
     const rows = [look("a", 1, [[dim("A"), 1]], { source: "manual" }), look("b", 2, [[dim("B"), 1]])];
     expect(mergeRows(rows, ["a", "b"])!.cues[0]!.source).toBeUndefined();
-  });
-});
-
-describe("simplifyCaptured", () => {
-  const dense = Array.from({ length: 40 }, (_, i) => look(`r${i}`, i / 10, [[dim("A"), (i % 2) / 2 + i / 100]]));
-  it("coarser detail leaves fewer rows, and manual rows are kept", () => {
-    const manual = look("m", 1.05, [[dim("Z"), 1]], { source: "manual" });
-    const all = [...dense, manual];
-    const fine = simplifyCaptured(all, "fine").filter((c) => c.source === "captured").length;
-    const normal = simplifyCaptured(all, "normal").filter((c) => c.source === "captured").length;
-    const coarse = simplifyCaptured(all, "coarse").filter((c) => c.source === "captured").length;
-    expect(fine).toBeGreaterThan(normal);
-    expect(normal).toBeGreaterThan(coarse);
-    expect(coarse).toBe(4);
-    expect(simplifyCaptured(all, "coarse").some((c) => c.id === "m")).toBe(true);
-  });
-  it("drops a repeated value", () => {
-    const rows = [look("a", 0, [[dim("A"), 1]]), look("b", 2, [[dim("A"), 1], [dim("B"), 1]]), look("c", 4, [[dim("A"), 1]])];
-    const out = simplifyCaptured(rows, "coarse");
-    expect(out.map((r) => r.id)).toEqual(["a", "b"]);
-    expect(out[1]!.messages).toHaveLength(1);
   });
 });
 

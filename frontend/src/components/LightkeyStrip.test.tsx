@@ -145,7 +145,7 @@ describe("LightkeyStrip", () => {
     expect(await screen.findByTestId("lightkey-detail-setting")).toHaveTextContent("Finer detail replays motion smoother but makes more rows.");
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
     await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail: "fine" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));
   });
 
   it("Record asks first when the song has edited captured looks, and does nothing on Cancel", async () => {

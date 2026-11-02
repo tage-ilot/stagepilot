@@ -280,6 +280,8 @@ export interface SongLightingCueMap {
   osc_cues?: OscLightingCue[];
   /** How loud the room was while the song was recorded (levels only, never audio). Absent until recorded. */
   loudness?: SongLoudness | null;
+  /** Captured look rows were changed by hand (a whole row deleted, for one). Absent while false. */
+  captured_edited?: boolean;
 }
 
 /**
@@ -338,6 +340,17 @@ export interface LightkeyStatus {
   /** Recording detail (the backend's thinning setting). Absent on backends without it. */
   detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
+}
+
+/** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
+export interface LightkeySimplifyResponse {
+  accepted: boolean;
+  applied: boolean;
+  message: string;
+  rows_before: number;
+  rows_after: number;
+  messages_before: number;
+  messages_after: number;
 }
 
 export interface LightkeyActionResponse {

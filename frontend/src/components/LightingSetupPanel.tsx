@@ -6,6 +6,7 @@ import type {
   LightingCue,
   LightingMethod,
   LightkeyDetail,
+  LightkeySimplifyResponse,
   LightingPad,
   OscArgument,
   OscLightingCue,
@@ -19,6 +20,7 @@ import {
   confirmClearAllLightingCues,
   confirmClearSelectedLightingCues,
 } from "./lightingCueConfirmations";
+import { simplifyLightkeyLooks } from "../api";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -35,7 +37,7 @@ import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
 import {
   capturedCount, detailLabels, hasEditedCaptured, isCaptured, isLook, lookLabel, markEdited, mergeRows,
-  removeFixtureFromRows, simplifyCaptured,
+  removeFixtureFromRows,
 } from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
@@ -87,6 +89,8 @@ export interface LightingPanelActions {
   /** Removes the selected song's loudness envelope (nothing else). */
   onClearLoudness?: (songKey: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
+  /** Apply "Simplify this song" on the backend and reread the saved cue maps. */
+  onSimplifyLooks: (songKey: string, detail: LightkeyDetail) => Promise<LightkeySimplifyResponse | null>;
 }
 
 export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
@@ -112,6 +116,7 @@ export function LightingSetupPanel({
   onUndoCapture,
   onClearLoudness,
   onSavePads,
+  onSimplifyLooks,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -386,23 +391,34 @@ export function LightingSetupPanel({
     persistOscCues(removeFixtureFromRows(oscCues, fixture), true);
     setUndo({ cues: before, text: `Undo removing ${fixture}` });
   };
-  const simplifyCount = useMemo(
-    () => (simplify ? simplifyCaptured(oscCues, simplify.detail).filter(isCaptured).length : 0),
-    [oscCues, simplify],
-  );
-  const applySimplify = () => {
-    if (!simplify) return;
+  // The counts come from the backend (the same thin + merge step a recording uses), never from the browser.
+  const [simplifyPreview, setSimplifyPreview] = useState<LightkeySimplifyResponse | null>(null);
+  const simplifyDetail = simplify?.detail ?? null;
+  const capturedNow = capturedCount(oscCues);
+  useEffect(() => {
+    setSimplifyPreview(null);
+    if (!simplifyDetail || !selectedSongKey) return;
+    let current = true;
+    simplifyLightkeyLooks(selectedSongKey, simplifyDetail, false)
+      .then((response) => { if (current) setSimplifyPreview(response); })
+      .catch(() => { if (current) setSimplifyPreview({ accepted: false, applied: false, message: "Could not count the rows.", rows_before: 0, rows_after: 0, messages_before: 0, messages_after: 0 }); });
+    return () => { current = false; };
+  }, [simplifyDetail, selectedSongKey, capturedNow]);
+  const applySimplify = async () => {
+    if (!simplify || !selectedSongKey || !onSimplifyLooks) return;
     const before = oscCues;
-    persistOscCues(simplifyCaptured(oscCues, simplify.detail), true);
-    setUndo({ cues: before, text: "Undo simplify" });
-    setSimplify(null);
+    const result = await onSimplifyLooks(selectedSongKey, simplify.detail);
+    if (result?.applied) {
+      setUndo({ cues: before, text: "Undo simplify" });
+      setSimplify(null);
+    }
   };
   const undoLast = () => {
     if (!undo) return;
     persistOscCues(undo.cues, true);
     setUndo(null);
   };
-  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) };
+  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
   const PAGE_SIZE = 40;
 
   const addOscCue = () => {
@@ -771,8 +787,11 @@ export function LightingSetupPanel({
                 {(Object.keys(detailLabels) as LightkeyDetail[]).map((detail) => <option key={detail} value={detail}>{detailLabels[detail]}</option>)}
               </Select>
             </Field>
-            <p className="text-ink" data-testid="simplify-preview">{looks.count} rows → {simplifyCount}</p>
-            <Button disabled={simplifyCount >= looks.count} onClick={applySimplify} variant="tinted">Apply</Button>
+            <p className="text-ink" data-testid="simplify-preview">
+              {simplifyPreview === null ? "Counting…" : simplifyPreview.rows_before > 0 ? `${simplifyPreview.rows_before} rows → ${simplifyPreview.rows_after}` : simplifyPreview.message}
+            </p>
+            {simplifyPreview !== null && !simplifyPreview.accepted && simplifyPreview.rows_before > 0 && <p className="text-ink-muted" data-testid="simplify-note">{simplifyPreview.message}</p>}
+            <Button disabled={!simplifyPreview?.accepted || pendingOperation !== null} onClick={() => void applySimplify()} variant="tinted">Apply</Button>
             <Button onClick={() => setSimplify(null)} variant="secondary">Cancel</Button>
           </div>
         )}

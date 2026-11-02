@@ -468,6 +468,7 @@ export function Dashboard({
   undoLightingCapture,
   clearLightingLoudness,
   clearAllLightingCues = () => undefined,
+  simplifyLightingLooks,
   updater,
 }: {
   capabilities?: AccessCapabilities;
@@ -529,6 +530,7 @@ export function Dashboard({
   undoLightingCapture?: LightingPanelActions["onUndoCapture"];
   clearLightingLoudness?: LightingPanelActions["onClearLoudness"];
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
+  simplifyLightingLooks?: LightingPanelActions["onSimplifyLooks"];
   updater?: UpdaterController;
 }) {
   const { canOperate, canConfigure } = capabilities;
@@ -1117,6 +1119,7 @@ export function Dashboard({
           lights={lights}
           message={lightingMessage}
           onClearAllCues={clearAllLightingCues}
+          onSimplifyLooks={simplifyLightingLooks}
           onClose={closeConnection}
           onRefresh={refreshLighting}
           onSaveCues={saveLightingCues}
