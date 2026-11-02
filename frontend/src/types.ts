@@ -278,6 +278,8 @@ export interface SongLightingCueMap {
   cues: LightingCue[];
   /** OSC cues. Kept when MIDI is the saved method. */
   osc_cues?: OscLightingCue[];
+  /** Captured look rows were changed by hand (a whole row deleted, for one). Absent while false. */
+  captured_edited?: boolean;
 }
 
 /** What the cue-map PUT sends: only the cue list of `method` is replaced. */
@@ -325,6 +327,17 @@ export interface LightkeyStatus {
   /** Recording detail (the backend's thinning setting). Absent on backends without it. */
   detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
+}
+
+/** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
+export interface LightkeySimplifyResponse {
+  accepted: boolean;
+  applied: boolean;
+  message: string;
+  rows_before: number;
+  rows_after: number;
+  messages_before: number;
+  messages_after: number;
 }
 
 export interface LightkeyActionResponse {

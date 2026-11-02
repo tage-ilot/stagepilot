@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ApplicationState, LightsStatusResponse, OscLightingCue, SettingsResponse, Song } from "../types";
+import type { ApplicationState, LightkeySimplifyResponse, LightsStatusResponse, OscLightingCue, SettingsResponse, Song } from "../types";
+import * as api from "../api";
 import { LightingSetupPanel } from "./LightingSetupPanel";
 import { LightingTimeline } from "./LightingTimeline";
 import type { TimelineMarker } from "./lightingTimelineMath";
@@ -12,6 +13,8 @@ const song: Song = { id: "item-1", source_song_id: "song-1", title: "Holy Foreve
 const base = { osc_host: "127.0.0.1", osc_port: 21600, enabled: true, output_name: null, channel: 1, pulse_ms: 100 };
 const lights = { ...base, method: "osc", connection_status: "connected", detail: null, outputs: [], last_cue: null, last_osc_cue: null, last_cue_at: null } as LightsStatusResponse;
 const state = { plan: { id: "p", title: "Sunday", songs: [song] }, current_song: song } as unknown as ApplicationState;
+
+vi.mock("../api", async (original) => ({ ...(await original<typeof import("../api")>()), simplifyLightkeyLooks: vi.fn(), getLightkeyStatus: vi.fn(() => Promise.reject(new Error("offline"))) }));
 
 const dim = (n: string) => `/fixture/${n}/overrides/dimmer`;
 const f = (value: number) => [{ type: "float" as const, value }];
@@ -24,9 +27,9 @@ const settingsWith = (cues: OscLightingCue[]) => ({
   settings: { lights: { ...base, method: "osc", cue_maps: { "song-1": { song_key: "song-1", song_title: "Holy Forever", cues: [], osc_cues: cues } } } },
 }) as unknown as SettingsResponse;
 
-const mount = (cues: OscLightingCue[], onSaveCues = vi.fn()) => {
+const mount = (cues: OscLightingCue[], onSaveCues = vi.fn(), onSimplifyLooks = vi.fn()) => {
   render(
-    <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={onSaveCues} onSaveSettings={vi.fn()}
+    <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={onSaveCues} onSimplifyLooks={onSimplifyLooks} onSaveSettings={vi.fn()}
       onTest={vi.fn()} onTestOsc={vi.fn()} pendingOperation={null} settings={settingsWith(cues)} state={state} />,
   );
   return onSaveCues;
@@ -162,19 +165,59 @@ describe("merge rows and simplify", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("Simplify this song previews 'N rows → M' and applies with undo", async () => {
+  const answer = (over: Partial<LightkeySimplifyResponse> = {}): LightkeySimplifyResponse => ({
+    accepted: true, applied: false, message: "30 rows -> 6", rows_before: 30, rows_after: 6, messages_before: 30, messages_after: 6, ...over,
+  });
+
+  it("Simplify this song asks the backend for the 'N rows → M' preview, per Detail, and saves nothing", async () => {
     const dense = Array.from({ length: 30 }, (_, i) => look(`r${i}`, i / 10, [[dim("A"), i / 30]]));
+    vi.mocked(api.simplifyLightkeyLooks).mockImplementation(async (_key, detail) => answer(detail === "coarse" ? { rows_after: 3 } : {}));
     const save = mount(dense);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Simplify this song" }));
-    expect(screen.getByTestId("simplify-preview")).toHaveTextContent("30 rows → 6");
+    await waitFor(() => expect(screen.getByTestId("simplify-preview")).toHaveTextContent("30 rows → 6"));
+    expect(api.simplifyLightkeyLooks).toHaveBeenLastCalledWith("song-1", "normal", false);
     await user.selectOptions(within(screen.getByTestId("simplify-panel")).getByLabelText("Detail"), "coarse");
-    expect(screen.getByTestId("simplify-preview")).toHaveTextContent("30 rows → 3");
+    await waitFor(() => expect(screen.getByTestId("simplify-preview")).toHaveTextContent("30 rows → 3"));
+    expect(api.simplifyLightkeyLooks).toHaveBeenLastCalledWith("song-1", "coarse", false);
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it("Apply runs on the backend (no browser-side thinning) and Undo restores the old rows", async () => {
+    const dense = Array.from({ length: 30 }, (_, i) => look(`r${i}`, i / 10, [[dim("A"), i / 30]]));
+    vi.mocked(api.simplifyLightkeyLooks).mockResolvedValue(answer());
+    const apply = vi.fn().mockResolvedValue(answer({ applied: true, message: "Simplified: 30 rows -> 6." }));
+    const save = mount(dense, vi.fn(), apply);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Simplify this song" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Apply" }));
-    expect(lastSaved(save)).toHaveLength(3);
-    await user.click(screen.getByRole("button", { name: "Undo simplify" }));
+    expect(apply).toHaveBeenCalledWith("song-1", "normal");
+    expect(save).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Undo simplify" }));
     expect(lastSaved(save)).toHaveLength(30);
+  });
+
+  it("Apply stays off when the backend has nothing to simplify, and says why", async () => {
+    vi.mocked(api.simplifyLightkeyLooks).mockResolvedValue(answer({ accepted: false, rows_after: 30, message: "Nothing to simplify at this detail (30 rows -> 30)." }));
+    mount(Array.from({ length: 30 }, (_, i) => look(`r${i}`, i * 5, [[dim("A"), i % 2]])));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Simplify this song" }));
+    await waitFor(() => expect(screen.getByTestId("simplify-note")).toHaveTextContent("Nothing to simplify"));
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+  });
+
+  it("a song flagged captured_edited by the backend (a whole row was deleted) still asks before Record replaces its looks", async () => {
+    const flagged = settingsWith(threeLooks());
+    (flagged.settings.lights.cue_maps["song-1"] as { captured_edited?: boolean }).captured_edited = true;
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue({ api_url: "http://192.0.2.10:8770", link: "connected", detail: null, active_count: null, recording: false, recording_song: null, replay: true, replay_blocked: null, replaying_song: null, message: null, takes: [] } as never);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()}
+        onTest={vi.fn()} onTestOsc={vi.fn()} pendingOperation={null} settings={flagged} state={state} />,
+    );
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("including your edits"));
   });
 });
 

@@ -12,6 +12,7 @@ import type {
   LightingPad,
   LightkeyActionResponse,
   LightkeyDetail,
+  LightkeySimplifyResponse,
   LightkeyStatus,
   LightsOperationResponse,
   LightsSettingsInput,
@@ -366,6 +367,13 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
+  });
+/** Thin + merge a song's captured rows on the backend. Without `apply` it only counts ("412 rows -> 190"). */
+export const simplifyLightkeyLooks = (songKey: string, detailLevel: LightkeyDetail, apply: boolean) =>
+  requestJson<LightkeySimplifyResponse>("/api/v1/lights/lightkey/simplify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ song_key: songKey, detail_level: detailLevel, apply }),
   });
 export const setLightkeyRecording = (recording: boolean) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/recording", {
