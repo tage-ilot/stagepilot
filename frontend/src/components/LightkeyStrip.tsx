@@ -9,9 +9,9 @@ import {
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus, LightkeyTakeSummary } from "../types";
 import { Button } from "./ui/Button";
+import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { Input } from "./ui/Input";
 import { StatusDot } from "./ui/StatusDot";
-import { Switch } from "./ui/Switch";
 import type { Tone } from "./ui/types";
 
 const POLL_MS = 1500;
@@ -44,14 +44,14 @@ function takeDetail(take: LightkeyTakeSummary): string {
   return cues + levels;
 }
 
-/** The line under the switches: the one thing the operator most needs to know right now. */
+/** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
 export function lightkeyHeadline(status: LightkeyStatus): string {
   if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
   if (status.replay_blocked && status.takes.length > 0) return status.replay_blocked;
   if (status.link === "connected" && status.takes.length === 0) {
-    return "Turn on Record, then start a song. Its lights are captured with the countdown.";
+    return "Switch to Record, then start a song. Its lights are captured with the countdown.";
   }
   return status.takes.length === 1 ? "1 song captured." : `${status.takes.length} songs captured.`;
 }
@@ -61,15 +61,11 @@ export function normaliseLine(text: string): string {
   return text.replace(/[\u201C\u201D\u201E]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, " ").trim();
 }
 
-/**
- * The lines under the switches, top to bottom, never the same thing twice: what just happened (an error or the
- * backend message), the headline, and, while a recording is armed or running with Replay on, that replay is paused.
- */
+/** The lines under the toggle, top to bottom, never the same thing twice: what just happened (an error or the backend message), then the headline. */
 export function lightkeyLines(status: LightkeyStatus, error: string | null): string[] {
   const candidates = [
     error ?? status.message ?? lightkeyHeadline(status),
     lightkeyHeadline(status),
-    status.recording && status.replay ? "Replay paused while recording." : "",
   ];
   const lines: string[] = [];
   const seen = new Set<string>();
@@ -144,6 +140,25 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
     return response;
   });
 
+  // Record -> Replay: stop recording first, then make sure replay is on. A failure leaves the toggle on what the
+  // backend says (it is re-read), and the message is shown.
+  const backToReplay = async (): Promise<LightkeyActionResponse> => {
+    try {
+      let response: LightkeyActionResponse | null = null;
+      if (status.recording) {
+        response = await setLightkeyRecording(false);
+        if (!response.accepted) return response;
+      }
+      if (!status.replay || response === null) {
+        response = await saveLightkeySettings({ replay: true });
+      }
+      return response;
+    } catch (cause) {
+      await load();
+      throw cause;
+    }
+  };
+
   const [headline, ...details] = lightkeyLines(status, error);
   return (
     <section aria-label="Lightkey live link" className="mt-6" data-testid="lightkey-strip">
@@ -186,20 +201,17 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         </Button>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-8">
-        <Switch
-          checked={status.recording}
-          disabled={busy || (!status.recording && !connected)}
-          label="Record from Lightkey"
-          onChange={(event) => void run(() => setLightkeyRecording(event.target.checked))}
-        />
-        <Switch
-          checked={status.replay}
-          disabled={busy}
-          label="Replay captured lights"
-          onChange={(event) => void run(() => saveLightkeySettings({ replay: event.target.checked }))}
-        />
-      </div>
+      <ConnectionMethod
+        className="mt-[-1.25rem]"
+        disabled={busy}
+        label="Lightkey mode"
+        onChange={(mode) => void (mode === "record" ? run(() => setLightkeyRecording(true)) : run(backToReplay))}
+        options={[
+          { value: "replay", label: "Replay" },
+          { value: "record", label: "Record", disabled: !status.recording && !connected },
+        ]}
+        value={status.recording ? "record" : "replay"}
+      />
 
       <p aria-live="polite" className="mt-1 text-type-body-sm text-ink-muted" data-testid="lightkey-headline">
         {headline}

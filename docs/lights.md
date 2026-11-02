@@ -99,13 +99,17 @@ Lighting panel, OSC only) reads that from
 agent that runs on the Lightkey Mac. Install it there first (its README covers
 the one-time macOS permission click).
 
-The strip has three controls:
+The strip has these controls:
 
 - **Address and Connect.** Defaults to the Lighting OSC host on port 8770
   (`10.30.0.211:8770`). The dot shows *Connected*, *Lightkey is closed*, or
   *Not connected* with the reason. If the answer is "refused", add the wired
   interface to `allow_interfaces` in the agent's config.
-- **Record from Lightkey.** While on, the next song's countdown is recorded:
+- **Replay | Record toggle.** One two-way control. *Replay* (the default) replays captured lights.
+  *Record* is for capturing and needs a connected link. Switching back to Replay stops the
+  recording first, then turns replay on; if that fails the toggle shows the real state and the
+  reason. There is no separate replay-off setting in the UI.
+  In Record mode, the next song's countdown is recorded:
   every cue Lightkey turns on or off is stored with its song time, measured
   from Lightkey's own DMX output with the clock difference between the two Macs
   removed. The capture is attached to that song and saved next to the settings
@@ -113,7 +117,7 @@ The strip has three controls:
   recorded, so a stray start and stop never replaces a good capture. Moving the
   playhead during a recording discards it. Turning Record off mid-song saves
   what was captured, if it was enough.
-- **Replay captured lights.** On by default, and only paused while recording.
+- **Replay.** Paused automatically while Record is selected.
   When a song with a capture plays, StagePilot first sets every captured cue to
   its recorded state at that point, then sends each change at its time, 40 ms
   early to absorb the OSC and fade delay (measured: 28 to 52 ms). Seeking and
@@ -135,7 +139,7 @@ intensity, pan and tilt, gobo, zoom and more, not only which cues are on. StageP
 setup for this. The agent sends its decoded fixture changes to the same address as the API, on UDP
 port 21700. The strip shows a second line, **Color and levels**, with the number of fixtures.
 
-- **Record.** The same Record switch captures both. Each fixture change is stored with its song
+- **Record.** The same Record mode captures both. Each fixture change is stored with its song
   time in Lightkey's OSC form, for example `/fixture/MH1/overrides/panAngle 90.0`. Replay needs no
   conversion. A fixture that never changes during the song is not stored. It stays with the cues
   and the Lightkey operator. The song's line in the list counts the color and level changes next
@@ -153,6 +157,12 @@ port 21700. The strip shows a second line, **Color and levels**, with the number
   0.8 s in a test.
 
 ## Cue board, live capture and the timeline
+
+The timeline follows the live song (or the last song that played) and switches
+when a new song starts. If you pick another song by hand, it stays on your pick
+until the next song starts; the line beside the song picker then reads "Showing
+<title>" with a **Follow live** button to jump back at once. With no song played
+yet it shows the first song of the plan.
 
 Cues are easiest to set while the song is running in practice. Under **Song
 lighting timeline** the panel has a **Cue board** and a visual **Timeline**; the

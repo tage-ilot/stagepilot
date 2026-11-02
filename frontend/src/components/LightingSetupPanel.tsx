@@ -123,7 +123,8 @@ export function LightingSetupPanel({
 } & Partial<LightingPanelActions>) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
-  const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
+  const liveSong = state.playing_song ?? state.current_song;
+  const liveKey = liveSong ? songKey(liveSong) : "";
   const [method, setMethod] = useState<LightingMethod>("osc");
   const [oscHost, setOscHost] = useState("127.0.0.1");
   const [oscPort, setOscPort] = useState("21600");
@@ -135,7 +136,19 @@ export function LightingSetupPanel({
   const [pulseMs, setPulseMs] = useState("100");
   const [testNote, setTestNote] = useState("60");
   const [testVelocity, setTestVelocity] = useState("127");
-  const [selectedSongKey, setSelectedSongKey] = useState(preferredSongKey);
+  // The timeline follows the live song, or the last one that played. A hand pick holds until the next song starts.
+  const [lastLiveKey, setLastLiveKey] = useState(liveKey);
+  const [manualSongKey, setManualSongKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!liveKey || liveKey === lastLiveKey) return;
+    setLastLiveKey(liveKey);
+    setManualSongKey(null);
+  }, [liveKey, lastLiveKey]);
+  const hasSong = (key: string | null): key is string => !!key && songs.some((song) => songKey(song) === key);
+  const followKey = hasSong(lastLiveKey) ? lastLiveKey : null;
+  const selectedSongKey = hasSong(manualSongKey)
+    ? manualSongKey
+    : (followKey ?? (songs[0] ? songKey(songs[0]) : ""));
   const [cues, setCues] = useState<LightingCue[]>([]);
   const [noteDisplayMode, setNoteDisplayMode] = useState<NoteDisplayMode>("music");
   const displayedNoteOptions = useMemo(
@@ -170,12 +183,6 @@ export function LightingSetupPanel({
   useEffect(() => {
     if (syncedPulse !== null) setPulseMs(syncedPulse);
   }, [syncedPulse]);
-
-  useEffect(() => {
-    if (!songs.some((song) => songKey(song) === selectedSongKey)) {
-      setSelectedSongKey(preferredSongKey);
-    }
-  }, [preferredSongKey, selectedSongKey, songs]);
 
   const selectedSong = songs.find((song) => songKey(song) === selectedSongKey) ?? null;
   const savedCueMap = selectedSongKey
@@ -559,11 +566,19 @@ export function LightingSetupPanel({
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
           <Field className="w-full sm:w-80" label="Song">
-            <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
+            <Select onChange={(event) => setManualSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
             </Select>
           </Field>
+          {followKey && (
+            <p className="flex items-center gap-2 pb-2 text-type-body-sm text-ink-muted" data-testid="lighting-follow-status">
+              {selectedSongKey === followKey ? "Following live song" : `Showing ${selectedSong?.title ?? "another song"}`}
+              {selectedSongKey !== followKey && (
+                <Button onClick={() => setManualSongKey(null)} variant="secondary">Follow live</Button>
+              )}
+            </p>
+          )}
           {method === "midi" && (
           <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
             <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-playback-midi-text" : "text-ink-muted"}>♪</span>

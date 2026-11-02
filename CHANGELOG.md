@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Lighting: the song timeline now follows the live song (or the last one played); a hand pick holds until the next song starts, with a "Follow live" button. The two Lightkey switches are now one Replay | Record toggle.
 - Developer-facing only, no change to the app: the retired Python backend (`backend/`), its CI jobs, the `python`/`rust` installer variants and the Python fixture generators are removed. Every build is the in-process Rust app. The 2.41.1 sources remain at the `v2.41.1` tag, and the migration notes moved to `docs/archive/`.
 - Remote Access: if you have turned it on and it stays unreachable for 2 minutes, the system check lists "Remote access offline" and the header pill says so instead of "Ready". It does not block starting a service, appears only while the problem lasts, and never shows when Remote Access is off.
 - A lights test no longer races the plugin recording its last cue on slow runners.
