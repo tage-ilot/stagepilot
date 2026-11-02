@@ -93,11 +93,12 @@ clock counts elapsed time up from the same start timestamp.
 ## Lightkey live link: record and replay
 
 The **Lightkey live link** (in the Lighting panel, OSC only) records what the
-fixtures do during a song and plays it back on later runs. It reads the fixture
-changes from [`lightkey-api`](https://github.com/huntrw6/lightkey-api) 0.4 or
-newer, a small read-only agent that runs on the Lightkey Mac. Install it there
-first (its README covers the one-time macOS permission click). A capture holds
-fixture data only: **cues are neither recorded nor replayed**.
+fixtures do during a song and puts it on that song's timeline as **look rows**,
+which the timeline then plays like any other row. It reads the fixture changes
+from [`lightkey-api`](https://github.com/huntrw6/lightkey-api) 0.4 or newer, a
+small read-only agent that runs on the Lightkey Mac. Install it there first (its
+README covers the one-time macOS permission click). A recording holds fixture
+data only: **cues are neither recorded nor replayed**.
 
 The strip has three controls:
 
@@ -107,22 +108,62 @@ The strip has three controls:
   interface to `allow_interfaces` in the agent's config.
 - **Record from Lightkey.** While on, the next song's countdown is recorded:
   every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
-  stored with its song time, measured from Lightkey's own DMX output with the
-  clock difference between the two Macs removed. The capture is attached to that
-  song and saved next to the settings (`lightkey-takes.json`). A song is saved
-  only if at least half of it was recorded and at least one fixture changed, so
-  a stray start and stop never replaces a good capture. Changes recorded after
-  the song's scheduled end are dropped. Moving the playhead during a recording
-  discards it. Turning Record off mid-song saves what was captured, if it was
-  enough.
+  kept with its song time, measured from Lightkey's own DMX output with the
+  clock difference between the two Macs removed. When the song ends (or Record
+  is turned off mid-song) the changes are thinned and merged into rows, saved
+  into the song's lighting cue map with the normal, serialized save, and the raw
+  changes are discarded. A song is saved only if at least half of it was
+  recorded and at least one fixture changed. Changes after the song's scheduled
+  end are dropped, an oversize change never discards the capture, and moving the
+  playhead during a recording discards it. Messages: `Recording <song>.`,
+  `Saved N looks to <song>'s timeline.`, `Not saved: only X of Y seconds recorded.`
 - **Replay captured lights.** On by default, and only paused while recording.
-  When a song with a capture plays, StagePilot first sets each captured fixture
-  to its recorded state at that point, then sends each change at its time, 45 ms
-  early to absorb the OSC delay. Replay holds those fixtures with overrides.
+  Saved rows replay through the normal timeline scheduler (see below).
 
-A song listed as **no fixture capture** (for example a capture made before cues
-were dropped) replays nothing. Captures made earlier still load; the cue data in
-them is ignored and is not written back.
+Saving replaces only that song's `source = captured` rows. Rows you added by
+hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
+An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or deleted
+(delete it by hand once you have re-recorded).
+
+### Detail: thinning and merging
+
+`lights.lightkey.detail` is `fine` (0.25 s), `normal` (0.5 s, default) or
+`coarse` (1 s); it can be changed through `PUT /api/v1/lights/lightkey/settings`
+(`{"detail": "fine"}`). The same value is the interval and the row grid.
+
+1. **Thin.** Per address a change is kept only if at least one interval has
+   passed since the last kept one. The last value of a run is always kept, and so
+   are big jumps: a dimmer to or from 0 or full, a colour/level jump past 0.25,
+   an angle jump past 25 degrees, and any non-number or option change.
+2. **Group on the grid.** Kept changes land on the nearest multiple of the
+   interval, so one row holds everything that changed in that slot (an address
+   changed twice in a slot keeps its last value). Idle slots make no row. Changes
+   at or before time 0 (and the start value of any address that moves later)
+   become a row at 0.0. Row times are stored to 0.1 s, so at Fine a row at 0.25 s
+   is stored at 0.2 s and one at 0.75 s at 0.8 s.
+3. **Merge.** One message per address per row (last wins); a message equal to
+   the address's previous kept value is dropped; rows left empty are dropped; a
+   row that only repeats addresses of the row before it with values within
+   tolerance (colour and dimmer 2 %, angles 1 degree) of the last kept value is
+   folded into that earlier row. Comparing with the last kept value means the
+   replayed value never drifts further than the tolerance from the recorded one.
+
+A song that would still pass the per-song caps (1,000 rows, 15,000 messages
+including the manual rows) is saved at twice the interval, up to six times.
+Motion is steppier on replay than the original (0.5 s steps at Normal); Fine is
+the remedy.
+
+Size on synthetic data shaped like real takes (25 ms steps, mostly colour, pan
+and dimmer sweeps over 255 s):
+
+| Take | Detail | Before merge | After merge |
+|---|---|---|---|
+| 109k commands, 63 addresses | Fine | 713 rows / 11,693 messages | 705 / 11,102 |
+| | Normal | 360 / 6,274 | 357 / 5,904 |
+| | Coarse | 183 / 3,566 | 181 / 3,305 |
+| 51k commands, 106 addresses | Fine | 228 / 5,518 | 224 / 5,169 |
+| | Normal | 116 / 2,976 | 114 / 2,774 |
+| | Coarse | 61 / 1,718 | 60 / 1,593 |
 
 ### Pause, stop and song end hold the last look
 

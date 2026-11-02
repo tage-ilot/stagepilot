@@ -17,12 +17,10 @@ use stagepilot_core::bus::EventBus;
 use stagepilot_core::config::LightkeySettings;
 use stagepilot_core::events::{new_event, EventPayload, EventType, TimerPayload};
 use stagepilot_core::state::Song;
-use stagepilot_lights::lightkey::{LightkeyLink as Link, LightkeyTake};
-use stagepilot_lights::lightkey_fixtures::{
-    FixtureArg, FixtureCommand, FixtureEvent, FixtureTrack,
-};
+use stagepilot_lights::lightkey::LightkeyLink as Link;
 use stagepilot_lights::lightkey_link::{
-    Clock, FileTakeStore, LightkeyLink, LinkOptions, LinkSettings, MemoryTakeStore, TakeStore,
+    ArmedStore, Clock, FileArmedStore, LightkeyLink, LinkOptions, LinkSettings, LooksSink,
+    MemoryArmedStore, SongLooks,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -204,7 +202,9 @@ struct Rig {
     port: u16,
     bus: EventBus,
     settings: Arc<Mutex<LinkSettings>>,
-    store: Arc<MemoryTakeStore>,
+    store: Arc<MemoryArmedStore>,
+    /// Every set of looks the link saved to a timeline.
+    saved: Arc<Mutex<Vec<SongLooks>>>,
     link: LightkeyLink,
 }
 
@@ -223,10 +223,17 @@ impl Rig {
             LightkeySettings {
                 api_url: format!("http://127.0.0.1:{port}"),
                 replay,
+                ..LightkeySettings::default()
             },
         )));
         let bus = EventBus::new();
-        let store = Arc::new(MemoryTakeStore::new());
+        let store = Arc::new(MemoryArmedStore::new());
+        let saved: Arc<Mutex<Vec<SongLooks>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink_saved = saved.clone();
+        let sink: LooksSink = Arc::new(move |looks| {
+            sink_saved.lock().unwrap().push(looks);
+            Box::pin(async { Ok(()) })
+        });
         let provider_settings = settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
             Arc::new(move || provider_settings.lock().unwrap().clone());
@@ -238,7 +245,8 @@ impl Rig {
             bus.clone(),
             provider,
             LinkOptions {
-                store: store.clone() as Arc<dyn TakeStore>,
+                armed_store: store.clone() as Arc<dyn ArmedStore>,
+                looks_sink: Some(sink),
                 clock: clock.clone(),
                 ..LinkOptions::default()
             },
@@ -250,11 +258,12 @@ impl Rig {
             bus,
             settings,
             store,
+            saved,
             link,
         }
     }
 
-    /// A second link on the same settings and take store: what a restart builds.
+    /// A second link on the same settings and Record-switch store: what a restart builds.
     fn restarted_link(&self) -> LightkeyLink {
         let provider_settings = self.settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
@@ -263,7 +272,7 @@ impl Rig {
             self.bus.clone(),
             provider,
             LinkOptions {
-                store: self.store.clone() as Arc<dyn TakeStore>,
+                armed_store: self.store.clone() as Arc<dyn ArmedStore>,
                 ..LinkOptions::default()
             },
         )
@@ -369,39 +378,6 @@ fn song(duration: u32) -> Song {
 
 fn names(items: &[&str]) -> Vec<String> {
     items.iter().map(ToString::to_string).collect()
-}
-
-fn dim(name: &str, x: f64) -> FixtureCommand {
-    FixtureCommand::new(
-        format!("/fixture/{name}/overrides/dimmer"),
-        vec![FixtureArg::Float(x)],
-    )
-}
-
-/// A take with a small fixture track: P1 at 0.5 s and 1.0 s.
-fn stored_take() -> LightkeyTake {
-    let mut take =
-        LightkeyTake::new("song-1".into(), "Holy Forever".into(), Utc::now(), 10.0).unwrap();
-    take.fixtures = Some(FixtureTrack {
-        initial: vec![dim("P1", 0.0)],
-        events: vec![
-            FixtureEvent {
-                at_seconds: 0.5,
-                osc: vec![dim("P1", 0.5)],
-            },
-            FixtureEvent {
-                at_seconds: 1.0,
-                osc: vec![dim("P1", 1.0)],
-            },
-        ],
-        lead_seconds: 0.045,
-    });
-    take
-}
-
-fn with_takes(rig: &Rig, takes: Vec<LightkeyTake>) {
-    rig.store
-        .set(takes.into_iter().map(|t| (t.song_key.clone(), t)).collect());
 }
 
 // ----------------------------------------------------------------------------- link status
@@ -538,17 +514,15 @@ async fn cannot_record_when_not_connected_or_not_osc() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn short_recording_does_not_overwrite_a_good_take() {
+async fn a_short_paused_recording_saves_nothing() {
     let rig = Rig::new(&["A"]).await;
-    let good = stored_take();
-    with_takes(&rig, vec![good.clone()]);
     rig.connect().await;
     rig.link.set_recording(true).await;
     let s = song(10);
     rig.song_start(&s, None).await;
     rig.song_stop(&s, 1.0).await; // 10% of the song
     pause(0.1).await;
-    assert_eq!(rig.store.takes()["song-1"], good);
+    assert!(rig.saved.lock().unwrap().is_empty());
     let status = rig.link.status();
     assert!(status.message.unwrap_or_default().contains("Paused") || status.recording);
     rig.link.stop().await;
@@ -563,16 +537,13 @@ async fn a_recording_turned_off_short_says_not_saved() {
     pause(0.1).await;
     let message = rig.link.set_recording(false).await;
     assert!(message.starts_with("Not saved: only "), "{message}");
-    assert!(
-        message.ends_with("seconds of \"Holy Forever\" were recorded."),
-        "{message}"
-    );
-    assert!(rig.store.takes().is_empty());
+    assert!(message.ends_with("seconds recorded."), "{message}");
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn seek_while_recording_discards_the_take() {
+async fn seek_while_recording_discards_the_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -583,12 +554,12 @@ async fn seek_while_recording_discards_the_take() {
     let status = rig.link.status();
     assert_eq!(status.recording_song, None);
     assert!(status.message.unwrap_or_default().contains("moved"));
-    assert!(rig.store.takes().is_empty());
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn timer_reset_while_recording_discards_the_take() {
+async fn timer_reset_while_recording_discards_the_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -619,15 +590,15 @@ async fn recording_turned_off_mid_song_saves_if_enough_was_captured() {
     rig.song_start(&s, Some(Utc::now() - ChronoDuration::milliseconds(1500)))
         .await;
     pause(0.05).await;
-    // No relay in this rig, so no fixture changes: cue changes are never stored, and a take
-    // that would replay nothing is not saved.
+    // No relay in this rig, so no fixture changes: cue changes are never stored, and nothing
+    // that would replay nothing is saved.
     agent_lock(&rig.agent).change(&["Stars"], &[]);
     let message = rig.link.set_recording(false).await;
     assert!(
         message.starts_with("Not saved: no fixture changes"),
         "{message}"
     );
-    assert!(!rig.link.has_take("song-1"));
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
@@ -679,7 +650,7 @@ async fn a_new_song_finishes_the_one_before() {
     rig.song_start(&next, None).await;
     let status = rig.link.status();
     assert_eq!(status.recording_song.as_deref(), Some("Gratitude"));
-    assert!(rig.store.takes().is_empty()); // the first was far too short to keep
+    assert!(rig.saved.lock().unwrap().is_empty()); // the first was far too short to keep
     rig.link.stop().await;
 }
 
@@ -688,7 +659,6 @@ async fn a_new_song_finishes_the_one_before() {
 #[tokio::test(flavor = "multi_thread")]
 async fn replay_switch_off_is_reported_in_the_status() {
     let rig = Rig::with(&["Warm"], false).await;
-    with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.song_start(&song(10), None).await;
     assert_eq!(
@@ -701,7 +671,6 @@ async fn replay_switch_off_is_reported_in_the_status() {
 #[tokio::test(flavor = "multi_thread")]
 async fn recording_armed_is_reported_as_the_replay_blocker() {
     let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(10), None).await;
@@ -759,87 +728,6 @@ async fn agent_restart_resets_the_sequence_without_a_false_change() {
     rig.link.stop().await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn clear_take_removes_it_and_reports_a_missing_one() {
-    let rig = Rig::new(&["A"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.link.start().await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    assert!(!rig.link.clear_take("nope").await);
-    assert!(rig.link.clear_take("song-1").await);
-    assert!(!rig.link.has_take("song-1"));
-    assert!(rig.store.takes().is_empty());
-    assert_eq!(
-        rig.link.status().message.as_deref(),
-        Some("Capture cleared.")
-    );
-    rig.link.stop().await;
-}
-
-#[test]
-fn file_store_round_trip_and_bad_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("t.json");
-    let store = FileTakeStore::new(&path);
-    assert!(store.load().unwrap().is_empty());
-    let mut takes = BTreeMap::new();
-    takes.insert("song-1".to_string(), stored_take());
-    store.save(&takes).unwrap();
-    assert_eq!(
-        store.load().unwrap()["song-1"]
-            .fixtures
-            .as_ref()
-            .unwrap()
-            .events[1]
-            .osc,
-        vec![dim("P1", 1.0)]
-    );
-    std::fs::write(&path, "{not json").unwrap();
-    assert!(store.load().unwrap().is_empty());
-    assert!(dir.path().join("t.json.bad").exists());
-    assert!(!path.exists());
-}
-
-#[test]
-fn file_store_writes_atomically_in_the_python_layout() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("lightkey-takes.json");
-    let store = FileTakeStore::new(&path);
-    let mut take = stored_take();
-    take.recorded_at = "2026-10-20T20:00:00Z".parse().unwrap();
-    let mut takes = BTreeMap::new();
-    takes.insert("song-1".to_string(), take);
-    store.save(&takes).unwrap();
-    let text = std::fs::read_to_string(&path).unwrap();
-    let value: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(value["version"], 1);
-    assert_eq!(value["takes"][0]["recorded_at"], "2026-10-20T20:00:00Z");
-    assert!(
-        text.starts_with("{\n \"version\": 1,"),
-        "indent=1 layout: {text}"
-    );
-    // No temp file is left behind.
-    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-        .collect();
-    assert_eq!(leftovers, vec!["lightkey-takes.json"]);
-}
-
-#[test]
-fn a_file_with_an_invalid_take_is_renamed_bad_and_ignored() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("t.json");
-    std::fs::write(
-        &path,
-        r#"{"version":1,"takes":[{"song_key":"","song_title":"x","recorded_at":"2026-10-20T20:00:00Z","duration_seconds":10}]}"#,
-    )
-    .unwrap();
-    let store = FileTakeStore::new(&path);
-    assert!(store.load().unwrap().is_empty());
-    assert!(dir.path().join("t.json.bad").exists());
-}
-
 // ------------------------------------------------------------------------- message lifetime (B3)
 
 #[tokio::test(flavor = "multi_thread")]
@@ -879,7 +767,6 @@ async fn losing_the_link_clears_a_stale_message() {
 async fn a_message_does_not_outlive_a_replay_switch_change() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
-    with_takes(&rig, vec![stored_take()]);
     rig.link.set_recording(true).await;
     assert!(rig.link.status().message.is_some());
     rig.set_settings(|s| s.3.replay = false);
@@ -911,16 +798,15 @@ async fn record_stays_armed_across_a_restart_and_disarming_is_remembered() {
 }
 
 #[test]
-fn the_file_store_remembers_the_armed_flag_next_to_the_takes() {
-    let dir = std::env::temp_dir().join(format!("sp-armed-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let store = FileTakeStore::new(dir.join("lightkey_takes.json"));
+fn the_file_store_remembers_the_armed_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lightkey-record-armed");
+    let store = FileArmedStore::new(&path);
     assert!(!store.load_armed());
     store.save_armed(true).unwrap();
-    assert!(FileTakeStore::new(dir.join("lightkey_takes.json")).load_armed());
+    assert!(FileArmedStore::new(&path).load_armed());
     store.save_armed(false).unwrap();
     assert!(!store.load_armed());
-    std::fs::write(dir.join("lightkey_takes.json.armed"), "garbage").unwrap();
+    std::fs::write(&path, "garbage").unwrap();
     assert!(!store.load_armed()); // unreadable means off, never an error at startup
-    let _ = std::fs::remove_dir_all(&dir);
 }

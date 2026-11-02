@@ -109,7 +109,8 @@ async fn defaults_replay_on_and_url_derived_from_the_osc_host() {
     assert_eq!(body["replay"], true);
     assert_eq!(body["api_url"], "http://10.30.0.211:8770");
     assert_eq!(body["recording"], false);
-    assert_eq!(body["takes"], json!([]));
+    assert!(body.get("takes").is_none(), "the takes list is gone");
+    assert!(body.get("captured").is_none());
 }
 
 #[tokio::test]
@@ -185,13 +186,50 @@ async fn recording_refused_until_connected() {
 }
 
 #[tokio::test]
-async fn clearing_a_missing_take_is_reported_not_an_error() {
+async fn the_takes_route_is_gone() {
     let (router, rt) = app(osc_lights()).await;
-    let (code, body) = call(&router, "DELETE", &format!("{LK}/takes/nope"), None).await;
+    let (code, _) = call(&router, "DELETE", &format!("{LK}/takes/nope"), None).await;
     rt.stop().await;
+    assert!(
+        code == StatusCode::NOT_FOUND || code == StatusCode::METHOD_NOT_ALLOWED,
+        "{code}"
+    );
+}
+
+#[tokio::test]
+async fn detail_is_saved_and_validated() {
+    let (router, rt) = app(osc_lights()).await;
+    let (code, body) = call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({"detail": "fine"})),
+    )
+    .await;
     assert_eq!(code, StatusCode::OK);
-    assert_eq!(body["accepted"], false);
-    assert_eq!(body["message"], "That song has no capture.");
+    assert!(body["lightkey"]["api_url"].is_string());
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(settings["settings"]["lights"]["lightkey"]["detail"], "fine");
+    // sending only the address keeps the detail
+    call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({"replay": false})),
+    )
+    .await;
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(settings["settings"]["lights"]["lightkey"]["detail"], "fine");
+    let (code, body) = call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({"detail": "ultra"})),
+    )
+    .await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["detail"][0]["loc"], json!(["body", "detail"]));
 }
 
 #[tokio::test]
@@ -201,6 +239,7 @@ async fn saving_lighting_settings_keeps_the_lightkey_block() {
         lightkey: LightkeySettings {
             api_url: "http://10.0.0.5:8770".into(),
             replay: false,
+            ..LightkeySettings::default()
         },
         ..LightsSettings::default()
     })
@@ -230,7 +269,8 @@ async fn old_settings_without_a_lightkey_block_load_with_replay_on() {
         loaded.lightkey,
         LightkeySettings {
             api_url: String::new(),
-            replay: true
+            replay: true,
+            detail: stagepilot_core::config::LightkeyDetail::Normal,
         }
     );
     // And a whole saved settings file from before the feature loads the same way.
@@ -325,4 +365,114 @@ async fn a_look_row_round_trips_through_the_cue_map_api_and_the_saved_settings()
     .await;
     rt.stop().await;
     assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+// ------------------------------------------------------------ recordings save to the timeline
+
+fn captured_row(at: f64, address: &str, x: f64) -> stagepilot_core::config::OscLightingCue {
+    use stagepilot_core::config::{OscArgument, OscCueSource, OscLightingCue, OscMessage};
+    OscLightingCue {
+        id: uuid::Uuid::new_v4(),
+        at_seconds: at,
+        address: address.into(),
+        args: vec![],
+        label: "Look - 1 fixture".into(),
+        color: None,
+        messages: vec![OscMessage {
+            address: address.into(),
+            args: vec![OscArgument::Float(x)],
+        }],
+        source: OscCueSource::Captured,
+    }
+}
+
+#[tokio::test]
+async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
+    use stagepilot_lights::lightkey_link::SongLooks;
+    let (router, rt) = app(osc_lights()).await;
+    let a = "/fixture/P1/overrides/dimmer";
+    let save = |rows| {
+        (rt.outputs.looks_sink)(SongLooks {
+            song_key: "song-1".into(),
+            song_title: "Holy Forever".into(),
+            rows,
+        })
+    };
+    // a manual row the operator added by hand
+    let mut manual = captured_row(5.0, "/live/cue/1", 0.0);
+    manual.source = stagepilot_core::config::OscCueSource::Manual;
+    manual.messages.clear();
+    manual.label = "Strobe".into();
+    let mut lights = osc_lights();
+    lights.cue_maps.insert(
+        "song-1".into(),
+        stagepilot_core::config::SongLightingCueMap {
+            song_key: "song-1".into(),
+            song_title: "Holy Forever".into(),
+            cues: vec![],
+            osc_cues: vec![manual],
+        },
+    );
+    rt.settings_service.persist_lights(lights).unwrap();
+    save(vec![captured_row(1.0, a, 0.1), captured_row(2.0, a, 0.9)])
+        .await
+        .unwrap();
+    save(vec![captured_row(3.0, a, 0.5)]).await.unwrap();
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    rt.stop().await;
+    let rows = settings["settings"]["lights"]["cue_maps"]["song-1"]["osc_cues"]
+        .as_array()
+        .unwrap();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0]["source"], "captured");
+    assert_eq!(rows[0]["at_seconds"], 3.0);
+    assert_eq!(rows[1]["label"], "Strobe", "the manual row stays");
+}
+
+#[tokio::test]
+async fn a_recording_past_the_timeline_caps_asks_for_a_coarser_detail() {
+    use stagepilot_lights::lightkey_link::{LooksError, SongLooks};
+    let (_router, rt) = app(osc_lights()).await;
+    let rows: Vec<_> = (0..=1_000)
+        .map(|i| captured_row(f64::from(i), "/fixture/P1/overrides/dimmer", 0.5))
+        .collect();
+    let result = (rt.outputs.looks_sink)(SongLooks {
+        song_key: "big".into(),
+        song_title: "Big".into(),
+        rows,
+    })
+    .await;
+    rt.stop().await;
+    assert_eq!(result, Err(LooksError::TooLarge));
+}
+
+#[tokio::test]
+async fn an_old_takes_file_next_to_the_settings_is_ignored_and_left_alone() {
+    use stagepilot_core::settings::MemoryCredentialStore;
+    use stagepilot_core::settings_file::SettingsFileStore;
+    let dir = tempfile::tempdir().unwrap();
+    let takes = dir.path().join("lightkey-takes.json");
+    let old = r#"{"version":1,"takes":[{"song_key":"x","song_title":"Old","recorded_at":"2026-10-20T20:00:00Z","duration_seconds":10}]}"#;
+    std::fs::write(&takes, old).unwrap();
+    let service = SettingsService::new(
+        Box::new(SettingsFileStore::new(dir.path().join("settings.json"))),
+        Box::new(MemoryCredentialStore::new(None)),
+        Default::default(),
+    );
+    service.load();
+    let backends = OutputBackends {
+        lightkey_http: Arc::new(|| Arc::new(FakeAgent { down: false })),
+        ..OutputBackends::fake_midi()
+    };
+    let runtime = Runtime::with_backends(Arc::new(service), false, backends);
+    runtime.start().await;
+    let body = runtime.outputs.lights.lightkey_status().await;
+    runtime.stop().await;
+    assert!(body.captured.is_none());
+    assert_eq!(
+        std::fs::read_to_string(&takes).unwrap(),
+        old,
+        "not read, not rewritten, not deleted"
+    );
+    assert!(!dir.path().join("lightkey-takes.json.bad").exists());
 }

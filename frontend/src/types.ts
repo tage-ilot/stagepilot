@@ -269,15 +269,14 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
 }
 
-/** One song's captured Lightkey fixture changes (summary only; the changes stay on the backend). */
-export interface LightkeyTakeSummary {
-  song_key: string;
+/** How finely a recording is kept as timeline rows: 0.25 s, 0.5 s (default) or 1 s. */
+export type LightkeyDetail = "fine" | "normal" | "coarse";
+
+/** The song most recently saved to the timeline by a recording. */
+export interface LightkeyCaptured {
   song_title: string;
-  recorded_at: string;
-  duration_seconds: number;
-  /** Present only when fixture levels (colour, intensity, movers) were captured; absent = "no fixture capture". */
-  fixture_count?: number;
-  fixture_event_count?: number;
+  /** Captured look rows now on that song's timeline. */
+  looks: number;
 }
 
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
@@ -305,7 +304,8 @@ export interface LightkeyStatus {
   replay_blocked: string | null;
   replaying_song: string | null;
   message: string | null;
-  takes: LightkeyTakeSummary[];
+  /** The song most recently saved to the timeline; absent until one has been. */
+  captured?: LightkeyCaptured;
   fixtures?: LightkeyFixtureStatus;
 }
 

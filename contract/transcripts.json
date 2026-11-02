@@ -589,7 +589,7 @@
    }
   },
   {
-   "name": "lightkey: status, connected with the seeded take",
+   "name": "lightkey: status, connected",
    "request": {
     "method": "GET",
     "path": "/api/v1/lights/lightkey"
@@ -605,17 +605,7 @@
      "recording_song": null,
      "replay": true,
      "replay_blocked": null,
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -642,7 +632,75 @@
       "lan_access": false,
       "lights": {
        "channel": 1,
-       "cue_maps": {},
+       "cue_maps": {
+        "demo-battle-belongs": {
+         "cues": [],
+         "osc_cues": [
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 0.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 10.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 1.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 40.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.25
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          }
+         ],
+         "song_key": "demo-battle-belongs",
+         "song_title": "Battle Belongs"
+        }
+       },
        "enabled": true,
        "lightkey": {
         "api_url": "http://127.0.0.1:<lightkey_port>",
@@ -755,17 +813,7 @@
       "recording_song": null,
       "replay": false,
       "replay_blocked": "Replay is switched off.",
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Saved."
     },
@@ -801,17 +849,7 @@
      "recording_song": null,
      "replay": false,
      "replay_blocked": "Replay is switched off.",
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -841,17 +879,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Saved."
     },
@@ -1038,17 +1066,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Saved."
     },
@@ -1087,17 +1105,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Saved."
     },
@@ -1168,17 +1176,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": "Paused while recording.",
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Recording starts with the next song."
     },
@@ -1210,17 +1208,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": "Paused while recording.",
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "Recording starts with the next song."
     },
@@ -1332,17 +1320,7 @@
      "recording_song": null,
      "replay": true,
      "replay_blocked": "Paused while recording.",
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -1643,22 +1621,12 @@
      "api_url": "http://127.0.0.1:<lightkey_port>",
      "detail": null,
      "link": "connected",
-     "message": "Recording \"Battle Belongs\".",
+     "message": "Recording Battle Belongs.",
      "recording": true,
      "recording_song": "Battle Belongs",
      "replay": true,
      "replay_blocked": "Paused while recording.",
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -1687,22 +1655,12 @@
      "api_url": "http://127.0.0.1:<lightkey_port>",
      "detail": null,
      "link": "connected",
-     "message": "Recording \"Battle Belongs\".",
+     "message": "Recording Battle Belongs.",
      "recording": true,
      "recording_song": "Battle Belongs",
      "replay": true,
      "replay_blocked": "Paused while recording.",
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -2017,17 +1975,7 @@
      "recording_song": "Battle Belongs",
      "replay": true,
      "replay_blocked": "Paused while recording.",
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -2057,17 +2005,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "<masked>"
     },
@@ -2078,7 +2016,7 @@
    }
   },
   {
-   "name": "lightkey: status, the seeded take is untouched",
+   "name": "lightkey: status, nothing was saved",
    "request": {
     "method": "GET",
     "path": "/api/v1/lights/lightkey"
@@ -2094,17 +2032,7 @@
      "recording_song": null,
      "replay": true,
      "replay_blocked": null,
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -2134,17 +2062,7 @@
       "recording_song": null,
       "replay": true,
       "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
+      "replaying_song": null
      },
      "message": "<masked>"
     },
@@ -2788,17 +2706,7 @@
      "recording_song": null,
      "replay": true,
      "replay_blocked": null,
-     "replaying_song": "Battle Belongs",
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
+     "replaying_song": "Battle Belongs"
     },
     "headers": {
      "content-type": "application/json"
@@ -2813,6 +2721,10 @@
     "path": "/api/v1/actions/stop_timer"
    },
    "response": {
+    "status": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
     "body": {
      "accepted": true,
      "action": "stop_timer",
@@ -3029,6 +2941,12 @@
        },
        {
         "id": "<uuid>",
+        "source": "lights",
+        "timestamp": "<str>",
+        "type": "connection.changed"
+       },
+       {
+        "id": "<uuid>",
         "source": "playback_connection",
         "timestamp": "<str>",
         "type": "connection.changed"
@@ -3143,11 +3061,7 @@
       },
       "updated_at": "<str>"
      }
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
+    }
    }
   },
   {
@@ -3176,116 +3090,7 @@
      "recording_song": null,
      "replay": true,
      "replay_blocked": null,
-     "replaying_song": null,
-     "takes": [
-      {
-       "duration_seconds": 281.0,
-       "recorded_at": "<str>",
-       "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs",
-       "fixture_count": 1,
-       "fixture_event_count": 2
-      }
-     ]
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
-   }
-  },
-  {
-   "name": "lightkey: clear a missing take",
-   "request": {
-    "method": "DELETE",
-    "path": "/api/v1/lights/lightkey/takes/nope"
-   },
-   "response": {
-    "body": {
-     "accepted": false,
-     "lightkey": {
-      "active_count": 2,
-      "api_url": "http://127.0.0.1:<lightkey_port>",
-      "detail": null,
-      "link": "connected",
-      "message": "<masked>",
-      "recording": false,
-      "recording_song": null,
-      "replay": true,
-      "replay_blocked": null,
-      "replaying_song": null,
-      "takes": [
-       {
-        "duration_seconds": 281.0,
-        "recorded_at": "<str>",
-        "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs",
-        "fixture_count": 1,
-        "fixture_event_count": 2
-       }
-      ]
-     },
-     "message": "<masked>"
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
-   }
-  },
-  {
-   "name": "lightkey: clear the seeded take",
-   "request": {
-    "method": "DELETE",
-    "path": "/api/v1/lights/lightkey/takes/demo-battle-belongs"
-   },
-   "response": {
-    "body": {
-     "accepted": true,
-     "lightkey": {
-      "active_count": 2,
-      "api_url": "http://127.0.0.1:<lightkey_port>",
-      "detail": null,
-      "link": "connected",
-      "message": "Capture cleared.",
-      "recording": false,
-      "recording_song": null,
-      "replay": true,
-      "replay_blocked": null,
-      "replaying_song": null,
-      "takes": []
-     },
-     "message": "Capture cleared."
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
-   }
-  },
-  {
-   "name": "lightkey: clear it again",
-   "request": {
-    "method": "DELETE",
-    "path": "/api/v1/lights/lightkey/takes/demo-battle-belongs"
-   },
-   "response": {
-    "body": {
-     "accepted": false,
-     "lightkey": {
-      "active_count": 2,
-      "api_url": "http://127.0.0.1:<lightkey_port>",
-      "detail": null,
-      "link": "connected",
-      "message": "Capture cleared.",
-      "recording": false,
-      "recording_song": null,
-      "replay": true,
-      "replay_blocked": null,
-      "replaying_song": null,
-      "takes": []
-     },
-     "message": "That song has no capture."
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -3315,8 +3120,7 @@
       "recording_song": null,
       "replay": false,
       "replay_blocked": "Replay is switched off.",
-      "replaying_song": null,
-      "takes": []
+      "replaying_song": null
      },
      "message": "Saved."
     },
@@ -3338,39 +3142,46 @@
   {
    "name": "lightkey: a Lighting save keeps the Lightkey block",
    "request": {
+    "method": "POST",
+    "path": "/api/v1/lights/settings",
     "json": {
      "enabled": true,
      "method": "osc",
      "osc_host": "127.0.0.1",
      "osc_port": 47999
-    },
-    "method": "POST",
-    "path": "/api/v1/lights/settings"
+    }
    },
    "response": {
+    "status": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
     "body": {
      "accepted": true,
      "lights": {
       "channel": 1,
       "connection_status": "connected",
-      "detail": "OSC ready for 127.0.0.1:47999. Nothing sent yet; UDP does not confirm delivery.",
+      "detail": "OSC output to 127.0.0.1:47999 reopened. UDP does not confirm delivery.",
       "enabled": true,
       "last_cue": null,
-      "last_cue_at": null,
+      "last_cue_at": "<str>",
       "last_osc_cue": null,
       "method": "osc",
       "osc_host": "127.0.0.1",
       "osc_port": 47999,
       "output_name": null,
-      "outputs": [],
+      "outputs": [
+       {
+        "ambiguous": false,
+        "connected": false,
+        "name": "StagePilot Test Out",
+        "selected": false
+       }
+      ],
       "pulse_ms": 100
      },
-     "message": "OSC ready for 127.0.0.1:47999. Nothing sent yet; UDP does not confirm delivery."
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
+     "message": "OSC output to 127.0.0.1:47999 reopened. UDP does not confirm delivery."
+    }
    }
   },
   {
@@ -3401,7 +3212,75 @@
       "lan_access": false,
       "lights": {
        "channel": 1,
-       "cue_maps": {},
+       "cue_maps": {
+        "demo-battle-belongs": {
+         "cues": [],
+         "osc_cues": [
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 0.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 10.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 1.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "/fixture/Par 1/overrides/dimmer",
+           "args": [],
+           "at_seconds": 40.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look - 1 fixture",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.25
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          }
+         ],
+         "song_key": "demo-battle-belongs",
+         "song_title": "Battle Belongs"
+        }
+       },
        "enabled": true,
        "lightkey": {
         "api_url": "http://127.0.0.1:<lightkey_port>",
@@ -3509,8 +3388,7 @@
      "recording_song": null,
      "replay": false,
      "replay_blocked": "Replay is switched off.",
-     "replaying_song": null,
-     "takes": []
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -3521,14 +3399,18 @@
   {
    "name": "lightkey: lighting off",
    "request": {
+    "method": "POST",
+    "path": "/api/v1/lights/settings",
     "json": {
      "enabled": false,
      "method": "osc"
-    },
-    "method": "POST",
-    "path": "/api/v1/lights/settings"
+    }
    },
    "response": {
+    "status": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
     "body": {
      "accepted": true,
      "lights": {
@@ -3537,21 +3419,24 @@
       "detail": "Disconnected. Lighting output is disabled.",
       "enabled": false,
       "last_cue": null,
-      "last_cue_at": null,
+      "last_cue_at": "<str>",
       "last_osc_cue": null,
       "method": "osc",
       "osc_host": "127.0.0.1",
       "osc_port": 47999,
       "output_name": null,
-      "outputs": [],
+      "outputs": [
+       {
+        "ambiguous": false,
+        "connected": false,
+        "name": "StagePilot Test Out",
+        "selected": false
+       }
+      ],
       "pulse_ms": 100
      },
      "message": "Lighting output disabled."
-    },
-    "headers": {
-     "content-type": "application/json"
-    },
-    "status": 200
+    }
    }
   },
   {
@@ -3580,8 +3465,7 @@
      "recording_song": null,
      "replay": false,
      "replay_blocked": "Lighting is off.",
-     "replaying_song": null,
-     "takes": []
+     "replaying_song": null
     },
     "headers": {
      "content-type": "application/json"
@@ -3611,8 +3495,7 @@
       "recording_song": null,
       "replay": false,
       "replay_blocked": "Lighting is off.",
-      "replaying_song": null,
-      "takes": []
+      "replaying_song": null
      },
      "message": "Turn Lighting on first."
     },

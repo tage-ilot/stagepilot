@@ -10,7 +10,9 @@ use stagepilot_core::config::{
 use stagepilot_core::events::{new_event, EventPayload, EventType, TimerPayload};
 use stagepilot_core::plugin::Plugin;
 use stagepilot_core::state::Song;
-use stagepilot_lights::lightkey_link::{LinkOptions, MemoryTakeStore, TakeStore};
+use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand, FixtureState};
+use stagepilot_lights::lightkey_link::{ArmedStore, LinkOptions, MemoryArmedStore};
+use stagepilot_lights::lightkey_looks::{look_rows, replace_captured, LookRecorder};
 use stagepilot_lights::plugin::LOOK_LEAD_SECONDS;
 use stagepilot_lights::{LightsOptions, LightsPlugin};
 use stagepilot_osc::{OscBackend, OscOutput, OutputError};
@@ -113,6 +115,7 @@ fn settings(songs: Vec<(&str, Vec<OscLightingCue>)>) -> LightsSettings {
         lightkey: LightkeySettings {
             api_url: "http://127.0.0.1:9".into(),
             replay: true,
+            ..LightkeySettings::default()
         },
         ..LightsSettings::default()
     }
@@ -125,7 +128,7 @@ struct Rig {
     t0: std::cell::Cell<Instant>,
 }
 
-async fn rig_with_store(lights: LightsSettings, store: Option<Arc<MemoryTakeStore>>) -> Rig {
+async fn rig_with_store(lights: LightsSettings, store: Option<Arc<MemoryArmedStore>>) -> Rig {
     let bus = EventBus::new();
     let log: Log = Arc::default();
     let mut options = LightsOptions::new(Arc::new(|| {
@@ -134,9 +137,9 @@ async fn rig_with_store(lights: LightsSettings, store: Option<Arc<MemoryTakeStor
     let backend_log = log.clone();
     options.osc_backend_factory = Arc::new(move || Arc::new(TimedBackend(backend_log.clone())));
     options.lightkey = LinkOptions {
-        store: store.map_or_else(
-            || Arc::new(MemoryTakeStore::new()) as Arc<dyn TakeStore>,
-            |s| s as Arc<dyn TakeStore>,
+        armed_store: store.map_or_else(
+            || Arc::new(MemoryArmedStore::new()) as Arc<dyn ArmedStore>,
+            |s| s as Arc<dyn ArmedStore>,
         ),
         ..LinkOptions::default()
     };
@@ -436,6 +439,7 @@ async fn switching_replay_off_releases_what_a_pause_was_holding() {
         .lightkey_apply_settings(LightkeySettings {
             api_url: String::new(),
             replay: false,
+            ..LightkeySettings::default()
         })
         .await;
     assert_two_rounds(&r, &["A", "B"]);
@@ -521,7 +525,7 @@ async fn replay_off_gates_fixture_messages_only() {
 
 #[tokio::test(start_paused = true)]
 async fn replay_does_not_run_while_recording_is_armed() {
-    let store = Arc::new(MemoryTakeStore::new());
+    let store = Arc::new(MemoryArmedStore::new());
     store.save_armed(true).unwrap();
     let rows = vec![
         look(1.0, vec![msg(&dim("A"), 0.1)]),
@@ -571,4 +575,60 @@ async fn a_400_row_6k_message_song_schedules_without_drift() {
     );
     // never faster than 200 packets a second
     assert!(sent.windows(2).all(|w| w[1].0 - w[0].0 >= 0.004), "paced");
+}
+
+// ------------------------------------------------------------------- recorded rows replay
+
+#[tokio::test(start_paused = true)]
+async fn recorded_rows_replay_through_the_scheduler_next_to_a_manual_row() {
+    // A recording: dimmer A sweeps for 3 s, B steps once; thinned to rows on the 0.5 s grid.
+    let mut recorder = LookRecorder::new(&FixtureState::new());
+    for i in 1..=30 {
+        let at = 1.0 + 0.1 * f64::from(i);
+        let value = FixtureArg::Float(0.2 + 0.02 * f64::from(i));
+        recorder.observe(at, &[FixtureCommand::new(dim("A"), vec![value])]);
+    }
+    recorder.observe(
+        2.0,
+        &[FixtureCommand::new(dim("B"), vec![FixtureArg::Float(1.0)])],
+    );
+    let rows = look_rows(&recorder.looks(300.0, 0.5));
+    assert!(rows.len() >= 4 && rows.len() < 30, "{} rows", rows.len());
+    let existing = SongLightingCueMap {
+        song_key: "s".into(),
+        song_title: "s".into(),
+        cues: vec![],
+        osc_cues: vec![plain(1.0, "/live/cue/1")],
+    };
+    let saved = replace_captured(Some(&existing), "s", "s", rows.clone()).unwrap();
+    assert!(saved
+        .osc_cues
+        .iter()
+        .any(|row| row.address == "/live/cue/1"));
+
+    let r = rig(settings(vec![("s", vec![plain(1.0, "/live/cue/1")])])).await;
+    r.plugin.replace_cue_map(saved).await;
+    r.start("s").await;
+    run_for(8.0).await;
+    let sent = r.sent();
+    assert_eq!(
+        sent.iter().filter(|(_, a)| a == "/live/cue/1").count(),
+        1,
+        "manual row still fires"
+    );
+    let fixtures: Vec<f64> = sent
+        .iter()
+        .filter(|(_, a)| a == &dim("A"))
+        .map(|(t, _)| *t)
+        .collect();
+    let wanted: Vec<f64> = rows
+        .iter()
+        .filter(|row| row.messages.iter().any(|m| m.address == dim("A")))
+        .map(|row| row.at_seconds - LOOK_LEAD_SECONDS)
+        .collect();
+    assert_eq!(fixtures.len(), wanted.len(), "{fixtures:?} vs {wanted:?}");
+    for (got, want) in fixtures.iter().zip(&wanted) {
+        assert!(close(*got, want.max(0.0)), "{got} vs {want}");
+    }
+    assert!(sent.iter().any(|(_, a)| a == &dim("B")));
 }

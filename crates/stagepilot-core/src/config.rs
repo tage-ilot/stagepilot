@@ -816,6 +816,11 @@ pub struct LightkeySettings {
     /// Replay is on by default and only ever suspended by this switch (or by recording).
     #[serde(default = "default_true")]
     pub replay: bool,
+    /// How finely a recording is kept as timeline rows (see `LightkeyDetail`). Left out of the
+    /// saved file while `normal`, so an older file saves back unchanged.
+    #[serde(default, skip_serializing_if = "LightkeyDetail::is_normal")]
+    #[ts(optional, as = "Option<LightkeyDetail>")]
+    pub detail: LightkeyDetail,
 }
 
 impl Default for LightkeySettings {
@@ -823,6 +828,37 @@ impl Default for LightkeySettings {
         Self {
             api_url: String::new(),
             replay: true,
+            detail: LightkeyDetail::default(),
+        }
+    }
+}
+
+/// Detail of a recorded look: the grid its rows sit on and the closest spacing of two kept
+/// changes of one address. Finer is smoother on replay and makes more rows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LightkeyDetail {
+    /// 0.25 s.
+    Fine,
+    /// 0.5 s.
+    #[default]
+    Normal,
+    /// 1 s.
+    Coarse,
+}
+
+impl LightkeyDetail {
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    /// The thinning interval and row grid, in seconds.
+    pub fn interval_seconds(self) -> f64 {
+        match self {
+            Self::Fine => 0.25,
+            Self::Normal => 0.5,
+            Self::Coarse => 1.0,
         }
     }
 }
