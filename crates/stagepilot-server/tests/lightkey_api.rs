@@ -548,6 +548,7 @@ async fn seed_dense_song(rt: &Runtime, count: usize) -> Vec<uuid::Uuid> {
             song_title: "Holy Forever".into(),
             cues: vec![],
             osc_cues,
+            loudness: None,
             captured_edited: false,
         },
     );

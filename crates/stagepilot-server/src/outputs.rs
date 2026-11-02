@@ -359,6 +359,7 @@ fn loudness_sink(
                     cues: Vec::new(),
                     osc_cues: Vec::new(),
                     loudness: None,
+                    captured_edited: false,
                 });
             map.loudness = Some(stagepilot_lights::loudness::merge_loudness(
                 map.loudness.as_ref(),
