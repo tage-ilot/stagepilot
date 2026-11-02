@@ -1187,7 +1187,7 @@
     "type": "object"
    },
    "LightkeySettingsRequest": {
-    "description": "Both fields optional: send only what changed. An empty ``api_url`` means \"derive it\".",
+    "description": "All fields optional: send only what changed. An empty ``api_url`` means \"derive it\". ``detail`` is accepted as an older spelling of ``detail_level``.",
     "properties": {
      "api_url": {
       "anyOf": [
@@ -1212,7 +1212,7 @@
       ],
       "title": "Replay"
      },
-     "detail": {
+     "detail_level": {
       "anyOf": [
        {
         "enum": [
@@ -1226,7 +1226,7 @@
         "type": "null"
        }
       ],
-      "title": "Detail"
+      "title": "Detail Level"
      }
     },
     "title": "LightkeySettingsRequest",
@@ -1335,6 +1335,23 @@
        }
       ],
       "title": "Captured"
+     },
+     "detail_level": {
+      "anyOf": [
+       {
+        "enum": [
+         "fine",
+         "normal",
+         "coarse"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail Level",
+      "description": "The saved Detail setting; left out while normal."
      }
     },
     "required": [
@@ -4825,6 +4842,18 @@
       "minLength": 1,
       "title": "Song Title",
       "type": "string"
+     },
+     "captured_edited": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured Edited",
+      "description": "Captured look rows were changed by hand; left out while false."
      }
     },
     "required": [
@@ -5021,6 +5050,85 @@
      "type"
     ],
     "title": "ValidationError",
+    "type": "object"
+   },
+   "LightkeySimplifyRequest": {
+    "properties": {
+     "song_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Song Key",
+      "type": "string"
+     },
+     "detail_level": {
+      "anyOf": [
+       {
+        "enum": [
+         "fine",
+         "normal",
+         "coarse"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail Level"
+     },
+     "apply": {
+      "default": false,
+      "title": "Apply",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "song_key"
+    ],
+    "title": "LightkeySimplifyRequest",
+    "type": "object"
+   },
+   "LightkeySimplifyResponse": {
+    "properties": {
+     "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+     },
+     "applied": {
+      "title": "Applied",
+      "type": "boolean"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "rows_before": {
+      "title": "Rows Before",
+      "type": "integer"
+     },
+     "rows_after": {
+      "title": "Rows After",
+      "type": "integer"
+     },
+     "messages_before": {
+      "title": "Messages Before",
+      "type": "integer"
+     },
+     "messages_after": {
+      "title": "Messages After",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "accepted",
+     "applied",
+     "message",
+     "rows_before",
+     "rows_after",
+     "messages_before",
+     "messages_after"
+    ],
+    "title": "LightkeySimplifyResponse",
     "type": "object"
    }
   }
@@ -5453,7 +5561,7 @@
   },
   "/api/v1/lights/lightkey/settings": {
    "put": {
-    "description": "Save the Lightkey API address and/or the replay switch (the only two settings).",
+    "description": "Save the Lightkey API address, the replay switch and/or the recording Detail.",
     "operationId": "update_lightkey_settings_api_v1_lights_lightkey_settings_put",
     "requestBody": {
      "content": {
@@ -7005,6 +7113,45 @@
      }
     },
     "summary": "State"
+   }
+  },
+  "/api/v1/lights/lightkey/simplify": {
+   "post": {
+    "description": "Thin and merge a song's captured look rows at a Detail; without ``apply`` only count them.",
+    "operationId": "simplify_lightkey_song_api_v1_lights_lightkey_simplify_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LightkeySimplifyRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LightkeySimplifyResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Simplify Lightkey Song"
    }
   }
  }

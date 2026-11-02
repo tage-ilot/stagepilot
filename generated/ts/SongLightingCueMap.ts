@@ -8,4 +8,9 @@ export type SongLightingCueMap = { song_key: string, song_title: string, cues: A
  * How loud the room was while the song was recorded (levels only, never audio). Absent
  * until a recording captured it, so older files load and save back unchanged.
  */
-loudness?: SongLoudness, };
+loudness?: SongLoudness, 
+/**
+ * Captured look rows of this song were changed by hand (a whole row deleted, for one):
+ * Record asks before replacing them. Left out while false; a new recording clears it.
+ */
+captured_edited?: boolean, };

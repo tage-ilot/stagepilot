@@ -150,6 +150,7 @@ fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLighti
             cues: vec![],
             osc_cues: vec![row(1, 0.0, 0.0), row(2, 10.0, 1.0), row(3, 40.0, 0.25)],
             loudness: None,
+            captured_edited: false,
         },
     ))
     .collect()

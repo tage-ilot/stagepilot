@@ -813,6 +813,11 @@ pub struct SongLightingCueMap {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub loudness: Option<SongLoudness>,
+    /// Captured look rows of this song were changed by hand (a whole row deleted, for one):
+    /// Record asks before replacing them. Left out while false; a new recording clears it.
+    #[serde(default, skip_serializing_if = "flag_unset")]
+    #[ts(optional, as = "Option<bool>")]
+    pub captured_edited: bool,
 }
 
 /// Most loudness values one song keeps (0.25 s steps cover a 1000 s song).
@@ -829,6 +834,10 @@ pub struct SongLoudness {
     pub values: Vec<u8>,
     /// How many recordings are averaged in (1 to 8).
     pub takes: u32,
+}
+
+fn flag_unset(value: &bool) -> bool {
+    !*value
 }
 
 /// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
