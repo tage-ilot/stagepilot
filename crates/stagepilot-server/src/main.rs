@@ -146,10 +146,40 @@ fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
                 api_url: format!("http://127.0.0.1:{agent_port}"),
                 replay: true,
             },
+            cue_maps: contract_lightkey_cue_maps(),
             ..LightsSettings::default()
         },
         ..PersistentSettings::default()
     }
+}
+
+/// The look rows the contract profile seeds on the first demo song's cue map: one fixture, two
+/// changes (the timeline is the replay source).
+fn contract_lightkey_cue_maps(
+) -> std::collections::BTreeMap<String, stagepilot_core::config::SongLightingCueMap> {
+    use stagepilot_core::config::{
+        OscArgument, OscCueSource, OscLightingCue, OscMessage, SongLightingCueMap,
+    };
+    let row = |at: f64, level: f64, label: &str| OscLightingCue {
+        id: uuid::Uuid::new_v4(),
+        at_seconds: at,
+        address: String::new(),
+        args: Vec::new(),
+        label: label.into(),
+        color: None,
+        messages: vec![OscMessage {
+            address: "/fixture/Par 1/overrides/dimmer".into(),
+            args: vec![OscArgument::Float(level)],
+        }],
+        source: OscCueSource::Captured,
+    };
+    let map = SongLightingCueMap {
+        song_key: "demo-battle-belongs".into(),
+        song_title: "Battle Belongs".into(),
+        cues: Vec::new(),
+        osc_cues: vec![row(10.0, 1.0, "Look 1"), row(40.0, 0.25, "Look 2")],
+    };
+    std::iter::once((map.song_key.clone(), map)).collect()
 }
 
 /// The take the contract profile seeds for the first demo song: one fixture, two changes.
