@@ -91,3 +91,35 @@ describe("SongsStrip", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("SongsStrip capture labels", () => {
+  const labelled: SongChip[] = [
+    { key: "a", title: "A", order: 1, looks: 12, handmade: 0, hasLoudness: false, label: "fully_captured" },
+    { key: "b", title: "B", order: 2, looks: 4, handmade: 0, hasLoudness: false, label: "incomplete" },
+    { key: "c", title: "C", order: 3, looks: 0, handmade: 2, hasLoudness: false, label: "manually_cued" },
+    { key: "d", title: "D", order: 4, looks: 9, handmade: 1, hasLoudness: false, label: "manually_cued_and_fully_captured" },
+    { key: "e", title: "E", order: 5, looks: 0, handmade: 0, hasLoudness: false, label: "not_captured" },
+  ];
+
+  it("says which state each song is in instead of a look count", () => {
+    mount({ chips: labelled });
+    const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
+    expect(items.map((item) => item.getAttribute("data-label"))).toEqual(["fully_captured", "incomplete", "manually_cued", "manually_cued_and_fully_captured", "not_captured"]);
+    expect(items[0]).toHaveTextContent("Fully captured");
+    expect(items[1]).toHaveTextContent("Incomplete capture");
+    expect(items[2]).toHaveTextContent("Manually cued");
+    expect(items[3]).toHaveTextContent("Manually cued & fully captured");
+    expect(items[4]).toHaveTextContent("Not captured");
+    expect(items[0]).not.toHaveTextContent("12 looks");
+    expect(items[0]).toHaveAttribute("title", expect.stringContaining("12 looks"));
+    expect(screen.getByText("Songs in this service - 2 of 5 fully captured")).toBeInTheDocument();
+  });
+
+  it("uses the manual colour for hand-made only and the captured colour for captures", () => {
+    mount({ chips: labelled });
+    const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
+    expect(items[2]!.className).toContain("border-cue-look-manual");
+    expect(items[0]!.className).toContain("border-cue-look-captured");
+    expect(items[1]!.className).toContain("border-dashed");
+  });
+});

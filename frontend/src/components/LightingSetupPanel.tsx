@@ -43,6 +43,7 @@ import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./Ligh
 import {
   capturedCount, detailLabels, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
   removeFixtureFromRows,
+  captureLabelOf,
 } from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
@@ -446,7 +447,7 @@ export function LightingSetupPanel({
     persistOscCues(undo.cues, true);
     setUndo(null);
   };
-  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
   const PAGE_SIZE = 40;
 
   const addOscCue = () => {
@@ -490,7 +491,7 @@ export function LightingSetupPanel({
   const songChips: SongChip[] = songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
-    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness) };
+    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
   });
 
   const askClearLoudness = () => {

@@ -130,6 +130,26 @@ The strip has these controls:
   API has `replay` off, the strip says "Replay is off" with a **Turn Replay on**
   button instead of looking as if it were replaying.
 
+### Auto mode (per song)
+
+The strip control is **Auto | Replay | Record**. Replay and Record pin the mode for every
+song; Auto decides when each song's timer starts and never changes its mind mid-song:
+
+| Connection (link connected, Lightkey running, fixture stream live, Lighting on; 60 s grace) | Song | Decision |
+| --- | --- | --- |
+| no | any | replay ("Auto: replaying (no connection)") |
+| yes | not fully captured, incomplete, or manual-only | capture ("Auto: capturing this song") |
+| yes | fully captured | replay ("Auto: replaying (fully captured)") |
+
+A pass is *fully captured* when it covered at least 95 % of the song with no playhead
+move or restart (pauses are fine), no link drop of 60 s or more, and at least one lighting
+change. A pass with no change is not saved and the song stays not captured. A partial pass
+(at least 10 % or 10 s, with a change) is saved as **Incomplete capture**; it replaces a stored
+partial only if it covers at least as much, and never replaces a complete capture. A seek
+during a pass discards it. Older cue maps whose captured rows have no status count as
+incomplete and are captured again. To re-capture a fully captured song, pin Record or
+Clear it. `replay: true` in an old settings file with no `mode` loads as Replay.
+
 Saving replaces only that song's `source = captured` rows. Rows you added by
 hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
 An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or deleted

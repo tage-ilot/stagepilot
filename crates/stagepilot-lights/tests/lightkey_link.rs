@@ -853,7 +853,10 @@ async fn a_pinned_replay_mode_overrides_auto() {
     rig.connect().await;
     let s = song(100);
     let decision = rig.link.decide_for_start(&s, Some(Utc::now()));
-    assert_eq!(decision.action, stagepilot_lights::lightkey_auto::Action::Replay);
+    assert_eq!(
+        decision.action,
+        stagepilot_lights::lightkey_auto::Action::Replay
+    );
     assert_eq!(rig.link.status().auto, None);
     rig.link.stop().await;
 }

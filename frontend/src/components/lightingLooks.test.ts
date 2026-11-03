@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OscLightingCue } from "../types";
 import {
-  clusterMarkers, groupByFixture, hasEditedCaptured, isLook, lookLabel, mergeRows, removeFixtureFromRows,
+  captureLabelOf, clusterMarkers, groupByFixture, hasEditedCaptured, isLook, lookLabel, mergeRows, removeFixtureFromRows,
 } from "./lightingLooks";
 
 const f = (value: number) => [{ type: "float" as const, value }];
@@ -71,5 +71,19 @@ describe("clusterMarkers", () => {
   it("keeps the selected marker single", () => {
     const items = clusterMarkers(markers, 1, 14, new Set(["m3"]));
     expect(items.some((it) => it.kind === "single" && it.marker.id === "m3")).toBe(true);
+  });
+});
+
+describe("captureLabelOf", () => {
+  const captured = { source: "captured" } as never;
+  const manual = { source: "manual" } as never;
+  it("names every state, and treats captured rows with no status as incomplete", () => {
+    expect(captureLabelOf(undefined)).toBe("not_captured");
+    expect(captureLabelOf({ osc_cues: [manual] })).toBe("manually_cued");
+    expect(captureLabelOf({ osc_cues: [captured] })).toBe("incomplete");
+    expect(captureLabelOf({ osc_cues: [captured], capture: { complete: false } })).toBe("incomplete");
+    expect(captureLabelOf({ osc_cues: [captured], capture: { complete: true } })).toBe("fully_captured");
+    expect(captureLabelOf({ osc_cues: [captured, manual], capture: { complete: true } })).toBe("manually_cued_and_fully_captured");
+    expect(captureLabelOf({ osc_cues: [], capture: { complete: true } })).toBe("not_captured");
   });
 });

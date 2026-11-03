@@ -141,3 +141,26 @@ export const clusterMarkers = <T extends MarkerLike>(
 /** A row that is still being typed: a look message or a plain row without an address yet. It lives only in the panel. */
 export const isDraftRow = (cue: OscLightingCue): boolean =>
   isLook(cue) ? cue.messages!.some((message) => message.address === "") : cue.address === "";
+
+export type CaptureLabel = "not_captured" | "incomplete" | "fully_captured" | "manually_cued" | "manually_cued_and_fully_captured";
+
+export const captureLabelText: Record<CaptureLabel, string> = {
+  not_captured: "Not captured",
+  incomplete: "Incomplete capture",
+  fully_captured: "Fully captured",
+  manually_cued: "Manually cued",
+  manually_cued_and_fully_captured: "Manually cued & fully captured",
+};
+
+/** What a song's saved rows say about capturing. Captured rows with no status (an older file) are an incomplete capture. */
+export const captureLabelOf = (map: { osc_cues?: OscLightingCue[]; cues?: unknown[]; capture?: { complete: boolean } } | undefined): CaptureLabel => {
+  const osc = map?.osc_cues ?? [];
+  const captured = osc.some(isCaptured);
+  const manual = osc.some((cue) => !isCaptured(cue)) || (map?.cues?.length ?? 0) > 0;
+  const complete = captured && Boolean(map?.capture?.complete);
+  if (captured) {
+    if (!complete) return "incomplete";
+    return manual ? "manually_cued_and_fully_captured" : "fully_captured";
+  }
+  return manual ? "manually_cued" : "not_captured";
+};

@@ -13,6 +13,7 @@ import type {
   LightkeyActionResponse,
   LightkeyAudio,
   LightkeyDetail,
+  LightkeyMode,
   LightkeySimplifyResponse,
   LightkeyStatus,
   LightsOperationResponse,
@@ -363,7 +364,7 @@ export const undoLightingCapture = (songKey: string, cueId: string) =>
   });
 
 export const getLightkeyStatus = () => requestJson<LightkeyStatus>("/api/v1/lights/lightkey");
-export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail_level?: LightkeyDetail; audio_device?: string }) =>
+export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; mode?: LightkeyMode; detail_level?: LightkeyDetail; audio_device?: string }) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

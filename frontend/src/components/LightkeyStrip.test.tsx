@@ -430,3 +430,33 @@ describe("LightkeyStrip saved replay off and release after a restart", () => {
     expect(await screen.findByRole("button", { name: "Release lights" })).toBeEnabled();
   });
 });
+
+describe("Auto | Replay | Record", () => {
+  it("offers three options and shows the saved mode", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto" }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Replay" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Record" })).not.toBeChecked();
+  });
+
+  it("choosing Replay pins it and Auto un-pins it, through the settings", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto" }));
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ mode: "replay" })));
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ mode: "replay", replay: true }));
+  });
+
+  it("in Auto the headline is the decision and its reason; capturing names the song", () => {
+    const auto = { capturing: false, reason: "Auto: replaying (fully captured)", song: "Holy Forever" };
+    expect(lightkeyHeadline(status({ mode: "auto", auto }))).toBe("Auto: replaying (fully captured)");
+    expect(lightkeyHeadline(status({ mode: "auto", recording_song: "Holy Forever", auto: { ...auto, capturing: true, reason: "Auto: capturing this song" } }))).toBe("Auto: capturing “Holy Forever”.");
+    expect(lightkeyHeadline(status({ mode: "replay" }))).not.toContain("Auto");
+  });
+
+  it("the song header says what the rows are", () => {
+    expect(lightkeyHeadline(status({ mode: "replay" }), { count: 12, edited: false, label: "fully_captured" })).toBe("Fully captured: 12 captured looks on this song");
+    expect(lightkeyHeadline(status({ mode: "replay" }), { count: 0, edited: false, label: "manually_cued" })).toBe("Manually cued on this song");
+  });
+});

@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyDetail, LightkeyLink, LightkeyStatus } from "../types";
+import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
@@ -46,22 +47,25 @@ function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
 
 /** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
 export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): string {
+  if (status.mode === "auto" && status.recording_song) return `Auto: capturing “${status.recording_song}”.`;
   if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
+  if (status.mode === "auto" && status.auto) return status.auto.reason;
   const count = looks?.count ?? status.captured?.looks ?? 0;
   if (status.replay_blocked && count > 0) return status.replay_blocked;
-  if (looks?.count) return capturedLooksText(count);
+  if (looks?.count) return capturedLooksText(count, looks.label);
+  if (looks?.label && looks.label !== "not_captured") return `${captureLabelText[looks.label]} on this song`;
   if (status.captured) return `${count} captured look${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
   if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
-  return looks ? capturedLooksText(0) : "No lights captured yet.";
+  return looks ? (looks.label && looks.label !== "not_captured" ? `${captureLabelText[looks.label]} on this song` : capturedLooksText(0)) : "No lights captured yet.";
 }
 
 /** What the selected song holds: captured look rows, and whether any were changed by hand. */
-export interface SongLooks { count: number; edited: boolean }
+export interface SongLooks { count: number; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
 
-export const capturedLooksText = (count: number): string =>
-  `${count} captured look${count === 1 ? "" : "s"} on this song`;
+export const capturedLooksText = (count: number, label?: CaptureLabel): string =>
+  `${label ? `${captureLabelText[label]}: ` : ""}${count} captured look${count === 1 ? "" : "s"} on this song`;
 
 const detailChoices: { value: LightkeyDetail; label: string }[] = [
   { value: "fine", label: "Fine" },
@@ -234,15 +238,15 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, ch
 
   // Record -> Replay: stop recording first, then make sure replay is on. A failure leaves the toggle on what the
   // backend says (it is re-read), and the message is shown.
-  const backToReplay = async (): Promise<LightkeyActionResponse> => {
+  const toMode = (mode: "auto" | "replay") => async (): Promise<LightkeyActionResponse> => {
     try {
       let response: LightkeyActionResponse | null = null;
       if (status.recording) {
         response = await setLightkeyRecording(false);
         if (!response.accepted) return response;
       }
-      if (!status.replay || response === null) {
-        response = await saveLightkeySettings({ replay: true });
+      if (!status.replay || response === null || (status.mode ?? "replay") !== mode) {
+        response = await saveLightkeySettings(mode === "replay" && status.mode === undefined ? { replay: true } : { mode, replay: true });
       }
       return response;
     } catch (cause) {
@@ -303,17 +307,18 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, ch
           disabled={busy}
           label="Lightkey mode"
           onChange={(mode) => {
-            if (mode !== "record") { void run(backToReplay); return; }
+            if (mode !== "record") { void run(toMode(mode)); return; }
             if (looks?.edited && !confirmRerecordLooks()) return;
             void run(() => setLightkeyRecording(true));
           }}
           options={[
+            { value: "auto", label: "Auto" },
             { value: "replay", label: "Replay" },
             { value: "record", label: "Record", disabled: !status.recording && !connected },
           ]}
-          value={status.recording ? "record" : "replay"}
+          value={status.recording || status.mode === "record" ? "record" : (status.mode ?? "replay")}
         />
-        {status.recording && (
+        {(status.recording || status.mode === "auto") && (
           <div data-testid="lightkey-detail-setting">
             <ConnectionMethod
               compact
@@ -337,7 +342,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, ch
           <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
         </div>
       )}
-      {status.recording && <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>}
+      {(status.recording || status.mode === "auto") && <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>}
       {status.link !== "connected" && status.link !== "off" && status.detail && (
         <p className="mt-1 text-type-body-sm text-ink-muted">{status.detail}</p>
       )}

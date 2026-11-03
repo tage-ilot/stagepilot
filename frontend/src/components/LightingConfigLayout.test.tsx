@@ -130,11 +130,11 @@ describe("songs strip in the panel", () => {
     const items = within(list).getAllByRole("listitem");
     expect(items.map((i) => i.getAttribute("data-song"))).toEqual(["song-1", "song-2", "song-3"]);
     expect(items.map((i) => i.getAttribute("data-state"))).toEqual(["captured", "empty", "captured"]);
-    expect(items[0]).toHaveTextContent("2 looks");
+    expect(items[0]).toHaveTextContent("Incomplete capture");
     expect(within(items[0]!).getByTestId("song-chip-loudness")).toBeInTheDocument();
-    expect(items[1]).toHaveTextContent("not captured");
+    expect(items[1]).toHaveTextContent("Not captured");
     expect(within(items[1]!).getByTestId("song-chip-live")).toBeInTheDocument();
-    expect(screen.getByText("Songs in this service - 2 of 3 captured")).toBeInTheDocument();
+    expect(screen.getByText(/Songs in this service - \d of 3 fully captured/)).toBeInTheDocument();
   });
 
   it("clicking a chip selects that song exactly like the Song menu, and Follow live returns", async () => {
