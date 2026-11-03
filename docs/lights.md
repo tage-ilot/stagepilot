@@ -394,7 +394,7 @@ its last listing after 2 s, and repeated picker polls do not start a second open
 level meter. The default is the system default input (the built-in microphone). Pick an audio interface or a
 line feed from the board if you have one. The choice is saved by name. If that input is not there next
 time (unplugged), StagePilot uses the default input and says so; the saved choice stays so it comes back
-when the interface does. **Clear loudness** removes the selected song's envelope and nothing else.
+when the interface does. **Clear loudness** removes the selected song's envelope and nothing else, and asks first (see below).
 
 **More than one recording.** Recording a song again averages the new loudness into the old. Levels are
 averaged as power (not as decibels), each recording counts equally up to eight; after that the oldest
@@ -483,3 +483,18 @@ tritanopia to keep the colours apart.
 - **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
 - **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
 - The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
+
+## Clearing cues
+
+**Clear** (the selected song), **Clear all** (every song in the plan) and **Clear loudness** all ask first in an in-app
+dialog. It says the cues will be **permanently erased** and cannot be undone, names the song (or "every song in
+<plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness). The focus starts on **Keep
+cues**; **Erase permanently** is the only button that erases. Esc, a click outside the dialog and **Keep cues** leave
+everything as it was.
+
+## Header layout
+
+The connection-method toggle (Playback API | MIDI, OSC | MIDI) sits in the middle of the panel header, between the
+title and the status pill and close button, whenever the panel is at least 57 rem (912 px) wide. That is the width at
+which the longest right-hand group ("MIDI · Alternate", Connected, close) still fits beside it. It is in the same place
+on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to its own row under the title.

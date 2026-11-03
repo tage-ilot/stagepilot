@@ -17,10 +17,15 @@ import type {
   Song,
 } from "../types";
 import {
-  confirmClearAllLightingCues,
-  confirmClearSelectedLightingCues,
+  clearAllRequest,
+  clearLoudnessRequest,
+  clearSongRequest,
+  countCueMap,
+  sumCounts,
+  type ClearCuesRequest,
 } from "./lightingCueConfirmations";
 import { simplifyLightkeyLooks } from "../api";
+import { ClearCuesDialog } from "./ClearCuesDialog";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -445,22 +450,33 @@ export function LightingSetupPanel({
   // A new OSC cue has no address yet, so it is only shown; it saves once its address is valid.
   const persistOscCuesLocal = (next: OscLightingCue[]) => setOscCues(next);
 
+  // Every Clear waits here for the in-app permanent-erase dialog (never window.confirm).
+  const [pendingClear, setPendingClear] = useState<ClearCuesRequest | null>(null);
+  const cueMaps = settings?.settings.lights.cue_maps;
+
   const clearSelectedSongCues = () => {
     if (!selectedSong || !shownCues.length) return;
-    if (confirmClearSelectedLightingCues(selectedSong.title)) {
+    setPendingClear(clearSongRequest(selectedSong.title, countCueMap(savedCueMap, method), () => {
       if (method === "osc") persistOscCues([]);
       else persistCues([]);
-    }
+    }));
   };
 
   const clearEverySongCues = () => {
     if (!songs.length) return;
-    if (confirmClearAllLightingCues(songs.map((song) => song.title), state.plan?.title ?? null)) {
+    const counts = sumCounts(songs.map((song) => countCueMap(cueMaps?.[songKey(song)], method)));
+    setPendingClear(clearAllRequest(songs.map((song) => song.title), state.plan?.title ?? null, counts, () => {
       if (method === "osc") setOscCues([]);
       else setCues([]);
       if (onClearAllCues) onClearAllCues(songs, method);
       else songs.forEach((song) => onSaveCues(song, [], method));
-    }
+    }));
+  };
+
+  const askClearLoudness = () => {
+    if (!onClearLoudness || !selectedSongKey) return;
+    const key = selectedSongKey;
+    setPendingClear(clearLoudnessRequest(selectedSong?.title ?? savedCueMap?.song_title ?? "this song", () => void onClearLoudness(key)));
   };
 
   // Hidden types only change what is drawn and listed; the cue maps and replay never see them.
@@ -605,9 +621,8 @@ export function LightingSetupPanel({
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
         title="Lighting"
         titleTone="lighting"
-      />
-
-      <ConnectionMethod
+        method={<ConnectionMethod
+          placement="header"
         disabled={!lights && !settings}
         heldChange={heldMethod}
         onChange={(value) => setMethod(value === "midi" ? "midi" : "osc")}
@@ -616,7 +631,9 @@ export function LightingSetupPanel({
           { value: "midi", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
         ]}
         value={method}
+        />}
       />
+
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
@@ -678,7 +695,7 @@ export function LightingSetupPanel({
         loudness={{
           present: Boolean(savedCueMap?.loudness),
           disabled: pendingOperation !== null,
-          onClear: onClearLoudness && selectedSongKey ? () => void onClearLoudness(selectedSongKey) : undefined,
+          onClear: onClearLoudness && selectedSongKey ? askClearLoudness : undefined,
         }}
       />}
       <Disclosure
@@ -917,6 +934,7 @@ export function LightingSetupPanel({
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
+      <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
     </Panel>
   );
 }

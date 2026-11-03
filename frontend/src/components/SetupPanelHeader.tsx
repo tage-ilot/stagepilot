@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { ConnectionStatus } from "../types";
 import { Badge, StatusBadge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -18,6 +20,7 @@ export function SetupPanelHeader({
   onClose,
   statusDetail,
   titleTone,
+  method,
 }: {
   title: string;
   /** The sentence under the title; omit it to show none. */
@@ -32,12 +35,21 @@ export function SetupPanelHeader({
   statusDetail?: string;
   /** Keeps the title in this identity's colour when the controls wear another accent (Lighting on its MIDI method). */
   titleTone?: PanelIdentity;
+  /**
+   * The panel's connection-method toggle (a ConnectionMethod with placement="header"). One rule places it for every panel:
+   * centred between the title block and the status pill + close when the header is wide enough (see .setup-header in
+   * index.css), otherwise on its own row under the title. Playback API, Playback MIDI and Lighting therefore put it at the
+   * same x and y.
+   */
+  method?: ReactNode;
 }) {
   const accent = useAccent();
   // Text and close share row one; below 480px the badge drops to row two, above it sits between them.
   return (
+    <div className="setup-header">
     <div
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 min-[480px]:grid-cols-[minmax(0,1fr)_auto_auto]"
+      className="setup-header-grid grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 min-[480px]:grid-cols-[minmax(0,1fr)_auto_auto]"
+      data-has-method={method ? "true" : undefined}
       data-setup-panel-header
     >
       <div className="col-start-1 row-start-1 min-w-0">
@@ -52,6 +64,7 @@ export function SetupPanelHeader({
       {/* The status pill always sits directly left of the close button, centred on its 44px height, on every connection page
           (owner, 2026-10-14). It used to centre on the title block, so it moved with the description. An extra badge, such as the
           saved alternate method, goes before the pill so the pill stays next to the close button. */}
+      <div className="setup-header-end">
       <div
         className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 justify-self-start min-[480px]:col-span-1 min-[480px]:col-start-2 min-[480px]:row-start-1 min-[480px]:h-ds-touch-target min-[480px]:flex-nowrap min-[480px]:justify-self-end"
         data-status-slot
@@ -71,6 +84,9 @@ export function SetupPanelHeader({
           ×
         </Button>
       )}
+      </div>
+      {method ? <div className="setup-header-method" data-header-method>{method}</div> : null}
+    </div>
     </div>
   );
 }

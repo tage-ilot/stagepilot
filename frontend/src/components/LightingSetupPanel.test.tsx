@@ -284,7 +284,7 @@ describe("LightingSetupPanel", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
-    const header = document.querySelector("[data-setup-panel-header]")!;
+    const header = document.querySelector("[data-status-slot]")!;
     expect(header).not.toHaveTextContent(/Alternate/i);
     expect(header).not.toHaveTextContent("MIDI ·");
   });
@@ -517,10 +517,10 @@ describe("LightingSetupPanel", () => {
     ], "midi");
   });
 
-  it("requires confirmation before clearing all cues", async () => {
+  it("asks in an in-app dialog before clearing all cues, and never uses window.confirm for it", async () => {
     const user = userEvent.setup();
     const onSaveCues = vi.fn();
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = vi.spyOn(window, "confirm");
     render(
       <LightingSetupPanel
         error={null}
@@ -536,15 +536,50 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    const clearAll = screen.getByRole("button", { name: "Clear all" });
-    await user.click(clearAll);
-    expect(confirm).toHaveBeenCalledWith(
-      'Clear all lighting cues for "Holy Forever"? This cannot be undone.',
-    );
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("permanently erased");
+    expect(dialog).toHaveTextContent("Holy Forever");
+    expect(screen.getByRole("button", { name: "Keep cues" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(onSaveCues).not.toHaveBeenCalled();
 
-    await user.click(clearAll);
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(screen.getByRole("button", { name: "Keep cues" }));
+    expect(onSaveCues).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(screen.getByRole("button", { name: "Erase permanently" }));
+    expect(onSaveCues).toHaveBeenCalledTimes(1);
     expect(onSaveCues).toHaveBeenCalledWith(song, [], "midi");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("asks before clearing the selected song and erases only after Erase permanently", async () => {
+    const user = userEvent.setup();
+    const onSaveCues = vi.fn();
+    const confirm = vi.spyOn(window, "confirm");
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={onSaveCues}
+        onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Holy Forever");
+    expect(onSaveCues).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Erase permanently" }));
+    expect(onSaveCues).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("puts the OSC / MIDI toggle in the same header slot as the Playback panel", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()}
+        onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(document.querySelector("[data-setup-panel-header] [data-header-method] [data-connection-method]")).not.toBeNull();
+    expect(document.querySelector("[data-header-method]")!.className).toContain("setup-header-method");
+    expect(screen.getByRole("radiogroup", { name: "Connection method" })).toBeInTheDocument();
   });
 
   it("sends an explicit Note On/Off compatibility test", async () => {

@@ -67,6 +67,12 @@ lengths: run Discover Song Order while Playback is stopped, after confirming
 that the complete Playback setlist order matches the StagePilot plan order.
 Number N is the discovered list index plus one (the existing MIDI position path).
 
+In the Playback panel the scan is the **Scan Playback Songs** button in the header row of the **Song order** section
+(its confirmation dialog is titled "Scan Playback Songs?", and the activity list marks events as "while scanning
+Playback songs"). The section can be folded with its chevron; the choice is remembered on this device and the section
+starts expanded. A folded section still shows a one-line summary ("Saved - 6 songs", "Learning - 2 of 6 placed",
+"No order yet") and the scan button.
+
 ### Learned order (provisional, before a scan)
 
 With **Learn the order as songs play** on (the default; `playback_api.learn_order`),

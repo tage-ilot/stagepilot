@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { playbackSettings, playbackState, playbackStatus } from "../test/playbackFixtures";
@@ -9,7 +9,7 @@ import { MidiSetupPanel } from "./MidiSetupPanel";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { PlaybackSaveBar, usePlaybackDraft } from "./PlaybackSaveFooter";
 import { usePlaybackSave, type PlaybackMidiStep } from "./usePlaybackSave";
-import { validPlaybackHost } from "./playbackStatus";
+import { SONG_ORDER_OPEN_KEY, validPlaybackHost } from "./playbackStatus";
 import { SetupChecklist } from "./SetupChecklist";
 import { buildConnectionCardViews, buildReadinessChecks } from "./dashboard/dashboardReadiness";
 
@@ -180,7 +180,7 @@ describe("Song order card", () => {
   it("disconnected: explanation instead of a dead button", () => {
     render(<PlaybackApiPanel playback={controller({ status: none() })} />);
     expect(screen.getByText("Connect to Playback first.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /song order/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /scan playback songs/i })).not.toBeInTheDocument();
   });
 
   it("connected without order: one button, confirmation dialog, then discover", async () => {
@@ -188,41 +188,41 @@ describe("Song order card", () => {
     const user = userEvent.setup();
     render(<PlaybackApiPanel playback={playback} />);
     expect(screen.getByText(/steps through your Playback songs once/)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Set up song order" }));
+    await user.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("must stay stopped");
     expect(dialog).toHaveTextContent("read their lengths");
     expect(dialog).toHaveTextContent("Nothing will be played.");
     expect(dialog).not.toHaveTextContent("2 seconds");
     expect(playback.discover).not.toHaveBeenCalled();
-    expect(within(dialog).getByRole("button", { name: "Set up song order" })).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Scan Playback Songs" })).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Set up song order" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Set up song order" }));
+    await user.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Scan Playback Songs" }));
     expect(playback.discover).toHaveBeenCalledOnce();
   });
 
   it("works with nothing typed or saved: no address and no save needed", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ song_order: [], stale: true, settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true } }) })} />);
-    expect(screen.getByRole("button", { name: "Set up song order" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).toBeEnabled();
   });
 
   it("playing: replaced by an explanation, not a dead control; an open dialog closes", () => {
     const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ song_order: [], stale: true }) })} />);
-    fireEvent.click(screen.getByRole("button", { name: "Set up song order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
     view.rerender(<PlaybackApiPanel playback={controller({ status: playbackStatus({ playing: true, song_order: [], stale: true }) })} />);
-    expect(screen.getByText("Stop Playback to set up song order.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /song order/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Stop Playback to scan Playback songs.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /scan playback songs/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("stale: warning message with the same one button; saved: confirmation count", () => {
     const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ stale: true }) })} />);
     expect(screen.getByText("Your Playback setlist changed. Scan the setlist again before updating Planning Center.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Set up song order" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).toBeEnabled();
     view.rerender(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
     expect(screen.getByText("Song order saved (2 songs)")).toBeVisible();
   });
@@ -345,6 +345,18 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(screen.queryByRole("button", { name: /Alternate connection: MIDI settings/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
+  });
+
+  it("the toggle sits in the panel header slot on the Playback API and the Playback MIDI screens alike", async () => {
+    const user = userEvent.setup();
+    panel();
+    const inHeader = () => document.querySelector("[data-setup-panel-header] [data-header-method] [data-connection-method]");
+    expect(inHeader()).not.toBeNull();
+    const slotClass = document.querySelector("[data-header-method]")!.className;
+    await chooseMethod(user, "real");
+    expect(inHeader()).not.toBeNull();
+    expect(document.querySelector("[data-header-method]")!.className).toBe(slotClass);
+    expect(document.querySelectorAll("[data-connection-method]")).toHaveLength(1);
   });
 
   it("switching the method swaps the fields as a view and calls nothing", async () => {
@@ -831,7 +843,7 @@ describe("outdated scan removes the Planning Center update and asks for a new sc
     expect(updateButton()).toBeDisabled();
     fireEvent.click(updateButton());
     expect(screen.queryByRole("dialog", { name: "Update Services?" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Set up song order" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Scan Playback Songs" }).length).toBeGreaterThan(0);
   });
 
   it("a fresh scan restores the update action without a restart", () => {
@@ -840,6 +852,60 @@ describe("outdated scan removes the Planning Center update and asks for a new sc
     view.rerender(<MidiSetupPanel playback={controller({ status: playbackStatus(measured) })} midi={null} messages={[]} error={null} message={null} pendingOperation={null} onRefresh={vi.fn()} onSelect={vi.fn()} settings={playbackSettings} onSaveSettings={vi.fn()} />);
     expect(screen.queryByText(NOTICE_SETLIST)).not.toBeInTheDocument();
     expect(updateButton()).toBeEnabled();
+  });
+});
+
+describe("Song order section", () => {
+  beforeEach(() => window.localStorage.clear());
+  const toggle = () => screen.getByRole("button", { name: /Song order/ });
+
+  it("is expanded by default, with chevron, title, one-line summary and the scan button in the header", () => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Saved - 2 songs");
+    const header = document.querySelector("[data-song-order-header]")!;
+    expect(within(header as HTMLElement).getByRole("button", { name: "Scan Playback Songs" })).toBeVisible();
+    expect(header.querySelector('[data-part="chevron"]')).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
+  });
+
+  it("folds, keeps the header row (summary and scan button) and remembers the choice on this device", async () => {
+    const user = userEvent.setup();
+    const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
+    await user.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    expect(window.localStorage.getItem(SONG_ORDER_OPEN_KEY)).toBe("false");
+    expect(document.getElementById(toggle().getAttribute("aria-controls")!)!.firstElementChild).toHaveAttribute("inert");
+    expect(screen.getByTestId("song-order-summary")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).toBeVisible();
+    view.unmount();
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    await userEvent.setup().click(toggle());
+    expect(window.localStorage.getItem(SONG_ORDER_OPEN_KEY)).toBe("true");
+  });
+
+  it.each([
+    ["saved", {}, "Saved - 2 songs"],
+    ["learning", { song_order: [], song_count: 6, plan_song_count: 6, order_mode: "learned" as const, learned_songs: [{ song_id: 7, plan_position: 0, confirmed: true, doubtful: false }, { song_id: 9, plan_position: 1, confirmed: false, doubtful: false }] }, "Learning - 2 of 6 placed"],
+    ["none", { song_order: [], song_count: 0, order_mode: "none" as const, learned_songs: [] }, "No order yet"],
+    ["stale", { stale: true }, "Needs a new scan"],
+  ])("summary when %s", (_name, extra, text) => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus(extra) })} />);
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent(text);
+  });
+
+  it("uses the Scan Playback Songs wording in the dialog and the activity line", async () => {
+    const user = userEvent.setup();
+    const playback = controller({ status: playbackStatus(), events: [{ event: { type: "song.started", timestamp: 1, song_id: 101, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null }, discovery: true }] });
+    render(<PlaybackApiPanel playback={playback} />);
+    await user.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    const dialog = screen.getByRole("dialog", { name: "Scan Playback Songs?" });
+    expect(within(dialog).getByRole("button", { name: "Scan Playback Songs" })).toHaveFocus();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: /Recent activity/ }));
+    expect(screen.getByText(/while scanning Playback songs/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/setting up song order|Set up song order|Set up again/);
   });
 });
 
@@ -854,7 +920,7 @@ describe("Learned song order", () => {
     render(<PlaybackApiPanel playback={controller({ status: learned() })} />);
     expect(screen.getByTestId("order-mode")).toHaveTextContent("Learning the order as songs play (2 of 6 placed)");
     expect(screen.queryByText(/Song order saved/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set up song order" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).toBeVisible();
   });
 
   it("scanned: Order scanned", () => {
