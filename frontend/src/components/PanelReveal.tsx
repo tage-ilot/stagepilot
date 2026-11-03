@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
+import { genieGeometry } from "../lib/genieGeometry";
 import type { PresencePhase } from "../hooks/usePanelPresence";
 
 export interface PanelRevealProps {
@@ -10,24 +11,42 @@ export interface PanelRevealProps {
   children: ReactNode;
 }
 
+/** Current translateY of an element (the genie animation moves the wrapper up), so layout position can be recovered. */
+function currentTranslateY(element: HTMLElement): number {
+  try {
+    const transform = getComputedStyle(element).transform;
+    if (!transform || transform === "none" || typeof DOMMatrixReadOnly === "undefined") return 0;
+    return new DOMMatrixReadOnly(transform).m42 || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
- * One wrapper animates the height (grid rows 0fr <-> 1fr, so the content below moves in lock-step); the panel inside
- * animates only transform, clip-path and opacity. See .panel-reveal in index.css and DESIGN.md "Config panel reveal".
+ * One wrapper animates the height (grid rows 0fr <-> 1fr, so the content below moves in lock-step) and slides up by the
+ * card gap; the visible clip box animates the funnel clip-path and opacity. See .panel-reveal in index.css and
+ * DESIGN.md "Config panel reveal".
  */
 export function PanelReveal({ phase, durationMs, trigger, children }: PanelRevealProps) {
   const root = useRef<HTMLDivElement>(null);
   const closing = phase === "closing";
 
-  // Horizontal origin = the card's own centre and width, as a percentage of the panel row.
+  // The card's own edges (as a % of the panel row) and the gap between its bottom edge and this wrapper.
   useLayoutEffect(() => {
     const element = root.current;
     const card = trigger();
     if (!element || !card) return;
     const host = element.getBoundingClientRect();
-    const box = card.getBoundingClientRect();
-    if (host.width <= 0) return;
-    element.style.setProperty("--genie-x", `${(((box.left + box.width / 2) - host.left) / host.width) * 100}%`);
-    element.style.setProperty("--genie-w", `${Math.min(100, (box.width / host.width) * 100)}%`);
+    // The panel's own top margin sits inside the clip box, so the visible shape starts at the first content element.
+    const content = element.querySelector<HTMLElement>(".panel-reveal__panel")?.firstElementChild ?? element;
+    const contentTop = content.getBoundingClientRect().top - currentTranslateY(element);
+    const geometry = genieGeometry(card.getBoundingClientRect(), { left: host.left, width: host.width, top: contentTop });
+    if (!geometry) return;
+    element.style.setProperty("--genie-x", `${geometry.x}%`);
+    element.style.setProperty("--genie-w", `${geometry.w}%`);
+    element.style.setProperty("--genie-l", `${geometry.l}%`);
+    element.style.setProperty("--genie-r", `${geometry.r}%`);
+    element.style.setProperty("--genie-gap", `${geometry.gap}px`);
   }, [trigger, phase]);
 
   // Closing: if focus is inside the panel, hand it back to the card before the panel goes inert.

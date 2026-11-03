@@ -3,6 +3,8 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePanelPresence } from "../hooks/usePanelPresence";
+import { genieDurationMs } from "../lib/genieDuration";
+import { genieGeometry } from "../lib/genieGeometry";
 import { PanelReveal } from "./PanelReveal";
 
 function Harness() {
@@ -52,5 +54,30 @@ describe("PanelReveal", () => {
     screen.getByLabelText("field").focus();
     act(() => { screen.getByText("card").click(); });
     expect(document.activeElement).toBe(screen.getByText("card"));
+  });
+});
+
+describe("genieGeometry", () => {
+  const host = { left: 100, width: 1000, top: 222 };
+  it("turns a card rect into edge/centre/width percentages and the gap", () => {
+    expect(genieGeometry({ left: 600, width: 200, bottom: 200 }, host)).toEqual({ x: 60, w: 20, l: 50, r: 70, gap: 22 });
+  });
+  it("clamps at the first and last card", () => {
+    expect(genieGeometry({ left: 80, width: 200, bottom: 222 }, host)).toMatchObject({ l: 0, r: 18, x: 9, w: 18, gap: 0 });
+    expect(genieGeometry({ left: 1000, width: 200, bottom: 230 }, host)).toMatchObject({ l: 90, r: 100, w: 10, gap: 0 });
+  });
+  it("returns null for a zero-width row", () => {
+    expect(genieGeometry({ left: 0, width: 10, bottom: 0 }, { left: 0, width: 0, top: 0 })).toBeNull();
+  });
+});
+
+describe("genieDurationMs", () => {
+  afterEach(() => { window.localStorage.removeItem("spGenieMs"); });
+  it("defaults, honours the dev override and ignores nonsense", () => {
+    expect(genieDurationMs(300)).toBe(300);
+    window.localStorage.setItem("spGenieMs", "3000");
+    expect(genieDurationMs(300)).toBe(3000);
+    window.localStorage.setItem("spGenieMs", "abc");
+    expect(genieDurationMs(300)).toBe(300);
   });
 });

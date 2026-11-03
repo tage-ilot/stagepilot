@@ -57,6 +57,7 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
+import { genieDurationMs } from "../lib/genieDuration";
 import { PanelReveal } from "./PanelReveal";
 import { usePanelPresence } from "../hooks/usePanelPresence";
 import { Button, Dialog, Panel, type LiveTone } from "./ui";
@@ -823,7 +824,7 @@ export function Dashboard({
     ? frozenRemaining
     : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
-  const revealMs = reducedMotion ? 100 : 300;
+  const revealMs = reducedMotion ? 100 : genieDurationMs(300);
   const { shown, phase } = usePanelPresence(canConfigure ? activeConnection : null, revealMs);
   const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
