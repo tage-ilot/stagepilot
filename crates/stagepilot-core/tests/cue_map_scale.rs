@@ -35,6 +35,7 @@ fn song(key: &str, rows: Vec<OscLightingCue>) -> SongLightingCueMap {
         osc_cues: rows,
         loudness: None,
         captured_edited: false,
+        capture: None,
     }
 }
 

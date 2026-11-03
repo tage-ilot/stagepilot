@@ -52,6 +52,7 @@ fn with_cues(cues: Vec<OscLightingCue>) -> LightsSettings {
             osc_cues: cues,
             loudness: None,
             captured_edited: false,
+            capture: None,
         },
     );
     lights

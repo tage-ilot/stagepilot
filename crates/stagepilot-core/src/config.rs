@@ -826,6 +826,71 @@ pub struct SongLightingCueMap {
     #[serde(default, skip_serializing_if = "flag_unset")]
     #[ts(optional, as = "Option<bool>")]
     pub captured_edited: bool,
+    /// How much of the song the captured rows cover. Absent on older cue maps and on songs with
+    /// no capture: captured rows without it count as an incomplete capture and are re-captured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub capture: Option<CaptureStatus>,
+}
+
+/// The state of a song's captured rows (`SongLightingCueMap::capture`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CaptureStatus {
+    /// A pass that covered at least 95 % of the song with no seek, no link drop of a minute or
+    /// more and at least one change. Only a complete capture is replayed by Auto.
+    pub complete: bool,
+    /// Seconds of the song the pass covered.
+    pub coverage_seconds: f64,
+    /// When the pass was saved, RFC 3339 UTC.
+    pub recorded_at: String,
+}
+
+/// What a song's cue map says about capturing (the chip on the songs strip).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CaptureLabel {
+    NotCaptured,
+    Incomplete,
+    FullyCaptured,
+    ManuallyCued,
+    ManuallyCuedAndFullyCaptured,
+}
+
+impl SongLightingCueMap {
+    pub fn has_captured_rows(&self) -> bool {
+        self.osc_cues
+            .iter()
+            .any(|row| row.source == OscCueSource::Captured)
+    }
+
+    /// Hand-built rows: manual look rows and MIDI cues.
+    pub fn has_manual_rows(&self) -> bool {
+        !self.cues.is_empty()
+            || self
+                .osc_cues
+                .iter()
+                .any(|row| row.source != OscCueSource::Captured)
+    }
+
+    /// Captured rows exist and a complete pass produced them.
+    pub fn is_fully_captured(&self) -> bool {
+        self.has_captured_rows() && self.capture.as_ref().is_some_and(|c| c.complete)
+    }
+
+    pub fn capture_label(&self) -> CaptureLabel {
+        let captured = self.has_captured_rows();
+        let complete = self.is_fully_captured();
+        let manual = self.has_manual_rows();
+        match (captured, complete, manual) {
+            (true, true, true) => CaptureLabel::ManuallyCuedAndFullyCaptured,
+            (true, true, false) => CaptureLabel::FullyCaptured,
+            (true, false, _) => CaptureLabel::Incomplete,
+            (false, _, true) => CaptureLabel::ManuallyCued,
+            (false, _, false) => CaptureLabel::NotCaptured,
+        }
+    }
 }
 
 /// Most loudness values one song keeps (0.25 s steps cover a 1000 s song).
@@ -863,6 +928,13 @@ pub struct LightkeySettings {
     /// Replay is on by default and only ever suspended by this switch (or by recording).
     #[serde(default = "default_true")]
     pub replay: bool,
+    /// Which songs capture and which replay. `auto` (default): the link decides per song when
+    /// its timer starts. `replay` and `record` pin it for every song. `record` is also what the
+    /// Record switch (`/lights/lightkey/recording`) sets, so it is never saved by the settings
+    /// route. `replay` stays the master switch: `false` replays nothing in any mode.
+    #[serde(default, skip_serializing_if = "LightkeyMode::is_auto")]
+    #[ts(optional, as = "Option<LightkeyMode>")]
+    pub mode: LightkeyMode,
     /// How finely a recording is kept as timeline rows (see `LightkeyDetail`). Left out of the
     /// saved file while `normal`, so an older file saves back unchanged.
     #[serde(default, skip_serializing_if = "LightkeyDetail::is_normal")]
@@ -880,9 +952,27 @@ impl Default for LightkeySettings {
         Self {
             api_url: String::new(),
             replay: true,
+            mode: LightkeyMode::default(),
             detail: LightkeyDetail::default(),
             audio_device: None,
         }
+    }
+}
+
+/// `LightkeySettings::mode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LightkeyMode {
+    #[default]
+    Auto,
+    Replay,
+    Record,
+}
+
+impl LightkeyMode {
+    pub fn is_auto(&self) -> bool {
+        *self == Self::Auto
     }
 }
 

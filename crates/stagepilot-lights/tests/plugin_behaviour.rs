@@ -73,6 +73,7 @@ fn settings(
             osc_cues: osc,
             loudness: None,
             captured_edited: false,
+            capture: None,
         },
     );
     LightsSettings {

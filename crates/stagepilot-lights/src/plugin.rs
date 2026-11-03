@@ -230,6 +230,13 @@ impl LightsPlugin {
                 FixtureEvent::StreamReset => inner.operator_stream_reset(),
             }
         }));
+        let captures_weak = weak.clone();
+        link_options.captures = Some(Arc::new(move |key: &str| match captures_weak.upgrade() {
+            Some(inner) => {
+                crate::lightkey_auto::song_capture(lock(&inner.state).settings.cue_maps.get(key))
+            }
+            None => crate::lightkey_auto::SongCapture::NotCaptured,
+        }));
         let settings_weak = weak.clone();
         let provider: crate::lightkey_link::SettingsProvider =
             Arc::new(move || match settings_weak.upgrade() {
@@ -770,12 +777,12 @@ impl Inner {
     /// May timeline fixture-override messages go out right now? Needs Lighting on, the OSC
     /// method, the Replay switch on and no recording armed.
     fn replay_allowed(&self) -> bool {
-        let armed = self.lightkey.get().is_some_and(LightkeyLink::armed);
+        let capturing = self.lightkey.get().is_some_and(LightkeyLink::capturing);
         let st = self.st();
         st.settings.enabled
             && st.settings.method == LightingMethod::Osc
             && st.settings.lightkey.replay
-            && !armed
+            && !capturing
     }
 
     /// Seconds into the song now, for a timer event that says the song was at `position` at
@@ -799,6 +806,10 @@ impl Inner {
         let Some(song) = song else {
             return;
         };
+        // Capture or replay is decided once, here (the link decides the same way on this start).
+        if let Some(link) = self.lightkey.get() {
+            link.decide_for_start(&song, payload.started_at);
+        }
         let active = self.active_cues(&song);
         self.take_back_due();
         // A new song: fixtures the last look held that this song does not use go back to

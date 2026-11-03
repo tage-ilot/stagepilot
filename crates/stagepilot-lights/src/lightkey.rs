@@ -6,7 +6,9 @@
 //! timeline then replays like any other row. Nothing here uses `tokio`.
 
 use serde::{Deserialize, Serialize};
-use stagepilot_core::config::{LightkeyDetail, LightkeySettings, DEFAULT_LIGHTKEY_API_PORT};
+use stagepilot_core::config::{
+    LightkeyDetail, LightkeyMode, LightkeySettings, DEFAULT_LIGHTKEY_API_PORT,
+};
 use stagepilot_core::state::ConnectionStatus;
 use ts_rs::TS;
 
@@ -62,6 +64,18 @@ pub struct FixtureStatus {
     pub recording: bool,
 }
 
+/// Auto's decision for the current (or next) song, with the reason the strip shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeyAuto {
+    /// The song captures (otherwise it replays).
+    pub capturing: bool,
+    /// For example "Auto: capturing this song".
+    pub reason: String,
+    /// The song the decision is about, when one is known.
+    pub song: Option<String>,
+}
+
 /// What the StagePilot Lightkey strip shows (`LightkeyStatus`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -73,6 +87,12 @@ pub struct LightkeyStatus {
     pub recording: bool,
     pub recording_song: Option<String>,
     pub replay: bool,
+    /// Auto, or Replay / Record pinned for every song (Record is the armed Record switch).
+    pub mode: LightkeyMode,
+    /// In Auto: what the link decided (or would decide) for the current/next song.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub auto: Option<LightkeyAuto>,
     pub replay_blocked: Option<String>,
     pub replaying_song: Option<String>,
     pub message: Option<String>,

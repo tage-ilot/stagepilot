@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 use stagepilot_core::config::{
-    clean_lightkey_api_url, LightkeyDetail, LightkeySettings, LightsSettings,
+    clean_lightkey_api_url, LightkeyDetail, LightkeyMode, LightkeySettings, LightsSettings,
 };
 use stagepilot_lights::lightkey::{effective_api_url, recording_is_worth_keeping};
 
@@ -68,6 +68,7 @@ fn replay_defaults_on_and_old_settings_load_with_replay_on() {
         LightkeySettings {
             api_url: String::new(),
             replay: true,
+            mode: LightkeyMode::Auto,
             detail: LightkeyDetail::Normal,
             audio_device: None,
         }
@@ -107,4 +108,45 @@ fn detail_defaults_to_normal_and_round_trips() {
     let old: LightkeySettings =
         serde_json::from_value(serde_json::json!({"api_url": "", "replay": true})).unwrap();
     assert_eq!(old.detail, LightkeyDetail::Normal);
+}
+
+#[test]
+fn mode_defaults_to_auto_round_trips_and_is_left_out_while_auto() {
+    use stagepilot_core::config::LightkeyMode;
+    assert_eq!(LightkeySettings::default().mode, LightkeyMode::Auto);
+    // An old file (no mode) loads as Auto and saves back without one.
+    let old: LightkeySettings =
+        serde_json::from_value(serde_json::json!({"replay": false})).unwrap();
+    assert_eq!(old.mode, LightkeyMode::Auto);
+    assert!(!old.replay, "the old replay switch keeps working");
+    assert!(serde_json::to_value(&old).unwrap().get("mode").is_none());
+    for (text, mode) in [
+        ("replay", LightkeyMode::Replay),
+        ("record", LightkeyMode::Record),
+    ] {
+        let loaded: LightkeySettings =
+            serde_json::from_value(serde_json::json!({"mode": text})).unwrap();
+        assert_eq!(loaded.mode, mode);
+        assert_eq!(serde_json::to_value(&loaded).unwrap()["mode"], text);
+    }
+}
+
+#[test]
+fn a_cue_map_capture_status_is_optional_and_round_trips() {
+    use stagepilot_core::config::{CaptureStatus, SongLightingCueMap};
+    let old: SongLightingCueMap =
+        serde_json::from_value(serde_json::json!({"song_key": "a", "song_title": "A"})).unwrap();
+    assert!(old.capture.is_none());
+    assert!(serde_json::to_value(&old).unwrap().get("capture").is_none());
+    let with = SongLightingCueMap {
+        capture: Some(CaptureStatus {
+            complete: false,
+            coverage_seconds: 12.5,
+            recorded_at: "2026-11-02T00:00:00Z".into(),
+        }),
+        ..old
+    };
+    let back: SongLightingCueMap =
+        serde_json::from_value(serde_json::to_value(&with).unwrap()).unwrap();
+    assert_eq!(back, with);
 }

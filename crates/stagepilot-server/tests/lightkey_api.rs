@@ -311,6 +311,7 @@ async fn old_settings_without_a_lightkey_block_load_with_replay_on() {
         LightkeySettings {
             api_url: String::new(),
             replay: true,
+            mode: stagepilot_core::config::LightkeyMode::Auto,
             detail: stagepilot_core::config::LightkeyDetail::Normal,
             audio_device: None,
         }
@@ -439,6 +440,7 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
             song_key: "song-1".into(),
             song_title: "Holy Forever".into(),
             rows,
+            status: complete(),
         })
     };
     // a manual row the operator added by hand
@@ -456,6 +458,7 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
             osc_cues: vec![manual],
             loudness: None,
             captured_edited: false,
+            capture: None,
         },
     );
     rt.settings_service.persist_lights(lights).unwrap();
@@ -485,6 +488,7 @@ async fn a_recording_past_the_timeline_caps_asks_for_a_coarser_detail() {
         song_key: "big".into(),
         song_title: "Big".into(),
         rows,
+        status: complete(),
     })
     .await;
     rt.stop().await;
@@ -550,6 +554,7 @@ async fn seed_dense_song(rt: &Runtime, count: usize) -> Vec<uuid::Uuid> {
             osc_cues,
             loudness: None,
             captured_edited: false,
+            capture: None,
         },
     );
     rt.settings_service.persist_lights(lights).unwrap();
@@ -692,6 +697,7 @@ async fn deleting_a_whole_captured_row_sets_the_song_flag_and_a_recording_clears
         song_key: "song-1".into(),
         song_title: "Holy Forever".into(),
         rows: vec![captured_row(1.0, "/fixture/P1/overrides/dimmer", 0.5)],
+        status: complete(),
     })
     .await
     .unwrap();
@@ -742,6 +748,7 @@ async fn a_stale_cue_map_put_is_refused_with_409_and_the_fresh_recording_survive
         song_key: "song-1".into(),
         song_title: "Holy Forever".into(),
         rows: vec![captured_row(2.0, "/fixture/P1/overrides/dimmer", 0.9)],
+        status: complete(),
     })
     .await
     .unwrap();
@@ -855,4 +862,12 @@ async fn a_cue_map_put_over_the_default_two_megabyte_limit_is_accepted() {
     let (code, response) = call(&router, "PUT", "/api/v1/lights/cue-map", Some(body)).await;
     rt.stop().await;
     assert_eq!(code, StatusCode::OK, "{response}");
+}
+
+fn complete() -> stagepilot_core::config::CaptureStatus {
+    stagepilot_core::config::CaptureStatus {
+        complete: true,
+        coverage_seconds: 100.0,
+        recorded_at: "2026-11-02T00:00:00Z".into(),
+    }
 }
