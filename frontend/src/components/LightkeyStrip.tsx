@@ -50,7 +50,7 @@ export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): str
   if (looks?.count) return capturedLooksText(count);
   if (status.captured) return `${count} captured look${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
   if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
-  return capturedLooksText(0);
+  return looks ? capturedLooksText(0) : "No lights captured yet.";
 }
 
 /** What the selected song holds: captured look rows, and whether any were changed by hand. */

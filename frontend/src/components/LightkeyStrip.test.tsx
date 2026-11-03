@@ -28,6 +28,7 @@ const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
   message: null,
   ...over,
 });
+const captured = { song_title: "Holy Forever", looks: 14 };
 const respond = (lightkey: LightkeyStatus, accepted = true, message = "ok") => ({ accepted, message, lightkey });
 
 beforeEach(() => { vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });

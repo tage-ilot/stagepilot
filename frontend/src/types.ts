@@ -250,6 +250,13 @@ export interface OscMessage {
 export type OscCueSource = "manual" | "captured";
 
 /** How finely a recording is thinned: finer replays motion smoother but makes more rows. */
+/** The song most recently saved to the timeline by a recording. */
+export interface LightkeyCaptured {
+  song_title: string;
+  /** Captured look rows now on that song's timeline. */
+  looks: number;
+}
+
 export type LightkeyDetail = "fine" | "normal" | "coarse";
 
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
