@@ -5,6 +5,8 @@ import type {
   LightingCaptureResponse,
   LightingCue,
   LightingMethod,
+  LightkeyDetail,
+  LightkeySimplifyResponse,
   LightingPad,
   OscArgument,
   OscLightingCue,
@@ -18,6 +20,7 @@ import {
   confirmClearAllLightingCues,
   confirmClearSelectedLightingCues,
 } from "./lightingCueConfirmations";
+import { simplifyLightkeyLooks } from "../api";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -31,11 +34,20 @@ import { accentClasses } from "./ui/accent";
 import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
-import { OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import {
+  capturedCount, detailLabels, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
+  removeFixtureFromRows,
+} from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
+import { CueTypeBadge } from "./CueTypeParts";
+import { useHiddenCueTypes } from "./useHiddenCueTypes";
+import type { CueTypeId } from "./lightingCueTypes";
+import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpokenLabel } from "./lightingCueTypes";
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
+import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
   formatElapsed,
@@ -48,9 +60,6 @@ import {
   type OscArgumentDraft,
 } from "./lightingOsc";
 
-const midiNoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
-const midiNoteName = (note: number) =>
-  `${midiNoteNames[note % midiNoteNames.length]}${Math.floor(note / 12) - 2}`;
 
 type NoteDisplayMode = "music" | "numeric";
 
@@ -78,7 +87,11 @@ export interface LightingPanelActions {
     capture?: { song_key: string; song_title: string; at_seconds: number },
   ) => Promise<LightingCaptureResponse | null>;
   onUndoCapture: (songKey: string, cueId: string) => Promise<boolean>;
+  /** Removes the selected song's loudness envelope (nothing else). */
+  onClearLoudness?: (songKey: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
+  /** Apply "Simplify this song" on the backend and reread the saved cue maps. */
+  onSimplifyLooks: (songKey: string, detail: LightkeyDetail) => Promise<LightkeySimplifyResponse | null>;
 }
 
 export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
@@ -102,7 +115,9 @@ export function LightingSetupPanel({
   onClearAllCues,
   onPressPad,
   onUndoCapture,
+  onClearLoudness,
   onSavePads,
+  onSimplifyLooks,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -123,7 +138,10 @@ export function LightingSetupPanel({
 } & Partial<LightingPanelActions>) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
-  const preferredSongKey = state.current_song ? songKey(state.current_song) : songs[0] ? songKey(songs[0]) : "";
+  // Only a song that is actually playing moves the follow. When a song ends, current_song may advance to the next one;
+  // that must not drop a hand pick (the last playing song is remembered below).
+  const liveSong = state.playing_song;
+  const liveKey = liveSong ? songKey(liveSong) : "";
   const [method, setMethod] = useState<LightingMethod>("osc");
   const [oscHost, setOscHost] = useState("127.0.0.1");
   const [oscPort, setOscPort] = useState("21600");
@@ -135,7 +153,19 @@ export function LightingSetupPanel({
   const [pulseMs, setPulseMs] = useState("100");
   const [testNote, setTestNote] = useState("60");
   const [testVelocity, setTestVelocity] = useState("127");
-  const [selectedSongKey, setSelectedSongKey] = useState(preferredSongKey);
+  // The timeline follows the live song, or the last one that played. A hand pick holds until the next song starts.
+  const [lastLiveKey, setLastLiveKey] = useState(liveKey);
+  const [manualSongKey, setManualSongKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!liveKey || liveKey === lastLiveKey) return;
+    setLastLiveKey(liveKey);
+    setManualSongKey(null);
+  }, [liveKey, lastLiveKey]);
+  const hasSong = (key: string | null): key is string => !!key && songs.some((song) => songKey(song) === key);
+  const followKey = hasSong(lastLiveKey) ? lastLiveKey : null;
+  const selectedSongKey = hasSong(manualSongKey)
+    ? manualSongKey
+    : (followKey ?? (songs[0] ? songKey(songs[0]) : ""));
   const [cues, setCues] = useState<LightingCue[]>([]);
   const [noteDisplayMode, setNoteDisplayMode] = useState<NoteDisplayMode>("music");
   const displayedNoteOptions = useMemo(
@@ -171,20 +201,29 @@ export function LightingSetupPanel({
     if (syncedPulse !== null) setPulseMs(syncedPulse);
   }, [syncedPulse]);
 
-  useEffect(() => {
-    if (!songs.some((song) => songKey(song) === selectedSongKey)) {
-      setSelectedSongKey(preferredSongKey);
-    }
-  }, [preferredSongKey, selectedSongKey, songs]);
-
   const selectedSong = songs.find((song) => songKey(song) === selectedSongKey) ?? null;
   const savedCueMap = selectedSongKey
     ? settings?.settings.lights.cue_maps[selectedSongKey]
     : undefined;
 
+  // Rows still being typed (no address yet) are kept across a refresh of the saved map and across the follow moving to
+  // another song; each song keeps its own (F-03).
+  const draftsBySong = useRef<Record<string, OscLightingCue[]>>({});
+  const shownSongKey = useRef(selectedSongKey);
+  const oscCuesNow = useRef<OscLightingCue[]>([]);
+  oscCuesNow.current = oscCues;
   useEffect(() => {
     setCues(savedCueMap?.cues.map((cue) => ({ ...cue })) ?? []);
-    setOscCues(savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? []);
+    const saved = savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? [];
+    let drafts = oscCuesNow.current.filter(isDraftRow);
+    if (shownSongKey.current !== selectedSongKey) {
+      draftsBySong.current[shownSongKey.current] = drafts;
+      shownSongKey.current = selectedSongKey;
+      drafts = draftsBySong.current[selectedSongKey] ?? [];
+      delete draftsBySong.current[selectedSongKey];
+    }
+    const draftIds = new Set(drafts.map((cue) => cue.id));
+    setOscCues([...saved.filter((cue) => !draftIds.has(cue.id)), ...drafts]);
   }, [savedCueMap, selectedSongKey]);
 
   // ---- Cue board, live capture and timeline ----
@@ -300,7 +339,19 @@ export function LightingSetupPanel({
     if (selectedSong) onSaveCues(selectedSong, sortedCues, "midi");
   };
 
-  const persistOscCues = (nextCues: OscLightingCue[]) => {
+  // One step of undo for merge, simplify and remove-fixture. Any other edit forgets it.
+  const [undo, setUndo] = useState<{ cues: OscLightingCue[]; text: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [simplify, setSimplify] = useState<{ detail: LightkeyDetail } | null>(null);
+  useEffect(() => { setUndo(null); setSelectedIds([]); setSimplify(null); setPage(0); setFocusId(null); }, [selectedSongKey]);
+  useEffect(() => {
+    setSelectedIds((ids) => (ids.every((id) => oscCues.some((cue) => cue.id === id)) ? ids : ids.filter((id) => oscCues.some((cue) => cue.id === id))));
+  }, [oscCues]);
+
+  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false) => {
+    if (!keepUndo) setUndo(null);
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setOscCues(sortedCues);
     if (selectedSong) onSaveCues(selectedSong, sortedCues, "osc");
@@ -308,7 +359,7 @@ export function LightingSetupPanel({
 
   // Timeline edits go through the same save as the cue rows, so the two stay in sync.
   const moveCue = (id: string, at: number) => {
-    if (method === "osc") persistOscCues(oscCues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
+    if (method === "osc") persistOscCues(oscCues.map((cue) => cue.id === id ? markEdited({ ...cue, at_seconds: at }) : cue));
     else persistCues(cues.map((cue) => cue.id === id ? { ...cue, at_seconds: at } : cue));
   };
   const removeCue = (id: string) => {
@@ -335,6 +386,59 @@ export function LightingSetupPanel({
     ]);
   };
 
+  // A look row changed by hand. A new message has no address yet, so it is only shown until the address is valid.
+  const commitLook = (next: OscLightingCue) => {
+    const messages = next.messages ?? [];
+    if (!messages.length) { persistOscCues(oscCues.filter((cue) => cue.id !== next.id)); return; }
+    const edited = markEdited(next);
+    if (messages.some((message) => message.address === "")) setOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
+    else persistOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
+  };
+  const mergeSelected = (ids: string[]) => {
+    const result = mergeRows(oscCues, ids);
+    if (!result) return;
+    if (result.changedAddresses.length && !confirmMergeChangesValues(result.changedAddresses)) return;
+    const before = oscCues;
+    persistOscCues(result.cues, true);
+    setUndo({ cues: before, text: `Undo merge of ${ids.length} rows` });
+    setSelectedIds([]);
+  };
+  const removeFixture = (fixture: string) => {
+    if (!selectedSong || !confirmRemoveFixture(fixture, selectedSong.title)) return;
+    const before = oscCues;
+    persistOscCues(removeFixtureFromRows(oscCues, fixture), true);
+    setUndo({ cues: before, text: `Undo removing ${fixture}` });
+  };
+  // The counts come from the backend (the same thin + merge step a recording uses), never from the browser.
+  const [simplifyPreview, setSimplifyPreview] = useState<LightkeySimplifyResponse | null>(null);
+  const simplifyDetail = simplify?.detail ?? null;
+  const capturedNow = capturedCount(oscCues);
+  useEffect(() => {
+    setSimplifyPreview(null);
+    if (!simplifyDetail || !selectedSongKey) return;
+    let current = true;
+    simplifyLightkeyLooks(selectedSongKey, simplifyDetail, false)
+      .then((response) => { if (current) setSimplifyPreview(response); })
+      .catch(() => { if (current) setSimplifyPreview({ accepted: false, applied: false, message: "Could not count the rows.", rows_before: 0, rows_after: 0, messages_before: 0, messages_after: 0 }); });
+    return () => { current = false; };
+  }, [simplifyDetail, selectedSongKey, capturedNow]);
+  const applySimplify = async () => {
+    if (!simplify || !selectedSongKey || !onSimplifyLooks) return;
+    const before = oscCues;
+    const result = await onSimplifyLooks(selectedSongKey, simplify.detail);
+    if (result?.applied) {
+      setUndo({ cues: before, text: "Undo simplify" });
+      setSimplify(null);
+    }
+  };
+  const undoLast = () => {
+    if (!undo) return;
+    persistOscCues(undo.cues, true);
+    setUndo(null);
+  };
+  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  const PAGE_SIZE = 40;
+
   const addOscCue = () => {
     persistOscCuesLocal([...oscCues, newOscCue(newCueId())]);
   };
@@ -359,7 +463,22 @@ export function LightingSetupPanel({
     }
   };
 
-  const shownCues = method === "osc" ? oscCues : cues;
+  // Hidden types only change what is drawn and listed; the cue maps and replay never see them.
+  const typeFilter = useHiddenCueTypes();
+  const keepRows = new Set([...selectedIds, ...(focusId ? [focusId] : [])]);
+  const rowVisible = (id: string, type: CueTypeId) => !typeFilter.hidden.has(type) || keepRows.has(id);
+  const listedOsc = oscCues.filter((cue) => rowVisible(cue.id, classifyOscCue(cue)));
+  const listedMidi = cues.filter((cue) => rowVisible(cue.id, classifyMidiCue(cue).type));
+  const pageCount = Math.max(1, Math.ceil(listedOsc.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const shownPage = listedOsc.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  useEffect(() => {
+    if (!focusId) return;
+    const index = listedOsc.findIndex((cue) => cue.id === focusId);
+    if (index >= 0) setPage(Math.floor(index / PAGE_SIZE));
+    document.getElementById(`look-row-${focusId}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownCues = method === "osc" ? listedOsc : listedMidi;
   const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
     (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
   ).length;
@@ -376,8 +495,20 @@ export function LightingSetupPanel({
   ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = method === "osc"
-    ? oscCues.filter((cue) => cue.address !== "").map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || cue.address, color: cue.color ?? null }))
-    : cues.map((cue) => ({ id: cue.id, at: cue.at_seconds, label: cue.label || `Note ${cue.note}`, color: cue.color ?? null }));
+    ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => {
+      const type = classifyOscCue(cue);
+      const label = isLook(cue) ? lookLabel(cue) : cue.label || cue.address;
+      return { id: cue.id, at: cue.at_seconds, label, color: cue.color ?? null, captured: isCaptured(cue), type, spokenLabel: typeSpokenLabel(type, label) };
+    })
+    : cues.map((cue) => {
+      const { type, sharp } = classifyMidiCue(cue);
+      const text = cue.label || `Note ${cue.note}`;
+      return {
+        id: cue.id, at: cue.at_seconds, color: cue.color ?? null, type, sharp,
+        label: noteDisplayMode === "music" ? `${midiNoteName(cue.note)} ${text}` : `${cue.note} ${text}`,
+        spokenLabel: midiSpokenLabel(cue.note, text),
+      };
+    });
   const savedLighting = settings?.settings.lights ?? lights;
   const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
   const savedOutputName = savedLighting?.output_name ?? null;
@@ -541,7 +672,15 @@ export function LightingSetupPanel({
       </div>
         </>
       )}
-      {savedMethod === "osc" && <LightkeyStrip lightingEnabled={Boolean(lights?.enabled)} />}
+      {savedMethod === "osc" && <LightkeyStrip
+        lightingEnabled={Boolean(lights?.enabled)}
+        looks={looks}
+        loudness={{
+          present: Boolean(savedCueMap?.loudness),
+          disabled: pendingOperation !== null,
+          onClear: onClearLoudness && selectedSongKey ? () => void onClearLoudness(selectedSongKey) : undefined,
+        }}
+      />}
       <Disclosure
         aside={(
           <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
@@ -559,11 +698,19 @@ export function LightingSetupPanel({
         <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
           <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
           <Field className="w-full sm:w-80" label="Song">
-            <Select onChange={(event) => setSelectedSongKey(event.target.value)} value={selectedSongKey}>
+            <Select onChange={(event) => setManualSongKey(event.target.value)} value={selectedSongKey}>
               {!songs.length && <option value="">Load a service plan first</option>}
               {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
             </Select>
           </Field>
+          {followKey && (
+            <p className="flex items-center gap-2 pb-2 text-type-body-sm text-ink-muted" data-testid="lighting-follow-status">
+              {selectedSongKey === followKey ? "Following live song" : `Showing ${selectedSong?.title ?? "another song"}`}
+              {selectedSongKey !== followKey && (
+                <Button onClick={() => setManualSongKey(null)} variant="secondary">Follow live</Button>
+              )}
+            </p>
+          )}
           {method === "midi" && (
           <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
             <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-playback-midi-text" : "text-ink-muted"}>♪</span>
@@ -647,11 +794,46 @@ export function LightingSetupPanel({
           <LightingTimeline
             disabled={pendingOperation !== null}
             markers={timelineMarkers}
+            onMerge={mergeSelected}
             onMove={moveCue}
             onRemove={removeCue}
+            onSelect={(id) => setFocusId(id)}
+            onSelectionChange={setSelectedIds}
+            selectedIds={selectedIds}
             playhead={elapsed}
+            loudness={savedCueMap?.loudness ?? null}
+            hiddenTypes={typeFilter.hidden}
+            method={method}
+            onShowAllTypes={typeFilter.showAll}
+            onToggleType={typeFilter.toggle}
             songLength={songLength}
           />
+        )}
+
+        {method === "osc" && (looks.count > 0 || undo || selectedIds.length > 1) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="look-tools">
+            <Button disabled={selectedIds.length < 2 || pendingOperation !== null} onClick={() => mergeSelected(selectedIds)} variant="tinted">
+              {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
+            </Button>
+            {looks.count > 0 && <Button disabled={pendingOperation !== null} onClick={() => setSimplify(simplify ? null : { detail: "normal" })} variant="tinted">Simplify this song</Button>}
+            {undo && <Button onClick={undoLast} variant="secondary">{undo.text}</Button>}
+            {selectedIds.length < 2 && <span className="text-type-body-sm text-ink-muted">Tick two or more rows, or Shift-click markers, to merge them.</span>}
+          </div>
+        )}
+        {method === "osc" && simplify && (
+          <div className="mt-2 flex flex-wrap items-end gap-3 rounded-ds-lg border border-edge-medium bg-surface-panel p-3" data-testid="simplify-panel" role="group" aria-label="Simplify this song">
+            <Field label="Detail">
+              <Select onChange={(event) => setSimplify({ detail: event.target.value as LightkeyDetail })} value={simplify.detail}>
+                {(Object.keys(detailLabels) as LightkeyDetail[]).map((detail) => <option key={detail} value={detail}>{detailLabels[detail]}</option>)}
+              </Select>
+            </Field>
+            <p className="text-ink" data-testid="simplify-preview">
+              {simplifyPreview === null ? "Counting…" : simplifyPreview.rows_before > 0 ? `${simplifyPreview.rows_before} rows → ${simplifyPreview.rows_after}` : simplifyPreview.message}
+            </p>
+            {simplifyPreview !== null && !simplifyPreview.accepted && simplifyPreview.rows_before > 0 && <p className="text-ink-muted" data-testid="simplify-note">{simplifyPreview.message}</p>}
+            <Button disabled={!simplifyPreview?.accepted || pendingOperation !== null} onClick={() => void applySimplify()} variant="tinted">Apply</Button>
+            <Button onClick={() => setSimplify(null)} variant="secondary">Cancel</Button>
+          </div>
         )}
 
         {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
@@ -665,7 +847,20 @@ export function LightingSetupPanel({
           role={shownCues.length > 0 ? "region" : undefined}
           tabIndex={shownCues.length > 0 ? 0 : undefined}
         >
-          {method === "osc" && oscCues.map((cue) => (
+          {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
+            <LookRow
+              cue={cue}
+              disabled={pendingOperation !== null}
+              highlight={cue.id === focusId}
+              key={cue.id}
+              onCommit={commitLook}
+              onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
+              onRemoveFixture={removeFixture}
+              onToggleSelect={() => setSelectedIds((ids) => ids.includes(cue.id) ? ids.filter((id) => id !== cue.id) : [...ids, cue.id])}
+              selected={selectedIds.includes(cue.id)}
+              songDuration={selectedSong?.duration_seconds ?? null}
+            />
+          ) : (
             <OscCueRow
               canTest={savedMethod === "osc" && !draftDiffersFromSaved}
               cue={cue}
@@ -681,8 +876,9 @@ export function LightingSetupPanel({
           ))}
           {method === "midi" && (
           <>
-          {cues.map((cue) => (
-            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" key={cue.id}>
+          {listedMidi.map((cue) => (
+            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[auto_7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" data-testid="midi-cue-row" key={cue.id}>
+              <span className="self-end pb-2"><CueTypeBadge sharp={classifyMidiCue(cue).sharp} type={classifyMidiCue(cue).type} /></span>
               <Field label="Elapsed time">
                 <Input aria-label="Elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
               </Field>
@@ -705,6 +901,13 @@ export function LightingSetupPanel({
           )}
           {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
         </ScrollRegion>
+        {method === "osc" && pageCount > 1 && (
+          <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
+            <Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} variant="tinted">Previous</Button>
+            <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(listedOsc.length, (safePage + 1) * PAGE_SIZE)} of {listedOsc.length}</span>
+            <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
+          </nav>
+        )}
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>

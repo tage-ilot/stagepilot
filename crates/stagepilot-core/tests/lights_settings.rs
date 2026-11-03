@@ -28,6 +28,8 @@ fn configured_lights() -> LightsSettings {
                 color: None,
             }],
             osc_cues: vec![],
+            loudness: None,
+            captured_edited: false,
         },
     );
     lights

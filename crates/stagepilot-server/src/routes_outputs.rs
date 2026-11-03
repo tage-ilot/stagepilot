@@ -4,7 +4,7 @@
 use crate::runtime::Runtime;
 use crate::validation::{self, http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::routing::{get, post, put};
 use axum::Router;
 use serde::de::DeserializeOwned;
@@ -37,6 +37,9 @@ const MIDI_BUSY: &str = "Stop the timer before changing the MIDI input.";
 const MIDI_DISABLED: &str = "The MIDI Playback plugin is disabled.";
 const PP_DISABLED: &str = "The ProPresenter plugin is disabled.";
 
+/// Largest cue-map PUT body: a song at the per-song caps plus its look rows.
+const CUE_MAP_BODY_LIMIT: usize = 8 * 1024 * 1024;
+
 pub fn routes() -> Router<Rt> {
     Router::new()
         .route("/api/v1/midi/inputs", get(midi_inputs).post(midi_inputs))
@@ -54,7 +57,11 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights", get(lights_status))
         .route("/api/v1/lights/outputs/refresh", post(lights_refresh))
         .route("/api/v1/lights/settings", post(lights_settings))
-        .route("/api/v1/lights/cue-map", put(lights_cue_map))
+        .route(
+            "/api/v1/lights/cue-map",
+            // A full 15,000-message song is close to axum's 2 MB default (K-01).
+            put(lights_cue_map).layer(DefaultBodyLimit::max(CUE_MAP_BODY_LIMIT)),
+        )
         .route("/api/v1/lights/pads", put(lights_pads))
         .route("/api/v1/lights/capture", post(lights_capture))
         .route("/api/v1/lights/capture/undo", post(lights_capture_undo))
@@ -62,14 +69,18 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights/test-osc", post(lights_test_osc))
         .route("/api/v1/lights/lightkey", get(lightkey_status))
         .route("/api/v1/lights/lightkey/settings", put(lightkey_settings))
+        .route("/api/v1/lights/lightkey/simplify", post(lightkey_simplify))
         .route(
             "/api/v1/lights/lightkey/recording",
             post(lightkey_recording),
         )
+        .route("/api/v1/lights/lightkey/release", post(lightkey_release))
+        .route("/api/v1/lights/lightkey/audio", get(lightkey_audio))
         .route(
-            "/api/v1/lights/lightkey/takes/{song_key}",
-            axum::routing::delete(lightkey_clear_take),
+            "/api/v1/lights/lightkey/audio/meter",
+            post(lightkey_audio_meter),
         )
+        .route("/api/v1/lights/loudness/clear", post(lights_loudness_clear))
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Value {
@@ -667,6 +678,9 @@ async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
     if let Err(response) = validate_lights_request(&request) {
         return response;
     }
+    // Serialize with the recording sink, capture, undo and simplify (C-01): all of them read,
+    // merge and persist the whole lights settings.
+    let _lock = rt.outputs.cue_lock.lock().await;
     let current = current_lights(&rt);
     // MIDI and OSC are independent: saving one method never touches the other's settings. A MIDI
     // save cannot overwrite the saved OSC host and port, and an OSC save cannot reset the saved
@@ -712,6 +726,7 @@ async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
         transport: current.transport,
         // The Lightkey block is not part of this request: carry it over untouched.
         lightkey: current.lightkey.clone(),
+        cue_revisions: current.cue_revisions.clone(),
     };
     updated.normalise();
     let mut errors = Vec::new();
@@ -755,6 +770,9 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
     }
     let mut errors = Vec::new();
     for (i, cue) in request.osc_cues.iter().enumerate() {
+        if !cue.messages.is_empty() {
+            continue; // a look row sends its messages; the shared validation below checks them
+        }
         let address = cue.address.trim();
         if let Err(message) = stagepilot_core::config::validate_osc_address(address) {
             errors.push(
@@ -772,6 +790,8 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: song_title.clone(),
         cues: request.cues.clone(),
         osc_cues: request.osc_cues.clone(),
+        loudness: None,
+        captured_edited: false,
     };
     let mut check = LightsSettings::default();
     check.cue_maps.insert(song_key.clone(), probe);
@@ -797,10 +817,22 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             song_title: song_title.clone(),
             cues: vec![],
             osc_cues: vec![],
+            loudness: None,
+            captured_edited: false,
         });
     let _ = value;
 
+    let _lock = rt.outputs.cue_lock.lock().await;
     let current = current_lights(&rt);
+    if let Some(sent) = request.revision {
+        let saved = current.cue_revisions.get(&song_key).copied().unwrap_or(0);
+        if sent != saved {
+            return http_error(
+                409,
+                "This song's lights changed since you opened them (a recording finished or another edit was saved). Reload and try again.",
+            );
+        }
+    }
     let existing = current.cue_maps.get(&song_key);
     // Replace only the submitted method's cues; the other method's cues are kept.
     let is_midi = request.method == LightingMethod::Midi;
@@ -817,9 +849,15 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         } else {
             existing.map(|m| m.osc_cues.clone()).unwrap_or_default()
         },
+        loudness: existing.and_then(|m| m.loudness.clone()),
+        captured_edited: false,
+    };
+    let merged = SongLightingCueMap {
+        captured_edited: captured_edited_after_save(existing, &merged, is_midi),
+        ..merged
     };
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
+    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated.cue_maps.insert(song_key.clone(), merged.clone());
     } else {
         updated.cue_maps.remove(&song_key);
@@ -839,6 +877,32 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         format!("Removed the lighting cue map for \"{song_title}\".")
     };
     lights_operation(&rt, true, message).await
+}
+
+/// The song-level "captured looks were changed by hand" flag after a cue-map save. Deleting a
+/// whole captured row leaves no row to carry the per-row `edited` mark, so the flag keeps it. It
+/// stays set until a recording replaces the captured rows, and clears when none are left.
+fn captured_edited_after_save(
+    existing: Option<&SongLightingCueMap>,
+    saved: &SongLightingCueMap,
+    midi_only: bool,
+) -> bool {
+    let Some(existing) = existing else {
+        return false;
+    };
+    let captured = |map: &SongLightingCueMap| {
+        map.osc_cues
+            .iter()
+            .filter(|row| row.source == stagepilot_core::config::OscCueSource::Captured)
+            .map(|row| row.id)
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let before = captured(existing);
+    let after = captured(saved);
+    if after.is_empty() {
+        return false;
+    }
+    existing.captured_edited || (!midi_only && before.iter().any(|id| !after.contains(id)))
 }
 
 async fn lights_pads(State(rt): State<Rt>, raw: Bytes) -> Json {
@@ -992,6 +1056,9 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     args: pad.args.clone(),
                     label: pad.label.clone(),
                     color: pad.color,
+                    messages: Vec::new(),
+                    source: Default::default(),
+                    edited: false,
                 };
                 cue_id = Some(cue.id);
                 osc_cues.push(cue);
@@ -1018,6 +1085,11 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                 song_title: song_title.trim().to_string(),
                 cues: midi_cues,
                 osc_cues,
+                loudness: existing.and_then(|m| m.loudness.clone()),
+                captured_edited: current
+                    .cue_maps
+                    .get(song_key)
+                    .is_some_and(|m| m.captured_edited),
             },
         );
         updated.normalise();
@@ -1085,9 +1157,11 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: existing.song_title.clone(),
         cues,
         osc_cues,
+        loudness: existing.loudness.clone(),
+        captured_edited: existing.captured_edited,
     };
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
+    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated
             .cue_maps
             .insert(request.song_key.clone(), merged.clone());
@@ -1184,10 +1258,13 @@ async fn lightkey_status(State(rt): State<Rt>) -> Json {
     ok(to_value(&rt.outputs.lights.lightkey_status().await))
 }
 
-/// `LightkeySettingsRequest`: both fields optional, send only what changed.
+/// `LightkeySettingsRequest`: every field optional, send only what changed.
 struct LightkeySettingsRequest {
     api_url: Option<String>,
     replay: Option<bool>,
+    detail: Option<stagepilot_core::config::LightkeyDetail>,
+    /// `Some("")` clears the choice (system default input).
+    audio_device: Option<String>,
 }
 
 /// pydantic's lax `bool`: `true`/`false`, `0`/`1`, and the strings pydantic accepts. `Err` is the
@@ -1257,8 +1334,67 @@ fn parse_lightkey_settings(
             }
         },
     };
+    // The frontend sends `detail_level` (status field of the same name); `detail` stays accepted.
+    let detail_key = if object.contains_key("detail_level") {
+        "detail_level"
+    } else {
+        "detail"
+    };
+    let detail = match object.get(detail_key) {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => match text.as_str() {
+            "fine" => Some(stagepilot_core::config::LightkeyDetail::Fine),
+            "normal" => Some(stagepilot_core::config::LightkeyDetail::Normal),
+            "coarse" => Some(stagepilot_core::config::LightkeyDetail::Coarse),
+            _ => {
+                errors.push(plain_error(
+                    "enum",
+                    detail_key,
+                    "Input should be 'fine', 'normal' or 'coarse'",
+                    &json!(text),
+                ));
+                None
+            }
+        },
+        Some(other) => {
+            errors.push(plain_error(
+                "enum",
+                detail_key,
+                "Input should be 'fine', 'normal' or 'coarse'",
+                other,
+            ));
+            None
+        }
+    };
+    let audio_device = match object.get("audio_device") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) if text.chars().count() <= 200 => Some(text.clone()),
+        Some(Value::String(text)) => {
+            errors.push(plain_error(
+                "string_too_long",
+                "audio_device",
+                "String should have at most 200 characters",
+                &json!(text),
+            ));
+            None
+        }
+        Some(other) => {
+            errors.push(plain_error(
+                "string_type",
+                "audio_device",
+                "Input should be a valid string",
+                other,
+            ));
+            None
+        }
+    };
     if errors.is_empty() {
-        Ok(LightkeySettingsRequest { api_url, replay })
+        Ok(LightkeySettingsRequest {
+            api_url,
+            replay,
+            detail,
+            audio_device,
+        })
     } else {
         Err(errors)
     }
@@ -1319,6 +1455,11 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
         api_url: stagepilot_core::config::clean_lightkey_api_url(&api_url)
             .unwrap_or_else(|_| api_url.clone()),
         replay: request.replay.unwrap_or(current.lightkey.replay),
+        detail: request.detail.unwrap_or(current.lightkey.detail),
+        audio_device: match &request.audio_device {
+            Some(name) => Some(name.trim().to_string()).filter(|name| !name.is_empty()),
+            None => current.lightkey.audio_device.clone(),
+        },
     };
     if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
         return response;
@@ -1342,6 +1483,114 @@ fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
         Some(Value::Object(map)) => Ok(map),
         other => Err(unprocessable(validation::invalid_body(raw, other.as_ref()))),
     }
+}
+
+/// "Release lights": give every fixture the replay holds back to Lightkey.
+async fn lightkey_release(State(rt): State<Rt>) -> Json {
+    let (accepted, message) = rt.outputs.lights.lightkey_release_lights().await;
+    lightkey_response(&rt, accepted, message).await
+}
+
+/// `POST /api/v1/lights/lightkey/simplify` `{song_key, detail_level?, apply?}`: the recording's
+/// thin + merge step over a song's captured rows. Without `apply` it only counts ("412 rows ->
+/// 190"); with it the simplified rows are saved through the same serialized cue-map path as a
+/// recording. Manual rows are never touched.
+async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
+    use stagepilot_lights::lightkey::LightkeySimplifyResponse;
+    let object = match object_body(&raw) {
+        Ok(object) => object,
+        Err(response) => return response,
+    };
+    let song_key = match object.get("song_key") {
+        Some(Value::String(text)) if !text.trim().is_empty() && text.len() <= 256 => {
+            text.trim().to_string()
+        }
+        Some(other) => {
+            return unprocessable(vec![plain_error(
+                "string_type",
+                "song_key",
+                "Input should be a non-empty string of at most 256 characters",
+                other,
+            )])
+        }
+        None => {
+            return unprocessable(vec![json!({"type": "missing", "loc": body_loc("song_key"),
+                "msg": "Field required", "input": Value::Object(object.clone())})])
+        }
+    };
+    let detail = match parse_lightkey_settings(&object) {
+        Ok(request) => request.detail,
+        Err(errors) => return unprocessable(errors),
+    };
+    let apply = match object.get("apply") {
+        None | Some(Value::Null) => false,
+        Some(value) => match lax_bool("apply", value) {
+            Ok(b) => b,
+            Err(error) => return unprocessable(vec![strip_ctx(error)]),
+        },
+    };
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let detail = detail.unwrap_or(current.lightkey.detail);
+    let respond = |accepted: bool, applied: bool, message: String, counts: [usize; 4]| {
+        let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
+        ok(to_value(&LightkeySimplifyResponse {
+            accepted,
+            applied,
+            message,
+            rows_before: n(counts[0]),
+            rows_after: n(counts[1]),
+            messages_before: n(counts[2]),
+            messages_after: n(counts[3]),
+        }))
+    };
+    let Some(result) = current.cue_maps.get(&song_key).and_then(|map| {
+        stagepilot_lights::lightkey_looks::simplify_song(map, detail.interval_seconds())
+    }) else {
+        return respond(
+            false,
+            false,
+            "This song has no captured looks to simplify.".into(),
+            [0; 4],
+        );
+    };
+    let counts = [
+        result.rows_before,
+        result.rows_after,
+        result.messages_before,
+        result.messages_after,
+    ];
+    let summary = format!("{} rows -> {}", result.rows_before, result.rows_after);
+    if result.rows_after >= result.rows_before {
+        return respond(
+            false,
+            false,
+            format!("Nothing to simplify at this detail ({summary})."),
+            counts,
+        );
+    }
+    if !stagepilot_lights::lightkey_looks::within_caps(&result.map) {
+        return respond(
+            false,
+            false,
+            format!("Still too many looks at this detail ({summary}); choose a coarser one."),
+            counts,
+        );
+    }
+    if !apply {
+        return respond(true, false, summary, counts);
+    }
+    let mut updated = current.clone();
+    updated.cue_maps.insert(song_key.clone(), result.map);
+    updated.normalise();
+    let merged = updated.cue_maps.get(&song_key).cloned();
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    if let Some(merged) = merged {
+        rt.outputs.lights.replace_cue_map(merged).await;
+    }
+    respond(true, true, format!("Simplified: {summary}."), counts)
 }
 
 async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
@@ -1370,19 +1619,107 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
     }))
 }
 
-async fn lightkey_clear_take(
-    State(rt): State<Rt>,
-    axum::extract::Path(song_key): axum::extract::Path<String>,
-) -> Json {
-    let removed = rt.outputs.lights.lightkey_clear_take(&song_key).await;
-    lightkey_response(
-        &rt,
-        removed,
-        if removed {
-            "Capture cleared.".into()
-        } else {
-            "That song has no capture.".into()
+// ---- Loudness ----------------------------------------------------------------------------------
+
+/// The input picker's data: devices, the saved choice, the live meter. `available: false` with a
+/// `reason` in a build or on a machine that cannot listen (the picker is then hidden).
+async fn lightkey_audio(State(rt): State<Rt>) -> Json {
+    audio_response(&rt, None).await
+}
+
+/// How long the audio routes wait for the device layer before answering with what is known.
+const AUDIO_ROUTE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The picker's data. Listing and opening inputs can block (a microphone permission dialog), so
+/// they run on a blocking thread with a timeout; a slow answer falls back to the cached view and
+/// the thread finishes on its own (A-01).
+async fn audio_response(rt: &Runtime, meter: Option<(Option<String>, bool)>) -> Json {
+    let selected = current_lights(rt).lightkey.audio_device;
+    let Some(hub) = rt.outputs.lights.lightkey_audio() else {
+        return ok(json!({
+            "available": false,
+            "reason": stagepilot_lights::audio::UNAVAILABLE_TEXT,
+            "devices": [],
+            "selected": null,
+            "note": null,
+            "level": null,
+            "metering": false,
+        }));
+    };
+    let worker = hub.clone();
+    let job = tokio::task::spawn_blocking(move || {
+        if let Some((device, on)) = meter {
+            worker.set_device(device);
+            worker.set_meter(on);
+        }
+        worker.info()
+    });
+    let mut info = match tokio::time::timeout(AUDIO_ROUTE_WAIT, job).await {
+        Ok(Ok(info)) => info,
+        _ => {
+            let mut info = hub.snapshot();
+            info.reason.get_or_insert_with(|| {
+                "The audio input is slow to answer (the system may be asking for microphone access)."
+                    .into()
+            });
+            info
+        }
+    };
+    info.selected = selected;
+    ok(to_value(&info))
+}
+
+/// Turns the picker's meter on (it switches itself off after a few seconds without a repeat) or
+/// off. Only the picker asks, and only while Record is chosen.
+async fn lightkey_audio_meter(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let on = match object_body(&raw) {
+        Ok(object) => match object.get("on") {
+            Some(value) => match lax_bool("on", value) {
+                Ok(on) => on,
+                Err(error) => return unprocessable(vec![strip_ctx(error)]),
+            },
+            None => true,
         },
-    )
-    .await
+        Err(response) => return response,
+    };
+    audio_response(&rt, Some((current_lights(&rt).lightkey.audio_device, on))).await
+}
+
+/// Removes a song's loudness envelope (nothing else on its cue map).
+async fn lights_loudness_clear(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let (request, _): (LoudnessClearRequest, Value) = match body(&raw) {
+        Ok(parsed) => parsed,
+        Err(response) => return response,
+    };
+    let mut errors = Vec::new();
+    length_error(&mut errors, "song_key", &request.song_key, 1, 256);
+    if let Err(response) = finish(errors) {
+        return response;
+    }
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let Some(mut map) = current.cue_maps.get(&request.song_key).cloned() else {
+        return lights_operation(&rt, false, "This song has no loudness.".into()).await;
+    };
+    if map.loudness.take().is_none() {
+        return lights_operation(&rt, false, "This song has no loudness.".into()).await;
+    }
+    let mut updated = current.clone();
+    if map.cues.is_empty() && map.osc_cues.is_empty() {
+        updated.cue_maps.remove(&request.song_key);
+    } else {
+        updated
+            .cue_maps
+            .insert(request.song_key.clone(), map.clone());
+    }
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    rt.outputs.lights.replace_cue_map(map).await;
+    lights_operation(&rt, true, "Loudness cleared.".into()).await
+}
+
+#[derive(serde::Deserialize)]
+struct LoudnessClearRequest {
+    song_key: String,
 }

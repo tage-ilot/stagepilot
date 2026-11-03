@@ -5,4 +5,10 @@ import type { LightkeySettings } from "./LightkeySettings";
 import type { MidiTransport } from "./MidiTransport";
 import type { SongLightingCueMap } from "./SongLightingCueMap";
 
-export type LightsSettings = { enabled: boolean, method: LightingMethod, transport: MidiTransport, output_name: string | null, channel: number, pulse_ms: number, osc_host: string, osc_port: number, cue_maps: { [key in string]: SongLightingCueMap }, pads: Array<LightingPad>, lightkey: LightkeySettings, };
+export type LightsSettings = { enabled: boolean, method: LightingMethod, transport: MidiTransport, output_name: string | null, channel: number, pulse_ms: number, osc_host: string, osc_port: number, cue_maps: { [key in string]: SongLightingCueMap }, pads: Array<LightingPad>, lightkey: LightkeySettings, 
+/**
+ * Per song, how many times its cue map has changed. The settings store bumps it on every
+ * save that changes a song's rows; a cue-map PUT that carries an older number is refused
+ * with 409, so an edit made on a stale list can never overwrite a fresh recording.
+ */
+cue_revisions?: { [key in string]: number }, };

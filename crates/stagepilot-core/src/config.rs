@@ -690,6 +690,73 @@ pub struct OscLightingCue {
     pub label: String,
     #[serde(default)]
     pub color: Option<PadColor>,
+    /// A "look": several OSC messages sent together at this row's time. When non-empty they are
+    /// sent instead of `address`/`args`. Left out of the saved file while empty, so a plain cue
+    /// saves exactly as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<OscMessage>>")]
+    pub messages: Vec<OscMessage>,
+    /// Where the row came from. Left out of the saved file while `manual`.
+    #[serde(default, skip_serializing_if = "OscCueSource::is_manual")]
+    #[ts(optional, as = "Option<OscCueSource>")]
+    pub source: OscCueSource,
+    /// Set when someone changed a captured look by hand, so a later recording does not replace it
+    /// silently. Left out of the saved file while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub edited: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// One OSC message of a look row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct OscMessage {
+    pub address: String,
+    #[serde(default)]
+    pub args: Vec<OscArgument>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum OscCueSource {
+    #[default]
+    Manual,
+    Captured,
+}
+
+impl OscCueSource {
+    pub fn is_manual(&self) -> bool {
+        *self == OscCueSource::Manual
+    }
+}
+
+/// Most messages one look row may hold (a rig has about 106 fixture addresses; headroom).
+pub const MAX_OSC_MESSAGES_PER_ROW: usize = 256;
+/// Most OSC rows one song may hold (sized for about 400 rows, with headroom).
+pub const MAX_OSC_ROWS_PER_SONG: usize = 1_000;
+/// Most arguments one look message may carry, and the longest text argument (M-01).
+pub const MAX_OSC_ARGS_PER_MESSAGE: usize = 8;
+pub const MAX_OSC_STRING_CHARS: usize = 256;
+/// Most look messages one song may hold in total (sized for about 6,000, with headroom).
+pub const MAX_OSC_MESSAGES_PER_SONG: usize = 15_000;
+
+impl OscLightingCue {
+    /// What the row sends: its `messages`, or else the single address and arguments.
+    pub fn outgoing(&self) -> Vec<OscMessage> {
+        if self.messages.is_empty() {
+            vec![OscMessage {
+                address: self.address.clone(),
+                args: self.args.clone(),
+            }]
+        } else {
+            self.messages.clone()
+        }
+    }
 }
 
 pub fn validate_osc_address(value: &str) -> Result<(), &'static str> {
@@ -703,6 +770,21 @@ pub fn validate_osc_address(value: &str) -> Result<(), &'static str> {
         return Err("An OSC address can be at most 256 characters.");
     }
     Ok(())
+}
+
+/// Address rule for a look message. Same as `validate_osc_address`, except that a
+/// `/fixture/...` address may contain spaces: Lightkey fixture names do ("Moving Head 1").
+pub fn validate_osc_message_address(value: &str) -> Result<(), &'static str> {
+    if value.starts_with("/fixture/") {
+        if value.chars().any(|c| (c as u32) < 32) {
+            return Err("An OSC address cannot contain control characters.");
+        }
+        if value.chars().count() > 256 {
+            return Err("An OSC address can be at most 256 characters.");
+        }
+        return Ok(());
+    }
+    validate_osc_address(value)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -734,6 +816,36 @@ pub struct SongLightingCueMap {
     pub cues: Vec<LightingCue>,
     #[serde(default)]
     pub osc_cues: Vec<OscLightingCue>,
+    /// How loud the room was while the song was recorded (levels only, never audio). Absent
+    /// until a recording captured it, so older files load and save back unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub loudness: Option<SongLoudness>,
+    /// Captured look rows of this song were changed by hand (a whole row deleted, for one):
+    /// Record asks before replacing them. Left out while false; a new recording clears it.
+    #[serde(default, skip_serializing_if = "flag_unset")]
+    #[ts(optional, as = "Option<bool>")]
+    pub captured_edited: bool,
+}
+
+/// Most loudness values one song keeps (0.25 s steps cover a 1000 s song).
+pub const MAX_LOUDNESS_VALUES: usize = 4_000;
+/// Recordings averaged into one loudness envelope; capped so it can still adapt.
+pub const MAX_LOUDNESS_TAKES: u32 = 8;
+
+/// A song's loudness envelope: one byte per `step_seconds` slot. `0` means "no data" (a pause or
+/// a missed slot); `1..=255` maps -60..0 dBFS. dBFS is a digital level, not sound pressure (SPL).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SongLoudness {
+    pub step_seconds: f64,
+    pub values: Vec<u8>,
+    /// How many recordings are averaged in (1 to 8).
+    pub takes: u32,
+}
+
+fn flag_unset(value: &bool) -> bool {
+    !*value
 }
 
 /// Default port of the `lightkey-api` agent (`DEFAULT_LIGHTKEY_API_PORT`).
@@ -751,6 +863,16 @@ pub struct LightkeySettings {
     /// Replay is on by default and only ever suspended by this switch (or by recording).
     #[serde(default = "default_true")]
     pub replay: bool,
+    /// How finely a recording is kept as timeline rows (see `LightkeyDetail`). Left out of the
+    /// saved file while `normal`, so an older file saves back unchanged.
+    #[serde(default, skip_serializing_if = "LightkeyDetail::is_normal")]
+    #[ts(optional, as = "Option<LightkeyDetail>")]
+    pub detail: LightkeyDetail,
+    /// Name of the audio input that measures loudness while recording. Unset means the system
+    /// default input; a name that is no longer present falls back to the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub audio_device: Option<String>,
 }
 
 impl Default for LightkeySettings {
@@ -758,6 +880,38 @@ impl Default for LightkeySettings {
         Self {
             api_url: String::new(),
             replay: true,
+            detail: LightkeyDetail::default(),
+            audio_device: None,
+        }
+    }
+}
+
+/// Detail of a recorded look: the grid its rows sit on and the closest spacing of two kept
+/// changes of one address. Finer is smoother on replay and makes more rows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LightkeyDetail {
+    /// 0.25 s.
+    Fine,
+    /// 0.5 s.
+    #[default]
+    Normal,
+    /// 1 s.
+    Coarse,
+}
+
+impl LightkeyDetail {
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    /// The thinning interval and row grid, in seconds.
+    pub fn interval_seconds(self) -> f64 {
+        match self {
+            Self::Fine => 0.25,
+            Self::Normal => 0.5,
+            Self::Coarse => 1.0,
         }
     }
 }
@@ -833,6 +987,12 @@ pub struct LightsSettings {
     pub pads: Vec<LightingPad>,
     #[serde(default)]
     pub lightkey: LightkeySettings,
+    /// Per song, how many times its cue map has changed. The settings store bumps it on every
+    /// save that changes a song's rows; a cue-map PUT that carries an older number is refused
+    /// with 409, so an edit made on a stale list can never overwrite a fresh recording.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, u32>>")]
+    pub cue_revisions: BTreeMap<String, u32>,
 }
 
 fn osc_method() -> LightingMethod {
@@ -865,6 +1025,7 @@ impl Default for LightsSettings {
             cue_maps: BTreeMap::new(),
             pads: vec![],
             lightkey: LightkeySettings::default(),
+            cue_revisions: BTreeMap::new(),
         }
     }
 }
@@ -899,6 +1060,9 @@ impl LightsSettings {
                 cue.at_seconds = round_tenths(cue.at_seconds);
                 cue.address = cue.address.trim().to_string();
                 cue.label = cue.label.trim().to_string();
+                for message in &mut cue.messages {
+                    message.address = message.address.trim().to_string();
+                }
             }
             map.cues.sort_by(|a, b| {
                 a.at_seconds
@@ -1042,8 +1206,90 @@ impl LightsSettings {
                     Some(86_399.0),
                     None,
                 );
-                if let Err(m) = validate_osc_address(&cue.address) {
-                    value_error(errors, &mp, m, json!(cue.address));
+                // A look row's own address is not sent, so it is only checked for a plain row.
+                if cue.messages.is_empty() {
+                    if let Err(m) = validate_osc_address(&cue.address) {
+                        value_error(errors, &mp, m, json!(cue.address));
+                    }
+                }
+                if cue.messages.len() > MAX_OSC_MESSAGES_PER_ROW {
+                    too_long(
+                        errors,
+                        &mp,
+                        "messages",
+                        cue.messages.len(),
+                        MAX_OSC_MESSAGES_PER_ROW,
+                    );
+                }
+                for message in &cue.messages {
+                    if let Err(m) = validate_osc_message_address(&message.address) {
+                        value_error(errors, &mp, m, json!(message.address));
+                    }
+                    if message.args.len() > MAX_OSC_ARGS_PER_MESSAGE {
+                        too_long(
+                            errors,
+                            &mp,
+                            "args",
+                            message.args.len(),
+                            MAX_OSC_ARGS_PER_MESSAGE,
+                        );
+                    }
+                    for arg in &message.args {
+                        if let OscArgument::String(text) = arg {
+                            let n = text.chars().count();
+                            if n > MAX_OSC_STRING_CHARS {
+                                too_long(errors, &mp, "args", n, MAX_OSC_STRING_CHARS);
+                            }
+                        }
+                    }
+                }
+            }
+            if map.osc_cues.len() > MAX_OSC_ROWS_PER_SONG {
+                too_long(
+                    errors,
+                    &mp,
+                    "osc_cues",
+                    map.osc_cues.len(),
+                    MAX_OSC_ROWS_PER_SONG,
+                );
+            }
+            let message_total: usize = map.osc_cues.iter().map(|c| c.messages.len()).sum();
+            if message_total > MAX_OSC_MESSAGES_PER_SONG {
+                too_long(
+                    errors,
+                    &mp,
+                    "messages",
+                    message_total,
+                    MAX_OSC_MESSAGES_PER_SONG,
+                );
+            }
+            if let Some(loudness) = &map.loudness {
+                check_range(
+                    errors,
+                    &mp,
+                    "step_seconds",
+                    loudness.step_seconds,
+                    Some(0.05),
+                    Some(10.0),
+                    None,
+                );
+                check_range(
+                    errors,
+                    &mp,
+                    "takes",
+                    loudness.takes,
+                    Some(1.0),
+                    Some(f64::from(MAX_LOUDNESS_TAKES)),
+                    None,
+                );
+                if loudness.values.len() > MAX_LOUDNESS_VALUES {
+                    too_long(
+                        errors,
+                        &mp,
+                        "values",
+                        loudness.values.len(),
+                        MAX_LOUDNESS_VALUES,
+                    );
                 }
             }
             let ids =

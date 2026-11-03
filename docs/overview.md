@@ -163,7 +163,7 @@ flowchart LR
 Ways to think about it:
 
 - **A pad is a reusable button.** Press it mid-song and it both fires the cue and writes it into this song's timeline at the current time, so you can program lights by playing along. Switch on **Preview only** to test pads without saving anything.
-- **Record and replay** (optional, needs the `lightkey-api` agent on the Lightkey Mac) captures cues, colors and mover positions from a live run and plays them back on later runs. Replay only touches what was recorded.
+- **Record and replay** (optional, needs the `lightkey-api` agent on the Lightkey Mac) captures colors, levels and mover positions from a live run and plays them back on later runs. Replay only touches the fixtures that were recorded, and holds the last look on pause, stop and song end.
 
 ### Only one method fires, never both
 

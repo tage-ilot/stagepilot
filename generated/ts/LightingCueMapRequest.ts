@@ -6,4 +6,9 @@ import type { OscLightingCue } from "./OscLightingCue";
 /**
  * `LightingCueMapRequest`: a song cue map that replaces only `method`'s cue list.
  */
-export type LightingCueMapRequest = { song_key: string, song_title: string, cues: Array<LightingCue>, osc_cues: Array<OscLightingCue>, method: LightingMethod, };
+export type LightingCueMapRequest = { song_key: string, song_title: string, cues: Array<LightingCue>, osc_cues: Array<OscLightingCue>, method: LightingMethod, 
+/**
+ * The song's revision (`settings.lights.cue_revisions`) the list was edited from. When it
+ * is older than the saved one the save is refused with 409. Left out = no check.
+ */
+revision?: number, };

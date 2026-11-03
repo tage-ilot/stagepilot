@@ -11,8 +11,9 @@
 //! * decoding a relay packet and a clock-ping answer,
 //! * the clock offset from the lowest-round-trip sample,
 //! * joining a command set that was split in parts, and finding lost packets,
-//! * recording changes against song time and building the stored [`FixtureTrack`],
-//! * the replay plan for a song position, and the commands that give fixtures back to the cues.
+//! * the ordered live state of the fixtures and the `clear` address that gives one back.
+//!
+//! Recording these changes into timeline rows is `crate::lightkey_looks`.
 //!
 //! The async shell is in `lightkey_link.rs` and `lightkey_relay.rs`.
 
@@ -23,16 +24,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Relay protocol version this client understands (`/relay/hello` first argument).
 pub const RELAY_VERSION: i32 = 1;
-/// Seconds before a recorded change that the replay command is sent. The agent's own measurement
-/// of OSC to first changed DMX frame is 40 to 50 ms; the take also stores the value it was made with.
-pub const FIXTURE_LEAD_SECONDS: f64 = 0.045;
-/// Most fixture changes one take can hold.
-pub const MAX_FIXTURE_EVENTS: usize = 100_000;
-/// Most commands one change (or the starting state) can hold.
-pub const MAX_COMMANDS_PER_EVENT: usize = 2_048;
 const MAX_ARGS: usize = 8;
 const MAX_ADDRESS: usize = 200;
-const MAX_SECONDS: f64 = 86_399.0;
 /// 1 January 1900 to 1 January 1970, in seconds.
 const NTP_UNIX_OFFSET: u64 = 2_208_988_800;
 
@@ -119,113 +112,15 @@ pub fn clear_address(fixture: &str) -> String {
     format!("/fixture/{fixture}/overrides/clear")
 }
 
-/// The commands that changed at one moment, `at_seconds` into the song.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FixtureEvent {
-    pub at_seconds: f64,
-    pub osc: Vec<FixtureCommand>,
-}
-
-/// Everything captured from the fixtures for one song. `initial` is the state at song time 0,
-/// then `events` change it.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct FixtureTrack {
-    #[serde(default)]
-    pub initial: Vec<FixtureCommand>,
-    #[serde(default)]
-    pub events: Vec<FixtureEvent>,
-    /// Seconds a command is sent before its time. The value the take was recorded with.
-    #[serde(default = "default_lead")]
-    pub lead_seconds: f64,
-}
-
-fn default_lead() -> f64 {
-    FIXTURE_LEAD_SECONDS
-}
-
-/// Why a track is refused. Same shape as `TakeError` in `lightkey.rs`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrackError(pub String);
-
-impl std::fmt::Display for TrackError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for TrackError {}
-
-fn round_ms(seconds: f64) -> f64 {
-    (seconds * 1000.0).round() / 1000.0
-}
-
-impl FixtureTrack {
-    /// Check every command, round times to 1 ms and sort the events by time (stable).
-    pub fn normalise_and_validate(&mut self) -> Result<(), TrackError> {
-        let err = |m: &str| Err(TrackError(m.to_string()));
-        if self.events.len() > MAX_FIXTURE_EVENTS {
-            return err("A take can hold at most 100000 fixture changes.");
-        }
-        if !(self.lead_seconds.is_finite() && (0.0..=1.0).contains(&self.lead_seconds)) {
-            return err("lead_seconds must be between 0 and 1.");
-        }
-        check_commands(&self.initial)?;
-        for event in &mut self.events {
-            event.at_seconds = round_ms(event.at_seconds);
-            if !(event.at_seconds.is_finite() && (0.0..=MAX_SECONDS).contains(&event.at_seconds)) {
-                return err("A fixture change time must be between 0 and 86399 seconds.");
-            }
-            if event.osc.is_empty() {
-                return err("A fixture change must hold at least one command.");
-            }
-            check_commands(&event.osc)?;
-        }
-        self.events
-            .sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
-        Ok(())
-    }
-
-    /// Names of the fixtures this track drives, sorted.
-    pub fn fixtures(&self) -> Vec<String> {
-        let mut names = BTreeSet::new();
-        for command in self
-            .initial
-            .iter()
-            .chain(self.events.iter().flat_map(|e| e.osc.iter()))
-        {
-            if let Some(name) = command.fixture() {
-                names.insert(name.to_string());
-            }
-        }
-        names.into_iter().collect()
-    }
-}
-
-fn check_commands(commands: &[FixtureCommand]) -> Result<(), TrackError> {
-    if commands.len() > MAX_COMMANDS_PER_EVENT {
-        return Err(TrackError(
-            "A fixture change can hold at most 2048 commands.".into(),
-        ));
-    }
-    for command in commands {
-        if command.fixture().is_none() {
-            return Err(TrackError(format!(
-                "Not a fixture override address: {}",
-                command.a
-            )));
-        }
-        if command.v.len() > MAX_ARGS {
-            return Err(TrackError("A command can hold at most 8 arguments.".into()));
-        }
-        let finite = command.v.iter().all(|a| match a {
+/// Whether a command can be replayed as a fixture override: a clean fixture address, at most
+/// `MAX_ARGS` arguments, finite numbers.
+pub fn is_replayable(command: &FixtureCommand) -> bool {
+    command.fixture().is_some()
+        && command.v.len() <= MAX_ARGS
+        && command.v.iter().all(|a| match a {
             FixtureArg::Float(f) => f.is_finite(),
             _ => true,
-        });
-        if !finite {
-            return Err(TrackError("A command argument must be finite.".into()));
-        }
-    }
-    Ok(())
+        })
 }
 
 // ---------------------------------------------------------------------------- ordered state
@@ -596,128 +491,6 @@ impl StreamTracker {
     }
 }
 
-// ------------------------------------------------------------------------------- recording
-
-/// Turns timed command sets into a [`FixtureTrack`].
-#[derive(Debug, Clone)]
-pub struct FixtureRecorder {
-    baseline: FixtureState,
-    current: FixtureState,
-    observed: Vec<(f64, Vec<FixtureCommand>)>,
-}
-
-impl FixtureRecorder {
-    /// `baseline` is the fixture state when the song started.
-    pub fn new(baseline: &FixtureState) -> Self {
-        Self {
-            baseline: baseline.clone(),
-            current: baseline.clone(),
-            observed: Vec::new(),
-        }
-    }
-
-    pub fn events(&self) -> usize {
-        self.observed.len()
-    }
-
-    /// Record the commands of one change at `position` seconds into the song. Commands that do
-    /// not change anything are dropped. Returns how many were kept.
-    pub fn observe(&mut self, position: f64, commands: &[FixtureCommand]) -> usize {
-        if self.observed.len() >= MAX_FIXTURE_EVENTS {
-            return 0;
-        }
-        let changed = self.current.apply_all(commands);
-        let kept = changed.len();
-        if kept > 0 {
-            self.observed.push((position, changed));
-        }
-        kept
-    }
-
-    /// Build the track. Changes at or before time 0 become part of the starting state. With
-    /// `all_fixtures` false (the default) the starting state names only fixtures that change
-    /// during the song, so the fixtures a song never touches stay with the cues and the operator.
-    /// Returns `None` when nothing changed: a constant look is not worth holding.
-    pub fn finish(
-        self,
-        duration: f64,
-        all_fixtures: bool,
-    ) -> Result<Option<FixtureTrack>, TrackError> {
-        let mut initial = self.baseline.clone();
-        let mut events: Vec<FixtureEvent> = Vec::new();
-        let mut ordered = self.observed;
-        ordered.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (raw_time, commands) in ordered {
-            let time = raw_time.max(0.0).min(duration);
-            if time <= 0.0 {
-                initial.apply_all(&commands);
-                continue;
-            }
-            match events.last_mut() {
-                Some(last) if (round_ms(time) - round_ms(last.at_seconds)).abs() < 0.0005 => {
-                    last.osc.extend(commands);
-                }
-                _ => events.push(FixtureEvent {
-                    at_seconds: time,
-                    osc: commands,
-                }),
-            }
-        }
-        if events.is_empty() {
-            return Ok(None);
-        }
-        let moved: BTreeSet<String> = events
-            .iter()
-            .flat_map(|e| e.osc.iter())
-            .filter_map(|c| c.fixture().map(str::to_string))
-            .collect();
-        let initial = if all_fixtures {
-            initial.commands()
-        } else {
-            initial.commands_of(&moved)
-        };
-        let mut track = FixtureTrack {
-            initial,
-            events,
-            lead_seconds: FIXTURE_LEAD_SECONDS,
-        };
-        track.normalise_and_validate()?;
-        Ok(Some(track))
-    }
-}
-
-// --------------------------------------------------------------------------------- replay
-
-/// What to send for a start or reposition at some song position.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FixtureReplay {
-    /// Force every managed fixture to its captured state at the position, at once.
-    pub sync_now: Vec<FixtureCommand>,
-    /// Changes after the position, in time order.
-    pub later: Vec<FixtureEvent>,
-    /// Every fixture the track drives: these are cleared when replay ends.
-    pub fixtures: BTreeSet<String>,
-}
-
-/// Plan the replay of `track` from `position`.
-pub fn fixture_replay_plan(track: &FixtureTrack, position: f64) -> FixtureReplay {
-    let mut state = FixtureState::new();
-    state.apply_all(&track.initial);
-    let mut later = Vec::new();
-    for event in &track.events {
-        if event.at_seconds <= position {
-            state.apply_all(&event.osc);
-        } else {
-            later.push(event.clone());
-        }
-    }
-    FixtureReplay {
-        sync_now: state.commands(),
-        later,
-        fixtures: track.fixtures().into_iter().collect(),
-    }
-}
-
 // ------------------------------------------------------------------------------------ tests
 
 #[cfg(test)]
@@ -1039,114 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn recorder_builds_initial_events_and_drops_untouched_fixtures() {
-        let mut base = FixtureState::new();
-        base.apply_all(&[dim("P1", 0.0), col("P1", 0.0, 0.0, 0.0), dim("P2", 0.5)]);
-        let mut r = FixtureRecorder::new(&base);
-        assert_eq!(r.observe(1.5, &[dim("P1", 1.0), dim("P2", 0.5)]), 1); // P2 did not change
-        r.observe(4.0, &[col("P1", 1.0, 0.0, 0.0)]);
-        r.observe(4.0004, &[col("P3", 0.0, 0.0, 1.0)]);
-        let track = r.finish(10.0, false).unwrap().unwrap();
-        assert_eq!(track.events.len(), 2);
-        assert_eq!(track.events[1].osc.len(), 2); // two changes in the same millisecond share one event
-        assert_eq!(track.fixtures(), vec!["P1", "P3"]);
-        // P2 never changed: not in the starting state
-        assert!(track.initial.iter().all(|c| c.fixture() == Some("P1")));
-        let all = {
-            let mut r = FixtureRecorder::new(&base);
-            r.observe(1.0, &[dim("P1", 1.0)]);
-            r.finish(10.0, true).unwrap().unwrap()
-        };
-        assert!(all.initial.iter().any(|c| c.fixture() == Some("P2")));
-    }
-
-    #[test]
-    fn recorder_folds_time_zero_clamps_and_returns_none_when_nothing_moved() {
-        let mut r = FixtureRecorder::new(&FixtureState::new());
-        r.observe(-0.2, &[dim("P1", 1.0)]);
-        assert!(r.finish(10.0, false).unwrap().is_none());
-        let mut r = FixtureRecorder::new(&FixtureState::new());
-        r.observe(0.0, &[dim("P1", 1.0)]);
-        r.observe(99.0, &[dim("P1", 0.0)]);
-        let track = r.finish(10.0, false).unwrap().unwrap();
-        assert_eq!(track.initial, vec![dim("P1", 1.0)]);
-        assert_eq!(track.events[0].at_seconds, 10.0);
-    }
-
-    #[test]
-    fn track_validation() {
-        let ok = |c: FixtureCommand| {
-            FixtureTrack {
-                initial: vec![c],
-                events: vec![],
-                lead_seconds: 0.045,
-            }
-            .normalise_and_validate()
-        };
-        assert!(ok(dim("P1", 1.0)).is_ok());
-        assert!(ok(cmd("/fixture/*/overrides/dimmer", vec![f(1.0)])).is_err());
-        assert!(ok(cmd("/live/x/cue/y/activate", vec![])).is_err());
-        assert!(ok(cmd("/fixture/P1/overrides/dimmer", vec![f(f64::NAN)])).is_err());
-        let mut t = FixtureTrack {
-            initial: vec![],
-            events: vec![
-                FixtureEvent {
-                    at_seconds: 5.0004,
-                    osc: vec![dim("P1", 1.0)],
-                },
-                FixtureEvent {
-                    at_seconds: 2.0,
-                    osc: vec![dim("P1", 0.0)],
-                },
-            ],
-            lead_seconds: 0.045,
-        };
-        t.normalise_and_validate().unwrap();
-        assert_eq!(t.events[0].at_seconds, 2.0);
-        assert_eq!(t.events[1].at_seconds, 5.0);
-        t.events.push(FixtureEvent {
-            at_seconds: 1.0,
-            osc: vec![],
-        });
-        assert!(t.normalise_and_validate().is_err());
-    }
-
-    #[test]
-    fn replay_plan_syncs_state_at_the_position_and_keeps_later_events() {
-        let track = FixtureTrack {
-            initial: vec![dim("P1", 0.0), col("P1", 0.0, 0.0, 0.0)],
-            events: vec![
-                FixtureEvent {
-                    at_seconds: 2.0,
-                    osc: vec![dim("P1", 1.0)],
-                },
-                FixtureEvent {
-                    at_seconds: 6.0,
-                    osc: vec![col("P1", 1.0, 0.0, 0.0), dim("P2", 0.5)],
-                },
-                FixtureEvent {
-                    at_seconds: 9.0,
-                    osc: vec![dim("P1", 0.0)],
-                },
-            ],
-            lead_seconds: 0.045,
-        };
-        let plan = fixture_replay_plan(&track, 6.0);
-        assert_eq!(
-            plan.sync_now,
-            vec![dim("P1", 1.0), col("P1", 1.0, 0.0, 0.0), dim("P2", 0.5)]
-        );
-        assert_eq!(plan.later.len(), 1);
-        assert_eq!(
-            plan.fixtures.iter().cloned().collect::<Vec<_>>(),
-            vec!["P1", "P2"]
-        );
-        let start = fixture_replay_plan(&track, 0.0);
-        assert_eq!(
-            start.sync_now,
-            vec![dim("P1", 0.0), col("P1", 0.0, 0.0, 0.0)]
-        );
-        assert_eq!(start.later.len(), 3);
+    fn clear_address_names_the_fixture() {
         assert_eq!(clear_address("MH 1"), "/fixture/MH 1/overrides/clear");
     }
 }

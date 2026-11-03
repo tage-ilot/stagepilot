@@ -23,7 +23,7 @@
 //!   stagepilot-server --contract-lightkey --lightkey-port N --port N
 //!       the "lightkey" contract profile: demo plan, simulated MIDI and timer output, Lighting on
 //!       OSC to a loopback port nothing listens on, and the Lightkey link polling a FAKE agent on
-//!       127.0.0.1:N with one seeded take. Mirrors `scripts/contract/lightkey_app.py`.
+//!       127.0.0.1:N. Mirrors `scripts/contract/lightkey_app.py`.
 //!
 //! The bind address comes from the settings (`STAGEPILOT_HOST` / `STAGEPILOT_PORT` override them);
 //! `--host` and `--port` override both.
@@ -31,13 +31,12 @@
 use stagepilot_core::auth::RemoteStore;
 use stagepilot_core::config::{
     IntegrationModes, LightingMethod, LightkeySettings, LightsSettings, MidiSettings, MidiSource,
-    ProPresenterSettings, ServiceSource, TimerOutput,
+    OscArgument, OscCueSource, OscLightingCue, OscMessage, ProPresenterSettings, ServiceSource,
+    SongLightingCueMap, TimerOutput,
 };
 use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
-use stagepilot_lights::lightkey::{LightkeyEdge, LightkeyTake};
-use stagepilot_lights::lightkey_link::{MemoryTakeStore, TakeStore};
 use stagepilot_pco::runtime::PcoOptions;
 use stagepilot_server::remote_fakes::ContractManager;
 use stagepilot_server::{
@@ -126,6 +125,37 @@ fn contract_outputs_settings(propresenter_port: u16) -> PersistentSettings {
     }
 }
 
+/// The look rows the contract profile seeds for the first demo song: one fixture, a start row
+/// and two changes, all `captured` (what a recording leaves on the timeline).
+fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLightingCueMap> {
+    let row = |n: u128, at: f64, level: f64| OscLightingCue {
+        id: uuid::Uuid::from_u128(n),
+        at_seconds: at,
+        address: "/fixture/Par 1/overrides/dimmer".into(),
+        args: vec![],
+        label: "Look - 1 fixture".into(),
+        color: None,
+        messages: vec![OscMessage {
+            address: "/fixture/Par 1/overrides/dimmer".into(),
+            args: vec![OscArgument::Float(level)],
+        }],
+        source: OscCueSource::Captured,
+        edited: false,
+    };
+    std::iter::once((
+        "demo-battle-belongs".to_string(),
+        SongLightingCueMap {
+            song_key: "demo-battle-belongs".into(),
+            song_title: "Battle Belongs".into(),
+            cues: vec![],
+            osc_cues: vec![row(1, 0.0, 0.0), row(2, 10.0, 1.0), row(3, 40.0, 0.25)],
+            loudness: None,
+            captured_edited: false,
+        },
+    ))
+    .collect()
+}
+
 /// The "lightkey" contract profile (see `scripts/contract/lightkey_app.py`).
 fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
     PersistentSettings {
@@ -142,39 +172,13 @@ fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
             lightkey: LightkeySettings {
                 api_url: format!("http://127.0.0.1:{agent_port}"),
                 replay: true,
+                ..LightkeySettings::default()
             },
+            cue_maps: contract_lightkey_cue_maps(),
             ..LightsSettings::default()
         },
         ..PersistentSettings::default()
     }
-}
-
-/// The take the Python profile seeds for the first demo song.
-fn contract_lightkey_store() -> Arc<dyn TakeStore> {
-    let edge = |at: f64, added: &[&str], removed: &[&str]| {
-        LightkeyEdge::new(
-            at,
-            added.iter().map(ToString::to_string).collect(),
-            removed.iter().map(ToString::to_string).collect(),
-        )
-    };
-    let take = LightkeyTake::new(
-        "demo-battle-belongs".into(),
-        "Battle Belongs".into(),
-        chrono::DateTime::parse_from_rfc3339("2026-10-20T20:00:00Z")
-            .map(|d| d.with_timezone(&chrono::Utc))
-            .unwrap_or_default(),
-        281.0,
-        vec!["Warm".into()],
-        vec![
-            edge(10.0, &["Stars"], &[]).expect("seed edge"),
-            edge(40.0, &["Strobe"], &["Stars"]).expect("seed edge"),
-        ],
-    )
-    .expect("seed take");
-    let store = MemoryTakeStore::new();
-    store.set(std::iter::once((take.song_key.clone(), take)).collect());
-    Arc::new(store)
 }
 
 #[tokio::main]
@@ -230,7 +234,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(service),
             false,
             OutputBackends {
-                lightkey_store: Some(contract_lightkey_store()),
                 ..OutputBackends::fake_midi()
             },
         )

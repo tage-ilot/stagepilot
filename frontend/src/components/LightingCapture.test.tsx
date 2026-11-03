@@ -187,12 +187,12 @@ describe("timeline in the panel", () => {
     });
     const markers = screen.getAllByTestId("lighting-marker");
     expect(markers).toHaveLength(1);
-    expect(markers[0]).toHaveAccessibleName("midi-only at 00:40");
+    expect(markers[0]).toHaveAccessibleName("MIDI note C3 (C, octave 3), midi-only, at 00:40");
   });
 
   it("a keyboard nudge saves the moved cue through the same save as the cue rows", async () => {
     const { onSaveCues } = mount({ osc_cues: [cue("o1", 20, "wash")] });
-    const marker = screen.getByRole("button", { name: "wash at 00:20" });
+    const marker = screen.getByRole("button", { name: "Other OSC, wash, at 00:20" });
     marker.focus();
     await userEvent.keyboard("{ArrowRight}");
     await waitFor(() => expect(onSaveCues).toHaveBeenCalledTimes(1));
@@ -245,7 +245,7 @@ describe("LightingTimeline", () => {
     const onMove = vi.fn();
     const onRemove = vi.fn();
     render(<LightingTimeline markers={markers} onMove={onMove} onRemove={onRemove} playhead={null} songLength={200} />);
-    const marker = screen.getByRole("button", { name: "Wash at 00:10" });
+    const marker = screen.getByRole("button", { name: "Manual look, Wash, at 00:10" });
     marker.focus();
     await userEvent.keyboard("{ArrowLeft}");
     expect(onMove).toHaveBeenLastCalledWith("a", 9.9);

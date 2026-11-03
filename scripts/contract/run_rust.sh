@@ -4,7 +4,7 @@
 # And the same for the "outputs" profile (fake MIDI, mock ProPresenter, dead-end OSC).
 # And the same for the "remote" and "static" profiles (the trusted remote ingress is a second
 # listener) and the "diagnostics" profile (uploads go to a mock control plane).
-# And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC, one seeded take).
+# And the same for the "lightkey" profile (fake lightkey-api, dead-end OSC).
 # Usage (repo root): scripts/contract/run_rust.sh [PORT]
 # Keep the base port and everything derived from it below 32768 (Linux ephemeral range).
 set -euo pipefail

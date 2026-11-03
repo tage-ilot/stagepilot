@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  clearLightkeyTake,
   getLightkeyStatus,
+  releaseLightkeyLights,
   saveLightkeySettings,
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus, LightkeyTakeSummary } from "../types";
+import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyDetail, LightkeyLink, LightkeyStatus } from "../types";
 import { Button } from "./ui/Button";
+import { ConnectionMethod } from "./ui/ConnectionMethod";
+import { confirmRerecordLooks } from "./lightingCueConfirmations";
+import { LoudnessPicker } from "./LoudnessPicker";
 import { Input } from "./ui/Input";
 import { StatusDot } from "./ui/StatusDot";
-import { Switch } from "./ui/Switch";
 import type { Tone } from "./ui/types";
 
 const POLL_MS = 1500;
@@ -31,45 +33,48 @@ const linkTone: Record<LightkeyLink, Tone> = {
 
 const fixtureTone: Record<LightkeyFixtureStatus["link"], Tone> = { waiting: "idle", live: "success", lost: "warning" };
 
-/** The fixture-level line: what is captured besides cues, in words. */
+/** The fixture-level line: what is captured, in words. */
 function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
   if (fixtures.link === "live") return `Colour and levels: ${fixtures.fixtures} fixture${fixtures.fixtures === 1 ? "" : "s"}`;
   if (fixtures.link === "waiting") return "Colour and levels: connecting";
   return fixtures.detail ?? "Colour and levels: not receiving";
 }
 
-function takeDetail(take: LightkeyTakeSummary): string {
-  const cues = `${take.edge_count} change${take.edge_count === 1 ? "" : "s"}`;
-  const levels = take.fixture_event_count ? ` · ${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}` : "";
-  return cues + levels;
-}
-
-/** The line under the switches: the one thing the operator most needs to know right now. */
-export function lightkeyHeadline(status: LightkeyStatus): string {
+/** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
+export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): string {
   if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
-  if (status.replay_blocked && status.takes.length > 0) return status.replay_blocked;
-  if (status.link === "connected" && status.takes.length === 0) {
-    return "Turn on Record, then start a song. Its lights are captured with the countdown.";
-  }
-  return status.takes.length === 1 ? "1 song captured." : `${status.takes.length} songs captured.`;
+  const count = looks?.count ?? status.captured?.looks ?? 0;
+  if (status.replay_blocked && count > 0) return status.replay_blocked;
+  if (looks?.count) return capturedLooksText(count);
+  if (status.captured) return `${count} captured look${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
+  if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
+  return looks ? capturedLooksText(0) : "No lights captured yet.";
 }
+
+/** What the selected song holds: captured look rows, and whether any were changed by hand. */
+export interface SongLooks { count: number; edited: boolean }
+
+export const capturedLooksText = (count: number): string =>
+  `${count} captured look${count === 1 ? "" : "s"} on this song`;
+
+const detailChoices: { value: LightkeyDetail; label: string }[] = [
+  { value: "fine", label: "Fine" },
+  { value: "normal", label: "Normal" },
+  { value: "coarse", label: "Coarse" },
+];
 
 /** Same text, ignoring quote style and spacing (the backend writes straight quotes, the headline curly ones). */
 export function normaliseLine(text: string): string {
   return text.replace(/[\u201C\u201D\u201E]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, " ").trim();
 }
 
-/**
- * The lines under the switches, top to bottom, never the same thing twice: what just happened (an error or the
- * backend message), the headline, and, while a recording is armed or running with Replay on, that replay is paused.
- */
-export function lightkeyLines(status: LightkeyStatus, error: string | null): string[] {
+/** The lines under the toggle, top to bottom, never the same thing twice: what just happened (an error or the backend message), then the headline. */
+export function lightkeyLines(status: LightkeyStatus, error: string | null, looks?: SongLooks): string[] {
   const candidates = [
-    error ?? status.message ?? lightkeyHeadline(status),
-    lightkeyHeadline(status),
-    status.recording && status.replay ? "Replay paused while recording." : "",
+    error ?? status.message ?? lightkeyHeadline(status, looks),
+    lightkeyHeadline(status, looks),
   ];
   const lines: string[] = [];
   const seen = new Set<string>();
@@ -82,11 +87,26 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null): str
   return lines;
 }
 
+/** "Holding 5 fixtures. 2 yielded to the operator." or "" when there is nothing to say. */
+function lightkeyHolding(status: LightkeyStatus): string {
+  const holding = status.holding_fixtures ?? 0;
+  const yielded = status.yielded_fixtures ?? 0;
+  const parts: string[] = [];
+  if (holding > 0) parts.push(`Holding ${holding} fixture${holding === 1 ? "" : "s"}.`);
+  if (yielded > 0) parts.push(`${yielded} yielded to the operator.`);
+  return parts.join(" ");
+}
+
 /**
  * Lightkey live link, kept to the minimum: connect, record, replay.
- * Lightkey sends nothing back over OSC or MIDI, so this reads the active cues from the lightkey-api agent on the Lightkey Mac.
+ * Captures the fixtures' colour and levels from the lightkey-api agent on the Lightkey Mac and holds them with overrides on replay.
  */
-export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean }) {
+export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
+  lightingEnabled: boolean;
+  looks?: SongLooks;
+  /** The selected song's loudness: whether it has any, and how to clear it. */
+  loudness?: { present: boolean; onClear?: () => void; disabled?: boolean };
+}) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null); // null = untouched, show the saved one
@@ -144,7 +164,26 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
     return response;
   });
 
-  const [headline, ...details] = lightkeyLines(status, error);
+  // Record -> Replay: stop recording first, then make sure replay is on. A failure leaves the toggle on what the
+  // backend says (it is re-read), and the message is shown.
+  const backToReplay = async (): Promise<LightkeyActionResponse> => {
+    try {
+      let response: LightkeyActionResponse | null = null;
+      if (status.recording) {
+        response = await setLightkeyRecording(false);
+        if (!response.accepted) return response;
+      }
+      if (!status.replay || response === null) {
+        response = await saveLightkeySettings({ replay: true });
+      }
+      return response;
+    } catch (cause) {
+      await load();
+      throw cause;
+    }
+  };
+
+  const [headline, ...details] = lightkeyLines(status, error, looks);
   return (
     <section aria-label="Lightkey live link" className="mt-6" data-testid="lightkey-strip">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -152,9 +191,6 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         <span className="inline-flex items-center gap-2 text-sm text-ink-body" data-testid="lightkey-link">
           <StatusDot ignoreAccent label={linkWord[status.link]} tone={linkTone[status.link]} />
           {linkWord[status.link]}
-          {connected && status.active_count !== null && (
-            <span className="text-ink-muted">· {status.active_count} cue{status.active_count === 1 ? "" : "s"} on</span>
-          )}
         </span>
       </div>
       {status.link !== "connected" && status.link !== "off" && status.detail && (
@@ -186,19 +222,45 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         </Button>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-8">
-        <Switch
-          checked={status.recording}
-          disabled={busy || (!status.recording && !connected)}
-          label="Record from Lightkey"
-          onChange={(event) => void run(() => setLightkeyRecording(event.target.checked))}
-        />
-        <Switch
-          checked={status.replay}
-          disabled={busy}
-          label="Replay captured lights"
-          onChange={(event) => void run(() => saveLightkeySettings({ replay: event.target.checked }))}
-        />
+      <ConnectionMethod
+        className="mt-[-1.25rem]"
+        disabled={busy}
+        label="Lightkey mode"
+        onChange={(mode) => {
+          if (mode !== "record") { void run(backToReplay); return; }
+          if (looks?.edited && !confirmRerecordLooks()) return;
+          void run(() => setLightkeyRecording(true));
+        }}
+        options={[
+          { value: "replay", label: "Replay" },
+          { value: "record", label: "Record", disabled: !status.recording && !connected },
+        ]}
+        value={status.recording ? "record" : "replay"}
+      />
+
+      {!status.recording && status.replay === false && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
+          <p className="text-type-body-sm text-warning-text">
+            Replay is off, so saved lights will not play. The toggle above does not show this.
+          </p>
+          <Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">
+            Turn Replay on
+          </Button>
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          disabled={busy || Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) === 0}
+          onClick={() => void run(() => releaseLightkeyLights())}
+          variant="secondary"
+          tone="lighting"
+        >
+          Release lights
+        </Button>
+        {lightkeyHolding(status) && (
+          <span className="text-type-body-sm text-ink-muted" data-testid="lightkey-holding">{lightkeyHolding(status)}</span>
+        )}
       </div>
 
       <p aria-live="polite" className="mt-1 text-type-body-sm text-ink-muted" data-testid="lightkey-headline">
@@ -208,25 +270,20 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         <p className="text-type-body-sm text-ink-muted" data-testid="lightkey-detail" key={line}>{line}</p>
       ))}
 
-      {status.takes.length > 0 && (
-        <ul aria-label="Captured songs" className="mt-2 grid gap-1">
-          {status.takes.map((take) => (
-            <li className="flex items-center justify-between gap-3 text-sm text-ink-body" key={take.song_key}>
-              <span className="min-w-0 truncate">
-                {take.song_title}
-                <span className="text-ink-muted"> · {takeDetail(take)}</span>
-              </span>
-              <Button
-                aria-label={`Clear capture for ${take.song_title}`}
-                disabled={busy}
-                onClick={() => void run(() => clearLightkeyTake(take.song_key))}
-                variant="secondary"
-              >
-                Clear
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {status.recording && (
+        <div className="mt-2" data-testid="lightkey-detail-setting">
+          <ConnectionMethod
+            disabled={busy}
+            label="Detail"
+            onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
+            options={detailChoices}
+            value={status.detail_level ?? "normal"}
+          />
+          <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>
+        </div>
+      )}
+      {status.recording && (
+        <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
       )}
     </section>
   );

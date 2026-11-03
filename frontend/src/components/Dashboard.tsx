@@ -466,7 +466,9 @@ export function Dashboard({
   saveLightingPads,
   pressLightingPad,
   undoLightingCapture,
+  clearLightingLoudness,
   clearAllLightingCues = () => undefined,
+  simplifyLightingLooks,
   updater,
 }: {
   capabilities?: AccessCapabilities;
@@ -526,7 +528,9 @@ export function Dashboard({
   saveLightingPads?: (pads: LightingPad[]) => Promise<boolean>;
   pressLightingPad?: LightingPanelActions["onPressPad"];
   undoLightingCapture?: LightingPanelActions["onUndoCapture"];
+  clearLightingLoudness?: LightingPanelActions["onClearLoudness"];
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
+  simplifyLightingLooks?: LightingPanelActions["onSimplifyLooks"];
   updater?: UpdaterController;
 }) {
   const { canOperate, canConfigure } = capabilities;
@@ -1115,12 +1119,14 @@ export function Dashboard({
           lights={lights}
           message={lightingMessage}
           onClearAllCues={clearAllLightingCues}
+          onSimplifyLooks={simplifyLightingLooks}
           onClose={closeConnection}
           onRefresh={refreshLighting}
           onSaveCues={saveLightingCues}
           onPressPad={pressLightingPad}
           onSavePads={saveLightingPads}
           onUndoCapture={undoLightingCapture}
+          onClearLoudness={clearLightingLoudness}
           onSaveSettings={saveLighting}
           onTest={sendLightingTest}
           onTestOsc={sendOscLightingTest}

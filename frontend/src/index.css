@@ -1500,3 +1500,8 @@ textarea:focus-visible {
     margin-left: clamp(1.25rem, 12cqw, 2.75rem);
   }
 }
+
+/* Lighting timeline cue types: bar styles that do not rely on colour (solid = fill, hollow, dashed, striped). */
+.cue-bar-off { background: transparent; border: 3px solid var(--ds-cue-live); }
+.cue-bar-other { background: repeating-linear-gradient(180deg, var(--ds-cue-other) 0 5px, transparent 5px 9px); }
+.cue-bar-sharp { background-image: repeating-linear-gradient(135deg, var(--ds-surface-950) 0 2px, transparent 2px 5px); }

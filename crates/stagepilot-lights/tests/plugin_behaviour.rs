@@ -52,6 +52,9 @@ fn osc_cue(at: f64, address: &str, args: Vec<OscArgument>, label: &str) -> OscLi
         args,
         label: label.into(),
         color: None,
+        messages: Vec::new(),
+        source: Default::default(),
+        edited: false,
     }
 }
 
@@ -68,6 +71,8 @@ fn settings(
             song_title: "Holy Forever".into(),
             cues,
             osc_cues: osc,
+            loudness: None,
+            captured_edited: false,
         },
     );
     LightsSettings {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  ApiError,
   completePlanningCenterOAuth,
   disconnectPlanningCenterOAuth,
   getAccess,
@@ -25,6 +26,8 @@ import {
   testLightingCue,
   captureLightingPad,
   undoLightingCapture,
+  clearLightingLoudness,
+  simplifyLightkeyLooks,
   updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
@@ -61,6 +64,8 @@ import type {
   SettingsResponse,
   Song,
   LightingMethod,
+  LightkeyDetail,
+  LightkeySimplifyResponse,
   OscArgument,
   OscLightingCue,
   SongLightingCueMapInput,
@@ -92,6 +97,8 @@ export function useStagePilot() {
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const settingsRef = useRef<SettingsResponse | null>(null);
+  settingsRef.current = settings;
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [pendingSettingsOperation, setPendingSettingsOperation] = useState(false);
@@ -920,12 +927,16 @@ export function useStagePilot() {
     setPendingLightingOperation("save-cues");
     setLightingError(null);
     setLightingMessage(null);
+    const songKey = song.source_song_id ?? song.id;
+    // The revision the list was edited from: a recording that finished meanwhile makes this save a 409.
+    const revision = settingsRef.current?.settings.lights.cue_revisions?.[songKey];
     const cueMap: SongLightingCueMapInput = {
       method,
-      song_key: song.source_song_id ?? song.id,
+      song_key: songKey,
       song_title: song.title,
       cues: method === "midi" ? (cues as LightingCue[]) : [],
       osc_cues: method === "osc" ? (cues as OscLightingCue[]) : [],
+      ...(settingsRef.current ? { revision: revision ?? 0 } : {}),
     };
     try {
       const response = await updateLightingCueMap(cueMap);
@@ -933,6 +944,10 @@ export function useStagePilot() {
       setSettings(await getSettings());
       setLightingMessage(response.message);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409) {
+        // Show what is saved now; the panel reloads its rows from it.
+        try { setSettings(await getSettings()); } catch { /* the error below still shows */ }
+      }
       setLightingError(describeError(cause, "Lighting cue map failed to save."));
     } finally {
       release("lights");
@@ -996,6 +1011,42 @@ export function useStagePilot() {
       release("lights-undo");
     }
   }, [claim, release, canOperate]);
+
+  const clearLightingLoudness_ = useCallback(async (songKey: string): Promise<boolean> => {
+    if (!canOperate) return false;
+    if (!claim("lights-loudness")) return false;
+    try {
+      const response = await clearLightingLoudness(songKey);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      setSettings(await getSettings());
+      return response.accepted;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Loudness could not be cleared."));
+      return false;
+    } finally {
+      release("lights-loudness");
+    }
+  }, [claim, release, canOperate]);
+
+  /** "Simplify this song" Apply: the backend thins and merges the captured rows, then the saved settings are reread. */
+  const simplifyLightingLooks = useCallback(async (songKey: string, detail: LightkeyDetail): Promise<LightkeySimplifyResponse | null> => {
+    if (!canConfigure) return null;
+    if (!claim("lights")) return null;
+    setLightingError(null);
+    try {
+      const response = await simplifyLightkeyLooks(songKey, detail, true);
+      setSettings(await getSettings());
+      if (response.applied) setLightingMessage(response.message);
+      else setLightingError(response.message);
+      return response;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Simplify failed."));
+      return null;
+    } finally {
+      release("lights");
+    }
+  }, [claim, release, canConfigure]);
 
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
@@ -1137,7 +1188,9 @@ export function useStagePilot() {
     saveLightingPads,
     pressLightingPad,
     undoLightingCapture: undoLightingCapture_,
+    clearLightingLoudness: clearLightingLoudness_,
     clearAllLightingCues,
+    simplifyLightingLooks,
     activateConfiguredServices,
   };
 }

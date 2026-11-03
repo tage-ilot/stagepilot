@@ -234,7 +234,30 @@ export interface OscLightingCue {
   args: OscArgument[];
   label: string;
   color?: PadColor | null;
+  /** A "look": several OSC messages sent together at this row's time. When present they replace address/args. */
+  messages?: OscMessage[];
+  /** Where the row came from; absent = manual. */
+  source?: OscCueSource;
+  /** A captured row someone changed by hand. A later recording must not replace it silently. */
+  edited?: boolean;
 }
+
+export interface OscMessage {
+  address: string;
+  args: OscArgument[];
+}
+
+export type OscCueSource = "manual" | "captured";
+
+/** How finely a recording is thinned: finer replays motion smoother but makes more rows. */
+/** The song most recently saved to the timeline by a recording. */
+export interface LightkeyCaptured {
+  song_title: string;
+  /** Captured look rows now on that song's timeline. */
+  looks: number;
+}
+
+export type LightkeyDetail = "fine" | "normal" | "coarse";
 
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
 export interface LightingPad {
@@ -262,24 +285,40 @@ export interface SongLightingCueMap {
   cues: LightingCue[];
   /** OSC cues. Kept when MIDI is the saved method. */
   osc_cues?: OscLightingCue[];
+  /** How loud the room was while the song was recorded (levels only, never audio). Absent until recorded. */
+  loudness?: SongLoudness | null;
+  /** Captured look rows were changed by hand (a whole row deleted, for one). Absent while false. */
+  captured_edited?: boolean;
+}
+
+/**
+ * A loudness envelope: one byte per `step_seconds`. 0 = no data (a pause); 1..255 = -60..0 dBFS.
+ * dBFS is a digital level, not sound pressure. `takes` recordings are averaged in (at most 8).
+ */
+export interface SongLoudness {
+  step_seconds: number;
+  values: number[];
+  takes: number;
+}
+
+/** The input picker's data (`GET`/`POST /api/v1/lights/lightkey/audio`). */
+export interface LightkeyAudio {
+  /** False in a build or on a machine that cannot listen; `reason` says why in one line. */
+  available: boolean;
+  reason: string | null;
+  devices: string[];
+  /** The saved input; null = the system default. */
+  selected: string | null;
+  note: string | null;
+  level: { rms_db: number | null; peak_db: number | null; value: number } | null;
+  metering: boolean;
 }
 
 /** What the cue-map PUT sends: only the cue list of `method` is replaced. */
 export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
-}
-
-/** One song's captured Lightkey changes (summary only; the changes stay on the backend). */
-export interface LightkeyTakeSummary {
-  song_key: string;
-  song_title: string;
-  recorded_at: string;
-  duration_seconds: number;
-  edge_count: number;
-  cue_count: number;
-  /** Present only when fixture levels (colour, intensity, movers) were captured with the cues. */
-  fixture_count?: number;
-  fixture_event_count?: number;
+  /** The song's revision the list was edited from; an older one is refused with 409. */
+  revision?: number;
 }
 
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
@@ -307,8 +346,28 @@ export interface LightkeyStatus {
   replay_blocked: string | null;
   replaying_song: string | null;
   message: string | null;
-  takes: LightkeyTakeSummary[];
+  /** The song most recently saved to the timeline; absent until one has been. */
+  captured?: LightkeyCaptured;
+  /** Recording detail (the backend's thinning setting). Absent on backends without it. */
+  detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
+  /** Fixtures the replay holds with overrides; absent when none. */
+  holding_fixtures?: number;
+  /** Fixtures the replay gave to the operator (taken back after 30 s of quiet); absent when none. */
+  yielded_fixtures?: number;
+  /** Fixtures the saved looks can override; Release lights clears these even after a restart. */
+  known_fixtures?: number;
+}
+
+/** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
+export interface LightkeySimplifyResponse {
+  accepted: boolean;
+  applied: boolean;
+  message: string;
+  rows_before: number;
+  rows_after: number;
+  messages_before: number;
+  messages_after: number;
 }
 
 export interface LightkeyActionResponse {
@@ -327,6 +386,8 @@ export interface LightsSettings {
   channel: number;
   pulse_ms: number;
   cue_maps: Record<string, SongLightingCueMap>;
+  /** How often each song's cue map changed; sent back with a save so a stale list is refused. */
+  cue_revisions?: Record<string, number>;
   /** Older backends omit the cue board. */
   pads?: LightingPad[];
 }

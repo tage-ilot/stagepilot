@@ -17,9 +17,10 @@ use stagepilot_core::bus::EventBus;
 use stagepilot_core::config::LightkeySettings;
 use stagepilot_core::events::{new_event, EventPayload, EventType, TimerPayload};
 use stagepilot_core::state::Song;
-use stagepilot_lights::lightkey::{LightkeyEdge, LightkeyLink as Link, LightkeyTake};
+use stagepilot_lights::lightkey::LightkeyLink as Link;
 use stagepilot_lights::lightkey_link::{
-    Clock, FileTakeStore, LightkeyLink, LinkOptions, LinkSettings, MemoryTakeStore, TakeStore,
+    ArmedStore, Clock, FileArmedStore, LightkeyLink, LinkOptions, LinkSettings, LooksSink,
+    MemoryArmedStore, SongLooks,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -200,10 +201,10 @@ struct Rig {
     agent: Shared,
     port: u16,
     bus: EventBus,
-    sent: Arc<Mutex<Vec<(f64, String)>>>,
-    t0: Arc<Mutex<Instant>>,
     settings: Arc<Mutex<LinkSettings>>,
-    store: Arc<MemoryTakeStore>,
+    store: Arc<MemoryArmedStore>,
+    /// Every set of looks the link saved to a timeline.
+    saved: Arc<Mutex<Vec<SongLooks>>>,
     link: LightkeyLink,
 }
 
@@ -222,20 +223,16 @@ impl Rig {
             LightkeySettings {
                 api_url: format!("http://127.0.0.1:{port}"),
                 replay,
+                ..LightkeySettings::default()
             },
         )));
         let bus = EventBus::new();
-        let sent: Arc<Mutex<Vec<(f64, String)>>> = Arc::default();
-        let t0 = Arc::new(Mutex::new(Instant::now()));
-        let store = Arc::new(MemoryTakeStore::new());
-        let (sent_in, t0_in) = (sent.clone(), t0.clone());
-        let send: stagepilot_lights::lightkey_link::SendOsc = Arc::new(move |address: String| {
-            let (sent, t0) = (sent_in.clone(), t0_in.clone());
-            Box::pin(async move {
-                let at = t0.lock().unwrap().elapsed().as_secs_f64();
-                sent.lock().unwrap().push((at, address));
-                Ok(())
-            })
+        let store = Arc::new(MemoryArmedStore::new());
+        let saved: Arc<Mutex<Vec<SongLooks>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink_saved = saved.clone();
+        let sink: LooksSink = Arc::new(move |looks| {
+            sink_saved.lock().unwrap().push(looks);
+            Box::pin(async { Ok(()) })
         });
         let provider_settings = settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
@@ -247,9 +244,9 @@ impl Rig {
         let link = LightkeyLink::new(
             bus.clone(),
             provider,
-            send,
             LinkOptions {
-                store: store.clone() as Arc<dyn TakeStore>,
+                armed_store: store.clone() as Arc<dyn ArmedStore>,
+                looks_sink: Some(sink),
                 clock: clock.clone(),
                 ..LinkOptions::default()
             },
@@ -259,15 +256,14 @@ impl Rig {
             agent,
             port,
             bus,
-            sent,
-            t0,
             settings,
             store,
+            saved,
             link,
         }
     }
 
-    /// A second link on the same settings and take store: what a restart builds.
+    /// A second link on the same settings and Record-switch store: what a restart builds.
     fn restarted_link(&self) -> LightkeyLink {
         let provider_settings = self.settings.clone();
         let provider: stagepilot_lights::lightkey_link::SettingsProvider =
@@ -275,25 +271,11 @@ impl Rig {
         LightkeyLink::new(
             self.bus.clone(),
             provider,
-            Arc::new(|_address: String| Box::pin(async { Ok(()) })),
             LinkOptions {
-                store: self.store.clone() as Arc<dyn TakeStore>,
+                armed_store: self.store.clone() as Arc<dyn ArmedStore>,
                 ..LinkOptions::default()
             },
         )
-    }
-
-    fn addresses(&self) -> Vec<String> {
-        self.sent
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(_, a)| a.clone())
-            .collect()
-    }
-
-    fn sent_at(&self, index: usize) -> f64 {
-        self.sent.lock().unwrap()[index].0
     }
 
     fn set_settings(&self, edit: impl FnOnce(&mut LinkSettings)) {
@@ -396,26 +378,6 @@ fn song(duration: u32) -> Song {
 
 fn names(items: &[&str]) -> Vec<String> {
     items.iter().map(ToString::to_string).collect()
-}
-
-fn stored_take() -> LightkeyTake {
-    LightkeyTake::new(
-        "song-1".into(),
-        "Holy Forever".into(),
-        Utc::now(),
-        10.0,
-        names(&["Warm"]),
-        vec![
-            LightkeyEdge::new(0.5, names(&["Stars"]), vec![]).unwrap(),
-            LightkeyEdge::new(1.0, names(&["Strobe"]), names(&["Stars"])).unwrap(),
-        ],
-    )
-    .unwrap()
-}
-
-fn with_takes(rig: &Rig, takes: Vec<LightkeyTake>) {
-    rig.store
-        .set(takes.into_iter().map(|t| (t.song_key.clone(), t)).collect());
 }
 
 // ----------------------------------------------------------------------------- link status
@@ -521,30 +483,6 @@ async fn clock_offset_is_measured_with_seven_samples_on_connect() {
     rig.link.stop().await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn offset_uses_the_lowest_round_trip_sample() {
-    // Six samples are slow (their midpoint is skewed by the delay); one is fast. A recording
-    // made afterwards must still land on song time, which only holds with the fast sample.
-    let rig = Rig::new(&["Warm"]).await;
-    agent_lock(&rig.agent).time_delay_ms = vec![300, 300, 300, 0, 300, 300, 300];
-    rig.connect().await;
-    rig.link.set_recording(true).await;
-    let s = song(10);
-    rig.song_start(&s, None).await;
-    pause(0.5).await;
-    agent_lock(&rig.agent).change(&["Stars"], &[]);
-    pause(0.6).await;
-    rig.song_stop(&s, 10.0).await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    let take = rig.store.takes()["song-1"].clone();
-    assert!(
-        (take.edges[0].at_seconds - 0.5).abs() < 0.25,
-        "edge at {}",
-        take.edges[0].at_seconds
-    );
-    rig.link.stop().await;
-}
-
 // ----------------------------------------------------------------------------- recording
 
 #[tokio::test(flavor = "multi_thread")]
@@ -576,66 +514,15 @@ async fn cannot_record_when_not_connected_or_not_osc() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn records_changes_with_song_times_and_saves_them() {
-    let rig = Rig::new(&["Warm"]).await;
-    rig.connect().await;
-    rig.link.set_recording(true).await;
-    assert!(rig.link.status().recording);
-    let s = song(10);
-    rig.song_start(&s, None).await;
-    pause(0.5).await;
-    agent_lock(&rig.agent).change(&["Stars"], &[]);
-    pause(0.6).await;
-    agent_lock(&rig.agent).change(&["Strobe"], &["Stars"]);
-    pause(0.5).await;
-    rig.song_stop(&s, 10.0).await; // played to the end
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    let take = rig.store.takes()["song-1"].clone();
-    assert_eq!(take.initial, names(&["Warm"]));
-    let edges: Vec<_> = take
-        .edges
-        .iter()
-        .map(|e| (e.added.clone(), e.removed.clone()))
-        .collect();
-    assert_eq!(
-        edges,
-        vec![
-            (names(&["Stars"]), vec![]),
-            (names(&["Strobe"]), names(&["Stars"]))
-        ]
-    );
-    // Times are song time on OUR clock: the 5 s Lightkey-clock offset must have been removed.
-    assert!((take.edges[0].at_seconds - 0.5).abs() < 0.25);
-    assert!((take.edges[1].at_seconds - 1.1).abs() < 0.25);
-    assert!(rig
-        .link
-        .status()
-        .message
-        .unwrap_or_default()
-        .contains("Saved"));
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn short_recording_does_not_overwrite_a_good_take() {
+async fn a_short_paused_recording_saves_nothing() {
     let rig = Rig::new(&["A"]).await;
-    let good = LightkeyTake::new(
-        "song-1".into(),
-        "Holy Forever".into(),
-        Utc::now(),
-        10.0,
-        names(&["A"]),
-        vec![LightkeyEdge::new(2.0, names(&["B"]), vec![]).unwrap()],
-    )
-    .unwrap();
-    with_takes(&rig, vec![good.clone()]);
     rig.connect().await;
     rig.link.set_recording(true).await;
     let s = song(10);
     rig.song_start(&s, None).await;
     rig.song_stop(&s, 1.0).await; // 10% of the song
     pause(0.1).await;
-    assert_eq!(rig.store.takes()["song-1"], good);
+    assert!(rig.saved.lock().unwrap().is_empty());
     let status = rig.link.status();
     assert!(status.message.unwrap_or_default().contains("Paused") || status.recording);
     rig.link.stop().await;
@@ -650,16 +537,13 @@ async fn a_recording_turned_off_short_says_not_saved() {
     pause(0.1).await;
     let message = rig.link.set_recording(false).await;
     assert!(message.starts_with("Not saved: only "), "{message}");
-    assert!(
-        message.ends_with("seconds of \"Holy Forever\" were recorded."),
-        "{message}"
-    );
-    assert!(rig.store.takes().is_empty());
+    assert!(message.ends_with("seconds recorded."), "{message}");
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn seek_while_recording_discards_the_take() {
+async fn seek_while_recording_discards_the_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -670,12 +554,12 @@ async fn seek_while_recording_discards_the_take() {
     let status = rig.link.status();
     assert_eq!(status.recording_song, None);
     assert!(status.message.unwrap_or_default().contains("moved"));
-    assert!(rig.store.takes().is_empty());
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn timer_reset_while_recording_discards_the_take() {
+async fn timer_reset_while_recording_discards_the_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -706,13 +590,20 @@ async fn recording_turned_off_mid_song_saves_if_enough_was_captured() {
     rig.song_start(&s, Some(Utc::now() - ChronoDuration::milliseconds(1500)))
         .await;
     pause(0.05).await;
-    rig.link.set_recording(false).await;
-    assert!(rig.link.has_take("song-1"));
+    // No relay in this rig, so no fixture changes: cue changes are never stored, and nothing
+    // that would replay nothing is saved.
+    agent_lock(&rig.agent).change(&["Stars"], &[]);
+    let message = rig.link.set_recording(false).await;
+    assert!(
+        message.starts_with("Not saved: no fixture changes"),
+        "{message}"
+    );
+    assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_paused_recording_resumes_in_place_and_backfills_changes() {
+async fn a_paused_recording_resumes_in_place() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -726,7 +617,6 @@ async fn a_paused_recording_resumes_in_place_and_backfills_changes() {
         .message
         .unwrap_or_default()
         .starts_with("Paused \"Holy Forever\"."));
-    agent_lock(&rig.agent).change(&["Stars"], &[]); // changed while paused
     pause(0.6).await;
     rig.bus
         .publish(new_event(
@@ -743,11 +633,6 @@ async fn a_paused_recording_resumes_in_place_and_backfills_changes() {
         ))
         .await;
     assert!(rig.link.status().recording_song.is_some());
-    rig.song_stop(&s, 10.0).await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    let take = rig.store.takes()["song-1"].clone();
-    assert_eq!(take.edges.len(), 1);
-    assert_eq!(take.edges[0].added, names(&["Stars"]));
     rig.link.stop().await;
 }
 
@@ -765,48 +650,17 @@ async fn a_new_song_finishes_the_one_before() {
     rig.song_start(&next, None).await;
     let status = rig.link.status();
     assert_eq!(status.recording_song.as_deref(), Some("Gratitude"));
-    assert!(rig.store.takes().is_empty()); // the first was far too short to keep
+    assert!(rig.saved.lock().unwrap().is_empty()); // the first was far too short to keep
     rig.link.stop().await;
 }
 
 // ------------------------------------------------------------------------------- replay
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_syncs_then_fires_edges_slightly_early() {
-    let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.connect().await;
-    *rig.t0.lock().unwrap() = Instant::now();
-    rig.song_start(&song(10), None).await;
-    wait_for(|| rig.sent.lock().unwrap().len() >= 6, 4.0).await;
-    assert_eq!(
-        rig.addresses(),
-        vec![
-            "/live/*/cue/Stars/deactivate",
-            "/live/*/cue/Strobe/deactivate",
-            "/live/*/cue/Warm/activate",
-            "/live/*/cue/Stars/activate",
-            "/live/*/cue/Stars/deactivate",
-            "/live/*/cue/Strobe/activate",
-        ]
-    );
-    assert!((rig.sent_at(3) - 0.46).abs() < 0.15); // 0.5 s edge, 40 ms lead
-    assert!((rig.sent_at(4) - 0.96).abs() < 0.15);
-    assert_eq!(
-        rig.link.status().replaying_song.as_deref(),
-        Some("Holy Forever")
-    );
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn replay_switch_off_sends_nothing() {
+async fn replay_switch_off_is_reported_in_the_status() {
     let rig = Rig::with(&["Warm"], false).await;
-    with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.song_start(&song(10), None).await;
-    pause(0.8).await;
-    assert!(rig.addresses().is_empty());
     assert_eq!(
         rig.link.status().replay_blocked.as_deref(),
         Some("Replay is switched off.")
@@ -815,14 +669,11 @@ async fn replay_switch_off_sends_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_does_not_run_while_recording_armed() {
+async fn recording_armed_is_reported_as_the_replay_blocker() {
     let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(10), None).await;
-    pause(0.8).await;
-    assert!(rig.addresses().is_empty());
     assert_eq!(
         rig.link.status().replay_blocked.as_deref(),
         Some("Paused while recording.")
@@ -861,75 +712,6 @@ async fn replay_blocked_strings_are_exact_and_ordered() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_stands_back_from_a_cue_the_operator_just_changed() {
-    let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.connect().await;
-    // The operator grabs "Strobe" shortly before replay would turn it on.
-    agent_lock(&rig.agent).change(&["Strobe"], &[]);
-    pause(0.6).await;
-    rig.song_start(&song(10), None).await;
-    pause(1.4).await;
-    let addresses = rig.addresses();
-    assert!(!addresses.iter().any(|a| a.contains("Strobe"))); // held, so skipped entirely
-    assert!(addresses.contains(&"/live/*/cue/Stars/activate".to_string())); // untouched cues follow
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn stop_cancels_remaining_replay() {
-    let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.connect().await;
-    let s = song(10);
-    rig.song_start(&s, None).await;
-    pause(0.2).await;
-    rig.song_stop(&s, 0.2).await;
-    let count = rig.addresses().len();
-    pause(1.0).await;
-    assert_eq!(rig.addresses().len(), count);
-    assert_eq!(rig.link.status().replaying_song, None);
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn seek_replays_from_the_new_position() {
-    let rig = Rig::new(&["Warm"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.connect().await;
-    let s = song(10);
-    rig.seek(&s, 5.0, 5).await;
-    wait_for(|| rig.sent.lock().unwrap().len() >= 3, 3.0).await;
-    // At 5 s the take says: Warm and Strobe on, Stars off.
-    let mut first_three: Vec<String> = rig.addresses().into_iter().take(3).collect();
-    first_three.sort();
-    assert_eq!(
-        first_three,
-        vec![
-            "/live/*/cue/Stars/deactivate",
-            "/live/*/cue/Strobe/activate",
-            "/live/*/cue/Warm/activate",
-        ]
-    );
-    pause(0.3).await;
-    assert_eq!(rig.addresses().len(), 3); // nothing left to schedule after 5 s
-    rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_song_without_a_take_sends_nothing() {
-    let rig = Rig::new(&["Warm"]).await;
-    rig.connect().await;
-    rig.song_start(&song(10), None).await;
-    pause(0.4).await;
-    assert!(rig.addresses().is_empty());
-    assert_eq!(rig.link.status().replaying_song, None);
-    rig.link.stop().await;
-}
-
-// ------------------------------------------------------------------- agent and take store
-
-#[tokio::test(flavor = "multi_thread")]
 async fn agent_restart_resets_the_sequence_without_a_false_change() {
     let rig = Rig::new(&["A"]).await;
     agent_lock(&rig.agent).seq = 40;
@@ -944,82 +726,6 @@ async fn agent_restart_resets_the_sequence_without_a_false_change() {
     assert_eq!(status.active_count, Some(2));
     assert_eq!(status.link, Link::Connected);
     rig.link.stop().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn clear_take_removes_it_and_reports_a_missing_one() {
-    let rig = Rig::new(&["A"]).await;
-    with_takes(&rig, vec![stored_take()]);
-    rig.link.start().await;
-    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
-    assert!(!rig.link.clear_take("nope").await);
-    assert!(rig.link.clear_take("song-1").await);
-    assert!(!rig.link.has_take("song-1"));
-    assert!(rig.store.takes().is_empty());
-    assert_eq!(
-        rig.link.status().message.as_deref(),
-        Some("Capture cleared.")
-    );
-    rig.link.stop().await;
-}
-
-#[test]
-fn file_store_round_trip_and_bad_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("t.json");
-    let store = FileTakeStore::new(&path);
-    assert!(store.load().unwrap().is_empty());
-    let mut takes = BTreeMap::new();
-    takes.insert("song-1".to_string(), stored_take());
-    store.save(&takes).unwrap();
-    assert_eq!(
-        store.load().unwrap()["song-1"].edges[1].removed,
-        names(&["Stars"])
-    );
-    std::fs::write(&path, "{not json").unwrap();
-    assert!(store.load().unwrap().is_empty());
-    assert!(dir.path().join("t.json.bad").exists());
-    assert!(!path.exists());
-}
-
-#[test]
-fn file_store_writes_atomically_in_the_python_layout() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("lightkey-takes.json");
-    let store = FileTakeStore::new(&path);
-    let mut take = stored_take();
-    take.recorded_at = "2026-10-20T20:00:00Z".parse().unwrap();
-    let mut takes = BTreeMap::new();
-    takes.insert("song-1".to_string(), take);
-    store.save(&takes).unwrap();
-    let text = std::fs::read_to_string(&path).unwrap();
-    let value: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(value["version"], 1);
-    assert_eq!(value["takes"][0]["recorded_at"], "2026-10-20T20:00:00Z");
-    assert!(
-        text.starts_with("{\n \"version\": 1,"),
-        "indent=1 layout: {text}"
-    );
-    // No temp file is left behind.
-    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-        .collect();
-    assert_eq!(leftovers, vec!["lightkey-takes.json"]);
-}
-
-#[test]
-fn a_file_with_an_invalid_take_is_renamed_bad_and_ignored() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("t.json");
-    std::fs::write(
-        &path,
-        r#"{"version":1,"takes":[{"song_key":"","song_title":"x","recorded_at":"2026-10-20T20:00:00Z","duration_seconds":10}]}"#,
-    )
-    .unwrap();
-    let store = FileTakeStore::new(&path);
-    assert!(store.load().unwrap().is_empty());
-    assert!(dir.path().join("t.json.bad").exists());
 }
 
 // ------------------------------------------------------------------------- message lifetime (B3)
@@ -1061,7 +767,6 @@ async fn losing_the_link_clears_a_stale_message() {
 async fn a_message_does_not_outlive_a_replay_switch_change() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
-    with_takes(&rig, vec![stored_take()]);
     rig.link.set_recording(true).await;
     assert!(rig.link.status().message.is_some());
     rig.set_settings(|s| s.3.replay = false);
@@ -1093,16 +798,15 @@ async fn record_stays_armed_across_a_restart_and_disarming_is_remembered() {
 }
 
 #[test]
-fn the_file_store_remembers_the_armed_flag_next_to_the_takes() {
-    let dir = std::env::temp_dir().join(format!("sp-armed-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let store = FileTakeStore::new(dir.join("lightkey_takes.json"));
+fn the_file_store_remembers_the_armed_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lightkey-record-armed");
+    let store = FileArmedStore::new(&path);
     assert!(!store.load_armed());
     store.save_armed(true).unwrap();
-    assert!(FileTakeStore::new(dir.join("lightkey_takes.json")).load_armed());
+    assert!(FileArmedStore::new(&path).load_armed());
     store.save_armed(false).unwrap();
     assert!(!store.load_armed());
-    std::fs::write(dir.join("lightkey_takes.json.armed"), "garbage").unwrap();
+    std::fs::write(&path, "garbage").unwrap();
     assert!(!store.load_armed()); // unreadable means off, never an error at startup
-    let _ = std::fs::remove_dir_all(&dir);
 }
