@@ -191,7 +191,7 @@ impl OperatorTracker {
             }
             if let Some(key) = self.yielded_key(fixture) {
                 self.yielded.insert(key.clone(), now);
-                if !verdict.restarted.iter().any(|f| *f == key) {
+                if !verdict.restarted.contains(&key) {
                     verdict.restarted.push(key);
                 }
             } else {
