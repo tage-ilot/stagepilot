@@ -38,6 +38,8 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 /// Closest spacing of two OSC packets: 5 ms = at most 200 packets per second.
+/// A stop within this many seconds of the song's end is the song ending, not a pause.
+const SONG_END_TOLERANCE_SECONDS: f64 = 2.0;
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
 pub const RETRY_SECONDS: f64 = 2.0;
@@ -1078,22 +1080,33 @@ impl Inner {
                         }) => *p,
                         _ => wall - session.started_at,
                     };
-                    session.last_position = session.last_position.max(position);
-                    session.running = false;
-                    if let Some(loudness) = &session.loudness {
-                        loudness
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .set_running(false);
-                    }
-                    let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
-                    if recording_is_worth_keeping(session.last_position, duration) {
-                        match st.session.take() {
-                            Some(session) => Next::Finish(Box::new(session)),
-                            None => Next::Nothing,
-                        }
+                    if !session.running {
+                        // Already paused (a pause is followed by the timer's own stopped
+                        // event): this says nothing new and must not move the position.
+                        Next::Nothing
                     } else {
-                        Next::Paused(session.song.title.clone())
+                        session.last_position = session.last_position.max(position);
+                        session.running = false;
+                        if let Some(loudness) = &session.loudness {
+                            loudness
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .set_running(false);
+                        }
+                        let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
+                        // Only the song's end (or a failed timer) closes a recording. A pause,
+                        // however late in the song, keeps it: the resume carries on, and a new
+                        // song or Record off saves what was captured (R-01).
+                        let ended = event.event_type == EventType::TimerFailed
+                            || session.last_position >= duration - SONG_END_TOLERANCE_SECONDS;
+                        if ended && recording_is_worth_keeping(session.last_position, duration) {
+                            match st.session.take() {
+                                Some(session) => Next::Finish(Box::new(session)),
+                                None => Next::Nothing,
+                            }
+                        } else {
+                            Next::Paused(session.song.title.clone())
+                        }
                     }
                 }
             }

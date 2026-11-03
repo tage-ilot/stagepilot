@@ -567,6 +567,73 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_late_pause_does_not_end_or_save_the_recording() {
+    // R-01: pause at 70 % of the song, resume in place, finish: one save covering the whole song.
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(10)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 0.4)], 0.0, 0).await;
+    // The operator pauses at 7 s: a stop request with the position, then the timer's own event.
+    for kind in [EventType::TimerStopRequested, EventType::TimerStopped] {
+        rig.bus
+            .publish(new_event(
+                kind,
+                "t",
+                EventPayload::Timer(TimerPayload {
+                    duration_seconds: 3,
+                    song: Some(song(10)),
+                    position_seconds: (kind == EventType::TimerStopRequested).then_some(7.0),
+                    remaining_seconds: Some(3),
+                    ..TimerPayload::default()
+                }),
+            ))
+            .await;
+    }
+    pause(0.6).await;
+    assert!(
+        rig.saved.lock().unwrap().is_empty(),
+        "a pause is not the end of the song"
+    );
+    // Resume in place, change the light, and let the song end.
+    rig.bus
+        .publish(new_event(
+            EventType::TimerResumed,
+            "t",
+            EventPayload::Timer(TimerPayload {
+                duration_seconds: 3,
+                song: Some(song(10)),
+                started_at: Some(Utc::now()),
+                position_seconds: Some(7.0),
+                remaining_seconds: Some(3),
+                running: true,
+                ..TimerPayload::default()
+            }),
+        ))
+        .await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 0.9)], 0.0, 0).await;
+    pause(0.3).await;
+    rig.song_stop(&song(10), 10.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1, "exactly one save");
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let values: Vec<f64> = saved
+        .rows
+        .iter()
+        .flat_map(|r| r.messages.iter())
+        .filter_map(|m| match m.args.first() {
+            Some(stagepilot_core::config::OscArgument::Float(x)) => Some(*x),
+            _ => None,
+        })
+        .collect();
+    let has = |x: f64| values.iter().any(|v| (v - x).abs() < 0.001);
+    assert!(has(0.4) && has(0.9), "{values:?}");
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_lost_packet_is_repaired_by_asking_for_a_keyframe() {
     let rig = Rig::new(vec![dim("P1", 0.0)]).await;
     rig.connect().await;
