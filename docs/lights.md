@@ -298,7 +298,7 @@ Cue times are kept to 0.1 s. Existing whole-second cue maps load unchanged.
 ### Timeline
 
 A horizontal bar covers the song's scheduled length, with a time ruler, one
-marker per cue (coloured from its pad) and a playhead while the timer runs.
+marker per cue (coloured and shaped by what the cue is, see below) and a playhead while the timer runs.
 Drag a marker to move it (it snaps to 0.1 s and stays inside the song), or focus
 it and press the left or right arrow to move it 0.1 s (Shift: 1 s). Click or
 press Enter to open the small editor to set an exact time or delete the cue.
@@ -378,6 +378,40 @@ the seconds-based scheduler.
 ## Look rows and the timeline as replay source
 
 A song lighting row (`osc_cues`) may carry `messages` (a list of `{address, args}`) and a `source` of `manual` or `captured`. A row sends its `messages` when non-empty, otherwise its single address/args. Caps: `MAX_OSC_MESSAGES_PER_ROW`, `MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`. Fixture look rows fire about 45 ms early and are paced to at most 200 packets/s. On start, resume or seek, the latest `/fixture/<name>/overrides/<prop>` message at or before the position is re-sent once. Pause, stop, end and reset hold the last look; fixtures are released (double `overrides/clear`) only when replay is switched off, Lighting is disabled, on shutdown, or when the next song does not use them.
+
+### Cue types and the legend
+
+Every marker and cue-list row has a type. The type sets the bar colour **and**
+style, and a glyph box repeats it, so nothing depends on colour alone. The
+accessible name starts with the type: "Captured look, Look - 12 fixtures, at
+00:14".
+
+| Type | Bar | Glyph | What it is |
+|---|---|---|---|
+| Captured look | cyan, solid | ◆ | A look recorded from Lightkey, not changed since |
+| Edited look | amber, solid | ◆✎ | A captured look you changed |
+| Manual look | indigo, solid | ◇ | A look you built by hand (never replaced by Record) |
+| Lightkey cue on | lime, solid | ▶ | `/live/*/cue/<name>/activate` (names may contain spaces) |
+| Lightkey cue off | lime, hollow (3 px border) | ■ | `/live/*/cue/<name>/deactivate` |
+| Fixture message | magenta, solid | ◐ | One `/fixture/<name>/overrides/...` message |
+| Other OSC | grey, dashed | ○ | Any other address |
+| MIDI note C D E F G A B | one colour per letter, same in every octave | the letter | A MIDI note-on cue. Sharps keep their letter's colour with a diagonal-striped bar and a ♯ in the glyph box (flats are shown as the sharp of the same pitch). Colour comes from the pitch class in both note display modes |
+
+The pad colour no longer colours the bar: it is a small square after the
+label. On the MIDI timeline the legend lists the seven letters (a letter with
+no cues is greyed out).
+
+The **legend** above the timeline groups the types (Looks / Lightkey cues /
+Single messages) and each chip is a toggle: it hides or shows that type on the
+timeline **and** in the cue list. The chip row says "2 types hidden" and has a
+**Show all** button. Hiding is only a view setting kept for the browser
+session; it is never saved in the cue map and never changes what replays. A
+marker you have selected is never hidden. A cluster of mixed types is a neutral
+chip with the commonest type's glyph; its accessible name lists the counts.
+
+Colours are the `cue-*` tokens in `DESIGN.md`. Each is at least 3:1 against the
+track backgrounds, and a test simulates protanopia, deuteranopia and
+tritanopia to keep the colours apart.
 
 ### Editing look rows in the timeline
 

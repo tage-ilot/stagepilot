@@ -231,7 +231,7 @@ export function LightingCueBoard({
             <Field error={attempted ? labelError ?? undefined : undefined} label="Pad name">
               <Input maxLength={60} onChange={(event) => setDraft({ ...draft, label: event.target.value })} placeholder="For example, Chorus wash…" ref={labelInput} value={draft.label} />
             </Field>
-            <Field label="Colour">
+            <Field hint="Shown as a small square after the cue's label on the timeline. The cue's type sets the bar colour." label="Colour">
               <Select onChange={(event) => setDraft({ ...draft, color: event.target.value as PadColor | "" })} value={draft.color}>
                 <option value="">None</option>
                 {padColors.map((color) => <option key={color} value={color}>{padColorClasses[color].label}</option>)}

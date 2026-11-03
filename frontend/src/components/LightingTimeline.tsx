@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import type { SongLoudness } from "../types";
+import { barClassFor } from "./cueTypeBars";
+import { CueTypeLegend } from "./CueTypeParts";
+import { useHiddenCueTypes } from "./useHiddenCueTypes";
+import { describeTypeCounts, dominantType, glyphFor, typeSpokenLabel, type CueTypeId } from "./lightingCueTypes";
 import { clusterMarkers } from "./lightingLooks";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
   MARKER_LABEL_ROWS,
-  neutralPad,
-  nudgeCueTime,
+  markerType,
+    nudgeCueTime,
   padColorClasses,
   placeMarkerLabels,
   rulerStep,
@@ -30,7 +34,14 @@ const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of sq
  */
 export function LightingTimeline({
   songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect, loudness,
+  method = "osc", hiddenTypes, onToggleType, onShowAllTypes,
 }: {
+  /** Which method's cues these are; the legend lists that method's types. */
+  method?: "osc" | "midi";
+  /** Types hidden from view (view-only). When not given the timeline keeps its own per-session state. */
+  hiddenTypes?: ReadonlySet<CueTypeId>;
+  onToggleType?: (type: CueTypeId) => void;
+  onShowAllTypes?: () => void;
   /** The song's recorded room loudness, drawn as a faint envelope behind the markers. */
   loudness?: SongLoudness | null;
   /** Called when a single marker is picked, so the cue list can show its row. */
@@ -47,6 +58,10 @@ export function LightingTimeline({
   onRemove: (id: string) => void;
   disabled?: boolean;
 }) {
+  const ownHidden = useHiddenCueTypes();
+  const hidden = hiddenTypes ?? ownHidden.hidden;
+  const toggleType = onToggleType ?? ownHidden.toggle;
+  const showAllTypes = onShowAllTypes ?? ownHidden.showAll;
   const [zoomIndex, setZoomIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; at: number } | null>(null);
@@ -105,7 +120,10 @@ export function LightingTimeline({
     if (selectedId && !markers.some((marker) => marker.id === selectedId)) setSelectedId(null);
   }, [markers, selectedId]);
 
-  const labelPlacements = placeMarkerLabels(markers.map((marker) => ({ id: marker.id, label: marker.label, at: marker.at })), trackWidth, length);
+  // A hidden type is only hidden from view: the picked, selected and dragged markers always stay.
+  const visibleMarkers = markers.filter((marker) => !hidden.has(markerType(marker)) || marker.id === selectedId || marker.id === drag?.id || picked.has(marker.id));
+  const presentTypes = new Set(markers.map(markerType));
+  const labelPlacements = placeMarkerLabels(visibleMarkers.map((marker) => ({ id: marker.id, label: marker.label, at: marker.at })), trackWidth, length);
   const percent = (at: number) => `${Math.min(100, Math.max(0, (at / length) * 100))}%`;
   const selected = markers.find((marker) => marker.id === selectedId) ?? null;
 
@@ -149,7 +167,7 @@ export function LightingTimeline({
 
   const pxPerSecond = trackWidth > 0 ? trackWidth / length : 0;
   const keepSingle = new Set([...(selectedId ? [selectedId] : []), ...(drag ? [drag.id] : []), ...selectedIds]);
-  const items = pxPerSecond > 0 ? clusterMarkers(markers, pxPerSecond, CLUSTER_GAP_PX, keepSingle) : markers.map((marker) => ({ kind: "single" as const, marker }));
+  const items = pxPerSecond > 0 ? clusterMarkers(visibleMarkers, pxPerSecond, CLUSTER_GAP_PX, keepSingle) : visibleMarkers.map((marker) => ({ kind: "single" as const, marker }));
   const zoomInto = (at: number, count: number) => {
     if (zoomIndex < ZOOMS.length - 1) { pendingScroll.current = at; setZoomIndex(zoomIndex + 1); }
     else { const first = markers.find((marker) => marker.at === at); if (first) setSelectedId(first.id); }
@@ -209,6 +227,7 @@ export function LightingTimeline({
           <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
         </div>
       </div>
+      <CueTypeLegend hidden={hidden} method={method} onShowAll={showAllTypes} onToggle={toggleType} present={presentTypes} />
       <ScrollRegion axis="x" className="overflow-x-auto overscroll-x-contain" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>
         <div className="relative px-3 pb-3" style={trackStyle}>
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
@@ -252,30 +271,38 @@ export function LightingTimeline({
             )}
             {items.map((item) => {
               if (item.kind === "cluster") {
-                const text = `${item.markers.length} cues, ${formatElapsed(item.at)} to ${formatElapsed(item.to)}. Zoom in`;
+                const counts = new Map<CueTypeId, number>();
+                for (const member of item.markers) counts.set(markerType(member), (counts.get(markerType(member)) ?? 0) + 1);
+                const lead = dominantType(counts);
+                const text = `${item.markers.length} cues (${describeTypeCounts(counts)}), ${formatElapsed(item.at)} to ${formatElapsed(item.to)}. Zoom in`;
                 return (
                   <button
                     aria-label={text}
                     className="absolute top-0 flex h-6 min-w-[1.5rem] -translate-x-1/2 touch-manipulation items-center justify-center rounded-ds-full border border-edge-medium bg-surface-panel px-1 text-type-body-sm tabular-nums text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    data-count={item.markers.length}
                     data-testid="lighting-cluster"
+                    data-types={[...counts.keys()].join(" ")}
                     key={item.id}
                     onClick={() => zoomInto(item.at, item.markers.length)}
                     style={{ left: percent(item.at) }}
                     type="button"
-                  >{item.markers.length}</button>
+                  >{lead && <span aria-hidden="true" className="mr-1 text-ink-muted" data-testid="lighting-cluster-glyph">{glyphFor(lead, lead.startsWith("note-") && item.markers.every((m) => m.sharp))}</span>}<span aria-hidden="true">{item.markers.length}</span></button>
                 );
               }
               const marker = item.marker;
               const at = drag?.id === marker.id ? drag.at : marker.at;
               const colors = marker.color ? padColorClasses[marker.color] : null;
               const isSelected = marker.id === selectedId || picked.has(marker.id);
+              const type = markerType(marker);
+              const spoken = marker.spokenLabel ?? typeSpokenLabel(type, marker.label || "Cue");
               return (
                 <button
-                  aria-label={`${marker.label || "Cue"} at ${formatElapsed(at)}`}
+                  aria-label={`${spoken}, at ${formatElapsed(at)}`}
                   aria-pressed={isSelected}
                   className={`absolute flex w-4 -translate-x-1/2 cursor-grab touch-none items-start justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${drag?.id === marker.id ? "cursor-grabbing" : ""}`}
                   data-source={marker.captured ? "captured" : "manual"}
                   data-testid="lighting-marker"
+                  data-type={type}
                   aria-disabled={disabled || undefined}
                   key={marker.id}
                   onClick={() => { if (longPressed.current) { longPressed.current = false; return; } setSelectedId(marker.id); }}
@@ -287,12 +314,16 @@ export function LightingTimeline({
                   style={{ left: percent(at), top: `${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px`, height: `calc(100% - ${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px)` }}
                   type="button"
                 >
-                  <span className={`block h-full w-1 rounded-ds-full ${marker.captured ? "bg-integration-lighting-osc-soft" : (colors?.marker ?? neutralPad.marker)} ${isSelected ? "outline outline-2 outline-ink" : ""}`} />
+                  <span className={`block h-full ${type === "cue-off" ? "w-2" : "w-1.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
                   <span
-                    className="pointer-events-none absolute left-[14px] top-0 truncate text-type-body-sm text-ink-body"
+                    className="pointer-events-none absolute left-[14px] top-0 flex items-center gap-1 text-type-body-sm text-ink-body"
                     data-label-row={labelPlacements.get(marker.id)?.row ?? 0}
                     style={{ maxWidth: `${labelPlacements.get(marker.id)?.width ?? 112}px` }}
-                  >{marker.label}</span>
+                  >
+                    <span aria-hidden="true" className="shrink-0 rounded-ds-sm border border-edge-medium bg-surface-panel-strong px-1 text-ink" data-testid="lighting-marker-glyph">{glyphFor(type, marker.sharp)}</span>
+                    <span className="truncate">{marker.label}</span>
+                    {colors && <span aria-hidden="true" className={`inline-block h-2 w-2 shrink-0 rounded-ds-sm border border-ink ${colors.swatch}`} data-testid="lighting-pad-square" />}
+                  </span>
                 </button>
               );
             })}

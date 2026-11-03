@@ -141,7 +141,7 @@ describe("loudness behind the timeline", () => {
     expect(picture.getAttribute("class")).toContain("pointer-events-none");
     expect(picture.getAttribute("class")).toContain("opacity-25");
     // The markers are still there and still reachable.
-    expect(screen.getByRole("button", { name: /Look - 3 fixtures at 00:12/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Look - 3 fixtures, at 00:12/ })).toBeInTheDocument();
   });
 
   it("scales to the song's own maximum", () => {
