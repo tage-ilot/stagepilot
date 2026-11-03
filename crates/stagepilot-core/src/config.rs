@@ -739,6 +739,9 @@ impl OscCueSource {
 pub const MAX_OSC_MESSAGES_PER_ROW: usize = 256;
 /// Most OSC rows one song may hold (sized for about 400 rows, with headroom).
 pub const MAX_OSC_ROWS_PER_SONG: usize = 1_000;
+/// Most arguments one look message may carry, and the longest text argument (M-01).
+pub const MAX_OSC_ARGS_PER_MESSAGE: usize = 8;
+pub const MAX_OSC_STRING_CHARS: usize = 256;
 /// Most look messages one song may hold in total (sized for about 6,000, with headroom).
 pub const MAX_OSC_MESSAGES_PER_SONG: usize = 15_000;
 
@@ -984,6 +987,12 @@ pub struct LightsSettings {
     pub pads: Vec<LightingPad>,
     #[serde(default)]
     pub lightkey: LightkeySettings,
+    /// Per song, how many times its cue map has changed. The settings store bumps it on every
+    /// save that changes a song's rows; a cue-map PUT that carries an older number is refused
+    /// with 409, so an edit made on a stale list can never overwrite a fresh recording.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, u32>>")]
+    pub cue_revisions: BTreeMap<String, u32>,
 }
 
 fn osc_method() -> LightingMethod {
@@ -1016,6 +1025,7 @@ impl Default for LightsSettings {
             cue_maps: BTreeMap::new(),
             pads: vec![],
             lightkey: LightkeySettings::default(),
+            cue_revisions: BTreeMap::new(),
         }
     }
 }
@@ -1214,6 +1224,23 @@ impl LightsSettings {
                 for message in &cue.messages {
                     if let Err(m) = validate_osc_message_address(&message.address) {
                         value_error(errors, &mp, m, json!(message.address));
+                    }
+                    if message.args.len() > MAX_OSC_ARGS_PER_MESSAGE {
+                        too_long(
+                            errors,
+                            &mp,
+                            "args",
+                            message.args.len(),
+                            MAX_OSC_ARGS_PER_MESSAGE,
+                        );
+                    }
+                    for arg in &message.args {
+                        if let OscArgument::String(text) = arg {
+                            let n = text.chars().count();
+                            if n > MAX_OSC_STRING_CHARS {
+                                too_long(errors, &mp, "args", n, MAX_OSC_STRING_CHARS);
+                            }
+                        }
                     }
                 }
             }

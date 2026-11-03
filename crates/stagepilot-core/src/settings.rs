@@ -1213,8 +1213,27 @@ impl SettingsService {
         self.save(updated)
     }
 
-    pub fn persist_lights(&self, settings: LightsSettings) -> Result<(), SettingsFileError> {
+    pub fn persist_lights(&self, mut settings: LightsSettings) -> Result<(), SettingsFileError> {
         let mut updated = self.snapshot();
+        // Cue-map revisions (U-01): count every save that changes a song's rows.
+        let mut revisions = updated.lights.cue_revisions.clone();
+        for (key, map) in &settings.cue_maps {
+            let before = updated.lights.cue_maps.get(key);
+            let changed = before.is_none_or(|b| {
+                b.cues != map.cues
+                    || b.osc_cues != map.osc_cues
+                    || b.captured_edited != map.captured_edited
+            });
+            if changed {
+                *revisions.entry(key.clone()).or_insert(0) += 1;
+            }
+        }
+        for key in updated.lights.cue_maps.keys() {
+            if !settings.cue_maps.contains_key(key) {
+                *revisions.entry(key.clone()).or_insert(0) += 1; // removed
+            }
+        }
+        settings.cue_revisions = revisions;
         updated.lights = settings;
         self.save(updated)
     }

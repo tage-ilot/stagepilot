@@ -327,20 +327,25 @@ fn fixture_count(messages: &[FixtureCommand]) -> usize {
         .len()
 }
 
+/// The `address` a look row carries. A look sends its `messages`; an older StagePilot that does
+/// not know them would send this address instead, with no arguments, and no rig listens to it
+/// (M-02: a downgrade never sends a fixture address without its value).
+pub const LOOK_ROW_ADDRESS: &str = "/stagepilot/look";
+
 /// The timeline rows for looks: `source = captured`, no colour, label "Look - N fixtures", times
 /// to 0.1 s. A row over the per-row message cap is split into several rows at the same time.
 pub fn look_rows(looks: &[Look]) -> Vec<OscLightingCue> {
     let mut rows = Vec::new();
     for look in looks {
         for chunk in look.messages.chunks(MAX_OSC_MESSAGES_PER_ROW) {
-            let Some(first) = chunk.first() else {
+            if chunk.is_empty() {
                 continue;
             };
             let n = fixture_count(chunk);
             rows.push(OscLightingCue {
                 id: Uuid::new_v4(),
                 at_seconds: round_tenths(look.at_seconds),
-                address: first.a.clone(),
+                address: LOOK_ROW_ADDRESS.to_string(),
                 args: Vec::new(),
                 label: format!("Look - {n} fixture{}", if n == 1 { "" } else { "s" }),
                 color: None,

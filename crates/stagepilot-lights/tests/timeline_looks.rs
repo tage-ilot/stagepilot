@@ -945,7 +945,11 @@ async fn release_lights_after_a_restart_clears_every_fixture_the_looks_name() {
     let r = rig(settings(vec![("s", two_fixture_song())])).await;
     let status = r.plugin.lightkey_status().await;
     assert_eq!(status.holding_fixtures, None);
-    assert_eq!(status.known_fixtures, Some(2), "the button must stay usable");
+    assert_eq!(
+        status.known_fixtures,
+        Some(2),
+        "the button must stay usable"
+    );
     let (accepted, message) = r.plugin.lightkey_release_lights().await;
     assert!(accepted, "{message}");
     let mut clears = r.clears();

@@ -23,4 +23,9 @@ holding_fixtures?: number,
 /**
  * Fixtures the replay gave to the operator, left out when none.
  */
-yielded_fixtures?: number, };
+yielded_fixtures?: number, 
+/**
+ * Fixtures the saved looks can override, left out when none. After a restart the held set
+ * is empty but Lightkey may still hold overrides: Release lights clears all of these.
+ */
+known_fixtures?: number, };

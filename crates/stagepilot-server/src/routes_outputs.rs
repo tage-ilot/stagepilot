@@ -4,7 +4,7 @@
 use crate::runtime::Runtime;
 use crate::validation::{self, http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::routing::{get, post, put};
 use axum::Router;
 use serde::de::DeserializeOwned;
@@ -37,6 +37,9 @@ const MIDI_BUSY: &str = "Stop the timer before changing the MIDI input.";
 const MIDI_DISABLED: &str = "The MIDI Playback plugin is disabled.";
 const PP_DISABLED: &str = "The ProPresenter plugin is disabled.";
 
+/// Largest cue-map PUT body: a song at the per-song caps plus its look rows.
+const CUE_MAP_BODY_LIMIT: usize = 8 * 1024 * 1024;
+
 pub fn routes() -> Router<Rt> {
     Router::new()
         .route("/api/v1/midi/inputs", get(midi_inputs).post(midi_inputs))
@@ -54,7 +57,11 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights", get(lights_status))
         .route("/api/v1/lights/outputs/refresh", post(lights_refresh))
         .route("/api/v1/lights/settings", post(lights_settings))
-        .route("/api/v1/lights/cue-map", put(lights_cue_map))
+        .route(
+            "/api/v1/lights/cue-map",
+            // A full 15,000-message song is close to axum's 2 MB default (K-01).
+            put(lights_cue_map).layer(DefaultBodyLimit::max(CUE_MAP_BODY_LIMIT)),
+        )
         .route("/api/v1/lights/pads", put(lights_pads))
         .route("/api/v1/lights/capture", post(lights_capture))
         .route("/api/v1/lights/capture/undo", post(lights_capture_undo))
@@ -671,6 +678,9 @@ async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
     if let Err(response) = validate_lights_request(&request) {
         return response;
     }
+    // Serialize with the recording sink, capture, undo and simplify (C-01): all of them read,
+    // merge and persist the whole lights settings.
+    let _lock = rt.outputs.cue_lock.lock().await;
     let current = current_lights(&rt);
     // MIDI and OSC are independent: saving one method never touches the other's settings. A MIDI
     // save cannot overwrite the saved OSC host and port, and an OSC save cannot reset the saved
@@ -716,6 +726,7 @@ async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
         transport: current.transport,
         // The Lightkey block is not part of this request: carry it over untouched.
         lightkey: current.lightkey.clone(),
+        cue_revisions: current.cue_revisions.clone(),
     };
     updated.normalise();
     let mut errors = Vec::new();
@@ -811,7 +822,17 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         });
     let _ = value;
 
+    let _lock = rt.outputs.cue_lock.lock().await;
     let current = current_lights(&rt);
+    if let Some(sent) = request.revision {
+        let saved = current.cue_revisions.get(&song_key).copied().unwrap_or(0);
+        if sent != saved {
+            return http_error(
+                409,
+                "This song's lights changed since you opened them (a recording finished or another edit was saved). Reload and try again.",
+            );
+        }
+    }
     let existing = current.cue_maps.get(&song_key);
     // Replace only the submitted method's cues; the other method's cues are kept.
     let is_midi = request.method == LightingMethod::Midi;

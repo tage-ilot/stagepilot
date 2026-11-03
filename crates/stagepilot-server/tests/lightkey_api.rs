@@ -699,3 +699,160 @@ async fn deleting_a_whole_captured_row_sets_the_song_flag_and_a_recording_clears
     rt.stop().await;
     assert_eq!(flag(&settings), Value::Null);
 }
+
+// ------------------------------------------------------------ cue-map safety (U-01, C-01, K-01)
+
+fn revision(settings: &Value, key: &str) -> Value {
+    settings["settings"]["lights"]["cue_revisions"][key].clone()
+}
+
+fn cue_map_body(
+    rows: Vec<stagepilot_core::config::OscLightingCue>,
+    revision: Option<u32>,
+) -> Value {
+    let mut body = json!({
+        "song_key": "song-1",
+        "song_title": "Holy Forever",
+        "method": "osc",
+        "osc_cues": rows.iter().map(|c| serde_json::to_value(c).unwrap()).collect::<Vec<_>>(),
+    });
+    if let Some(r) = revision {
+        body["revision"] = json!(r);
+    }
+    body
+}
+
+#[tokio::test]
+async fn a_stale_cue_map_put_is_refused_with_409_and_the_fresh_recording_survives() {
+    use stagepilot_lights::lightkey_link::SongLooks;
+    let (router, rt) = app(osc_lights()).await;
+    let first = captured_row(1.0, "/fixture/P1/overrides/dimmer", 0.5);
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(cue_map_body(vec![first.clone()], None)),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(revision(&settings, "song-1"), json!(1));
+    // The panel opened the song at revision 1. A recording finishes and saves new rows.
+    (rt.outputs.looks_sink)(SongLooks {
+        song_key: "song-1".into(),
+        song_title: "Holy Forever".into(),
+        rows: vec![captured_row(2.0, "/fixture/P1/overrides/dimmer", 0.9)],
+    })
+    .await
+    .unwrap();
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(revision(&settings, "song-1"), json!(2));
+    // The operator then edits the old list: refused, nothing overwritten.
+    let (code, body) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(cue_map_body(vec![first], Some(1))),
+    )
+    .await;
+    assert_eq!(code, StatusCode::CONFLICT, "{body}");
+    let saved = rt.settings_service.effective_runtime_settings().lights;
+    assert_eq!(
+        saved.cue_maps["song-1"].osc_cues[0].at_seconds, 2.0,
+        "the recording is still there"
+    );
+    // With the current revision the same edit goes through, and a request without one is accepted.
+    let rows = saved.cue_maps["song-1"].osc_cues.clone();
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(cue_map_body(rows.clone(), Some(2))),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(cue_map_body(rows, None)),
+    )
+    .await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_manual_cue_map_save_and_the_lights_settings_save_wait_for_the_cue_lock() {
+    use std::time::Duration;
+    let (router, rt) = app(osc_lights()).await;
+    let guard = rt.outputs.cue_lock.lock().await; // a recording is being saved
+    let row = captured_row(1.0, "/fixture/P1/overrides/dimmer", 0.5);
+    let put = {
+        let router = router.clone();
+        tokio::spawn(async move {
+            call(
+                &router,
+                "PUT",
+                "/api/v1/lights/cue-map",
+                Some(cue_map_body(vec![row], None)),
+            )
+            .await
+        })
+    };
+    let post = {
+        let router = router.clone();
+        tokio::spawn(async move {
+            call(
+                &router,
+                "POST",
+                "/api/v1/lights/settings",
+                Some(json!({"enabled": true, "method": "osc"})),
+            )
+            .await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !put.is_finished(),
+        "the cue-map save must wait for the cue lock (C-01)"
+    );
+    assert!(
+        !post.is_finished(),
+        "the lights settings save must wait for the cue lock (C-01)"
+    );
+    drop(guard);
+    let (code, _) = put.await.unwrap();
+    assert_eq!(code, StatusCode::OK);
+    let (code, _) = post.await.unwrap();
+    rt.stop().await;
+    assert_eq!(code, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_cue_map_put_over_the_default_two_megabyte_limit_is_accepted() {
+    // K-01: a song near the per-song caps is about 3 MB of JSON.
+    use stagepilot_core::config::{OscArgument, OscMessage};
+    let (router, rt) = app(osc_lights()).await;
+    let rows: Vec<_> = (0..1000)
+        .map(|i| {
+            let mut row = captured_row(f64::from(i) * 0.1, "/fixture/P1/overrides/dimmer", 0.5);
+            row.messages = (0..15)
+                .map(|m| OscMessage {
+                    address: format!("/fixture/Moving Head {m}/overrides/dimmer"),
+                    args: vec![OscArgument::String("x".repeat(60)), OscArgument::Float(0.5)],
+                })
+                .collect();
+            row
+        })
+        .collect();
+    let body = cue_map_body(rows, None);
+    assert!(
+        body.to_string().len() > 2 * 1024 * 1024,
+        "{}",
+        body.to_string().len()
+    );
+    let (code, response) = call(&router, "PUT", "/api/v1/lights/cue-map", Some(body)).await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::OK, "{response}");
+}

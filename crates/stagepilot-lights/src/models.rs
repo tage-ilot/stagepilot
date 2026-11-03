@@ -119,6 +119,11 @@ pub struct LightingCueMapRequest {
     pub osc_cues: Vec<OscLightingCue>,
     #[serde(default = "midi")]
     pub method: LightingMethod,
+    /// The song's revision (`settings.lights.cue_revisions`) the list was edited from. When it
+    /// is older than the saved one the save is refused with 409. Left out = no check.
+    #[serde(default)]
+    #[ts(optional)]
+    pub revision: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

@@ -188,3 +188,23 @@ fn a_fixture_address_may_contain_spaces_but_other_addresses_may_not() {
     )]));
     assert_eq!(control.len(), 1);
 }
+
+#[test]
+fn too_many_arguments_or_a_long_string_in_a_look_message_is_refused() {
+    // M-01
+    let many = OscMessage {
+        address: "/fixture/A/overrides/dimmer".into(),
+        args: vec![OscArgument::Float(0.5); MAX_OSC_ARGS_PER_MESSAGE + 1],
+    };
+    assert!(!errors_of(with_cues(vec![look(1.0, vec![many])])).is_empty());
+    let long = OscMessage {
+        address: "/fixture/A/overrides/name".into(),
+        args: vec![OscArgument::String("x".repeat(MAX_OSC_STRING_CHARS + 1))],
+    };
+    assert!(!errors_of(with_cues(vec![look(1.0, vec![long])])).is_empty());
+    let fine = OscMessage {
+        address: "/fixture/A/overrides/name".into(),
+        args: vec![OscArgument::String("x".repeat(MAX_OSC_STRING_CHARS)); MAX_OSC_ARGS_PER_MESSAGE],
+    };
+    assert!(errors_of(with_cues(vec![look(1.0, vec![fine])])).is_empty());
+}
