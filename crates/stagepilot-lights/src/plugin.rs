@@ -1352,15 +1352,17 @@ impl Inner {
             ));
         };
         let (on_port, note, velocity) = (port.clone(), cue.note, cue.velocity);
-        tokio::task::spawn_blocking(move || on_port.send_note_on(channel, note, velocity))
-            .await
-            .map_err(|_| MidiError::internal("MIDI send task failed."))??;
-        // The note off is sent even if this future is aborted mid-pulse (timeline cancelled).
+        // The note off is sent even if this future is aborted mid-pulse (timeline cancelled). The
+        // guard exists before the note on goes out: an abort between the send and the guard would
+        // otherwise leave the note stuck on (a harmless extra note off is the other way round).
         let guard = NoteOffGuard {
             port: Some(port),
             channel,
             note: cue.note,
         };
+        tokio::task::spawn_blocking(move || on_port.send_note_on(channel, note, velocity))
+            .await
+            .map_err(|_| MidiError::internal("MIDI send task failed."))??;
         tokio::time::sleep(Duration::from_secs_f64(f64::from(pulse_ms) / 1000.0)).await;
         guard.fire_now().await;
         let now = Utc::now();
