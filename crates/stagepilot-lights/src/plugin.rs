@@ -888,7 +888,24 @@ impl Inner {
         remaining: f64,
     ) {
         let cues_for_playback = cues.clone();
-        let plan = plan_cues(cues, now, keep_from, keep_to, self.replay_allowed());
+        let mut plan = plan_cues(cues, now, keep_from, keep_to, self.replay_allowed());
+        if keep_from.is_finite() {
+            // A resume or seek (S-03): a fixture the replay holds but the song has not touched
+            // yet at this position would keep a later look. Give it back to Lightkey; its first
+            // row takes it over again.
+            let held = self.st().held_fixtures.clone();
+            let mut clears: Vec<OscMessage> = plan
+                .not_yet
+                .iter()
+                .filter(|name| held.contains(*name))
+                .map(|name| OscMessage {
+                    address: clear_address(name),
+                    args: Vec::new(),
+                })
+                .collect();
+            clears.append(&mut plan.sync);
+            plan.sync = clears;
+        }
         if plan.sync.is_empty() && plan.rows.is_empty() {
             return;
         }
@@ -1678,6 +1695,8 @@ struct Plan {
     sync: Vec<OscMessage>,
     /// Rows still to send, in time order.
     rows: Vec<AnyCue>,
+    /// Fixtures the song only touches after the position (no message at or before it).
+    not_yet: BTreeSet<String>,
 }
 
 impl Plan {
@@ -1704,6 +1723,8 @@ fn plan_cues(
     let mut latest: BTreeMap<String, (usize, OscMessage)> = BTreeMap::new();
     let mut order = 0usize;
     let mut rows = Vec::new();
+    let mut touched_earlier = BTreeSet::new();
+    let mut touched_any = BTreeSet::new();
     for cue in cues {
         let cue = match cue {
             AnyCue::Midi(cue) => {
@@ -1726,6 +1747,14 @@ fn plan_cues(
         }
         let mut keep = Vec::new();
         if allow_fixtures {
+            for message in &fixture {
+                if let Some((name, _)) = fixture_override(&message.address) {
+                    touched_any.insert(name.to_string());
+                    if cue.at_seconds <= now {
+                        touched_earlier.insert(name.to_string());
+                    }
+                }
+            }
             if cue.at_seconds <= now {
                 for message in fixture {
                     order += 1;
@@ -1749,6 +1778,7 @@ fn plan_cues(
     Plan {
         sync: sync.into_iter().map(|(_, message)| message).collect(),
         rows,
+        not_yet: touched_any.difference(&touched_earlier).cloned().collect(),
     }
 }
 

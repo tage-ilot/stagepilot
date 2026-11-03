@@ -939,6 +939,29 @@ async fn release_lights_clears_exactly_the_held_fixtures() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn seeking_back_before_a_fixtures_first_row_gives_it_back_to_lightkey() {
+    // S-03: A first moves at 1 s, B only at 20 s. After playing to 25 s both are held; a seek
+    // back to 10 s re-syncs A and must not leave B on its 20 s look.
+    let rows = vec![
+        look(1.0, vec![msg(&dim("A"), 0.1)]),
+        look(20.0, vec![msg(&dim("B"), 0.9)]),
+    ];
+    let r = rig(settings(vec![("s", rows)])).await;
+    r.start("s").await;
+    run_for(25.0).await;
+    r.at(EventType::TimerStopRequested, "s", 25.0, false).await;
+    r.forget();
+    r.at(EventType::TimerSeeked, "s", 10.0, true).await;
+    r.t0.set(Instant::now() - Duration::from_secs(10));
+    run_for(0.5).await;
+    let sent = r.addresses();
+    assert!(sent.contains(&dim("A")), "A is re-synced: {sent:?}");
+    assert!(sent.contains(&clear("B")), "B is given back: {sent:?}");
+    assert!(!sent.contains(&clear("A")));
+    assert!(!sent.contains(&dim("B")), "B's 20 s value is not sent at 10 s");
+}
+
+#[tokio::test(start_paused = true)]
 async fn release_lights_after_a_restart_clears_every_fixture_the_looks_name() {
     // H-01: the held set is memory only. A fresh plugin holds nothing, yet Lightkey may still
     // hold the overrides of the run before the restart.
