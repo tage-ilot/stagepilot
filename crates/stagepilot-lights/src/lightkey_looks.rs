@@ -111,7 +111,8 @@ fn within_tolerance(address: &str, a: &[FixtureArg], b: &[FixtureArg]) -> bool {
 /// away, or there is none). Kept changes are placed on the nearest multiple of `interval`; one
 /// row holds everything that landed in its slot (the last value of an address wins). Changes at
 /// or before t=0 form the starting state at 0.0, and `baseline` supplies the start value of an
-/// address that only moves later. Changes after `duration` are dropped. `changes` need not be
+/// address that only moves later. The last change of an address after `duration` is folded into
+/// the final row at `duration`; earlier ones after it are dropped. `changes` need not be
 /// sorted.
 pub fn thin(
     baseline: &[FixtureCommand],
@@ -139,6 +140,7 @@ pub fn thin(
         list.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut start: Option<&FixtureCommand> = None;
         let mut changed_at_start = false;
+        let mut after_end: Option<&FixtureCommand> = None;
         let mut later: Vec<(f64, &FixtureCommand)> = Vec::new();
         for (at, command) in list {
             if at <= 0.0 {
@@ -146,7 +148,14 @@ pub fn thin(
                 changed_at_start = true;
             } else if duration <= 0.0 || at <= duration {
                 later.push((at, command));
+            } else {
+                after_end = Some(command);
             }
+        }
+        // A song that overruns keeps its last look (a fade-out, say): the final value after the
+        // scheduled end lands in the final row at `duration` instead of being dropped (R-02).
+        if let Some(command) = after_end {
+            later.push((duration, command));
         }
         if later.is_empty() && !changed_at_start {
             continue;
@@ -298,7 +307,8 @@ impl LookRecorder {
     }
 
     /// The rows these changes make at this Detail `interval` (see [`thin`] and [`merge`]).
-    /// Changes after `duration` are dropped, never fatal.
+    /// The last change of an address after `duration` is folded into the final row; it is never
+    /// fatal.
     pub fn looks(&self, duration: f64, interval: f64) -> Vec<Look> {
         let baseline = self.baseline.commands();
         let looks = simplify(&baseline, &self.observed, duration, interval);
@@ -311,7 +321,7 @@ impl LookRecorder {
             tracing::warn!(
                 late,
                 duration,
-                "lightkey_fixture_changes_after_the_end_dropped"
+                "lightkey_fixture_changes_after_the_end_folded"
             );
         }
         looks
@@ -640,11 +650,14 @@ mod tests {
     }
 
     #[test]
-    fn changes_after_the_end_are_dropped_not_fatal() {
+    fn the_last_change_after_the_end_is_folded_into_the_final_row_at_the_duration() {
+        // R-02: an overrunning song keeps its final look (a fade-out), not dropped.
         let changes = vec![(10.0, dim(0.5)), (100.0, dim(0.9)), (101.0, dim(0.1))];
         let looks = thin(&[], &changes, 60.0, 0.5);
-        assert_eq!(looks.len(), 1);
+        assert_eq!(looks.len(), 2);
         assert_eq!(looks[0].messages[0].v, f(0.5));
+        assert_eq!(looks[1].at_seconds, 60.0);
+        assert_eq!(looks[1].messages[0].v, f(0.1), "the last value wins");
     }
 
     #[test]
@@ -858,7 +871,9 @@ mod tests {
             .flat_map(|l| l.messages.iter())
             .map(|m| m.a.as_str())
             .collect();
-        assert_eq!(names.len(), 1);
+        // P1, plus the final value of each of the 2100 fixtures that moved after the end,
+        // folded into the row at the duration.
+        assert_eq!(names.len(), 2101);
         assert_eq!(
             state_at(&looks, 10.0)["/fixture/P1/overrides/dimmer"],
             f(0.5)

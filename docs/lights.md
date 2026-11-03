@@ -113,8 +113,8 @@ The strip has these controls:
   is turned off mid-song) the changes are thinned and merged into rows, saved
   into the song's lighting cue map with the normal, serialized save, and the raw
   changes are discarded. A song is saved only if at least half of it was
-  recorded and at least one fixture changed. Changes after the song's scheduled
-  end are dropped, an oversize change never discards the capture, and moving the
+  recorded and at least one fixture changed. The last change of a fixture after the song's scheduled
+  end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
   playhead during a recording discards it. Messages: `Recording <song>.`,
   `Saved N looks to <song>'s timeline.` (`... (reduced detail, 0.5 s).` when the song was
   too large for the chosen Detail and was saved at a coarser spacing), `Not saved: only X of Y seconds recorded.`
