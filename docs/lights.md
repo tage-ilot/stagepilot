@@ -99,7 +99,7 @@ newer, a small read-only agent that runs on the Lightkey Mac. Install it there
 first (its README covers the one-time macOS permission click). A capture holds
 fixture data only: **cues are neither recorded nor replayed**.
 
-The strip has three controls:
+The strip has these controls:
 
 - **Address and Connect.** Defaults to the Lighting OSC host on port 8770
   (`10.30.0.211:8770`). The dot shows *Connected*, *Lightkey is closed*, or
@@ -119,6 +119,23 @@ The strip has three controls:
   When a song with a capture plays, StagePilot first sets each captured fixture
   to its recorded state at that point, then sends each change at its time, 45 ms
   early to absorb the OSC delay. Replay holds those fixtures with overrides.
+- **Replay | Record toggle.** One two-way control. *Replay* (the default) replays captured lights.
+  *Record* is for capturing and needs a connected link. Switching back to Replay stops the
+  recording first, then turns replay on; if that fails the toggle shows the real state and the
+  reason. There is no separate replay-off setting in the UI.
+  In Record mode, the next song's countdown is recorded:
+  every cue Lightkey turns on or off is stored with its song time, measured
+  from Lightkey's own DMX output with the clock difference between the two Macs
+  removed. The capture is attached to that song and saved next to the settings
+  (`lightkey-takes.json`). A song is saved only if at least half of it was
+  recorded, so a stray start and stop never replaces a good capture. Moving the
+  playhead during a recording discards it. Turning Record off mid-song saves
+  what was captured, if it was enough.
+- **Replay.** Paused automatically while Record is selected.
+  When a song with a capture plays, StagePilot first sets every captured cue to
+  its recorded state at that point, then sends each change at its time, 40 ms
+  early to absorb the OSC and fade delay (measured: 28 to 52 ms). Seeking and
+  resuming re-sync from the new position.
 
 A song listed as **no fixture capture** (for example a capture made before cues
 were dropped) replays nothing. Captures made earlier still load; the cue data in
@@ -152,8 +169,30 @@ The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired
 router. Do not use Wi-Fi. Its timing is not steady enough: the agent's multicast
 over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
 recording, the message says that levels were not recorded.
+- **Record.** The same Record mode captures both. Each fixture change is stored with its song
+  time in Lightkey's OSC form, for example `/fixture/MH1/overrides/panAngle 90.0`. Replay needs no
+  conversion. A fixture that never changes during the song is not stored. It stays with the cues
+  and the Lightkey operator. The song's line in the list counts the color and level changes next
+  to the cue changes.
+- **Replay.** Replay sets each captured fixture to its recorded state at that point. Then it sends
+  each change 45 ms before its time. Replay holds those fixtures with overrides. When the song
+  ends, stops, or replay is switched off, StagePilot clears every fixture it held. It sends one
+  clear per fixture, twice. The cues then take over again. Fixtures that were never captured are
+  not touched.
+- **Older agents.** An agent without the fixture relay shows no second line. Recording then
+  captures cues only, as before. If the stream stops during a recording, the cue capture is
+  unaffected, and the message says that levels were not recorded.
+- **Wired network.** The relay uses plain unicast UDP, so it crosses the wired router. Do not use
+  Wi-Fi. Its timing is not steady enough: the agent's multicast over Wi-Fi stalled for up to
+  0.8 s in a test.
 
 ## Cue board, live capture and the timeline
+
+The timeline follows the live song (or the last song that played) and switches
+when a new song starts. If you pick another song by hand, it stays on your pick
+until the next song starts; the line beside the song picker then reads "Showing
+<title>" with a **Follow live** button to jump back at once. With no song played
+yet it shows the first song of the plan.
 
 Cues are easiest to set while the song is running in practice. Under **Song
 lighting timeline** the panel has a **Cue board** and a visual **Timeline**; the
