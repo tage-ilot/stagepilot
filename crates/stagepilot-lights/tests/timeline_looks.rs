@@ -707,19 +707,19 @@ async fn the_replays_own_echo_never_yields() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_change_with_no_matching_send_yields_but_one_for_another_property_too() {
+async fn an_unsent_property_never_yields_but_a_changed_sent_one_does() {
     let r = rig(settings(vec![("s", two_fixture_song())])).await;
     r.start("s").await;
     run_for(10.0).await; // the 10 s row went out at 9.955 s
-                         // A pan nobody sent is the operator's, even right after a dimmer send to the same fixture.
+                         // A pan the replay never sent is Lightkey's own business (a chase, an effect): not the operator.
     r.plugin
         .lightkey_fixture_changes(vec![dmx(&pan("A"), 12.0)], false);
-    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(1));
-    // An echo older than the window no longer excuses a change.
-    run_for(0.6).await;
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    // A different dimmer value 100 ms after the send is the operator, not an echo (O-01).
+    run_for(0.1).await;
     r.plugin
         .lightkey_fixture_changes(vec![dmx(&dim("B"), 0.8)], false);
-    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(2));
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(1));
 }
 
 #[tokio::test(start_paused = true)]

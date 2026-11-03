@@ -1115,6 +1115,7 @@ impl Inner {
             let release: Vec<String> = st.held_fixtures.difference(keep).cloned().collect();
             for name in &release {
                 st.held_fixtures.remove(name);
+                st.operator.forget_sent(name);
             }
             release
         };
@@ -1187,7 +1188,7 @@ impl Inner {
                 return Ok(()); // the operator has this fixture
             } else {
                 st.held_fixtures.insert(name.to_string());
-                st.operator.note_send(&message.address, Instant::now());
+                st.operator.note_send(&message.address, &message.args, Instant::now());
             }
         }
         self.send_osc(&message.address, &message.args).await
