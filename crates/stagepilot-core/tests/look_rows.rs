@@ -49,6 +49,7 @@ fn with_cues(cues: Vec<OscLightingCue>) -> LightsSettings {
             song_title: "S".into(),
             cues: vec![],
             osc_cues: cues,
+            captured_edited: false,
         },
     );
     lights

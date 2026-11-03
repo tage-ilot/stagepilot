@@ -70,6 +70,7 @@ fn settings(
             song_title: "Holy Forever".into(),
             cues,
             osc_cues: osc,
+            captured_edited: false,
         },
     );
     LightsSettings {

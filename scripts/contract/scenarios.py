@@ -295,7 +295,7 @@ OUTPUT_SCENARIOS: list[Step] = [
 
 # ---- the "lightkey" profile -----------------------------------------------------------------------
 # Run against the demo plan with Lighting on OSC (to a loopback UDP port nothing listens on) and a
-# FAKE lightkey-api (scripts/contract/mock_lightkey.py). One take is seeded for "Battle Belongs".
+# FAKE lightkey-api (scripts/contract/mock_lightkey.py). The Lightkey link no longer keeps takes; recordings become look rows on the song timeline.
 # Extra step kind: {"mock": "/__change?add=Stars"} changes the fake agent's cue set (not recorded).
 # Steps marked "mask": ["message"] blank a message that quotes how many seconds were recorded.
 
@@ -312,7 +312,7 @@ def lightkey_link_connected() -> Step:
 LIGHTKEY_SCENARIOS: list[Step] = [
     mock("/__reset"),
     lightkey_link_connected(),
-    http("lightkey: status, connected with the seeded take", "GET", LIGHTKEY),
+    http("lightkey: status, connected", "GET", LIGHTKEY),
     http("lightkey: settings show the default block", "GET", "/api/v1/settings"),
     masked(http("lightkey: replay off", "PUT", f"{LIGHTKEY}/settings", {"replay": False}), "link", "active_count"),
     lightkey_link_connected(),
@@ -346,7 +346,7 @@ LIGHTKEY_SCENARIOS: list[Step] = [
     sleep(0.2),
     http("lightkey: status, paused recording", "GET", LIGHTKEY),
     masked(http("lightkey: recording off, too short to keep", "POST", f"{LIGHTKEY}/recording", {"recording": False}), "message"),
-    masked(http("lightkey: status, the seeded take is untouched", "GET", LIGHTKEY), "message"),
+    masked(http("lightkey: status, nothing was saved", "GET", LIGHTKEY), "message"),
     masked(http("lightkey: recording off again", "POST", f"{LIGHTKEY}/recording", {"recording": False}), "message"),
     # ---- replay --------------------------------------------------------------------------------
     http("lightkey: back to the start of the plan", "POST", "/api/v1/actions/reset_position"),
@@ -356,10 +356,6 @@ LIGHTKEY_SCENARIOS: list[Step] = [
     http("lightkey: stop the timer, replay stops", "POST", "/api/v1/actions/stop_timer"),
     {"name": "lightkey: wait for replay to stop", "wait": {"path": LIGHTKEY, "key": "replaying_song", "equals": None, "timeout": 20}},
     masked(http("lightkey: status, no longer replaying", "GET", LIGHTKEY), "message"),
-    # ---- takes ---------------------------------------------------------------------------------
-    masked(http("lightkey: clear a missing take", "DELETE", f"{LIGHTKEY}/takes/nope"), "message"),
-    http("lightkey: clear the seeded take", "DELETE", f"{LIGHTKEY}/takes/demo-battle-belongs"),
-    http("lightkey: clear it again", "DELETE", f"{LIGHTKEY}/takes/demo-battle-belongs"),
     # ---- Lighting settings keep the Lightkey block ---------------------------------------------
     masked(http("lightkey: replay off before a Lighting save", "PUT", f"{LIGHTKEY}/settings", {"replay": False}), "link", "active_count"),
     lightkey_link_connected(),

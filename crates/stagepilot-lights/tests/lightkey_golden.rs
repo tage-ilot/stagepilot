@@ -1,28 +1,15 @@
-//! Pure Lightkey rules checked against `tests/fixtures/lightkey_golden.json`. The cue rules the
-//! file once covered (state_at, replay_plan, operator hold...) are gone with cue replay; the file
-//! still serves as an old-format take that must keep loading.
+//! Pure Lightkey rules checked against `tests/fixtures/lightkey_golden.json`.
 
 use serde_json::Value;
-use stagepilot_core::config::{clean_lightkey_api_url, LightkeySettings, LightsSettings};
-use stagepilot_lights::lightkey::{
-    effective_api_url, summarize, take_is_worth_keeping, LightkeyTake,
+use stagepilot_core::config::{
+    clean_lightkey_api_url, LightkeyDetail, LightkeySettings, LightsSettings,
 };
+use stagepilot_lights::lightkey::{effective_api_url, recording_is_worth_keeping};
 
 const GOLDEN_TEXT: &str = include_str!("fixtures/lightkey_golden.json");
 
 fn golden() -> Value {
     serde_json::from_str(GOLDEN_TEXT).expect("golden json")
-}
-
-#[test]
-fn an_old_take_with_cue_data_still_loads_and_is_written_back_without_it() {
-    let mut take: LightkeyTake = serde_json::from_value(golden()["take"].clone()).expect("take");
-    take.normalise_and_validate().expect("valid take");
-    assert!(take.fixtures.is_none());
-    let written = serde_json::to_value(&take).unwrap();
-    assert!(written.get("initial").is_none() && written.get("edges").is_none());
-    // a take with no fixture track is "no fixture capture"
-    assert_eq!(summarize(&take).fixture_count, None);
 }
 
 #[test]
@@ -34,7 +21,7 @@ fn worth_keeping_matches_golden() {
             case[2].as_bool().unwrap(),
         );
         assert_eq!(
-            take_is_worth_keeping(covered, duration),
+            recording_is_worth_keeping(covered, duration),
             expected,
             "{covered}/{duration}"
         );
@@ -53,6 +40,7 @@ fn effective_api_url_cases() {
         let settings = LightkeySettings {
             api_url: clean_lightkey_api_url(raw).expect("valid"),
             replay: true,
+            ..LightkeySettings::default()
         };
         assert_eq!(effective_api_url(&settings, host), expected, "{raw:?}");
     }
@@ -79,11 +67,43 @@ fn replay_defaults_on_and_old_settings_load_with_replay_on() {
         loaded.lightkey,
         LightkeySettings {
             api_url: String::new(),
-            replay: true
+            replay: true,
+            detail: LightkeyDetail::Normal,
         }
     );
     // A partial block keeps the other field's default.
     let partial: LightsSettings =
         serde_json::from_value(serde_json::json!({"lightkey": {"api_url": "10.0.0.5"}})).unwrap();
     assert!(partial.lightkey.replay);
+}
+
+#[test]
+fn detail_defaults_to_normal_and_round_trips() {
+    assert_eq!(LightkeySettings::default().detail, LightkeyDetail::Normal);
+    assert_eq!(LightkeyDetail::Fine.interval_seconds(), 0.25);
+    assert_eq!(LightkeyDetail::Normal.interval_seconds(), 0.5);
+    assert_eq!(LightkeyDetail::Coarse.interval_seconds(), 1.0);
+    for (detail, text) in [
+        (LightkeyDetail::Fine, "fine"),
+        (LightkeyDetail::Normal, "normal"),
+        (LightkeyDetail::Coarse, "coarse"),
+    ] {
+        let json = serde_json::to_value(LightkeySettings {
+            detail,
+            ..Default::default()
+        })
+        .unwrap();
+        // Normal is the default and is left out of the saved file; the others are written.
+        if detail == LightkeyDetail::Normal {
+            assert!(json.get("detail").is_none(), "{json}");
+        } else {
+            assert_eq!(json["detail"], text);
+        }
+        let back: LightkeySettings = serde_json::from_value(json).unwrap();
+        assert_eq!(back.detail, detail);
+    }
+    // an older saved block without the field loads as Normal
+    let old: LightkeySettings =
+        serde_json::from_value(serde_json::json!({"api_url": "", "replay": true})).unwrap();
+    assert_eq!(old.detail, LightkeyDetail::Normal);
 }

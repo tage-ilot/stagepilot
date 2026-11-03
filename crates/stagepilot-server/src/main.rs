@@ -23,7 +23,7 @@
 //!   stagepilot-server --contract-lightkey --lightkey-port N --port N
 //!       the "lightkey" contract profile: demo plan, simulated MIDI and timer output, Lighting on
 //!       OSC to a loopback port nothing listens on, and the Lightkey link polling a FAKE agent on
-//!       127.0.0.1:N with one seeded take. Mirrors `scripts/contract/lightkey_app.py`.
+//!       127.0.0.1:N. Mirrors `scripts/contract/lightkey_app.py`.
 //!
 //! The bind address comes from the settings (`STAGEPILOT_HOST` / `STAGEPILOT_PORT` override them);
 //! `--host` and `--port` override both.
@@ -31,16 +31,12 @@
 use stagepilot_core::auth::RemoteStore;
 use stagepilot_core::config::{
     IntegrationModes, LightingMethod, LightkeySettings, LightsSettings, MidiSettings, MidiSource,
-    ProPresenterSettings, ServiceSource, TimerOutput,
+    OscArgument, OscCueSource, OscLightingCue, OscMessage, ProPresenterSettings, ServiceSource,
+    SongLightingCueMap, TimerOutput,
 };
 use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
-use stagepilot_lights::lightkey::LightkeyTake;
-use stagepilot_lights::lightkey_fixtures::{
-    FixtureArg, FixtureCommand, FixtureEvent, FixtureTrack,
-};
-use stagepilot_lights::lightkey_link::{MemoryTakeStore, TakeStore};
 use stagepilot_pco::runtime::PcoOptions;
 use stagepilot_server::remote_fakes::ContractManager;
 use stagepilot_server::{
@@ -129,6 +125,35 @@ fn contract_outputs_settings(propresenter_port: u16) -> PersistentSettings {
     }
 }
 
+/// The look rows the contract profile seeds for the first demo song: one fixture, a start row
+/// and two changes, all `captured` (what a recording leaves on the timeline).
+fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLightingCueMap> {
+    let row = |n: u128, at: f64, level: f64| OscLightingCue {
+        id: uuid::Uuid::from_u128(n),
+        at_seconds: at,
+        address: "/fixture/Par 1/overrides/dimmer".into(),
+        args: vec![],
+        label: "Look - 1 fixture".into(),
+        color: None,
+        messages: vec![OscMessage {
+            address: "/fixture/Par 1/overrides/dimmer".into(),
+            args: vec![OscArgument::Float(level)],
+        }],
+        source: OscCueSource::Captured,
+    };
+    std::iter::once((
+        "demo-battle-belongs".to_string(),
+        SongLightingCueMap {
+            song_key: "demo-battle-belongs".into(),
+            song_title: "Battle Belongs".into(),
+            cues: vec![],
+            osc_cues: vec![row(1, 0.0, 0.0), row(2, 10.0, 1.0), row(3, 40.0, 0.25)],
+            captured_edited: false,
+        },
+    ))
+    .collect()
+}
+
 /// The "lightkey" contract profile (see `scripts/contract/lightkey_app.py`).
 fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
     PersistentSettings {
@@ -145,77 +170,13 @@ fn contract_lightkey_settings(agent_port: u16) -> PersistentSettings {
             lightkey: LightkeySettings {
                 api_url: format!("http://127.0.0.1:{agent_port}"),
                 replay: true,
+                ..LightkeySettings::default()
             },
             cue_maps: contract_lightkey_cue_maps(),
             ..LightsSettings::default()
         },
         ..PersistentSettings::default()
     }
-}
-
-/// The look rows the contract profile seeds on the first demo song's cue map: one fixture, two
-/// changes (the timeline is the replay source).
-fn contract_lightkey_cue_maps(
-) -> std::collections::BTreeMap<String, stagepilot_core::config::SongLightingCueMap> {
-    use stagepilot_core::config::{
-        OscArgument, OscCueSource, OscLightingCue, OscMessage, SongLightingCueMap,
-    };
-    let row = |at: f64, level: f64, label: &str| OscLightingCue {
-        id: uuid::Uuid::new_v4(),
-        at_seconds: at,
-        address: String::new(),
-        args: Vec::new(),
-        label: label.into(),
-        color: None,
-        messages: vec![OscMessage {
-            address: "/fixture/Par 1/overrides/dimmer".into(),
-            args: vec![OscArgument::Float(level)],
-        }],
-        source: OscCueSource::Captured,
-    };
-    let map = SongLightingCueMap {
-        song_key: "demo-battle-belongs".into(),
-        song_title: "Battle Belongs".into(),
-        cues: Vec::new(),
-        osc_cues: vec![row(10.0, 1.0, "Look 1"), row(40.0, 0.25, "Look 2")],
-    };
-    std::iter::once((map.song_key.clone(), map)).collect()
-}
-
-/// The take the contract profile seeds for the first demo song: one fixture, two changes.
-fn contract_lightkey_store() -> Arc<dyn TakeStore> {
-    let dimmer = |level: f64| {
-        FixtureCommand::new(
-            "/fixture/Par 1/overrides/dimmer",
-            vec![FixtureArg::Float(level)],
-        )
-    };
-    let mut take = LightkeyTake::new(
-        "demo-battle-belongs".into(),
-        "Battle Belongs".into(),
-        chrono::DateTime::parse_from_rfc3339("2026-10-20T20:00:00Z")
-            .map(|d| d.with_timezone(&chrono::Utc))
-            .unwrap_or_default(),
-        281.0,
-    )
-    .expect("seed take");
-    take.fixtures = Some(FixtureTrack {
-        initial: vec![dimmer(0.0)],
-        events: vec![
-            FixtureEvent {
-                at_seconds: 10.0,
-                osc: vec![dimmer(1.0)],
-            },
-            FixtureEvent {
-                at_seconds: 40.0,
-                osc: vec![dimmer(0.25)],
-            },
-        ],
-        lead_seconds: 0.045,
-    });
-    let store = MemoryTakeStore::new();
-    store.set(std::iter::once((take.song_key.clone(), take)).collect());
-    Arc::new(store)
 }
 
 #[tokio::main]
@@ -271,7 +232,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(service),
             false,
             OutputBackends {
-                lightkey_store: Some(contract_lightkey_store()),
                 ..OutputBackends::fake_midi()
             },
         )

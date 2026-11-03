@@ -12,21 +12,22 @@
 //! engine. This link keeps the recorder, the relay client and the status the Lighting panel shows.
 
 use crate::lightkey::{
-    effective_api_url, summarize, take_is_worth_keeping, truncate_micros, LightkeyLink as Link,
-    LightkeyStatus, LightkeyTake, LightkeyTakeSummary,
+    effective_api_url, recording_is_worth_keeping, LightkeyCaptured, LightkeyLink as Link,
+    LightkeyStatus,
 };
-use crate::lightkey_fixtures::{FixtureCommand, FixtureRecorder};
+use crate::lightkey_fixtures::FixtureCommand;
+use crate::lightkey_looks::{look_rows, LookRecorder};
 use crate::lightkey_relay::{relay_target, RelayClient};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
-use stagepilot_core::config::{LightkeySettings, DEFAULT_LIGHTKEY_RELAY_PORT};
+use stagepilot_core::config::{LightkeySettings, OscLightingCue, DEFAULT_LIGHTKEY_RELAY_PORT};
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -72,12 +73,6 @@ impl Clock for SystemClock {
     fn mono(&self) -> f64 {
         self.started.elapsed().as_secs_f64()
     }
-}
-
-fn utc_from_wall(wall: f64) -> DateTime<Utc> {
-    truncate_micros(
-        DateTime::from_timestamp_micros((wall * 1e6).round() as i64).unwrap_or_default(),
-    )
 }
 
 fn datetime_seconds(value: DateTime<Utc>) -> f64 {
@@ -166,12 +161,11 @@ impl LightkeyHttp for ReqwestLightkeyHttp {
 pub type LinkSettings = (bool, bool, String, LightkeySettings);
 pub type SettingsProvider = Arc<dyn Fn() -> LinkSettings + Send + Sync>;
 
-// -------------------------------------------------------------------------------- take stores
+// ---------------------------------------------------------------------------- Record switch
 
-pub trait TakeStore: Send + Sync {
-    fn load(&self) -> Result<BTreeMap<String, LightkeyTake>, std::io::Error>;
-    fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error>;
-    /// Whether Record was armed when the app last ran. Unreadable means off.
+/// Remembers whether the Record switch was on when the app last ran.
+pub trait ArmedStore: Send + Sync {
+    /// Unreadable means off.
     fn load_armed(&self) -> bool {
         false
     }
@@ -181,31 +175,17 @@ pub trait TakeStore: Send + Sync {
 }
 
 #[derive(Default)]
-pub struct MemoryTakeStore {
-    takes: Mutex<BTreeMap<String, LightkeyTake>>,
+pub struct MemoryArmedStore {
     armed: Mutex<bool>,
 }
 
-impl MemoryTakeStore {
+impl MemoryArmedStore {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn takes(&self) -> BTreeMap<String, LightkeyTake> {
-        self.takes.lock().unwrap_or_else(|p| p.into_inner()).clone()
-    }
-    pub fn set(&self, takes: BTreeMap<String, LightkeyTake>) {
-        *self.takes.lock().unwrap_or_else(|p| p.into_inner()) = takes;
-    }
 }
 
-impl TakeStore for MemoryTakeStore {
-    fn load(&self) -> Result<BTreeMap<String, LightkeyTake>, std::io::Error> {
-        Ok(self.takes())
-    }
-    fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error> {
-        self.set(takes.clone());
-        Ok(())
-    }
+impl ArmedStore for MemoryArmedStore {
     fn load_armed(&self) -> bool {
         *self.armed.lock().unwrap_or_else(|p| p.into_inner())
     }
@@ -215,137 +195,53 @@ impl TakeStore for MemoryTakeStore {
     }
 }
 
-/// `_TakeFile`.
-#[derive(Serialize, Deserialize)]
-struct TakeFile {
-    #[serde(default = "one")]
-    version: i64,
-    #[serde(default)]
-    takes: Vec<LightkeyTake>,
-}
-
-fn one() -> i64 {
-    1
-}
-
-/// All captures in one atomically written JSON file next to the settings file.
-pub struct FileTakeStore {
+/// The Record switch in a one-word file next to the settings file.
+pub struct FileArmedStore {
     pub path: PathBuf,
 }
 
-impl FileTakeStore {
+impl FileArmedStore {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
-
-    /// The Record switch lives in its own tiny file so the takes format stays unchanged.
-    fn armed_path(&self) -> PathBuf {
-        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
-        name.push(".armed");
-        self.path.with_file_name(name)
-    }
-
-    fn bad_path(&self) -> PathBuf {
-        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
-        name.push(".bad");
-        self.path.with_file_name(name)
-    }
-
-    fn parse(text: &str) -> Option<BTreeMap<String, LightkeyTake>> {
-        let mut file: TakeFile = serde_json::from_str(text).ok()?;
-        let mut takes = BTreeMap::new();
-        for take in &mut file.takes {
-            take.normalise_and_validate().ok()?;
-        }
-        for take in file.takes {
-            takes.insert(take.song_key.clone(), take);
-        }
-        Some(takes)
-    }
 }
 
-/// `model_dump_json(indent=1)`: one-space indent.
-fn to_indented_json(value: &impl Serialize) -> Result<String, std::io::Error> {
-    let mut out = Vec::new();
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(b" ");
-    let mut serializer = serde_json::Serializer::with_formatter(&mut out, formatter);
-    value
-        .serialize(&mut serializer)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    String::from_utf8(out).map_err(|e| std::io::Error::other(e.to_string()))
-}
-
-impl TakeStore for FileTakeStore {
-    fn load(&self) -> Result<BTreeMap<String, LightkeyTake>, std::io::Error> {
-        if !self.path.exists() {
-            return Ok(BTreeMap::new());
-        }
-        let parsed = std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|text| Self::parse(&text));
-        match parsed {
-            Some(takes) => Ok(takes),
-            None => {
-                // Never block startup on a bad capture file: keep it for inspection, start empty.
-                let _ = std::fs::rename(&self.path, self.bad_path());
-                Ok(BTreeMap::new())
-            }
-        }
-    }
-
+impl ArmedStore for FileArmedStore {
     fn load_armed(&self) -> bool {
-        std::fs::read_to_string(self.armed_path()).is_ok_and(|text| text.trim() == "armed")
+        std::fs::read_to_string(&self.path).is_ok_and(|text| text.trim() == "armed")
     }
 
     fn save_armed(&self, armed: bool) -> Result<(), std::io::Error> {
         if let Some(parent) = self.path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(self.armed_path(), if armed { "armed" } else { "off" })
-    }
-
-    fn save(&self, takes: &BTreeMap<String, LightkeyTake>) -> Result<(), std::io::Error> {
-        let mut sorted: Vec<LightkeyTake> = takes.values().cloned().collect();
-        sorted.sort_by(|a, b| a.song_key.cmp(&b.song_key));
-        let text = to_indented_json(&TakeFile {
-            version: 1,
-            takes: sorted,
-        })?;
-        let name = self
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let temporary = self
-            .path
-            .with_file_name(format!(".{name}.{}.tmp", uuid::Uuid::new_v4().simple()));
-        let result = (|| {
-            if let Some(parent) = self.path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                std::fs::create_dir_all(parent)?;
-            }
-            {
-                use std::io::Write;
-                let mut handle = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&temporary)?;
-                handle.write_all(text.as_bytes())?;
-                handle.flush()?;
-                handle.sync_all()?;
-            }
-            std::fs::rename(&temporary, &self.path)
-        })();
-        let _ = remove_if_exists(&temporary);
-        result
+        std::fs::write(&self.path, if armed { "armed" } else { "off" })
     }
 }
 
-fn remove_if_exists(path: &Path) -> std::io::Result<()> {
-    match std::fs::remove_file(path) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        other => other,
-    }
+// ------------------------------------------------------------------------- saving the looks
+
+/// The captured look rows of one song, ready for its timeline.
+#[derive(Debug, Clone)]
+pub struct SongLooks {
+    pub song_key: String,
+    pub song_title: String,
+    pub rows: Vec<OscLightingCue>,
 }
+
+/// Why the looks could not be saved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LooksError {
+    /// The song's timeline would pass the row or message caps: the link tries a coarser Detail.
+    TooLarge,
+    Failed(String),
+}
+
+pub type LooksFuture = Pin<Box<dyn Future<Output = Result<(), LooksError>> + Send>>;
+
+/// Saves a song's captured rows into its cue map through the normal, serialized save path
+/// (replacing only the captured rows of that song, keeping manual ones).
+pub type LooksSink = Arc<dyn Fn(SongLooks) -> LooksFuture + Send + Sync>;
 
 // ------------------------------------------------------------------------------------- state
 
@@ -359,7 +255,7 @@ struct Session {
     last_position: f64,
     running: bool,
     /// Fixture changes from the `lightkey-api` relay, when it is connected.
-    fixtures: Option<FixtureRecorder>,
+    fixtures: Option<LookRecorder>,
 }
 
 impl Session {
@@ -397,7 +293,7 @@ struct Message {
 }
 
 struct State {
-    takes: BTreeMap<String, LightkeyTake>,
+    captured: Option<LightkeyCaptured>,
     subscriptions: Vec<Subscription>,
     poll_task: Option<JoinHandle<()>>,
     relay_task: Option<JoinHandle<()>>,
@@ -419,7 +315,8 @@ struct State {
 struct Inner {
     bus: EventBus,
     settings: SettingsProvider,
-    store: Arc<dyn TakeStore>,
+    armed_store: Arc<dyn ArmedStore>,
+    looks_sink: Option<LooksSink>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
     relay_port: u16,
@@ -430,7 +327,10 @@ struct Inner {
 
 /// Everything `LightkeyLink::new` needs besides the bus and the settings.
 pub struct LinkOptions {
-    pub store: Arc<dyn TakeStore>,
+    /// Remembers the Record switch.
+    pub armed_store: Arc<dyn ArmedStore>,
+    /// Where a finished recording goes (the song's timeline). `None` saves nothing.
+    pub looks_sink: Option<LooksSink>,
     pub http_factory: HttpFactory,
     pub clock: Arc<dyn Clock>,
     /// UDP port of the `lightkey-api` relay (21700 unless the agent was configured otherwise).
@@ -440,7 +340,8 @@ pub struct LinkOptions {
 impl Default for LinkOptions {
     fn default() -> Self {
         Self {
-            store: Arc::new(MemoryTakeStore::new()),
+            armed_store: Arc::new(MemoryArmedStore::new()),
+            looks_sink: None,
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
             relay_port: DEFAULT_LIGHTKEY_RELAY_PORT,
@@ -463,13 +364,14 @@ impl LightkeyLink {
             inner: Arc::new(Inner {
                 bus,
                 settings,
-                store: options.store,
+                armed_store: options.armed_store,
+                looks_sink: options.looks_sink,
                 http_factory: options.http_factory,
                 clock: options.clock,
                 relay_port: options.relay_port,
                 relay: RelayClient::new(),
                 state: Mutex::new(State {
-                    takes: BTreeMap::new(),
+                    captured: None,
                     subscriptions: Vec::new(),
                     poll_task: None,
                     relay_task: None,
@@ -528,25 +430,9 @@ impl LightkeyLink {
         self.inner.status()
     }
 
-    pub fn take_summaries(&self) -> Vec<LightkeyTakeSummary> {
-        lock(&self.inner.state)
-            .takes
-            .values()
-            .map(summarize)
-            .collect()
-    }
-
-    pub fn has_take(&self, song_key: &str) -> bool {
-        lock(&self.inner.state).takes.contains_key(song_key)
-    }
-
     // ------------------------------------------------------------ actions
     pub async fn set_recording(&self, on: bool) -> String {
         self.inner.clone().set_recording(on).await
-    }
-
-    pub async fn clear_take(&self, song_key: &str) -> bool {
-        self.inner.clone().clear_take(song_key).await
     }
 }
 
@@ -608,8 +494,6 @@ impl Inner {
         let (enabled, _osc, osc_host, settings) = (self.settings)();
         let mut st = self.st();
         let message = self.live_message(&mut st, settings.replay);
-        let mut takes: Vec<LightkeyTakeSummary> = st.takes.values().map(summarize).collect();
-        takes.sort_by_key(|item| item.song_title.to_lowercase());
         LightkeyStatus {
             api_url: effective_api_url(&settings, &osc_host),
             link: if enabled { st.link } else { Link::Off },
@@ -624,7 +508,8 @@ impl Inner {
             replay_blocked: self.replay_blocked_reason(st.armed),
             replaying_song: st.replaying.clone(),
             message,
-            takes,
+            detail_level: settings.detail,
+            captured: st.captured.clone(),
             fixtures: self.relay.status(
                 st.session
                     .as_ref()
@@ -635,19 +520,12 @@ impl Inner {
 
     async fn start(self: Arc<Self>) {
         self.st().stopped = false;
-        let store = self.store.clone();
-        let loaded = tokio::task::spawn_blocking(move || store.load())
-            .await
-            .ok()
-            .and_then(Result::ok)
-            .unwrap_or_default();
-        let store = self.store.clone();
+        let store = self.armed_store.clone();
         let armed = tokio::task::spawn_blocking(move || store.load_armed())
             .await
             .unwrap_or(false);
         {
             let mut st = self.st();
-            st.takes = loaded;
             st.armed = armed;
         }
         let mut subs = Vec::new();
@@ -749,32 +627,11 @@ impl Inner {
 
     /// Remember the Record switch for the next start. A failure is logged, never fatal.
     async fn persist_armed(&self, armed: bool) {
-        let store = self.store.clone();
+        let store = self.armed_store.clone();
         let saved = tokio::task::spawn_blocking(move || store.save_armed(armed)).await;
         if !matches!(saved, Ok(Ok(()))) {
             tracing::warn!(armed, "lightkey_armed_state_not_saved");
         }
-    }
-
-    async fn clear_take(self: Arc<Self>, song_key: &str) -> bool {
-        let mut takes = {
-            let st = self.st();
-            if !st.takes.contains_key(song_key) {
-                return false;
-            }
-            st.takes.clone()
-        };
-        takes.remove(song_key);
-        let (store, to_save) = (self.store.clone(), takes.clone());
-        let saved = tokio::task::spawn_blocking(move || store.save(&to_save)).await;
-        if !matches!(saved, Ok(Ok(()))) {
-            // Python lets the OSError escape the route (a 500); keep the take and say so.
-            self.say("Could not save the capture to disk.");
-            return false;
-        }
-        self.st().takes = takes;
-        self.say("Capture cleared.");
-        true
     }
 
     // ------------------------------------------------------------ polling
@@ -1053,7 +910,7 @@ impl Inner {
                 if st.link == Link::Connected {
                     let mut session = Session::new(song.clone(), started_at);
                     if self.relay.is_live() {
-                        session.fixtures = Some(FixtureRecorder::new(&self.relay.state()));
+                        session.fixtures = Some(LookRecorder::new(&self.relay.state()));
                     }
                     st.session = Some(session);
                     true
@@ -1071,10 +928,10 @@ impl Inner {
                 .as_ref()
                 .is_some_and(|session| session.fixtures.is_some());
             if with_fixtures || self.relay.status(false).is_none() {
-                self.say(format!("Recording \"{}\".", song.title));
+                self.say(format!("Recording {}.", song.title));
             } else {
                 self.say(format!(
-                    "Recording \"{}\". Fixture levels are not recorded: the Lightkey API relay is not connected.",
+                    "Recording {}. Fixture levels are not recorded: the Lightkey API relay is not connected.",
                     song.title
                 ));
             }
@@ -1139,7 +996,7 @@ impl Inner {
                     session.last_position = session.last_position.max(position);
                     session.running = false;
                     let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
-                    if take_is_worth_keeping(session.last_position, duration) {
+                    if recording_is_worth_keeping(session.last_position, duration) {
                         match st.session.take() {
                             Some(session) => Next::Finish(Box::new(session)),
                             None => Next::Nothing,
@@ -1171,6 +1028,8 @@ impl Inner {
         }
     }
 
+    /// A recording ends: below half the song it is thrown away, otherwise thinned into look
+    /// rows and saved to the song's timeline. The raw changes go with `session`.
     async fn finish(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         if session.running {
@@ -1183,56 +1042,80 @@ impl Inner {
         } else {
             session.last_position
         };
-        if !take_is_worth_keeping(covered, duration) {
+        if !recording_is_worth_keeping(covered, duration) {
             return self.say(format!(
-                "Not saved: only {covered:.0} of {duration:.0} seconds of \"{}\" were recorded.",
-                session.song.title
+                "Not saved: only {covered:.0} of {duration:.0} seconds recorded."
             ));
         }
-        let Ok(mut take) = LightkeyTake::new(
-            session.key.clone(),
-            session.song.title.clone(),
-            utc_from_wall(self.clock.wall()),
-            duration,
-        ) else {
-            tracing::error!(song = %session.key, "lightkey_take_invalid");
-            return self.say("Could not save the capture to disk.");
+        let title = session.song.title.clone();
+        let Some(recorder) = session.fixtures.take() else {
+            return self.say(format!(
+                "Not saved: no fixture changes were recorded for {title}."
+            ));
         };
-        let mut fixture_changes = 0usize;
-        if let Some(recorder) = session.fixtures.take() {
-            match recorder.finish(duration, false) {
-                Ok(Some(track)) => {
-                    fixture_changes = track.events.len();
-                    take.fixtures = Some(track);
+        if recorder.is_empty() {
+            return self.say(format!(
+                "Not saved: no fixture changes were recorded for {title}."
+            ));
+        }
+        let Some(sink) = self.looks_sink.clone() else {
+            return self.say("Could not save the looks to the timeline.");
+        };
+        let recorder = Arc::new(recorder);
+        let wanted = (self.settings)().3.detail.interval_seconds();
+        let mut interval = wanted;
+        // A song that would pass the timeline caps is saved coarser, never dropped.
+        for _ in 0..MAX_COARSER_TRIES {
+            let thin = recorder.clone();
+            let rows =
+                tokio::task::spawn_blocking(move || look_rows(&thin.looks(duration, interval)))
+                    .await
+                    .unwrap_or_default();
+            if rows.is_empty() {
+                return self.say(format!(
+                    "Not saved: no fixture changes were recorded for {title}."
+                ));
+            }
+            let count = rows.len();
+            let saved = sink(SongLooks {
+                song_key: session.key.clone(),
+                song_title: title.clone(),
+                rows,
+            })
+            .await;
+            match saved {
+                Ok(()) => {
+                    tracing::info!(song = %session.key, rows = count, reason, "lightkey_looks_saved");
+                    self.st().captured = Some(LightkeyCaptured {
+                        song_title: title.clone(),
+                        looks: u32::try_from(count).unwrap_or(u32::MAX),
+                    });
+                    return self.say(saved_message(count, &title, wanted, interval));
                 }
-                Ok(None) => {}
-                Err(error) => {
-                    tracing::error!(song = %session.key, error = %error, "lightkey_fixture_track_invalid");
+                Err(LooksError::TooLarge) => interval *= 2.0,
+                Err(LooksError::Failed(error)) => {
+                    tracing::error!(song = %session.key, error = %error, "lightkey_looks_save_failed");
+                    return self.say("Could not save the looks to the timeline.");
                 }
             }
         }
-        if take.fixtures.is_none() {
-            // A take without a fixture track replays nothing: never let it replace a good one.
-            return self.say(format!(
-                "Not saved: no fixture changes were recorded for \"{}\".",
-                session.song.title
-            ));
-        }
-        let mut takes = self.st().takes.clone();
-        takes.insert(session.key.clone(), take);
-        let (store, to_save) = (self.store.clone(), takes.clone());
-        let saved = tokio::task::spawn_blocking(move || store.save(&to_save)).await;
-        if !matches!(saved, Ok(Ok(()))) {
-            tracing::error!(song = %session.key, "lightkey_take_save_failed");
-            return self.say("Could not save the capture to disk.");
-        }
-        self.st().takes = takes;
-        self.say(format!(
-            "Saved \"{}\": {fixture_changes} fixture changes. {reason}",
-            session.song.title
-        ))
+        self.say("Could not save the looks to the timeline: the song has too many rows.")
     }
 }
+
+/// "Saved N looks to X's timeline." and, when the song was too large for the chosen Detail and
+/// was saved at a coarser spacing, which spacing was used.
+fn saved_message(count: usize, title: &str, wanted: f64, used: f64) -> String {
+    let plural = if count == 1 { "" } else { "s" };
+    if used > wanted {
+        format!("Saved {count} look{plural} to {title}'s timeline (reduced detail, {used} s).")
+    } else {
+        format!("Saved {count} look{plural} to {title}'s timeline.")
+    }
+}
+
+/// How many times a recording too large for the timeline is retried at twice the interval.
+const MAX_COARSER_TRIES: usize = 6;
 
 // ------------------------------------------------------- Python-flavoured JSON coercions
 // The agent's JSON is read the way the Python link reads it (`int()`, `float()`, `bool()`,

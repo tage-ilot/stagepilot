@@ -49,7 +49,7 @@ pub struct LightsOptions {
     pub midi_backend_factory: MidiOutputBackendFactory,
     pub osc_backend_factory: OscBackendFactory,
     pub monitor_interval: Duration,
-    /// Take store, HTTP client and clock of the Lightkey link (real ones by default).
+    /// Record-switch store, timeline sink, HTTP client and clock of the Lightkey link.
     pub lightkey: LinkOptions,
 }
 
@@ -220,10 +220,6 @@ impl LightsPlugin {
             self.inner.release_all().await;
         }
         message
-    }
-
-    pub async fn lightkey_clear_take(&self, song_key: &str) -> bool {
-        self.link().clear_take(song_key).await
     }
 
     /// Apply saved Lightkey settings to the running plugin and make the link re-read them.

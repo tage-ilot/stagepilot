@@ -8,6 +8,7 @@
 pub mod lightkey;
 pub mod lightkey_fixtures;
 pub mod lightkey_link;
+pub mod lightkey_looks;
 pub mod lightkey_relay;
 pub mod models;
 pub mod plugin;

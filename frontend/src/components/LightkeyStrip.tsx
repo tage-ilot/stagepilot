@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  clearLightkeyTake,
   getLightkeyStatus,
   saveLightkeySettings,
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus, LightkeyTakeSummary } from "../types";
+import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyLink, LightkeyStatus } from "../types";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { Input } from "./ui/Input";
@@ -38,21 +37,19 @@ function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
   return fixtures.detail ?? "Colour and levels: not receiving";
 }
 
-function takeDetail(take: LightkeyTakeSummary): string {
-  if (!take.fixture_event_count) return "no fixture capture";
-  return `${take.fixture_event_count} colour/level change${take.fixture_event_count === 1 ? "" : "s"}`;
-}
-
 /** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
 export function lightkeyHeadline(status: LightkeyStatus): string {
-  if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
+  if (status.recording && status.recording_song) return `Recording ${status.recording_song}.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
-  if (status.replay_blocked && status.takes.length > 0) return status.replay_blocked;
-  if (status.link === "connected" && status.takes.length === 0) {
-    return "Switch to Record, then start a song. Its lights are captured with the countdown.";
+  if (status.replay_blocked && status.captured) return status.replay_blocked;
+  if (!status.captured) {
+    return status.link === "connected"
+      ? "Switch to Record, then start a song. Its lights are captured with the countdown."
+      : "No lights captured yet.";
   }
-  return status.takes.length === 1 ? "1 song captured." : `${status.takes.length} songs captured.`;
+  const { looks, song_title: song } = status.captured;
+  return `${looks} captured look${looks === 1 ? "" : "s"} on “${song}”.`;
 }
 
 /** Same text, ignoring quote style and spacing (the backend writes straight quotes, the headline curly ones). */
@@ -216,26 +213,6 @@ export function LightkeyStrip({ lightingEnabled }: { lightingEnabled: boolean })
         <p className="text-type-body-sm text-ink-muted" data-testid="lightkey-detail" key={line}>{line}</p>
       ))}
 
-      {status.takes.length > 0 && (
-        <ul aria-label="Captured songs" className="mt-2 grid gap-1">
-          {status.takes.map((take) => (
-            <li className="flex items-center justify-between gap-3 text-sm text-ink-body" key={take.song_key}>
-              <span className="min-w-0 truncate">
-                {take.song_title}
-                <span className="text-ink-muted"> · {takeDetail(take)}</span>
-              </span>
-              <Button
-                aria-label={`Clear capture for ${take.song_title}`}
-                disabled={busy}
-                onClick={() => void run(() => clearLightkeyTake(take.song_key))}
-                variant="secondary"
-              >
-                Clear
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }
