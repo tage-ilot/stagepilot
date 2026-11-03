@@ -1,6 +1,6 @@
 //! Cue-map revisions (U-01) and the size/latency of a settings file holding a whole service's
 //! worth of captured looks (K-01). The measurement prints its numbers (`--nocapture`) and
-//! only asserts generous bounds, so it is a tripwire, not a benchmark.
+//! only asserts the file size and a very generous time bound, so it is a tripwire, not a benchmark.
 
 use stagepilot_core::config::*;
 use stagepilot_core::settings::*;
