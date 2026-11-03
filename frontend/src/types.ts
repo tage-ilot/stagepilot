@@ -259,6 +259,24 @@ export interface LightkeyCaptured {
 
 export type LightkeyDetail = "fine" | "normal" | "coarse";
 
+/** Which songs capture and which replay: Auto decides per song; Replay and Record pin it for every song. */
+export type LightkeyMode = "auto" | "replay" | "record";
+
+/** Auto's decision for the current or next song. */
+export interface LightkeyAuto {
+  capturing: boolean;
+  /** For example "Auto: capturing this song". */
+  reason: string;
+  song: string | null;
+}
+
+/** The state of a song's captured rows. Absent on older cue maps: their captured rows count as incomplete. */
+export interface CaptureStatus {
+  complete: boolean;
+  coverage_seconds: number;
+  recorded_at: string;
+}
+
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
 export interface LightingPad {
   id: string;
@@ -289,6 +307,8 @@ export interface SongLightingCueMap {
   loudness?: SongLoudness | null;
   /** Captured look rows were changed by hand (a whole row deleted, for one). Absent while false. */
   captured_edited?: boolean;
+  /** Whether a complete pass produced the captured rows. Absent: no capture, or an older file (incomplete). */
+  capture?: CaptureStatus;
 }
 
 /**
@@ -342,6 +362,10 @@ export interface LightkeyStatus {
   recording: boolean;
   recording_song: string | null;
   replay: boolean;
+  /** Auto, or Replay / Record pinned for every song. Absent on older backends (Replay). */
+  mode?: LightkeyMode;
+  /** In Auto: what the link decided (or would decide) for the current or next song. */
+  auto?: LightkeyAuto;
   /** Why replay is not running right now (recording, switch off, MIDI, Lighting off); null when it can. */
   replay_blocked: string | null;
   replaying_song: string | null;

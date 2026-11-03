@@ -3,7 +3,7 @@
 
 use crate::lightkey_fixtures::{is_replayable, FixtureArg, FixtureCommand, FixtureState};
 use stagepilot_core::config::{
-    round_tenths, OscCueSource, OscLightingCue, OscMessage, SongLightingCueMap,
+    round_tenths, CaptureStatus, OscCueSource, OscLightingCue, OscMessage, SongLightingCueMap,
     MAX_OSC_MESSAGES_PER_ROW, MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -390,6 +390,7 @@ pub fn replace_captured(
         osc_cues: Vec::new(),
         loudness: None,
         captured_edited: false,
+        capture: None,
     });
     map.osc_cues
         .retain(|row| row.source != OscCueSource::Captured);
@@ -404,6 +405,50 @@ pub fn replace_captured(
         return None;
     }
     Some(map)
+}
+
+/// What saving a capture pass did to a song's cue map.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CaptureSave {
+    /// The song's whole cue map after the pass.
+    Saved(SongLightingCueMap),
+    /// The stored capture is at least as good: nothing changes. A complete capture is never
+    /// replaced by a partial; a partial is replaced only by one that covers at least as much.
+    Kept,
+    TooLarge,
+}
+
+/// Save a capture pass (`status`) into the song's cue map. A complete pass always replaces the
+/// captured rows (manual rows stay). A partial pass replaces captured rows only when they are
+/// not a complete capture and cover no more of the song. Captured rows with no status (an older
+/// file) count as an incomplete capture that covers nothing.
+pub fn save_capture(
+    existing: Option<&SongLightingCueMap>,
+    song_key: &str,
+    song_title: &str,
+    rows: Vec<OscLightingCue>,
+    status: CaptureStatus,
+) -> CaptureSave {
+    if let Some(old) = existing.filter(|map| map.has_captured_rows()) {
+        let stored = old.capture.as_ref();
+        let keep = if status.complete {
+            false
+        } else if stored.is_some_and(|c| c.complete) {
+            true
+        } else {
+            stored.map_or(0.0, |c| c.coverage_seconds) > status.coverage_seconds
+        };
+        if keep {
+            return CaptureSave::Kept;
+        }
+    }
+    match replace_captured(existing, song_key, song_title, rows) {
+        Some(mut map) => {
+            map.capture = Some(status);
+            CaptureSave::Saved(map)
+        }
+        None => CaptureSave::TooLarge,
+    }
 }
 
 /// What simplifying a song's captured rows does.
@@ -939,6 +984,7 @@ mod tests {
             osc_cues: std::iter::once(manual.clone()).chain(old_look).collect(),
             loudness: None,
             captured_edited: false,
+            capture: None,
         };
         let fresh = look_rows(&[Look {
             at_seconds: 2.0,

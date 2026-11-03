@@ -30,6 +30,7 @@ fn configured_lights() -> LightsSettings {
             osc_cues: vec![],
             loudness: None,
             captured_edited: false,
+            capture: None,
         },
     );
     lights

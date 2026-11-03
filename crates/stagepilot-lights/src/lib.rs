@@ -9,6 +9,7 @@ pub mod audio;
 #[cfg(feature = "cpal-backend")]
 pub mod audio_cpal;
 pub mod lightkey;
+pub mod lightkey_auto;
 pub mod lightkey_fixtures;
 pub mod lightkey_link;
 pub mod lightkey_looks;

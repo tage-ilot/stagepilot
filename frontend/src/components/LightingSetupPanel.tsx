@@ -17,10 +17,15 @@ import type {
   Song,
 } from "../types";
 import {
-  confirmClearAllLightingCues,
-  confirmClearSelectedLightingCues,
+  clearAllRequest,
+  clearLoudnessRequest,
+  clearSongRequest,
+  countCueMap,
+  sumCounts,
+  type ClearCuesRequest,
 } from "./lightingCueConfirmations";
 import { simplifyLightkeyLooks } from "../api";
+import { ClearCuesDialog } from "./ClearCuesDialog";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -38,6 +43,7 @@ import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./Ligh
 import {
   capturedCount, detailLabels, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
   removeFixtureFromRows,
+  captureLabelOf,
 } from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
@@ -47,6 +53,8 @@ import type { CueTypeId } from "./lightingCueTypes";
 import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpokenLabel } from "./lightingCueTypes";
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
+import { SongsStrip, type SongChip } from "./SongsStrip";
+import { CONTROL_34 } from "./compactControl";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
@@ -95,6 +103,7 @@ export interface LightingPanelActions {
 }
 
 export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
+export const LIGHTING_CUE_BOARD_OPEN_KEY = "stagepilot.lighting.cue-board-open";
 
 export function LightingSetupPanel({
   connectionStatus,
@@ -239,6 +248,8 @@ export function LightingSetupPanel({
   // The whole song-timeline group (song picker, cue board, timeline, cue list) folds away for people who do not use it. It starts
   // open and then stays however the user leaves it, across restarts (owner, 2026-10-15).
   const [timelineOpen, setTimelineOpen] = usePersistedFlag(LIGHTING_TIMELINE_OPEN_KEY, true);
+  // The Cue board folds away on its own and is remembered on this device; it starts open.
+  const [cueBoardOpen, setCueBoardOpen] = usePersistedFlag(LIGHTING_CUE_BOARD_OPEN_KEY, true);
   const selectedSongRunning = timerRunning && selectedSong !== null
     && playingSong !== null && playingSong !== undefined && songKey(playingSong) === songKey(selectedSong);
   useEffect(() => {
@@ -436,7 +447,7 @@ export function LightingSetupPanel({
     persistOscCues(undo.cues, true);
     setUndo(null);
   };
-  const looks = { count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
   const PAGE_SIZE = 40;
 
   const addOscCue = () => {
@@ -445,22 +456,48 @@ export function LightingSetupPanel({
   // A new OSC cue has no address yet, so it is only shown; it saves once its address is valid.
   const persistOscCuesLocal = (next: OscLightingCue[]) => setOscCues(next);
 
+  // Every Clear waits here for the in-app permanent-erase dialog (never window.confirm).
+  const [pendingClear, setPendingClear] = useState<ClearCuesRequest | null>(null);
+  const cueMaps = settings?.settings.lights.cue_maps;
+
   const clearSelectedSongCues = () => {
     if (!selectedSong || !shownCues.length) return;
-    if (confirmClearSelectedLightingCues(selectedSong.title)) {
+    setPendingClear(clearSongRequest(selectedSong.title, countCueMap(savedCueMap, method), () => {
       if (method === "osc") persistOscCues([]);
       else persistCues([]);
-    }
+    }));
   };
 
   const clearEverySongCues = () => {
     if (!songs.length) return;
-    if (confirmClearAllLightingCues(songs.map((song) => song.title), state.plan?.title ?? null)) {
+    const counts = sumCounts(songs.map((song) => countCueMap(cueMaps?.[songKey(song)], method)));
+    setPendingClear(clearAllRequest(songs.map((song) => song.title), state.plan?.title ?? null, counts, () => {
       if (method === "osc") setOscCues([]);
       else setCues([]);
       if (onClearAllCues) onClearAllCues(songs, method);
       else songs.forEach((song) => onSaveCues(song, [], method));
-    }
+    }));
+  };
+
+  // The x on a song chip: the same permanent-erase dialog, for that song only.
+  const clearSongByKey = (key: string) => {
+    const song = songs.find((item) => songKey(item) === key);
+    if (!song) return;
+    if (key === selectedSongKey && shownCues.length) { clearSelectedSongCues(); return; }
+    const counts = countCueMap(cueMaps?.[key], method);
+    if (counts.looks + counts.handmade === 0) return;
+    setPendingClear(clearSongRequest(song.title, counts, () => onSaveCues(song, [], method)));
+  };
+  const songChips: SongChip[] = songs.map((song) => {
+    const map = cueMaps?.[songKey(song)];
+    const counts = countCueMap(map, method);
+    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
+  });
+
+  const askClearLoudness = () => {
+    if (!onClearLoudness || !selectedSongKey) return;
+    const key = selectedSongKey;
+    setPendingClear(clearLoudnessRequest(selectedSong?.title ?? savedCueMap?.song_title ?? "this song", () => void onClearLoudness(key)));
   };
 
   // Hidden types only change what is drawn and listed; the cue maps and replay never see them.
@@ -596,6 +633,133 @@ export function LightingSetupPanel({
   const currentOutputMissing = outputName
     && !lights?.outputs.some((output) => output.name === outputName);
 
+  const loudnessProp = {
+    present: Boolean(savedCueMap?.loudness),
+    disabled: pendingOperation !== null,
+    onClear: onClearLoudness && selectedSongKey ? askClearLoudness : undefined,
+  };
+  const testReasonText = method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output.";
+
+  // The test cue lives under the connection, folded away until it is wanted. Same fields, checks and sending as before.
+  const oscTestCue = (
+    <Disclosure className="mt-4" tone="lighting" title="Send a test cue" variant="advanced">
+      <div aria-label="OSC test cue" className="lighting-osc-test mt-3 grid gap-3" role="group">
+        <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} hint="The cue's OSC path, for example /live/*/cue/Stars/activate. The host is set above." label="OSC address">
+          <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
+        </Field>
+        <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
+        {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
+        <div>
+          <Button
+            aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+            disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+            onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
+            variant="tinted"
+          >
+            {pendingOperation === "test" ? "Sending…" : "Send test cue"}
+          </Button>
+        </div>
+        {draftDiffersFromSaved && <p className="text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
+      </div>
+    </Disclosure>
+  );
+  const midiTestCue = (
+    <Disclosure className="mt-4" tone="midi" title="Send a test cue" variant="advanced">
+      <div aria-label="Test cue" className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
+        <div className="w-28 flex-none">
+          <Field label="Note">
+            <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
+              {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <div className="w-28 flex-none">
+          <Field label="Velocity">
+            <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
+          </Field>
+        </div>
+        <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
+        {draftDiffersFromSaved && <p className="w-full text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
+      </div>
+    </Disclosure>
+  );
+  const oscExtras = (
+    <>
+      <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="osc-status">
+        {savedMethod === "osc" && lights?.connection_status === "error"
+          ? lights.detail
+          : savedMethod === "osc" && lights?.last_osc_cue
+            ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
+            : savedMethod === "osc" && lights?.connection_status === "ready"
+              ? "Ready, delivery not confirmed. Nothing sent yet; OSC is sent over UDP. Use Send test cue to check."
+              : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
+      </p>
+      <p className="mt-1 text-type-body-sm text-ink-muted">
+        Enter the port your lighting app listens for OSC on. In Lightkey, control-click a cue and choose External Control, then Copy OSC Address, to get a cue's address.
+      </p>
+      {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
+      {oscTestCue}
+    </>
+  );
+
+  // One toolbar row when wide, wrapping when narrow: every control is 34 px (44 on touch).
+  const toolbarNode = (
+    <>
+      <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+        <Field className="w-full sm:w-64" label="Song">
+          <Select className={CONTROL_34} onChange={(event) => setManualSongKey(event.target.value)} value={selectedSongKey}>
+            {!songs.length && <option value="">Load a service plan first</option>}
+            {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
+          </Select>
+        </Field>
+        {followKey && (
+          <p className="flex min-h-[34px] items-center gap-2 text-type-body-sm text-ink-muted" data-testid="lighting-follow-status">
+            {selectedSongKey === followKey ? "Following live song" : `Showing ${selectedSong?.title ?? "another song"}`}
+            {selectedSongKey !== followKey && (
+              <Button className={CONTROL_34} onClick={() => setManualSongKey(null)} variant="secondary">Follow live</Button>
+            )}
+          </p>
+        )}
+      </div>
+      {method === "midi" && (
+        <div className="flex min-h-[34px] items-center gap-2" aria-label="MIDI note display">
+          <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-playback-midi-text" : "text-ink-muted"}>♪</span>
+          <button
+            aria-checked={noteDisplayMode === "numeric"}
+            aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
+            className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-playback-midi-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-playback-midi-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-playback-midi-soft/20" : "bg-surface-900"}`}
+            onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
+            role="switch"
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-playback-midi-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
+            />
+          </button>
+          <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-playback-midi-text" : "text-ink-muted"}>#</span>
+        </div>
+      )}
+      <Button className={CONTROL_34} disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} variant="tinted">Add cue</Button>
+      <Button className={CONTROL_34} disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear song..."}</Button>
+      {method === "osc" && (
+        <>
+          <Button
+            className={CONTROL_34}
+            disabled={selectedIds.length < 2 || pendingOperation !== null}
+            onClick={() => mergeSelected(selectedIds)}
+            title="Tick two or more rows, or Shift-click markers, to merge them."
+            variant="tinted"
+          >
+            {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
+          </Button>
+          <Button aria-label="Simplify this song" className={CONTROL_34} disabled={looks.count === 0 || pendingOperation !== null} onClick={() => setSimplify(simplify ? null : { detail: "normal" })} variant="tinted">Simplify</Button>
+          {undo && <Button className={CONTROL_34} onClick={undoLast} variant="secondary">{undo.text}</Button>}
+        </>
+      )}
+    </>
+  );
+
   return (
     <Panel accent={accent} className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
       <SetupPanelHeader
@@ -605,9 +769,8 @@ export function LightingSetupPanel({
         status={connectionStatus ?? lights?.connection_status ?? "loading"}
         title="Lighting"
         titleTone="lighting"
-      />
-
-      <ConnectionMethod
+        method={<ConnectionMethod
+          placement="header"
         disabled={!lights && !settings}
         heldChange={heldMethod}
         onChange={(value) => setMethod(value === "midi" ? "midi" : "osc")}
@@ -616,12 +779,23 @@ export function LightingSetupPanel({
           { value: "midi", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
         ]}
         value={method}
+        />}
       />
+
 
       <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
 
       {method === "osc" ? (
-        <>
+        savedMethod === "osc" ? (
+          <LightkeyStrip
+            connection={{ host: oscHost, onHost: setOscHost, oscPort, onPort: setOscPort, savedOscHost: savedLighting?.osc_host ?? "127.0.0.1", attempted: attempt.attempted, held: { host: heldHost, port: heldPort } }}
+            lightingEnabled={Boolean(lights?.enabled)}
+            looks={looks}
+            loudness={loudnessProp}
+          >
+            {oscExtras}
+          </LightkeyStrip>
+        ) : (
           <OscConnectionFields
             attempted={attempt.attempted}
             held={{ host: heldHost, port: heldPort }}
@@ -629,18 +803,10 @@ export function LightingSetupPanel({
             onHost={setOscHost}
             onPort={setOscPort}
             port={oscPort}
-          />
-          <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="osc-status">
-            {savedMethod === "osc" && lights?.connection_status === "error"
-              ? lights.detail
-              : savedMethod === "osc" && lights?.last_osc_cue
-                ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
-                : savedMethod === "osc" && lights?.connection_status === "ready"
-                  ? "Ready, delivery not confirmed. Nothing sent yet; OSC is sent over UDP. Use Send test cue to check."
-                  : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
-          </p>
-          {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
-        </>
+          >
+            {oscExtras}
+          </OscConnectionFields>
+        )
       ) : (
         <>
       <div className="lighting-output mt-4">
@@ -670,17 +836,23 @@ export function LightingSetupPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={pendingOperation !== null} onClick={onRefresh} variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
       </div>
+      {midiTestCue}
         </>
       )}
-      {savedMethod === "osc" && <LightkeyStrip
+      {method === "midi" && savedMethod === "osc" && <LightkeyStrip
         lightingEnabled={Boolean(lights?.enabled)}
         looks={looks}
-        loudness={{
-          present: Boolean(savedCueMap?.loudness),
-          disabled: pendingOperation !== null,
-          onClear: onClearLoudness && selectedSongKey ? () => void onClearLoudness(selectedSongKey) : undefined,
-        }}
+        loudness={loudnessProp}
       />}
+      <SongsStrip
+        chips={songChips}
+        liveKey={hasSong(liveKey) ? liveKey : ""}
+        noun={method === "osc" ? "looks" : "cues"}
+        onClear={clearSongByKey}
+        onClearAll={clearEverySongCues}
+        onSelect={setManualSongKey}
+        selectedKey={selectedSongKey}
+      />
       <Disclosure
         aside={(
           <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
@@ -695,87 +867,15 @@ export function LightingSetupPanel({
         tone={accent}
         variant="feature"
       >
-        <div className="flex flex-wrap-reverse items-end gap-x-6 gap-y-4">
-          <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-3">
-          <Field className="w-full sm:w-80" label="Song">
-            <Select onChange={(event) => setManualSongKey(event.target.value)} value={selectedSongKey}>
-              {!songs.length && <option value="">Load a service plan first</option>}
-              {songs.map((song) => <option key={songKey(song)} value={songKey(song)}>{song.order}. {song.title}</option>)}
-            </Select>
-          </Field>
-          {followKey && (
-            <p className="flex items-center gap-2 pb-2 text-type-body-sm text-ink-muted" data-testid="lighting-follow-status">
-              {selectedSongKey === followKey ? "Following live song" : `Showing ${selectedSong?.title ?? "another song"}`}
-              {selectedSongKey !== followKey && (
-                <Button onClick={() => setManualSongKey(null)} variant="secondary">Follow live</Button>
-              )}
-            </p>
-          )}
-          {method === "midi" && (
-          <div className="flex items-center gap-2 pb-2" aria-label="MIDI note display">
-            <span aria-hidden="true" className={noteDisplayMode === "music" ? "text-integration-playback-midi-text" : "text-ink-muted"}>♪</span>
-            <button
-              aria-checked={noteDisplayMode === "numeric"}
-              aria-label={`MIDI note display: ${noteDisplayMode === "music" ? "music notation" : "numeric value"}`}
-              className={`relative h-7 w-12 shrink-0 cursor-pointer touch-manipulation rounded-ds-full border border-integration-playback-midi-soft/30 transition-colors duration-[140ms] motion-reduce:transition-none can-hover:border-integration-playback-midi-soft/60 coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-[9px] coarse:after:content-[''] ${noteDisplayMode === "numeric" ? "bg-integration-playback-midi-soft/20" : "bg-surface-900"}`}
-              onClick={() => setNoteDisplayMode((current) => current === "music" ? "numeric" : "music")}
-              role="switch"
-              type="button"
-            >
-              <span
-                aria-hidden="true"
-                className={`absolute left-0 top-1 h-4 w-4 rounded-ds-full bg-integration-playback-midi-soft shadow-sm transition-transform duration-200 motion-reduce:transition-none ${noteDisplayMode === "numeric" ? "translate-x-7" : "translate-x-1"}`}
-              />
-            </button>
-            <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-playback-midi-text" : "text-ink-muted"}>#</span>
-          </div>
-          )}
-          <Button disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} variant="tinted">Add cue</Button>
-          </div>
-          {method === "midi" && (
-          <div aria-label="Test cue" className="lighting-test flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
-            <h3 className="pb-2.5 font-semibold text-ink">Test cue</h3>
-            <div className="w-28 flex-none">
-              <Field label="Note">
-                <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
-                  {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-                </Select>
-              </Field>
-            </div>
-            <div className="w-28 flex-none">
-              <Field label="Velocity">
-                <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
-              </Field>
-            </div>
-            <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
-          </div>
-          )}
-        </div>
-        {method === "osc" && (
-          <div aria-label="OSC test cue" className="lighting-osc-test mt-4 grid gap-3" role="group">
-            <h3 className="font-semibold text-ink">Test cue</h3>
-            <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} label="OSC address">
-              <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
-            </Field>
-            <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
-            {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
-            <div>
-              <Button
-                aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
-                disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
-                onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-                variant="tinted"
-              >
-                {pendingOperation === "test" ? "Sending…" : "Send test cue"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output."}</p>}
+        {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
+        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{testReasonText}</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         {onSavePads && (
+          <Disclosure className="mt-4" onOpenChange={setCueBoardOpen} open={cueBoardOpen} title="Cue board" tone={accent} variant="advanced">
+          <div className="mt-3">
           <LightingCueBoard
+            embedded
             busy={boardBusy || pendingOperation !== null}
             canUndo={lastCapture !== null}
             captureMode={captureMode}
@@ -789,9 +889,12 @@ export function LightingSetupPanel({
             status={captureStatus}
             viewMethod={method}
           />
+          </div>
+          </Disclosure>
         )}
         {selectedSong && (
           <LightingTimeline
+            toolbar={toolbarNode}
             disabled={pendingOperation !== null}
             markers={timelineMarkers}
             onMerge={mergeSelected}
@@ -810,16 +913,6 @@ export function LightingSetupPanel({
           />
         )}
 
-        {method === "osc" && (looks.count > 0 || undo || selectedIds.length > 1) && (
-          <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="look-tools">
-            <Button disabled={selectedIds.length < 2 || pendingOperation !== null} onClick={() => mergeSelected(selectedIds)} variant="tinted">
-              {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
-            </Button>
-            {looks.count > 0 && <Button disabled={pendingOperation !== null} onClick={() => setSimplify(simplify ? null : { detail: "normal" })} variant="tinted">Simplify this song</Button>}
-            {undo && <Button onClick={undoLast} variant="secondary">{undo.text}</Button>}
-            {selectedIds.length < 2 && <span className="text-type-body-sm text-ink-muted">Tick two or more rows, or Shift-click markers, to merge them.</span>}
-          </div>
-        )}
         {method === "osc" && simplify && (
           <div className="mt-2 flex flex-wrap items-end gap-3 rounded-ds-lg border border-edge-medium bg-surface-panel p-3" data-testid="simplify-panel" role="group" aria-label="Simplify this song">
             <Field label="Detail">
@@ -909,14 +1002,11 @@ export function LightingSetupPanel({
           </nav>
         )}
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear"}</Button>
-          <Button disabled={!songs.length || pendingOperation !== null} onClick={clearEverySongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear all"}</Button>
-        </div>
       </Disclosure>
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
+      <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
     </Panel>
   );
 }

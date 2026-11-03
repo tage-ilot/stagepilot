@@ -10,8 +10,8 @@ use axum::Router;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use stagepilot_core::config::{
-    round_tenths, value_error, Detail, Errors, LightingCue, LightingMethod, LightkeySettings,
-    LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
+    round_tenths, value_error, Detail, Errors, LightingCue, LightingMethod, LightkeyMode,
+    LightkeySettings, LightsSettings, OscLightingCue, ProPresenterSettings, SongLightingCueMap,
 };
 use stagepilot_core::settings_errors::parse_body;
 use stagepilot_core::state::{ConnectionStatus, TimerStatus};
@@ -792,6 +792,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         osc_cues: request.osc_cues.clone(),
         loudness: None,
         captured_edited: false,
+        capture: None,
     };
     let mut check = LightsSettings::default();
     check.cue_maps.insert(song_key.clone(), probe);
@@ -819,6 +820,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             osc_cues: vec![],
             loudness: None,
             captured_edited: false,
+            capture: None,
         });
     let _ = value;
 
@@ -851,11 +853,14 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         },
         loudness: existing.and_then(|m| m.loudness.clone()),
         captured_edited: false,
+        capture: None,
     };
     let merged = SongLightingCueMap {
         captured_edited: captured_edited_after_save(existing, &merged, is_midi),
+        capture: existing.and_then(|m| m.capture.clone()),
         ..merged
     };
+    let merged = without_stale_capture(merged);
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated.cue_maps.insert(song_key.clone(), merged.clone());
@@ -877,6 +882,14 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         format!("Removed the lighting cue map for \"{song_title}\".")
     };
     lights_operation(&rt, true, message).await
+}
+
+/// A capture status describes captured rows; with none left (cleared, deleted, undone) it is gone.
+fn without_stale_capture(mut map: SongLightingCueMap) -> SongLightingCueMap {
+    if !map.has_captured_rows() {
+        map.capture = None;
+    }
+    map
 }
 
 /// The song-level "captured looks were changed by hand" flag after a cue-map save. Deleting a
@@ -1090,6 +1103,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     .cue_maps
                     .get(song_key)
                     .is_some_and(|m| m.captured_edited),
+                capture: existing.and_then(|m| m.capture.clone()),
             },
         );
         updated.normalise();
@@ -1159,7 +1173,9 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         osc_cues,
         loudness: existing.loudness.clone(),
         captured_edited: existing.captured_edited,
+        capture: existing.capture.clone(),
     };
+    let merged = without_stale_capture(merged);
     let mut updated = current.clone();
     if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated
@@ -1262,6 +1278,7 @@ async fn lightkey_status(State(rt): State<Rt>) -> Json {
 struct LightkeySettingsRequest {
     api_url: Option<String>,
     replay: Option<bool>,
+    mode: Option<stagepilot_core::config::LightkeyMode>,
     detail: Option<stagepilot_core::config::LightkeyDetail>,
     /// `Some("")` clears the choice (system default input).
     audio_device: Option<String>,
@@ -1335,6 +1352,32 @@ fn parse_lightkey_settings(
         },
     };
     // The frontend sends `detail_level` (status field of the same name); `detail` stays accepted.
+    let mode = match object.get("mode") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => match text.as_str() {
+            "auto" => Some(stagepilot_core::config::LightkeyMode::Auto),
+            "replay" => Some(stagepilot_core::config::LightkeyMode::Replay),
+            "record" => Some(stagepilot_core::config::LightkeyMode::Record),
+            _ => {
+                errors.push(plain_error(
+                    "enum",
+                    "mode",
+                    "Input should be 'auto', 'replay' or 'record'",
+                    &json!(text),
+                ));
+                None
+            }
+        },
+        Some(other) => {
+            errors.push(plain_error(
+                "enum",
+                "mode",
+                "Input should be 'auto', 'replay' or 'record'",
+                other,
+            ));
+            None
+        }
+    };
     let detail_key = if object.contains_key("detail_level") {
         "detail_level"
     } else {
@@ -1392,6 +1435,7 @@ fn parse_lightkey_settings(
         Ok(LightkeySettingsRequest {
             api_url,
             replay,
+            mode,
             detail,
             audio_device,
         })
@@ -1454,7 +1498,20 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
     let candidate = LightkeySettings {
         api_url: stagepilot_core::config::clean_lightkey_api_url(&api_url)
             .unwrap_or_else(|_| api_url.clone()),
-        replay: request.replay.unwrap_or(current.lightkey.replay),
+        // Choosing Auto or Replay also turns the master Replay switch back on, unless the request
+        // says otherwise: "replay: false" is the one thing that silences every mode.
+        replay: request.replay.unwrap_or(
+            current.lightkey.replay
+                || matches!(
+                    request.mode,
+                    Some(LightkeyMode::Auto | LightkeyMode::Replay)
+                ),
+        ),
+        // Record is the Record switch (below), never a saved mode.
+        mode: match request.mode {
+            Some(mode @ (LightkeyMode::Auto | LightkeyMode::Replay)) => mode,
+            _ => current.lightkey.mode,
+        },
         detail: request.detail.unwrap_or(current.lightkey.detail),
         audio_device: match &request.audio_device {
             Some(name) => Some(name.trim().to_string()).filter(|name| !name.is_empty()),
@@ -1472,7 +1529,22 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
     if let Err(response) = persist_lights(&rt, updated) {
         return response;
     }
+    // The recorder's save takes this lock too: let go before touching it.
+    drop(_lock);
     rt.outputs.lights.lightkey_apply_settings(lightkey).await;
+    // Pinning Record arms the recorder; pinning Auto or Replay disarms it.
+    let armed = rt.outputs.lights.lightkey_status().await.recording;
+    match request.mode {
+        Some(LightkeyMode::Record) if !armed => {
+            let message = rt.outputs.lights.lightkey_set_recording(true).await;
+            let recording = rt.outputs.lights.lightkey_status().await.recording;
+            return lightkey_response(&rt, recording, message).await;
+        }
+        Some(LightkeyMode::Auto | LightkeyMode::Replay) if armed => {
+            rt.outputs.lights.lightkey_set_recording(false).await;
+        }
+        _ => {}
+    }
     lightkey_response(&rt, true, "Saved.".into()).await
 }
 

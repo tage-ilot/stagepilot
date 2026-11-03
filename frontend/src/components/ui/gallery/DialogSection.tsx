@@ -43,7 +43,7 @@ export function DialogSection() {
   const [live, setLive] = useState(false);
   return (
     <Section name="dialog" title="Dialog">
-      <Example label="Default action" title="Set up song order?" />
+      <Example label="Default action" title="Scan Playback Songs?" />
       <Example label="Danger action" danger title="Discard unsaved changes?" />
       <Example label="Long title" title={longTitle} />
       <Example
@@ -61,7 +61,7 @@ export function DialogSection() {
         <Dialog
           open={live}
           onClose={() => setLive(false)}
-          title="Set up song order?"
+          title="Scan Playback Songs?"
           description="Escape, backdrop click and Cancel close this."
           actions={<><Button size="touch" variant="secondary" onClick={() => setLive(false)}>Cancel</Button><Button size="touch" onClick={() => setLive(false)}>Confirm</Button></>}
         />

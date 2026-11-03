@@ -13,8 +13,11 @@
 
 use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
-    effective_api_url, recording_is_worth_keeping, LightkeyCaptured, LightkeyLink as Link,
-    LightkeyStatus,
+    effective_api_url, recording_is_worth_keeping, LightkeyAuto, LightkeyCaptured,
+    LightkeyLink as Link, LightkeyStatus,
+};
+use crate::lightkey_auto::{
+    decide, judge, Action, Availability, Decision, PassVerdict, Reason, SongCapture,
 };
 use crate::lightkey_fixtures::FixtureCommand;
 use crate::lightkey_looks::{look_rows, LookRecorder};
@@ -25,7 +28,8 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    LightkeySettings, OscLightingCue, SongLoudness, DEFAULT_LIGHTKEY_RELAY_PORT,
+    CaptureStatus, LightkeyMode, LightkeySettings, OscLightingCue, SongLoudness,
+    DEFAULT_LIGHTKEY_RELAY_PORT,
 };
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
@@ -235,6 +239,8 @@ pub struct SongLooks {
     pub song_key: String,
     pub song_title: String,
     pub rows: Vec<OscLightingCue>,
+    /// How much of the song the pass covered and whether it was a complete capture.
+    pub status: CaptureStatus,
 }
 
 /// Why the looks could not be saved.
@@ -242,6 +248,9 @@ pub struct SongLooks {
 pub enum LooksError {
     /// The song's timeline would pass the row or message caps: the link tries a coarser Detail.
     TooLarge,
+    /// The song already has a capture that is at least as good (a complete capture is never
+    /// replaced by a partial one); nothing was changed.
+    Kept,
     Failed(String),
 }
 
@@ -250,6 +259,9 @@ pub type LooksFuture = Pin<Box<dyn Future<Output = Result<(), LooksError>> + Sen
 /// Saves a song's captured rows into its cue map through the normal, serialized save path
 /// (replacing only the captured rows of that song, keeping manual ones).
 pub type LooksSink = Arc<dyn Fn(SongLooks) -> LooksFuture + Send + Sync>;
+
+/// What the link knows about a song's stored capture (read from the saved cue maps).
+pub type CaptureLookup = Arc<dyn Fn(&str) -> SongCapture + Send + Sync>;
 
 /// A song's loudness from one recording, to be averaged into what the song already has.
 #[derive(Debug, Clone)]
@@ -278,6 +290,10 @@ struct Session {
     fixtures: Option<LookRecorder>,
     /// Loudness windows from the audio input, on the same song clock.
     loudness: Option<SharedRecorder>,
+    /// Song position when the current lighting-link drop began.
+    down_position: Option<f64>,
+    /// Song position where the link had been down for a minute: the pass ends there.
+    cutoff: Option<f64>,
 }
 
 impl Session {
@@ -291,8 +307,19 @@ impl Session {
             running: true,
             fixtures: None,
             loudness: None,
+            down_position: None,
+            cutoff: None,
         }
     }
+}
+
+/// The capture/replay decision for one timer start of one song.
+#[derive(Clone)]
+struct SongDecision {
+    key: String,
+    /// Identifies the timer start (its `started_at`), so a restart decides again.
+    started: Option<i64>,
+    decision: Decision,
 }
 
 fn song_key(song: &Song) -> String {
@@ -333,6 +360,8 @@ struct State {
     message: Option<Message>,
     replaying: Option<String>,
     pending_song: Option<Song>,
+    availability: Availability,
+    decision: Option<SongDecision>,
 }
 
 struct Inner {
@@ -342,6 +371,7 @@ struct Inner {
     looks_sink: Option<LooksSink>,
     fixture_tap: Option<FixtureTap>,
     loudness_sink: Option<LoudnessSink>,
+    captures: Option<CaptureLookup>,
     audio: Option<Arc<AudioHub>>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
@@ -374,6 +404,8 @@ pub struct LinkOptions {
     pub fixture_tap: Option<FixtureTap>,
     /// Where a recording's loudness goes. `None` saves none.
     pub loudness_sink: Option<LoudnessSink>,
+    /// What each song's stored capture is (Auto decides from it). `None`: no song is captured.
+    pub captures: Option<CaptureLookup>,
     /// The audio input that measures loudness. `None` records no loudness (headless builds).
     pub audio: Option<Arc<dyn AudioInput>>,
     pub http_factory: HttpFactory,
@@ -389,6 +421,7 @@ impl Default for LinkOptions {
             looks_sink: None,
             fixture_tap: None,
             loudness_sink: None,
+            captures: None,
             audio: None,
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
@@ -416,6 +449,7 @@ impl LightkeyLink {
                 looks_sink: options.looks_sink,
                 fixture_tap: options.fixture_tap,
                 loudness_sink: options.loudness_sink,
+                captures: options.captures,
                 audio: options
                     .audio
                     .map(|input| Arc::new(AudioHub::new(input, options.clock.clone()))),
@@ -440,6 +474,8 @@ impl LightkeyLink {
                     message: None,
                     replaying: None,
                     pending_song: None,
+                    availability: Availability::default(),
+                    decision: None,
                 }),
                 wake: Notify::new(),
             }),
@@ -480,6 +516,17 @@ impl LightkeyLink {
     /// Whether the Record switch is on (replay never runs while it is).
     pub fn armed(&self) -> bool {
         lock(&self.inner.state).armed
+    }
+
+    /// Decide capture or replay for the timer start of `song` (once per start; the link and the
+    /// plugin both ask and get the same answer). The decision holds until the next start.
+    pub fn decide_for_start(&self, song: &Song, started_at: Option<DateTime<Utc>>) -> Decision {
+        self.inner.decide_for_start(song, started_at)
+    }
+
+    /// Fixture replay must not run: Record is on, or this song is being captured.
+    pub fn capturing(&self) -> bool {
+        self.inner.capturing()
     }
 
     /// The song the timeline is replaying fixture looks for (shown in the status), if any.
@@ -535,7 +582,130 @@ impl Inner {
         None
     }
 
-    fn replay_blocked_reason(&self, armed: bool) -> Option<String> {
+    /// Record pinned (the switch, or a hand-edited `mode: record`), else the saved mode.
+    fn effective_mode(armed: bool, settings: &LightkeySettings) -> LightkeyMode {
+        if armed || settings.mode == LightkeyMode::Record {
+            LightkeyMode::Record
+        } else {
+            settings.mode
+        }
+    }
+
+    /// The lighting connection: API linked, Lightkey running, fixture stream live, Lighting on.
+    fn available_now(&self, link: Link) -> bool {
+        let (enabled, osc, _host, _settings) = (self.settings)();
+        enabled && osc && link == Link::Connected && self.relay.is_live()
+    }
+
+    /// Note the connection (call often: the poll loop does), and end a capture whose link has
+    /// been down for a minute or more at the song position where the drop began.
+    fn tick(&self) {
+        let link = self.st().link;
+        let available = self.available_now(link);
+        let now = self.clock.mono();
+        let wall = self.clock.wall();
+        let mut st = self.st();
+        st.availability.observe(now, available);
+        let down = st.availability.down_since().is_some();
+        let too_long = st.availability.dropped_too_long(now);
+        if let Some(session) = st.session.as_mut() {
+            if !down {
+                session.down_position = None;
+            } else if session.down_position.is_none() {
+                session.down_position = Some(if session.running {
+                    (wall - session.started_at).max(session.last_position)
+                } else {
+                    session.last_position
+                });
+            }
+            if too_long && session.cutoff.is_none() {
+                session.cutoff = session.down_position;
+            }
+        }
+    }
+
+    fn decide_for_start(&self, song: &Song, started_at: Option<DateTime<Utc>>) -> Decision {
+        self.tick();
+        let key = song_key(song);
+        let started = started_at.and_then(|at| at.timestamp_nanos_opt());
+        let (_enabled, _osc, _host, settings) = (self.settings)();
+        let stored = self
+            .captures
+            .as_ref()
+            .map_or(SongCapture::NotCaptured, |lookup| lookup(&key));
+        let link = self.st().link;
+        let available = self.available_now(link);
+        let now = self.clock.mono();
+        let mut st = self.st();
+        if let Some(existing) = &st.decision {
+            if existing.key == key && existing.started == started {
+                return existing.decision;
+            }
+        }
+        let mode = Self::effective_mode(st.armed, &settings);
+        let usable = st.availability.usable(now, available);
+        let decision = decide(mode, usable, stored);
+        st.decision = Some(SongDecision {
+            key,
+            started,
+            decision,
+        });
+        decision
+    }
+
+    fn capturing(&self) -> bool {
+        let settings = (self.settings)().3;
+        let st = self.st();
+        st.armed
+            || settings.mode == LightkeyMode::Record
+            || st
+                .decision
+                .as_ref()
+                .is_some_and(|d| d.decision.action == Action::Capture)
+    }
+
+    /// What Auto does (or would do) with the current/next song, for the status.
+    fn auto_status(&self, mode: LightkeyMode) -> Option<LightkeyAuto> {
+        if mode != LightkeyMode::Auto {
+            return None;
+        }
+        let link = self.st().link;
+        let available = self.available_now(link);
+        let now = self.clock.mono();
+        let (decision, pending, usable) = {
+            let st = self.st();
+            (
+                st.decision.clone(),
+                st.pending_song.clone(),
+                st.availability.usable(now, available),
+            )
+        };
+        let (decision, song) = match (decision, pending) {
+            (Some(d), pending) => {
+                let title = pending.filter(|p| song_key(p) == d.key).map(|p| p.title);
+                (d.decision, title)
+            }
+            (None, Some(song)) => {
+                let stored = self
+                    .captures
+                    .as_ref()
+                    .map_or(SongCapture::NotCaptured, |lookup| lookup(&song_key(&song)));
+                (decide(LightkeyMode::Auto, usable, stored), Some(song.title))
+            }
+            (None, None) if !usable => (
+                decide(LightkeyMode::Auto, false, SongCapture::NotCaptured),
+                None,
+            ),
+            (None, None) => return None,
+        };
+        Some(LightkeyAuto {
+            capturing: decision.action == Action::Capture,
+            reason: decision.reason.text().to_string(),
+            song,
+        })
+    }
+
+    fn replay_blocked_reason(&self, armed: bool, auto_capture: bool) -> Option<String> {
         let (enabled, osc, _host, settings) = (self.settings)();
         if !enabled {
             return Some("Lighting is off.".into());
@@ -546,6 +716,9 @@ impl Inner {
         if armed {
             return Some("Paused while recording.".into());
         }
+        if auto_capture {
+            return Some("Paused while capturing this song.".into());
+        }
         if !settings.replay {
             return Some("Replay is switched off.".into());
         }
@@ -554,7 +727,14 @@ impl Inner {
 
     fn status(&self) -> LightkeyStatus {
         let (enabled, _osc, osc_host, settings) = (self.settings)();
+        let armed_now = self.st().armed;
+        let mode = Self::effective_mode(armed_now, &settings);
+        let auto = self.auto_status(mode);
         let mut st = self.st();
+        let auto_capture = st
+            .decision
+            .as_ref()
+            .is_some_and(|d| d.decision.action == Action::Capture);
         let message = self.live_message(&mut st, settings.replay);
         LightkeyStatus {
             api_url: effective_api_url(&settings, &osc_host),
@@ -567,7 +747,9 @@ impl Inner {
             recording: st.armed,
             recording_song: st.session.as_ref().map(|s| s.song.title.clone()),
             replay: settings.replay,
-            replay_blocked: self.replay_blocked_reason(st.armed),
+            mode: Self::effective_mode(st.armed, &settings),
+            auto,
+            replay_blocked: self.replay_blocked_reason(st.armed, auto_capture),
             replaying_song: st.replaying.clone(),
             message,
             detail_level: settings.detail,
@@ -684,6 +866,15 @@ impl Inner {
         let session = {
             let mut st = self.st();
             st.armed = false;
+            // A decision pinned by Record describes a mode that is now off; leaving it would
+            // keep the status saying "Record" and block replay while the mode reads Auto.
+            if st
+                .decision
+                .as_ref()
+                .is_some_and(|d| d.decision.reason == Reason::PinnedRecord)
+            {
+                st.decision = None;
+            }
             st.session.take()
         };
         self.persist_armed(false).await;
@@ -728,6 +919,7 @@ impl Inner {
                 self.on_unreachable(&failure);
                 delay = RETRY_SECONDS;
             }
+            self.tick();
             tokio::select! {
                 () = self.wake.notified() => {}
                 () = tokio::time::sleep(Duration::from_secs_f64(delay)) => {}
@@ -792,7 +984,7 @@ impl Inner {
         let mut st = self.st();
         let stopped = st.stopped;
         if let Some(session) = st.session.as_mut() {
-            if session.running && !stopped {
+            if session.running && !stopped && session.cutoff.is_none() {
                 let position = local_time - session.started_at;
                 if let Some(recorder) = session.fixtures.as_mut() {
                     recorder.observe(position, commands);
@@ -951,7 +1143,12 @@ impl Inner {
     // ------------------------------------------------------------ timer events
     async fn on_song(self: &Arc<Self>, event: &StagePilotEvent) {
         if let EventPayload::Song { song, .. } = &event.payload {
-            self.st().pending_song = Some(song.clone());
+            let mut st = self.st();
+            st.pending_song = Some(song.clone());
+            let key = song_key(song);
+            if st.decision.as_ref().is_some_and(|d| d.key != key) {
+                st.decision = None;
+            }
         }
     }
 
@@ -974,18 +1171,20 @@ impl Inner {
         let Some(song) = song else {
             return;
         };
+        let decision = self.decide_for_start(&song, payload.started_at);
         let previous = self.st().session.take();
         if let Some(previous) = previous {
             self.finish(previous, "A new song started.").await;
         }
         let started_at = self.clock_from(payload, 0.0);
-        let armed = self.st().armed;
-        if armed {
+        if decision.action == Action::Capture {
+            let pinned = decision.reason == Reason::PinnedRecord;
             let recording = {
                 let mut st = self.st();
-                if st.link == Link::Connected {
+                // A pinned Record needs the API linked; Auto already counted the grace period.
+                if !pinned || st.link == Link::Connected {
                     let mut session = Session::new(song.clone(), started_at);
-                    if self.relay.is_live() {
+                    if self.relay.is_live() || !pinned {
                         session.fixtures = Some(LookRecorder::new(&self.relay.state()));
                     }
                     if self.audio.is_some() {
@@ -1009,11 +1208,16 @@ impl Inner {
                 .session
                 .as_ref()
                 .is_some_and(|session| session.fixtures.is_some());
+            let lead = if pinned {
+                "Recording"
+            } else {
+                "Auto: capturing"
+            };
             let mut text = if with_fixtures || self.relay.status(false).is_none() {
-                format!("Recording {}.", song.title)
+                format!("{lead} {}.", song.title)
             } else {
                 format!(
-                    "Recording {}. Fixture levels are not recorded: the Lightkey API relay is not connected.",
+                    "{lead} {}. Fixture levels are not recorded: the Lightkey API relay is not connected.",
                     song.title
                 )
             };
@@ -1067,6 +1271,7 @@ impl Inner {
 
     /// Pause, stop, song end and a failed timer: a recording session pauses or is kept.
     async fn on_stopped(self: &Arc<Self>, event: &StagePilotEvent) {
+        self.tick();
         enum Next {
             Finish(Box<Session>),
             Paused(String),
@@ -1104,7 +1309,7 @@ impl Inner {
                         // song or Record off saves what was captured (R-01).
                         let ended = event.event_type == EventType::TimerFailed
                             || session.last_position >= duration - SONG_END_TOLERANCE_SECONDS;
-                        if ended && recording_is_worth_keeping(session.last_position, duration) {
+                        if ended {
                             match st.session.take() {
                                 Some(session) => Next::Finish(Box::new(session)),
                                 None => Next::Nothing,
@@ -1131,7 +1336,11 @@ impl Inner {
 
     /// Reset discards a recording in progress.
     async fn on_reset(self: &Arc<Self>, _event: &StagePilotEvent) {
-        let had = self.st().session.take().is_some();
+        let had = {
+            let mut st = self.st();
+            st.decision = None;
+            st.session.take().is_some()
+        };
         if had {
             self.say("Recording discarded: the countdown was reset.");
         }
@@ -1210,35 +1419,54 @@ impl Inner {
     }
 
     async fn finish_looks(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
+        self.tick();
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         if session.running {
             session.last_position = session
                 .last_position
                 .max(self.clock.wall() - session.started_at);
         }
-        let covered = if duration > 0.0 {
+        let mut covered = if duration > 0.0 {
             session.last_position.min(duration)
         } else {
             session.last_position
         };
-        if !recording_is_worth_keeping(covered, duration) {
-            return self.say(format!(
-                "Not saved: only {covered:.0} of {duration:.0} seconds recorded."
-            ));
+        // A link that was down for a minute ends the pass where the drop began.
+        let link_failed = session.cutoff.is_some();
+        if let Some(cutoff) = session.cutoff {
+            covered = covered.min(cutoff.max(0.0));
         }
         let title = session.song.title.clone();
-        let Some(recorder) = session.fixtures.take() else {
+        let recorder = session.fixtures.take().filter(|r| !r.is_empty());
+        let verdict = judge(duration, covered, recorder.is_some(), link_failed);
+        let complete = match verdict {
+            PassVerdict::TooShort => {
+                return self.say(format!(
+                    "Not saved: only {covered:.0} of {duration:.0} seconds recorded."
+                ));
+            }
+            PassVerdict::NoChanges => {
+                return self.say(format!(
+                    "Not saved: no fixture changes were recorded for {title}."
+                ));
+            }
+            PassVerdict::Complete => true,
+            PassVerdict::Partial => false,
+        };
+        let Some(recorder) = recorder else {
             return self.say(format!(
                 "Not saved: no fixture changes were recorded for {title}."
             ));
         };
-        if recorder.is_empty() {
-            return self.say(format!(
-                "Not saved: no fixture changes were recorded for {title}."
-            ));
-        }
         let Some(sink) = self.looks_sink.clone() else {
             return self.say("Could not save the looks to the timeline.");
+        };
+        let status = CaptureStatus {
+            complete,
+            coverage_seconds: covered,
+            recorded_at: DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0)
+                .unwrap_or_default()
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         };
         let recorder = Arc::new(recorder);
         let wanted = (self.settings)().3.detail.interval_seconds();
@@ -1260,16 +1488,29 @@ impl Inner {
                 song_key: session.key.clone(),
                 song_title: title.clone(),
                 rows,
+                status: status.clone(),
             })
             .await;
             match saved {
                 Ok(()) => {
-                    tracing::info!(song = %session.key, rows = count, reason, "lightkey_looks_saved");
+                    tracing::info!(song = %session.key, rows = count, complete, reason, "lightkey_looks_saved");
                     self.st().captured = Some(LightkeyCaptured {
                         song_title: title.clone(),
                         looks: u32::try_from(count).unwrap_or(u32::MAX),
                     });
-                    return self.say(saved_message(count, &title, wanted, interval));
+                    let text = saved_message(count, &title, wanted, interval);
+                    return self.say(if complete {
+                        text
+                    } else {
+                        format!(
+                            "{text} Incomplete capture: {covered:.0} of {duration:.0} seconds; it captures again next time."
+                        )
+                    });
+                }
+                Err(LooksError::Kept) => {
+                    return self.say(format!(
+                        "Not saved: {title} already has a capture that covers more of the song."
+                    ));
                 }
                 Err(LooksError::TooLarge) => interval *= 2.0,
                 Err(LooksError::Failed(error)) => {

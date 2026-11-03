@@ -209,37 +209,26 @@ describe("LightingSetupPanel", () => {
       expect(within(body as HTMLElement).getByLabelText("Song")).toBeInTheDocument();
       expect(body.contains(screen.getByTestId("lighting-cue-list"))).toBe(true);
       expect(body.contains(screen.getByTestId("lighting-timeline"))).toBe(true);
-      expect(body.contains(screen.getByRole("group", { name: "Test cue" }))).toBe(true);
     });
 
-    it("keeps the MIDI Test cue where it was before the section collapsed: at the right of the song row, wrapping above it, never below", () => {
+    it("moves the MIDI test cue out of the timeline into a collapsed 'Send a test cue' disclosure under the connection", () => {
       mount();
-      const testCue = screen.getByRole("group", { name: "Test cue" });
-      const row = testCue.parentElement!;
-      // Same row as the song picker and Add cue; the row wraps in reverse, so a test cue that does not fit lands ABOVE them.
-      expect(row).toHaveClass("flex", "flex-wrap-reverse");
-      expect(row.contains(screen.getByLabelText("Song"))).toBe(true);
-      expect(row.contains(screen.getByRole("button", { name: "Add cue" }))).toBe(true);
-      // It is the last child of the row, pushed to the right by the stylesheet rule.
-      expect(row.lastElementChild).toBe(testCue);
-      expect(testCue).toHaveClass("lighting-test");
-      expect(testCue.querySelector("h3")).toHaveClass("pb-2.5");
+      const body = header().parentElement!.querySelector("[data-part=region]")!;
+      const testCue = screen.getByRole("group", { name: "Test cue", hidden: true });
+      expect(body.contains(testCue)).toBe(false);
+      const disclosure = testCue.closest("[data-variant=advanced]")!;
+      const toggle = within(disclosure as HTMLElement).getByRole("button", { name: "Send a test cue" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(disclosure.querySelector("[data-part=region] > [inert]")).not.toBeNull(); // folded: out of the tab order and the accessibility tree
     });
 
-    it("has the .lighting-test right-alignment rule back in the stylesheet", async () => {
-      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
-      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
-      expect(css).toMatch(/\.lighting-test \{\s*margin-left: auto;\s*\}/);    });
-
-    it("collapses on click, saves the choice, and folds the Test cue controls away with the rest", async () => {
+    it("collapses on click and saves the choice", async () => {
       const user = userEvent.setup();
       mount();
       await user.click(header());
       expect(header()).toHaveAttribute("aria-expanded", "false");
       expect(window.localStorage.getItem(KEY)).toBe("false");
       const body = header().parentElement!.querySelector("[data-part=region]")!;
-      // Test cue lives inside the group (owner, 2026-10-15), so closing the group hides it from the page and the tab order.
-      expect(body.contains(screen.getByRole("group", { name: "Test cue", hidden: true }))).toBe(true);
       expect(body.firstElementChild).toHaveAttribute("inert");
       await user.click(header());
       expect(header()).toHaveAttribute("aria-expanded", "true");
@@ -284,7 +273,7 @@ describe("LightingSetupPanel", () => {
     render(
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
-    const header = document.querySelector("[data-setup-panel-header]")!;
+    const header = document.querySelector("[data-status-slot]")!;
     expect(header).not.toHaveTextContent(/Alternate/i);
     expect(header).not.toHaveTextContent("MIDI ·");
   });
@@ -370,7 +359,7 @@ describe("LightingSetupPanel", () => {
     it("on OSC everything stays the Lighting colour, and switching back and forth swaps the controls with it", async () => {
       const user = userEvent.setup();
       mountPanel();
-      const group = screen.getByRole("radiogroup");
+      const group = screen.getByRole("radiogroup", { name: "Connection method" });
       await user.click(within(group).getByRole("radio", { name: /OSC/ }));
       expect(panel().className).toMatch(/border-t-integration-lighting-soft/);
       expect(screen.getByRole("heading", { name: "Lighting" })).toHaveClass("text-integration-lighting-soft");
@@ -517,10 +506,10 @@ describe("LightingSetupPanel", () => {
     ], "midi");
   });
 
-  it("requires confirmation before clearing all cues", async () => {
+  it("asks in an in-app dialog before clearing all cues, and never uses window.confirm for it", async () => {
     const user = userEvent.setup();
     const onSaveCues = vi.fn();
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = vi.spyOn(window, "confirm");
     render(
       <LightingSetupPanel
         error={null}
@@ -536,15 +525,50 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    const clearAll = screen.getByRole("button", { name: "Clear all" });
-    await user.click(clearAll);
-    expect(confirm).toHaveBeenCalledWith(
-      'Clear all lighting cues for "Holy Forever"? This cannot be undone.',
-    );
+    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("permanently erased");
+    expect(dialog).toHaveTextContent("Holy Forever");
+    expect(screen.getByRole("button", { name: "Keep cues" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(onSaveCues).not.toHaveBeenCalled();
 
-    await user.click(clearAll);
+    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Keep cues" }));
+    expect(onSaveCues).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Erase permanently" }));
+    expect(onSaveCues).toHaveBeenCalledTimes(1);
     expect(onSaveCues).toHaveBeenCalledWith(song, [], "midi");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("asks before clearing the selected song and erases only after Erase permanently", async () => {
+    const user = userEvent.setup();
+    const onSaveCues = vi.fn();
+    const confirm = vi.spyOn(window, "confirm");
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={onSaveCues}
+        onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Clear song..." }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Holy Forever");
+    expect(onSaveCues).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Erase permanently" }));
+    expect(onSaveCues).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("puts the OSC / MIDI toggle in the same header slot as the Playback panel", () => {
+    render(
+      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()}
+        onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+    );
+    expect(document.querySelector("[data-setup-panel-header] [data-header-method] [data-connection-method]")).not.toBeNull();
+    expect(document.querySelector("[data-header-method]")!.className).toContain("setup-header-method");
+    expect(screen.getByRole("radiogroup", { name: "Connection method" })).toBeInTheDocument();
   });
 
   it("sends an explicit Note On/Off compatibility test", async () => {

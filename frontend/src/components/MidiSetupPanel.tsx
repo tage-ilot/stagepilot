@@ -203,9 +203,8 @@ export function MidiSetupPanel({
         status={connectionStatus}
         statusDetail={savedMethod === "real" ? "MIDI · Alternate" : undefined}
         title="Playback"
-      />
-
-      <ConnectionMethod
+        method={<ConnectionMethod
+          placement="header"
         disabled={!playback || Boolean(playback.pending) || playback.status?.discovery === "running"}
         heldChange={draft.methodDirty}
         onChange={(value) => draft.setMethod(value === "real" ? "real" : "playback_api")}
@@ -214,7 +213,9 @@ export function MidiSetupPanel({
           { value: "real", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
         ]}
         value={draft.method}
+        />}
       />
+
       {draft.method === "playback_api" && <PlaybackApiPanel playback={playback} draft={draft} />}
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}

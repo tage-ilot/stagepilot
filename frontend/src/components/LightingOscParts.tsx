@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
 import { groupByFixture, isCaptured, lookLabel } from "./lightingLooks";
@@ -15,6 +15,7 @@ import {
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
+import { CONTROL_34 } from "./compactControl";
 import { Select } from "./ui/Select";
 import { clampCueTime } from "./lightingTimelineMath";
 
@@ -29,8 +30,12 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
 import { CueTypeBadge } from "./CueTypeParts";
 import { classifyOscCue } from "./lightingCueTypes";
 
+/**
+ * The sACN DMX Live Link line when the live link itself is not on screen (Lighting is not saved as OSC yet): the same shared host
+ * and OSC UDP port boxes, so the person can type the machine before saving. Once OSC is saved, LightkeyStrip draws the full line.
+ */
 export function OscConnectionFields({
-  host, port, held, attempted, onHost, onPort,
+  host, port, held, attempted, onHost, onPort, children,
 }: {
   host: string;
   port: string;
@@ -38,21 +43,26 @@ export function OscConnectionFields({
   attempted: boolean;
   onHost: (host: string) => void;
   onPort: (port: string) => void;
+  children?: ReactNode;
 }) {
+  const hostError = attempted ? oscHostError(host) : null;
+  const portError = attempted ? oscPortError(port) : null;
   return (
-    <div className="lighting-osc-connection mt-4">
-      <div className="lighting-osc-fields grid gap-4">
-        <Field error={attempted ? oscHostError(host) ?? undefined : undefined} heldChange={held.host} label="Host or IP address">
-          <Input autoCapitalize="none" autoCorrect="off" onChange={(event) => onHost(event.target.value)} spellCheck={false} value={host} />
-        </Field>
-        <Field error={attempted ? oscPortError(port) ?? undefined : undefined} heldChange={held.port} label="UDP port">
-          <Input className="tabular-nums" inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
-        </Field>
+    <section aria-label="sACN DMX Live Link" className="lighting-osc-connection mt-6">
+      <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>
+      <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2" data-testid="live-link-line">
+        <label className="flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-muted">
+          Host or IP
+          <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full sm:!w-52 ${CONTROL_34} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-muted">
+          OSC UDP
+          <Input aria-label="OSC UDP port" className={`!w-[5.25rem] tabular-nums ${CONTROL_34} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
+        </label>
       </div>
-      <p className="mt-2 text-type-body-sm text-ink-muted">
-        Enter the port your lighting app listens for OSC on. In Lightkey, control-click a cue and choose External Control, then Copy OSC Address, to get a cue's address.
-      </p>
-    </div>
+      {(hostError || portError) && <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, portError].filter(Boolean).join(" ")}</p>}
+      {children}
+    </section>
   );
 }
 

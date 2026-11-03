@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
 import type { SongLoudness } from "../types";
 import { barClassFor } from "./cueTypeBars";
@@ -9,7 +9,6 @@ import { clusterMarkers } from "./lightingLooks";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
-  MARKER_LABEL_ROWS,
   markerType,
     nudgeCueTime,
   padColorClasses,
@@ -21,6 +20,9 @@ import {
 import { loudnessAltText, loudnessPath } from "./loudness";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
+import { ConnectionMethod } from "./ui/ConnectionMethod";
+import { CONTROL_34 } from "./compactControl";
+import { heightFor, labelRowsFor, LABEL_ROW_PX, useHeightMode, type HeightMode } from "./timelineHeight";
 import { ScrollRegion } from "./ui/ScrollRegion";
 
 const ZOOMS = [0, 6, 12, 24, 60, 120] as const; // pixels per second; 0 = fit the width
@@ -34,8 +36,10 @@ const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of sq
  */
 export function LightingTimeline({
   songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect, loudness,
-  method = "osc", hiddenTypes, onToggleType, onShowAllTypes,
+  method = "osc", hiddenTypes, onToggleType, onShowAllTypes, toolbar,
 }: {
+  /** The panel's own controls (Song, Add cue, Clear song, Merge, Simplify, Undo): they lead the toolbar row; zoom and height sit at its right. */
+  toolbar?: ReactNode;
   /** Which method's cues these are; the legend lists that method's types. */
   method?: "osc" | "midi";
   /** Types hidden from view (view-only). When not given the timeline keeps its own per-session state. */
@@ -63,6 +67,7 @@ export function LightingTimeline({
   const toggleType = onToggleType ?? ownHidden.toggle;
   const showAllTypes = onShowAllTypes ?? ownHidden.showAll;
   const [zoomIndex, setZoomIndex] = useState(0);
+  const [heightMode, setHeightMode] = useHeightMode();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; at: number } | null>(null);
   const [trackWidth, setTrackWidth] = useState(0);
@@ -123,7 +128,6 @@ export function LightingTimeline({
   // A hidden type is only hidden from view: the picked, selected and dragged markers always stay.
   const visibleMarkers = markers.filter((marker) => !hidden.has(markerType(marker)) || marker.id === selectedId || marker.id === drag?.id || picked.has(marker.id));
   const presentTypes = new Set(markers.map(markerType));
-  const labelPlacements = placeMarkerLabels(visibleMarkers.map((marker) => ({ id: marker.id, label: marker.label, at: marker.at })), trackWidth, length);
   const percent = (at: number) => `${Math.min(100, Math.max(0, (at / length) * 100))}%`;
   const selected = markers.find((marker) => marker.id === selectedId) ?? null;
 
@@ -168,6 +172,16 @@ export function LightingTimeline({
   const pxPerSecond = trackWidth > 0 ? trackWidth / length : 0;
   const keepSingle = new Set([...(selectedId ? [selectedId] : []), ...(drag ? [drag.id] : []), ...selectedIds]);
   const items = pxPerSecond > 0 ? clusterMarkers(visibleMarkers, pxPerSecond, CLUSTER_GAP_PX, keepSingle) : visibleMarkers.map((marker) => ({ kind: "single" as const, marker }));
+  // Labels stack per single marker, and a cluster pill takes a slot like a short label, so Auto height follows what is really drawn.
+  const placeInputs = items.map((item) => item.kind === "cluster"
+    ? { id: item.id, label: "####", at: item.at }
+    : { id: item.marker.id, label: item.marker.label, at: item.marker.at });
+  const labelPlacements = placeMarkerLabels(placeInputs, trackWidth, length, labelRowsFor(heightMode));
+  const rowsUsed = Math.max(1, ...[...labelPlacements.values()].map((placement) => placement.row + 1));
+  const trackHeight = heightFor(heightMode, rowsUsed);
+  const labelZone = rowsUsed * LABEL_ROW_PX + 4; // the waveform and playhead start under this
+  // A label never runs past the right end of the track (it would be clipped and make the timeline scroll sideways).
+  const labelMaxWidth = (wanted: number, at: number) => (trackWidth > 0 ? Math.max(0, Math.min(wanted, trackWidth - (at / length) * trackWidth - 18)) : wanted);
   const zoomInto = (at: number, count: number) => {
     if (zoomIndex < ZOOMS.length - 1) { pendingScroll.current = at; setZoomIndex(zoomIndex + 1); }
     else { const first = markers.find((marker) => marker.at === at); if (first) setSelectedId(first.id); }
@@ -219,20 +233,33 @@ export function LightingTimeline({
 
   return (
     <div className="lighting-timeline mt-4" data-testid="lighting-timeline">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold text-ink">Timeline</h3>
-        <div aria-label="Timeline zoom" className="flex items-center gap-1" role="group">
-          <Button aria-label="Zoom out" disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} variant="tinted">−</Button>
-          <span aria-live="polite" className="min-w-[3.5rem] text-center text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "Fit" : `${zoom} px/s`}</span>
-          <Button aria-label="Zoom in" disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
+      <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">
+        {toolbar}
+        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2" data-part="timeline-tools-end">
+          <div aria-label="Timeline zoom" className="flex items-center gap-1" role="group">
+            <Button aria-label="Zoom out" className={CONTROL_34} disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} variant="tinted">−</Button>
+            <Button aria-pressed={zoomIndex === 0} className={CONTROL_34} onClick={() => setZoomIndex(0)} variant={zoomIndex === 0 ? "secondary" : "tinted"}>Fit</Button>
+            <Button aria-label="Zoom in" className={CONTROL_34} disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
+            <span aria-live="polite" className="min-w-[3.25rem] text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "" : `${zoom} px/s`}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true" className="text-type-body-sm text-ink-muted">Height</span>
+            <ConnectionMethod<HeightMode>
+              compact
+              label="Timeline height"
+              onChange={setHeightMode}
+              options={[{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "auto", label: "Auto" }]}
+              value={heightMode}
+            />
+          </div>
         </div>
       </div>
-      <CueTypeLegend hidden={hidden} method={method} onShowAll={showAllTypes} onToggle={toggleType} present={presentTypes} />
+      <CueTypeLegend className="justify-end" compact hidden={hidden} method={method} onShowAll={showAllTypes} onToggle={toggleType} present={presentTypes} />
       <ScrollRegion axis="x" className="overflow-x-auto overscroll-x-contain" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>
         <div className="relative px-3 pb-3" style={trackStyle}>
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
             {ticks.map((tick) => (
-              <span className={`absolute top-0 text-type-body-sm tabular-nums text-ink-muted ${tick === 0 ? "" : "-translate-x-1/2"}`} key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
+              <span className={`absolute top-0 text-type-body-sm tabular-nums text-ink-muted ${tick === 0 ? "" : tick / length > 0.97 ? "-translate-x-full" : "-translate-x-1/2"}`} key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
             ))}
           </div>
           <div
@@ -244,14 +271,15 @@ export function LightingTimeline({
             onPointerUp={trackUp}
             ref={trackRef}
             role="group"
-            style={{ height: `${MARKER_LABEL_ROWS * 20 + 20}px` }}
+            style={{ height: `${trackHeight}px` }}
           >
             {loudness && loudnessShape && (
               <svg
                 aria-label={loudnessAltText(loudness)}
-                className="pointer-events-none absolute inset-0 h-full w-full text-ink-muted opacity-25"
+                className="pointer-events-none absolute inset-x-0 w-full text-ink-muted opacity-25"
                 data-testid="lighting-loudness"
                 preserveAspectRatio="none"
+                style={{ top: `${labelZone}px`, height: `calc(100% - ${labelZone}px)` }}
                 role="img"
                 viewBox="0 0 1000 100"
               >
@@ -261,9 +289,9 @@ export function LightingTimeline({
             {playhead !== null && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 w-px bg-live-reload"
+                className="pointer-events-none absolute w-0.5 bg-live-reload"
                 data-testid="lighting-playhead"
-                style={{ left: percent(Math.min(playhead, length)) }}
+                style={{ top: `${labelZone}px`, height: `calc(100% - ${labelZone}px)`, left: percent(Math.min(playhead, length)) }}
               />
             )}
             {marquee && (
@@ -278,13 +306,13 @@ export function LightingTimeline({
                 return (
                   <button
                     aria-label={text}
-                    className="absolute top-0 flex h-6 min-w-[1.5rem] -translate-x-1/2 touch-manipulation items-center justify-center rounded-ds-full border border-edge-medium bg-surface-panel px-1 text-type-body-sm tabular-nums text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    className="absolute flex h-6 min-w-[1.5rem] -translate-x-1/2 touch-manipulation items-center justify-center rounded-ds-full border border-edge-medium bg-surface-panel px-1 text-type-body-sm tabular-nums text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                     data-count={item.markers.length}
                     data-testid="lighting-cluster"
                     data-types={[...counts.keys()].join(" ")}
                     key={item.id}
                     onClick={() => zoomInto(item.at, item.markers.length)}
-                    style={{ left: percent(item.at) }}
+                    style={{ left: percent(item.at), top: `${(labelPlacements.get(item.id)?.row ?? 0) * LABEL_ROW_PX}px` }}
                     type="button"
                   >{lead && <span aria-hidden="true" className="mr-1 text-ink-muted" data-testid="lighting-cluster-glyph">{glyphFor(lead, lead.startsWith("note-") && item.markers.every((m) => m.sharp))}</span>}<span aria-hidden="true">{item.markers.length}</span></button>
                 );
@@ -300,6 +328,7 @@ export function LightingTimeline({
                   aria-label={`${spoken}, at ${formatElapsed(at)}`}
                   aria-pressed={isSelected}
                   className={`absolute flex w-4 -translate-x-1/2 cursor-grab touch-none items-start justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${drag?.id === marker.id ? "cursor-grabbing" : ""}`}
+                  data-selected={isSelected ? "true" : "false"}
                   data-source={marker.captured ? "captured" : "manual"}
                   data-testid="lighting-marker"
                   data-type={type}
@@ -311,14 +340,15 @@ export function LightingTimeline({
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
                   ref={(node) => { if (node) markerRefs.current.set(marker.id, node); else markerRefs.current.delete(marker.id); }}
-                  style={{ left: percent(at), top: `${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px`, height: `calc(100% - ${(labelPlacements.get(marker.id)?.row ?? 0) * 20}px)` }}
+                  style={{ left: percent(at), top: `${(labelPlacements.get(marker.id)?.row ?? 0) * LABEL_ROW_PX}px`, height: `calc(100% - ${(labelPlacements.get(marker.id)?.row ?? 0) * LABEL_ROW_PX}px)` }}
                   type="button"
                 >
-                  <span className={`block h-full ${type === "cue-off" ? "w-2" : "w-1.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
+                  <span className={`block h-full ${isSelected ? "w-2.5" : type === "cue-off" ? "w-2" : "w-1.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
                   <span
-                    className="pointer-events-none absolute left-[14px] top-0 flex items-center gap-1 text-type-body-sm text-ink-body"
+                    className={`pointer-events-none absolute left-[14px] top-0 flex items-center gap-1 text-type-body-sm text-ink-body ${isSelected ? "z-10 rounded-ds-sm bg-surface-panel-strong pr-1 font-semibold text-ink ring-2 ring-ink" : ""}`}
+                    data-testid="lighting-marker-label"
                     data-label-row={labelPlacements.get(marker.id)?.row ?? 0}
-                    style={{ maxWidth: `${labelPlacements.get(marker.id)?.width ?? 112}px` }}
+                    style={{ maxWidth: `${labelMaxWidth(labelPlacements.get(marker.id)?.width ?? 112, at)}px` }}
                   >
                     <span aria-hidden="true" className="shrink-0 rounded-ds-sm border border-edge-medium bg-surface-panel-strong px-1 text-ink" data-testid="lighting-marker-glyph">{glyphFor(type, marker.sharp)}</span>
                     <span className="truncate">{marker.label}</span>
@@ -339,8 +369,8 @@ export function LightingTimeline({
       )}
       {!markers.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
       {selected && (
-        <div aria-label="Selected cue" className="mt-2 flex flex-wrap items-center gap-2 rounded-ds-lg border border-edge-medium bg-surface-panel p-2" data-testid="lighting-marker-popover" role="group">
-          <span className="text-type-body-sm text-ink-body">
+        <div aria-label="Selected cue" className="mt-2 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-ds-lg border border-edge-medium bg-surface-panel px-2 py-1" data-testid="lighting-marker-popover" role="group">
+          <span className="shrink-0 text-type-body-sm text-ink-body">
             <strong>{selected.label || "Cue"}</strong> at <span className="tabular-nums">{formatElapsed(selected.at)}</span>
           </span>
           <label className="flex items-center gap-1 text-type-body-sm text-ink-muted">
@@ -361,9 +391,9 @@ export function LightingTimeline({
               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
             />
           </label>
-          <span className="text-type-body-sm text-ink-muted">Arrow keys move a marker 0.1 s, Shift 1 s. To merge, Shift-click rows, drag across the timeline, or press and hold on touch.</span>
-          <Button aria-label={`Delete cue at ${formatElapsed(selected.at)}`} disabled={disabled} onClick={() => onRemove(selected.id)} tone="danger" variant="tinted">Delete</Button>
-          <Button onClick={() => { setSelectedId(null); }} variant="secondary">Close</Button>
+          <span className="hidden min-w-0 flex-1 truncate text-type-body-sm text-ink-muted xl:inline" title="Arrow keys move a marker 0.1 s, Shift 1 s. To merge, Shift-click rows, drag across the timeline, or press and hold on touch.">Arrow keys move a marker 0.1 s, Shift 1 s. To merge, Shift-click rows, drag across the timeline, or press and hold on touch.</span>
+          <Button className={`shrink-0 ${CONTROL_34}`} aria-label={`Delete cue at ${formatElapsed(selected.at)}`} disabled={disabled} onClick={() => onRemove(selected.id)} tone="danger" variant="tinted">Delete</Button>
+          <Button className={`shrink-0 ${CONTROL_34}`} onClick={() => { setSelectedId(null); }} variant="secondary">Close</Button>
         </div>
       )}
     </div>

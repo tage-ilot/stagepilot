@@ -1162,11 +1162,6 @@ textarea:focus-visible {
   container-type: inline-size;
 }
 
-/* The MIDI test cue sits at the right of the song row, as it did before the section became collapsible. */
-.lighting-test {
-  margin-left: auto;
-}
-
 .lighting-pads {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
 }
@@ -1505,3 +1500,76 @@ textarea:focus-visible {
 .cue-bar-off { background: transparent; border: 3px solid var(--ds-cue-live); }
 .cue-bar-other { background: repeating-linear-gradient(180deg, var(--ds-cue-other) 0 5px, transparent 5px 9px); }
 .cue-bar-sharp { background-image: repeating-linear-gradient(135deg, var(--ds-surface-950) 0 2px, transparent 2px 5px); }
+
+/* Setup panel header. The header decides by its OWN width (it spans the panel), not the window's.
+   Narrow: the connection-method toggle gets its own row under the title block (as before).
+   Wide: it is centred between the title block (left) and status pill + close (right). The side columns are equal
+   (1fr each) so the toggle is centred on the panel and sits at the same x on Playback API, Playback MIDI and Lighting,
+   whatever the title, description or saved-method badge say. The 57rem threshold is measured: the longest right group
+   ("MIDI · Alternate" badge 138px + Connected pill 116px + 44px close + gaps = 318px) must fit in a side column next to
+   the widest toggle (Playback API | MIDI, 238px): 2 x 318 + 238 + 2 x 12 = 898px, rounded up to 912px (57rem). */
+.setup-header {
+  container-type: inline-size;
+}
+
+/* Below the threshold the wrapper does not exist as a box: the pill and close place themselves on the grid as before. */
+.setup-header-end {
+  display: contents;
+}
+
+.setup-header-method {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@container (min-width: 57rem) {
+  .setup-header-grid[data-has-method] {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .setup-header-grid[data-has-method] .setup-header-end {
+    display: flex;
+    grid-column: 3;
+    grid-row: 1;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .setup-header-grid[data-has-method] .setup-header-method {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+    align-self: start;
+    position: relative;
+  }
+
+  /* Header mode: no visible kicker (the group keeps its accessible name) and the held marker hangs below the toggle. */
+  .setup-header-method .connection-method-kicker {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .setup-header-method [role="radiogroup"] {
+    margin-top: 0;
+  }
+
+  .setup-header-method .connection-method-held {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    white-space: nowrap;
+  }
+}

@@ -130,6 +130,26 @@ The strip has these controls:
   API has `replay` off, the strip says "Replay is off" with a **Turn Replay on**
   button instead of looking as if it were replaying.
 
+### Auto mode (per song)
+
+The strip control is **Auto | Replay | Record**. Replay and Record pin the mode for every
+song; Auto decides when each song's timer starts and never changes its mind mid-song:
+
+| Connection (link connected, Lightkey running, fixture stream live, Lighting on; 60 s grace) | Song | Decision |
+| --- | --- | --- |
+| no | any | replay ("Auto: replaying (no connection)") |
+| yes | not fully captured, incomplete, or manual-only | capture ("Auto: capturing this song") |
+| yes | fully captured | replay ("Auto: replaying (fully captured)") |
+
+A pass is *fully captured* when it covered at least 95 % of the song with no playhead
+move or restart (pauses are fine), no link drop of 60 s or more, and at least one lighting
+change. A pass with no change is not saved and the song stays not captured. A partial pass
+(at least 10 % or 10 s, with a change) is saved as **Incomplete capture**; it replaces a stored
+partial only if it covers at least as much, and never replaces a complete capture. A seek
+during a pass discards it. Older cue maps whose captured rows have no status count as
+incomplete and are captured again. To re-capture a fully captured song, pin Record or
+Clear it. An old settings file with no `mode` loads as Auto; `replay` stays the master replay switch (`false` replays nothing in any mode). Record is set through the recording switch and is not saved by the settings route.
+
 Saving replaces only that song's `source = captured` rows. Rows you added by
 hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
 An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or deleted
@@ -394,7 +414,7 @@ its last listing after 2 s, and repeated picker polls do not start a second open
 level meter. The default is the system default input (the built-in microphone). Pick an audio interface or a
 line feed from the board if you have one. The choice is saved by name. If that input is not there next
 time (unplugged), StagePilot uses the default input and says so; the saved choice stays so it comes back
-when the interface does. **Clear loudness** removes the selected song's envelope and nothing else.
+when the interface does. **Clear loudness** removes the selected song's envelope and nothing else, and asks first (see below).
 
 **More than one recording.** Recording a song again averages the new loudness into the old. Levels are
 averaged as power (not as decibels), each recording counts equally up to eight; after that the oldest
@@ -483,3 +503,70 @@ tritanopia to keep the colours apart.
 - **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
 - **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
 - The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
+
+## Clearing cues
+
+**Clear song...** (the selected song, in the timeline toolbar), **Clear all songs...** and the **x** on a song chip (see
+"Lighting screen layout" below), and **Clear loudness**, all ask first in an in-app
+dialog. It says the cues will be **permanently erased** and cannot be undone, names the song (or "every song in
+<plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness). The focus starts on **Keep
+cues**; **Erase permanently** is the only button that erases. Esc, a click outside the dialog and **Keep cues** leave
+everything as it was.
+
+## Header layout
+
+The connection-method toggle (Playback API | MIDI, OSC | MIDI) sits in the middle of the panel header, between the
+title and the status pill and close button, whenever the panel is at least 57 rem (912 px) wide. That is the width at
+which the longest right-hand group ("MIDI · Alternate", Connected, close) still fits beside it. It is in the same place
+on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to its own row under the title.
+
+## Lighting screen layout
+
+### sACN DMX Live Link (one line)
+
+In OSC mode the connection is one titled section, **sACN DMX Live Link**, drawn as a single line that wraps cleanly on
+narrow screens: the link status (and fixture count), **one host or IP box**, a small **OSC UDP** port box (default
+21600), a small **API** port box (default 8770), **Connect / Check again**, and the **Replay | Record** toggle. The
+**Detail** (Fine / Normal / Coarse) toggle appears beside it only while Record is chosen. **Release lights** and the
+"Holding N fixtures" text sit on a second small line. The Lighting computer that receives OSC and the one that runs
+`lightkey-api` are always the same machine, so the host is shared.
+
+Saved settings are unchanged: `osc_host` and `osc_port` are saved with the Save bar as before, and `lightkey.api_url`
+is saved by Connect. The screen writes `api_url` as `<host>:<API port>`, and leaves it **empty** when the API port is
+8770 and the host is the saved OSC host, so the backend derives it as it always did. If a saved `api_url` names a
+different host than `osc_host`, a one-line notice names that host and offers **Use the OSC host**. StagePilot keeps
+using the saved address until you accept; nothing is rewritten silently. Host and port range messages are unchanged.
+MIDI mode is unchanged apart from the shared header.
+
+### Send a test cue
+
+The test cue is a collapsed **Send a test cue** disclosure under the connection (OSC and MIDI alike), no longer part of
+the timeline section. It behaves as before. Its **OSC address** field is the cue's OSC *path* (for example
+`/live/*/cue/Stars/activate`), not the host.
+
+### Songs strip
+
+Above the timeline, **Songs in this service - N of M captured** shows one chip per plan song, in plan order, with
+**Clear all songs...** at the right. A captured song is a small coloured box with its title, its look count (or cue
+count in MIDI mode), a note glyph when it has loudness, and an **x** that opens the permanent-erase dialog for that song
+only. A plan song with nothing saved is greyed with a dashed outline and says "not captured". Clicking a chip selects
+that song in the timeline exactly like the **Song** menu (a hand pick; **Follow live** returns). The song that is
+playing has a green dot, the selected chip an outline. The chips look small but their buttons are 44 px tall, and the
+list scrolls inside a fixed height, so 40 songs do not push the page around.
+
+### Song lighting timeline section
+
+One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
+the following-live status, Add cue, Clear song..., Merge rows, Simplify, Undo, then at the right Zoom (- / Fit / +) and
+timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
+cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
+how you left it on this device.
+
+### Timeline height
+
+**Auto** (the default) sizes the timeline from the number of stacked marker labels at the current zoom and clustering:
+about 200 px with one or two rows, growing by 22 px per row up to 420 px, so finer recordings and more crowded zooms
+get taller. **S** (200 px) and **M** (320 px) are fixed and kept on this device. Labels sit in the top rows. The
+loudness waveform and the playhead start below the last label row, so they never draw over a label pill. The selected
+marker gets a thicker bar, a ring around its label and a raised label. The first ruler label starts at the left edge and
+the last one is right-aligned to the end; labels near the end are shortened to fit the track.

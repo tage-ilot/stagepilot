@@ -120,6 +120,7 @@ export const placeMarkerLabels = (
   markers: { id: string; label: string; at: number }[],
   trackWidth: number,
   songLength: number,
+  maxRows: number = MARKER_LABEL_ROWS,
 ): Map<string, MarkerLabelPlacement> => {
   const placements = new Map<string, MarkerLabelPlacement>();
   if (trackWidth <= 0 || songLength <= 0) {
@@ -128,8 +129,8 @@ export const placeMarkerLabels = (
   }
   // Labels start 8 px to the right of the marker line (see the component), so the line's x is the start of the claim.
   const sorted = [...markers].sort((left, right) => left.at - right.at || left.id.localeCompare(right.id));
-  const rowEnds: number[] = Array.from({ length: MARKER_LABEL_ROWS }, () => Number.NEGATIVE_INFINITY);
-  const lastOnRow: (string | null)[] = Array.from({ length: MARKER_LABEL_ROWS }, () => null);
+  const rowEnds: number[] = Array.from({ length: maxRows }, () => Number.NEGATIVE_INFINITY);
+  const lastOnRow: (string | null)[] = Array.from({ length: maxRows }, () => null);
   for (const marker of sorted) {
     const x = (marker.at / songLength) * trackWidth;
     const wanted = markerLabelWidth(marker.label);

@@ -100,3 +100,15 @@ export function scanSummary(scan: PlaybackScanResult): string {
   const nets = scan.networks?.length ? `${plural(scan.networks.length, "network")} (${scan.networks.join(", ")})` : "no network";
   return `Checked ${scan.hosts_probed ?? 0} of ${scan.hosts_total ?? 0} addresses on ${nets} in ${seconds}s.`;
 }
+
+export const SONG_ORDER_OPEN_KEY = "stagepilot.playback.song-order-open";
+export const SCAN_PLAYBACK_SONGS = "Scan Playback Songs";
+
+/** One line for the Song order header, so it still says something while the section is folded. */
+export function songOrderSummary(status: PlaybackStatusResponse, running: boolean): string {
+  if (running) return "Scanning Playback songs…";
+  const saved = Boolean(status.song_order.length) && !status.stale && !status.plan_changed;
+  if (saved) return `Saved - ${status.song_order.length} ${status.song_order.length === 1 ? "song" : "songs"}`;
+  if (playbackOrderMode(status) === "learned") return `Learning - ${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed`;
+  return status.song_order.length > 0 ? "Needs a new scan" : "No order yet";
+}

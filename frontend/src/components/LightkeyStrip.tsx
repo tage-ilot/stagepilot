@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   getLightkeyStatus,
@@ -8,11 +8,16 @@ import {
 } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyFixtureStatus, LightkeyDetail, LightkeyLink, LightkeyStatus } from "../types";
+import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
 import { LoudnessPicker } from "./LoudnessPicker";
 import { Input } from "./ui/Input";
+import { CONTROL_34 } from "./compactControl";
+import { apiHostMismatch, apiPortError, composeApiUrl, splitApiUrl } from "./lightkeyConnection";
+import { oscHostError, oscPortError } from "./lightingOsc";
+import { OscConnectionFields } from "./LightingOscParts";
 import { StatusDot } from "./ui/StatusDot";
 import type { Tone } from "./ui/types";
 
@@ -42,22 +47,25 @@ function lightkeyFixtureWord(fixtures: LightkeyFixtureStatus): string {
 
 /** The line under the Replay | Record toggle: the one thing the operator most needs to know right now. */
 export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): string {
+  if (status.mode === "auto" && status.recording_song) return `Auto: capturing “${status.recording_song}”.`;
   if (status.recording && status.recording_song) return `Recording “${status.recording_song}”.`;
   if (status.recording) return "Recording starts with the next song.";
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
+  if (status.mode === "auto" && status.auto) return status.auto.reason;
   const count = looks?.count ?? status.captured?.looks ?? 0;
   if (status.replay_blocked && count > 0) return status.replay_blocked;
-  if (looks?.count) return capturedLooksText(count);
+  if (looks?.count) return capturedLooksText(count, looks.label);
+  if (looks?.label && looks.label !== "not_captured") return `${captureLabelText[looks.label]} on this song`;
   if (status.captured) return `${count} captured look${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
   if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
-  return looks ? capturedLooksText(0) : "No lights captured yet.";
+  return looks ? (looks.label && looks.label !== "not_captured" ? `${captureLabelText[looks.label]} on this song` : capturedLooksText(0)) : "No lights captured yet.";
 }
 
 /** What the selected song holds: captured look rows, and whether any were changed by hand. */
-export interface SongLooks { count: number; edited: boolean }
+export interface SongLooks { count: number; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
 
-export const capturedLooksText = (count: number): string =>
-  `${count} captured look${count === 1 ? "" : "s"} on this song`;
+export const capturedLooksText = (count: number, label?: CaptureLabel): string =>
+  `${label ? `${captureLabelText[label]}: ` : ""}${count} captured look${count === 1 ? "" : "s"} on this song`;
 
 const detailChoices: { value: LightkeyDetail; label: string }[] = [
   { value: "fine", label: "Fine" },
@@ -97,19 +105,50 @@ function lightkeyHolding(status: LightkeyStatus): string {
   return parts.join(" ");
 }
 
+/** The shared Lighting connection the panel owns: ONE host for the OSC output and the live-link API, and the OSC UDP port. */
+export interface LiveLinkConnection {
+  host: string;
+  onHost: (host: string) => void;
+  oscPort: string;
+  onPort: (port: string) => void;
+  /** The OSC host as saved (not the draft): the API address is left empty when it is this host on the default API port. */
+  savedOscHost: string;
+  /** A save was tried, so field errors show. */
+  attempted: boolean;
+  held: { host: boolean; port: boolean };
+}
+
+const smallBox = "!w-[5.25rem] tabular-nums";
+
+function Labelled({ caption, children }: { caption: string; children: ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-muted">
+      {caption}
+      {children}
+    </label>
+  );
+}
+
 /**
- * Lightkey live link, kept to the minimum: connect, record, replay.
- * Captures the fixtures' colour and levels from the lightkey-api agent on the Lightkey Mac and holds them with overrides on replay.
+ * sACN DMX Live Link: one titled line (status, the shared host, the OSC UDP and API ports, Connect, Replay | Record), then a small
+ * second line (Release lights, what is held). The Lighting computer for OSC and for the lightkey-api is always the same machine.
+ * Captures the fixtures' colour and levels from the lightkey-api agent and holds them with overrides on replay.
+ * `connection` is the panel's shared host/port draft; on its own (tests, other screens) the strip keeps a host of its own.
  */
-export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
+export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, children }: {
   lightingEnabled: boolean;
   looks?: SongLooks;
   /** The selected song's loudness: whether it has any, and how to clear it. */
   loudness?: { present: boolean; onClear?: () => void; disabled?: boolean };
+  connection?: LiveLinkConnection;
+  /** Under the connection line: the collapsed "Send a test cue" disclosure. */
+  children?: ReactNode;
 }) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [address, setAddress] = useState<string | null>(null); // null = untouched, show the saved one
+  const [ownHost, setOwnHost] = useState<string | null>(null); // only without `connection`
+  const [apiPort, setApiPort] = useState<string | null>(null); // null = untouched, show the saved one
+  const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
 
@@ -146,35 +185,68 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
     }
   };
 
+  const title = <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>;
   if (!status) {
+    // The host and OSC UDP boxes never wait for the live link to answer: they are the saved OSC output.
+    if (connection) {
+      return (
+        <OscConnectionFields attempted={connection.attempted} held={connection.held} host={connection.host} onHost={connection.onHost} onPort={connection.onPort} port={connection.oscPort}>
+          <p className="mt-2 text-type-body-sm text-ink-muted">{error ?? "Loading…"}</p>
+          {children}
+        </OscConnectionFields>
+      );
+    }
     return (
-      <section aria-label="Lightkey live link" className="mt-6">
-        <h3 className="font-semibold text-ink">Lightkey live link</h3>
+      <section aria-label="sACN DMX Live Link" className="mt-6">
+        {title}
         <p className="mt-2 text-type-body-sm text-ink-muted">{error ?? "Loading…"}</p>
       </section>
     );
   }
 
-  const shownAddress = address ?? status.api_url;
-  const addressChanged = address !== null && address.trim() !== status.api_url;
+  const saved = splitApiUrl(status.api_url);
+  const savedOscHost = connection?.savedOscHost ?? saved.host;
+  const host = connection ? connection.host : (ownHost ?? saved.host);
+  const setHost = connection ? connection.onHost : setOwnHost;
+  const shownApiPort = apiPort ?? saved.port;
+  // A saved API address on another machine is kept (and used) until the person accepts the OSC host; it is never rewritten silently.
+  const otherHost = apiHostMismatch(status.api_url, savedOscHost);
+  const hostError = connection && !connection.attempted && !tried ? null : oscHostError(host);
+  const apiError = tried || apiPort !== null ? apiPortError(shownApiPort) : null;
+  const udpError = connection && connection.attempted ? oscPortError(connection.oscPort) : null;
   const connected = status.link === "connected";
-  const connect = () => run(async () => {
-    const response = await saveLightkeySettings({ api_url: (address ?? status.api_url).trim() });
-    setAddress(null);
+  const changed = (apiPort !== null && apiPort.trim() !== saved.port) || (otherHost === null && host.trim().toLowerCase() !== saved.host.toLowerCase());
+  const valid = !oscHostError(host) && !apiPortError(shownApiPort);
+  const connect = () => {
+    setTried(true);
+    if (!valid) return Promise.resolve();
+    return run(async () => {
+      const apiUrl = otherHost !== null
+        ? (apiPort === null ? status.api_url : `${otherHost}:${apiPort.trim()}`)
+        : composeApiUrl({ host, apiPort: shownApiPort, savedOscHost });
+      const response = await saveLightkeySettings({ api_url: apiUrl });
+      setApiPort(null);
+      if (!connection) setOwnHost(null);
+      return response;
+    });
+  };
+  const acceptOscHost = () => run(async () => {
+    const response = await saveLightkeySettings({ api_url: composeApiUrl({ host: savedOscHost, apiPort: shownApiPort, savedOscHost }) });
+    setApiPort(null);
     return response;
   });
 
   // Record -> Replay: stop recording first, then make sure replay is on. A failure leaves the toggle on what the
   // backend says (it is re-read), and the message is shown.
-  const backToReplay = async (): Promise<LightkeyActionResponse> => {
+  const toMode = (mode: "auto" | "replay") => async (): Promise<LightkeyActionResponse> => {
     try {
       let response: LightkeyActionResponse | null = null;
       if (status.recording) {
         response = await setLightkeyRecording(false);
         if (!response.accepted) return response;
       }
-      if (!status.replay || response === null) {
-        response = await saveLightkeySettings({ replay: true });
+      if (!status.replay || response === null || (status.mode ?? "replay") !== mode) {
+        response = await saveLightkeySettings(mode === "replay" && status.mode === undefined ? { replay: true } : { mode, replay: true });
       }
       return response;
     } catch (cause) {
@@ -184,59 +256,102 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
   };
 
   const [headline, ...details] = lightkeyLines(status, error, looks);
+  const enterToConnect = (event: { key: string }) => { if (event.key === "Enter") void connect(); };
   return (
-    <section aria-label="Lightkey live link" className="mt-6" data-testid="lightkey-strip">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 className="font-semibold text-ink">Lightkey live link</h3>
-        <span className="inline-flex items-center gap-2 text-sm text-ink-body" data-testid="lightkey-link">
+    <section aria-label="sACN DMX Live Link" className="mt-6" data-testid="lightkey-strip">
+      {title}
+      <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2" data-testid="live-link-line">
+        <span className="inline-flex min-h-[34px] items-center gap-2 text-sm text-ink-body" data-testid="lightkey-link">
           <StatusDot ignoreAccent label={linkWord[status.link]} tone={linkTone[status.link]} />
           {linkWord[status.link]}
         </span>
+        {connected && status.fixtures && status.fixtures.link === "live" && (
+          <span className="inline-flex min-h-[34px] items-center gap-2 text-type-body-sm text-ink-muted" data-testid="lightkey-fixtures">
+            <StatusDot ignoreAccent label={lightkeyFixtureWord(status.fixtures)} tone={fixtureTone[status.fixtures.link]} />
+            {lightkeyFixtureWord(status.fixtures)}
+          </span>
+        )}
+        <Labelled caption="Host or IP">
+          <Input
+            aria-label="Host or IP address"
+            autoCapitalize="none"
+            autoCorrect="off"
+            className={`w-full sm:!w-52 ${CONTROL_34} ${connection?.held.host ? "!border-warning" : ""}`}
+            error={Boolean(hostError)}
+            onChange={(event) => setHost(event.target.value)}
+            onKeyDown={enterToConnect}
+            placeholder="192.0.2.10"
+            spellCheck={false}
+            value={host}
+          />
+        </Labelled>
+        {connection && (
+          <Labelled caption="OSC UDP">
+            <Input aria-label="OSC UDP port" className={`${smallBox} ${CONTROL_34} ${connection.held.port ? "!border-warning" : ""}`} error={Boolean(udpError)} inputMode="numeric" onChange={(event) => connection.onPort(event.target.value)} value={connection.oscPort} />
+          </Labelled>
+        )}
+        <Labelled caption="API">
+          <Input aria-label="API port" className={`${smallBox} ${CONTROL_34}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
+        </Labelled>
+        <Button
+          className={CONTROL_34}
+          disabled={busy || !lightingEnabled}
+          onClick={() => void connect()}
+          variant={connected && !changed ? "secondary" : "tinted"}
+          tone="lighting"
+        >
+          {connected && !changed ? "Check again" : "Connect"}
+        </Button>
+        <ConnectionMethod
+          compact
+          disabled={busy}
+          label="Lightkey mode"
+          onChange={(mode) => {
+            if (mode !== "record") { void run(toMode(mode)); return; }
+            if (looks?.edited && !confirmRerecordLooks()) return;
+            void run(() => setLightkeyRecording(true));
+          }}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "replay", label: "Replay" },
+            { value: "record", label: "Record", disabled: !status.recording && !connected },
+          ]}
+          value={status.recording || status.mode === "record" ? "record" : (status.mode ?? "replay")}
+        />
+        {(status.recording || status.mode === "auto") && (
+          <div data-testid="lightkey-detail-setting">
+            <ConnectionMethod
+              compact
+              disabled={busy}
+              label="Detail"
+              onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
+              options={detailChoices}
+              value={status.detail_level ?? "normal"}
+            />
+          </div>
+        )}
       </div>
+      {(hostError || udpError || apiError) && (
+        <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</p>
+      )}
+      {otherHost !== null && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-host-notice" role="status">
+          <p className="text-type-body-sm text-warning-text">
+            {`The live-link API is set to ${otherHost}, not the OSC host ${savedOscHost}. It keeps using ${otherHost} until you change it.`}
+          </p>
+          <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
+        </div>
+      )}
+      {(status.recording || status.mode === "auto") && <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>}
       {status.link !== "connected" && status.link !== "off" && status.detail && (
         <p className="mt-1 text-type-body-sm text-ink-muted">{status.detail}</p>
       )}
-      {connected && status.fixtures && (
+      {connected && status.fixtures && status.fixtures.link !== "live" && (
         <p className="mt-1 inline-flex items-center gap-2 text-type-body-sm text-ink-muted" data-testid="lightkey-fixtures">
           <StatusDot ignoreAccent label={lightkeyFixtureWord(status.fixtures)} tone={fixtureTone[status.fixtures.link]} />
           {lightkeyFixtureWord(status.fixtures)}
         </p>
       )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="Lightkey API address"
-          className="w-full sm:w-72"
-          onChange={(event) => setAddress(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") void connect(); }}
-          placeholder="10.30.0.211:8770"
-          value={shownAddress}
-        />
-        <Button
-          disabled={busy || !lightingEnabled}
-          onClick={() => void connect()}
-          variant={connected && !addressChanged ? "secondary" : "tinted"}
-          tone="lighting"
-        >
-          {connected && !addressChanged ? "Check again" : "Connect"}
-        </Button>
-      </div>
-
-      <ConnectionMethod
-        className="mt-[-1.25rem]"
-        disabled={busy}
-        label="Lightkey mode"
-        onChange={(mode) => {
-          if (mode !== "record") { void run(backToReplay); return; }
-          if (looks?.edited && !confirmRerecordLooks()) return;
-          void run(() => setLightkeyRecording(true));
-        }}
-        options={[
-          { value: "replay", label: "Replay" },
-          { value: "record", label: "Record", disabled: !status.recording && !connected },
-        ]}
-        value={status.recording ? "record" : "replay"}
-      />
 
       {!status.recording && status.replay === false && (
         <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
@@ -249,8 +364,9 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
         </div>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button
+          className={CONTROL_34}
           disabled={busy || Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) === 0}
           onClick={() => void run(() => releaseLightkeyLights())}
           variant="secondary"
@@ -271,20 +387,9 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
       ))}
 
       {status.recording && (
-        <div className="mt-2" data-testid="lightkey-detail-setting">
-          <ConnectionMethod
-            disabled={busy}
-            label="Detail"
-            onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
-            options={detailChoices}
-            value={status.detail_level ?? "normal"}
-          />
-          <p className="mt-1 text-type-body-sm text-ink-muted">Finer detail replays motion smoother but makes more rows.</p>
-        </div>
-      )}
-      {status.recording && (
         <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
       )}
+      {children}
     </section>
   );
 }
