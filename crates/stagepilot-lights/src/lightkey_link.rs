@@ -1,17 +1,22 @@
-//! Lightkey link: connect to `lightkey-api`, record live cue changes against a song, replay them.
-//! Port of `plugins/lights/lightkey.py`.
+//! Lightkey link: connect to the `lightkey-api` agent, record fixture changes against a song and
+//! replay them.
 //!
 //! Owned by `LightsPlugin` (started and stopped with it) so it adds no new plugin or setting page.
-//! It polls `GET {api}/log` on the Lightkey Mac, which reports every change of the active-cue set
-//! with a timestamp taken from Lightkey's own DMX output. Those timestamps are converted to this
-//! machine's clock with a measured offset and then to song time. The pure rules live in
-//! `crate::lightkey`; this file is the thin async shell around them. The clock and the HTTP client
-//! are injected (`Clock`, `LightkeyHttp`), so everything is testable offline.
+//! Fixture changes arrive from the agent's OSC relay (`crate::lightkey_relay`), timestamped from
+//! Lightkey's own DMX output, converted to this machine's clock with a measured offset and then to
+//! song time. The agent's HTTP `/log` is still polled, for link status only: cue changes it
+//! reports never reach a take or a replay. The pure rules live in `crate::lightkey` and
+//! `crate::lightkey_fixtures`; this file is the thin async shell around them. The clock and the
+//! HTTP client are injected (`Clock`, `LightkeyHttp`), so everything is testable offline.
+//!
+//! Replay holds fixtures with overrides. Pause, stop, reset and the end of a song only cancel the
+//! changes still scheduled: the last look stays held. Held fixtures are released (one `clear`
+//! per fixture, repeated once) only when replay is switched off, Lighting is disabled, the link
+//! shuts down, or a new song starts that does not use them.
 
 use crate::lightkey::{
-    build_take_edges, diff, effective_api_url, osc_address, replay_plan, summarize,
-    take_is_worth_keeping, truncate_micros, LightkeyLink as Link, LightkeyStatus, LightkeyTake,
-    LightkeyTakeSummary, Observation, OperatorHold, ReplayCommand, REPLAY_LEAD_SECONDS,
+    effective_api_url, summarize, take_is_worth_keeping, truncate_micros, LightkeyLink as Link,
+    LightkeyStatus, LightkeyTake, LightkeyTakeSummary,
 };
 use crate::lightkey_fixtures::{
     clear_address, fixture_replay_plan, FixtureCommand, FixtureRecorder, FixtureReplay,
@@ -163,10 +168,6 @@ impl LightkeyHttp for ReqwestLightkeyHttp {
         serde_json::from_slice(&bytes).map_err(|e| HttpFailure::Other(e.to_string()))
     }
 }
-
-/// Send one OSC message (address only: replay never sends an argument) through the saved output.
-pub type SendOsc =
-    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync>;
 
 /// Sends one OSC message with arguments through the saved Lighting output (fixture replay).
 pub type SendCommand = Arc<
@@ -368,9 +369,6 @@ struct Session {
     key: String,
     /// Wall-clock seconds when song time 0 happened.
     started_at: f64,
-    baseline: Vec<String>,
-    active: std::collections::BTreeSet<String>,
-    observed: Vec<Observation>,
     /// Furthest song position reached.
     last_position: f64,
     running: bool,
@@ -379,15 +377,12 @@ struct Session {
 }
 
 impl Session {
-    fn new(song: Song, started_at: f64, baseline: &std::collections::BTreeSet<String>) -> Self {
+    fn new(song: Song, started_at: f64) -> Self {
         let key = song_key(&song);
         Self {
             song,
             key,
             started_at,
-            baseline: baseline.iter().cloned().collect(),
-            active: baseline.clone(),
-            observed: Vec::new(),
             last_position: 0.0,
             running: true,
             fixtures: None,
@@ -419,10 +414,11 @@ struct State {
     takes: BTreeMap<String, LightkeyTake>,
     subscriptions: Vec<Subscription>,
     poll_task: Option<JoinHandle<()>>,
+    /// The running replay: sync, scheduled changes, then wait for the song's end.
     replay_task: Option<JoinHandle<()>>,
-    fixture_task: Option<JoinHandle<()>>,
     relay_task: Option<JoinHandle<()>>,
-    /// Fixtures the running fixture replay holds with overrides; cleared when it ends.
+    /// Fixtures replay holds with overrides. Kept across pause, stop and song end; emptied only
+    /// by a release. A set of names so per-fixture state (held / yielded) can grow from it.
     held_fixtures: std::collections::BTreeSet<String>,
     replay_generation: u64,
     stopped: bool,
@@ -437,14 +433,12 @@ struct State {
     session: Option<Session>,
     message: Option<Message>,
     replaying: Option<String>,
-    hold: OperatorHold,
     pending_song: Option<Song>,
 }
 
 struct Inner {
     bus: EventBus,
     settings: SettingsProvider,
-    send_osc: SendOsc,
     store: Arc<dyn TakeStore>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
@@ -457,7 +451,7 @@ struct Inner {
     wake: Notify,
 }
 
-/// Everything `LightkeyLink::new` needs besides the bus, the settings and the OSC sender.
+/// Everything `LightkeyLink::new` needs besides the bus and the settings.
 pub struct LinkOptions {
     pub store: Arc<dyn TakeStore>,
     pub http_factory: HttpFactory,
@@ -490,17 +484,11 @@ fn lock(m: &Mutex<State>) -> std::sync::MutexGuard<'_, State> {
 }
 
 impl LightkeyLink {
-    pub fn new(
-        bus: EventBus,
-        settings: SettingsProvider,
-        send_osc: SendOsc,
-        options: LinkOptions,
-    ) -> Self {
+    pub fn new(bus: EventBus, settings: SettingsProvider, options: LinkOptions) -> Self {
         Self {
             inner: Arc::new(Inner {
                 bus,
                 settings,
-                send_osc,
                 store: options.store,
                 http_factory: options.http_factory,
                 clock: options.clock,
@@ -513,7 +501,6 @@ impl LightkeyLink {
                     subscriptions: Vec::new(),
                     poll_task: None,
                     replay_task: None,
-                    fixture_task: None,
                     relay_task: None,
                     held_fixtures: Default::default(),
                     replay_generation: 0,
@@ -528,7 +515,6 @@ impl LightkeyLink {
                     session: None,
                     message: None,
                     replaying: None,
-                    hold: OperatorHold::new(),
                     pending_song: None,
                 }),
                 wake: Notify::new(),
@@ -558,12 +544,12 @@ impl LightkeyLink {
         self.inner.wake.notify_one();
     }
 
-    /// Stop a running replay if the saved settings no longer allow it (replay switched off, or
-    /// Lighting turned off). Gives the fixtures back to the cues.
+    /// Stop a running replay and give the fixtures back if the saved settings no longer allow
+    /// it (replay switched off, or Lighting turned off).
     pub async fn refresh_replay(&self) {
         let armed = self.inner.st().armed;
         if self.inner.replay_blocked_reason(armed).is_some() {
-            self.inner.cancel_replay().await;
+            self.inner.release_replay().await;
         }
     }
 
@@ -727,7 +713,7 @@ impl Inner {
     async fn stop(self: Arc<Self>) {
         self.st().stopped = true;
         self.wake.notify_one();
-        self.cancel_replay().await;
+        self.release_replay().await;
         let task = self.st().poll_task.take();
         if let Some(task) = task {
             task.abort();
@@ -778,7 +764,7 @@ impl Inner {
             }
             self.st().armed = true;
             self.persist_armed(true).await;
-            self.cancel_replay().await;
+            self.release_replay().await;
             return self.say("Recording starts with the next song.");
         }
         let session = {
@@ -1028,14 +1014,9 @@ impl Inner {
                     Some(_) => Err(HttpFailure::Other(format!("{key} is not a list"))),
                 }
             };
-            let when = match event.get("effective_ms") {
-                Some(v) => py_float(v)?,
-                None => match state.get("server_time") {
-                    Some(v) => py_float(v)?,
-                    None => 0.0,
-                },
-            };
-            self.apply_change(names("added")?, names("removed")?, when / 1000.0);
+            // The cue feed is status only: check its shape, store nothing from it.
+            names("added")?;
+            names("removed")?;
         }
         self.st().active = Some(active_now);
         self.set_link(Link::Connected, None);
@@ -1066,28 +1047,6 @@ impl Inner {
         Ok(())
     }
 
-    fn apply_change(&self, added: Vec<String>, removed: Vec<String>, lightkey_time: f64) {
-        let now = self.clock.mono();
-        let mut st = self.st();
-        let local_time = lightkey_time - st.offset;
-        for cue in added.iter().chain(removed.iter()) {
-            if st.hold.note_change(cue, now) {
-                tracing::info!(cue = %cue, "lightkey_operator_change");
-            }
-        }
-        let stopped = st.stopped;
-        if let Some(session) = st.session.as_mut() {
-            if session.running && !stopped {
-                let position = local_time - session.started_at;
-                for cue in &removed {
-                    session.active.remove(cue);
-                }
-                session.active.extend(added.iter().cloned());
-                session.observed.push((position, added, removed));
-            }
-        }
-    }
-
     // ------------------------------------------------------------ timer events
     async fn on_song(self: &Arc<Self>, event: &StagePilotEvent) {
         if let EventPayload::Song { song, .. } = &event.payload {
@@ -1114,7 +1073,11 @@ impl Inner {
         let Some(song) = song else {
             return;
         };
-        self.cancel_replay().await;
+        self.cancel_sends().await;
+        // A new song: fixtures the old look held that this song does not use go back to Lightkey.
+        // Fixtures it does use are taken over by its sync below.
+        let used = self.fixtures_used_by(&song);
+        self.release_fixtures_except(&used).await;
         let previous = self.st().session.take();
         if let Some(previous) = previous {
             self.finish(previous, "A new song started.").await;
@@ -1124,16 +1087,15 @@ impl Inner {
         if armed {
             let recording = {
                 let mut st = self.st();
-                match (&st.active, st.link) {
-                    (Some(active), Link::Connected) => {
-                        let mut session = Session::new(song.clone(), started_at, active);
-                        if self.relay.is_live() {
-                            session.fixtures = Some(FixtureRecorder::new(&self.relay.state()));
-                        }
-                        st.session = Some(session);
-                        true
+                if st.link == Link::Connected {
+                    let mut session = Session::new(song.clone(), started_at);
+                    if self.relay.is_live() {
+                        session.fixtures = Some(FixtureRecorder::new(&self.relay.state()));
                     }
-                    _ => false,
+                    st.session = Some(session);
+                    true
+                } else {
+                    false
                 }
             };
             if !recording {
@@ -1180,20 +1142,8 @@ impl Inner {
                         .map_or_else(|| self.clock.wall(), datetime_seconds)
                         - position;
                     session.running = true;
-                    if let Some(session) = st.session.as_mut() {
-                        if let Some(recorder) = session.fixtures.as_mut() {
-                            recorder.observe(position, &self.relay.state().commands());
-                        }
-                    }
-                    if let Some(active) = st.active.clone() {
-                        let session = st.session.as_mut();
-                        if let Some(session) = session {
-                            let (added, removed) = diff(session.active.iter(), active.iter());
-                            if !added.is_empty() || !removed.is_empty() {
-                                session.observed.push((position, added, removed));
-                                session.active = active;
-                            }
-                        }
+                    if let Some(recorder) = session.fixtures.as_mut() {
+                        recorder.observe(position, &self.relay.state().commands());
                     }
                     Some(true)
                 } else {
@@ -1212,7 +1162,8 @@ impl Inner {
             }
             None => {}
         }
-        self.cancel_replay().await;
+        // Resume or seek: drop the pending changes (the look stays held) and re-sync from here.
+        self.cancel_sends().await;
         if !payload.running {
             return;
         }
@@ -1222,8 +1173,10 @@ impl Inner {
         self.start_replay(&song, payload, position).await;
     }
 
+    /// Pause, stop, song end and a failed timer all freeze the look: only the changes still
+    /// scheduled are cancelled, nothing is cleared.
     async fn on_stopped(self: &Arc<Self>, event: &StagePilotEvent) {
-        self.cancel_replay().await;
+        self.cancel_sends().await;
         enum Next {
             Finish(Box<Session>),
             Paused(String),
@@ -1269,8 +1222,9 @@ impl Inner {
         }
     }
 
+    /// Reset behaves like stop: the look is held.
     async fn on_reset(self: &Arc<Self>, _event: &StagePilotEvent) {
-        self.cancel_replay().await;
+        self.cancel_sends().await;
         let had = self.st().session.take().is_some();
         if had {
             self.say("Recording discarded: the countdown was reset.");
@@ -1295,20 +1249,12 @@ impl Inner {
                 session.song.title
             ));
         }
-        let built = build_take_edges(session.baseline.iter(), &session.observed, duration)
-            .and_then(|(initial, edges)| {
-                let count = edges.len();
-                LightkeyTake::new(
-                    session.key.clone(),
-                    session.song.title.clone(),
-                    utc_from_wall(self.clock.wall()),
-                    duration,
-                    initial,
-                    edges,
-                )
-                .map(|take| (take, count))
-            });
-        let Ok((mut take, count)) = built else {
+        let Ok(mut take) = LightkeyTake::new(
+            session.key.clone(),
+            session.song.title.clone(),
+            utc_from_wall(self.clock.wall()),
+            duration,
+        ) else {
             tracing::error!(song = %session.key, "lightkey_take_invalid");
             return self.say("Could not save the capture to disk.");
         };
@@ -1325,6 +1271,13 @@ impl Inner {
                 }
             }
         }
+        if take.fixtures.is_none() {
+            // A take without a fixture track replays nothing: never let it replace a good one.
+            return self.say(format!(
+                "Not saved: no fixture changes were recorded for \"{}\".",
+                session.song.title
+            ));
+        }
         let mut takes = self.st().takes.clone();
         takes.insert(session.key.clone(), take);
         let (store, to_save) = (self.store.clone(), takes.clone());
@@ -1334,27 +1287,39 @@ impl Inner {
             return self.say("Could not save the capture to disk.");
         }
         self.st().takes = takes;
-        let fixtures_text = if fixture_changes > 0 {
-            format!(" and {fixture_changes} fixture changes")
-        } else {
-            String::new()
-        };
         self.say(format!(
-            "Saved \"{}\": {count} changes{fixtures_text}. {reason}",
+            "Saved \"{}\": {fixture_changes} fixture changes. {reason}",
             session.song.title
         ))
     }
 
     // ------------------------------------------------------------ replay
+    /// Fixtures the take for `song` would drive, when replay is allowed to run for it now.
+    fn fixtures_used_by(&self, song: &Song) -> std::collections::BTreeSet<String> {
+        let st = self.st();
+        if self.replay_blocked_reason(st.armed).is_some() || self.send_command.is_none() {
+            return Default::default();
+        }
+        st.takes
+            .get(&song_key(song))
+            .and_then(|take| take.fixtures.as_ref())
+            .map(|track| track.fixtures().into_iter().collect())
+            .unwrap_or_default()
+    }
+
     async fn start_replay(self: &Arc<Self>, song: &Song, payload: &TimerPayload, position: f64) {
         let armed = self.st().armed;
-        if self.replay_blocked_reason(armed).is_some() {
+        if self.replay_blocked_reason(armed).is_some() || self.send_command.is_none() {
             return;
         }
         let Some(take) = self.st().takes.get(&song_key(song)).cloned() else {
             return;
         };
-        let (sync_now, later) = replay_plan(&take, position);
+        // A take with no fixture track replays nothing.
+        let Some(track) = take.fixtures.as_ref() else {
+            return;
+        };
+        let plan = fixture_replay_plan(track, position);
         let wall = self.clock.wall();
         let wall_started = payload.started_at.map_or(wall, datetime_seconds);
         let elapsed = (wall - wall_started).max(0.0);
@@ -1363,31 +1328,21 @@ impl Inner {
         st.replay_generation += 1;
         let generation = st.replay_generation;
         st.replaying = Some(song.title.clone());
+        st.held_fixtures.extend(plan.fixtures.iter().cloned());
         let task = tokio::spawn(self.clone().run_replay(
             generation,
-            sync_now,
-            later,
+            plan,
+            track.lead_seconds,
             clock_zero,
             take.duration_seconds,
         ));
         st.replay_task = Some(task);
-        if let (Some(track), Some(_)) = (take.fixtures.as_ref(), self.send_command.as_ref()) {
-            let plan = fixture_replay_plan(track, position);
-            st.held_fixtures.extend(plan.fixtures.iter().cloned());
-            let task = tokio::spawn(self.clone().run_fixture_replay(
-                generation,
-                plan,
-                track.lead_seconds,
-                clock_zero,
-                take.duration_seconds,
-            ));
-            st.fixture_task = Some(task);
-        }
     }
 
     /// Send the fixture track: the state at the position at once, then each change `lead`
-    /// seconds before its time. Every fixture it touched is given back to the cues at the end.
-    async fn run_fixture_replay(
+    /// seconds before its time, then stay "replaying" until the song's end. The fixtures are
+    /// NOT released at the end: the last look is held.
+    async fn run_replay(
         self: Arc<Self>,
         generation: u64,
         plan: FixtureReplay,
@@ -1417,8 +1372,9 @@ impl Inner {
             tracing::error!(error = %error, "lightkey_fixture_replay_failed");
             self.say("A fixture command could not be sent.");
         }
-        if self.st().replay_generation == generation {
-            self.release_fixtures().await;
+        let mut st = self.st();
+        if st.replay_generation == generation {
+            st.replaying = None;
         }
     }
 
@@ -1448,12 +1404,17 @@ impl Inner {
         }
     }
 
-    /// Give every fixture replay held back to the cues. One clear per fixture, repeated once:
-    /// a single wildcard clear was seen to leave fixtures held on a real rig.
-    async fn release_fixtures(&self) {
-        let held: Vec<String> = std::mem::take(&mut self.st().held_fixtures)
-            .into_iter()
-            .collect();
+    /// Give back to Lightkey every held fixture that is not in `keep`. One clear per fixture,
+    /// repeated once: a single wildcard clear was seen to leave fixtures held on a real rig.
+    async fn release_fixtures_except(&self, keep: &std::collections::BTreeSet<String>) {
+        let held: Vec<String> = {
+            let mut st = self.st();
+            let release: Vec<String> = st.held_fixtures.difference(keep).cloned().collect();
+            for name in &release {
+                st.held_fixtures.remove(name);
+            }
+            release
+        };
         let Some(send) = self.send_command.clone() else {
             return;
         };
@@ -1470,57 +1431,9 @@ impl Inner {
         }
     }
 
-    async fn run_replay(
-        self: Arc<Self>,
-        generation: u64,
-        sync_now: Vec<ReplayCommand>,
-        later: Vec<ReplayCommand>,
-        clock_zero: f64,
-        song_seconds: f64,
-    ) {
-        let outcome: Result<(), String> = async {
-            for command in &sync_now {
-                self.send(command).await?;
-            }
-            for command in &later {
-                let delay =
-                    clock_zero + command.at_seconds - REPLAY_LEAD_SECONDS - self.clock.mono();
-                if delay > 0.0 {
-                    tokio::time::sleep(Duration::from_secs_f64(delay)).await;
-                }
-                self.send(command).await?;
-            }
-            // Stay "replaying" until the song's end (or a stop), so the strip does not go quiet
-            // while the song is still playing.
-            let rest = (clock_zero + song_seconds - self.clock.mono()).max(0.0);
-            tokio::time::sleep(Duration::from_secs_f64(rest)).await;
-            Ok(())
-        }
-        .await;
-        if let Err(error) = outcome {
-            tracing::error!(error = %error, "lightkey_replay_failed");
-            self.say("A replay command could not be sent.");
-        }
-        let mut st = self.st();
-        if st.replay_generation == generation {
-            st.replaying = None;
-        }
-    }
-
-    async fn send(&self, command: &ReplayCommand) -> Result<(), String> {
-        let now = self.clock.mono();
-        {
-            let mut st = self.st();
-            if st.hold.is_held(&command.cue, now) {
-                return Ok(()); // the operator touched this cue a moment ago: leave it with them
-            }
-            st.hold.note_sent(&command.cue, now);
-        }
-        self.pace().await;
-        (self.send_osc)(osc_address(&command.cue, command.verb)).await
-    }
-
-    async fn cancel_replay(&self) {
+    /// Cancel the replay task: the changes still scheduled are never sent. Nothing is cleared;
+    /// the held fixtures keep their last look.
+    async fn cancel_sends(&self) {
         let task = {
             let mut st = self.st();
             st.replay_generation += 1;
@@ -1531,12 +1444,13 @@ impl Inner {
             task.abort();
             let _ = task.await;
         }
-        let fixture_task = self.st().fixture_task.take();
-        if let Some(task) = fixture_task {
-            task.abort();
-            let _ = task.await;
-        }
-        self.release_fixtures().await;
+    }
+
+    /// Stop replay and give every held fixture back to Lightkey (replay switched off, Lighting
+    /// disabled, recording armed, shutdown).
+    async fn release_replay(&self) {
+        self.cancel_sends().await;
+        self.release_fixtures_except(&Default::default()).await;
     }
 }
 

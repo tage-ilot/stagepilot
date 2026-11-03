@@ -343,7 +343,6 @@ impl Rig {
         let link = LightkeyLink::new(
             bus.clone(),
             provider,
-            Arc::new(|_address: String| Box::pin(async { Ok(()) })),
             LinkOptions {
                 store: store.clone() as Arc<dyn TakeStore>,
                 send_command: Some(send_command),
@@ -417,6 +416,50 @@ impl Rig {
             .await;
     }
 
+    /// What the timer sends on Pause: a stop request, then the stop, both with the position.
+    async fn song_pause(&self, song: &Song, position: f64) {
+        for kind in [EventType::TimerStopRequested, EventType::TimerStopped] {
+            self.bus
+                .publish(new_event(
+                    kind,
+                    "t",
+                    EventPayload::Timer(TimerPayload {
+                        duration_seconds: 0,
+                        song: Some(song.clone()),
+                        position_seconds: Some(position),
+                        remaining_seconds: Some(0),
+                        ..TimerPayload::default()
+                    }),
+                ))
+                .await;
+        }
+    }
+
+    async fn song_resume(&self, song: &Song, position: f64, duration: u32) {
+        self.bus
+            .publish(new_event(
+                EventType::TimerResumed,
+                "t",
+                EventPayload::Timer(TimerPayload {
+                    duration_seconds: duration,
+                    song: Some(song.clone()),
+                    position_seconds: Some(position),
+                    remaining_seconds: Some(duration),
+                    running: true,
+                    started_at: Some(Utc::now()),
+                    ..TimerPayload::default()
+                }),
+            ))
+            .await;
+    }
+
+    fn clears(&self) -> Vec<String> {
+        self.addresses()
+            .into_iter()
+            .filter(|a| a.ends_with("/overrides/clear"))
+            .collect()
+    }
+
     fn addresses(&self) -> Vec<String> {
         self.sent
             .lock()
@@ -486,7 +529,6 @@ async fn a_relay_that_never_answers_leaves_the_strip_as_before() {
         LightkeyLink::new(
             rig.bus.clone(),
             provider,
-            Arc::new(|_a: String| Box::pin(async { Ok(()) })),
             LinkOptions {
                 relay_port: port,
                 ..LinkOptions::default()
@@ -573,15 +615,8 @@ async fn a_lost_packet_is_repaired_by_asking_for_a_keyframe() {
 fn stored_take() -> stagepilot_lights::lightkey::LightkeyTake {
     use stagepilot_lights::lightkey::LightkeyTake;
     use stagepilot_lights::lightkey_fixtures::{FixtureEvent, FixtureTrack};
-    let mut take = LightkeyTake::new(
-        "song-1".into(),
-        "Holy Forever".into(),
-        Utc::now(),
-        2.0,
-        vec![],
-        vec![],
-    )
-    .unwrap();
+    let mut take =
+        LightkeyTake::new("song-1".into(), "Holy Forever".into(), Utc::now(), 2.0).unwrap();
     take.fixtures = Some(FixtureTrack {
         initial: vec![dim("P1", 0.0), color("P1", 0.0, 0.0, 0.0)],
         events: vec![
@@ -600,7 +635,7 @@ fn stored_take() -> stagepilot_lights::lightkey::LightkeyTake {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn replay_sends_the_start_state_then_each_change_early_then_clears_every_fixture() {
+async fn replay_sends_the_start_state_then_each_change_early_then_holds_the_last_look() {
     let rig = Rig::new(vec![]).await;
     rig.store.set(
         [("song-1".to_string(), stored_take())]
@@ -638,31 +673,14 @@ async fn replay_sends_the_start_state_then_each_change_early_then_clears_every_f
         dimmer_at - started
     );
     assert!(at("/fixture/MH1/overrides/dimmer") - started > 0.7);
-    // song ends: both fixtures are given back, twice over
-    wait_for(
-        || {
-            rig.addresses()
-                .iter()
-                .filter(|a| a.ends_with("/overrides/clear"))
-                .count()
-                >= 4
-        },
-        4.0,
-    )
-    .await;
-    let clears: Vec<String> = rig
-        .addresses()
-        .into_iter()
-        .filter(|a| a.ends_with("/overrides/clear"))
-        .collect();
-    assert!(clears.contains(&"/fixture/P1/overrides/clear".to_string()));
-    assert!(clears.contains(&"/fixture/MH1/overrides/clear".to_string()));
-    assert!(!clears.iter().any(|a| a.contains('*')));
+    // song ends: the last look is held, nothing is given back
+    pause(2.2).await;
+    assert!(rig.clears().is_empty(), "{:?}", rig.addresses());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn stopping_the_song_gives_the_fixtures_back_at_once() {
+async fn stopping_the_song_holds_the_fixtures_and_cancels_pending_changes() {
     let rig = Rig::new(vec![]).await;
     rig.store.set(
         [("song-1".to_string(), stored_take())]
@@ -673,22 +691,11 @@ async fn stopping_the_song_gives_the_fixtures_back_at_once() {
     rig.song_start(&song(10)).await;
     wait_for(|| rig.addresses().len() >= 2, 3.0).await;
     rig.song_stop(&song(10), 0.5).await;
-    wait_for(
-        || {
-            rig.addresses()
-                .iter()
-                .any(|a| a == "/fixture/P1/overrides/clear")
-        },
-        2.0,
-    )
-    .await;
     let before = rig.sent.lock().unwrap().len();
     pause(1.2).await; // the 0.8 s change must not fire after the stop
     let after: Vec<String> = rig.addresses()[before..].to_vec();
-    assert!(
-        !after.iter().any(|a| a.ends_with("/MH1/overrides/dimmer")),
-        "{after:?}"
-    );
+    assert!(after.is_empty(), "{after:?}");
+    assert!(rig.clears().is_empty());
     rig.link.stop().await;
 }
 
@@ -739,7 +746,7 @@ async fn switching_replay_off_during_a_song_releases_the_fixtures() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn an_old_take_without_fixtures_still_loads_and_replays_cues_only() {
+async fn an_old_take_without_fixtures_still_loads_and_replays_nothing() {
     let text = r#"{"takes":[{"song_key":"song-1","song_title":"Holy Forever","recorded_at":"2026-10-20T20:00:00Z","duration_seconds":10.0,"initial":["Warm"],"edges":[{"at_seconds":0.5,"added":["Stars"],"removed":[]}]}]}"#;
     let file: serde_json::Value = serde_json::from_str(text).unwrap();
     let take: stagepilot_lights::lightkey::LightkeyTake =
@@ -756,15 +763,8 @@ async fn an_old_take_without_fixtures_still_loads_and_replays_cues_only() {
 fn big_take(count: usize) -> stagepilot_lights::lightkey::LightkeyTake {
     use stagepilot_lights::lightkey::LightkeyTake;
     use stagepilot_lights::lightkey_fixtures::FixtureTrack;
-    let mut take = LightkeyTake::new(
-        "song-1".into(),
-        "Holy Forever".into(),
-        Utc::now(),
-        10.0,
-        vec![],
-        vec![],
-    )
-    .unwrap();
+    let mut take =
+        LightkeyTake::new("song-1".into(), "Holy Forever".into(), Utc::now(), 10.0).unwrap();
     take.fixtures = Some(FixtureTrack {
         initial: (0..count).map(|n| dim(&format!("F{n:02}"), 0.5)).collect(),
         events: vec![],
@@ -809,5 +809,369 @@ async fn stopping_mid_burst_cancels_the_rest_of_the_burst() {
         .filter(|a| a.ends_with("/overrides/dimmer"))
         .count();
     assert!(sets < 60, "{sets} of 60 commands were sent after the stop");
+    rig.link.stop().await;
+}
+
+// ------------------------------------------------- DMX-only replay: hold, release, no cues
+
+fn take_for(
+    key: &str,
+    title: &str,
+    duration: f64,
+    track: stagepilot_lights::lightkey_fixtures::FixtureTrack,
+) -> stagepilot_lights::lightkey::LightkeyTake {
+    let mut take = stored_take();
+    take.song_key = key.into();
+    take.song_title = title.into();
+    take.duration_seconds = duration;
+    take.fixtures = Some(track);
+    take
+}
+
+fn song_b() -> Song {
+    let mut s = song(10);
+    s.id = "item-2".into();
+    s.title = "Other Song".into();
+    s.source_song_id = Some("song-2".into());
+    s
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pause_holds_the_last_look_and_stops_the_pending_changes() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    rig.song_pause(&song(10), 0.2).await;
+    pause(1.4).await; // the 0.4 s and 0.8 s changes must not fire while paused
+    let sent = rig.addresses();
+    assert!(
+        rig.clears().is_empty(),
+        "pause cleared the overrides: {sent:?}"
+    );
+    assert!(
+        !sent.iter().any(|a| a.ends_with("/MH1/overrides/dimmer")),
+        "{sent:?}"
+    );
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn resume_in_place_re_syncs_to_the_position_then_carries_on() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    rig.song_pause(&song(10), 0.5).await;
+    let before = rig.sent.lock().unwrap().len();
+    rig.song_resume(&song(10), 0.5, 10).await;
+    // state at 0.5 s: P1 dimmer 1.0 (0.4 s change applied), colour 0,0,0; then MH1 at 0.8 s
+    wait_for(
+        || {
+            rig.addresses()
+                .iter()
+                .skip(before)
+                .any(|a| a.ends_with("/MH1/overrides/dimmer"))
+        },
+        3.0,
+    )
+    .await;
+    let after = rig.sent.lock().unwrap()[before..].to_vec();
+    assert_eq!(after[0].1, "/fixture/P1/overrides/dimmer");
+    assert_eq!(after[0].2, vec![OscArgument::Float(1.0)]);
+    assert!(rig.clears().is_empty(), "{:?}", rig.addresses());
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn seeking_re_syncs_from_the_new_position_without_clearing() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    let before = rig.sent.lock().unwrap().len();
+    rig.song_resume(&song(10), 5.0, 10).await; // resume elsewhere, past every change
+    wait_for(|| rig.sent.lock().unwrap().len() >= before + 3, 3.0).await;
+    let after = rig.sent.lock().unwrap()[before..].to_vec();
+    assert!(after
+        .iter()
+        .any(|s| s.1 == "/fixture/MH1/overrides/dimmer" && s.2 == vec![OscArgument::Float(0.7)]));
+    assert!(rig.clears().is_empty());
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_and_song_end_hold_the_last_look() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(2)).await;
+    wait_for(
+        || {
+            rig.addresses()
+                .iter()
+                .any(|a| a.ends_with("/MH1/overrides/dimmer"))
+        },
+        3.0,
+    )
+    .await;
+    pause(2.3).await; // past the song's end
+    assert!(
+        rig.clears().is_empty(),
+        "song end cleared: {:?}",
+        rig.addresses()
+    );
+    assert!(rig.link.status().replaying_song.is_none());
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.sent.lock().unwrap().len() > 6, 3.0).await;
+    rig.song_stop(&song(10), 0.5).await;
+    pause(0.5).await;
+    assert!(
+        rig.clears().is_empty(),
+        "stop cleared: {:?}",
+        rig.addresses()
+    );
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn reset_behaves_like_stop_and_holds() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    rig.bus
+        .publish(new_event(
+            EventType::TimerResetRequested,
+            "t",
+            EventPayload::Timer(TimerPayload {
+                song: Some(song(10)),
+                ..TimerPayload::default()
+            }),
+        ))
+        .await;
+    pause(0.5).await;
+    assert!(rig.clears().is_empty(), "{:?}", rig.addresses());
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_song_releases_only_the_fixtures_it_does_not_use() {
+    use stagepilot_lights::lightkey_fixtures::FixtureTrack;
+    let rig = Rig::new(vec![]).await;
+    let b = take_for(
+        "song-2",
+        "Other Song",
+        10.0,
+        FixtureTrack {
+            initial: vec![dim("P1", 0.3)],
+            events: vec![],
+            lead_seconds: 0.045,
+        },
+    );
+    rig.store.set(
+        [
+            ("song-1".to_string(), stored_take()),
+            ("song-2".to_string(), b),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(
+        || {
+            rig.addresses()
+                .iter()
+                .any(|a| a.ends_with("/P1/overrides/color"))
+        },
+        3.0,
+    )
+    .await;
+    rig.song_stop(&song(10), 0.9).await;
+    pause(1.0).await; // MH1 was touched at 0.8 s
+    assert!(rig.clears().is_empty());
+    rig.song_start(&song_b()).await;
+    wait_for(|| rig.clears().len() >= 2, 3.0).await;
+    pause(0.4).await;
+    let clears = rig.clears();
+    assert!(
+        clears.iter().all(|a| a == "/fixture/MH1/overrides/clear"),
+        "{clears:?}"
+    );
+    assert_eq!(clears.len(), 2, "double clear per released fixture");
+    assert!(rig
+        .addresses()
+        .iter()
+        .any(|a| a == "/fixture/P1/overrides/dimmer"));
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_song_with_no_take_releases_everything_held() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(
+        || {
+            rig.addresses()
+                .iter()
+                .any(|a| a.ends_with("/P1/overrides/color"))
+        },
+        3.0,
+    )
+    .await;
+    rig.song_stop(&song(10), 0.1).await;
+    rig.song_start(&song_b()).await;
+    wait_for(|| rig.clears().len() >= 2, 3.0).await;
+    pause(0.4).await;
+    assert!(rig
+        .clears()
+        .contains(&"/fixture/P1/overrides/clear".to_string()));
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replay_off_and_shutdown_release_what_a_pause_was_holding() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    rig.song_pause(&song(10), 0.2).await;
+    pause(0.3).await;
+    assert!(rig.clears().is_empty());
+    rig.settings.lock().unwrap().3.replay = false;
+    rig.link.refresh_replay().await;
+    wait_for(|| rig.clears().len() >= 2, 3.0).await;
+    assert!(rig
+        .clears()
+        .contains(&"/fixture/P1/overrides/clear".to_string()));
+    // shutdown, from a held state
+    rig.settings.lock().unwrap().3.replay = true;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.sent.lock().unwrap().len() > 6, 3.0).await;
+    rig.song_stop(&song(10), 0.2).await;
+    let before = rig.clears().len();
+    rig.link.stop().await;
+    assert!(
+        rig.clears().len() >= before + 2,
+        "shutdown must release: {:?}",
+        rig.addresses()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lighting_off_releases_held_fixtures() {
+    let rig = Rig::new(vec![]).await;
+    rig.store.set(
+        [("song-1".to_string(), stored_take())]
+            .into_iter()
+            .collect(),
+    );
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| rig.addresses().len() >= 2, 3.0).await;
+    rig.song_pause(&song(10), 0.2).await;
+    rig.settings.lock().unwrap().0 = false;
+    rig.link.refresh_replay().await;
+    wait_for(|| rig.clears().len() >= 2, 3.0).await;
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cue_commands_are_never_sent_and_a_legacy_take_replays_only_its_fixtures() {
+    let rig = Rig::new(vec![]).await;
+    let legacy = r#"{"takes":[{"song_key":"song-1","song_title":"Holy Forever","recorded_at":"2026-10-20T20:00:00Z","duration_seconds":10.0,"initial":["worship","HAZE SEQ"],"edges":[{"at_seconds":0.5,"added":["Stars"],"removed":[]}],"fixtures":{"initial":[{"a":"/fixture/P1/overrides/dimmer","v":[0.5]}],"events":[],"lead_seconds":0.045}}]}"#;
+    let file: serde_json::Value = serde_json::from_str(legacy).unwrap();
+    let take: stagepilot_lights::lightkey::LightkeyTake =
+        serde_json::from_value(file["takes"][0].clone()).unwrap();
+    rig.store
+        .set([("song-1".to_string(), take)].into_iter().collect());
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    wait_for(|| !rig.addresses().is_empty(), 3.0).await;
+    pause(0.6).await;
+    assert!(
+        rig.addresses().iter().all(|a| a.starts_with("/fixture/")),
+        "{:?}",
+        rig.addresses()
+    );
+    assert_eq!(
+        rig.addresses(),
+        vec!["/fixture/P1/overrides/dimmer".to_string()]
+    );
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_take_without_a_fixture_track_replays_nothing() {
+    let rig = Rig::new(vec![]).await;
+    let mut take = stored_take();
+    take.fixtures = None;
+    rig.store
+        .set([("song-1".to_string(), take)].into_iter().collect());
+    rig.connect().await;
+    rig.song_start(&song(10)).await;
+    pause(0.6).await;
+    assert!(rig.sent.lock().unwrap().is_empty());
+    assert!(rig.link.status().replaying_song.is_none());
+    let summary = &rig.link.status().takes[0];
+    assert_eq!(summary.fixture_count, None);
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recording_stores_fixture_data_only() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.4).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(1.8).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| rig.link.has_take("song-1"), 3.0).await;
+    let take = rig.store.takes().remove("song-1").unwrap();
+    let json = serde_json::to_string(&take).unwrap();
+    assert!(!json.contains("Warm"), "cue names were stored: {json}");
+    assert!(
+        !json.contains("\"edges\"") && !json.contains("\"initial\":[\""),
+        "{json}"
+    );
+    assert!(take.fixtures.is_some());
     rig.link.stop().await;
 }

@@ -608,12 +608,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -759,12 +759,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -805,12 +805,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -845,12 +845,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -1042,12 +1042,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -1091,12 +1091,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -1172,12 +1172,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -1214,12 +1214,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -1336,12 +1336,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -1652,12 +1652,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -1696,12 +1696,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -2021,12 +2021,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -2061,12 +2061,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -2098,12 +2098,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -2138,12 +2138,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },
@@ -2792,12 +2792,12 @@
      "replaying_song": "Battle Belongs",
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -3180,12 +3180,12 @@
      "replaying_song": null,
      "takes": [
       {
-       "cue_count": 3,
        "duration_seconds": 281.0,
-       "edge_count": 2,
        "recorded_at": "<str>",
        "song_key": "demo-battle-belongs",
-       "song_title": "Battle Belongs"
+       "song_title": "Battle Belongs",
+       "fixture_count": 1,
+       "fixture_event_count": 2
       }
      ]
     },
@@ -3217,12 +3217,12 @@
       "replaying_song": null,
       "takes": [
        {
-        "cue_count": 3,
         "duration_seconds": 281.0,
-        "edge_count": 2,
         "recorded_at": "<str>",
         "song_key": "demo-battle-belongs",
-        "song_title": "Battle Belongs"
+        "song_title": "Battle Belongs",
+        "fixture_count": 1,
+        "fixture_event_count": 2
        }
       ]
      },

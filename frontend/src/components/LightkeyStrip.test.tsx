@@ -28,17 +28,17 @@ const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
   takes: [],
   ...over,
 });
-const take = { song_key: "s1", song_title: "Holy Forever", recorded_at: "2026-10-20T00:00:00Z", duration_seconds: 300, edge_count: 14, cue_count: 5 };
+const take = { song_key: "s1", song_title: "Holy Forever", recorded_at: "2026-10-20T00:00:00Z", duration_seconds: 300, fixture_count: 4, fixture_event_count: 14 };
 const respond = (lightkey: LightkeyStatus, accepted = true, message = "ok") => ({ accepted, message, lightkey });
 
 beforeEach(() => { vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("LightkeyStrip", () => {
-  it("shows the link word and how many cues are on", async () => {
+  it("shows the link word", async () => {
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByText("Connected")).toBeInTheDocument();
-    expect(screen.getByText(/11 cues on/)).toBeInTheDocument();
+    expect(screen.queryByText(/cues on/)).not.toBeInTheDocument();
   });
 
   it("says why it is not connected, in words", async () => {
@@ -93,20 +93,21 @@ describe("LightkeyStrip", () => {
     vi.mocked(api.clearLightkeyTake).mockResolvedValue(respond(status()));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByText(/Holy Forever/)).toBeInTheDocument();
-    expect(screen.getByText(/14 changes/)).toBeInTheDocument();
+    expect(screen.getByText(/14 colour\/level changes/)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Clear capture for Holy Forever" }));
     await waitFor(() => expect(api.clearLightkeyTake).toHaveBeenCalledWith("s1"));
     await waitFor(() => expect(screen.queryByText(/Holy Forever/)).not.toBeInTheDocument());
   });
 
-  it("shows the fixture stream and what each song captured besides cues", async () => {
+  it("shows the fixture stream and what each song captured", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
       fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
-      takes: [{ ...take, fixture_count: 12, fixture_event_count: 131 }],
+      takes: [{ ...take, fixture_count: 12, fixture_event_count: 131 }, { ...take, song_key: "s2", song_title: "Old Cue Take", fixture_count: undefined, fixture_event_count: undefined }],
     }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
     expect(screen.getByText(/131 colour\/level changes/)).toBeInTheDocument();
+    expect(screen.getByText(/no fixture capture/)).toBeInTheDocument();
   });
 
   it("says connecting while the first fixture data is awaited", async () => {
@@ -190,8 +191,8 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   });
 
   it("a message that differs from the headline is kept next to it", () => {
-    expect(lightkeyLines(status({ takes: [take], message: "Saved \"Holy Forever\": 14 changes. Song finished." }), null)).toEqual([
-      'Saved "Holy Forever": 14 changes. Song finished.',
+    expect(lightkeyLines(status({ takes: [take], message: "Saved \"Holy Forever\": 14 fixture changes. Song finished." }), null)).toEqual([
+      'Saved "Holy Forever": 14 fixture changes. Song finished.',
       "1 song captured.",
     ]);
   });

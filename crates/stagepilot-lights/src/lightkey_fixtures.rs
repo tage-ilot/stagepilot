@@ -160,28 +160,45 @@ fn round_ms(seconds: f64) -> f64 {
 }
 
 impl FixtureTrack {
-    /// Check every command, round times to 1 ms and sort the events by time (stable).
+    /// Make the track valid without ever refusing it for one bad part: commands that are not
+    /// fixture overrides are dropped, an event over `MAX_COMMANDS_PER_EVENT` is split into
+    /// several events at the same time, events with a bad time or nothing left are dropped,
+    /// times are rounded to 1 ms and the events sorted (stable). Every repair is logged. Only a
+    /// bad `lead_seconds` is an error (it is one number for the whole track).
     pub fn normalise_and_validate(&mut self) -> Result<(), TrackError> {
-        let err = |m: &str| Err(TrackError(m.to_string()));
-        if self.events.len() > MAX_FIXTURE_EVENTS {
-            return err("A take can hold at most 100000 fixture changes.");
-        }
         if !(self.lead_seconds.is_finite() && (0.0..=1.0).contains(&self.lead_seconds)) {
-            return err("lead_seconds must be between 0 and 1.");
+            return Err(TrackError("lead_seconds must be between 0 and 1.".into()));
         }
-        check_commands(&self.initial)?;
-        for event in &mut self.events {
+        let mut repaired = 0usize;
+        let initial = std::mem::take(&mut self.initial);
+        let before = initial.len();
+        self.initial = valid_commands(initial);
+        repaired += before - self.initial.len();
+        if self.initial.len() > MAX_COMMANDS_PER_EVENT {
+            repaired += self.initial.len() - MAX_COMMANDS_PER_EVENT;
+            self.initial.truncate(MAX_COMMANDS_PER_EVENT);
+        }
+        let mut events = Vec::with_capacity(self.events.len());
+        for mut event in std::mem::take(&mut self.events) {
             event.at_seconds = round_ms(event.at_seconds);
             if !(event.at_seconds.is_finite() && (0.0..=MAX_SECONDS).contains(&event.at_seconds)) {
-                return err("A fixture change time must be between 0 and 86399 seconds.");
+                repaired += 1;
+                continue;
             }
-            if event.osc.is_empty() {
-                return err("A fixture change must hold at least one command.");
-            }
-            check_commands(&event.osc)?;
+            let before = event.osc.len();
+            let osc = valid_commands(event.osc);
+            repaired += before - osc.len();
+            events.extend(split_event(event.at_seconds, osc));
         }
-        self.events
-            .sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
+        events.sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
+        if events.len() > MAX_FIXTURE_EVENTS {
+            repaired += events.len() - MAX_FIXTURE_EVENTS;
+            events.truncate(MAX_FIXTURE_EVENTS);
+        }
+        self.events = events;
+        if repaired > 0 {
+            tracing::warn!(repaired, "lightkey_fixture_track_repaired");
+        }
         Ok(())
     }
 
@@ -201,31 +218,31 @@ impl FixtureTrack {
     }
 }
 
-fn check_commands(commands: &[FixtureCommand]) -> Result<(), TrackError> {
-    if commands.len() > MAX_COMMANDS_PER_EVENT {
-        return Err(TrackError(
-            "A fixture change can hold at most 2048 commands.".into(),
-        ));
-    }
-    for command in commands {
-        if command.fixture().is_none() {
-            return Err(TrackError(format!(
-                "Not a fixture override address: {}",
-                command.a
-            )));
-        }
-        if command.v.len() > MAX_ARGS {
-            return Err(TrackError("A command can hold at most 8 arguments.".into()));
-        }
-        let finite = command.v.iter().all(|a| match a {
-            FixtureArg::Float(f) => f.is_finite(),
-            _ => true,
-        });
-        if !finite {
-            return Err(TrackError("A command argument must be finite.".into()));
-        }
-    }
-    Ok(())
+/// Keep the commands a fixture override can replay: a fixture address, at most `MAX_ARGS`
+/// arguments, finite numbers.
+fn valid_commands(commands: Vec<FixtureCommand>) -> Vec<FixtureCommand> {
+    commands
+        .into_iter()
+        .filter(|command| {
+            command.fixture().is_some()
+                && command.v.len() <= MAX_ARGS
+                && command.v.iter().all(|a| match a {
+                    FixtureArg::Float(f) => f.is_finite(),
+                    _ => true,
+                })
+        })
+        .collect()
+}
+
+/// One event, or several at the same time when it holds more than `MAX_COMMANDS_PER_EVENT`
+/// commands. Nothing at all for an empty command list.
+fn split_event(at_seconds: f64, osc: Vec<FixtureCommand>) -> Vec<FixtureEvent> {
+    osc.chunks(MAX_COMMANDS_PER_EVENT)
+        .map(|chunk| FixtureEvent {
+            at_seconds,
+            osc: chunk.to_vec(),
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------- ordered state
@@ -647,8 +664,15 @@ impl FixtureRecorder {
         let mut events: Vec<FixtureEvent> = Vec::new();
         let mut ordered = self.observed;
         ordered.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut dropped = 0usize;
         for (raw_time, commands) in ordered {
-            let time = raw_time.max(0.0).min(duration);
+            // A recording can run on past the scheduled end. Those changes are not part of the
+            // song: drop them (clamping them would pile them all into one event).
+            if duration > 0.0 && round_ms(raw_time) > duration {
+                dropped += commands.len();
+                continue;
+            }
+            let time = raw_time.max(0.0);
             if time <= 0.0 {
                 initial.apply_all(&commands);
                 continue;
@@ -662,6 +686,13 @@ impl FixtureRecorder {
                     osc: commands,
                 }),
             }
+        }
+        if dropped > 0 {
+            tracing::warn!(
+                dropped,
+                duration,
+                "lightkey_fixture_changes_after_the_end_dropped"
+            );
         }
         if events.is_empty() {
             return Ok(None);
@@ -1061,32 +1092,133 @@ mod tests {
     }
 
     #[test]
-    fn recorder_folds_time_zero_clamps_and_returns_none_when_nothing_moved() {
+    fn recorder_folds_time_zero_drops_late_changes_and_returns_none_when_nothing_moved() {
         let mut r = FixtureRecorder::new(&FixtureState::new());
         r.observe(-0.2, &[dim("P1", 1.0)]);
         assert!(r.finish(10.0, false).unwrap().is_none());
         let mut r = FixtureRecorder::new(&FixtureState::new());
         r.observe(0.0, &[dim("P1", 1.0)]);
         r.observe(99.0, &[dim("P1", 0.0)]);
+        // the change at 99 s is after the song's end: dropped, so nothing moved during the song
+        assert!(r.finish(10.0, false).unwrap().is_none());
+    }
+
+    /// 2100 distinct addresses changing after the scheduled end used to pile into one event
+    /// (clamped to the duration) and trip the 2048-command limit, losing the whole track.
+    #[test]
+    fn a_recording_that_runs_past_its_scheduled_end_still_yields_a_valid_track() {
+        let mut r = FixtureRecorder::new(&FixtureState::new());
+        r.observe(1.0, &[dim("P1", 1.0)]);
+        r.observe(2.0, &[dim("P1", 0.5)]);
+        for n in 0..2100 {
+            r.observe(11.0 + f64::from(n) * 0.01, &[dim(&format!("X{n}"), 1.0)]);
+        }
+        let track = r
+            .finish(10.0, false)
+            .expect("a valid track")
+            .expect("a track");
+        assert_eq!(
+            track.events.len(),
+            2,
+            "only events inside the song are kept"
+        );
+        assert!(track.events.iter().all(|e| e.at_seconds <= 10.0));
+        assert!(track
+            .events
+            .iter()
+            .all(|e| e.osc.len() <= MAX_COMMANDS_PER_EVENT));
+        assert_eq!(track.fixtures(), vec!["P1"]);
+    }
+
+    #[test]
+    fn events_after_the_duration_are_dropped_not_clamped() {
+        let mut r = FixtureRecorder::new(&FixtureState::new());
+        r.observe(5.0, &[dim("P1", 1.0)]);
+        r.observe(99.0, &[dim("P1", 0.0)]);
         let track = r.finish(10.0, false).unwrap().unwrap();
-        assert_eq!(track.initial, vec![dim("P1", 1.0)]);
-        assert_eq!(track.events[0].at_seconds, 10.0);
+        assert_eq!(track.events.len(), 1);
+        assert_eq!(track.events[0].at_seconds, 5.0);
+    }
+
+    #[test]
+    fn a_single_oversize_event_is_split_not_rejected() {
+        let mut r = FixtureRecorder::new(&FixtureState::new());
+        let many: Vec<FixtureCommand> = (0..5000).map(|n| dim(&format!("F{n}"), 1.0)).collect();
+        r.observe(3.0, &many);
+        let track = r.finish(10.0, false).unwrap().unwrap();
+        assert!(track
+            .events
+            .iter()
+            .all(|e| e.osc.len() <= MAX_COMMANDS_PER_EVENT));
+        let total: usize = track.events.iter().map(|e| e.osc.len()).sum();
+        assert_eq!(total, 5000);
+        assert!(track.events.iter().all(|e| e.at_seconds == 3.0));
+    }
+
+    #[test]
+    fn a_loaded_track_with_one_bad_event_keeps_the_good_ones() {
+        let mut track = FixtureTrack {
+            initial: vec![dim("P1", 0.0)],
+            events: vec![
+                FixtureEvent {
+                    at_seconds: 1.0,
+                    osc: vec![dim("P1", 1.0)],
+                },
+                FixtureEvent {
+                    at_seconds: 2.0,
+                    osc: (0..3000).map(|n| dim(&format!("F{n}"), 1.0)).collect(),
+                },
+                FixtureEvent {
+                    at_seconds: f64::NAN,
+                    osc: vec![dim("P1", 0.2)],
+                },
+                FixtureEvent {
+                    at_seconds: 4.0,
+                    osc: vec![cmd("/live/x/cue/y/activate", vec![])],
+                },
+                FixtureEvent {
+                    at_seconds: 5.0,
+                    osc: vec![dim("P1", 0.0)],
+                },
+            ],
+            lead_seconds: 0.045,
+        };
+        track
+            .normalise_and_validate()
+            .expect("degrades, never fails");
+        let times: Vec<f64> = track.events.iter().map(|e| e.at_seconds).collect();
+        assert_eq!(times, vec![1.0, 2.0, 2.0, 5.0]);
+        assert!(track
+            .events
+            .iter()
+            .all(|e| e.osc.len() <= MAX_COMMANDS_PER_EVENT));
     }
 
     #[test]
     fn track_validation() {
-        let ok = |c: FixtureCommand| {
-            FixtureTrack {
+        // a command that cannot be replayed is dropped; the track stays valid
+        let kept = |c: FixtureCommand| {
+            let mut track = FixtureTrack {
                 initial: vec![c],
                 events: vec![],
                 lead_seconds: 0.045,
-            }
-            .normalise_and_validate()
+            };
+            track.normalise_and_validate().unwrap();
+            track.initial.len()
         };
-        assert!(ok(dim("P1", 1.0)).is_ok());
-        assert!(ok(cmd("/fixture/*/overrides/dimmer", vec![f(1.0)])).is_err());
-        assert!(ok(cmd("/live/x/cue/y/activate", vec![])).is_err());
-        assert!(ok(cmd("/fixture/P1/overrides/dimmer", vec![f(f64::NAN)])).is_err());
+        assert_eq!(kept(dim("P1", 1.0)), 1);
+        assert_eq!(kept(cmd("/fixture/*/overrides/dimmer", vec![f(1.0)])), 0);
+        assert_eq!(kept(cmd("/live/x/cue/y/activate", vec![])), 0);
+        assert_eq!(
+            kept(cmd("/fixture/P1/overrides/dimmer", vec![f(f64::NAN)])),
+            0
+        );
+        let bad_lead = FixtureTrack {
+            initial: vec![],
+            events: vec![],
+            lead_seconds: 2.0,
+        };
+        assert!(bad_lead.clone().normalise_and_validate().is_err());
         let mut t = FixtureTrack {
             initial: vec![],
             events: vec![
@@ -1108,7 +1240,9 @@ mod tests {
             at_seconds: 1.0,
             osc: vec![],
         });
-        assert!(t.normalise_and_validate().is_err());
+        // an empty event is dropped, not fatal
+        t.normalise_and_validate().unwrap();
+        assert_eq!(t.events.len(), 2);
     }
 
     #[test]
