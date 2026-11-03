@@ -234,7 +234,23 @@ export interface OscLightingCue {
   args: OscArgument[];
   label: string;
   color?: PadColor | null;
+  /** A "look": several OSC messages sent together at this row's time. When present they replace address/args. */
+  messages?: OscMessage[];
+  /** Where the row came from; absent = manual. */
+  source?: OscCueSource;
+  /** A captured row someone changed by hand. A later recording must not replace it silently. */
+  edited?: boolean;
 }
+
+export interface OscMessage {
+  address: string;
+  args: OscArgument[];
+}
+
+export type OscCueSource = "manual" | "captured";
+
+/** How finely a recording is thinned: finer replays motion smoother but makes more rows. */
+export type LightkeyDetail = "fine" | "normal" | "coarse";
 
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
 export interface LightingPad {
@@ -262,6 +278,8 @@ export interface SongLightingCueMap {
   cues: LightingCue[];
   /** OSC cues. Kept when MIDI is the saved method. */
   osc_cues?: OscLightingCue[];
+  /** Captured look rows were changed by hand (a whole row deleted, for one). Absent while false. */
+  captured_edited?: boolean;
 }
 
 /** What the cue-map PUT sends: only the cue list of `method` is replaced. */
@@ -306,11 +324,24 @@ export interface LightkeyStatus {
   message: string | null;
   /** The song most recently saved to the timeline; absent until one has been. */
   captured?: LightkeyCaptured;
+  /** Recording detail (the backend's thinning setting). Absent on backends without it. */
+  detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
   /** Fixtures the replay holds with overrides; absent when none. */
   holding_fixtures?: number;
   /** Fixtures the replay gave to the operator (taken back after 30 s of quiet); absent when none. */
   yielded_fixtures?: number;
+}
+
+/** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
+export interface LightkeySimplifyResponse {
+  accepted: boolean;
+  applied: boolean;
+  message: string;
+  rows_before: number;
+  rows_after: number;
+  messages_before: number;
+  messages_after: number;
 }
 
 export interface LightkeyActionResponse {

@@ -25,6 +25,7 @@ import {
   testLightingCue,
   captureLightingPad,
   undoLightingCapture,
+  simplifyLightkeyLooks,
   updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
@@ -61,6 +62,8 @@ import type {
   SettingsResponse,
   Song,
   LightingMethod,
+  LightkeyDetail,
+  LightkeySimplifyResponse,
   OscArgument,
   OscLightingCue,
   SongLightingCueMapInput,
@@ -997,6 +1000,25 @@ export function useStagePilot() {
     }
   }, [claim, release, canOperate]);
 
+  /** "Simplify this song" Apply: the backend thins and merges the captured rows, then the saved settings are reread. */
+  const simplifyLightingLooks = useCallback(async (songKey: string, detail: LightkeyDetail): Promise<LightkeySimplifyResponse | null> => {
+    if (!canConfigure) return null;
+    if (!claim("lights")) return null;
+    setLightingError(null);
+    try {
+      const response = await simplifyLightkeyLooks(songKey, detail, true);
+      setSettings(await getSettings());
+      if (response.applied) setLightingMessage(response.message);
+      else setLightingError(response.message);
+      return response;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Simplify failed."));
+      return null;
+    } finally {
+      release("lights");
+    }
+  }, [claim, release, canConfigure]);
+
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -1138,6 +1160,7 @@ export function useStagePilot() {
     pressLightingPad,
     undoLightingCapture: undoLightingCapture_,
     clearAllLightingCues,
+    simplifyLightingLooks,
     activateConfiguredServices,
   };
 }

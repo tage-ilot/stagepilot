@@ -255,22 +255,6 @@ The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired
 router. Do not use Wi-Fi. Its timing is not steady enough: the agent's multicast
 over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
 recording, the message says that levels were not recorded.
-- **Record.** The same Record mode captures both. Each fixture change is stored with its song
-  time in Lightkey's OSC form, for example `/fixture/MH1/overrides/panAngle 90.0`. Replay needs no
-  conversion. A fixture that never changes during the song is not stored. It stays with the cues
-  and the Lightkey operator. The song's line in the list counts the color and level changes next
-  to the cue changes.
-- **Replay.** Replay sets each captured fixture to its recorded state at that point. Then it sends
-  each change 45 ms before its time. Replay holds those fixtures with overrides. When the song
-  ends, stops, or replay is switched off, StagePilot clears every fixture it held. It sends one
-  clear per fixture, twice. The cues then take over again. Fixtures that were never captured are
-  not touched.
-- **Older agents.** An agent without the fixture relay shows no second line. Recording then
-  captures cues only, as before. If the stream stops during a recording, the cue capture is
-  unaffected, and the message says that levels were not recorded.
-- **Wired network.** The relay uses plain unicast UDP, so it crosses the wired router. Do not use
-  Wi-Fi. Its timing is not steady enough: the agent's multicast over Wi-Fi stalled for up to
-  0.8 s in a test.
 
 ## Cue board, live capture and the timeline
 
@@ -339,3 +323,12 @@ the seconds-based scheduler.
 ## Look rows and the timeline as replay source
 
 A song lighting row (`osc_cues`) may carry `messages` (a list of `{address, args}`) and a `source` of `manual` or `captured`. A row sends its `messages` when non-empty, otherwise its single address/args. Caps: `MAX_OSC_MESSAGES_PER_ROW`, `MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`. Fixture look rows fire about 45 ms early and are paced to at most 200 packets/s. On start, resume or seek, the latest `/fixture/<name>/overrides/<prop>` message at or before the position is re-sent once. Pause, stop, end and reset hold the last look; fixtures are released (double `overrides/clear`) only when replay is switched off, Lighting is disabled, on shutdown, or when the next song does not use them.
+
+### Editing look rows in the timeline
+
+- A row with several messages is a **look**: "Look - N fixtures". Rows from a recording (`captured`) are drawn in the Lighting colour and badged *Captured*; rows made by hand are *Manual*. Press **Edit** on a row to see its messages grouped by fixture. Each message's address and values are editable (the same typed values as a single cue), each can be deleted, and **Add message** adds one (it saves once its address is valid). A row left with no messages is removed. **−0.1 s / +0.1 s**, the time box, dragging the marker and the arrow keys move a row; times snap to 0.1 s.
+- **Remove fixture from this song** (in each fixture's heading) asks first, then deletes that fixture's messages from every row of the song. Rows left empty are removed.
+- Changing a captured row marks it **edited** (`edited` in the saved cue). With Record chosen, starting a recording on a song that has edited captured looks asks "Recording replaces this song's captured looks, including your edits" first. Deleting a whole captured row counts too: the backend sets `captured_edited` on the song's cue map for it.
+- **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
+- **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
+- The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.

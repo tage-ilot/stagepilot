@@ -8,6 +8,8 @@ import {
   getPlanningCenterServiceTypes,
   rememberServerPort,
   refreshMidiInputs,
+  saveLightkeySettings,
+  simplifyLightkeyLooks,
   selectMidiInput,
   selectPlanningCenterPlan,
   simulateMidiCue,
@@ -290,6 +292,29 @@ describe("MIDI API", () => {
         body: JSON.stringify({ cue: "start_next" }),
       },
     );
+  });
+});
+
+describe("Lightkey Detail and Simplify API", () => {
+  const answer = { accepted: true, message: "Saved.", lightkey: { detail_level: "fine" } };
+  it("PUTs exactly {detail_level} to the Lightkey settings route (the body the Rust test frontend_detail_level_round_trips_through_settings_and_status sends)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue(answer) });
+    vi.stubGlobal("fetch", fetchMock);
+    await saveLightkeySettings({ detail_level: "fine" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/v1/lights/lightkey/settings");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({ detail_level: "fine" });
+  });
+
+  it("POSTs song_key, detail_level and apply to the simplify route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ accepted: true, applied: false, message: "412 rows -> 190" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await simplifyLightkeyLooks("song-1", "coarse", false);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/v1/lights/lightkey/simplify");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ song_key: "song-1", detail_level: "coarse", apply: false });
   });
 });
 

@@ -31,6 +31,8 @@ export interface TimelineMarker {
   at: number;
   label: string;
   color: PadColor | null;
+  /** A look recorded from Lightkey (drawn differently from rows made by hand). */
+  captured?: boolean;
 }
 
 /** Ruler tick spacing in seconds for a song of this length. */

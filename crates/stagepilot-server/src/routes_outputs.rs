@@ -1028,6 +1028,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     color: pad.color,
                     messages: Vec::new(),
                     source: Default::default(),
+                    edited: false,
                 };
                 cue_id = Some(cue.id);
                 osc_cues.push(cue);

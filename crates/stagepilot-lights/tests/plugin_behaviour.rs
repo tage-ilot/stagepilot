@@ -54,6 +54,7 @@ fn osc_cue(at: f64, address: &str, args: Vec<OscArgument>, label: &str) -> OscLi
         color: None,
         messages: Vec::new(),
         source: Default::default(),
+        edited: false,
     }
 }
 

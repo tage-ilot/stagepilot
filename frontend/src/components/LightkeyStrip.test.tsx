@@ -122,11 +122,57 @@ describe("LightkeyStrip", () => {
       fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
       captured,
     }));
-    render(<LightkeyStrip lightingEnabled />);
+    render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
     expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("14 captured looks on “Holy Forever”.");
     expect(screen.queryByRole("button", { name: /Clear capture/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Captured songs" })).not.toBeInTheDocument();
+  });
+
+  it("says 1 captured look in the singular", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
+    render(<LightkeyStrip lightingEnabled looks={{ count: 1, edited: false }} />);
+    expect(await screen.findByText("1 captured look on this song")).toBeInTheDocument();
+  });
+
+  it("shows the Detail setting only for Record, with its one-line explanation", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: false }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByTestId("lightkey-detail-setting")).toBeNull();
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, detail_level: "normal" }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-detail-setting")).toHaveTextContent("Finer detail replays motion smoother but makes more rows.");
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
+    await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));
+  });
+
+  it("Record asks first when the song has edited captured looks, and does nothing on Cancel", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "connected" }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true })));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<LightkeyStrip lightingEnabled looks={{ count: 12, edited: true }} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("radio", { name: "Record" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recording replaces this song's captured looks, including your edits"));
+    expect(api.setLightkeyRecording).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("radio", { name: "Record" }));
+    await waitFor(() => expect(api.setLightkeyRecording).toHaveBeenCalledWith(true));
+    confirm.mockRestore();
+  });
+
+  it("Record does not ask when no captured look was edited", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "connected" }));
+    vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true })));
+    const confirm = vi.spyOn(window, "confirm");
+    render(<LightkeyStrip lightingEnabled looks={{ count: 12, edited: false }} />);
+    await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
+    await waitFor(() => expect(api.setLightkeyRecording).toHaveBeenCalledWith(true));
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 
   it("says connecting while the first fixture data is awaited", async () => {

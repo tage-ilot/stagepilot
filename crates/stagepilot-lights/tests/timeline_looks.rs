@@ -70,6 +70,7 @@ fn look(at: f64, messages: Vec<OscMessage>) -> OscLightingCue {
         color: None,
         messages,
         source: OscCueSource::Captured,
+        edited: false,
     }
 }
 fn plain(at: f64, address: &str) -> OscLightingCue {
@@ -77,6 +78,7 @@ fn plain(at: f64, address: &str) -> OscLightingCue {
         address: address.into(),
         messages: vec![],
         source: OscCueSource::Manual,
+        edited: false,
         ..look(at, vec![])
     }
 }
