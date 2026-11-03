@@ -110,21 +110,25 @@ The strip has these controls:
   every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
   kept with its song time, measured from Lightkey's own DMX output with the
   clock difference between the two Macs removed. When the song ends (or Record
-  is turned off mid-song) the changes are thinned and merged into rows, saved
+  is turned off mid-song, or a new song starts) the changes are thinned and merged into rows, saved
   into the song's lighting cue map with the normal, serialized save, and the raw
   changes are discarded. A song is saved only if at least half of it was
-  recorded and at least one fixture changed. The last change of a fixture after the song's scheduled
+  recorded and at least one fixture changed. **A pause never ends or saves a
+  recording**, however late in the song: resuming in place carries on, and only
+  the song's end (within 2 s of its length), a new song, or Record off saves it.
+  The last change of a fixture after the song's scheduled
   end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
   playhead during a recording discards it. Messages: `Recording <song>.`,
   `Saved N looks to <song>'s timeline.` (`... (reduced detail, 0.5 s).` when the song was
   too large for the chosen Detail and was saved at a coarser spacing), `Not saved: only X of Y seconds recorded.`
-- **Replay captured lights.** On by default, and only paused while recording.
-  Saved rows replay through the normal timeline scheduler (see below).
 - **Replay | Record toggle.** One two-way control. *Replay* (the default) replays
-  captured lights. *Record* is for capturing and needs a connected link. Switching
-  back to Replay stops the recording first, then turns replay on; if that fails the
-  toggle shows the real state and the reason. There is no separate replay-off setting
-  in the UI. Replay is paused automatically while Record is selected.
+  the captured lights: saved rows play through the normal timeline scheduler (see
+  below). *Record* is for capturing and needs a connected link. Switching back to
+  Replay stops the recording first, then turns replay on; if that fails the toggle
+  shows the real state and the reason. Replay is paused automatically while Record
+  is selected. There is no replay-off switch in the UI; if a settings file or the
+  API has `replay` off, the strip says "Replay is off" with a **Turn Replay on**
+  button instead of looking as if it were replaying.
 
 Saving replaces only that song's `source = captured` rows. Rows you added by
 hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
@@ -174,6 +178,33 @@ rows are saved through the serialized cue-map save. Manual rows, MIDI cues and
 captured rows that are not fixture overrides are never touched. Nothing is saved
 when the result would not be smaller or would still pass the per-song caps.
 
+### Saving a song's cue map
+
+Every save that changes a song's rows raises that song's revision
+(`settings.lights.cue_revisions[song_key]`). The cue-map `PUT` may carry the
+`revision` it was edited from; when it is older than the saved one the save is refused
+with **409** ("This song's lights changed since you opened them"), so an edit made on
+a stale list cannot overwrite a recording that finished meanwhile. A request without
+`revision` is accepted as before. The manual save and the Lighting settings save take
+the same lock as the recording, capture, undo and Simplify saves, so none of them can
+lose another's rows. The cue-map route accepts bodies up to 8 MB (a song at the
+per-song caps is about 3 MB). A look message may carry at most 8 arguments, and a
+text argument at most 256 characters.
+
+Look rows store the placeholder address `/stagepilot/look` and send their `messages`.
+An older StagePilot that does not know `messages` would send that placeholder, which
+no rig listens to, instead of a fixture address without its value; still, do not
+downgrade with look rows saved.
+
+Captured looks live in the one settings file, which is rewritten (pretty-printed) on every save and sent to
+the browser with every settings read. Measured with 40 dense songs (148 rows of 40
+fixture messages each, 236,800 messages): `settings.json` 60.5 MiB on disk, 22.4 MiB as
+the settings payload, and about 2.2 s per save in a debug build (the test is
+`forty_dense_songs_settings_file_size_and_save_latency`). That is above what a real
+service needs (real takes are 3 to 6 thousand messages a song, so roughly a quarter of
+this for 40 songs), and the storage layout is unchanged; moving looks out of the
+settings file is a separate design (see the report's open items).
+
 ### Edited captured looks
 
 Deleting a whole captured row leaves no row to carry an "edited" mark, so the
@@ -204,18 +235,32 @@ Pausing, stopping, resetting the countdown or reaching the end of the song only
 cancels the changes still scheduled. StagePilot sends **no clear**: the fixtures
 keep the look they had, and Lightkey's own cues do not take over. Resuming at the
 same place, or seeking, sets the fixtures to the song's state at the new position
-and carries on from there.
+and carries on from there. Seeking **back** to before a fixture's first row gives
+that fixture back to Lightkey (the song has not touched it yet at that position)
+instead of leaving it on a later look.
+
+A single failed send (a dropped network packet, a reconnect) is retried once after
+100 ms and then skipped with a log line and the strip's error; the rest of the
+song, including every later row, still goes out. The error clears as soon as
+sending works again. Only a closed output stops the timeline.
 
 ### When the lights are given back
 
 A held fixture returns to Lightkey only when:
 
-- Replay is switched off, or Recording is turned on (replay pauses while
-  recording);
+- **Record is armed** (replay would otherwise be recorded) or **Replay is
+  switched off**;
 - Lighting is turned off;
 - StagePilot, or the Lighting plugin, shuts down;
-- a new song starts: fixtures the new song's capture does not use are released.
-  Fixtures it does use are simply taken over by its first sync, without a clear.
+- Lighting is reconfigured in a way that matters (Lighting, Replay, the method or
+  the host changes);
+- **a new song starts**: fixtures the new song's rows do not use are released.
+  This happens right after the new song's timeline has started, so its first
+  look is never delayed by the releases. Fixtures it does use are simply taken over
+  by its first sync, without a clear;
+- the operator presses **Release lights**.
+
+Pause, stop, reset, seek, resume and the song's end never clear anything.
 
 Each release sends one `overrides/clear` per fixture, twice, paced at no more than
 200 packets a second. Fixtures that were never captured are never touched.
@@ -223,9 +268,15 @@ Each release sends one `overrides/clear` per fixture, twice, paced at no more th
 ### The operator always wins, per fixture
 
 Lightkey's own controls beat the replay. While the replay holds a fixture, a DMX
-change on it that is **not** the echo of something the replay just sent (same
-fixture and property within about half a second; the value is ignored because
-wheel slots are approximate) is taken as the operator's. StagePilot then stops
+change on it that is **not** the echo of something the replay just sent is taken
+as the operator's. An echo is the same fixture and property with the same value
+(within 2 %, or 1 degree for angles) within about 200 ms, so an operator change on
+a property that moves all the time is still caught. Wheel and option properties
+(gobo, wheel, slot, prism, macro) and non-numeric values match with any value,
+because wheel slots are approximate. Only properties the replay has itself sent to
+that fixture are judged: a pan, colour or effect that Lightkey's own running cues
+move is never taken for the operator. Fixture names compare without regard to case
+or `%20` encoding. StagePilot then stops
 sending to that fixture, sends **no clear** (the operator's change stays), and
 keeps replaying every other fixture. The strip shows "Holding N fixtures" and
 "M yielded to the operator".
@@ -244,10 +295,14 @@ a fixture the replay is holding is probably invisible in DMX, because the replay
 override sits on top of it. Use **Release lights** for that.
 
 **Release lights** (button in the Lightkey strip, `POST /api/v1/lights/lightkey/release`)
-sends the double `overrides/clear` to every fixture held right now and empties the
-held set. It is disabled when nothing is held. Fixtures already yielded to the
-operator are not cleared. A running song picks a fixture up again at that
-fixture's next look row.
+sends the double `overrides/clear` to every fixture held right now **and** every
+fixture any saved look can override, then empties the held set. The held set lives
+in memory only, so after a crash or restart Lightkey may still hold overrides that
+StagePilot has forgotten; naming every known fixture is what clears them. The
+button is disabled only when nothing is held and no saved look names a fixture.
+Fixtures already yielded to the operator are not cleared. **While a song is
+playing the release is momentary**: the running timeline picks a fixture up again at
+that fixture's next look row. To keep the lights released, pause or stop first.
 
 ### Wired network
 
@@ -258,8 +313,10 @@ recording, the message says that levels were not recorded.
 
 ## Cue board, live capture and the timeline
 
-The timeline follows the live song (or the last song that played) and switches
-when a new song starts. If you pick another song by hand, it stays on your pick
+The timeline follows the song that is playing (or the last one that played) and
+switches when a new song starts. A song ending, and the plan's current song moving on
+to the next one, do not move it. A row you are still typing (no address yet) is kept
+when the settings refresh and when the follow moves to another song. If you pick another song by hand, it stays on your pick
 until the next song starts; the line beside the song picker then reads "Showing
 <title>" with a **Follow live** button to jump back at once. With no song played
 yet it shows the first song of the plan.
@@ -327,6 +384,11 @@ lights capture, and with the same rules: a pause leaves a gap, moving the playhe
 the take, and it is saved only if at least half the song was recorded. While Record is chosen but no song
 runs, the input is open only as long as the input picker is on screen (to show its level meter) and closes
 a few seconds after you leave. In Replay mode it never opens.
+
+Opening the input can wait for the microphone permission dialog, so it never blocks
+anything else: opening and closing run on their own thread, the song start waits at
+most 1.5 s for it (loudness then starts when the input opens), the picker answers from
+its last listing after 2 s, and repeated picker polls do not start a second open.
 
 **Choosing the input.** With Record chosen, the Lightkey strip shows an **Audio input** list with a live
 level meter. The default is the system default input (the built-in microphone). Pick an audio interface or a
