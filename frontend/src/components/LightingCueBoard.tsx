@@ -54,8 +54,10 @@ export type CaptureMode = "capture" | "preview";
  * on, the parent adds it to the timeline). Pads of the other method stay saved but dimmed and disabled.
  */
 export function LightingCueBoard({
-  pads, viewMethod, savedMethod, busy, captureMode, onCaptureMode, running, canUndo, status, onPress, onUndo, onSavePads,
+  pads, viewMethod, savedMethod, busy, captureMode, onCaptureMode, running, canUndo, status, onPress, onUndo, onSavePads, embedded = false,
 }: {
+  /** Drawn inside a collapsible section that already carries the title and the spacing. */
+  embedded?: boolean;
   pads: LightingPad[];
   viewMethod: LightingMethod;
   savedMethod: LightingMethod;
@@ -143,9 +145,9 @@ export function LightingCueBoard({
       : "No song is running: pads only fire.";
 
   return (
-    <section aria-label="Cue board" className="lighting-board mt-5 border-t border-edge-subtle pt-5" data-testid="lighting-cue-board" onKeyDown={onBoardKey}>
+    <section aria-label="Cue board" className={embedded ? "lighting-board" : "lighting-board mt-5 border-t border-edge-subtle pt-5"} data-testid="lighting-cue-board" onKeyDown={onBoardKey}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h3 className="font-semibold text-ink">Cue board</h3>
+        <h3 className={embedded ? "sr-only" : "font-semibold text-ink"}>Cue board</h3>
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-type-body-sm text-ink-body">
             <input

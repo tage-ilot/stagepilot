@@ -17,8 +17,11 @@ const GROUPS: CueTypeInfo["group"][] = ["Looks", "Lightkey cues", "Single messag
 
 /** Legend above the timeline. Each chip is a toggle that hides or shows that type in the timeline and the cue list. */
 export function CueTypeLegend({
-  method, hidden, onToggle, onShowAll, present,
+  method, hidden, onToggle, onShowAll, present, className = "", compact = false,
 }: {
+  className?: string;
+  /** One tight line: the group names are read by screen readers only and the gaps are smaller. */
+  compact?: boolean;
   method: "osc" | "midi";
   hidden: ReadonlySet<CueTypeId>;
   onToggle: (type: CueTypeId) => void;
@@ -29,13 +32,13 @@ export function CueTypeLegend({
   const ids = typeIdsFor(method);
   const hiddenCount = ids.filter((id) => hidden.has(id)).length;
   return (
-    <div aria-label="Cue types" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="cue-legend" role="group">
+    <div aria-label="Cue types" className={`mt-2 flex flex-wrap items-center ${compact ? "gap-x-3 gap-y-1.5" : "gap-x-4 gap-y-2"} ${className}`} data-testid="cue-legend" role="group">
       {GROUPS.map((group) => {
         const types = ids.filter((id) => CUE_TYPES[id].group === group);
         if (!types.length) return null;
         return (
           <div aria-label={group} className="flex flex-wrap items-center gap-1.5" key={group} role="group">
-            <span className="text-type-body-sm uppercase tracking-wide text-ink-muted">{group}</span>
+            <span className={compact ? "sr-only" : "text-type-body-sm uppercase tracking-wide text-ink-muted"}>{group}</span>
             {types.map((id) => {
               const off = hidden.has(id);
               const unused = !present.has(id) && !off;

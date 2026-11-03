@@ -30,6 +30,9 @@ export interface ConnectionMethodProps<T extends string = string> {
    * readers) and the "Not saved yet" marker hangs under the toggle, so nothing shifts. Narrow: looks as it always did.
    */
   placement?: "inline" | "header";
+  /** One-line use inside a toolbar: the kicker is read by screen readers only, nothing sits above the switch and the options are 34 px
+   * (44 px on touch). The same component, so the keyboard and radio behaviour do not change. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -45,7 +48,7 @@ const roleWord = { primary: "Primary", alternate: "Alternate" } as const;
  */
 export function ConnectionMethod<T extends string = string>({
   options, value, onChange, disabled = false, heldChange = false,
-  label = "Connection method", placement = "inline", className,
+  label = "Connection method", placement = "inline", compact = false, className,
 }: ConnectionMethodProps<T>) {
   const uid = useId();
   const accent = useAccent();
@@ -84,7 +87,7 @@ export function ConnectionMethod<T extends string = string>({
     <fieldset className={cx("min-w-0", className)} data-connection-method data-placement={placement} data-state={heldChange ? "held" : "default"} disabled={disabled}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         {/* min-h matches the 18px "Not saved yet" marker, so the header row (and the switch below it) never moves when that marker appears. */}
-        <legend className={cx("mt-6 min-h-[18px] p-0 font-type-kicker text-type-kicker uppercase text-ink-muted", placement === "header" && "connection-method-kicker")}>{label}</legend>
+        <legend className={cx(compact ? "sr-only" : "mt-6 min-h-[18px] p-0 font-type-kicker text-type-kicker uppercase text-ink-muted", placement === "header" && "connection-method-kicker")}>{label}</legend>
         {heldChange && (
           <span id={heldId} data-held-marker className={cx("mt-6 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text", placement === "header" && "connection-method-held")}>
             <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
@@ -95,7 +98,8 @@ export function ConnectionMethod<T extends string = string>({
       <div
         aria-describedby={heldId}
         className={cx(
-          "relative mt-2 inline-flex max-w-full rounded-ds-xl border bg-surface-950 p-[3px] gap-[3px]",
+          "relative inline-flex max-w-full rounded-ds-xl border bg-surface-950 p-[3px] gap-[3px]",
+          compact ? "mt-0" : "mt-2",
           heldChange ? "border-warning" : "border-edge",
           disabled && "opacity-60",
         )}
@@ -121,7 +125,8 @@ export function ConnectionMethod<T extends string = string>({
             <label
               key={option.value}
               className={cx(
-                "relative z-10 flex min-h-ds-touch-target min-w-0 touch-manipulation flex-col justify-center rounded-ds-lg border border-transparent px-4 py-1 transition-colors duration-[140ms] motion-reduce:transition-none",
+                "relative z-10 flex min-w-0 touch-manipulation flex-col justify-center rounded-ds-lg border border-transparent transition-colors duration-[140ms] motion-reduce:transition-none",
+                compact ? "min-h-[26px] px-3 py-0 coarse:min-h-ds-touch-target" : "min-h-ds-touch-target px-4 py-1",
                 "has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink",
                 disabled || option.disabled ? "cursor-not-allowed" : "cursor-pointer",
                 on

@@ -49,16 +49,78 @@ describe("LightkeyStrip", () => {
     expect(screen.getByRole("radio", { name: "Record" })).toBeDisabled();
   });
 
-  it("Connect saves the typed address", async () => {
+  it("Connect with the shared host on the default API port leaves api_url empty so the backend derives it", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API." }));
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ link: "unreachable" })));
     render(<LightkeyStrip lightingEnabled />);
-    const input = await screen.findByLabelText("Lightkey API address");
+    await screen.findByLabelText("Host or IP address");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "" }));
+  });
+
+  it("Connect writes <host>:<apiPort> when the API port is not 8770", async () => {
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status()));
+    render(<LightkeyStrip lightingEnabled />);
+    const port = await screen.findByLabelText("API port");
     const user = userEvent.setup();
-    await user.clear(input);
-    await user.type(input, "10.30.0.211:8770");
+    await user.clear(port);
+    await user.type(port, "9100");
     await user.click(screen.getByRole("button", { name: "Connect" }));
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "10.30.0.211:8770" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "10.30.0.211:9100" }));
+  });
+
+  it("refuses an API port outside 1-65535 and says so", async () => {
+    render(<LightkeyStrip lightingEnabled />);
+    const port = await screen.findByLabelText("API port");
+    const user = userEvent.setup();
+    await user.clear(port);
+    await user.type(port, "70000");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter an API port from 1 to 65535.");
+    expect(api.saveLightkeySettings).not.toHaveBeenCalled();
+  });
+
+  it("a saved API address on another host shows a notice naming it and keeps using it until accepted", async () => {
+    const connection = { host: "192.0.2.10", onHost: vi.fn(), oscPort: "21600", onPort: vi.fn(), savedOscHost: "192.0.2.10", attempted: false, held: { host: false, port: false } };
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ api_url: "http://192.0.2.99:8770" }));
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ api_url: "http://192.0.2.99:8770" })));
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-host-notice")).toHaveTextContent("192.0.2.99");
+    const user = userEvent.setup();
+    // Connect never rewrites it: the saved address goes back unchanged.
+    await user.click(screen.getByRole("button", { name: /Connect|Check again/ }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "http://192.0.2.99:8770" }));
+    vi.mocked(api.saveLightkeySettings).mockClear();
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ api_url: "http://192.0.2.10:8770" })));
+    await user.click(screen.getByRole("button", { name: "Use the OSC host" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "" }));
+    await waitFor(() => expect(screen.queryByTestId("lightkey-host-notice")).toBeNull());
+  });
+
+  it("no notice when the API is on the OSC host, and the OSC UDP box edits the panel's port", async () => {
+    const onPort = vi.fn();
+    const connection = { host: "10.30.0.211", onHost: vi.fn(), oscPort: "21600", onPort, savedOscHost: "10.30.0.211", attempted: false, held: { host: false, port: false } };
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    await screen.findByLabelText("Host or IP address");
+    expect(screen.queryByTestId("lightkey-host-notice")).toBeNull();
+    await userEvent.setup().type(screen.getByLabelText("OSC UDP port"), "1");
+    expect(onPort).toHaveBeenCalledWith("216001");
+  });
+
+  it("is one titled line: status, host, OSC UDP, API, Connect and Replay | Record share a single wrapping row", async () => {
+    const connection = { host: "10.30.0.211", onHost: vi.fn(), oscPort: "21600", onPort: vi.fn(), savedOscHost: "10.30.0.211", attempted: false, held: { host: false, port: false } };
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    await screen.findByLabelText("API port");
+    expect(screen.getByRole("heading", { name: "sACN DMX Live Link" })).toBeInTheDocument();
+    const line = screen.getByTestId("live-link-line");
+    expect(line.className).toContain("flex-wrap");
+    for (const name of ["Host or IP address", "OSC UDP port", "API port"]) expect(line).toContainElement(screen.getByLabelText(name));
+    expect(line).toContainElement(screen.getByRole("button", { name: /Connect|Check again/ }));
+    expect(line).toContainElement(screen.getByRole("radiogroup", { name: "Lightkey mode" }));
+    expect(line).toContainElement(screen.getByTestId("lightkey-link"));
+    expect(screen.getByLabelText("API port")).toHaveValue("8770");
+    // Release lights sits on the second line, outside the first.
+    expect(line).not.toContainElement(screen.getByRole("button", { name: "Release lights" }));
   });
 
   it("Record mode starts recording and shows the answer", async () => {
@@ -144,7 +206,8 @@ describe("LightkeyStrip", () => {
     unmount();
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, detail_level: "normal" }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByTestId("lightkey-detail-setting")).toHaveTextContent("Finer detail replays motion smoother but makes more rows.");
+    expect(await screen.findByTestId("lightkey-detail-setting")).toBeInTheDocument();
+    expect(screen.getByText("Finer detail replays motion smoother but makes more rows.")).toBeInTheDocument();
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
     await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
     await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));

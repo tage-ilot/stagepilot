@@ -131,7 +131,7 @@ describe("LightingSetupPanel OSC", () => {
     for (const guess of [/Chamsys/i, /QLC\+/, /ETC Eos/i, /GrandMA/i, /Resolume/i, /Playback 1 go/, /Executor 201/]) {
       expect(screen.queryByText(guess)).not.toBeInTheDocument();
     }
-    expect(screen.getByLabelText("UDP port")).toBeInTheDocument();
+    expect(screen.getByLabelText("OSC UDP port")).toBeInTheDocument();
     expect(screen.getByText(/Enter the port your lighting app listens for OSC on/)).toBeInTheDocument();
   });
 
@@ -141,8 +141,8 @@ describe("LightingSetupPanel OSC", () => {
     mount({ onSaveSettings });
     await user.clear(screen.getByLabelText("Host or IP address"));
     await user.type(screen.getByLabelText("Host or IP address"), "192.168.4.50");
-    await user.clear(screen.getByLabelText("UDP port"));
-    await user.type(screen.getByLabelText("UDP port"), "8000");
+    await user.clear(screen.getByLabelText("OSC UDP port"));
+    await user.type(screen.getByLabelText("OSC UDP port"), "8000");
     await user.click(screen.getByRole("button", { name: /Save/ }));
     expect(onSaveSettings).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, method: "osc", osc_host: "192.168.4.50", osc_port: 8000 }));
     expect(onSaveSettings.mock.calls[0]?.[0]).not.toHaveProperty("osc_preset");
@@ -152,7 +152,7 @@ describe("LightingSetupPanel OSC", () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn();
     mount({ onSaveSettings });
-    await user.clear(screen.getByLabelText("UDP port"));
+    await user.clear(screen.getByLabelText("OSC UDP port"));
     await user.click(screen.getByRole("button", { name: /Save/ }));
     expect(onSaveSettings).not.toHaveBeenCalled();
     expect(screen.getByText(/UDP port from 1 to 65535/)).toBeInTheDocument();

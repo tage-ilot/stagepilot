@@ -486,7 +486,8 @@ tritanopia to keep the colours apart.
 
 ## Clearing cues
 
-**Clear** (the selected song), **Clear all** (every song in the plan) and **Clear loudness** all ask first in an in-app
+**Clear song...** (the selected song, in the timeline toolbar), **Clear all songs...** and the **x** on a song chip (see
+"Lighting screen layout" below), and **Clear loudness**, all ask first in an in-app
 dialog. It says the cues will be **permanently erased** and cannot be undone, names the song (or "every song in
 <plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness). The focus starts on **Keep
 cues**; **Erase permanently** is the only button that erases. Esc, a click outside the dialog and **Keep cues** leave
@@ -498,3 +499,54 @@ The connection-method toggle (Playback API | MIDI, OSC | MIDI) sits in the middl
 title and the status pill and close button, whenever the panel is at least 57 rem (912 px) wide. That is the width at
 which the longest right-hand group ("MIDI · Alternate", Connected, close) still fits beside it. It is in the same place
 on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to its own row under the title.
+
+## Lighting screen layout
+
+### sACN DMX Live Link (one line)
+
+In OSC mode the connection is one titled section, **sACN DMX Live Link**, drawn as a single line that wraps cleanly on
+narrow screens: the link status (and fixture count), **one host or IP box**, a small **OSC UDP** port box (default
+21600), a small **API** port box (default 8770), **Connect / Check again**, and the **Replay | Record** toggle. The
+**Detail** (Fine / Normal / Coarse) toggle appears beside it only while Record is chosen. **Release lights** and the
+"Holding N fixtures" text sit on a second small line. The Lighting computer that receives OSC and the one that runs
+`lightkey-api` are always the same machine, so the host is shared.
+
+Saved settings are unchanged: `osc_host` and `osc_port` are saved with the Save bar as before, and `lightkey.api_url`
+is saved by Connect. The screen writes `api_url` as `<host>:<API port>`, and leaves it **empty** when the API port is
+8770 and the host is the saved OSC host, so the backend derives it as it always did. If a saved `api_url` names a
+different host than `osc_host`, a one-line notice names that host and offers **Use the OSC host**. StagePilot keeps
+using the saved address until you accept; nothing is rewritten silently. Host and port range messages are unchanged.
+MIDI mode is unchanged apart from the shared header.
+
+### Send a test cue
+
+The test cue is a collapsed **Send a test cue** disclosure under the connection (OSC and MIDI alike), no longer part of
+the timeline section. It behaves as before. Its **OSC address** field is the cue's OSC *path* (for example
+`/live/*/cue/Stars/activate`), not the host.
+
+### Songs strip
+
+Above the timeline, **Songs in this service - N of M captured** shows one chip per plan song, in plan order, with
+**Clear all songs...** at the right. A captured song is a small coloured box with its title, its look count (or cue
+count in MIDI mode), a note glyph when it has loudness, and an **x** that opens the permanent-erase dialog for that song
+only. A plan song with nothing saved is greyed with a dashed outline and says "not captured". Clicking a chip selects
+that song in the timeline exactly like the **Song** menu (a hand pick; **Follow live** returns). The song that is
+playing has a green dot, the selected chip an outline. The chips look small but their buttons are 44 px tall, and the
+list scrolls inside a fixed height, so 40 songs do not push the page around.
+
+### Song lighting timeline section
+
+One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
+the following-live status, Add cue, Clear song..., Merge rows, Simplify, Undo, then at the right Zoom (- / Fit / +) and
+timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
+cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
+how you left it on this device.
+
+### Timeline height
+
+**Auto** (the default) sizes the timeline from the number of stacked marker labels at the current zoom and clustering:
+about 200 px with one or two rows, growing by 22 px per row up to 420 px, so finer recordings and more crowded zooms
+get taller. **S** (200 px) and **M** (320 px) are fixed and kept on this device. Labels sit in the top rows. The
+loudness waveform and the playhead start below the last label row, so they never draw over a label pill. The selected
+marker gets a thicker bar, a ring around its label and a raised label. The first ruler label starts at the left edge and
+the last one is right-aligned to the end; labels near the end are shortened to fit the track.
