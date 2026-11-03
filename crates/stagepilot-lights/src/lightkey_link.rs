@@ -11,6 +11,7 @@
 //! Replay is not done here: the song-lighting timeline in `crate::plugin` is the one replay
 //! engine. This link keeps the recorder, the relay client and the status the Lighting panel shows.
 
+use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
     effective_api_url, recording_is_worth_keeping, LightkeyCaptured, LightkeyLink as Link,
     LightkeyStatus,
@@ -18,11 +19,14 @@ use crate::lightkey::{
 use crate::lightkey_fixtures::FixtureCommand;
 use crate::lightkey_looks::{look_rows, LookRecorder};
 use crate::lightkey_relay::{relay_target, RelayClient};
+use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
-use stagepilot_core::config::{LightkeySettings, OscLightingCue, DEFAULT_LIGHTKEY_RELAY_PORT};
+use stagepilot_core::config::{
+    LightkeySettings, OscLightingCue, SongLoudness, DEFAULT_LIGHTKEY_RELAY_PORT,
+};
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
 use std::future::Future;
@@ -243,6 +247,18 @@ pub type LooksFuture = Pin<Box<dyn Future<Output = Result<(), LooksError>> + Sen
 /// (replacing only the captured rows of that song, keeping manual ones).
 pub type LooksSink = Arc<dyn Fn(SongLooks) -> LooksFuture + Send + Sync>;
 
+/// A song's loudness from one recording, to be averaged into what the song already has.
+#[derive(Debug, Clone)]
+pub struct SongLoudnessTake {
+    pub song_key: String,
+    pub song_title: String,
+    pub loudness: SongLoudness,
+}
+
+/// Saves a recording's loudness into the song's cue map (averaging with earlier recordings, see
+/// [`crate::loudness::merge_loudness`]) through the same serialized save path as the looks.
+pub type LoudnessSink = Arc<dyn Fn(SongLoudnessTake) -> LooksFuture + Send + Sync>;
+
 // ------------------------------------------------------------------------------------- state
 
 /// One song being recorded (`_Session`).
@@ -256,6 +272,8 @@ struct Session {
     running: bool,
     /// Fixture changes from the `lightkey-api` relay, when it is connected.
     fixtures: Option<LookRecorder>,
+    /// Loudness windows from the audio input, on the same song clock.
+    loudness: Option<SharedRecorder>,
 }
 
 impl Session {
@@ -268,6 +286,7 @@ impl Session {
             last_position: 0.0,
             running: true,
             fixtures: None,
+            loudness: None,
         }
     }
 }
@@ -318,6 +337,8 @@ struct Inner {
     armed_store: Arc<dyn ArmedStore>,
     looks_sink: Option<LooksSink>,
     fixture_tap: Option<FixtureTap>,
+    loudness_sink: Option<LoudnessSink>,
+    audio: Option<Arc<AudioHub>>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
     relay_port: u16,
@@ -347,6 +368,10 @@ pub struct LinkOptions {
     pub looks_sink: Option<LooksSink>,
     /// Told about every relay change and stream restart (the plugin judges operator input).
     pub fixture_tap: Option<FixtureTap>,
+    /// Where a recording's loudness goes. `None` saves none.
+    pub loudness_sink: Option<LoudnessSink>,
+    /// The audio input that measures loudness. `None` records no loudness (headless builds).
+    pub audio: Option<Arc<dyn AudioInput>>,
     pub http_factory: HttpFactory,
     pub clock: Arc<dyn Clock>,
     /// UDP port of the `lightkey-api` relay (21700 unless the agent was configured otherwise).
@@ -359,6 +384,8 @@ impl Default for LinkOptions {
             armed_store: Arc::new(MemoryArmedStore::new()),
             looks_sink: None,
             fixture_tap: None,
+            loudness_sink: None,
+            audio: None,
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
             relay_port: DEFAULT_LIGHTKEY_RELAY_PORT,
@@ -384,6 +411,10 @@ impl LightkeyLink {
                 armed_store: options.armed_store,
                 looks_sink: options.looks_sink,
                 fixture_tap: options.fixture_tap,
+                loudness_sink: options.loudness_sink,
+                audio: options
+                    .audio
+                    .map(|input| Arc::new(AudioHub::new(input, options.clock.clone()))),
                 http_factory: options.http_factory,
                 clock: options.clock,
                 relay_port: options.relay_port,
@@ -431,6 +462,12 @@ impl LightkeyLink {
         }
         self.inner.relay.reset();
         self.inner.wake.notify_one();
+        self.inner.sync_audio();
+    }
+
+    /// The audio input hub (picker, meter), when this build can listen to an input.
+    pub fn audio(&self) -> Option<Arc<AudioHub>> {
+        self.inner.audio.clone()
     }
 
     /// Whether the Record switch is on (replay never runs while it is).
@@ -602,9 +639,12 @@ impl Inner {
         for sub in subs {
             self.bus.unsubscribe(&sub);
         }
-        let mut st = self.st();
-        st.session = None;
-        st.armed = false;
+        {
+            let mut st = self.st();
+            st.session = None;
+            st.armed = false;
+        }
+        self.sync_audio();
     }
 
     // ------------------------------------------------------------ actions
@@ -940,6 +980,10 @@ impl Inner {
                     if self.relay.is_live() {
                         session.fixtures = Some(LookRecorder::new(&self.relay.state()));
                     }
+                    if self.audio.is_some() {
+                        session.loudness =
+                            Some(Arc::new(Mutex::new(LoudnessRecorder::new(started_at))));
+                    }
                     st.session = Some(session);
                     true
                 } else {
@@ -950,19 +994,25 @@ impl Inner {
                 self.say("Not recording this song: Lightkey is not connected.");
                 return;
             }
+            // The input opens now; a failure never stops the lights capture.
+            let audio_problem = self.sync_audio();
             let with_fixtures = self
                 .st()
                 .session
                 .as_ref()
                 .is_some_and(|session| session.fixtures.is_some());
-            if with_fixtures || self.relay.status(false).is_none() {
-                self.say(format!("Recording {}.", song.title));
+            let mut text = if with_fixtures || self.relay.status(false).is_none() {
+                format!("Recording {}.", song.title)
             } else {
-                self.say(format!(
+                format!(
                     "Recording {}. Fixture levels are not recorded: the Lightkey API relay is not connected.",
                     song.title
-                ));
+                )
+            };
+            if let Some(problem) = audio_problem {
+                text.push_str(&format!(" Loudness is not recorded: {problem}"));
             }
+            self.say(text);
         }
     }
 
@@ -987,6 +1037,11 @@ impl Inner {
                     if let Some(recorder) = session.fixtures.as_mut() {
                         recorder.observe(position, &self.relay.state().commands());
                     }
+                    if let Some(loudness) = &session.loudness {
+                        let mut loudness = loudness.lock().unwrap_or_else(|p| p.into_inner());
+                        loudness.set_started_at(session.started_at);
+                        loudness.set_running(true);
+                    }
                     Some(true)
                 } else {
                     st.session = None;
@@ -999,6 +1054,7 @@ impl Inner {
         if had_session == Some(false) {
             self.say("Recording discarded: the song was moved.");
         }
+        self.sync_audio();
     }
 
     /// Pause, stop, song end and a failed timer: a recording session pauses or is kept.
@@ -1023,6 +1079,12 @@ impl Inner {
                     };
                     session.last_position = session.last_position.max(position);
                     session.running = false;
+                    if let Some(loudness) = &session.loudness {
+                        loudness
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .set_running(false);
+                    }
                     let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
                     if recording_is_worth_keeping(session.last_position, duration) {
                         match st.session.take() {
@@ -1054,11 +1116,68 @@ impl Inner {
         if had {
             self.say("Recording discarded: the countdown was reset.");
         }
+        self.sync_audio();
     }
 
     /// A recording ends: below half the song it is thrown away, otherwise thinned into look
     /// rows and saved to the song's timeline. The raw changes go with `session`.
     async fn finish(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
+        let note = self.save_loudness(&mut session).await;
+        let text = self.finish_looks(session, reason).await;
+        match note {
+            Some(note) => self.say(format!("{text} {note}")),
+            None => text,
+        }
+    }
+
+    /// Points the audio input at the running session's recorder (none: the input closes) and at
+    /// the saved input choice. `Some` is why the input could not be opened.
+    fn sync_audio(&self) -> Option<String> {
+        let hub = self.audio.as_ref()?;
+        let recorder = self.st().session.as_ref().and_then(|s| s.loudness.clone());
+        hub.set_device((self.settings)().3.audio_device.clone());
+        hub.set_recorder(recorder).err()
+    }
+
+    /// A finished recording's loudness goes to the song, under the same keep-it rule as the
+    /// looks (at least half the song). The line is added to the status; never an error.
+    async fn save_loudness(self: &Arc<Self>, session: &mut Session) -> Option<String> {
+        let recorder = session.loudness.take()?;
+        let problem = self.audio.as_ref().and_then(|hub| hub.info().reason);
+        self.sync_audio();
+        let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
+        let mut covered = session.last_position;
+        if session.running {
+            covered = covered.max(self.clock.wall() - session.started_at);
+        }
+        let covered = if duration > 0.0 {
+            covered.min(duration)
+        } else {
+            covered
+        };
+        if !recording_is_worth_keeping(covered, duration) {
+            return None;
+        }
+        let Some(loudness) = AudioHub::finish(&recorder, duration) else {
+            return Some(match problem {
+                Some(problem) => format!("Loudness not saved: {problem}"),
+                None => "Loudness not saved: nothing was heard.".into(),
+            });
+        };
+        let sink = self.loudness_sink.clone()?;
+        let saved = sink(SongLoudnessTake {
+            song_key: session.key.clone(),
+            song_title: session.song.title.clone(),
+            loudness,
+        })
+        .await;
+        Some(match saved {
+            Ok(()) => "Loudness saved.".into(),
+            Err(_) => "Loudness could not be saved.".into(),
+        })
+    }
+
+    async fn finish_looks(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         if session.running {
             session.last_position = session

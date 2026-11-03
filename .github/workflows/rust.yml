@@ -81,13 +81,13 @@ jobs:
       # midir backend (feature midir-backend). Linux (no ALSA dev headers) tests every
       # behaviour through in-memory fakes only.
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend -- -D warnings
+        run: cargo clippy --workspace --all-targets --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend -- -D warnings
 
       - name: cargo test
         shell: bash
         run: |
           start=$(date +%s)
-          cargo test --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend
+          cargo test --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
           echo "test_seconds=$(( $(date +%s) - start )) runner=${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build the rig latency probe (artifact only; nothing is published)

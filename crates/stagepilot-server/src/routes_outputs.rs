@@ -68,6 +68,12 @@ pub fn routes() -> Router<Rt> {
             post(lightkey_recording),
         )
         .route("/api/v1/lights/lightkey/release", post(lightkey_release))
+        .route("/api/v1/lights/lightkey/audio", get(lightkey_audio))
+        .route(
+            "/api/v1/lights/lightkey/audio/meter",
+            post(lightkey_audio_meter),
+        )
+        .route("/api/v1/lights/loudness/clear", post(lights_loudness_clear))
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Value {
@@ -773,6 +779,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: song_title.clone(),
         cues: request.cues.clone(),
         osc_cues: request.osc_cues.clone(),
+        loudness: None,
         captured_edited: false,
     };
     let mut check = LightsSettings::default();
@@ -799,6 +806,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             song_title: song_title.clone(),
             cues: vec![],
             osc_cues: vec![],
+            loudness: None,
             captured_edited: false,
         });
     let _ = value;
@@ -820,6 +828,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         } else {
             existing.map(|m| m.osc_cues.clone()).unwrap_or_default()
         },
+        loudness: existing.and_then(|m| m.loudness.clone()),
         captured_edited: false,
     };
     let merged = SongLightingCueMap {
@@ -827,7 +836,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         ..merged
     };
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
+    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated.cue_maps.insert(song_key.clone(), merged.clone());
     } else {
         updated.cue_maps.remove(&song_key);
@@ -1055,6 +1064,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                 song_title: song_title.trim().to_string(),
                 cues: midi_cues,
                 osc_cues,
+                loudness: existing.and_then(|m| m.loudness.clone()),
                 captured_edited: current
                     .cue_maps
                     .get(song_key)
@@ -1126,10 +1136,11 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         song_title: existing.song_title.clone(),
         cues,
         osc_cues,
+        loudness: existing.loudness.clone(),
         captured_edited: existing.captured_edited,
     };
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() {
+    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
         updated
             .cue_maps
             .insert(request.song_key.clone(), merged.clone());
@@ -1231,6 +1242,8 @@ struct LightkeySettingsRequest {
     api_url: Option<String>,
     replay: Option<bool>,
     detail: Option<stagepilot_core::config::LightkeyDetail>,
+    /// `Some("")` clears the choice (system default input).
+    audio_device: Option<String>,
 }
 
 /// pydantic's lax `bool`: `true`/`false`, `0`/`1`, and the strings pydantic accepts. `Err` is the
@@ -1332,11 +1345,34 @@ fn parse_lightkey_settings(
             None
         }
     };
+    let audio_device = match object.get("audio_device") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) if text.chars().count() <= 200 => Some(text.clone()),
+        Some(Value::String(text)) => {
+            errors.push(plain_error(
+                "string_too_long",
+                "audio_device",
+                "String should have at most 200 characters",
+                &json!(text),
+            ));
+            None
+        }
+        Some(other) => {
+            errors.push(plain_error(
+                "string_type",
+                "audio_device",
+                "Input should be a valid string",
+                other,
+            ));
+            None
+        }
+    };
     if errors.is_empty() {
         Ok(LightkeySettingsRequest {
             api_url,
             replay,
             detail,
+            audio_device,
         })
     } else {
         Err(errors)
@@ -1399,6 +1435,10 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
             .unwrap_or_else(|_| api_url.clone()),
         replay: request.replay.unwrap_or(current.lightkey.replay),
         detail: request.detail.unwrap_or(current.lightkey.detail),
+        audio_device: match &request.audio_device {
+            Some(name) => Some(name.trim().to_string()).filter(|name| !name.is_empty()),
+            None => current.lightkey.audio_device.clone(),
+        },
     };
     if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
         return response;
@@ -1556,4 +1596,90 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
         message,
         lightkey: status,
     }))
+}
+
+// ---- Loudness ----------------------------------------------------------------------------------
+
+/// The input picker's data: devices, the saved choice, the live meter. `available: false` with a
+/// `reason` in a build or on a machine that cannot listen (the picker is then hidden).
+async fn lightkey_audio(State(rt): State<Rt>) -> Json {
+    audio_response(&rt)
+}
+
+fn audio_response(rt: &Runtime) -> Json {
+    match rt.outputs.lights.lightkey_audio() {
+        Some(hub) => {
+            let mut info = hub.info();
+            info.selected = current_lights(rt).lightkey.audio_device;
+            ok(to_value(&info))
+        }
+        None => ok(json!({
+            "available": false,
+            "reason": stagepilot_lights::audio::UNAVAILABLE_TEXT,
+            "devices": [],
+            "selected": null,
+            "note": null,
+            "level": null,
+            "metering": false,
+        })),
+    }
+}
+
+/// Turns the picker's meter on (it switches itself off after a few seconds without a repeat) or
+/// off. Only the picker asks, and only while Record is chosen.
+async fn lightkey_audio_meter(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let on = match object_body(&raw) {
+        Ok(object) => match object.get("on") {
+            Some(value) => match lax_bool("on", value) {
+                Ok(on) => on,
+                Err(error) => return unprocessable(vec![strip_ctx(error)]),
+            },
+            None => true,
+        },
+        Err(response) => return response,
+    };
+    if let Some(hub) = rt.outputs.lights.lightkey_audio() {
+        hub.set_device(current_lights(&rt).lightkey.audio_device);
+        hub.set_meter(on);
+    }
+    audio_response(&rt)
+}
+
+/// Removes a song's loudness envelope (nothing else on its cue map).
+async fn lights_loudness_clear(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let (request, _): (LoudnessClearRequest, Value) = match body(&raw) {
+        Ok(parsed) => parsed,
+        Err(response) => return response,
+    };
+    let mut errors = Vec::new();
+    length_error(&mut errors, "song_key", &request.song_key, 1, 256);
+    if let Err(response) = finish(errors) {
+        return response;
+    }
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let Some(mut map) = current.cue_maps.get(&request.song_key).cloned() else {
+        return lights_operation(&rt, false, "This song has no loudness.".into()).await;
+    };
+    if map.loudness.take().is_none() {
+        return lights_operation(&rt, false, "This song has no loudness.".into()).await;
+    }
+    let mut updated = current.clone();
+    if map.cues.is_empty() && map.osc_cues.is_empty() {
+        updated.cue_maps.remove(&request.song_key);
+    } else {
+        updated
+            .cue_maps
+            .insert(request.song_key.clone(), map.clone());
+    }
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    rt.outputs.lights.replace_cue_map(map).await;
+    lights_operation(&rt, true, "Loudness cleared.".into()).await
+}
+
+#[derive(serde::Deserialize)]
+struct LoudnessClearRequest {
+    song_key: String,
 }

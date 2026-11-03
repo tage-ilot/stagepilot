@@ -352,6 +352,7 @@ pub fn look_rows(looks: &[Look]) -> Vec<OscLightingCue> {
                     })
                     .collect(),
                 source: OscCueSource::Captured,
+                edited: false,
             });
         }
     }
@@ -372,6 +373,7 @@ pub fn replace_captured(
         song_title: song_title.to_string(),
         cues: Vec::new(),
         osc_cues: Vec::new(),
+        loudness: None,
         captured_edited: false,
     });
     map.osc_cues
@@ -904,6 +906,7 @@ mod tests {
             color: None,
             messages: vec![],
             source: OscCueSource::Manual,
+            edited: false,
         };
         let old_look = look_rows(&[Look {
             at_seconds: 1.0,
@@ -914,6 +917,7 @@ mod tests {
             song_title: "Song".into(),
             cues: vec![],
             osc_cues: std::iter::once(manual.clone()).chain(old_look).collect(),
+            loudness: None,
             captured_edited: false,
         };
         let fresh = look_rows(&[Look {

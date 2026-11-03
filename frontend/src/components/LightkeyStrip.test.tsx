@@ -12,6 +12,7 @@ vi.mock("../api", async (original) => ({
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
   releaseLightkeyLights: vi.fn(),
+  setLightkeyAudioMeter: vi.fn().mockResolvedValue({ available: false, reason: "No input.", devices: [], selected: null, note: null, level: null, metering: false }),
 }));
 
 const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
@@ -27,7 +28,6 @@ const status = (over: Partial<LightkeyStatus> = {}): LightkeyStatus => ({
   message: null,
   ...over,
 });
-const captured = { song_title: "Holy Forever", looks: 14 };
 const respond = (lightkey: LightkeyStatus, accepted = true, message = "ok") => ({ accepted, message, lightkey });
 
 beforeEach(() => { vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });
@@ -120,13 +120,13 @@ describe("LightkeyStrip", () => {
   it("says how many captured looks the last saved song has, and no longer lists takes", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({
       fixtures: { link: "live", detail: null, fixtures: 66, lost_packets: 0, recording: false },
-      captured,
+      
     }));
     render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
     expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
-    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("14 captured looks on “Holy Forever”.");
-    expect(screen.queryByRole("button", { name: /Clear capture/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Captured songs" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured looks on this song");
+    expect(screen.queryByRole("list", { name: "Captured songs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Clear capture/ })).toBeNull();
   });
 
   it("says 1 captured look in the singular", async () => {
@@ -203,16 +203,15 @@ describe("LightkeyStrip", () => {
 
 describe("lightkeyHeadline", () => {
   it("puts recording first, then replaying, then why replay is paused", () => {
-    expect(lightkeyHeadline(status({ recording: true, recording_song: "Holy Forever" }))).toBe("Recording Holy Forever.");
+    expect(lightkeyHeadline(status({ recording: true, recording_song: "Holy Forever" }))).toBe("Recording “Holy Forever”.");
     expect(lightkeyHeadline(status({ recording: true }))).toBe("Recording starts with the next song.");
-    expect(lightkeyHeadline(status({ replaying_song: "Holy Forever", captured }))).toBe("Replaying “Holy Forever”.");
-    expect(lightkeyHeadline(status({ replay_blocked: "Replay is switched off.", captured }))).toBe("Replay is switched off.");
+    expect(lightkeyHeadline(status({ replaying_song: "Holy Forever" }), { count: 1, edited: false })).toBe("Replaying “Holy Forever”.");
+    expect(lightkeyHeadline(status({ replay_blocked: "Replay is switched off." }), { count: 1, edited: false })).toBe("Replay is switched off.");
   });
   it("tells a first-time operator what to do, then counts captures", () => {
     expect(lightkeyHeadline(status())).toMatch(/Switch to Record/);
-    expect(lightkeyHeadline(status({ captured }))).toBe("14 captured looks on “Holy Forever”.");
-    expect(lightkeyHeadline(status({ captured: { song_title: "Gratitude", looks: 1 } }))).toBe("1 captured look on “Gratitude”.");
-    expect(lightkeyHeadline(status({ link: "unreachable" }))).toBe("No lights captured yet.");
+    expect(lightkeyHeadline(status(), { count: 1, edited: false })).toBe("1 captured look on this song");
+    expect(lightkeyHeadline(status(), { count: 2, edited: false })).toBe("2 captured looks on this song");
   });
 });
 
@@ -260,7 +259,7 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   });
 
   it("an error replaces the message line", () => {
-    expect(lightkeyLines(status({ message: "Saved 14 looks to Holy Forever's timeline." }), "Cannot reach the app.")[0]).toBe("Cannot reach the app.");
+    expect(lightkeyLines(status({ message: "Capture cleared." }), "Cannot reach the app.")[0]).toBe("Cannot reach the app.");
   });
 
   it("normaliseLine ignores quote style and spacing", () => {

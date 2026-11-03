@@ -140,6 +140,7 @@ fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLighti
             args: vec![OscArgument::Float(level)],
         }],
         source: OscCueSource::Captured,
+        edited: false,
     };
     std::iter::once((
         "demo-battle-belongs".to_string(),
@@ -148,6 +149,7 @@ fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLighti
             song_title: "Battle Belongs".into(),
             cues: vec![],
             osc_cues: vec![row(1, 0.0, 0.0), row(2, 10.0, 1.0), row(3, 40.0, 0.25)],
+            loudness: None,
             captured_edited: false,
         },
     ))

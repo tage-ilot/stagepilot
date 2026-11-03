@@ -48,9 +48,10 @@ keyring = { version = "3", default-features = false, features = ["apple-native"]
 # The installers ship on Windows and macOS, where MIDI hardware goes through midir (WinMM / CoreMIDI).
 # Without this the server refuses to start on any settings that send MIDI ("built without
 # MIDI hardware support"), which is what v2.42.0-rc.3 did. Linux is not shipped and its midir needs
-# ALSA headers the CI runner does not have, so the feature stays off there.
+# ALSA headers the CI runner does not have, so the feature stays off there. `cpal-backend` is the
+# audio input that measures room loudness while recording (CoreAudio / WASAPI); same reasoning.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-stagepilot-server = { path = "../../crates/stagepilot-server", features = ["midir-backend"] }
+stagepilot-server = { path = "../../crates/stagepilot-server", features = ["midir-backend", "cpal-backend"] }
 
 # Lets the shell's own tests assert the feature really is on in the build that ships.
 [target.'cfg(any(windows, target_os = "macos"))'.dev-dependencies]

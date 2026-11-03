@@ -311,6 +311,61 @@ Captures, undo and cue-map saves are serialized on the backend, so a capture
 and a timer restart cannot overwrite each other's cues. The scheduler is
 unchanged: a cue added mid-song takes effect at the next timer start.
 
+## Room loudness behind the timeline
+
+While Lightkey records a song, StagePilot can also measure how loud the room is and draw it as a faint
+filled envelope behind the song's look rows in the Lighting timeline (scaled to the song's own loudest
+moment, so it shows the shape of the song, not an absolute level). Markers stay on top and the picture
+zooms and scrolls with the timeline. A text alternative reads for example "Loudness: peak at 02:10".
+
+**Privacy.** Only loudness numbers are saved: one byte per 0.25 s window, about 1,000 numbers for a four
+minute song. Sound is measured the moment it arrives and thrown away. No audio is stored, written to disk
+or sent anywhere, and nothing leaves the machine.
+
+**When it listens.** Only while Record is chosen **and** a song is running, on the same song clock as the
+lights capture, and with the same rules: a pause leaves a gap, moving the playhead or resetting discards
+the take, and it is saved only if at least half the song was recorded. While Record is chosen but no song
+runs, the input is open only as long as the input picker is on screen (to show its level meter) and closes
+a few seconds after you leave. In Replay mode it never opens.
+
+**Choosing the input.** With Record chosen, the Lightkey strip shows an **Audio input** list with a live
+level meter. The default is the system default input (the built-in microphone). Pick an audio interface or a
+line feed from the board if you have one. The choice is saved by name. If that input is not there next
+time (unplugged), StagePilot uses the default input and says so; the saved choice stays so it comes back
+when the interface does. **Clear loudness** removes the selected song's envelope and nothing else.
+
+**More than one recording.** Recording a song again averages the new loudness into the old. Levels are
+averaged as power (not as decibels), each recording counts equally up to eight; after that the oldest
+influence fades, so it can still follow how the room changes. A slot one recording missed (a pause) keeps
+the other's value.
+
+**If audio is not available** (the Docker or headless server, no input device, microphone permission
+refused) the picker is hidden and one short line says why. Lights capture is never affected: the song's
+lights record as usual and the status line adds "Loudness is not recorded: ...".
+
+**Limits.**
+- The numbers are **dBFS** (decibels relative to the input's full scale, from -60 to 0), not sound
+  pressure (SPL). They compare moments within a recording, not rooms or nights. Louder means louder
+  *at that input with that gain*.
+- The built-in microphone hears the room: the band, the congregation and the speakers together. A line
+  feed from the console is cleaner and ignores the room, but it is a different level than a microphone.
+  Do not mix inputs across recordings of the same song, or the average blends two different scales.
+- Anything stored stays near 0.25 s resolution and at most 4,000 numbers per song (over sixteen minutes).
+- Device delay is not compensated; a few tens of milliseconds are far below the 0.25 s window.
+
+### macOS microphone permission
+
+The first time StagePilot listens (when you choose Record, or open the input picker), macOS asks once:
+"StagePilot would like to access the Microphone". The text it shows is: *StagePilot measures how loud the
+room is while you record lights. It never saves audio.* Choose **OK**. If you chose **Don't Allow**, the
+picker shows that microphone access was refused. To allow it later: **System Settings > Privacy &
+Security > Microphone**, switch **StagePilot** on, then reopen the app. If StagePilot is not in that list
+yet, choose Record once so macOS asks again. Windows has its own switch under **Settings > Privacy >
+Microphone** (allow desktop apps). The app is ad-hoc signed without the hardened runtime, so no audio
+entitlement is needed today; if it ever ships with the hardened runtime, the
+`com.apple.security.device.audio-input` entitlement must be added then. The usage text lives in
+`desktop/src-tauri/Info.plist` (`NSMicrophoneUsageDescription`).
+
 ## Why MIDI Clock is not used for `mm:ss`
 
 Playback MIDI Clock carries musical tempo pulses while tracks are playing. It

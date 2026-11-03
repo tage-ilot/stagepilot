@@ -6,6 +6,8 @@
   <string>StagePilot.help</string>
   <key>CFBundleHelpBookName</key>
   <string>org.stagepilot.desktop.help</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>StagePilot measures how loud the room is while you record lights. It never saves audio.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>StagePilot looks for Playback on your local network so it can follow your service.</string>
 </dict>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
+import type { SongLoudness } from "../types";
 import { clusterMarkers } from "./lightingLooks";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
@@ -13,6 +14,7 @@ import {
   timeFromTrackOffset,
   type TimelineMarker,
 } from "./lightingTimelineMath";
+import { loudnessAltText, loudnessPath } from "./loudness";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ScrollRegion } from "./ui/ScrollRegion";
@@ -27,8 +29,10 @@ const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of sq
  * The cue rows below stay the precise editor; this component only reports moves, nudges and deletes.
  */
 export function LightingTimeline({
-  songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect,
+  songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect, loudness,
 }: {
+  /** The song's recorded room loudness, drawn as a faint envelope behind the markers. */
+  loudness?: SongLoudness | null;
   /** Called when a single marker is picked, so the cue list can show its row. */
   onSelect?: (id: string) => void;
   /** Rows picked for merging (shift/ctrl-click, a drag on the track, or a long press on touch). */
@@ -69,6 +73,7 @@ export function LightingTimeline({
     width: zoom === 0 ? "100%" : `${Math.max(length * zoom, 1)}px`,
   };
   const step = rulerStep(length);
+  const loudnessShape = loudness ? loudnessPath(loudness, length) : null;
   const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, index) => index * step);
 
   // The width the labels have to share. jsdom (the tests) has no ResizeObserver, so fall back to one read.
@@ -222,6 +227,18 @@ export function LightingTimeline({
             role="group"
             style={{ height: `${MARKER_LABEL_ROWS * 20 + 20}px` }}
           >
+            {loudness && loudnessShape && (
+              <svg
+                aria-label={loudnessAltText(loudness)}
+                className="pointer-events-none absolute inset-0 h-full w-full text-ink-muted opacity-25"
+                data-testid="lighting-loudness"
+                preserveAspectRatio="none"
+                role="img"
+                viewBox="0 0 1000 100"
+              >
+                <path d={loudnessShape} fill="currentColor" />
+              </svg>
+            )}
             {playhead !== null && (
               <div
                 aria-hidden="true"

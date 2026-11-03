@@ -25,6 +25,7 @@ import {
   testLightingCue,
   captureLightingPad,
   undoLightingCapture,
+  clearLightingLoudness,
   simplifyLightkeyLooks,
   updateLightingPads,
   testOscLightingCue,
@@ -1000,6 +1001,23 @@ export function useStagePilot() {
     }
   }, [claim, release, canOperate]);
 
+  const clearLightingLoudness_ = useCallback(async (songKey: string): Promise<boolean> => {
+    if (!canOperate) return false;
+    if (!claim("lights-loudness")) return false;
+    try {
+      const response = await clearLightingLoudness(songKey);
+      setLights(response.lights);
+      setLightingMessage(response.message);
+      setSettings(await getSettings());
+      return response.accepted;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Loudness could not be cleared."));
+      return false;
+    } finally {
+      release("lights-loudness");
+    }
+  }, [claim, release, canOperate]);
+
   /** "Simplify this song" Apply: the backend thins and merges the captured rows, then the saved settings are reread. */
   const simplifyLightingLooks = useCallback(async (songKey: string, detail: LightkeyDetail): Promise<LightkeySimplifyResponse | null> => {
     if (!canConfigure) return null;
@@ -1159,6 +1177,7 @@ export function useStagePilot() {
     saveLightingPads,
     pressLightingPad,
     undoLightingCapture: undoLightingCapture_,
+    clearLightingLoudness: clearLightingLoudness_,
     clearAllLightingCues,
     simplifyLightingLooks,
     activateConfiguredServices,

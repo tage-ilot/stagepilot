@@ -71,6 +71,7 @@ fn settings(
             song_title: "Holy Forever".into(),
             cues,
             osc_cues: osc,
+            loudness: None,
             captured_edited: false,
         },
     );

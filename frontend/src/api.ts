@@ -11,6 +11,7 @@ import type {
   LightingCaptureResponse,
   LightingPad,
   LightkeyActionResponse,
+  LightkeyAudio,
   LightkeyDetail,
   LightkeySimplifyResponse,
   LightkeyStatus,
@@ -362,7 +363,7 @@ export const undoLightingCapture = (songKey: string, cueId: string) =>
   });
 
 export const getLightkeyStatus = () => requestJson<LightkeyStatus>("/api/v1/lights/lightkey");
-export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail_level?: LightkeyDetail }) =>
+export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; detail_level?: LightkeyDetail; audio_device?: string }) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -370,6 +371,19 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
   });
 export const releaseLightkeyLights = () =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/release", { method: "POST" });
+/** Turns the input meter on (it switches itself off after a few seconds) or off; answers the picker's data. */
+export const setLightkeyAudioMeter = (on: boolean) =>
+  requestJson<LightkeyAudio>("/api/v1/lights/lightkey/audio/meter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ on }),
+  });
+export const clearLightingLoudness = (songKey: string) =>
+  requestJson<LightsOperationResponse>("/api/v1/lights/loudness/clear", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ song_key: songKey }),
+  });
 /** Thin + merge a song's captured rows on the backend. Without `apply` it only counts ("412 rows -> 190"). */
 export const simplifyLightkeyLooks = (songKey: string, detailLevel: LightkeyDetail, apply: boolean) =>
   requestJson<LightkeySimplifyResponse>("/api/v1/lights/lightkey/simplify", {

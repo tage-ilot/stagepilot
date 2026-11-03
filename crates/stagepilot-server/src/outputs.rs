@@ -58,6 +58,9 @@ pub struct OutputBackends {
     /// Where the Lightkey Record switch is remembered; `None` means next to the settings file
     /// (or in memory when the settings are in memory).
     pub lightkey_armed: Option<Arc<dyn stagepilot_lights::lightkey_link::ArmedStore>>,
+    /// The audio input that measures room loudness while recording (cpal in the desktop app, a
+    /// "not available" stand-in in headless builds, a fake in tests).
+    pub audio_input: Arc<dyn stagepilot_lights::audio::AudioInput>,
 }
 
 impl Default for OutputBackends {
@@ -71,6 +74,7 @@ impl Default for OutputBackends {
                 Arc::new(stagepilot_lights::lightkey_link::ReqwestLightkeyHttp::new())
             }),
             lightkey_armed: None,
+            audio_input: stagepilot_lights::audio::default_input(),
         }
     }
 }
@@ -84,6 +88,10 @@ impl OutputBackends {
         Self {
             midi: Arc::new(move || Ok(input.clone() as Arc<dyn MidiBackend>)),
             midi_output: Arc::new(move || Ok(output.clone() as Arc<dyn MidiOutputBackend>)),
+            // Tests never open a real audio device.
+            audio_input: Arc::new(stagepilot_lights::audio::UnavailableInput(
+                stagepilot_lights::audio::UNAVAILABLE_TEXT.into(),
+            )),
             ..Self::default()
         }
     }
@@ -327,6 +335,50 @@ fn looks_sink(
     })
 }
 
+/// The Lightkey link's way to save a recording's loudness: average it into the song's envelope and
+/// save the cue map through the same lock as every other cue-map write.
+fn loudness_sink(
+    cue_lock: Arc<tokio::sync::Mutex<()>>,
+    settings_service: Arc<SettingsService>,
+    plugin: Arc<std::sync::OnceLock<std::sync::Weak<LightsPlugin>>>,
+) -> stagepilot_lights::lightkey_link::LoudnessSink {
+    use stagepilot_lights::lightkey_link::{LooksError, SongLoudnessTake};
+    Arc::new(move |take: SongLoudnessTake| {
+        let (cue_lock, settings_service, plugin) =
+            (cue_lock.clone(), settings_service.clone(), plugin.clone());
+        Box::pin(async move {
+            let _guard = cue_lock.lock().await;
+            let mut lights = settings_service.effective_runtime_settings().lights;
+            let mut map = lights
+                .cue_maps
+                .get(&take.song_key)
+                .cloned()
+                .unwrap_or_else(|| stagepilot_core::config::SongLightingCueMap {
+                    song_key: take.song_key.clone(),
+                    song_title: take.song_title.clone(),
+                    cues: Vec::new(),
+                    osc_cues: Vec::new(),
+                    loudness: None,
+                    captured_edited: false,
+                });
+            map.loudness = Some(stagepilot_lights::loudness::merge_loudness(
+                map.loudness.as_ref(),
+                take.loudness,
+            ));
+            lights.cue_maps.insert(take.song_key.clone(), map);
+            lights.normalise();
+            let merged = lights.cue_maps.get(&take.song_key).cloned();
+            settings_service
+                .persist_lights(lights)
+                .map_err(|error| LooksError::Failed(error.0))?;
+            if let (Some(merged), Some(plugin)) = (merged, plugin.get().and_then(|w| w.upgrade())) {
+                plugin.replace_cue_map(merged).await;
+            }
+            Ok(())
+        })
+    })
+}
+
 /// Everything the routes and the runtime need from the output plugins.
 pub struct Outputs {
     pub backends: OutputBackends,
@@ -339,6 +391,8 @@ pub struct Outputs {
     pub cue_lock: Arc<tokio::sync::Mutex<()>>,
     /// How a finished Lightkey recording is saved to a song's timeline (also used by tests).
     pub looks_sink: stagepilot_lights::lightkey_link::LooksSink,
+    /// How a finished recording's loudness is averaged into a song (also used by tests).
+    pub loudness_sink: stagepilot_lights::lightkey_link::LoudnessSink,
     presentation: Mutex<Option<Arc<ProPresenterPlugin>>>,
     applied: Mutex<Option<ProPresenterSettings>>,
     demo: Mutex<Option<Arc<DemoPlugin>>>,
@@ -371,6 +425,13 @@ impl Outputs {
                     path.with_file_name("lightkey-record-armed"),
                 ));
         }
+        let loudness = loudness_sink(
+            cue_lock.clone(),
+            settings_service.clone(),
+            plugin_cell.clone(),
+        );
+        lights_options.lightkey.loudness_sink = Some(loudness.clone());
+        lights_options.lightkey.audio = Some(backends.audio_input.clone());
         let sink = looks_sink(cue_lock.clone(), settings_service, plugin_cell.clone());
         lights_options.lightkey.looks_sink = Some(sink.clone());
         let lights = Arc::new(LightsPlugin::new(
@@ -403,6 +464,7 @@ impl Outputs {
             midi_input,
             cue_lock,
             looks_sink: sink,
+            loudness_sink: loudness,
             presentation: Mutex::new(None),
             applied: Mutex::new(None),
             demo: Mutex::new(None),
