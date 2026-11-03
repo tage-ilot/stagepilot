@@ -90,6 +90,26 @@ describe("SongsStrip", () => {
     const { container } = render(<SongsStrip chips={[]} liveKey="" noun="looks" onClear={vi.fn()} onClearAll={vi.fn()} onSelect={vi.fn()} selectedKey="" />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("keeps the title whole and lets the count truncate first; a very long title truncates but stays named", () => {
+    const long = "A very long song title that goes on and on and on past any sensible chip width";
+    mount({ chips: [
+      { key: "n", title: "Battle Belongs", order: 1, looks: 12, handmade: 0, hasLoudness: false },
+      { key: "l", title: long, order: 2, looks: 3, handmade: 0, hasLoudness: false },
+    ] });
+    const normal = screen.getByText("Battle Belongs");
+    expect(normal.className).toContain("shrink-0");
+    expect(normal.className).not.toContain("min-w-0");
+    expect(normal.className).toContain("max-w-[16rem]");
+    expect(normal.className).toContain("truncate");
+    const count = screen.getByText("· 12 looks");
+    expect(count.className).toContain("min-w-0");
+    expect(count.className).toContain("truncate");
+    expect(count.className).not.toContain("shrink-0");
+    expect(screen.getByText(long).className).toContain("truncate");
+    expect(screen.getByRole("button", { name: new RegExp(`^${long}, 3 looks`) })).toBeInTheDocument();
+    expect(screen.getByText(long).closest("li")?.className).toContain("max-w-[28rem]");
+  });
 });
 
 describe("SongsStrip capture labels", () => {
