@@ -53,7 +53,7 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
           ].filter(Boolean).join(", ");
           return (
             <li
-              className={`relative flex h-7 min-w-0 max-w-[20rem] items-center rounded-ds-lg border text-type-body-sm ${has ? "border-cue-look-captured bg-cue-look-captured/20 text-ink" : "border-dashed border-edge-medium bg-surface-900/40 text-ink-muted"} ${selected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`}
+              className={`relative flex h-7 min-w-0 max-w-[28rem] items-center rounded-ds-lg border text-type-body-sm ${has ? "border-cue-look-captured bg-cue-look-captured/20 text-ink" : "border-dashed border-edge-medium bg-surface-900/40 text-ink-muted"} ${selected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`}
               data-song={chip.key}
               data-state={has ? "captured" : "empty"}
               key={chip.key}
@@ -67,8 +67,8 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
                 type="button"
               >
                 {live && <span aria-hidden="true" className="size-2 shrink-0 rounded-ds-full bg-success" data-testid="song-chip-live" />}
-                <span aria-hidden="true" className="truncate font-semibold">{chip.title}</span>
-                <span aria-hidden="true" className="shrink-0 tabular-nums text-ink-body">{`· ${has ? countText(chip, noun) : "not captured"}`}</span>
+                <span aria-hidden="true" className="max-w-[16rem] shrink-0 truncate font-semibold" title={chip.title}>{chip.title}</span>
+                <span aria-hidden="true" className="min-w-0 truncate tabular-nums text-ink-body">{`· ${has ? countText(chip, noun) : "not captured"}`}</span>
                 {has && chip.hasLoudness && <span aria-hidden="true" className="shrink-0" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
               </button>
               {chip.looks + chip.handmade > 0 && (
