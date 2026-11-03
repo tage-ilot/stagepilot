@@ -1,5 +1,4 @@
-//! Lightkey link: connect to the `lightkey-api` agent, record fixture changes against a song and
-//! replay them.
+//! Lightkey link: connect to the `lightkey-api` agent and record fixture changes against a song.
 //!
 //! Owned by `LightsPlugin` (started and stopped with it) so it adds no new plugin or setting page.
 //! Fixture changes arrive from the agent's OSC relay (`crate::lightkey_relay`), timestamped from
@@ -9,31 +8,25 @@
 //! `crate::lightkey_fixtures`; this file is the thin async shell around them. The clock and the
 //! HTTP client are injected (`Clock`, `LightkeyHttp`), so everything is testable offline.
 //!
-//! Replay holds fixtures with overrides. Pause, stop, reset and the end of a song only cancel the
-//! changes still scheduled: the last look stays held. Held fixtures are released (one `clear`
-//! per fixture, repeated once) only when replay is switched off, Lighting is disabled, the link
-//! shuts down, or a new song starts that does not use them.
+//! Replay is not done here: the song-lighting timeline in `crate::plugin` is the one replay
+//! engine. This link keeps the recorder, the relay client and the status the Lighting panel shows.
 
 use crate::lightkey::{
     effective_api_url, summarize, take_is_worth_keeping, truncate_micros, LightkeyLink as Link,
     LightkeyStatus, LightkeyTake, LightkeyTakeSummary,
 };
-use crate::lightkey_fixtures::{
-    clear_address, fixture_replay_plan, FixtureCommand, FixtureRecorder, FixtureReplay,
-};
+use crate::lightkey_fixtures::{FixtureCommand, FixtureRecorder};
 use crate::lightkey_relay::{relay_target, RelayClient};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
-use stagepilot_core::config::{LightkeySettings, OscArgument, DEFAULT_LIGHTKEY_RELAY_PORT};
+use stagepilot_core::config::{LightkeySettings, DEFAULT_LIGHTKEY_RELAY_PORT};
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
 use std::collections::BTreeMap;
-use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -168,13 +161,6 @@ impl LightkeyHttp for ReqwestLightkeyHttp {
         serde_json::from_slice(&bytes).map_err(|e| HttpFailure::Other(e.to_string()))
     }
 }
-
-/// Sends one OSC message with arguments through the saved Lighting output (fixture replay).
-pub type SendCommand = Arc<
-    dyn Fn(String, Vec<OscArgument>) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
-        + Send
-        + Sync,
->;
 
 /// `(lighting enabled, method is OSC, OSC host, Lightkey settings)`.
 pub type LinkSettings = (bool, bool, String, LightkeySettings);
@@ -414,13 +400,7 @@ struct State {
     takes: BTreeMap<String, LightkeyTake>,
     subscriptions: Vec<Subscription>,
     poll_task: Option<JoinHandle<()>>,
-    /// The running replay: sync, scheduled changes, then wait for the song's end.
-    replay_task: Option<JoinHandle<()>>,
     relay_task: Option<JoinHandle<()>>,
-    /// Fixtures replay holds with overrides. Kept across pause, stop and song end; emptied only
-    /// by a release. A set of names so per-fixture state (held / yielded) can grow from it.
-    held_fixtures: std::collections::BTreeSet<String>,
-    replay_generation: u64,
     stopped: bool,
     link: Link,
     detail: Option<String>,
@@ -442,11 +422,8 @@ struct Inner {
     store: Arc<dyn TakeStore>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
-    send_command: Option<SendCommand>,
     relay_port: u16,
     relay: RelayClient,
-    /// When the next OSC packet may leave (see `pace`).
-    next_send: Mutex<Option<tokio::time::Instant>>,
     state: Mutex<State>,
     wake: Notify,
 }
@@ -456,8 +433,6 @@ pub struct LinkOptions {
     pub store: Arc<dyn TakeStore>,
     pub http_factory: HttpFactory,
     pub clock: Arc<dyn Clock>,
-    /// Sends fixture OSC (with arguments). `None` leaves fixture replay off.
-    pub send_command: Option<SendCommand>,
     /// UDP port of the `lightkey-api` relay (21700 unless the agent was configured otherwise).
     pub relay_port: u16,
 }
@@ -468,7 +443,6 @@ impl Default for LinkOptions {
             store: Arc::new(MemoryTakeStore::new()),
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
-            send_command: None,
             relay_port: DEFAULT_LIGHTKEY_RELAY_PORT,
         }
     }
@@ -492,18 +466,13 @@ impl LightkeyLink {
                 store: options.store,
                 http_factory: options.http_factory,
                 clock: options.clock,
-                send_command: options.send_command,
                 relay_port: options.relay_port,
                 relay: RelayClient::new(),
-                next_send: Mutex::new(None),
                 state: Mutex::new(State {
                     takes: BTreeMap::new(),
                     subscriptions: Vec::new(),
                     poll_task: None,
-                    replay_task: None,
                     relay_task: None,
-                    held_fixtures: Default::default(),
-                    replay_generation: 0,
                     stopped: false,
                     link: Link::Off,
                     detail: None,
@@ -544,13 +513,14 @@ impl LightkeyLink {
         self.inner.wake.notify_one();
     }
 
-    /// Stop a running replay and give the fixtures back if the saved settings no longer allow
-    /// it (replay switched off, or Lighting turned off).
-    pub async fn refresh_replay(&self) {
-        let armed = self.inner.st().armed;
-        if self.inner.replay_blocked_reason(armed).is_some() {
-            self.inner.release_replay().await;
-        }
+    /// Whether the Record switch is on (replay never runs while it is).
+    pub fn armed(&self) -> bool {
+        lock(&self.inner.state).armed
+    }
+
+    /// The song the timeline is replaying fixture looks for (shown in the status), if any.
+    pub fn set_replaying(&self, song: Option<String>) {
+        lock(&self.inner.state).replaying = song;
     }
 
     // ------------------------------------------------------------ status
@@ -713,7 +683,6 @@ impl Inner {
     async fn stop(self: Arc<Self>) {
         self.st().stopped = true;
         self.wake.notify_one();
-        self.release_replay().await;
         let task = self.st().poll_task.take();
         if let Some(task) = task {
             task.abort();
@@ -764,7 +733,6 @@ impl Inner {
             }
             self.st().armed = true;
             self.persist_armed(true).await;
-            self.release_replay().await;
             return self.say("Recording starts with the next song.");
         }
         let session = {
@@ -1073,11 +1041,6 @@ impl Inner {
         let Some(song) = song else {
             return;
         };
-        self.cancel_sends().await;
-        // A new song: fixtures the old look held that this song does not use go back to Lightkey.
-        // Fixtures it does use are taken over by its sync below.
-        let used = self.fixtures_used_by(&song);
-        self.release_fixtures_except(&used).await;
         let previous = self.st().session.take();
         if let Some(previous) = previous {
             self.finish(previous, "A new song started.").await;
@@ -1115,18 +1078,12 @@ impl Inner {
                     song.title
                 ));
             }
-            return;
         }
-        self.start_replay(&song, payload, 0.0).await;
     }
 
     async fn on_repositioned(self: &Arc<Self>, event: &StagePilotEvent) {
         let EventPayload::Timer(payload) = &event.payload else {
             return;
-        };
-        let song = {
-            let st = self.st();
-            payload.song.clone().or_else(|| st.pending_song.clone())
         };
         let position = payload.position_seconds.unwrap_or(0.0).max(0.0);
         let had_session = {
@@ -1154,29 +1111,13 @@ impl Inner {
                 None
             }
         };
-        match had_session {
-            Some(true) => return,
-            Some(false) => {
-                self.say("Recording discarded: the song was moved.");
-                return;
-            }
-            None => {}
+        if had_session == Some(false) {
+            self.say("Recording discarded: the song was moved.");
         }
-        // Resume or seek: drop the pending changes (the look stays held) and re-sync from here.
-        self.cancel_sends().await;
-        if !payload.running {
-            return;
-        }
-        let Some(song) = song else {
-            return;
-        };
-        self.start_replay(&song, payload, position).await;
     }
 
-    /// Pause, stop, song end and a failed timer all freeze the look: only the changes still
-    /// scheduled are cancelled, nothing is cleared.
+    /// Pause, stop, song end and a failed timer: a recording session pauses or is kept.
     async fn on_stopped(self: &Arc<Self>, event: &StagePilotEvent) {
-        self.cancel_sends().await;
         enum Next {
             Finish(Box<Session>),
             Paused(String),
@@ -1222,9 +1163,8 @@ impl Inner {
         }
     }
 
-    /// Reset behaves like stop: the look is held.
+    /// Reset discards a recording in progress.
     async fn on_reset(self: &Arc<Self>, _event: &StagePilotEvent) {
-        self.cancel_sends().await;
         let had = self.st().session.take().is_some();
         if had {
             self.say("Recording discarded: the countdown was reset.");
@@ -1291,166 +1231,6 @@ impl Inner {
             "Saved \"{}\": {fixture_changes} fixture changes. {reason}",
             session.song.title
         ))
-    }
-
-    // ------------------------------------------------------------ replay
-    /// Fixtures the take for `song` would drive, when replay is allowed to run for it now.
-    fn fixtures_used_by(&self, song: &Song) -> std::collections::BTreeSet<String> {
-        let st = self.st();
-        if self.replay_blocked_reason(st.armed).is_some() || self.send_command.is_none() {
-            return Default::default();
-        }
-        st.takes
-            .get(&song_key(song))
-            .and_then(|take| take.fixtures.as_ref())
-            .map(|track| track.fixtures().into_iter().collect())
-            .unwrap_or_default()
-    }
-
-    async fn start_replay(self: &Arc<Self>, song: &Song, payload: &TimerPayload, position: f64) {
-        let armed = self.st().armed;
-        if self.replay_blocked_reason(armed).is_some() || self.send_command.is_none() {
-            return;
-        }
-        let Some(take) = self.st().takes.get(&song_key(song)).cloned() else {
-            return;
-        };
-        // A take with no fixture track replays nothing.
-        let Some(track) = take.fixtures.as_ref() else {
-            return;
-        };
-        let plan = fixture_replay_plan(track, position);
-        let wall = self.clock.wall();
-        let wall_started = payload.started_at.map_or(wall, datetime_seconds);
-        let elapsed = (wall - wall_started).max(0.0);
-        let clock_zero = self.clock.mono() - elapsed - position;
-        let mut st = self.st();
-        st.replay_generation += 1;
-        let generation = st.replay_generation;
-        st.replaying = Some(song.title.clone());
-        st.held_fixtures.extend(plan.fixtures.iter().cloned());
-        let task = tokio::spawn(self.clone().run_replay(
-            generation,
-            plan,
-            track.lead_seconds,
-            clock_zero,
-            take.duration_seconds,
-        ));
-        st.replay_task = Some(task);
-    }
-
-    /// Send the fixture track: the state at the position at once, then each change `lead`
-    /// seconds before its time, then stay "replaying" until the song's end. The fixtures are
-    /// NOT released at the end: the last look is held.
-    async fn run_replay(
-        self: Arc<Self>,
-        generation: u64,
-        plan: FixtureReplay,
-        lead: f64,
-        clock_zero: f64,
-        song_seconds: f64,
-    ) {
-        let outcome: Result<(), String> = async {
-            for command in &plan.sync_now {
-                self.send_fixture(command).await?;
-            }
-            for event in &plan.later {
-                let delay = clock_zero + event.at_seconds - lead - self.clock.mono();
-                if delay > 0.0 {
-                    tokio::time::sleep(Duration::from_secs_f64(delay)).await;
-                }
-                for command in &event.osc {
-                    self.send_fixture(command).await?;
-                }
-            }
-            let rest = (clock_zero + song_seconds - self.clock.mono()).max(0.0);
-            tokio::time::sleep(Duration::from_secs_f64(rest)).await;
-            Ok(())
-        }
-        .await;
-        if let Err(error) = outcome {
-            tracing::error!(error = %error, "lightkey_fixture_replay_failed");
-            self.say("A fixture command could not be sent.");
-        }
-        let mut st = self.st();
-        if st.replay_generation == generation {
-            st.replaying = None;
-        }
-    }
-
-    /// Space packets at least `MIN_SEND_GAP` apart (<= 200 per second). The replay start sends
-    /// the whole fixture state at once; a rig's network side drops a burst that tight. Each
-    /// caller waits for its own slot, so order is kept and an aborted task frees the rest.
-    async fn pace(&self) {
-        let now = tokio::time::Instant::now();
-        let slot = {
-            let mut next = self.next_send.lock().unwrap_or_else(|p| p.into_inner());
-            let slot = next.map_or(now, |at| at.max(now));
-            *next = Some(slot + MIN_SEND_GAP);
-            slot
-        };
-        if slot > now {
-            tokio::time::sleep_until(slot).await;
-        }
-    }
-
-    async fn send_fixture(&self, command: &FixtureCommand) -> Result<(), String> {
-        match &self.send_command {
-            Some(send) => {
-                self.pace().await;
-                send(command.a.clone(), command.osc_args()).await
-            }
-            None => Ok(()),
-        }
-    }
-
-    /// Give back to Lightkey every held fixture that is not in `keep`. One clear per fixture,
-    /// repeated once: a single wildcard clear was seen to leave fixtures held on a real rig.
-    async fn release_fixtures_except(&self, keep: &std::collections::BTreeSet<String>) {
-        let held: Vec<String> = {
-            let mut st = self.st();
-            let release: Vec<String> = st.held_fixtures.difference(keep).cloned().collect();
-            for name in &release {
-                st.held_fixtures.remove(name);
-            }
-            release
-        };
-        let Some(send) = self.send_command.clone() else {
-            return;
-        };
-        for round in 0..2 {
-            for name in &held {
-                self.pace().await;
-                if let Err(error) = send(clear_address(name), Vec::new()).await {
-                    tracing::warn!(fixture = %name, error = %error, "lightkey_fixture_clear_failed");
-                }
-            }
-            if round == 0 && !held.is_empty() {
-                tokio::time::sleep(Duration::from_millis(150)).await;
-            }
-        }
-    }
-
-    /// Cancel the replay task: the changes still scheduled are never sent. Nothing is cleared;
-    /// the held fixtures keep their last look.
-    async fn cancel_sends(&self) {
-        let task = {
-            let mut st = self.st();
-            st.replay_generation += 1;
-            st.replaying = None;
-            st.replay_task.take()
-        };
-        if let Some(task) = task {
-            task.abort();
-            let _ = task.await;
-        }
-    }
-
-    /// Stop replay and give every held fixture back to Lightkey (replay switched off, Lighting
-    /// disabled, recording armed, shutdown).
-    async fn release_replay(&self) {
-        self.cancel_sends().await;
-        self.release_fixtures_except(&Default::default()).await;
     }
 }
 

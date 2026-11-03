@@ -642,7 +642,55 @@
       "lan_access": false,
       "lights": {
        "channel": 1,
-       "cue_maps": {},
+       "cue_maps": {
+        "demo-battle-belongs": {
+         "cues": [],
+         "osc_cues": [
+          {
+           "address": "",
+           "args": [],
+           "at_seconds": 10.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look 1",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 1.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "",
+           "args": [],
+           "at_seconds": 40.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look 2",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.25
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          }
+         ],
+         "song_key": "demo-battle-belongs",
+         "song_title": "Battle Belongs"
+        }
+       },
        "enabled": true,
        "lightkey": {
         "api_url": "http://127.0.0.1:<lightkey_port>",
@@ -3402,7 +3450,55 @@
       "lan_access": false,
       "lights": {
        "channel": 1,
-       "cue_maps": {},
+       "cue_maps": {
+        "demo-battle-belongs": {
+         "cues": [],
+         "osc_cues": [
+          {
+           "address": "",
+           "args": [],
+           "at_seconds": 10.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look 1",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 1.0
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          },
+          {
+           "address": "",
+           "args": [],
+           "at_seconds": 40.0,
+           "color": null,
+           "id": "<uuid>",
+           "label": "Look 2",
+           "messages": [
+            {
+             "address": "/fixture/Par 1/overrides/dimmer",
+             "args": [
+              {
+               "type": "float",
+               "value": 0.25
+              }
+             ]
+            }
+           ],
+           "source": "captured"
+          }
+         ],
+         "song_key": "demo-battle-belongs",
+         "song_title": "Battle Belongs"
+        }
+       },
        "enabled": true,
        "lightkey": {
         "api_url": "http://127.0.0.1:<lightkey_port>",

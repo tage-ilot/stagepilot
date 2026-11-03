@@ -755,6 +755,9 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
     }
     let mut errors = Vec::new();
     for (i, cue) in request.osc_cues.iter().enumerate() {
+        if !cue.messages.is_empty() {
+            continue; // a look row sends its messages; the shared validation below checks them
+        }
         let address = cue.address.trim();
         if let Err(message) = stagepilot_core::config::validate_osc_address(address) {
             errors.push(
@@ -992,6 +995,8 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     args: pad.args.clone(),
                     label: pad.label.clone(),
                     color: pad.color,
+                    messages: Vec::new(),
+                    source: Default::default(),
                 };
                 cue_id = Some(cue.id);
                 osc_cues.push(cue);
