@@ -1624,17 +1624,19 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
 /// The input picker's data: devices, the saved choice, the live meter. `available: false` with a
 /// `reason` in a build or on a machine that cannot listen (the picker is then hidden).
 async fn lightkey_audio(State(rt): State<Rt>) -> Json {
-    audio_response(&rt)
+    audio_response(&rt, None).await
 }
 
-fn audio_response(rt: &Runtime) -> Json {
-    match rt.outputs.lights.lightkey_audio() {
-        Some(hub) => {
-            let mut info = hub.info();
-            info.selected = current_lights(rt).lightkey.audio_device;
-            ok(to_value(&info))
-        }
-        None => ok(json!({
+/// How long the audio routes wait for the device layer before answering with what is known.
+const AUDIO_ROUTE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The picker's data. Listing and opening inputs can block (a microphone permission dialog), so
+/// they run on a blocking thread with a timeout; a slow answer falls back to the cached view and
+/// the thread finishes on its own (A-01).
+async fn audio_response(rt: &Runtime, meter: Option<(Option<String>, bool)>) -> Json {
+    let selected = current_lights(rt).lightkey.audio_device;
+    let Some(hub) = rt.outputs.lights.lightkey_audio() else {
+        return ok(json!({
             "available": false,
             "reason": stagepilot_lights::audio::UNAVAILABLE_TEXT,
             "devices": [],
@@ -1642,8 +1644,29 @@ fn audio_response(rt: &Runtime) -> Json {
             "note": null,
             "level": null,
             "metering": false,
-        })),
-    }
+        }));
+    };
+    let worker = hub.clone();
+    let job = tokio::task::spawn_blocking(move || {
+        if let Some((device, on)) = meter {
+            worker.set_device(device);
+            worker.set_meter(on);
+        }
+        worker.info()
+    });
+    let mut info = match tokio::time::timeout(AUDIO_ROUTE_WAIT, job).await {
+        Ok(Ok(info)) => info,
+        _ => {
+            let mut info = hub.snapshot();
+            info.reason.get_or_insert_with(|| {
+                "The audio input is slow to answer (the system may be asking for microphone access)."
+                    .into()
+            });
+            info
+        }
+    };
+    info.selected = selected;
+    ok(to_value(&info))
 }
 
 /// Turns the picker's meter on (it switches itself off after a few seconds without a repeat) or
@@ -1659,11 +1682,7 @@ async fn lightkey_audio_meter(State(rt): State<Rt>, raw: Bytes) -> Json {
         },
         Err(response) => return response,
     };
-    if let Some(hub) = rt.outputs.lights.lightkey_audio() {
-        hub.set_device(current_lights(&rt).lightkey.audio_device);
-        hub.set_meter(on);
-    }
-    audio_response(&rt)
+    audio_response(&rt, Some((current_lights(&rt).lightkey.audio_device, on))).await
 }
 
 /// Removes a song's loudness envelope (nothing else on its cue map).

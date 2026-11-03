@@ -74,6 +74,8 @@ struct FakeInput {
     errors: Mutex<Option<ErrorSink>>,
     opened: Mutex<Vec<Option<String>>>,
     open_now: Arc<AtomicUsize>,
+    /// How long `open` blocks, like a microphone permission dialog.
+    open_delay: Mutex<Duration>,
 }
 impl FakeInput {
     fn new(devices: &[&str]) -> Arc<Self> {
@@ -102,6 +104,10 @@ impl AudioInput for FakeInput {
         samples: SampleSink,
         errors: ErrorSink,
     ) -> Result<Box<dyn AudioStream>, AudioError> {
+        let delay = *self.open_delay.lock().unwrap();
+        if !delay.is_zero() {
+            std::thread::sleep(delay);
+        }
         if let Some(error) = self.fail.lock().unwrap().clone() {
             return Err(error);
         }
@@ -296,10 +302,71 @@ fn db(loudness: &SongLoudness, slot: usize) -> f64 {
 // ------------------------------------------------------------------------------------ tests
 
 #[tokio::test]
+async fn a_blocked_audio_open_does_not_hold_up_the_song_start() {
+    // A-01: the first open can sit on the microphone permission dialog. The song start must go on.
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    *input.open_delay.lock().unwrap() = Duration::from_secs(4);
+    let rig = Rig::armed(input.clone()).await;
+    let started = Instant::now();
+    rig.start(&song(10)).await;
+    let waited = started.elapsed();
+    assert!(
+        waited < Duration::from_millis(2500),
+        "song start waited {waited:?} for the audio input"
+    );
+    assert_eq!(
+        rig.link
+            .status()
+            .message
+            .as_deref()
+            .map(|m| m.starts_with("Recording")),
+        Some(true),
+        "{:?}",
+        rig.link.status().message
+    );
+    // The open finishes on its own and loudness starts then.
+    wait_for(|| input.open_count() == 1).await;
+}
+
+#[tokio::test]
+async fn the_picker_does_not_wait_for_a_blocked_open_or_pile_up_opens() {
+    use stagepilot_lights::audio::AudioHub;
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    *input.open_delay.lock().unwrap() = Duration::from_secs(2);
+    let clock = Arc::new(FakeClock {
+        wall: Mutex::new(1_800_000_000.0),
+        started: Instant::now(),
+    });
+    let hub = Arc::new(AudioHub::new(input.clone(), clock));
+    let first = {
+        let hub = hub.clone();
+        tokio::task::spawn_blocking(move || hub.set_meter(true))
+    };
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // While the first open is blocked, polls return at once and start no second open.
+    let started = Instant::now();
+    for _ in 0..20 {
+        let _ = hub.set_meter(true);
+        let _ = hub.snapshot();
+    }
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        started.elapsed()
+    );
+    first.await.unwrap();
+    assert_eq!(
+        input.opened.lock().unwrap().len(),
+        1,
+        "one open, not one per poll"
+    );
+}
+
+#[tokio::test]
 async fn windows_follow_the_song_clock_and_are_saved() {
     let input = FakeInput::new(&["Built-in Microphone"]);
     let rig = Rig::armed(input.clone()).await;
-    let s = song(8);
+    let s = song(4);
     rig.start(&s).await;
     assert_eq!(
         input.open_count(),
@@ -308,7 +375,7 @@ async fn windows_follow_the_song_clock_and_are_saved() {
     );
     rig.hear(1.0, 0.1); // -20 dBFS for song 0..1
     rig.hear(3.0, 0.01); // -40 dBFS for song 1..4
-    rig.stop(&s, 4.0).await; // 4 of 8 s = half: kept
+    rig.stop(&s, 4.0).await; // the song's end: kept
     let saved = rig.saved.lock().unwrap().clone();
     assert_eq!(saved.len(), 1, "{:?}", rig.link.status().message);
     let l = &saved[0].loudness;
@@ -316,7 +383,7 @@ async fn windows_follow_the_song_clock_and_are_saved() {
         (saved[0].song_key.as_str(), l.step_seconds, l.takes),
         ("song-1", 0.25, 1)
     );
-    assert_eq!(l.values.len(), 32);
+    assert_eq!(l.values.len(), 16);
     assert!(
         (0..4).all(|i| (db(l, i) + 20.0).abs() < 0.4),
         "{:?}",
@@ -327,7 +394,6 @@ async fn windows_follow_the_song_clock_and_are_saved() {
         "{:?}",
         l.values
     );
-    assert!(l.values[16..].iter().all(|v| *v == 0));
     assert_eq!(
         input.open_count(),
         0,
@@ -360,8 +426,8 @@ async fn a_pause_is_a_gap_and_resume_continues_in_place() {
     rig.stop(&s, 2.0).await; // pause (under half)
     rig.hear(3.0, 0.5); // paused: loud room noise must not be recorded
     rig.resume(&s, 2.0).await;
-    rig.hear(4.0, 0.1); // song 2..6
-    rig.stop(&s, 6.0).await;
+    rig.hear(8.0, 0.1); // song 2..10
+    rig.stop(&s, 10.0).await; // the end of the song
     let l = rig.saved.lock().unwrap()[0].loudness.clone();
     assert!(l.values[..24].iter().all(|v| *v != 0), "{:?}", l.values);
     assert!(

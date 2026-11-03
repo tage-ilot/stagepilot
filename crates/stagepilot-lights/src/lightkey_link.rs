@@ -39,6 +39,8 @@ use tokio::task::JoinHandle;
 
 /// Closest spacing of two OSC packets: 5 ms = at most 200 packets per second.
 /// A stop within this many seconds of the song's end is the song ending, not a pause.
+/// How long a song-start handler waits for the audio input to open before it carries on.
+const AUDIO_OPEN_WAIT: Duration = Duration::from_millis(1500);
 const SONG_END_TOLERANCE_SECONDS: f64 = 2.0;
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
@@ -464,7 +466,10 @@ impl LightkeyLink {
         }
         self.inner.relay.reset();
         self.inner.wake.notify_one();
-        self.inner.sync_audio();
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            inner.sync_audio().await;
+        });
     }
 
     /// The audio input hub (picker, meter), when this build can listen to an input.
@@ -647,7 +652,7 @@ impl Inner {
             st.session = None;
             st.armed = false;
         }
-        self.sync_audio();
+        self.sync_audio().await;
     }
 
     // ------------------------------------------------------------ actions
@@ -998,7 +1003,7 @@ impl Inner {
                 return;
             }
             // The input opens now; a failure never stops the lights capture.
-            let audio_problem = self.sync_audio();
+            let audio_problem = self.sync_audio().await;
             let with_fixtures = self
                 .st()
                 .session
@@ -1057,7 +1062,7 @@ impl Inner {
         if had_session == Some(false) {
             self.say("Recording discarded: the song was moved.");
         }
-        self.sync_audio();
+        self.sync_audio().await;
     }
 
     /// Pause, stop, song end and a failed timer: a recording session pauses or is kept.
@@ -1130,7 +1135,7 @@ impl Inner {
         if had {
             self.say("Recording discarded: the countdown was reset.");
         }
-        self.sync_audio();
+        self.sync_audio().await;
     }
 
     /// A recording ends: below half the song it is thrown away, otherwise thinned into look
@@ -1146,19 +1151,32 @@ impl Inner {
 
     /// Points the audio input at the running session's recorder (none: the input closes) and at
     /// the saved input choice. `Some` is why the input could not be opened.
-    fn sync_audio(&self) -> Option<String> {
-        let hub = self.audio.as_ref()?;
+    async fn sync_audio(&self) -> Option<String> {
+        let hub = self.audio.clone()?;
         let recorder = self.st().session.as_ref().and_then(|s| s.loudness.clone());
-        hub.set_device((self.settings)().3.audio_device.clone());
-        hub.set_recorder(recorder).err()
+        let device = (self.settings)().3.audio_device.clone();
+        // Opening the input can wait on the microphone permission dialog, so it runs on a
+        // blocking thread and the link only waits a moment for it (A-01).
+        let job = tokio::task::spawn_blocking(move || {
+            hub.set_device(device);
+            hub.set_recorder(recorder).err()
+        });
+        match tokio::time::timeout(AUDIO_OPEN_WAIT, job).await {
+            Ok(Ok(problem)) => problem,
+            Ok(Err(_)) => Some("The audio input could not start.".into()),
+            Err(_) => Some(
+                "The audio input is slow to open (the system may be asking for microphone access); loudness starts when it opens."
+                    .into(),
+            ),
+        }
     }
 
     /// A finished recording's loudness goes to the song, under the same keep-it rule as the
     /// looks (at least half the song). The line is added to the status; never an error.
     async fn save_loudness(self: &Arc<Self>, session: &mut Session) -> Option<String> {
         let recorder = session.loudness.take()?;
-        let problem = self.audio.as_ref().and_then(|hub| hub.info().reason);
-        self.sync_audio();
+        let problem = self.audio.as_ref().and_then(|hub| hub.snapshot().reason);
+        self.sync_audio().await;
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         let mut covered = session.last_position;
         if session.running {

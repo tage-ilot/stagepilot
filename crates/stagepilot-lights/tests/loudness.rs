@@ -117,10 +117,16 @@ fn a_pause_in_the_middle_leaves_zero_slots() {
     let mut rec = LoudnessRecorder::new(0.0);
     feed(&mut rec, 0.0, 1.0, 0.1);
     rec.set_running(false);
+    // Loud audio keeps arriving while paused (song 1..2): none of it may be recorded (A-05).
+    feed(&mut rec, 1.0, 1.0, 0.9);
     rec.set_running(true);
-    feed(&mut rec, 2.0, 1.0, 0.1); // song 2..3, nothing for 1..2
+    feed(&mut rec, 2.0, 1.0, 0.1); // song 2..3
     let l = rec.finish(3.0).unwrap();
-    assert!(l.values[4..8].iter().all(|v| *v == 0));
+    assert!(
+        l.values[4..8].iter().all(|v| *v == 0),
+        "paused audio leaked: {:?}",
+        l.values
+    );
     assert!(l.values[8..].iter().all(|v| *v != 0));
 }
 

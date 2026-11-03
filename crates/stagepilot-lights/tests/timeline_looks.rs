@@ -958,7 +958,10 @@ async fn seeking_back_before_a_fixtures_first_row_gives_it_back_to_lightkey() {
     assert!(sent.contains(&dim("A")), "A is re-synced: {sent:?}");
     assert!(sent.contains(&clear("B")), "B is given back: {sent:?}");
     assert!(!sent.contains(&clear("A")));
-    assert!(!sent.contains(&dim("B")), "B's 20 s value is not sent at 10 s");
+    assert!(
+        !sent.contains(&dim("B")),
+        "B's 20 s value is not sent at 10 s"
+    );
 }
 
 #[tokio::test(start_paused = true)]

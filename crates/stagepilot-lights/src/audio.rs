@@ -128,18 +128,30 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// The open device; held so it stays open, dropped to close it.
 struct Open(#[allow(dead_code)] Box<dyn AudioStream>);
 
+/// How long the list of inputs is reused: the picker polls, listing devices is not free.
+const DEVICES_TTL_SECONDS: f64 = 2.0;
+
+type DeviceList = (Vec<String>, bool, Option<String>);
+
 #[derive(Default)]
 struct HubState {
     open: Option<Open>,
     meter_until: f64,
     wanted_device: Option<String>,
     note: Option<String>,
+    /// The last device listing and when it was taken.
+    devices: Option<(f64, DeviceList)>,
 }
 
+/// Opening a device can sit on the microphone permission dialog, and closing one joins its audio
+/// thread. The hub therefore never holds `state` across either, and the calls that open or close
+/// run one at a time on `reconcile_lock`; the ones that only poll skip the work when another is
+/// already in progress (A-01). Callers on an async thread go through `spawn_blocking`.
 pub struct AudioHub {
     input: Arc<dyn AudioInput>,
     shared: Arc<Shared>,
     state: Mutex<HubState>,
+    reconcile_lock: Mutex<()>,
 }
 
 impl AudioHub {
@@ -153,17 +165,22 @@ impl AudioHub {
                 error: Mutex::new(None),
             }),
             state: Mutex::new(HubState::default()),
+            reconcile_lock: Mutex::new(()),
         }
     }
 
     /// The saved input choice changed (or is read for the first time).
     pub fn set_device(&self, device: Option<String>) -> Option<String> {
-        let mut state = lock(&self.state);
-        if state.wanted_device != device {
-            state.wanted_device = device;
-            state.open = None; // reopened on the new choice at the next reconcile
-        }
-        drop(state);
+        let closing = {
+            let mut state = lock(&self.state);
+            if state.wanted_device != device {
+                state.wanted_device = device;
+                state.open.take() // reopened on the new choice at the next reconcile
+            } else {
+                None
+            }
+        };
+        drop(closing); // joins the audio thread, outside the state lock
         self.reconcile()
     }
 
@@ -184,20 +201,48 @@ impl AudioHub {
         if !on {
             self.shared.meter.clear();
         }
-        self.reconcile()
+        // A poll never queues behind an open that is already in progress.
+        self.try_reconcile()
     }
 
+    /// The picker's data with the input listing refreshed when it is older than a couple of
+    /// seconds. May call the device layer: run it on a blocking thread.
     pub fn info(&self) -> AudioInfo {
         // Lets an expired meter close the input.
-        let _ = self.reconcile();
-        let (devices, available, mut reason) = match self.input.devices() {
-            Ok(devices) => (devices, true, None),
-            Err(error) => (
-                Vec::new(),
-                !matches!(error, AudioError::Unavailable(_)),
-                Some(error.message()),
-            ),
-        };
+        let _ = self.try_reconcile();
+        let now = self.shared.clock.wall();
+        let cached = lock(&self.state)
+            .devices
+            .as_ref()
+            .filter(|(at, _)| now - *at < DEVICES_TTL_SECONDS && now >= *at)
+            .map(|(_, list)| list.clone());
+        let list = cached.unwrap_or_else(|| {
+            let list = match self.input.devices() {
+                Ok(devices) => (devices, true, None),
+                Err(error) => (
+                    Vec::new(),
+                    !matches!(error, AudioError::Unavailable(_)),
+                    Some(error.message()),
+                ),
+            };
+            lock(&self.state).devices = Some((now, list.clone()));
+            list
+        });
+        self.assemble(list)
+    }
+
+    /// What is known without touching the device layer: the last listing, the meter and the last
+    /// error. For a caller that gave up waiting.
+    pub fn snapshot(&self) -> AudioInfo {
+        let list = lock(&self.state)
+            .devices
+            .as_ref()
+            .map(|(_, list)| list.clone())
+            .unwrap_or((Vec::new(), true, None));
+        self.assemble(list)
+    }
+
+    fn assemble(&self, (devices, available, mut reason): DeviceList) -> AudioInfo {
         let state = lock(&self.state);
         let level = self.shared.meter.read().map(|w| MeterLevel {
             rms_db: w.rms_db.is_finite().then_some(w.rms_db),
@@ -224,16 +269,35 @@ impl AudioHub {
     }
 
     /// Opens or closes the device to match what is needed. `Some` is why it could not be opened.
+    /// Waits for an open or close already in progress.
     fn reconcile(&self) -> Option<String> {
+        let _turn = lock(&self.reconcile_lock);
+        self.reconcile_now()
+    }
+
+    /// Like `reconcile`, but does nothing when another one is in progress.
+    fn try_reconcile(&self) -> Option<String> {
+        let _turn = match self.reconcile_lock.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return None,
+        };
+        self.reconcile_now()
+    }
+
+    fn reconcile_now(&self) -> Option<String> {
         if !self.needed() {
-            let mut state = lock(&self.state);
-            state.open = None;
+            let closing = lock(&self.state).open.take();
+            drop(closing); // joins the audio thread, outside the state lock
             return None;
         }
-        let wanted = lock(&self.state).wanted_device.clone();
-        if lock(&self.state).open.is_some() {
-            return None;
-        }
+        let wanted = {
+            let state = lock(&self.state);
+            if state.open.is_some() {
+                return None;
+            }
+            state.wanted_device.clone()
+        };
         // A saved input that is gone falls back to the default.
         let mut device = wanted.clone();
         let mut note = None;
@@ -255,6 +319,7 @@ impl AudioHub {
         let errors: ErrorSink = Arc::new(move |error| {
             *lock(&shared.error) = Some(error.message());
         });
+        // The slow part (a permission dialog, a device start) runs with no hub lock held.
         match self.input.open(device.as_deref(), samples, errors) {
             Ok(stream) => {
                 *lock(&self.shared.error) = None;
