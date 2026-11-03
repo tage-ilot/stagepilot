@@ -95,6 +95,11 @@ pub struct LightkeyStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub yielded_fixtures: Option<u32>,
+    /// Fixtures the saved looks can override, left out when none. After a restart the held set
+    /// is empty but Lightkey may still hold overrides: Release lights clears all of these.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub known_fixtures: Option<u32>,
 }
 
 impl LightkeyStatus {

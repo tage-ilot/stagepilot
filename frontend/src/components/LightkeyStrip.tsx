@@ -240,7 +240,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
-          disabled={busy || !(status.holding_fixtures && status.holding_fixtures > 0)}
+          disabled={busy || Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) === 0}
           onClick={() => void run(() => releaseLightkeyLights())}
           variant="secondary"
           tone="lighting"

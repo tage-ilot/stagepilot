@@ -261,6 +261,7 @@ impl LightsPlugin {
         let some = |n: usize| (n > 0).then(|| u32::try_from(n).unwrap_or(u32::MAX));
         status.holding_fixtures = some(st.held_fixtures.len());
         status.yielded_fixtures = some(st.operator.yielded_count());
+        status.known_fixtures = some(Self::releasable(&st).len());
         status
     }
 
@@ -278,18 +279,42 @@ impl LightsPlugin {
     /// "Release lights": the double clear for every fixture held right now. Fixtures the
     /// operator has taken stay as they are.
     pub async fn lightkey_release_lights(&self) -> (bool, String) {
-        let held = lock(&self.inner.state).held_fixtures.len();
-        if held == 0 {
+        // After a restart the held set is empty while Lightkey may still hold the overrides, so
+        // every fixture the saved looks can override is cleared, not only the ones held now.
+        let targets = {
+            let mut st = lock(&self.inner.state);
+            let targets = Self::releasable(&st);
+            st.held_fixtures.extend(targets.iter().cloned());
+            targets.len()
+        };
+        if targets == 0 {
             return (false, "No fixtures are held.".into());
         }
         self.inner.release_held_except(&BTreeSet::new()).await;
         (
             true,
             format!(
-                "Released {held} fixture{}.",
-                if held == 1 { "" } else { "s" }
+                "Released {targets} fixture{}.",
+                if targets == 1 { "" } else { "s" }
             ),
         )
+    }
+
+    /// The fixtures Release lights clears: held now, or named by any saved look, except the
+    /// ones the operator has taken (their change stays).
+    fn releasable(st: &State) -> BTreeSet<String> {
+        let mut all = st.held_fixtures.clone();
+        for map in st.settings.cue_maps.values() {
+            for cue in &map.osc_cues {
+                for message in cue.outgoing() {
+                    if let Some((name, _)) = fixture_override(&message.address) {
+                        all.insert(name.to_string());
+                    }
+                }
+            }
+        }
+        all.retain(|name| !st.operator.is_yielded(name));
+        all
     }
 
     /// The audio input hub behind the picker and the meter; `None` in a build without audio.

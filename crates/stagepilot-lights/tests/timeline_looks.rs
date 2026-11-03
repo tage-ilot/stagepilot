@@ -921,9 +921,6 @@ async fn keyframes_and_reconnects_do_not_yield() {
 #[tokio::test(start_paused = true)]
 async fn release_lights_clears_exactly_the_held_fixtures() {
     let r = rig(settings(vec![("s", two_fixture_song())])).await;
-    // Nothing held yet: nothing to release.
-    let (accepted, _) = r.plugin.lightkey_release_lights().await;
-    assert!(!accepted);
     r.start("s").await;
     run_for(5.0).await;
     r.plugin
@@ -939,6 +936,29 @@ async fn release_lights_clears_exactly_the_held_fixtures() {
     let status = r.plugin.lightkey_status().await;
     assert_eq!(status.holding_fixtures, None);
     assert_eq!(status.yielded_fixtures, Some(1));
+}
+
+#[tokio::test(start_paused = true)]
+async fn release_lights_after_a_restart_clears_every_fixture_the_looks_name() {
+    // H-01: the held set is memory only. A fresh plugin holds nothing, yet Lightkey may still
+    // hold the overrides of the run before the restart.
+    let r = rig(settings(vec![("s", two_fixture_song())])).await;
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.holding_fixtures, None);
+    assert_eq!(status.known_fixtures, Some(2), "the button must stay usable");
+    let (accepted, message) = r.plugin.lightkey_release_lights().await;
+    assert!(accepted, "{message}");
+    let mut clears = r.clears();
+    clears.sort();
+    assert_eq!(clears, vec![clear("A"), clear("A"), clear("B"), clear("B")]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn release_lights_with_no_looks_and_nothing_held_does_nothing() {
+    let r = rig(settings(vec![("s", vec![plain(1.0, "/live/cue/1")])])).await;
+    let (accepted, _) = r.plugin.lightkey_release_lights().await;
+    assert!(!accepted);
+    assert!(r.clears().is_empty());
 }
 
 #[tokio::test(start_paused = true)]

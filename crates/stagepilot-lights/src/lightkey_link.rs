@@ -571,6 +571,7 @@ impl Inner {
                     .is_some_and(|session| session.fixtures.is_some()),
             ),
             holding_fixtures: None,
+            known_fixtures: None,
             yielded_fixtures: None,
         }
     }

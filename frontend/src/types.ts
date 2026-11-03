@@ -353,6 +353,8 @@ export interface LightkeyStatus {
   holding_fixtures?: number;
   /** Fixtures the replay gave to the operator (taken back after 30 s of quiet); absent when none. */
   yielded_fixtures?: number;
+  /** Fixtures the saved looks can override; Release lights clears these even after a restart. */
+  known_fixtures?: number;
 }
 
 /** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
