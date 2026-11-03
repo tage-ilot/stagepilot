@@ -1505,3 +1505,41 @@ textarea:focus-visible {
 .cue-bar-off { background: transparent; border: 3px solid var(--ds-cue-live); }
 .cue-bar-other { background: repeating-linear-gradient(180deg, var(--ds-cue-other) 0 5px, transparent 5px 9px); }
 .cue-bar-sharp { background-image: repeating-linear-gradient(135deg, var(--ds-surface-950) 0 2px, transparent 2px 5px); }
+
+/* Config panel reveal (DESIGN.md "Config panel reveal"). The wrapper animates its height (grid rows 0fr <-> 1fr) so the
+   dashboard below moves in lock-step; the panel itself animates only clip-path, transform and opacity, growing out of
+   the connection card (--genie-x / --genie-w are set from the card's rect). Close is the explicit reverse, ease-in. */
+.panel-reveal { --genie-x: 50%; --genie-w: 20%; display: grid; grid-template-rows: 1fr; }
+.panel-reveal__clip { min-height: 0; overflow: clip; overflow-clip-margin: 0; }
+.panel-reveal__panel { transform-origin: var(--genie-x, 50%) 0; }
+.panel-reveal[data-phase="opening"] { animation: panel-rows-in var(--genie-ms, 300ms) cubic-bezier(.2, .8, .2, 1) both; }
+.panel-reveal[data-phase="opening"] .panel-reveal__panel { animation: panel-genie-in var(--genie-ms, 300ms) cubic-bezier(.2, .8, .2, 1) both; }
+.panel-reveal[data-phase="closing"] { animation: panel-rows-out var(--genie-ms, 300ms) cubic-bezier(.4, 0, 1, 1) both; }
+.panel-reveal[data-phase="closing"] .panel-reveal__panel { animation: panel-genie-out var(--genie-ms, 300ms) cubic-bezier(.4, 0, 1, 1) both; }
+@keyframes panel-rows-in { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
+@keyframes panel-rows-out { from { grid-template-rows: 1fr; } to { grid-template-rows: 0fr; } }
+@keyframes panel-genie-in {
+  from { opacity: 0; transform: translateY(-28px) scaleY(.55);
+    clip-path: polygon(calc(var(--genie-x) - var(--genie-w, 20%) / 2) 0, calc(var(--genie-x) + var(--genie-w, 20%) / 2) 0, calc(var(--genie-x) + var(--genie-w, 20%) / 2) 100%, calc(var(--genie-x) - var(--genie-w, 20%) / 2) 100%); }
+  55% { clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%); }
+  to { opacity: 1; transform: none; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+}
+@keyframes panel-genie-out {
+  from { opacity: 1; transform: none; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+  45% { clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%); }
+  to { opacity: 0; transform: translateY(-28px) scaleY(.55);
+    clip-path: polygon(calc(var(--genie-x) - var(--genie-w, 20%) / 2) 0, calc(var(--genie-x) + var(--genie-w, 20%) / 2) 0, calc(var(--genie-x) + var(--genie-w, 20%) / 2) 100%, calc(var(--genie-x) - var(--genie-w, 20%) / 2) 100%); }
+}
+/* Single column: a plain vertical emerge. */
+@media (max-width: 639px) {
+  @keyframes panel-genie-in { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: none; } }
+  @keyframes panel-genie-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-20px); } }
+}
+/* Reduced motion: no travel, no warp, no height animation; a short fade only. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-reveal[data-phase] { animation: none; }
+  .panel-reveal[data-phase="opening"] .panel-reveal__panel { animation: panel-fade-in var(--genie-ms, 100ms) linear both; }
+  .panel-reveal[data-phase="closing"] .panel-reveal__panel { animation: panel-fade-out var(--genie-ms, 100ms) linear both; }
+  @keyframes panel-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes panel-fade-out { from { opacity: 1; } to { opacity: 0; } }
+}

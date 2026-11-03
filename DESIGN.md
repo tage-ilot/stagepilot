@@ -509,6 +509,10 @@ A segmented radio group: two or more options side by side, each a bold name, opt
 | `feature` | card with a **5px rail, 70% border and soft wash in the connection colour**, `text-lg` title, a **detail line** shown open or closed that says what is inside (`16 cues on 2 of 4 songs · 2 pads · Battle Belongs 04:41`), an `aside` tag at the right | a **major** optional feature that deserves weight (Lighting's Song lighting timeline). Everything in the feature, including its Test cue controls, folds away with it |
 Expand/collapse 500ms; respect reduced motion. **Persist** collapse state with `usePersistedFlag(KEY, default)` whenever a section is optional for some users (Remote access, Song lighting timeline: both start open).
 
+### Config panel reveal
+
+A configuration panel grows out of the connection card it belongs to and the dashboard below moves down with it; closing is the exact reverse and the panel unmounts only afterwards (`usePanelPresence` + `PanelReveal`, `.panel-reveal` in index.css). 300ms, `cubic-bezier(.2,.8,.2,1)` (ease-out) opening, `cubic-bezier(.4,0,1,1)` (ease-in) closing. One wrapper animates its height (grid rows 0fr/1fr); the panel animates only `clip-path` (a funnel from the card's width to full width), `transform` (translateY/scaleY from the card's centre) and `opacity`. Single column (<640px): plain vertical emerge. Switching panels closes the old one, then opens the new. While closing the panel is `inert` and `aria-hidden`, and focus inside it returns to the card. Reduced motion: no travel, warp or height animation; a 100ms fade and an immediate height change.
+
 ### 6.5 Other primitives
 - **`Panel`** (`variant` default | setup | live; `tone` = connection): `surface-panel` fill, `edge` border, 12px, `elevation.default`. `setup` adds the connection-tinted wash and 20px padding; `live` adds the red rail and 135° wash.
 - **`SaveBar`**: §9. **`Badge`/`StatusBadge`**: full radius, uppercase pixel text, hue at 10-15% fill. **`InlineAlert`** (warning/danger → `role="alert"`; success/info → `role="status"`): 8px, hue 10% fill, 20-30% border, under the thing it is about.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Configuration panels now open and close with a short genie-style animation: the panel grows out of its connection card while the dashboard below moves down with it, and closing runs in reverse (300 ms; a 100 ms fade with reduced motion; plain vertical emerge on phones). Focus returns to the card on close.
+
 ### Added
 
 - Lighting timeline: **colour-coded cue types and a legend filter.** Markers and cue-list rows now show what a cue is: captured, edited or manual look, Lightkey cue on (solid) or off (hollow), fixture message, other OSC (dashed), and on the MIDI timeline one colour per note letter (sharps striped with a ♯). Each type also has a glyph box and a spoken name, so colour is never the only signal. The legend above the timeline hides or shows a type on the timeline and in the list (view-only, kept for the session, "N types hidden" and Show all); a selected marker is never hidden. The pad colour is now a small square after the label instead of the bar colour. Mixed clusters get a neutral chip that names the counts.
