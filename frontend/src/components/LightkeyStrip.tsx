@@ -238,6 +238,17 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness }: {
         value={status.recording ? "record" : "replay"}
       />
 
+      {!status.recording && status.replay === false && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
+          <p className="text-type-body-sm text-warning-text">
+            Replay is off, so saved lights will not play. The toggle above does not show this.
+          </p>
+          <Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">
+            Turn Replay on
+          </Button>
+        </div>
+      )}
+
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
           disabled={busy || Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) === 0}

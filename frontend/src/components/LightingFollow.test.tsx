@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ApplicationState, LightsStatusResponse, Song } from "../types";
+import type { ApplicationState, LightsStatusResponse, SettingsResponse, Song } from "../types";
 import { LightingSetupPanel } from "./LightingSetupPanel";
 
 const mk = (n: number): Song => ({ id: `item-${n}`, source_song_id: `song-${n}`, title: `Song ${n}`, duration_seconds: 200, order: n, is_generic: false });
@@ -25,6 +25,35 @@ function ui(state: ApplicationState) {
   );
 }
 const select = () => screen.getByLabelText("Song") as HTMLSelectElement;
+
+const oscSettings = (revision = 1) => ({
+  settings: { lights: { enabled: true, method: "osc", osc_host: "127.0.0.1", osc_port: 21600, output_name: null, channel: 1, pulse_ms: 100, pads: [], cue_maps: {}, cue_revisions: { "song-1": revision } } },
+}) as unknown as SettingsResponse;
+
+function uiWith(state: ApplicationState, settings: SettingsResponse) {
+  return (
+    <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />
+  );
+}
+
+describe("Lighting draft rows (F-03)", () => {
+  it("keeps an unsaved new row when the saved settings refresh and when the follow moves and comes back", () => {
+    const { rerender } = render(uiWith(withLive(a), oscSettings()));
+    const rows = () => screen.queryAllByLabelText("OSC address").length - 1; // minus the test-send field
+    expect(rows()).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Add cue" }));
+    expect(rows()).toBe(1);
+    // The settings refresh (a recording finished elsewhere): a new object, the draft stays.
+    rerender(uiWith(withLive(a), oscSettings(2)));
+    expect(rows()).toBe(1);
+    // Auto-follow moves to the next song and the draft is not shown there, then is back.
+    rerender(uiWith(withLive(b), oscSettings(2)));
+    expect(select().value).toBe("song-2");
+    expect(rows()).toBe(0);
+    fireEvent.change(select(), { target: { value: "song-1" } });
+    expect(rows()).toBe(1);
+  });
+});
 
 describe("Lighting timeline follows the live song", () => {
   it("falls back to the first song when nothing has played, with no indicator", () => {
@@ -51,6 +80,15 @@ describe("Lighting timeline follows the live song", () => {
     expect(select().value).toBe("song-3");
     rerender(ui(withLive(b)));
     expect(select().value).toBe("song-2");
+  });
+
+  it("a song ending does not drop the hand pick when current_song moves on to the next song (F-01)", () => {
+    const { rerender } = render(ui(withLive(a)));
+    fireEvent.change(select(), { target: { value: "song-3" } });
+    // Song A ends: nothing is playing, and the plan's current song advances to B.
+    rerender(ui({ ...withLive(null), current_song: b }));
+    expect(select().value).toBe("song-3");
+    expect(screen.getByTestId("lighting-follow-status")).toHaveTextContent("Showing Song 3");
   });
 
   it("Follow live goes back to the live song in one click", () => {

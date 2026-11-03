@@ -137,3 +137,7 @@ export const clusterMarkers = <T extends MarkerLike>(
   flush();
   return items;
 };
+
+/** A row that is still being typed: a look message or a plain row without an address yet. It lives only in the panel. */
+export const isDraftRow = (cue: OscLightingCue): boolean =>
+  isLook(cue) ? cue.messages!.some((message) => message.address === "") : cue.address === "";

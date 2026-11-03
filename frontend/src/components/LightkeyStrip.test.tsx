@@ -337,3 +337,33 @@ describe("LightkeyStrip operator override", () => {
     expect(screen.getByRole("button", { name: "Release lights" })).toBeDisabled();
   });
 });
+
+describe("LightkeyStrip saved replay off and release after a restart", () => {
+  it("F-02: shows a warning and a way back when the saved replay setting is off", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ replay: false, recording: false }));
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ replay: true })));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-replay-off")).toHaveTextContent("Replay is off");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Turn Replay on" }));
+    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ replay: true }));
+    await waitFor(() => expect(screen.queryByTestId("lightkey-replay-off")).not.toBeInTheDocument());
+  });
+
+  it("no warning while replay is on or while recording", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ replay: true }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByTestId("lightkey-replay-off")).not.toBeInTheDocument();
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ replay: false, recording: true }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByTestId("lightkey-replay-off")).not.toBeInTheDocument();
+  });
+
+  it("H-01: Release lights is usable when the looks name fixtures but nothing is held (after a restart)", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ known_fixtures: 4 }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByRole("button", { name: "Release lights" })).toBeEnabled();
+  });
+});

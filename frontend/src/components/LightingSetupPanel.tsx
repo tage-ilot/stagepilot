@@ -36,7 +36,7 @@ import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
 import {
-  capturedCount, detailLabels, hasEditedCaptured, isCaptured, isLook, lookLabel, markEdited, mergeRows,
+  capturedCount, detailLabels, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
   removeFixtureFromRows,
 } from "./lightingLooks";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
@@ -138,7 +138,9 @@ export function LightingSetupPanel({
 } & Partial<LightingPanelActions>) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
-  const liveSong = state.playing_song ?? state.current_song;
+  // Only a song that is actually playing moves the follow. When a song ends, current_song may advance to the next one;
+  // that must not drop a hand pick (the last playing song is remembered below).
+  const liveSong = state.playing_song;
   const liveKey = liveSong ? songKey(liveSong) : "";
   const [method, setMethod] = useState<LightingMethod>("osc");
   const [oscHost, setOscHost] = useState("127.0.0.1");
@@ -204,9 +206,24 @@ export function LightingSetupPanel({
     ? settings?.settings.lights.cue_maps[selectedSongKey]
     : undefined;
 
+  // Rows still being typed (no address yet) are kept across a refresh of the saved map and across the follow moving to
+  // another song; each song keeps its own (F-03).
+  const draftsBySong = useRef<Record<string, OscLightingCue[]>>({});
+  const shownSongKey = useRef(selectedSongKey);
+  const oscCuesNow = useRef<OscLightingCue[]>([]);
+  oscCuesNow.current = oscCues;
   useEffect(() => {
     setCues(savedCueMap?.cues.map((cue) => ({ ...cue })) ?? []);
-    setOscCues(savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? []);
+    const saved = savedCueMap?.osc_cues?.map((cue) => ({ ...cue, args: cue.args.map((arg) => ({ ...arg })) })) ?? [];
+    let drafts = oscCuesNow.current.filter(isDraftRow);
+    if (shownSongKey.current !== selectedSongKey) {
+      draftsBySong.current[shownSongKey.current] = drafts;
+      shownSongKey.current = selectedSongKey;
+      drafts = draftsBySong.current[selectedSongKey] ?? [];
+      delete draftsBySong.current[selectedSongKey];
+    }
+    const draftIds = new Set(drafts.map((cue) => cue.id));
+    setOscCues([...saved.filter((cue) => !draftIds.has(cue.id)), ...drafts]);
   }, [savedCueMap, selectedSongKey]);
 
   // ---- Cue board, live capture and timeline ----

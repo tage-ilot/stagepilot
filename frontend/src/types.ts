@@ -317,6 +317,8 @@ export interface LightkeyAudio {
 /** What the cue-map PUT sends: only the cue list of `method` is replaced. */
 export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
+  /** The song's revision the list was edited from; an older one is refused with 409. */
+  revision?: number;
 }
 
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
@@ -384,6 +386,8 @@ export interface LightsSettings {
   channel: number;
   pulse_ms: number;
   cue_maps: Record<string, SongLightingCueMap>;
+  /** How often each song's cue map changed; sent back with a save so a stale list is refused. */
+  cue_revisions?: Record<string, number>;
   /** Older backends omit the cue board. */
   pads?: LightingPad[];
 }
