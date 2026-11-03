@@ -879,7 +879,8 @@ textarea:focus-visible {
 }
 
 /* Hidden from the very first frame (no transition while moving), then it fades in once the logo has landed. */
-.stagepilot-dashboard[data-landing="done"] > :not(header),
+/* .panel-reveal is excluded: this rule (higher specificity) would replace its open/close animation with the 200ms fade. */
+.stagepilot-dashboard[data-landing="done"] > :not(header):not(.panel-reveal),
 .stagepilot-dashboard[data-landing="done"] .app-header-status {
   animation: landing-fade-in 200ms ease-out both;
 }
