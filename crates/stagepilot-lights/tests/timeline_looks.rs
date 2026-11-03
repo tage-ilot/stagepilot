@@ -492,6 +492,38 @@ async fn the_next_song_releases_only_the_fixtures_its_rows_do_not_use() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn new_song_first_look_is_not_delayed_by_releasing_unused_fixtures() {
+    // S-01: 100 fixtures held by song s; song t uses one of them and has a look at 0 s.
+    let many: Vec<OscMessage> = (0..100).map(|i| msg(&dim(&format!("F{i}")), 0.5)).collect();
+    let r = rig(settings(vec![
+        ("s", vec![look(0.5, many)]),
+        ("t", vec![look(0.0, vec![msg(&dim("F0"), 0.9)])]),
+    ]))
+    .await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.forget();
+    let before = Instant::now();
+    r.start("t").await;
+    run_for(0.2).await;
+    let first = r
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, a, v)| *a == dim("F0") && *v == f(0.9))
+        .map(|(t, _, _)| (*t - before).as_secs_f64());
+    let first = first.expect("the new song's first look was sent");
+    assert!(first < 0.1, "first look left after {first} s");
+    run_for(5.0).await;
+    assert_eq!(
+        r.clears().len(),
+        99 * 2,
+        "the 99 unused fixtures still get both rounds"
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_song_without_fixture_rows_releases_everything_held() {
     let r = rig(settings(vec![
         ("s", vec![look(1.0, vec![msg(&dim("A"), 0.1)])]),
@@ -637,6 +669,102 @@ async fn recorded_rows_replay_through_the_scheduler_next_to_a_manual_row() {
         assert!(close(*got, want.max(0.0)), "{got} vs {want}");
     }
     assert!(sent.iter().any(|(_, a)| a == &dim("B")));
+}
+
+struct FlakyOutput {
+    log: Log,
+    calls: Mutex<u32>,
+    fail: std::ops::RangeInclusive<u32>,
+}
+impl OscOutput for FlakyOutput {
+    fn closed(&self) -> bool {
+        false
+    }
+    fn send_message(&self, address: &str, args: &[OscArgument]) -> Result<(), OutputError> {
+        let n = {
+            let mut c = self.calls.lock().unwrap();
+            *c += 1;
+            *c
+        };
+        if self.fail.contains(&n) {
+            return Err(OutputError::public("Network is unreachable."));
+        }
+        self.log
+            .lock()
+            .unwrap()
+            .push((Instant::now(), address.into(), args.to_vec()));
+        Ok(())
+    }
+    fn close(&self) {}
+}
+struct FlakyBackend(Log, std::ops::RangeInclusive<u32>);
+impl OscBackend for FlakyBackend {
+    fn open_output(&self, _: &str, _: u16) -> Result<Arc<dyn OscOutput>, OutputError> {
+        Ok(Arc::new(FlakyOutput {
+            log: self.0.clone(),
+            calls: Mutex::new(0),
+            fail: self.1.clone(),
+        }))
+    }
+}
+
+async fn flaky_rig(lights: LightsSettings, fail: std::ops::RangeInclusive<u32>) -> Rig {
+    let bus = EventBus::new();
+    let log: Log = Arc::default();
+    let mut options = LightsOptions::new(Arc::new(|| {
+        Err(stagepilot_midi::MidiError::public("no MIDI in this test"))
+    }));
+    let backend_log = log.clone();
+    options.osc_backend_factory =
+        Arc::new(move || Arc::new(FlakyBackend(backend_log.clone(), fail.clone())));
+    let plugin = LightsPlugin::new(bus.clone(), lights, options).unwrap();
+    plugin.start().await.unwrap();
+    Rig {
+        bus,
+        plugin,
+        log,
+        t0: std::cell::Cell::new(Instant::now()),
+    }
+}
+
+fn three_fixture_rows() -> Vec<OscLightingCue> {
+    vec![
+        look(10.0, vec![msg(&dim("A"), 0.1)]),
+        look(20.0, vec![msg(&dim("B"), 0.2)]),
+        look(30.0, vec![msg(&dim("C"), 0.3)]),
+    ]
+}
+
+#[tokio::test(start_paused = true)]
+async fn one_failed_send_is_retried_and_the_rest_of_the_song_still_goes_out() {
+    // S-02: the 2nd and 3rd sends fail, so row B fails twice and is dropped; C still goes out.
+    let r = flaky_rig(settings(vec![("s", three_fixture_rows())]), 2..=3).await;
+    r.start("s").await;
+    run_for(40.0).await;
+    let sent = r.addresses();
+    assert!(sent.contains(&dim("A")));
+    assert!(!sent.contains(&dim("B")), "B failed twice: {sent:?}");
+    assert!(
+        sent.contains(&dim("C")),
+        "the rest of the song survives one bad row: {sent:?}"
+    );
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(
+        status.replaying_song.as_deref(),
+        Some("s"),
+        "still replaying"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_send_that_works_on_the_retry_is_not_lost() {
+    let r = flaky_rig(settings(vec![("s", three_fixture_rows())]), 2..=2).await;
+    r.start("s").await;
+    run_for(40.0).await;
+    let sent = r.addresses();
+    for name in ["A", "B", "C"] {
+        assert!(sent.contains(&dim(name)), "{name} missing: {sent:?}");
+    }
 }
 
 // ------------------------------------------------------------------ operator override (L3)

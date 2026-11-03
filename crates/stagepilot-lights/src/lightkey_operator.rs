@@ -217,7 +217,9 @@ impl OperatorTracker {
 
     /// When the fixture's quiet time ends, if the operator has it.
     pub fn deadline(&self, fixture: &str, quiet: Duration) -> Option<Instant> {
-        self.yielded.get(&self.yielded_key(fixture)?).map(|at| *at + quiet)
+        self.yielded
+            .get(&self.yielded_key(fixture)?)
+            .map(|at| *at + quiet)
     }
 
     /// Yielded fixtures with no operator change for `quiet`.
@@ -283,7 +285,11 @@ mod tests {
         let mut h = held(&["A"]);
         t.note_send(DIM, &f(0.2), t0);
         let v = t.observe(&mut h, &[cmd(DIM, 0.9)], false, t0 + ms(100));
-        assert_eq!(v.newly_yielded, vec!["A".to_string()], "different value is the operator's");
+        assert_eq!(
+            v.newly_yielded,
+            vec!["A".to_string()],
+            "different value is the operator's"
+        );
     }
 
     #[test]
@@ -359,7 +365,12 @@ mod tests {
             Verdict::default()
         );
         assert_eq!(
-            t.observe(&mut h, &[cmd("/fixture/B/overrides/dimmer", 1.0)], true, t0 + ms(1000)),
+            t.observe(
+                &mut h,
+                &[cmd("/fixture/B/overrides/dimmer", 1.0)],
+                true,
+                t0 + ms(1000)
+            ),
             Verdict::default()
         );
         assert_eq!(h.len(), 1);
@@ -393,10 +404,18 @@ mod tests {
         t.observe(&mut h, &[cmd(DIM, 1.0)], false, t0);
         let quiet = Duration::from_secs(30);
         assert!(t.due(quiet, t0 + Duration::from_secs(29)).is_empty());
-        let v = t.observe(&mut h, &[cmd(DIM, 0.2)], false, t0 + Duration::from_secs(20));
+        let v = t.observe(
+            &mut h,
+            &[cmd(DIM, 0.2)],
+            false,
+            t0 + Duration::from_secs(20),
+        );
         assert_eq!(v.restarted, vec!["A".to_string()]);
         assert!(t.due(quiet, t0 + Duration::from_secs(40)).is_empty());
-        assert_eq!(t.due(quiet, t0 + Duration::from_secs(50)), vec!["A".to_string()]);
+        assert_eq!(
+            t.due(quiet, t0 + Duration::from_secs(50)),
+            vec!["A".to_string()]
+        );
         assert!(t.take_back("A"));
         assert_eq!(t.yielded_count(), 0);
     }

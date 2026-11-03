@@ -27,6 +27,8 @@ use uuid::Uuid;
 /// the fixtures have changed by the beat. Other rows (MIDI, `/live` cues) leave exactly on time.
 pub const LOOK_LEAD_SECONDS: f64 = 0.045;
 /// Pause between the two rounds of `overrides/clear` a release sends per fixture.
+/// Pause before a failed timeline send is tried once more.
+const SEND_RETRY_DELAY: Duration = Duration::from_millis(100);
 const RELEASE_ROUND_GAP: Duration = Duration::from_millis(150);
 
 /// A fixture the operator took over goes back to the replay after this many seconds without a
@@ -781,11 +783,11 @@ impl Inner {
         } else {
             BTreeSet::new()
         };
-        self.release_fixtures_except(&used).await;
-        if !self.st().settings.enabled || active.is_empty() {
-            return;
-        }
-        if !self.output_ready() && !self.clone().connect().await {
+        let proceed = self.st().settings.enabled
+            && !active.is_empty()
+            && (self.output_ready() || self.clone().connect().await);
+        if !proceed {
+            self.release_fixtures_except(&used).await;
             return;
         }
         let now = Self::song_position_now(0.0, payload.started_at);
@@ -797,6 +799,11 @@ impl Inner {
             f64::from(payload.duration_seconds),
             f64::from(payload.duration_seconds),
         );
+        // The release goes out after the timeline has started (S-01): releasing 100 unused
+        // fixtures takes about a second and must not delay the new song's first look. It
+        // reserves its packet slots one at a time, so rows interleave with it.
+        let inner = self.clone();
+        tokio::spawn(async move { inner.release_fixtures_except(&used).await });
     }
 
     /// Resume/seek: restart the timeline at the song position. Upcoming rows are scheduled; each
@@ -902,10 +909,15 @@ impl Inner {
                     tokio::time::sleep(Duration::from_secs_f64(delay)).await;
                 }
                 match cue {
-                    AnyCue::Osc(cue) => inner
-                        .send_row(&cue, paced)
-                        .await
-                        .map_err(|e| (e.message.clone(), e.public)),
+                    AnyCue::Osc(cue) => {
+                        // One failed send is retried once, never the end of the show (S-02).
+                        let mut result = inner.send_row(&cue, paced).await;
+                        if result.is_err() {
+                            tokio::time::sleep(SEND_RETRY_DELAY).await;
+                            result = inner.send_row(&cue, false).await;
+                        }
+                        result.map_err(|e| (e.message.clone(), e.public))
+                    }
                     AnyCue::Midi(cue) => inner
                         .clone()
                         .send_pulse(&cue)
@@ -914,18 +926,43 @@ impl Inner {
                 }
             });
         }
+        let mut failed = false;
         while let Some(joined) = set.join_next().await {
             match joined {
-                Ok(Ok(())) => {}
+                Ok(Ok(())) => {
+                    if failed {
+                        // Sending works again: the error no longer describes the output.
+                        failed = false;
+                        {
+                            let mut st = self.st();
+                            st.status = PluginStatus::Running;
+                            st.last_error = None;
+                        }
+                        self.set_connection(
+                            ConnectionStatus::Connected,
+                            "Lighting cues are going out again.",
+                        )
+                        .await;
+                    }
+                }
                 Ok(Err((message, public))) => {
-                    set.abort_all();
+                    tracing::warn!(error = %message, "lighting_timeline_send_failed");
+                    failed = true;
                     self.record_error_text(if public {
                         message
                     } else {
                         "A lighting cue could not be sent.".into()
                     })
                     .await;
-                    return;
+                    if !self.output_ready() {
+                        // The output is closed: nothing later can go out. The status stops
+                        // saying "Replaying".
+                        set.abort_all();
+                        if let Some(link) = self.lightkey.get() {
+                            link.set_replaying(None);
+                        }
+                        return;
+                    }
                 }
                 Err(_) => {}
             }
@@ -1188,7 +1225,8 @@ impl Inner {
                 return Ok(()); // the operator has this fixture
             } else {
                 st.held_fixtures.insert(name.to_string());
-                st.operator.note_send(&message.address, &message.args, Instant::now());
+                st.operator
+                    .note_send(&message.address, &message.args, Instant::now());
             }
         }
         self.send_osc(&message.address, &message.args).await
