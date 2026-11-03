@@ -148,7 +148,7 @@ change. A pass with no change is not saved and the song stays not captured. A pa
 partial only if it covers at least as much, and never replaces a complete capture. A seek
 during a pass discards it. Older cue maps whose captured rows have no status count as
 incomplete and are captured again. To re-capture a fully captured song, pin Record or
-Clear it. `replay: true` in an old settings file with no `mode` loads as Replay.
+Clear it. An old settings file with no `mode` loads as Auto; `replay` stays the master replay switch (`false` replays nothing in any mode). Record is set through the recording switch and is not saved by the settings route.
 
 Saving replaces only that song's `source = captured` rows. Rows you added by
 hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
