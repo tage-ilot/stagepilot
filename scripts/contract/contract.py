@@ -63,6 +63,9 @@ RUST_EXTENSIONS = {
     # How often each song's cue map changed (per-song revision for the cue-map 409). Keyed by song, so
     # any dict of ints; the Python recording has none.
     "cue_revisions": set(),
+    # Lightkey Auto | Replay | Record (#293): what Auto decides for the current/next song. Present
+    # only in Auto mode, on the Lightkey status and on the `lightkey` object of the Lighting settings.
+    "auto": {"capturing", "reason", "song"},
 }
 # Rust-only scalar additions to a response body (same rule as above: only with this type).
 # `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);
@@ -74,6 +77,9 @@ RUST_SCALAR_EXTENSIONS = {
     "settings_degraded_reason": (str, type(None)),
     # Fixtures the saved looks can override: Release lights clears them even after a restart.
     "known_fixtures": (int,),
+    # Lightkey capture/replay mode ("auto" | "replay" | "record") of #293; the Python app only had
+    # the Record switch and the Replay on/off.
+    "mode": (str,),
 }
 # Reviewed, intentional differences from the Python 2.41.1 recording (rc.4 audit fixes). Each entry
 # is a regex over one diff line plus the reason. Anything not listed still fails the replay, so keep

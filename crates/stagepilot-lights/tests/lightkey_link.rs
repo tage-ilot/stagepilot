@@ -654,6 +654,31 @@ async fn a_new_song_finishes_the_one_before() {
     rig.link.stop().await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn record_turned_off_drops_the_record_decision_from_the_status() {
+    let rig = Rig::new(&["A"]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(100), None).await;
+    assert_eq!(
+        rig.link.status().auto,
+        None,
+        "pinned Record shows no Auto decision"
+    );
+    rig.link.set_recording(false).await;
+    let status = rig.link.status();
+    assert_eq!(status.mode, stagepilot_core::config::LightkeyMode::Auto);
+    if let Some(auto) = &status.auto {
+        assert_ne!(auto.reason, "Record: capturing every song");
+    }
+    assert_ne!(
+        status.replay_blocked.as_deref(),
+        Some("Paused while capturing this song."),
+        "a stale Record decision must not block replay once Record is off"
+    );
+    rig.link.stop().await;
+}
+
 // ------------------------------------------------------------------------------- replay
 
 #[tokio::test(flavor = "multi_thread")]

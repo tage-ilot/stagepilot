@@ -866,6 +866,15 @@ impl Inner {
         let session = {
             let mut st = self.st();
             st.armed = false;
+            // A decision pinned by Record describes a mode that is now off; leaving it would
+            // keep the status saying "Record" and block replay while the mode reads Auto.
+            if st
+                .decision
+                .as_ref()
+                .is_some_and(|d| d.decision.reason == Reason::PinnedRecord)
+            {
+                st.decision = None;
+            }
             st.session.take()
         };
         self.persist_armed(false).await;
