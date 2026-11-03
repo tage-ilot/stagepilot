@@ -67,6 +67,7 @@ pub fn routes() -> Router<Rt> {
             "/api/v1/lights/lightkey/recording",
             post(lightkey_recording),
         )
+        .route("/api/v1/lights/lightkey/release", post(lightkey_release))
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Value {
@@ -1420,6 +1421,12 @@ fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
         Some(Value::Object(map)) => Ok(map),
         other => Err(unprocessable(validation::invalid_body(raw, other.as_ref()))),
     }
+}
+
+/// "Release lights": give every fixture the replay holds back to Lightkey.
+async fn lightkey_release(State(rt): State<Rt>) -> Json {
+    let (accepted, message) = rt.outputs.lights.lightkey_release_lights().await;
+    lightkey_response(&rt, accepted, message).await
 }
 
 /// `POST /api/v1/lights/lightkey/simplify` `{song_key, detail_level?, apply?}`: the recording's

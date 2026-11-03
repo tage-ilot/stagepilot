@@ -317,6 +317,7 @@ struct Inner {
     settings: SettingsProvider,
     armed_store: Arc<dyn ArmedStore>,
     looks_sink: Option<LooksSink>,
+    fixture_tap: Option<FixtureTap>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
     relay_port: u16,
@@ -325,12 +326,27 @@ struct Inner {
     wake: Notify,
 }
 
+/// What the fixture stream tells the lights plugin (operator override).
+pub enum FixtureEvent<'a> {
+    /// Fixture properties changed on the Lightkey Mac. `keyframe`: found by a keyframe.
+    Changed {
+        commands: &'a [FixtureCommand],
+        keyframe: bool,
+    },
+    /// The relay session (re)started: the state is unknown until it is learned again.
+    StreamReset,
+}
+
+pub type FixtureTap = Arc<dyn Fn(FixtureEvent<'_>) + Send + Sync>;
+
 /// Everything `LightkeyLink::new` needs besides the bus and the settings.
 pub struct LinkOptions {
     /// Remembers the Record switch.
     pub armed_store: Arc<dyn ArmedStore>,
     /// Where a finished recording goes (the song's timeline). `None` saves nothing.
     pub looks_sink: Option<LooksSink>,
+    /// Told about every relay change and stream restart (the plugin judges operator input).
+    pub fixture_tap: Option<FixtureTap>,
     pub http_factory: HttpFactory,
     pub clock: Arc<dyn Clock>,
     /// UDP port of the `lightkey-api` relay (21700 unless the agent was configured otherwise).
@@ -342,6 +358,7 @@ impl Default for LinkOptions {
         Self {
             armed_store: Arc::new(MemoryArmedStore::new()),
             looks_sink: None,
+            fixture_tap: None,
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
             relay_port: DEFAULT_LIGHTKEY_RELAY_PORT,
@@ -366,6 +383,7 @@ impl LightkeyLink {
                 settings,
                 armed_store: options.armed_store,
                 looks_sink: options.looks_sink,
+                fixture_tap: options.fixture_tap,
                 http_factory: options.http_factory,
                 clock: options.clock,
                 relay_port: options.relay_port,
@@ -515,6 +533,8 @@ impl Inner {
                     .as_ref()
                     .is_some_and(|session| session.fixtures.is_some()),
             ),
+            holding_fixtures: None,
+            yielded_fixtures: None,
         }
     }
 
@@ -682,10 +702,15 @@ impl Inner {
             let this = self.clone();
             let sink: crate::lightkey_relay::FixtureSink = {
                 let this = self.clone();
-                Arc::new(move |local: f64, commands: Vec<FixtureCommand>| {
-                    this.apply_fixture_change(local, &commands);
-                })
+                Arc::new(
+                    move |local: f64, commands: Vec<FixtureCommand>, keyframe: bool| {
+                        this.apply_fixture_change(local, &commands, keyframe);
+                    },
+                )
             };
+            if let Some(tap) = &self.fixture_tap {
+                tap(FixtureEvent::StreamReset);
+            }
             let clock = self.clock.clone();
             let clock_b = self.clock.clone();
             let watch = target.clone();
@@ -712,7 +737,10 @@ impl Inner {
     }
 
     /// A fixture changed on the Lightkey Mac at `local_time` (this computer's clock).
-    fn apply_fixture_change(&self, local_time: f64, commands: &[FixtureCommand]) {
+    fn apply_fixture_change(&self, local_time: f64, commands: &[FixtureCommand], keyframe: bool) {
+        if let Some(tap) = &self.fixture_tap {
+            tap(FixtureEvent::Changed { commands, keyframe });
+        }
         let mut st = self.st();
         let stopped = st.stopped;
         if let Some(session) = st.session.as_mut() {

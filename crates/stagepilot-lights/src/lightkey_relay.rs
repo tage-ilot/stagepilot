@@ -29,9 +29,11 @@ const PING_GAP_SECONDS: f64 = 0.03;
 pub const SILENCE_SECONDS: f64 = 6.0;
 const TICK: Duration = Duration::from_millis(30);
 
-/// Called with `(local_unix_seconds, changed_commands)` for every fixture change after the first
-/// keyframe. `local_unix_seconds` is the DMX-change time on THIS computer's clock.
-pub type FixtureSink = Arc<dyn Fn(f64, Vec<FixtureCommand>) + Send + Sync>;
+/// Called with `(local_unix_seconds, changed_commands, from_keyframe)` for every fixture change
+/// after the first keyframe. `local_unix_seconds` is the DMX-change time on THIS computer's
+/// clock. `from_keyframe` marks differences found by a keyframe (a missed packet, handed on
+/// late): they are real changes for a recording but never operator input.
+pub type FixtureSink = Arc<dyn Fn(f64, Vec<FixtureCommand>, bool) + Send + Sync>;
 
 #[derive(Debug)]
 struct Shared {
@@ -302,7 +304,7 @@ impl RelayClient {
                 (Vec::new(), lost)
             } else {
                 let (joined, lost) = s.tracker.on_packet(&packet);
-                let mut events: Vec<(f64, Vec<FixtureCommand>)> = Vec::new();
+                let mut events: Vec<(f64, Vec<FixtureCommand>, bool)> = Vec::new();
                 if let Joined::Complete {
                     kind,
                     time,
@@ -319,13 +321,13 @@ impl RelayClient {
                             // After the first keyframe, anything a keyframe changes was missed
                             // (a lost packet): hand it on, late, rather than lose it.
                             if !first && !changed.is_empty() {
-                                events.push((local, changed));
+                                events.push((local, changed, true));
                             }
                         }
                         PacketKind::Event => {
                             let changed = s.state.apply_all(&commands);
                             if s.have_keyframe && !changed.is_empty() {
-                                events.push((local, changed));
+                                events.push((local, changed, false));
                             }
                         }
                         PacketKind::Hello => {}
@@ -334,8 +336,8 @@ impl RelayClient {
                 (events, lost)
             }
         };
-        for (local, changed) in events {
-            sink(local, changed);
+        for (local, changed, keyframe) in events {
+            sink(local, changed, keyframe);
         }
         if want_keyframe {
             let _ = socket.send(&message("/relay/keyframe", vec![])).await;

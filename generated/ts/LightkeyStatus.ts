@@ -15,4 +15,12 @@ detail_level?: LightkeyDetail,
 /**
  * The song most recently saved to the timeline, left out until one has been.
  */
-captured?: LightkeyCaptured, fixtures?: FixtureStatus, };
+captured?: LightkeyCaptured, fixtures?: FixtureStatus, 
+/**
+ * Fixtures the replay holds with overrides, left out when none.
+ */
+holding_fixtures?: number, 
+/**
+ * Fixtures the replay gave to the operator, left out when none.
+ */
+yielded_fixtures?: number, };

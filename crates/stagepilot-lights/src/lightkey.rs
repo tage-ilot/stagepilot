@@ -87,6 +87,14 @@ pub struct LightkeyStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fixtures: Option<FixtureStatus>,
+    /// Fixtures the replay holds with overrides, left out when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub holding_fixtures: Option<u32>,
+    /// Fixtures the replay gave to the operator, left out when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub yielded_fixtures: Option<u32>,
 }
 
 impl LightkeyStatus {
