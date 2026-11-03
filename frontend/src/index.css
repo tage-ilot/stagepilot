@@ -1573,3 +1573,50 @@ textarea:focus-visible {
     white-space: nowrap;
   }
 }
+
+/* .panel-reveal is excluded: this rule (higher specificity) would replace its open/close animation with the 200ms fade. */
+.stagepilot-dashboard[data-landing="done"] > :not(header):not(.panel-reveal),
+
+/* Config panel reveal (DESIGN.md "Config panel reveal"). The wrapper animates its height (grid rows 0fr <-> 1fr, so the
+   dashboard below moves in lock-step) and is lifted by --genie-gap (the panel's top margin) so the visible panel top meets the card's bottom edge, settling
+   to the normal layout gap in the last 25%. The funnel clip-path lives on the VISIBLE box (.panel-reveal__clip), in % of
+   that box: it starts as a strip exactly the card wide (--genie-l / --genie-r), the bottom edge sweeps out to full
+   width, then the top edge widens. Close is the explicit reverse, ease-in. Transform / clip-path / opacity only. */
+.panel-reveal { --genie-x: 50%; --genie-w: 20%; --genie-l: 40%; --genie-r: 60%; --genie-gap: 0px; display: grid; grid-template-rows: 1fr; }
+.panel-reveal__clip { min-height: 0; overflow: clip; overflow-clip-margin: 0; }
+.panel-reveal[data-phase="opening"] { animation: panel-rows-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both, panel-drop-in var(--genie-ms, 300ms) linear both; }
+.panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-genie-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both; }
+.panel-reveal[data-phase="closing"] { animation: panel-rows-out var(--genie-ms, 300ms) cubic-bezier(.5, 0, .75, .5) both, panel-drop-out var(--genie-ms, 300ms) linear both; }
+.panel-reveal[data-phase="closing"] .panel-reveal__clip { animation: panel-genie-out var(--genie-ms, 300ms) cubic-bezier(.5, 0, .75, .5) both; }
+@keyframes panel-rows-in { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
+@keyframes panel-rows-out { from { grid-template-rows: 1fr; } to { grid-template-rows: 0fr; } }
+/* The shape's top stays on the card's bottom edge (wrapper lifted by the gap) and settles into the layout gap in the last 25%. */
+@keyframes panel-drop-in { from, 75% { transform: translateY(calc(-1 * var(--genie-gap, 0px))); } to { transform: none; } }
+@keyframes panel-drop-out { from { transform: none; } 25%, to { transform: translateY(calc(-1 * var(--genie-gap, 0px))); } }
+@keyframes panel-genie-in {
+  0% { opacity: .6; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, var(--genie-r) 100%, var(--genie-l) 100%); animation-timing-function: linear; }
+  30% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, calc(var(--genie-r) + (100% - var(--genie-r)) * .6) 100%, calc(var(--genie-l) * .4) 100%); animation-timing-function: linear; }
+  50% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
+  75% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
+  100% { opacity: 1; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+}
+@keyframes panel-genie-out {
+  0% { opacity: 1; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); animation-timing-function: linear; }
+  25% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
+  50% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
+  70% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, calc(var(--genie-r) + (100% - var(--genie-r)) * .6) 100%, calc(var(--genie-l) * .4) 100%); animation-timing-function: linear; }
+  100% { opacity: .6; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, var(--genie-r) 100%, var(--genie-l) 100%); }
+}
+/* Single column: a plain vertical emerge (the card spans the row, so there is no funnel). */
+@media (max-width: 639px) {
+  @keyframes panel-genie-in { from { opacity: .6; } 30%, to { opacity: 1; } }
+  @keyframes panel-genie-out { from, 70% { opacity: 1; } to { opacity: .6; } }
+}
+/* Reduced motion: no travel, no warp, no height animation; a short fade only. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-reveal[data-phase] { animation: none; }
+  .panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-fade-in var(--genie-ms, 100ms) linear both; }
+  .panel-reveal[data-phase="closing"] .panel-reveal__clip { animation: panel-fade-out var(--genie-ms, 100ms) linear both; }
+  @keyframes panel-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes panel-fade-out { from { opacity: 1; } to { opacity: 0; } }
+}

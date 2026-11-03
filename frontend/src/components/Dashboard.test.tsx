@@ -766,7 +766,7 @@ describe("Dashboard Planning Center plan states", () => {
       expect((screen.getByLabelText(field) as HTMLInputElement).value).toBe(value);
       await user.click(screen.getByRole("button", { name: close }));
       await user.click(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" }));
-      expect(screen.queryByLabelText(field)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText(field)).not.toBeInTheDocument());
     });
   });
 
@@ -1433,13 +1433,13 @@ describe("Dashboard connection configuration panels", () => {
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
     expect(midiConnection).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument());
 
     await user.click(midiConnection);
 
     expect(midiConnection).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument());
   });
 
   it("keeps all connection cards in one row with persistent icons", () => {
@@ -1499,10 +1499,10 @@ describe("Dashboard connection configuration panels", () => {
     for (const panel of panels) {
       const panelHeading = () => screen.queryAllByRole("heading", { name: panel.heading }).filter((h) => h.closest("section[data-variant=\"setup\"]") !== null);
       await user.click(screen.getByRole("button", { name: panel.card }));
-      expect(panelHeading()).toHaveLength(1);
+      await waitFor(() => expect(panelHeading()).toHaveLength(1));
 
       await user.click(screen.getByRole("button", { name: panel.close }));
-      expect(panelHeading()).toHaveLength(0);
+      await waitFor(() => expect(panelHeading()).toHaveLength(0));
     }
   });
 

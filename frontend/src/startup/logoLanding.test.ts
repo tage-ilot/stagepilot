@@ -78,6 +78,6 @@ describe("loading logo landing", () => {
     expect(css).toMatch(/\[data-landing="moving"\] > :not\(header\),[^{]*\{\s*opacity: 0;/);
     // No transition while moving, or the dashboard would flash before it is hidden.
     expect(css).not.toMatch(/\.stagepilot-dashboard\[data-landing\] > :not\(header\)/);
-    expect(css).toMatch(/\[data-landing="done"\] > :not\(header\),[^{]*\{\s*animation: landing-fade-in 200ms/);
+    expect(css).toMatch(/\[data-landing="done"\] > :not\(header\):not\(\.panel-reveal\),[^{]*\{\s*animation: landing-fade-in 200ms/);
   });
 });

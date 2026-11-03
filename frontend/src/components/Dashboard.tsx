@@ -57,6 +57,9 @@ import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
+import { genieDurationMs } from "../lib/genieDuration";
+import { PanelReveal } from "./PanelReveal";
+import { usePanelPresence } from "../hooks/usePanelPresence";
 import { Button, Dialog, Panel, type LiveTone } from "./ui";
 import { InlineAlert } from "./ui/InlineAlert";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
@@ -820,6 +823,9 @@ export function Dashboard({
   const timerRemaining = frozenRemaining !== null
     ? frozenRemaining
     : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
+  const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  const revealMs = reducedMotion ? 100 : genieDurationMs(300);
+  const { shown, phase } = usePanelPresence(canConfigure ? activeConnection : null, revealMs);
   const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
@@ -1035,7 +1041,8 @@ export function Dashboard({
         />
       </section>
 
-      {canConfigure && activeConnection === "planning-center" && (
+      {canConfigure && shown === "planning-center" && (
+        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"planning-center-configuration\"]")}>
         <PlanningCenterSetupPanel
           onDirtyChange={setPanelDirty}
           error={planningCenterError}
@@ -1057,9 +1064,11 @@ export function Dashboard({
           state={state}
           status={planningCenterStatus}
         />
+        </PanelReveal>
       )}
 
-      {canConfigure && activeConnection === "midi" && (
+      {canConfigure && shown === "midi" && (
+        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"midi-configuration\"]")}>
         <MidiSetupPanel
           playback={playback}
           error={midiError}
@@ -1079,6 +1088,7 @@ export function Dashboard({
           settingsMessage={settingsMessage}
           songs={state?.plan?.songs ?? []}
         />
+        </PanelReveal>
       )}
 
       <Dialog
@@ -1095,7 +1105,8 @@ export function Dashboard({
         }
       />
 
-      {canConfigure && activeConnection === "propresenter" && (
+      {canConfigure && shown === "propresenter" && (
+        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"propresenter-configuration\"]")}>
         <ProPresenterSetupPanel
           onDirtyChange={setPanelDirty}
           error={propresenterError}
@@ -1108,9 +1119,11 @@ export function Dashboard({
           pendingOperation={pendingProPresenterOperation}
           propresenter={propresenter}
         />
+        </PanelReveal>
       )}
 
-      {canConfigure && activeConnection === "lights" && (
+      {canConfigure && shown === "lights" && (
+        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"lighting-configuration\"]")}>
         <LightingSetupPanel
           onDirtyChange={setPanelDirty}
           connectionStatus={connectionViews.lights.status}
@@ -1134,9 +1147,11 @@ export function Dashboard({
           settings={settings}
           state={state}
         />
+        </PanelReveal>
       )}
 
-      {canConfigure && activeConnection === "backend" && (
+      {canConfigure && shown === "backend" && (
+        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"backend-configuration\"]")}>
         <BackendSetupPanel
           onDirtyChange={setPanelDirty}
           error={settingsError}
@@ -1150,6 +1165,7 @@ export function Dashboard({
           settings={settings}
           state={state}
         />
+        </PanelReveal>
       )}
 
       <DashboardGrid

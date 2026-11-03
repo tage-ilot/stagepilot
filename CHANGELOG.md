@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Configuration panels now open and close with a short genie-style animation: the panel grows out of its connection card while the dashboard below moves down with it, and closing runs in reverse (300 ms; a 100 ms fade with reduced motion; plain vertical emerge on phones). The panel visibly comes out of, and goes back into, its own card (a funnel starting at the card's width, lifted to meet the card's bottom edge). Focus returns to the card on close. Dev hook: `localStorage.setItem("spGenieMs","3000")` slows the animation for inspection.
+
 ### Added
 
 - Lightkey **Auto mode** (per song): the Lighting link now has Auto | Replay | Record (`LightkeySettings.mode`, default Auto; old files without `mode` load as Auto and `replay` stays the master replay switch). In Auto, when a song's timer starts the link captures songs that are not fully captured, replays fully captured songs, and replays when there is no lighting connection (link connected, Lightkey running, fixture stream live, Lighting on; a 60 s grace applies). The decision never changes mid-song. A pass is **fully captured** at 95 % coverage with no playhead move, no link drop of 60 s or more and at least one change; partial passes (10 % or 10 s, with a change) are saved marked incomplete and never replace a complete capture. Songs show Fully captured / Incomplete capture / Manually cued / Manually cued & fully captured / Not captured. Status reports the mode and the Auto reason.
