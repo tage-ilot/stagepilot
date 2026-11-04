@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import {
-  NOTCH_SIZE,
+  NOTCH_ABOVE,
+  NOTCH_WIDTH,
   SLIDE_EASING,
   SLIDE_MS,
   emergeFrames,
@@ -26,6 +27,12 @@ export interface PanelRevealProps {
    */
   triggerKey?: string;
   children: ReactNode;
+}
+
+/** The panel's children, which fade in as the content (the panel itself when it has none). */
+function fadeTargets(panel: HTMLElement): HTMLElement[] {
+  const children = Array.from(panel.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
+  return children.length ? children : [panel];
 }
 
 /** Elements that move with the panel's lower edge: everything after the reveal in the flow. */
@@ -53,25 +60,38 @@ interface Group {
   /** The animations that move the content below the panel; they are refitted if the panel's height changes mid-flight. */
   below: Animation[];
   touched: HTMLElement[];
+  /** One fade per child of the panel. A child that is replaced while the animation runs (data arriving) hands its fade to the new one. */
+  fades: Map<HTMLElement, Animation>;
+  watcher: MutationObserver | null;
 }
 
 /**
  * Config panel open / close (DESIGN.md "Config panel reveal"). The panel is laid out at its final size at once and
  * only transform and opacity animate (Web Animations, one group): the outer wrapper scales the strip out of the card's
  * width, the inner wrapper grows it down from the card's bottom edge, the content below slides by the same amount (FLIP),
- * the content fades in late and a notch on the panel's top border points at the card. Nothing animates height, grid rows,
- * margins, clip-path or filters, so the dashboard is not laid out again per frame.
+ * the content fades in late and a notch on the panel's top border points at the card (it rises out of the border at the end of
+ * an open and sinks back into it at the start of a close). Nothing animates height, grid rows, margins, clip-path or filters,
+ * so the dashboard is not laid out again per frame.
  */
 export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }: PanelRevealProps) {
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  // The notch: track (follows the panel's top edge as the gap to the card closes) > clip (static strip above the border) > rise (translateY) > notch (translateX, accent) > fill (static triangle)
+  // > counterX > counterY > bg. The bg is a copy of the panel's own background at the panel's position; the counters cancel the
+  // notch's movement so it stays lined up with the panel and the notch shows exactly the panel's colour.
+  const track = useRef<HTMLSpanElement>(null);
+  const clip = useRef<HTMLSpanElement>(null);
+  const rise = useRef<HTMLSpanElement>(null);
   const notch = useRef<HTMLSpanElement>(null);
+  const counterX = useRef<HTMLSpanElement>(null);
+  const counterY = useRef<HTMLSpanElement>(null);
+  const fill = useRef<HTMLSpanElement>(null);
   const closing = phase === "closing";
 
   const group = useRef<Group | null>(null);
-  const slide = useRef<Animation | null>(null);
+  const slide = useRef<Animation[]>([]);
   const placed = useRef<{ centre: number; accent: string } | null>(null);
   const latest = useRef({ phase, durationMs, trigger });
   latest.current = { phase, durationMs, trigger };
@@ -88,6 +108,7 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
     const current = group.current;
     group.current = null;
     if (!current) return;
+    current.watcher?.disconnect();
     for (const animation of current.animations) { animation.onfinish = null; animation.cancel(); }
     for (const element of current.touched) element.style.removeProperty("will-change");
   };
@@ -104,6 +125,7 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
     const height = panel.offsetHeight;
     if (!(height > 0) || Math.abs(height - current.geometry.height) < 1) return;
     current.geometry = { ...current.geometry, height };
+    syncFill();
     const frames = emergeFrames(current.geometry, current.built);
     for (const animation of current.below) {
       const effect = animation.effect as KeyframeEffect | null;
@@ -113,8 +135,23 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
 
   const cancelSlide = () => {
     const current = slide.current;
-    slide.current = null;
-    if (current) { current.onfinish = null; current.cancel(); }
+    slide.current = [];
+    for (const animation of current) { animation.onfinish = null; animation.cancel(); }
+  };
+
+  /** Copies the panel's background (colour, gradient wash) and its box onto the notch's fill, so both paint the same pixels (and the fill continues it upwards). */
+  const syncFill = () => {
+    const element = fill.current;
+    const panel = panelElement();
+    if (!element || !panel) return;
+    const styles = getComputedStyle(panel);
+    element.style.setProperty("left", `${Number.parseFloat(styles.marginLeft) || 0}px`);
+    element.style.setProperty("width", `${panel.offsetWidth}px`);
+    // The copy reaches NOTCH_ABOVE px above the panel (a transparent top border), so the notch's fill is the panel's background continued upwards.
+    element.style.setProperty("height", `${panel.offsetHeight + NOTCH_ABOVE}px`);
+    element.style.setProperty("border-width", `${(Number.parseFloat(styles.borderTopWidth) || 0) + NOTCH_ABOVE}px ${styles.borderRightWidth} ${styles.borderBottomWidth} ${styles.borderLeftWidth}`);
+    element.style.setProperty("background-color", styles.backgroundColor);
+    element.style.setProperty("background-image", styles.backgroundImage);
   };
 
   /**
@@ -133,6 +170,7 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
     const marginTop = Number.parseFloat(styles.marginTop) || 0;
     const previous = placed.current;
     host.style.setProperty("--emerge-top", `${marginTop}px`);
+    syncFill();
     // Already there (or on its way there): leave a running slide alone. A re-measure with the same answer, e.g. the
     // ResizeObserver firing because the swapped-in panel has another height, must not cut the glide short.
     if (previous && Math.abs(previous.centre - centre) <= 0.5 && previous.accent === accent) return;
@@ -140,21 +178,24 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
     let fromCentre = previous?.centre ?? centre;
     let fromAccent = previous?.accent ?? accent;
     const gliding = glide && previous !== null && canAnimate(element) && (Math.abs(previous.centre - centre) > 0.5 || previous.accent !== accent);
-    if (gliding && slide.current) {
+    if (gliding && slide.current.length) {
       // Retarget from where the notch is right now, so interrupting a slide never jumps.
       const computed = getComputedStyle(element);
       const x = parseTranslateX(computed.transform);
-      if (x !== null) fromCentre = x + NOTCH_SIZE / 2;
-      fromAccent = computed.borderTopColor || fromAccent;
+      if (x !== null) fromCentre = x + NOTCH_WIDTH / 2;
+      fromAccent = computed.color || fromAccent;
     }
     cancelSlide();
-    element.style.setProperty("--notch-x", `${centre - NOTCH_SIZE / 2}px`);
+    element.style.setProperty("--notch-x", `${centre - NOTCH_WIDTH / 2}px`);
     element.style.setProperty("--notch-accent", accent);
     placed.current = { centre, accent };
     if (!gliding) return;
-    const animation = element.animate(slideFrames(fromCentre, centre, fromAccent, accent), { duration: SLIDE_MS, easing: SLIDE_EASING });
-    slide.current = animation;
-    animation.onfinish = () => { if (slide.current === animation) slide.current = null; };
+    const frames = slideFrames(fromCentre, centre, fromAccent, accent);
+    const timing = { duration: SLIDE_MS, easing: SLIDE_EASING };
+    const animation = element.animate(frames.notch, timing);
+    const counter = counterX.current?.animate(frames.counter, timing);
+    slide.current = counter ? [animation, counter] : [animation];
+    animation.onfinish = () => { if (slide.current[0] === animation) slide.current = []; };
   };
 
   /** Builds the animation group for one direction, from freshly measured geometry. */
@@ -166,36 +207,47 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
     const panel = panelElement();
     const card = latest.current.trigger();
     const element = notch.current;
-    if (!host || !wrapperOuter || !wrapperInner || !panel || !card || !element || !canAnimate(wrapperOuter)) return;
+    const risen = rise.current;
+    const risenCounter = counterY.current;
+    const cover = clip.current;
+    const following = track.current;
+    if (!host || !wrapperOuter || !wrapperInner || !panel || !card || !element || !risen || !risenCounter || !cover || !following || !canAnimate(wrapperOuter)) return;
     const duration = latest.current.durationMs;
     const animations: Animation[] = [];
     const belowAnimations: Animation[] = [];
     const touched: HTMLElement[] = [];
     let measured: EmergeGeometry | null = null;
+    const fades = new Map<HTMLElement, Animation>();
     const add = (target: HTMLElement, frames: Keyframe[], easing: string, hint: string) => {
       target.style.setProperty("will-change", hint);
       touched.push(target);
-      animations.push(target.animate(frames, { duration, easing, fill: "both" }));
+      const animation = target.animate(frames, { duration, easing, fill: "both" });
+      animations.push(animation);
+      return animation;
     };
+    let contentFrames: Keyframe[] = [];
 
     if (matches("(prefers-reduced-motion: reduce)")) {
       add(wrapperOuter, fadeFrames(direction), "linear", "opacity");
-      add(element, fadeFrames(direction), "linear", "opacity");
+      add(cover, fadeFrames(direction), "linear", "opacity");
     } else {
       const geometry = emergeGeometry(card.getBoundingClientRect(), panel.getBoundingClientRect());
       if (!geometry) return;
       measured = geometry;
-      const frames = emergeFrames(geometry, direction);
       // Single column: the card spans the row, so there is nothing to spread out of; the strip only grows down.
-      if (!matches("(max-width: 639px)")) add(wrapperOuter, frames.outer, frames.easing.outer, "transform");
+      const spread = !matches("(max-width: 639px)");
+      const frames = emergeFrames(geometry, direction, spread);
+      if (spread) add(wrapperOuter, frames.outer, frames.easing.outer, "transform");
       add(wrapperInner, frames.inner, frames.easing.inner, "transform");
       for (const below of elementsBelow(host)) { add(below, frames.below, frames.easing.below, "transform"); belowAnimations.push(animations[animations.length - 1]!); }
-      const faded = Array.from(panel.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
-      for (const child of faded.length ? faded : [panel]) add(child, frames.content, frames.easing.content, "opacity");
-      add(element, frames.notch, frames.easing.notch, "opacity");
+      contentFrames = frames.content;
+      for (const child of fadeTargets(panel)) fades.set(child, add(child, frames.content, frames.easing.content, "opacity"));
+      add(following, frames.track, frames.easing.inner, "transform");
+      add(risen, frames.notch, frames.easing.notch, "transform");
+      add(risenCounter, frames.notchCounter, frames.easing.notch, "transform");
     }
 
-    const entry: Group = { animations, direction, built: direction, geometry: measured, below: belowAnimations, touched };
+    const entry: Group = { animations, direction, built: direction, geometry: measured, below: belowAnimations, touched, fades, watcher: null };
     group.current = entry;
     const settle = () => {
       if (group.current !== entry || !animations.every((animation) => animation.playState === "finished")) return;
@@ -205,6 +257,37 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
       if (resizeWhileBusy.current) { resizeWhileBusy.current = false; if (latest.current.phase !== "closing") placeNotch(false); }
     };
     for (const animation of animations) animation.onfinish = settle;
+
+    // The panel's children can be replaced while it opens (the Lighting panel swaps a section once its settings arrive). A
+    // fade on a removed child would keep ticking on the main thread without ever painting, and the new child would show its
+    // text at full opacity while the strip is still narrow. So the new child takes over the fade, in step with the others.
+    if (fades.size && typeof MutationObserver === "function") {
+      entry.watcher = new MutationObserver(() => {
+        if (group.current !== entry) return;
+        const present = new Set(fadeTargets(panel));
+        for (const [child, animation] of entry.fades) {
+          if (present.has(child)) continue;
+          animation.onfinish = null;
+          animation.cancel();
+          entry.fades.delete(child);
+          const at = animations.indexOf(animation);
+          if (at >= 0) animations.splice(at, 1);
+          child.style.removeProperty("will-change");
+        }
+        const reference = animations[0];
+        for (const child of present) {
+          if (entry.fades.has(child) || !canAnimate(child)) continue;
+          child.style.setProperty("will-change", "opacity");
+          touched.push(child);
+          const animation = child.animate(contentFrames, { duration, easing: "linear", fill: "both" });
+          if (reference) { animation.currentTime = reference.currentTime; animation.playbackRate = reference.playbackRate; }
+          animation.onfinish = settle;
+          animations.push(animation);
+          entry.fades.set(child, animation);
+        }
+      });
+      entry.watcher.observe(panel, { childList: true });
+    }
   };
 
   // Closing: if focus is inside the panel, hand it back to the card before the panel goes inert.
@@ -274,7 +357,21 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
           <div ref={content} className="panel-reveal__panel">{children}</div>
         </div>
       </div>
-      <span ref={notch} className="panel-reveal__notch" aria-hidden="true" />
+      <span ref={track} className="panel-reveal__notch-track" aria-hidden="true">
+        <span ref={clip} className="panel-reveal__notch-clip">
+          <span ref={rise} className="panel-reveal__notch-rise">
+            <span ref={notch} className="panel-reveal__notch">
+              <span className="panel-reveal__notch-fill">
+                <span ref={counterX} className="panel-reveal__notch-cx">
+                  <span ref={counterY} className="panel-reveal__notch-cy">
+                    <span ref={fill} className="panel-reveal__notch-bg" />
+                  </span>
+                </span>
+              </span>
+            </span>
+          </span>
+        </span>
+      </span>
     </div>
   );
 }

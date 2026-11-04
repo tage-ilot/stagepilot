@@ -2,13 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMERGE_MS,
-  NOTCH_SIZE,
+  NOTCH_ABOVE,
+  NOTCH_HEIGHT,
+  NOTCH_RISE,
+  NOTCH_WIDTH,
+  RISE_EASING,
+  RISE_FROM,
+  SINK_EASING,
+  RISE_LATEST,
+  SINK_TO,
+  bezierTimeAt,
   emergeFrames,
   emergeGeometry,
   flipOffset,
   notchCentre,
   panelEdges,
   parseTranslateX,
+  riseFrames,
+  riseStart,
   slideFrames,
   stripWidth,
   type CardBox,
@@ -79,18 +90,19 @@ describe("notchCentre", () => {
     expect(notchCentre(CARDS[0], panel)).toBeCloseTo(CARDS[0].width / 2, 6);
     expect(notchCentre(CARDS[2], panel)).toBeCloseTo(2 * (265.6 + 12) + 265.6 / 2, 6);
     expect(notchCentre(CARDS[4], panel)).toBeCloseTo(4 * (265.6 + 12) + 265.6 / 2, 6);
-    expect(NOTCH_SIZE).toBe(16);
+    expect(NOTCH_WIDTH).toBe(28);
   });
 });
 
 const LAYOUT_PROPS = ["height", "width", "top", "left", "right", "bottom", "margin", "marginTop", "clipPath", "clip-path", "filter", "gridTemplateRows", "padding"];
-const ALLOWED = new Set(["transform", "opacity", "offset", "easing", "composite", "borderTopColor", "borderLeftColor"]);
+// The only properties anything here may animate: transform and opacity, plus the accent colour of a notch glide (paint only).
+const ALLOWED = new Set(["transform", "opacity", "offset", "easing", "composite", "color"]);
 
 describe("emergeFrames", () => {
   const g = emergeGeometry(CARDS[0], panel)!;
   const all = (direction: "open" | "close") => {
     const f = emergeFrames(g, direction);
-    return [f.outer, f.inner, f.below, f.content, f.notch];
+    return [f.outer, f.inner, f.below, f.content, f.notch, f.notchCounter, f.track];
   };
 
   it("animate only transform and opacity (layout properties can never creep back)", () => {
@@ -99,7 +111,7 @@ describe("emergeFrames", () => {
         for (const frame of frames) {
           for (const key of Object.keys(frame)) {
             expect(LAYOUT_PROPS).not.toContain(key);
-            expect(["transform", "opacity", "offset"]).toContain(key);
+            expect(["transform", "opacity", "offset", "easing"]).toContain(key);
           }
         }
       }
@@ -126,9 +138,90 @@ describe("emergeFrames", () => {
     expect(close).toEqual([{ opacity: 1, offset: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 0, offset: 1 }]);
   });
 
-  it("fades the notch in from 70% on open and out within the first 30% of a close", () => {
-    expect(emergeFrames(g, "open").notch).toEqual([{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.7 }, { opacity: 1, offset: 1 }]);
-    expect(emergeFrames(g, "close").notch).toEqual([{ opacity: 1, offset: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 0, offset: 1 }]);
+  it("the notch rises from behind the border (translateY +h -> 0) from 60% of an open, with the approved easing, and only transform animates", () => {
+    const middle = emergeGeometry(CARDS[2], panel)!;
+    const open = emergeFrames(middle, "open");
+    expect(NOTCH_RISE).toBe(NOTCH_HEIGHT);
+    expect(open.notch).toEqual([
+      { transform: `translateY(${NOTCH_RISE}px)`, offset: 0 },
+      { transform: `translateY(${NOTCH_RISE}px)`, offset: RISE_FROM, easing: "cubic-bezier(.2,.8,.2,1)" },
+      { transform: "translateY(0px)", offset: 1 },
+    ]);
+    expect(RISE_FROM).toBe(0.6);
+    expect(RISE_EASING).toBe("cubic-bezier(.2,.8,.2,1)");
+    for (const frame of open.notch) expect(Object.keys(frame).filter((key) => !["transform", "offset", "easing"].includes(key))).toEqual([]);
+    // never faded: opacity stays 1 for the whole travel, the clip does the revealing
+    expect(open.notch.some((frame) => "opacity" in frame)).toBe(false);
+  });
+
+  it("starts the rise at 60% for cards near the middle and a little later for edge cards, once the strip covers the notch", () => {
+    expect(riseStart(emergeGeometry(CARDS[2], panel)!)).toBe(RISE_FROM);
+    for (const index of [0, 4]) {
+      const g = emergeGeometry(CARDS[index]!, panel)!;
+      const start = riseStart(g);
+      expect(start).toBeGreaterThan(RISE_FROM);
+      expect(start).toBeLessThanOrEqual(RISE_LATEST);
+      // at that moment the strip (scaleX eased by cubic-bezier(.65,0,.35,1)) reaches past the notch plus the strip's rounded end
+      const progress = ((): number => {
+        let low = 0; let high = 1;
+        for (let step = 0; step < 50; step += 1) { const mid = (low + high) / 2; if (bezierTimeAt(mid, [0.65, 0, 0.35, 1]) < start) low = mid; else high = mid; }
+        return (low + high) / 2;
+      })();
+      const half = stripWidth(g, panel.width, progress) / 2;
+      expect(half).toBeGreaterThanOrEqual(Math.abs(g.dx) + NOTCH_WIDTH / 2 + 12 - 0.5);
+      expect(emergeFrames(g, "open").notch[1]!.offset).toBe(start);
+      expect(emergeFrames(g, "open").notchCounter[1]!.offset).toBe(start);
+    }
+    // single column: no spread, so nothing to wait for
+    expect(riseStart(emergeGeometry(CARDS[0], panel)!, false)).toBe(RISE_FROM);
+  });
+
+  it("bezierTimeAt inverts the timing function (monotonic, 0 -> 0, 1 -> 1, the midpoint of a symmetric curve is 0.5)", () => {
+    expect(bezierTimeAt(0, [0.65, 0, 0.35, 1])).toBeCloseTo(0, 6);
+    expect(bezierTimeAt(1, [0.65, 0, 0.35, 1])).toBeCloseTo(1, 6);
+    expect(bezierTimeAt(0.5, [0.65, 0, 0.35, 1])).toBeCloseTo(0.5, 4);
+    expect(bezierTimeAt(0.9, [0.65, 0, 0.35, 1])).toBeGreaterThan(bezierTimeAt(0.1, [0.65, 0, 0.35, 1]));
+  });
+
+  it("the notch's clip follows the panel's top edge with the inner wrapper's translateY and easing, so the gap closing never exposes the notch over the panel", () => {
+    const open = emergeFrames(g, "open");
+    expect(open.track).toEqual([{ transform: `translateY(${-g.gap}px)` }, { transform: "translateY(0px)" }]);
+    expect(open.track[0]!.transform).toBe(`translateY(${-g.gap}px)`);
+    expect(open.inner[0]!.transform).toBe(`translateY(${-g.gap}px) scaleY(0.02)`);
+    expect(emergeFrames(g, "close").track).toEqual([...open.track].reverse());
+  });
+
+  it("the notch sinks back down within the first 35% of a close (the rise curve run backwards)", () => {
+    const close = emergeFrames(g, "close");
+    expect(close.notch).toEqual([
+      { transform: "translateY(0px)", offset: 0, easing: SINK_EASING },
+      { transform: `translateY(${NOTCH_RISE}px)`, offset: SINK_TO },
+      { transform: `translateY(${NOTCH_RISE}px)`, offset: 1 },
+    ]);
+    expect(SINK_TO).toBeLessThanOrEqual(0.35);
+    expect(SINK_EASING).toBe("cubic-bezier(.8,0,.8,.2)"); // 1-x2, 1-y2, 1-x1, 1-y1 of the rise curve
+  });
+
+  it("the fill's counter-translation has the same offsets and easings and the exact opposite offsets in y, so the two always cancel", () => {
+    for (const direction of ["open", "close"] as const) {
+      const frames = emergeFrames(g, direction);
+      expect(frames.notchCounter).toHaveLength(frames.notch.length);
+      frames.notch.forEach((frame, index) => {
+        const counter = frames.notchCounter[index]!;
+        expect(counter.offset).toBe(frame.offset);
+        expect(counter.easing).toBe(frame.easing);
+        const y = Number.parseFloat(String(frame.transform).replace(/[^\d.-]/g, ""));
+        const yCounter = Number.parseFloat(String(counter.transform).replace(/[^\d.-]/g, ""));
+        expect(yCounter + y).toBeCloseTo(0, 9);
+      });
+    }
+    expect(riseFrames("open", -1)[0]!.transform).toBe(`translateY(${-NOTCH_RISE}px)`);
+  });
+
+  it("the clip strip reaches from the notch's tip to just under the border row (what the CSS clip shows)", () => {
+    expect(NOTCH_HEIGHT).toBe(14);
+    expect(NOTCH_ABOVE).toBe(12); // the border's top edge is 12px below the clip's top: the border row is 12..13, the highlight under it 13..14
+    expect(NOTCH_RISE).toBeGreaterThanOrEqual(NOTCH_HEIGHT); // fully hidden behind the strip at the start
   });
 
   it("closing is the exact reverse of the transform frames", () => {
@@ -145,20 +238,23 @@ describe("emergeFrames", () => {
 });
 
 describe("slideFrames", () => {
-  it("moves the notch with transform only (plus the accent colour)", () => {
+  it("moves the notch with transform only (plus the accent colour) and the fill's counter-translation the other way", () => {
     const frames = slideFrames(100, 400, "rgb(1, 2, 3)", "rgb(4, 5, 6)");
-    expect(frames).toHaveLength(2);
-    expect(frames[0]!.transform).toBe(`translateX(${100 - NOTCH_SIZE / 2}px) rotate(45deg)`);
-    expect(frames[1]!.transform).toBe(`translateX(${400 - NOTCH_SIZE / 2}px) rotate(45deg)`);
-    for (const frame of frames) for (const key of Object.keys(frame)) expect(ALLOWED.has(key)).toBe(true);
-    expect(frames[0]!.borderTopColor).toBe("rgb(1, 2, 3)");
-    expect(frames[1]!.borderLeftColor).toBe("rgb(4, 5, 6)");
+    expect(frames.notch).toHaveLength(2);
+    expect(frames.notch[0]!.transform).toBe(`translateX(${100 - NOTCH_WIDTH / 2}px)`);
+    expect(frames.notch[1]!.transform).toBe(`translateX(${400 - NOTCH_WIDTH / 2}px)`);
+    for (const frame of [...frames.notch, ...frames.counter]) for (const key of Object.keys(frame)) expect(ALLOWED.has(key)).toBe(true);
+    expect(frames.notch[0]!.color).toBe("rgb(1, 2, 3)");
+    expect(frames.notch[1]!.color).toBe("rgb(4, 5, 6)");
+    expect(frames.counter[0]!.transform).toBe(`translateX(${-(100 - NOTCH_WIDTH / 2)}px)`);
+    expect(frames.counter[1]!.transform).toBe(`translateX(${-(400 - NOTCH_WIDTH / 2)}px)`);
+    expect(frames.counter.every((frame) => !("color" in frame))).toBe(true);
   });
 });
 
 describe("parseTranslateX", () => {
-  it("reads the x translation out of a rotated matrix and tolerates none", () => {
-    expect(parseTranslateX("matrix(0.707107, 0.707107, -0.707107, 0.707107, 312.5, 0)")).toBeCloseTo(312.5, 6);
+  it("reads the x translation out of a matrix and tolerates none", () => {
+    expect(parseTranslateX("matrix(1, 0, 0, 1, 312.5, 0)")).toBeCloseTo(312.5, 6);
     expect(parseTranslateX("none")).toBeNull();
     expect(parseTranslateX("")).toBeNull();
   });
