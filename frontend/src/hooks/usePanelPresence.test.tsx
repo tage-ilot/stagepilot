@@ -90,4 +90,26 @@ describe("usePanelPresence", () => {
     h.unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("swaps in place with the swap option (phase kept, no close in between) and still closes normally", () => {
+    const h = renderHook(({ t }: { t: Id | null }) => usePanelPresence<Id>(t, 300, null, { swap: true }), { initialProps: { t: null as Id | null } });
+    h.rerender({ t: "a" });
+    act(() => { vi.advanceTimersByTime(300); });
+    h.rerender({ t: "b" });
+    expect(h.result.current).toEqual({ shown: "b", phase: "open" });
+    h.rerender({ t: null });
+    expect(h.result.current).toEqual({ shown: "b", phase: "closing" });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(h.result.current).toEqual({ shown: null, phase: "closed" });
+  });
+
+  it("swapping during the open keeps opening and settles open after the duration", () => {
+    const h = renderHook(({ t }: { t: Id | null }) => usePanelPresence<Id>(t, 300, null, { swap: true }), { initialProps: { t: null as Id | null } });
+    h.rerender({ t: "a" });
+    act(() => { vi.advanceTimersByTime(100); });
+    h.rerender({ t: "b" });
+    expect(h.result.current).toEqual({ shown: "b", phase: "opening" });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(h.result.current).toEqual({ shown: "b", phase: "open" });
+  });
 });

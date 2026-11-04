@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Configuration panels now open and close with a short genie-style animation: the panel grows out of its connection card while the dashboard below moves down with it, and closing runs in reverse (300 ms; a 100 ms fade with reduced motion; plain vertical emerge on phones). The panel visibly comes out of, and goes back into, its own card (a funnel starting at the card's width, lifted to meet the card's bottom edge). Focus returns to the card on close. Dev hook: `localStorage.setItem("spGenieMs","3000")` slows the animation for inspection.
+- Configuration panels now emerge from their connection card (500 ms; a 120 ms fade with reduced motion): the panel scales out of the card's width and down from its bottom edge, the dashboard below slides by the same amount so the gap never changes, and the content fades in late. Only `transform` and `opacity` animate (no height, grid-row or clip-path animation), so the dashboard is no longer laid out again on every frame; this replaces the earlier height and clip-path funnel. A small notch on the panel's top border, in the connection colour, points at the card; when another card is picked while a panel is open, the notch glides along the edge to it instead of the panel closing and reopening. Interrupting an open or close turns it round from where it is. Focus returns to the card on close. Dev hook: `localStorage.setItem("spGenieMs","6")` makes the animation six times slower for inspection (a value of 50 or more is read as milliseconds).
 
 ### Added
 
