@@ -23,6 +23,7 @@
     "@tauri-apps/plugin-updater": "2.10.1",
     "@tauri-apps/plugin-window-state": "2.4.1",
     "gridstack": "13.0.2",
+    "html-to-image": "^1.11.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

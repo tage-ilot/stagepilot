@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Configuration panels can now open and close like the macOS Genie: a snapshot of the panel is mapped onto a 64-row mesh (128 triangles, 1x texture) and warped on the GPU so it pours out of, and back into, its own connection card, with the dashboard below following the lowest row. It is a cheap, optional layer over the existing animation and silently falls back to it (and always under reduced motion or on a single column) when anything is doubtful: no WebGL, a failed or blank or stale snapshot, a snapshot capture over 40 ms (disabled for the session), or 3 slow frames in a row (the run ends with a 120 ms fade). Kill switch `localStorage.spGenieMesh = "off"` (`"on"` forces it for testing); `window.__spGenie` shows the last result. The snapshot library (`html-to-image`) is loaded lazily and is not in the main bundle.
+
 - Configuration panels now open and close with a short genie-style animation: the panel grows out of its connection card while the dashboard below moves down with it, and closing runs in reverse (300 ms; a 100 ms fade with reduced motion; plain vertical emerge on phones). The panel visibly comes out of, and goes back into, its own card (a funnel starting at the card's width, lifted to meet the card's bottom edge). Focus returns to the card on close. Dev hook: `localStorage.setItem("spGenieMs","3000")` slows the animation for inspection.
 
 ### Added

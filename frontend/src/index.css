@@ -1583,7 +1583,7 @@ textarea:focus-visible {
    to the normal layout gap in the last 25%. The funnel clip-path lives on the VISIBLE box (.panel-reveal__clip), in % of
    that box: it starts as a strip exactly the card wide (--genie-l / --genie-r), the bottom edge sweeps out to full
    width, then the top edge widens. Close is the explicit reverse, ease-in. Transform / clip-path / opacity only. */
-.panel-reveal { --genie-x: 50%; --genie-w: 20%; --genie-l: 40%; --genie-r: 60%; --genie-gap: 0px; display: grid; grid-template-rows: 1fr; }
+.panel-reveal { position: relative; --genie-x: 50%; --genie-w: 20%; --genie-l: 40%; --genie-r: 60%; --genie-gap: 0px; display: grid; grid-template-rows: 1fr; }
 .panel-reveal__clip { min-height: 0; overflow: clip; overflow-clip-margin: 0; }
 .panel-reveal[data-phase="opening"] { animation: panel-rows-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both, panel-drop-in var(--genie-ms, 300ms) linear both; }
 .panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-genie-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both; }
@@ -1614,6 +1614,15 @@ textarea:focus-visible {
   @keyframes panel-genie-out { from, 70% { opacity: 1; } to { opacity: .6; } }
 }
 /* Reduced motion: no travel, no warp, no height animation; a short fade only. */
+/* Genie mesh (WebGL snapshot warp, DESIGN.md "Config panel reveal"). data-mesh is set only while the mesh owns the motion:
+   run = the canvas animates and JS sets the wrapper height each frame; the real panel is invisible (but still laid out).
+   collapsed = a finished close, until the panel unmounts. fade = a bailed open: the real panel fades in over 120 ms. */
+.panel-reveal[data-mesh] { animation: none; }
+.panel-reveal[data-mesh] .panel-reveal__clip { animation: none; opacity: 0; pointer-events: none; }
+.panel-reveal[data-mesh="collapsed"] { height: 0; }
+.panel-reveal[data-mesh="fade"] .panel-reveal__clip { opacity: 1; pointer-events: auto; animation: genie-fade-in 120ms linear both; }
+@keyframes genie-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   .panel-reveal[data-phase] { animation: none; }
   .panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-fade-in var(--genie-ms, 100ms) linear both; }

@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
+import { GenieCanvas } from "./GenieCanvas";
+import { useGenieMesh } from "../hooks/useGenieMesh";
 import { genieGeometry } from "../lib/genieGeometry";
 import type { PresencePhase } from "../hooks/usePanelPresence";
 
@@ -29,13 +31,17 @@ function currentTranslateY(element: HTMLElement): number {
  */
 export function PanelReveal({ phase, durationMs, trigger, children }: PanelRevealProps) {
   const root = useRef<HTMLDivElement>(null);
+  const slot = useRef<HTMLDivElement>(null);
   const closing = phase === "closing";
+  useGenieMesh({ root, slot, phase, durationMs, trigger });
 
   // The card's own edges (as a % of the panel row) and the gap between its bottom edge and this wrapper.
   useLayoutEffect(() => {
     const element = root.current;
     const card = trigger();
     if (!element || !card) return;
+    // A mesh run owns the wrapper's geometry; these variables only feed the CSS fallback animation.
+    if (element.hasAttribute("data-mesh")) return;
     const host = element.getBoundingClientRect();
     // The panel's own top margin sits inside the clip box, so the visible shape starts at the first content element.
     const content = element.querySelector<HTMLElement>(".panel-reveal__panel")?.firstElementChild ?? element;
@@ -65,6 +71,7 @@ export function PanelReveal({ phase, durationMs, trigger, children }: PanelRevea
       aria-hidden={closing || undefined}
       inert={closing}
     >
+      <GenieCanvas slot={slot} />
       <div className="panel-reveal__clip">
         <div className="panel-reveal__panel">{children}</div>
       </div>
