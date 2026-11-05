@@ -61,6 +61,7 @@ export default {
     "cue-look-captured": "#1fb0e0",
     "cue-look-edited": "#f0a030",
     "cue-look-manual": "#7c8cff",
+    "cue-effect": "#4fd1a5",
     "cue-live": "#a8e830",
     "cue-fixture": "#f08ae8",
     "cue-other": "#94a3b8",

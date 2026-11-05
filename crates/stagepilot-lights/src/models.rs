@@ -124,6 +124,12 @@ pub struct LightingCueMapRequest {
     #[serde(default)]
     #[ts(optional)]
     pub revision: Option<u32>,
+    /// Ids of the song's effects (repeating loops) to remove. Editing rows never changes
+    /// effects, so removing one is this explicit list. Left out = every effect stays; an
+    /// unknown id is ignored. Only an OSC save removes effects.
+    #[serde(default)]
+    #[ts(optional)]
+    pub remove_effect_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

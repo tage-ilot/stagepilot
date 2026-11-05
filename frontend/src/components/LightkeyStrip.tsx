@@ -7,7 +7,7 @@ import {
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyDetail, LightkeyStatus } from "../types";
+import type { LightkeyActionResponse, LightkeyStatus } from "../types";
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
@@ -30,25 +30,33 @@ export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): str
   if (status.replaying_song) return `Replaying “${status.replaying_song}”.`;
   if (status.mode === "auto" && status.auto) return status.auto.reason;
   const count = looks?.count ?? status.captured?.looks ?? 0;
-  if (status.replay_blocked && count > 0) return status.replay_blocked;
-  if (looks?.count) return capturedLooksText(count, looks.label);
+  const loops = looks?.loops ?? 0;
+  if (status.replay_blocked && count + loops > 0) return status.replay_blocked;
+  if (looks?.count || loops) return capturedLooksText(count, looks?.label, loops);
   if (looks?.label && looks.label !== "not_captured") return `${captureLabelText[looks.label]} on this song`;
-  if (status.captured) return `${count} captured look${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
+  if (status.captured) return `${count} captured item${count === 1 ? "" : "s"} on “${status.captured.song_title}”.`;
   if (status.link === "connected") return "Switch to Record, then start a song. Its lights are captured with the countdown.";
   return looks ? (looks.label && looks.label !== "not_captured" ? `${captureLabelText[looks.label]} on this song` : capturedLooksText(0)) : "No lights captured yet.";
 }
 
 /** What the selected song holds: captured look rows, and whether any were changed by hand. */
-export interface SongLooks { count: number; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
+export interface SongLooks { count: number; /** Repeating loops saved with the song. */ loops?: number; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
 
-export const capturedLooksText = (count: number, label?: CaptureLabel): string =>
-  `${label ? `${captureLabelText[label]}: ` : ""}${count} captured look${count === 1 ? "" : "s"} on this song`;
+/** "552 captured items (546 ramps/steps, 6 loops)": the rows (ramps and steps) and the loops a recording saved. */
+export const capturedItemsText = (rows: number, loops: number): string =>
+  `${rows + loops} captured item${rows + loops === 1 ? "" : "s"} (${rows} ramps/steps, ${loops} loop${loops === 1 ? "" : "s"})`;
 
-const detailChoices: { value: LightkeyDetail; label: string }[] = [
-  { value: "fine", label: "Fine" },
-  { value: "normal", label: "Normal" },
-  { value: "coarse", label: "Coarse" },
-];
+export const capturedLooksText = (count: number, label?: CaptureLabel, loops = 0): string =>
+  `${label ? `${captureLabelText[label]}: ` : ""}${capturedItemsText(count, loops)} on this song`;
+
+/** One sentence: ends with a full stop (or ! ? ...) so statements joined with " · " each read as their own. */
+export const endSentence = (text: string): string => {
+  const trimmed = text.trim();
+  return /[.!?\u2026]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+};
+
+/** The state line: the statements in order, each ended properly, joined with " · ". */
+export const joinStateLine = (parts: string[]): string => parts.map(endSentence).join(" \u00B7 ");
 
 /** Same text, ignoring quote style and spacing (the backend writes straight quotes, the headline curly ones). */
 export function normaliseLine(text: string): string {
@@ -79,7 +87,7 @@ function lightkeyHolding(status: LightkeyStatus): string {
   const parts: string[] = [];
   if (holding > 0) parts.push(`Holding ${holding} fixture${holding === 1 ? "" : "s"}`);
   if (yielded > 0) parts.push(`${yielded} yielded to the operator`);
-  return parts.join(" \u00B7 ");
+  return parts.length ? endSentence(parts.join(" \u00B7 ")) : "";
 }
 
 /** The shared Lighting connection the panel owns: ONE host for the OSC output and the live-link API, and the OSC UDP port. */
@@ -99,7 +107,7 @@ const smallBox = "!w-[5.25rem] text-center tabular-nums";
 
 /**
  * sACN DMX Live Link, the approved bordered block: a header (title and the one state pill), a field row (the shared host, the OSC UDP and
- * API ports, Connect, then Mode and Detail at the far right), then a quiet strip (one line of state text, Release lights, Send a test cue). The Lighting computer for OSC and for the lightkey-api is always the same machine.
+ * API ports, Connect, then Mode alone at the far right), then a quiet strip (one line of state text, Release lights, Send a test cue). The Lighting computer for OSC and for the lightkey-api is always the same machine.
  * Captures the fixtures' colour and levels from the lightkey-api agent and holds them with overrides on replay.
  * `connection` is the panel's shared host/port draft; on its own (tests, other screens) the strip keeps a host of its own.
  */
@@ -235,8 +243,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const enterToConnect = (event: { key: string }) => { if (event.key === "Enter") void connect(); };
   const releasable = Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) > 0;
   const stateText = (
-    <p aria-live="polite" className="min-w-0 text-[0.78125rem] text-ink-muted" data-testid="lightkey-headline">
-      {segments.join(" ")}
+    <p aria-live="polite" className="min-w-0 flex-[1_1_16rem] text-[0.78125rem] text-ink-muted" data-testid="lightkey-headline">
+      {segments.length > 0 && joinStateLine(segments)}
       {holding && (
         <>
           {segments.length > 0 && " \u00B7 "}
@@ -272,7 +280,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
         </LiveLinkField>
         {/* The Lighting primary, never dimmed unless the panel itself is off; while a request is in flight it shows a busy state. */}
         <Button
-          className={`live-link-connect ${CONTROL_40} !border-integration-lighting-soft !bg-integration-lighting-soft/30 !text-ink can-hover:!bg-integration-lighting-soft/45`}
+          className={`live-link-connect ${CONTROL_40} !border-integration-lighting-soft !bg-surface-950 !text-ink can-hover:!bg-surface-900`}
           disabled={!lightingEnabled}
           loading={busy}
           loadingLabel={"Checking\u2026"}
@@ -299,19 +307,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             ]}
             value={shownMode}
           />
-          {shownMode !== "replay" && (
-            <div data-testid="lightkey-detail-setting">
-              <ConnectionMethod
-                description="Finer detail replays motion smoother but makes more rows."
-                disabled={busy}
-                field
-                label="Detail"
-                onChange={(detail) => void run(() => saveLightkeySettings({ detail_level: detail }))}
-                options={detailChoices}
-                value={status.detail_level ?? "normal"}
-              />
-            </div>
-          )}
         </div>
       </div>
       {(hostError || udpError || apiError) && (

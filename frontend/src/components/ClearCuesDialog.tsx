@@ -36,9 +36,10 @@ export function ClearCuesDialog({ request, onClose }: { request: ClearCuesReques
       {request && (
         <ul aria-label="What will be erased" className="list-disc space-y-1 pl-5 text-sm">
           {request.looks > 0 && <li data-testid="erase-looks">{plural(request.looks, "look")}</li>}
+          {(request.loops ?? 0) > 0 && <li data-testid="erase-loops">{plural(request.loops ?? 0, "loop")}</li>}
           {request.handmade > 0 && <li data-testid="erase-handmade">{plural(request.handmade, "hand-made cue")}</li>}
           {request.loudness > 0 && <li data-testid="erase-loudness">The recorded loudness for this song</li>}
-          {request.looks + request.handmade + request.loudness === 0 && <li>Nothing is saved to erase.</li>}
+          {request.looks + request.handmade + request.loudness + (request.loops ?? 0) === 0 && <li>Nothing is saved to erase.</li>}
         </ul>
       )}
     </Dialog>

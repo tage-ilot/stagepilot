@@ -131,7 +131,7 @@ describe("SongsStrip capture labels", () => {
     expect(items[3]).toHaveTextContent("Manually cued & fully captured");
     expect(items[4]).toHaveTextContent("Not captured");
     expect(items[0]).not.toHaveTextContent("12 looks");
-    expect(items[0]).toHaveAttribute("title", expect.stringContaining("12 looks"));
+    expect(items[0]).toHaveAttribute("title", expect.stringContaining("12 captured items (12 ramps/steps, 0 loops)"));
     expect(screen.getByText("Songs in this service - 2 of 5 fully captured")).toBeInTheDocument();
   });
 

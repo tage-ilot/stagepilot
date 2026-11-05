@@ -116,77 +116,83 @@ describe("Live Link block: Connect button", () => {
   });
 });
 
-describe("Live Link block: Mode and Detail", () => {
-  it("labels Mode and Detail visibly and puts them after Connect, Mode first, on the field row", async () => {
-    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", fixtures: live() }));
-    render(<LightkeyStrip connection={connection} lightingEnabled />);
-    const mode = await screen.findByRole("radiogroup", { name: "Mode" });
-    const detail = screen.getByRole("radiogroup", { name: "Detail" });
-    const line = screen.getByTestId("live-link-line");
-    expect(line).toContainElement(mode);
-    expect(line).toContainElement(detail);
-    expect(within(mode).getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["auto", "replay", "record"]);
-    for (const name of ["Mode", "Detail"]) {
-      const legend = screen.getByText(name, { selector: "legend" });
+describe("Live Link block: Mode", () => {
+  it("labels Mode visibly, puts it after Connect on the field row, and offers no Detail toggle in any mode", async () => {
+    for (const mode of ["auto", "replay", "record"] as const) {
+      vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode, detail_level: "normal", fixtures: live() }));
+      const { unmount } = render(<LightkeyStrip connection={connection} lightingEnabled />);
+      const modeGroup = await screen.findByRole("radiogroup", { name: "Mode" });
+      const line = screen.getByTestId("live-link-line");
+      expect(line).toContainElement(modeGroup);
+      expect(within(modeGroup).getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["auto", "replay", "record"]);
+      const legend = screen.getByText("Mode", { selector: "legend" });
       expect(legend.className).not.toContain("sr-only");
       expect(legend.className).toContain("uppercase");
-    }
-    // Mode precedes Detail in the DOM, so the keyboard reaches Mode first.
-    expect(mode.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("shows Detail in Auto and Record and hides it in Replay", async () => {
-    for (const [mode, expected] of [["auto", true], ["replay", false], ["record", true]] as const) {
-      vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode, fixtures: live() }));
-      const { unmount } = render(<LightkeyStrip connection={connection} lightingEnabled />);
-      await screen.findByRole("radiogroup", { name: "Mode" });
-      expect(screen.queryByRole("radiogroup", { name: "Detail" }) !== null).toBe(expected);
+      expect(screen.queryByRole("radiogroup", { name: "Detail" })).toBeNull();
+      expect(screen.queryByText(/detail/i, { selector: "legend, label, button" })).toBeNull();
+      // Mode is the only toggle on the row, so nothing shares the live-link-modes group with it.
+      expect(line.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
       unmount();
     }
   });
 
-  it("the Detail explanation is the toggle's tooltip and description, not a visible paragraph", async () => {
+  it("Mode works from the keyboard (arrow keys change the choice) and sends only mode and replay", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", fixtures: live() }));
-    render(<LightkeyStrip connection={connection} lightingEnabled />);
-    const detail = await screen.findByRole("radiogroup", { name: "Detail" });
-    const sentence = "Finer detail replays motion smoother but makes more rows.";
-    expect(detail).toHaveAttribute("title", sentence);
-    expect(detail).toHaveAccessibleDescription(sentence);
-    const visible = screen.getAllByText(sentence);
-    expect(visible).toHaveLength(1);
-    expect(visible[0]).toHaveClass("sr-only");
-  });
-
-  it("both toggles work from the keyboard (arrow keys change the choice)", async () => {
-    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", detail_level: "normal", fixtures: live() }));
-    vi.mocked(api.saveLightkeySettings).mockResolvedValue({ accepted: true, message: "ok", lightkey: status({ mode: "auto", detail_level: "coarse", fixtures: live() }) });
+    vi.mocked(api.saveLightkeySettings).mockResolvedValue({ accepted: true, message: "ok", lightkey: status({ mode: "replay", fixtures: live() }) });
     render(<LightkeyStrip connection={connection} lightingEnabled />);
     const user = userEvent.setup();
-    const normal = await screen.findByRole("radio", { name: "Normal" });
-    normal.focus();
-    await user.keyboard("{ArrowRight}");
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "coarse" }));
-    vi.mocked(api.saveLightkeySettings).mockResolvedValue({ accepted: true, message: "ok", lightkey: status({ mode: "replay", fixtures: live() }) });
-    screen.getByRole("radio", { name: "Auto" }).focus();
+    const auto = await screen.findByRole("radio", { name: "Auto" });
+    auto.focus();
     await user.keyboard("{ArrowRight}");
     await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ mode: "replay", replay: true }));
+    expect(vi.mocked(api.saveLightkeySettings).mock.calls.some(([sent]) => "detail_level" in sent)).toBe(false);
+  });
+});
+
+describe("Live Link block: the state line (#296 nit 1)", () => {
+  it("joins separate statements with a middle dot and ends each one with a full stop, on one muted line", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    await screen.findByText("Not connected");
+    const line = screen.getByTestId("lightkey-headline");
+    expect(line.textContent).toBe("Auto: replaying (no connection). \u00B7 Lightkey API did not answer.");
+    expect(line.className).toContain("text-ink-muted");
+    expect(line.tagName).toBe("P");
+  });
+
+  it("puts what the replay holds last, also as its own sentence", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "replay", replaying_song: "Holy Forever", holding_fixtures: 5, yielded_fixtures: 2, fixtures: live() }));
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    await screen.findByTestId("lightkey-holding");
+    expect(screen.getByTestId("lightkey-headline").textContent).toBe("Replaying \u201CHoly Forever\u201D. \u00B7 Holding 5 fixtures \u00B7 2 yielded to the operator.");
+  });
+});
+
+describe("Live Link block: Connect is an action, not a state (#296 nit 3)", () => {
+  it("is an outlined primary with a dark fill and an accent border, never the crimson fill of a selected segment", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    const connect = await screen.findByRole("button", { name: "Connect" });
+    expect(connect.className).toContain("!border-integration-lighting-soft");
+    expect(connect.className).toContain("!bg-surface-950");
+    expect(connect.className).not.toMatch(/bg-integration-lighting-soft\/(30|45)|bg-primary/);
   });
 });
 
 describe("Live Link block: the strip under the fields", () => {
-  it("tab order is host, UDP, API, Connect, Mode, Detail, Release lights, Send a test cue, How to find", async () => {
+  it("tab order is host, UDP, API, Connect, Mode, Release lights, Send a test cue, How to find", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", holding_fixtures: 3, fixtures: live() }));
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
     await screen.findByRole("radiogroup", { name: "Mode" });
     const user = userEvent.setup();
     const names: string[] = [];
-    for (let step = 0; step < 9; step += 1) {
+    for (let step = 0; step < 8; step += 1) {
       await user.tab();
       const el = document.activeElement as HTMLElement;
       names.push(el.getAttribute("aria-label") ?? (el.getAttribute("type") === "radio" ? `radio:${el.getAttribute("value")}` : (el.textContent ?? "")));
     }
     expect(names).toEqual([
-      "Host or IP address", "OSC UDP port", "API port", "Check again", "radio:auto", "radio:normal",
+      "Host or IP address", "OSC UDP port", "API port", "Check again", "radio:auto",
       "Release lights", "Send a test cue\u25B8", "How to find a cue's address\u25B8",
     ]);
   });
@@ -219,6 +225,20 @@ describe("Live Link block: the strip under the fields", () => {
     await userEvent.setup().click(toggle);
     expect(help).toBeVisible();
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps the three actions together after the state text, so How to find a cue's address can never sit alone on a row (#296 nit 2)", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
+    render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
+    await screen.findByText("Not connected");
+    const sub = screen.getByTestId("live-link-sub");
+    const actions = screen.getByTestId("live-link-actions");
+    // Two children of the strip: the state text and ONE group holding Release, Send a test cue and How to find.
+    expect(Array.from(sub.children)).toEqual([screen.getByTestId("lightkey-headline"), actions]);
+    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Send a test cue", "How to find a cue's address"]);
+    // The state text may shrink and wrap (basis 16rem) so the group stays on the first row when there is room.
+    expect(screen.getByTestId("lightkey-headline").className).toContain("flex-[1_1_16rem]");
+    expect(actions.className).toContain("flex-wrap");
   });
 
   it("Release lights stays in the strip and is disabled when nothing is held", async () => {

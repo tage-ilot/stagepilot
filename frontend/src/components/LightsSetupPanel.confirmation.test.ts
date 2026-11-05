@@ -8,9 +8,9 @@ const hand = { source: "manual", address: "/b" };
 describe("clear request wording and counts", () => {
   it("counts captured looks and hand-made cues per method", () => {
     const map = { cues: [{}, {}], osc_cues: [look, look, hand], loudness: { values: [1] } } as never;
-    expect(countCueMap(map, "osc")).toEqual({ looks: 2, handmade: 1, loudness: 1 });
-    expect(countCueMap(map, "midi")).toEqual({ looks: 0, handmade: 2, loudness: 1 });
-    expect(countCueMap(undefined, "osc")).toEqual({ looks: 0, handmade: 0, loudness: 0 });
+    expect(countCueMap(map, "osc")).toEqual({ looks: 2, handmade: 1, loudness: 1, loops: 0 });
+    expect(countCueMap(map, "midi")).toEqual({ looks: 0, handmade: 2, loudness: 1, loops: 0 });
+    expect(countCueMap(undefined, "osc")).toEqual({ looks: 0, handmade: 0, loudness: 0, loops: 0 });
   });
 
   it("song request names the song; all request names the plan or the single song", () => {

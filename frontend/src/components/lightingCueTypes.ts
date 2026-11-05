@@ -1,7 +1,7 @@
 import type { LightingCue, OscLightingCue } from "../types";
 
-/** What a timeline marker / cue row is. OSC rows get one of seven types; MIDI rows one per note letter. */
-export type OscCueTypeId = "look-captured" | "look-edited" | "look-manual" | "cue-on" | "cue-off" | "fixture" | "other";
+/** What a timeline marker / cue row is. OSC rows get one of eight types (the Effect loop is not a row: it is a song's repeating pattern); MIDI rows one per note letter. */
+export type OscCueTypeId = "look-captured" | "look-edited" | "look-manual" | "effect-loop" | "cue-on" | "cue-off" | "fixture" | "other";
 export type NoteLetter = "C" | "D" | "E" | "F" | "G" | "A" | "B";
 export type MidiCueTypeId = `note-${NoteLetter}`;
 export type CueTypeId = OscCueTypeId | MidiCueTypeId;
@@ -23,6 +23,7 @@ export const CUE_TYPES: Record<CueTypeId, CueTypeInfo> = Object.fromEntries([
   info("look-captured", "Captured look", "◆", "Looks", "bg-cue-look-captured"),
   info("look-edited", "Edited look", "◆✎", "Looks", "bg-cue-look-edited"),
   info("look-manual", "Manual look", "◇", "Looks", "bg-cue-look-manual"),
+  info("effect-loop", "Effect loop", "↻", "Looks", "cue-bar-effect"),
   info("cue-on", "Lightkey cue on", "▶", "Lightkey cues", "bg-cue-live"),
   info("cue-off", "Lightkey cue off", "■", "Lightkey cues", "cue-bar-off"),
   info("fixture", "Fixture message", "◐", "Single messages", "bg-cue-fixture"),
@@ -36,7 +37,7 @@ export const CUE_TYPES: Record<CueTypeId, CueTypeInfo> = Object.fromEntries([
   info("note-B", "B notes", "B", "Notes", "bg-cue-note-b"),
 ]) as Record<CueTypeId, CueTypeInfo>;
 
-export const OSC_TYPE_IDS: OscCueTypeId[] = ["look-captured", "look-edited", "look-manual", "cue-on", "cue-off", "fixture", "other"];
+export const OSC_TYPE_IDS: OscCueTypeId[] = ["look-captured", "look-edited", "look-manual", "effect-loop", "cue-on", "cue-off", "fixture", "other"];
 export const MIDI_TYPE_IDS: MidiCueTypeId[] = ["note-C", "note-D", "note-E", "note-F", "note-G", "note-A", "note-B"];
 export const typeIdsFor = (method: "osc" | "midi"): CueTypeId[] => (method === "osc" ? OSC_TYPE_IDS : MIDI_TYPE_IDS);
 

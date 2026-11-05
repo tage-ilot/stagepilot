@@ -40,6 +40,10 @@ export interface TimelineMarker {
   sharp?: boolean;
   /** Full spoken name, without the time; the time is added by the timeline (it follows drags). */
   spokenLabel?: string;
+  /** A ramp: seconds the row takes from `at` to reach its values. Absent or 0 = an instant row. */
+  fade?: number;
+  /** Plain words for a ramp (fixtures, properties, from -> to, duration): the marker's tooltip and the detail line. */
+  description?: string;
 }
 
 /** Ruler tick spacing in seconds for a song of this length. */

@@ -1,4 +1,4 @@
-import type { LightkeyDetail, OscArgument, OscLightingCue, OscMessage } from "../types";
+import type { OscArgument, OscLightingCue, OscMessage } from "../types";
 
 /** A row with several messages is a "look". */
 export const isLook = (cue: OscLightingCue): boolean => (cue.messages?.length ?? 0) > 0;
@@ -106,8 +106,6 @@ export const mergeRows = (cues: OscLightingCue[], ids: string[]): MergeResult | 
 /** Rows that would be affected by a merge, ordered in time. */
 export const rowsInRange = (cues: OscLightingCue[], from: number, to: number): string[] =>
   cues.filter((cue) => cue.at_seconds >= from && cue.at_seconds <= to).map((cue) => cue.id);
-
-export const detailLabels: Record<LightkeyDetail, string> = { fine: "Fine", normal: "Normal", coarse: "Coarse" };
 
 export interface MarkerLike { id: string; at: number }
 export type MarkerItem<T extends MarkerLike> =

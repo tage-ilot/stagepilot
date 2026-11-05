@@ -93,7 +93,7 @@ describe("type table", () => {
     expect([glyph("look-captured"), glyph("look-edited"), glyph("look-manual"), glyph("cue-on"), glyph("cue-off"), glyph("fixture"), glyph("other")])
       .toEqual(["◆", "◆✎", "◇", "▶", "■", "◐", "○"]);
     expect(MIDI_TYPE_IDS).toEqual(["note-C", "note-D", "note-E", "note-F", "note-G", "note-A", "note-B"]);
-    expect(OSC_TYPE_IDS).toHaveLength(7);
+    expect(OSC_TYPE_IDS).toHaveLength(8);
   });
 
   it("builds an accessible name that never relies on colour", () => {

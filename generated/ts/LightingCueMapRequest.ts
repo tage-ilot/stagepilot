@@ -11,4 +11,10 @@ export type LightingCueMapRequest = { song_key: string, song_title: string, cues
  * The song's revision (`settings.lights.cue_revisions`) the list was edited from. When it
  * is older than the saved one the save is refused with 409. Left out = no check.
  */
-revision?: number, };
+revision?: number, 
+/**
+ * Ids of the song's effects (repeating loops) to remove. Editing rows never changes
+ * effects, so removing one is this explicit list. Left out = every effect stays; an
+ * unknown id is ignored. Only an OSC save removes effects.
+ */
+remove_effect_ids?: Array<string>, };

@@ -7,13 +7,15 @@ export interface SongChip {
   title: string;
   order: number;
   looks: number;
+  /** Repeating loops saved with the song (OSC). */
+  loops?: number;
   handmade: number;
   hasLoudness: boolean;
   /** What the saved rows say about capturing; absent on callers that predate capture status. */
   label?: CaptureLabel;
 }
 
-const isCaptured = (chip: SongChip) => chip.looks + chip.handmade > 0 || chip.hasLoudness;
+const isCaptured = (chip: SongChip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0 || chip.hasLoudness;
 
 const countText = (chip: SongChip, noun: "looks" | "cues") => {
   if (chip.label === "not_captured" && chip.hasLoudness) return "loudness only";
@@ -43,14 +45,14 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
     <section aria-label="Songs in this service" className="mt-5" data-testid="songs-strip">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 className="text-type-body-sm font-semibold text-ink">{`Songs in this service - ${captured} of ${chips.length} ${chips.some((chip) => chip.label) ? "fully " : ""}captured`}</h3>
-        <Button disabled={!chips.some((chip) => chip.looks + chip.handmade > 0)} onClick={onClearAll} variant="secondary">Clear all songs...</Button>
+        <Button disabled={!chips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={onClearAll} variant="secondary">Clear all songs...</Button>
       </div>
       <ul aria-label="Songs in this service" className="mt-2 flex max-h-[11.5rem] flex-wrap content-start gap-x-2 gap-y-4 overflow-y-auto overscroll-contain py-2">
         {chips.map((chip) => {
           const has = isCaptured(chip);
           const manualOnly = chip.label === "manually_cued";
           const incomplete = chip.label === "incomplete";
-          const counts = `${chip.looks} ${chip.looks === 1 ? "look" : "looks"}, ${chip.handmade} hand-made`;
+          const counts = `${chip.looks + (chip.loops ?? 0)} captured item${chip.looks + (chip.loops ?? 0) === 1 ? "" : "s"} (${chip.looks} ramps/steps, ${chip.loops ?? 0} loop${chip.loops === 1 ? "" : "s"}), ${chip.handmade} hand-made`;
           const selected = chip.key === selectedKey;
           const live = chip.key === liveKey;
           const name = [
@@ -81,7 +83,7 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
                 <span aria-hidden="true" className="min-w-0 truncate tabular-nums text-ink-body">{`· ${has || chip.label ? countText(chip, noun) : "not captured"}`}</span>
                 {has && chip.hasLoudness && <span aria-hidden="true" className="shrink-0" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
               </button>
-              {chip.looks + chip.handmade > 0 && (
+              {chip.looks + (chip.loops ?? 0) + chip.handmade > 0 && (
                 <button
                   aria-label={`Clear cues for ${chip.title}...`}
                   className="relative flex min-h-[44px] min-w-[36px] shrink-0 touch-manipulation items-center justify-center rounded-ds-lg text-ink-body can-hover:text-danger-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
