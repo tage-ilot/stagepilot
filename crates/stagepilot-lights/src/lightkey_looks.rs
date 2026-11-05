@@ -436,6 +436,7 @@ pub fn replace_captured_with_effects(
 
 /// What saving a capture pass did to a song's cue map.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CaptureSave {
     /// The song's whole cue map after the pass.
     Saved(SongLightingCueMap),

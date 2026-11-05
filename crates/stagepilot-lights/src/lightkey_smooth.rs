@@ -392,6 +392,8 @@ struct Sample<'a> {
 
 /// Fit one address. `cuts` are windows an effect drives: the samples inside are dropped, the
 /// ramp ends at the window start and the rows restart (with a step) at its end.
+type EmitFn<'a> = dyn FnMut(&mut Vec<Item>, f64, f64, Vec<FixtureArg>) + 'a;
+
 fn fit_address(
     data: &AddrData,
     series: Option<&Series>,
@@ -411,17 +413,7 @@ fn fit_address(
             })
             .collect()
     };
-    if cuts.is_empty() || series.is_none() {
-        for (t, v) in &data.items {
-            samples.push(Sample {
-                t: *t,
-                v,
-                numeric: numeric_of(v),
-                cut_before: false,
-            });
-        }
-    } else {
-        let series = series.expect("checked above");
+    if let (false, Some(series)) = (cuts.is_empty(), series) {
         let mut buf = vec![0.0; series.dim];
         // synthetic edge samples first, so they can be borrowed below
         for &(s, e) in cuts {
@@ -454,6 +446,15 @@ fn fit_address(
                 cut_before: cut,
             });
         }
+    } else {
+        for (t, v) in &data.items {
+            samples.push(Sample {
+                t: *t,
+                v,
+                numeric: numeric_of(v),
+                cut_before: false,
+            });
+        }
     }
 
     let mut items: Vec<Item> = Vec::new();
@@ -472,9 +473,7 @@ fn fit_address(
         });
     };
     let mut run: Vec<usize> = Vec::new();
-    let flush = |run: &mut Vec<usize>,
-                 items: &mut Vec<Item>,
-                 emit: &mut dyn FnMut(&mut Vec<Item>, f64, f64, Vec<FixtureArg>)| {
+    let flush = |run: &mut Vec<usize>, items: &mut Vec<Item>, emit: &mut EmitFn| {
         if run.is_empty() {
             return;
         }

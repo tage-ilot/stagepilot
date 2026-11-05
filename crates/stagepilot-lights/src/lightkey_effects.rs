@@ -454,8 +454,8 @@ fn phase_offset(
     // refine on the raw samples, +-50 ms around the coarse lag, 2 ms steps
     let coarse = best.2 as f64 * DT;
     let mut refined = (f64::INFINITY, coarse);
-    let mut a = vec![0.0; 8];
-    let mut b = vec![0.0; 8];
+    let mut a = [0.0; 8];
+    let mut b = [0.0; 8];
     let mut o = coarse - 0.05;
     while o <= coarse + 0.05 + 1e-9 {
         let mut sum = 0.0;

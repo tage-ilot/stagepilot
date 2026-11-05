@@ -702,22 +702,22 @@ async fn a_recording_past_the_song_end_with_a_huge_change_still_saves() {
     rig.link.stop().await;
 }
 
-/// A song too large for the chosen Detail is saved at twice the spacing, not dropped, and the
-/// status message says so.
+/// A song too large for the caps is fitted again at twice the tolerance, not dropped, and the
+/// status message says so. (The Detail setting no longer changes the result.)
 #[tokio::test(flavor = "multi_thread")]
-async fn a_song_too_large_for_the_detail_is_saved_at_twice_the_spacing_and_says_so() {
+async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says_so() {
     use stagepilot_core::config::LightkeyDetail;
     let rig = Rig::with_row_limit(vec![dim("P1", 0.0)], 5).await;
-    rig.settings.lock().unwrap().3.detail = LightkeyDetail::Fine;
+    rig.settings.lock().unwrap().3.detail = LightkeyDetail::Fine; // ignored
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(2)).await;
     pause(2.0).await;
-    // a steady fade in 60 ms steps, delivered with the song time it happened at
+    // a 5 % zigzag in 60 ms steps (more rows than the cap at 3 %, one ramp at 6 %), delivered with the song time it happened at
     for k in 0..30u32 {
         let at = 1.9 - f64::from(k) * 0.06;
         rig.relay
-            .change(vec![dim("P1", 0.1 + f64::from(k) * 0.03)], at, 0)
+            .change(vec![dim("P1", 0.1 + f64::from(k % 2) * 0.05)], at, 0)
             .await;
     }
     pause(0.2).await;
@@ -727,11 +727,11 @@ async fn a_song_too_large_for_the_detail_is_saved_at_twice_the_spacing_and_says_
     assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
     assert!(
         *rig.attempts.lock().unwrap() >= 2,
-        "the first try at Fine was refused"
+        "the first try was refused"
     );
     let message = rig.link.status().message.unwrap_or_default();
     assert!(
-        message.contains("(reduced detail, 0.5 s)"),
+        message.contains("fitted loosely"),
         "message: {message}"
     );
     assert!(message.starts_with("Saved "), "message: {message}");

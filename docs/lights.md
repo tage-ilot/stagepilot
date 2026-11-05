@@ -272,7 +272,15 @@ tolerance x2, the song was very large).`); the capture is never dropped for size
 Real takes (two songs of 255 s and 290 s, 109,353 and 50,800 raw samples; the take
 files are not in the repository). All numbers come from the report tool:
 
-REPORT_TABLE_PLACEHOLDER
+| | Unstoppable God (255 s) | Able (290 s) |
+|---|---|---|
+| Raw samples | 109,361 | 50,832 |
+| Before (thin + merge at 0.5 s) | 439 rows, 7,398 messages, 1,124,595 bytes | 387 rows, 3,631 messages, 431,855 bytes |
+| After (ramps + effects) | 537 rows (1,205 messages) + 9 effects (62 cycle steps) = 546 items, 257,437 bytes | 303 rows (799 messages) + 9 effects (54 cycle steps) = 312 items, 139,345 bytes |
+| Max error outside effects (angle / colour / dimmer) | 1.486 deg / 0.030 / 0.030 | 1.443 deg / 0.008 / 0.030 |
+| p99 error overall (angle / colour / dimmer) | 2.05 deg / 0.022 / 0.026 | 0.47 deg / 0.005 / 0.030 |
+| Inside effects, points beyond 2x tolerance (angle / colour / dimmer) | 1.56 % / 0.68 % / 1.23 % | 1.71 % / n/a / 0.59 % |
+| Plain-ramp sanity (script numbers reproduced) | 8,322 segments, longest 4.0 s | 2,727 segments, longest 3.2 s |
 
 **Not yet.** Replay interpolation (ticks, rate budget, seek, operator take-over) is the next
 change. Until it lands a replay sends each row's final values at the row's time and does
