@@ -17,6 +17,7 @@ pub mod lightkey_link;
 pub mod lightkey_looks;
 pub mod lightkey_operator;
 pub mod lightkey_relay;
+pub mod lightkey_replay;
 pub mod lightkey_smooth;
 pub mod loudness;
 pub mod models;

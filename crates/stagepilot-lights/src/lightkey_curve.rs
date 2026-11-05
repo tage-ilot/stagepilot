@@ -148,6 +148,22 @@ struct EffectCurve {
 }
 
 impl EffectCurve {
+    /// The next instant step (a cycle step without a fade) after `at`, inside the window.
+    fn next_step_after(&self, at: f64) -> Option<f64> {
+        let origin = self.start + self.offset;
+        let cycle = ((at - origin) / self.period).floor();
+        let mut best: Option<f64> = None;
+        for k in [cycle, cycle + 1.0] {
+            for step in self.steps.iter().filter(|s| s.fade <= 0.0) {
+                let t = origin + k * self.period + step.at;
+                if t > at && t < self.end && best.is_none_or(|b| t < b) {
+                    best = Some(t);
+                }
+            }
+        }
+        best
+    }
+
     fn value(&self, t: f64) -> Vec<f64> {
         let phase = (t - self.start - self.offset).rem_euclid(self.period);
         let n = self.steps.len();
@@ -177,6 +193,8 @@ impl EffectCurve {
 pub struct Timeline {
     rows: BTreeMap<String, AddressCurve>,
     effects: BTreeMap<String, Vec<EffectCurve>>,
+    /// Sorted times at which some row starts or finishes a ramp, or an effect starts or ends.
+    boundaries: Vec<f64>,
 }
 
 fn is_fixture_address(address: &str) -> bool {
@@ -257,7 +275,42 @@ impl Timeline {
         for list in timeline.effects.values_mut() {
             list.sort_by(|a, b| a.start.total_cmp(&b.start));
         }
+        let mut boundaries: Vec<f64> = Vec::new();
+        for curve in timeline.rows.values() {
+            for s in &curve.segments {
+                boundaries.push(s.t0);
+                if s.t1 > s.t0 {
+                    boundaries.push(s.t1);
+                }
+            }
+        }
+        for list in timeline.effects.values() {
+            for e in list {
+                boundaries.push(e.start);
+                boundaries.push(e.end);
+            }
+        }
+        boundaries.retain(|b| b.is_finite());
+        boundaries.sort_by(f64::total_cmp);
+        boundaries.dedup();
+        timeline.boundaries = boundaries;
         timeline
+    }
+
+    /// The next time after `at` at which something discrete happens: a row starts or finishes
+    /// its ramp, an effect starts or ends, or an instant step of an effect's cycle happens. A
+    /// scheduler that wakes at these times never delays a step. `None` when nothing is left.
+    pub fn next_boundary(&self, at: f64) -> Option<f64> {
+        let i = self.boundaries.partition_point(|b| *b <= at);
+        let mut next = self.boundaries.get(i).copied();
+        for list in self.effects.values() {
+            for effect in list.iter().filter(|e| e.start <= at && at < e.end) {
+                if let Some(t) = effect.next_step_after(at) {
+                    next = Some(next.map_or(t, |n| n.min(t)));
+                }
+            }
+        }
+        next
     }
 
     /// Every address that has a row or an effect.
@@ -280,6 +333,14 @@ impl Timeline {
             .iter()
             .rev()
             .find(|e| e.start <= at && at < e.end)
+    }
+
+    /// Whether an instant step of the effect driving `address` at `upto` happened after `after`
+    /// (up to and including `upto`).
+    pub fn instant_step_in(&self, address: &str, after: f64, upto: f64) -> bool {
+        self.effect_at(address, upto)
+            .and_then(|e| e.next_step_after(after))
+            .is_some_and(|t| t <= upto)
     }
 
     /// Whether an effect drives `address` at `at`.
