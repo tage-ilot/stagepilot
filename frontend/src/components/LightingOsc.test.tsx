@@ -208,6 +208,7 @@ describe("LightingSetupPanel OSC", () => {
     const user = userEvent.setup();
     const onTestOsc = vi.fn();
     mount({ onTestOsc });
+    await user.click(screen.getByRole("button", { name: "Send a test cue" }));
     const group = screen.getByRole("group", { name: "OSC test cue" });
     const send = within(group).getByRole("button", { name: "Send test cue" });
     expect(send).toBeDisabled();

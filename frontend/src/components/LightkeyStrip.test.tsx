@@ -45,7 +45,7 @@ describe("LightkeyStrip", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API.", active_count: null }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
-    expect(screen.getByText("Cannot reach the Lightkey API.")).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Cannot reach the Lightkey API.");
     expect(screen.getByRole("radio", { name: "Record" })).toBeDisabled();
   });
 
@@ -116,8 +116,9 @@ describe("LightkeyStrip", () => {
     expect(line.className).toContain("flex-wrap");
     for (const name of ["Host or IP address", "OSC UDP port", "API port"]) expect(line).toContainElement(screen.getByLabelText(name));
     expect(line).toContainElement(screen.getByRole("button", { name: /Connect|Check again/ }));
-    expect(line).toContainElement(screen.getByRole("radiogroup", { name: "Lightkey mode" }));
-    expect(line).toContainElement(screen.getByTestId("lightkey-link"));
+    expect(line).toContainElement(screen.getByRole("radiogroup", { name: "Mode" }));
+    // The one state pill sits in the header beside the title, not in the field row.
+    expect(line).not.toContainElement(screen.getByTestId("lightkey-link"));
     expect(screen.getByLabelText("API port")).toHaveValue("8770");
     // Release lights sits on the second line, outside the first.
     expect(line).not.toContainElement(screen.getByRole("button", { name: "Release lights" }));
@@ -136,13 +137,13 @@ describe("LightkeyStrip", () => {
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status(), false, "Recording needs Lighting set to OSC."));
     render(<LightkeyStrip lightingEnabled />);
     await userEvent.setup().click(await screen.findByRole("radio", { name: "Record" }));
-    expect(await screen.findByText("Recording needs Lighting set to OSC.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Recording needs Lighting set to OSC."));
     expect(screen.getByRole("radio", { name: "Replay" })).toBeChecked();
   });
 
   it("one Replay | Record toggle replaces the two switches, Replay by default", async () => {
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByRole("radiogroup", { name: "Lightkey mode" })).toBeInTheDocument();
+    expect(await screen.findByRole("radiogroup", { name: "Mode" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Replay" })).toBeChecked();
     expect(screen.queryByRole("switch")).toBeNull();
   });
@@ -165,7 +166,7 @@ describe("LightkeyStrip", () => {
     vi.mocked(api.setLightkeyRecording).mockResolvedValue(respond(status({ recording: true }), false, "Cannot stop right now."));
     render(<LightkeyStrip lightingEnabled />);
     await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
-    expect(await screen.findByText("Cannot stop right now.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Cannot stop right now."));
     expect(api.saveLightkeySettings).not.toHaveBeenCalled();
     expect(screen.getByRole("radio", { name: "Record" })).toBeChecked();
   });
@@ -186,7 +187,7 @@ describe("LightkeyStrip", () => {
       
     }));
     render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
-    expect(await screen.findByText("Colour and levels: 66 fixtures")).toBeInTheDocument();
+    expect(await screen.findByText("Connected \u00B7 66 fixtures")).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured looks on this song");
     expect(screen.queryByRole("list", { name: "Captured songs" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Clear capture/ })).toBeNull();
@@ -242,7 +243,8 @@ describe("LightkeyStrip", () => {
   it("says connecting while the first fixture data is awaited", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: { link: "waiting", detail: null, fixtures: 1, lost_packets: 0, recording: false } }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Colour and levels: connecting")).toBeInTheDocument();
+    expect(await screen.findByText("Connecting\u2026")).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-link")).toHaveAttribute("title", expect.stringContaining("Colour and levels: connecting"));
   });
 
   it("says in words when the fixture stream stops, and says nothing for an older Lightkey API", async () => {
@@ -250,7 +252,8 @@ describe("LightkeyStrip", () => {
       fixtures: { link: "lost", detail: "No fixture data from the Lightkey API.", fixtures: 66, lost_packets: 2, recording: false },
     }));
     const { unmount } = render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("No fixture data from the Lightkey API.")).toBeInTheDocument();
+    expect(await screen.findByText("Connected \u00B7 not receiving")).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("No fixture data from the Lightkey API.");
     unmount();
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
     render(<LightkeyStrip lightingEnabled />);
@@ -370,13 +373,13 @@ describe("LightkeyStrip operator override", () => {
   it("shows what the replay holds and what the operator has", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ holding_fixtures: 5, yielded_fixtures: 2 }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 5 fixtures. 2 yielded to the operator.");
+    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 5 fixtures \u00B7 2 yielded to the operator");
   });
 
   it("uses the singular and hides the line when nothing is held or yielded", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ holding_fixtures: 1 }));
     const { unmount } = render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 1 fixture.");
+    expect(await screen.findByTestId("lightkey-holding")).toHaveTextContent("Holding 1 fixture");
     unmount();
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
     render(<LightkeyStrip lightingEnabled />);

@@ -14,6 +14,7 @@ export function PanelAlert({
   className,
   messageTone = "info",
   dot = false,
+  neutral = false,
 }: {
   error: string | null;
   message: string | null;
@@ -22,12 +23,14 @@ export function PanelAlert({
   messageTone?: "info" | "success";
   /** Informational result line: a small dot of the tone colour before the message (never on errors). */
   dot?: boolean;
+  /** A status note that is not the connection's own news (for example "OSC ready"): the plain info look, not the panel's accent colour. Errors are unaffected. */
+  neutral?: boolean;
 }) {
   const accent = useAccent();
   if (!error && !message) return null;
   return (
-    <InlineAlert aria-live="polite" className={className} tone={error ? "danger" : messageTone}>
-      {dot && !error && <span aria-hidden="true" data-part="dot" className={`mr-2 inline-block size-1.5 rounded-ds-full align-middle ${accent ? accentClasses[accent].dot : "bg-info"}`} />}
+    <InlineAlert aria-live="polite" className={className} neutral={neutral && !error} tone={error ? "danger" : messageTone}>
+      {dot && !error && <span aria-hidden="true" data-part="dot" className={`mr-2 inline-block size-1.5 rounded-ds-full align-middle ${accent && !neutral ? accentClasses[accent].dot : "bg-info"}`} />}
       <span>{error ?? message}</span>
       {error && onRetry && (
         <Button className="ml-3" onClick={onRetry} size="touch" variant="secondary">Try again</Button>

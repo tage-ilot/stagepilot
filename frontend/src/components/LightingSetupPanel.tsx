@@ -55,6 +55,7 @@ import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { SongsStrip, type SongChip } from "./SongsStrip";
 import { CONTROL_34 } from "./compactControl";
+import { CONTROL_40, shortLightingMessage } from "./liveLink";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
 import { clampCueTime, elapsedSince, snapTenths, type TimelineMarker } from "./lightingTimelineMath";
 import {
@@ -640,28 +641,29 @@ export function LightingSetupPanel({
   };
   const testReasonText = method === "osc" ? "Save the OSC settings first. Test cue sends with the saved settings." : "Save the new output first. Test cue sends to the saved output.";
 
-  // The test cue lives under the connection, folded away until it is wanted. Same fields, checks and sending as before.
+  // The OSC test cue lives in the Live Link block's strip ("Send a test cue"), folded away until it is wanted. Same fields, checks and sending as before.
   const oscTestCue = (
-    <Disclosure className="mt-4" tone="lighting" title="Send a test cue" variant="advanced">
-      <div aria-label="OSC test cue" className="lighting-osc-test mt-3 grid gap-3" role="group">
-        <Field error={oscTestAddress && oscTestAddressError ? oscTestAddressError : undefined} hint="The cue's OSC path, for example /live/*/cue/Stars/activate. The host is set above." label="OSC address">
-          <Input autoCapitalize="none" autoCorrect="off" className="font-mono" onChange={(event) => setOscTestAddress(event.target.value)} spellCheck={false} value={oscTestAddress} />
+    <div aria-label="OSC test cue" className="lighting-osc-test grid gap-2" role="group">
+      <div className="flex flex-wrap items-end gap-x-2.5 gap-y-2">
+        <Field className="live-link-host" label="OSC address">
+          <Input aria-describedby={oscTestAddress && oscTestAddressError ? "osc-test-cue-hint osc-test-cue-error" : "osc-test-cue-hint"} autoCapitalize="none" autoCorrect="off" className={`font-mono ${CONTROL_40}`} error={Boolean(oscTestAddress && oscTestAddressError)} onChange={(event) => setOscTestAddress(event.target.value)} placeholder="/live/*/cue/Stars/activate" spellCheck={false} value={oscTestAddress} />
         </Field>
-        <OscArgumentRows drafts={oscTestArgs} label="Test argument" onChange={setOscTestArgs} />
-        {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
-        <div>
-          <Button
-            aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
-            disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
-            onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-            variant="tinted"
-          >
-            {pendingOperation === "test" ? "Sending…" : "Send test cue"}
-          </Button>
-        </div>
-        {draftDiffersFromSaved && <p className="text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
+        <OscArgumentRows drafts={oscTestArgs} inline label="Test argument" onChange={setOscTestArgs} />
+        <Button
+          aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+          className={CONTROL_40}
+          disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+          onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
+          variant="tinted"
+        >
+          {pendingOperation === "test" ? "Sending…" : "Send test cue"}
+        </Button>
       </div>
-    </Disclosure>
+      <p className="text-type-body-sm text-ink-muted" id="osc-test-cue-hint">The cue&apos;s OSC path, for example /live/*/cue/Stars/activate. The host is set above.</p>
+      {oscTestAddress && oscTestAddressError && <p className="text-type-body-sm text-danger-text" id="osc-test-cue-error" role="alert">{oscTestAddressError}</p>}
+      {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
+      {draftDiffersFromSaved && <p className="text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
+    </div>
   );
   const midiTestCue = (
     <Disclosure className="mt-4" tone="midi" title="Send a test cue" variant="advanced">
@@ -683,22 +685,19 @@ export function LightingSetupPanel({
       </div>
     </Disclosure>
   );
-  const oscExtras = (
+  // Under the Live Link block's strip. The "ready" state is NOT repeated here (the banner above and the header pill say it once): only what
+  // is new (an error, the last cue sent) or what has no other home.
+  const oscStatusLine = savedMethod === "osc" && lights?.connection_status === "error"
+    ? lights.detail
+    : savedMethod === "osc" && lights?.last_osc_cue
+      ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
+      : savedMethod === "osc" && lights?.connection_status === "ready"
+        ? null
+        : savedMethod === "osc" ? null : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check.";
+  const oscFooter = (
     <>
-      <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="osc-status">
-        {savedMethod === "osc" && lights?.connection_status === "error"
-          ? lights.detail
-          : savedMethod === "osc" && lights?.last_osc_cue
-            ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
-            : savedMethod === "osc" && lights?.connection_status === "ready"
-              ? "Ready, delivery not confirmed. Nothing sent yet; OSC is sent over UDP. Use Send test cue to check."
-              : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check."}
-      </p>
-      <p className="mt-1 text-type-body-sm text-ink-muted">
-        Enter the port your lighting app listens for OSC on. In Lightkey, control-click a cue and choose External Control, then Copy OSC Address, to get a cue's address.
-      </p>
+      {oscStatusLine && <p className={`mt-2 text-type-body-sm ${savedMethod === "osc" && lights?.connection_status === "error" ? "text-danger-text" : "text-ink-muted"}`} data-testid="osc-status">{oscStatusLine}</p>}
       {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
-      {oscTestCue}
     </>
   );
 
@@ -783,7 +782,7 @@ export function LightingSetupPanel({
       />
 
 
-      <PanelAlert className="mt-4" dot error={error} message={message} messageTone="info" onRetry={!lights ? onRetryLoad : undefined} />
+      <PanelAlert className="mt-4 !py-1.5" dot error={error} message={message ? shortLightingMessage(message) : message} messageTone="info" neutral={Boolean(message && /^OSC /.test(message))} onRetry={!lights ? onRetryLoad : undefined} />
 
       {method === "osc" ? (
         savedMethod === "osc" ? (
@@ -792,9 +791,9 @@ export function LightingSetupPanel({
             lightingEnabled={Boolean(lights?.enabled)}
             looks={looks}
             loudness={loudnessProp}
-          >
-            {oscExtras}
-          </LightkeyStrip>
+            footer={oscFooter}
+            testCue={oscTestCue}
+          />
         ) : (
           <OscConnectionFields
             attempted={attempt.attempted}
@@ -803,9 +802,9 @@ export function LightingSetupPanel({
             onHost={setOscHost}
             onPort={setOscPort}
             port={oscPort}
-          >
-            {oscExtras}
-          </OscConnectionFields>
+            footer={oscFooter}
+            testCue={oscTestCue}
+          />
         )
       ) : (
         <>

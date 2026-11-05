@@ -144,3 +144,20 @@ describe("ConnectionMethod without ranked options (Backend Connection Access)", 
     expect(screen.getByRole("radio", { name: "Host" })).toBeChecked();
   });
 });
+
+describe("ConnectionMethod field (a labelled toggle in a row of fields)", () => {
+  it("shows the small uppercase kicker, keeps the radio group named, and carries the explanation as tooltip and description", () => {
+    render(<ConnectionMethod description="Finer is smoother." field label="Detail" onChange={() => {}} options={[{ value: "a", label: "A" }, { value: "b", label: "B" }]} value="a" />);
+    const legend = screen.getByText("Detail", { selector: "legend" });
+    expect(legend).not.toHaveClass("sr-only");
+    expect(legend).toHaveClass("uppercase", "text-ink-muted");
+    const group = screen.getByRole("radiogroup", { name: "Detail" });
+    expect(group).toHaveAttribute("title", "Finer is smoother.");
+    expect(group).toHaveAccessibleDescription("Finer is smoother.");
+  });
+
+  it("compact alone keeps the kicker for screen readers only", () => {
+    render(<ConnectionMethod compact label="Quiet" onChange={() => {}} options={[{ value: "a", label: "A" }, { value: "b", label: "B" }]} value="a" />);
+    expect(screen.getByText("Quiet", { selector: "legend" })).toHaveClass("sr-only");
+  });
+});
