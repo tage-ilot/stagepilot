@@ -1580,6 +1580,11 @@ textarea:focus-visible {
    notch), so nothing here animates height, grid rows, margins, clip-path or filters. flow-root keeps the panel's own top margin inside the
    box (as the old grid did); the notch is positioned from --emerge-top (that margin) and --notch-x / --notch-accent, all set from layout. */
 .panel-reveal { position: relative; display: flow-root; }
+/* The panel is drawn with an opaque fill. Its normal fill is 94% translucent, so the page shows through it: the backdrop's photo,
+   plus the cards' and widgets' drop shadows. The notch above the panel sits over a different patch of all that, so an equally
+   translucent copy could never equal the panel (up to 13/255 measured near the bright, red left edge). With an opaque fill (the
+   same colour token, alpha 1) the notch's copy of the panel's background is the panel's own pixels wherever it is. */
+.panel-reveal__panel > [data-variant] { background-color: var(--ds-surface-panel); }
 /* Both wrappers scale from the panel's top edge at the horizontal centre (the panel's own top margin collapses out of them). */
 .panel-reveal__x, .panel-reveal__y { transform-origin: 50% 0; }
 /* The notch rises out of the panel's top border. .panel-reveal__notch-clip is a static strip (14px) from just above the border down
@@ -1617,7 +1622,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 0;
   background: currentColor;
-  clip-path: polygon(0 14px, 12.4px 1.6px, 13.15px 0.85px, 14.85px 0.85px, 15.6px 1.6px, 28px 14px, 26.586px 14px, 14.586px 2px, 13.414px 2px, 1.414px 14px);
+  clip-path: polygon(1px 13px, 12.4px 1.6px, 13.15px 0.85px, 14.85px 0.85px, 15.6px 1.6px, 27px 13px, 25.586px 13px, 14.586px 2px, 13.414px 2px, 2.414px 13px);
 }
 .panel-reveal__notch-fill {
   position: absolute;
@@ -1626,6 +1631,6 @@ textarea:focus-visible {
 }
 .panel-reveal__notch-cx, .panel-reveal__notch-cy { position: absolute; left: 0; top: 0; width: 0; height: 0; }
 .panel-reveal__notch-cx { transform: translateX(calc(var(--notch-x, 0px) * -1)); }
-.panel-reveal__notch-bg { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 0 solid transparent; background-origin: border-box; }
+.panel-reveal__notch-back, .panel-reveal__notch-bg { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 0 solid transparent; background-origin: border-box; }
 /* Decorative only: the selected card's own styling stays the cue, so forced colours simply drop the notch. */
 @media (forced-colors: active) { .panel-reveal__notch-track { display: none; } }

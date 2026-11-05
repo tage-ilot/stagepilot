@@ -834,7 +834,7 @@ export function Dashboard({
     : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
   const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
-  const { shown, phase } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
+  const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
   const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
@@ -1051,7 +1051,7 @@ export function Dashboard({
       </section>
 
       {canConfigure && shown && (
-        <PanelReveal phase={phase} durationMs={revealMs} triggerKey={shown} trigger={() => document.querySelector<HTMLElement>(`[aria-controls="${PANEL_CONTROLS[shown]}"]`)}>
+        <PanelReveal phase={phase} durationMs={revealMs} triggerKey={shown} onCloseEnd={closeEnded} trigger={() => document.querySelector<HTMLElement>(`[aria-controls="${PANEL_CONTROLS[shown]}"]`)}>
           {shown === "planning-center" && (
           <PlanningCenterSetupPanel
             onDirtyChange={setPanelDirty}

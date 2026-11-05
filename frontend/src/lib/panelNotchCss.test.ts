@@ -36,8 +36,9 @@ describe("config panel notch CSS contract (DESIGN.md \"Config panel reveal\")", 
     // (a clip-path on the notch itself would clip the fill too)
     const chevron = rule(".panel-reveal__notch::before");
     expect(chevron).toContain("background: currentColor");
-    expect(chevron).toContain("clip-path: polygon(0 14px, 12.4px 1.6px");
-    expect(chevron).toContain("26.586px 14px, 14.586px 2px, 13.414px 2px, 1.414px 14px");
+    // the legs end on the border row's bottom edge (y 13): no feet below the border where the diagonals meet it
+    expect(chevron).toContain("clip-path: polygon(1px 13px, 12.4px 1.6px");
+    expect(chevron).toContain("27px 13px, 25.586px 13px, 14.586px 2px, 13.414px 2px, 2.414px 13px");
     expect(notch).not.toContain("clip-path");
     expect(rule(".panel-reveal__notch-fill")).toContain("clip-path: polygon(1.414px 14px"); // 1px perpendicular = 1.414px along the axis
   });
@@ -57,5 +58,11 @@ describe("config panel notch CSS contract (DESIGN.md \"Config panel reveal\")", 
 
   it("is dropped in forced-colors", () => {
     expect(css).toContain("@media (forced-colors: active) { .panel-reveal__notch-track { display: none; } }");
+  });
+
+  it("draws the panel with an opaque fill, so the notch's copy of it is the panel's own pixels wherever the notch is", () => {
+    const fill = rule(".panel-reveal__panel > [data-variant]");
+    expect(fill).toContain("background-color: var(--ds-surface-panel)");
+    expect(fill).not.toMatch(/rgb|rgba|opacity|\/ ?0?\.9/);
   });
 });

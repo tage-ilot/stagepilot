@@ -26,6 +26,11 @@ export interface PanelRevealProps {
    * card's centre to the new one (the panel itself is not replayed).
    */
   triggerKey?: string;
+  /**
+   * Called the moment a close animation has finished (no timer in between), so the panel can be unmounted in the same frame its
+   * last (invisible) frame ends. Not called for an interrupted close.
+   */
+  onCloseEnd?: () => void;
   children: ReactNode;
 }
 
@@ -73,7 +78,7 @@ interface Group {
  * an open and sinks back into it at the start of a close). Nothing animates height, grid rows, margins, clip-path or filters,
  * so the dashboard is not laid out again per frame.
  */
-export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }: PanelRevealProps) {
+export function PanelReveal({ phase, durationMs, trigger, triggerKey, onCloseEnd, children }: PanelRevealProps) {
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -93,8 +98,8 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
   const group = useRef<Group | null>(null);
   const slide = useRef<Animation[]>([]);
   const placed = useRef<{ centre: number; accent: string } | null>(null);
-  const latest = useRef({ phase, durationMs, trigger });
-  latest.current = { phase, durationMs, trigger };
+  const latest = useRef({ phase, durationMs, trigger, onCloseEnd });
+  latest.current = { phase, durationMs, trigger, onCloseEnd };
   const lastResize = useRef(0);
   const resizeWhileBusy = useRef(false);
   const shownKey = useRef<{ key: string | undefined } | null>(null);
@@ -237,7 +242,9 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
       // Single column: the card spans the row, so there is nothing to spread out of; the strip only grows down.
       const spread = !matches("(max-width: 639px)");
       const frames = emergeFrames(geometry, direction, spread);
-      if (spread) add(wrapperOuter, frames.outer, frames.easing.outer, "transform");
+      if (spread) add(wrapperOuter, frames.outer, frames.easing.outer, "transform, opacity");
+      // The whole panel fades in at the start of an open and out at the end of a close, so nothing is left to pop away.
+      add(wrapperOuter, frames.group, frames.easing.group, "transform, opacity");
       add(wrapperInner, frames.inner, frames.easing.inner, "transform");
       for (const below of elementsBelow(host)) { add(below, frames.below, frames.easing.below, "transform"); belowAnimations.push(animations[animations.length - 1]!); }
       contentFrames = frames.content;
@@ -254,6 +261,7 @@ export function PanelReveal({ phase, durationMs, trigger, triggerKey, children }
       // An open leaves its final styles to plain CSS and drops every animation. A close keeps its last frame until the
       // panel unmounts (the presence timer), otherwise the panel would flash back to full size first.
       if (entry.direction === "open") clearGroup();
+      else if (latest.current.phase === "closing") latest.current.onCloseEnd?.();
       if (resizeWhileBusy.current) { resizeWhileBusy.current = false; if (latest.current.phase !== "closing") placeNotch(false); }
     };
     for (const animation of animations) animation.onfinish = settle;

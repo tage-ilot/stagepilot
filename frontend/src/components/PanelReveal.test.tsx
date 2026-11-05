@@ -182,21 +182,63 @@ describe("PanelReveal", () => {
     expect(below.effect.setKeyframes).toHaveBeenCalledWith([{ transform: "translateY(-706px)" }, { transform: "translateY(0px)" }]);
   });
 
-  it("closes with the reversed frames from a settled open", () => {
+  it("closes from a settled open: onto the card, accelerating, ending at scaleY(0) and opacity 0", () => {
     open();
     finishAll();
     expect(live()).toHaveLength(0);
     click("card a");
-    const x = log.filter((animation) => animation.target.classList.contains("panel-reveal__x")).at(-1)!;
+    const x = log.filter((animation) => animation.target.classList.contains("panel-reveal__x") && props(animation).has("transform")).at(-1)!;
     expect(x.frames[0]!.transform).toBe("translateX(0px) scaleX(1)");
     expect(x.frames[1]!.transform).toBe("translateX(-410px) scaleX(0.18)");
     const content = log.filter((animation) => animation.target.closest("section")).at(-1)!;
     expect(content.frames).toEqual([{ opacity: 1, offset: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 0, offset: 1 }]);
   });
 
+  it("a close ends at scaleY(0), the card's width and opacity 0: only transform and opacity animate, one easing for the strip and the content below", () => {
+    open();
+    finishAll();
+    click("card a");
+    const closing = live();
+    const y = closing.find((animation) => animation.target.classList.contains("panel-reveal__y"))!;
+    expect(y.frames.at(-1)!.transform).toBe("translateY(-20px) scaleY(0)");
+    expect(y.options.easing).toBe("cubic-bezier(.5,0,.75,.4)");
+    const below = closing.find((animation) => animation.target === screen.getByTestId("below"))!;
+    expect(below.frames.at(-1)!.transform).toBe("translateY(-620px)"); // the whole panel height (600, from layout) + the gap (20)
+    expect(below.options.easing).toBe(y.options.easing);
+    const group = closing.find((animation) => animation.target.classList.contains("panel-reveal__x") && props(animation).has("opacity"))!;
+    expect(group.frames.at(-1)).toMatchObject({ opacity: 0, offset: 1 });
+    expect(group.options.easing).toBe("linear");
+    for (const animation of closing) {
+      for (const key of props(animation)) expect(["transform", "opacity", "offset", "easing"]).toContain(key);
+    }
+  });
+
+  it("onCloseEnd fires when the close animation finishes (no timer in between), not for an open and not for an interrupted close", () => {
+    const ended = vi.fn();
+    function Wrapper() {
+      const [on, setOn] = useState(true);
+      return (
+        <>
+          <button data-card="a" aria-controls="a-configuration" onClick={() => setOn(false)}>card a</button>
+          <PanelReveal phase={on ? "opening" : "closing"} durationMs={500} trigger={() => document.querySelector<HTMLElement>("[aria-controls='a-configuration']")} onCloseEnd={ended}>
+            <section id="a-configuration"><h2>panel a</h2></section>
+          </PanelReveal>
+        </>
+      );
+    }
+    render(<Wrapper />);
+    placeCard("a");
+    finishAll();
+    expect(ended).not.toHaveBeenCalled(); // an open finishing
+    click("card a");
+    expect(ended).not.toHaveBeenCalled();
+    finishAll();
+    expect(ended).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves no animations and no will-change at rest after an open", () => {
     open();
-    expect(document.querySelector<HTMLElement>(".panel-reveal__x")!.style.willChange).toBe("transform");
+    expect(document.querySelector<HTMLElement>(".panel-reveal__x")!.style.willChange).toBe("transform, opacity");
     finishAll();
     expect(log.every((animation) => animation.cancelled)).toBe(true);
     for (const element of document.querySelectorAll<HTMLElement>("*")) expect(element.style.willChange).toBe("");
@@ -294,7 +336,7 @@ describe("PanelReveal", () => {
     expect(riseOf()).toHaveLength(risesBefore);
     expect(riseCounterOf()).toHaveLength(risesBefore);
     expect(slides()).toHaveLength(2);
-    expect(log.filter((animation) => animation.target.classList.contains("panel-reveal__x"))).toHaveLength(1);
+    expect(log.filter((animation) => animation.target.classList.contains("panel-reveal__x"))).toHaveLength(2); // transform + group opacity, from the one open
   });
 
   it("the notch's fill is a copy of the panel's background, continued 12 px above it", () => {
@@ -345,7 +387,7 @@ describe("PanelReveal", () => {
   it("single column: no horizontal spread", () => {
     narrow = true;
     open();
-    expect(log.some((animation) => animation.target.classList.contains("panel-reveal__x"))).toBe(false);
+    expect(log.some((animation) => animation.target.classList.contains("panel-reveal__x") && props(animation).has("transform"))).toBe(false);
     expect(log.some((animation) => animation.target.classList.contains("panel-reveal__y"))).toBe(true);
   });
 

@@ -7,7 +7,10 @@
  *  - everything below the panel: translateY(-(0.98 H + gap)) -> 0 (FLIP), so the gap under the panel never changes;
  *  - the panel's content fades in late (so scaled text is never visible), the notch rises out of the panel's top border last
  *    (translateY inside a static clip that only shows the strip above the border, so no part of it is ever drawn over the panel).
- * Closing is the same frames reversed (the content fade and the notch's sink have their own early timings).
+ * Closing is NOT the open reversed: it accelerates into the card (CLOSE_EASING, no slow tail), ends at scaleY(0) at the card's
+ * width (so the content below is exactly at its closed-layout position when the panel unmounts) and the whole panel fades out
+ * over its last stretch, so no strip is left hanging under the card and nothing pops away when it unmounts. The content fade and
+ * the notch's sink have their own early timings.
  */
 
 /** Open / close duration in ms. The slow-motion hook (genieDuration.ts) stretches it. */
@@ -36,6 +39,17 @@ export const SINK_TO = 0.35;
 export const RISE_EASING = "cubic-bezier(.2,.8,.2,1)";
 /** The rise curve run backwards in time. */
 export const SINK_EASING = "cubic-bezier(.8,0,.8,.2)";
+
+/**
+ * Close easing for the vertical collapse and the horizontal narrowing (and the content below, which must keep the same gap): slow
+ * start, then it accelerates into the card. The open keeps cubic-bezier(.4,0,.2,1) / (.65,0,.35,1).
+ */
+export const CLOSE_EASING = "cubic-bezier(.5,0,.75,.4)";
+/** The panel group (outer wrapper) is fully opaque until CLOSE_FADE_FROM and gone at CLOSE_FADE_TO (offsets of a close). */
+export const CLOSE_FADE_FROM = 0.65;
+export const CLOSE_FADE_TO = 0.93;
+/** An open fades the group in over its first stretch, so an open that is turned round mid-flight (reverse()) also vanishes at its end. */
+export const OPEN_FADE_TO = 0.2;
 
 export const SX_FLOOR = 0.06;
 export const SY_START = 0.02;
@@ -98,13 +112,15 @@ export interface EmergeFrames {
   inner: Keyframe[];
   below: Keyframe[];
   content: Keyframe[];
+  /** Opacity of the whole panel group (outer wrapper), linear: a short fade-in at the start of an open, the fade-out that ends a close. */
+  group: Keyframe[];
   /** The notch's clip strip follows the panel's top edge while the gap to the card closes (the same translateY as the inner wrapper). */
   track: Keyframe[];
   /** The notch's rise (open) or sink (close): translateY on the wrapper inside the static clip. */
   notch: Keyframe[];
   /** The exact opposite translation, for the notch's panel-coloured fill, which must stay put while the notch moves. */
   notchCounter: Keyframe[];
-  easing: { outer: string; inner: string; below: string; content: string; notch: string };
+  easing: { outer: string; inner: string; below: string; content: string; notch: string; group: string };
 }
 
 /** Time (0..1) at which a cubic-bezier(x1, y1, x2, y2) timing function has reached `progress` (y). */
@@ -142,18 +158,34 @@ export function riseFrames(direction: EmergeDirection, sign: 1 | -1, from = RISE
 
 export function emergeFrames(g: EmergeGeometry, direction: EmergeDirection, spread = true): EmergeFrames {
   const opening = direction === "open";
-  const pair = (from: Keyframe, to: Keyframe): Keyframe[] => (opening ? [from, to] : [to, from]);
-  return {
-    outer: pair({ transform: `translateX(${g.dx}px) scaleX(${g.sx})` }, { transform: "translateX(0px) scaleX(1)" }),
-    inner: pair({ transform: `translateY(${-g.gap}px) scaleY(${SY_START})` }, { transform: "translateY(0px) scaleY(1)" }),
-    below: pair({ transform: `translateY(${-((1 - SY_START) * g.height + g.gap)}px)` }, { transform: "translateY(0px)" }),
+  const rest = { transform: "translateX(0px) scaleX(1)" };
+  const common = {
     content: opening
       ? [{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1, offset: 1 }]
       : [{ opacity: 1, offset: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 0, offset: 1 }],
-    track: pair({ transform: `translateY(${-g.gap}px)` }, { transform: "translateY(0px)" }),
     notch: riseFrames(direction, 1, riseStart(g, spread)),
     notchCounter: riseFrames(direction, -1, riseStart(g, spread)),
-    easing: { outer: EASE_OUTER, inner: EASE_INNER, below: EASE_INNER, content: "linear", notch: "linear" },
+  };
+  if (opening) {
+    return {
+      ...common,
+      outer: [{ transform: `translateX(${g.dx}px) scaleX(${g.sx})` }, rest],
+      inner: [{ transform: `translateY(${-g.gap}px) scaleY(${SY_START})` }, { transform: "translateY(0px) scaleY(1)" }],
+      below: [{ transform: `translateY(${-((1 - SY_START) * g.height + g.gap)}px)` }, { transform: "translateY(0px)" }],
+      track: [{ transform: `translateY(${-g.gap}px)` }, { transform: "translateY(0px)" }],
+      group: [{ opacity: 0, offset: 0 }, { opacity: 1, offset: OPEN_FADE_TO }, { opacity: 1, offset: 1 }],
+      easing: { outer: EASE_OUTER, inner: EASE_INNER, below: EASE_INNER, content: "linear", notch: "linear", group: "linear" },
+    };
+  }
+  // Close: ends with the strip at the card's width, zero tall, on the card's bottom edge, and the content below exactly at its closed position.
+  return {
+    ...common,
+    outer: [rest, { transform: `translateX(${g.dx}px) scaleX(${g.sx})` }],
+    inner: [{ transform: "translateY(0px) scaleY(1)" }, { transform: `translateY(${-g.gap}px) scaleY(0)` }],
+    below: [{ transform: "translateY(0px)" }, { transform: `translateY(${-(g.height + g.gap)}px)` }],
+    track: [{ transform: "translateY(0px)" }, { transform: `translateY(${-g.gap}px)` }],
+    group: [{ opacity: 1, offset: 0 }, { opacity: 1, offset: CLOSE_FADE_FROM }, { opacity: 0, offset: CLOSE_FADE_TO }, { opacity: 0, offset: 1 }],
+    easing: { outer: CLOSE_EASING, inner: CLOSE_EASING, below: CLOSE_EASING, content: "linear", notch: "linear", group: "linear" },
   };
 }
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CLOSE_EASING,
+  CLOSE_FADE_FROM,
   EMERGE_MS,
+  OPEN_FADE_TO,
   NOTCH_ABOVE,
   NOTCH_HEIGHT,
   NOTCH_RISE,
@@ -102,7 +105,7 @@ describe("emergeFrames", () => {
   const g = emergeGeometry(CARDS[0], panel)!;
   const all = (direction: "open" | "close") => {
     const f = emergeFrames(g, direction);
-    return [f.outer, f.inner, f.below, f.content, f.notch, f.notchCounter, f.track];
+    return [f.outer, f.inner, f.below, f.content, f.notch, f.notchCounter, f.track, f.group];
   };
 
   it("animate only transform and opacity (layout properties can never creep back)", () => {
@@ -224,12 +227,56 @@ describe("emergeFrames", () => {
     expect(NOTCH_RISE).toBeGreaterThanOrEqual(NOTCH_HEIGHT); // fully hidden behind the strip at the start
   });
 
-  it("closing is the exact reverse of the transform frames", () => {
+  it("an open is unchanged (same easings, scaleY(0.02) start) apart from a short fade-in of the whole group", () => {
     const open = emergeFrames(g, "open");
+    expect(open.inner[0]!.transform).toBe(`translateY(${-g.gap}px) scaleY(0.02)`);
+    expect(open.easing.inner).toBe("cubic-bezier(.4,0,.2,1)");
+    expect(open.group).toEqual([{ opacity: 0, offset: 0 }, { opacity: 1, offset: OPEN_FADE_TO }, { opacity: 1, offset: 1 }]);
+    expect(open.easing.group).toBe("linear");
+  });
+
+  it("a close ends at scaleY(0) on the card's width and bottom edge, with the content below exactly at its closed position", () => {
+    for (const card of CARDS) {
+      const geometry = emergeGeometry(card, panel)!;
+      const close = emergeFrames(geometry, "close");
+      expect(close.outer).toEqual([{ transform: "translateX(0px) scaleX(1)" }, { transform: `translateX(${geometry.dx}px) scaleX(${geometry.sx})` }]);
+      expect(close.inner.at(-1)!.transform).toBe(`translateY(${-geometry.gap}px) scaleY(0)`);
+      expect(close.below.at(-1)!.transform).toBe(`translateY(${-(geometry.height + geometry.gap)}px)`); // the whole panel height and gap: no 2% left over to pop
+      expect(close.track.at(-1)!.transform).toBe(`translateY(${-geometry.gap}px)`);
+    }
+  });
+
+  it("the gap under the panel stays constant through a close (inner and below share one easing)", () => {
     const close = emergeFrames(g, "close");
-    expect(close.outer).toEqual([...open.outer].reverse());
-    expect(close.inner).toEqual([...open.inner].reverse());
-    expect(close.below).toEqual([...open.below].reverse());
+    expect(close.easing.inner).toBe(close.easing.below);
+    expect(close.easing.inner).toBe(CLOSE_EASING);
+    // linear interpolation under one easing: below(p) = -(H + gap) p, panel bottom(p) = top - gap p + H (1 - p) -> bottom - below top is constant
+    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+      const bottom = panel.top - g.gap * p + g.height * (1 - p);
+      const belowTop = panel.top + g.height + 20 - (g.height + g.gap) * p;
+      expect(belowTop - bottom).toBeCloseTo(20, 6);
+    }
+  });
+
+  it("a close accelerates into the card (no slow tail) and the group is gone before the very end", () => {
+    // ease-in: the progress is below the diagonal for most of the time, and the last 8% of the time covers a large share of the way
+    const [x1, y1, x2, y2] = CLOSE_EASING.match(/-?\d*\.?\d+/g)!.map(Number) as [number, number, number, number];
+    expect(x1).toBeGreaterThanOrEqual(0.4); expect(y1).toBe(0); expect(y2).toBeLessThan(x2); // slow start, steepening towards the end
+    expect(bezierTimeAt(0.5, [x1, y1, x2, y2])).toBeGreaterThan(0.5); // halfway there only after more than half the time
+    const close = emergeFrames(g, "close");
+    expect(close.group.at(0)).toEqual({ opacity: 1, offset: 0 });
+    expect(close.group.at(-1)).toEqual({ opacity: 0, offset: 1 });
+    const gone = close.group.find((frame) => frame.opacity === 0)!.offset!;
+    const faded = (at: number) => 1 - (at - CLOSE_FADE_FROM) / (gone - CLOSE_FADE_FROM); // linear between the two keyframes
+    expect(faded(0.92)).toBeLessThanOrEqual(0.1); // no more than 10% opaque at 92% of a close
+    expect(gone).toBeGreaterThanOrEqual(0.85);
+    expect(gone).toBeLessThan(1);
+    expect(close.easing.group).toBe("linear");
+    expect(CLOSE_FADE_FROM).toBeGreaterThanOrEqual(0.5); // the fade is the last stretch, not a fade of the whole close
+  });
+
+  it("the notch has sunk (SINK_TO) before the fade starts", () => {
+    expect(SINK_TO).toBeLessThan(CLOSE_FADE_FROM);
   });
 
   it("opens in 500 ms", () => {

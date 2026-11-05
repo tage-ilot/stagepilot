@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PresencePhase = "closed" | "opening" | "open" | "closing";
 
@@ -6,6 +6,8 @@ export interface PanelPresence<T> {
   /** The panel that is currently mounted (it stays mounted while it animates closed). */
   shown: T | null;
   phase: PresencePhase;
+  /** Call when the close animation has really ended: the panel unmounts (or the next one opens) right away instead of waiting for the timer. */
+  closeEnded: () => void;
 }
 
 /**
@@ -23,8 +25,16 @@ export function usePanelPresence<T>(
   options: { swap?: boolean } = {},
 ): PanelPresence<T> {
   const swap = options.swap === true;
-  const [state, setState] = useState<PanelPresence<T>>({ shown: initial, phase: initial === null ? "closed" : "open" });
+  const [state, setState] = useState<{ shown: T | null; phase: PresencePhase }>({ shown: initial, phase: initial === null ? "closed" : "open" });
   const { shown, phase } = state;
+  const latest = useRef({ target, shown, phase });
+  latest.current = { target, shown, phase };
+
+  const closeEnded = useCallback(() => {
+    const current = latest.current;
+    if (current.phase !== "closing") return;
+    setState(current.target === null ? { shown: null, phase: "closed" } : { shown: current.target, phase: "opening" });
+  }, []);
 
   useEffect(() => {
     if (target === shown) {
@@ -46,5 +56,5 @@ export function usePanelPresence<T>(
     return () => clearTimeout(timer);
   }, [target, shown, phase, durationMs, swap]);
 
-  return state;
+  return { shown, phase, closeEnded };
 }
