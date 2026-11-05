@@ -1,5 +1,5 @@
 //! The smooth replay engine: for every held fixture property the value at the song position `p`
-//! is [`Timeline::value_at`] of the song's rows and effects, and the engine sends only what
+//! is [`Timeline::playback_at`] (the song's rows and effects, with the seams of effects blended), and the engine sends only what
 //! changed. Pure: no clock, no I/O. The caller passes the monotonic time `now` and the song
 //! position `p` (usually `now`-based plus the look lead) of every tick and sends the returned
 //! messages itself (the plugin paces them, [`simulate`] counts them).
@@ -26,6 +26,9 @@
 //!   boundary, or not at all.
 //!
 //! # DMX resolution
+//!
+//! A value that is still moving is sent as it will be half a tick later (the middle of the
+//! interval it will be held for), which halves the error of holding it.
 //!
 //! Levels and colours are 8-bit (one step is 1/255), angles 16-bit on a 540 degree range (one
 //! step is about 0.008 degrees). Lightkey truncates to the DMX resolution, so a value that is
@@ -235,7 +238,7 @@ impl ReplayEngine {
                 continue;
             };
             seen.insert(name.to_string());
-            if self.timeline.value_at(&slot.address, p).is_some() {
+            if self.timeline.playback_at(&slot.address, p).is_some() {
                 valued.insert(name.to_string());
             }
         }
@@ -275,7 +278,7 @@ impl ReplayEngine {
             let instant = in_effect && self.timeline.instant_step_in(&slot.address, previous_p, p);
             let waiting =
                 in_effect && slot.in_effect && slot.last.is_some() && !effect_turn && !instant;
-            let Some(value) = self.timeline.value_at(&slot.address, p) else {
+            let Some(now_value) = self.timeline.playback_at(&slot.address, p) else {
                 slot.in_effect = in_effect;
                 continue;
             };
@@ -292,10 +295,21 @@ impl ReplayEngine {
             } else {
                 Kind::Ramp
             };
-            let target = if moving && kind != Kind::Step {
-                with_half_step(&slot.address, &value, slot.step)
+            let target = if kind == Kind::Step {
+                now_value
             } else {
-                value
+                // A value held until the next send is best when it is the one from the middle of
+                // that interval; and Lightkey truncates, so it also goes half a DMX step up.
+                let interval = if kind == Kind::Effect {
+                    self.effect_interval
+                } else {
+                    FAST_TICK_SECONDS
+                };
+                let ahead = self
+                    .timeline
+                    .playback_at(&slot.address, p + interval / 2.0)
+                    .unwrap_or(now_value);
+                with_half_step(&slot.address, &ahead, slot.step)
             };
             let weight = slot
                 .last

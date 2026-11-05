@@ -282,9 +282,8 @@ files are not in the repository). All numbers come from the report tool:
 | Inside effects, points beyond 2x tolerance (angle / colour / dimmer) | 1.56 % / 0.68 % / 1.23 % | 1.71 % / n/a / 0.59 % |
 | Plain-ramp sanity (script numbers reproduced) | 8,322 segments, longest 4.0 s | 2,727 segments, longest 3.2 s |
 
-**Not yet.** Replay interpolation (ticks, rate budget, seek, operator take-over) is the next
-change. Until it lands a replay sends each row's final values at the row's time and does
-not play effects, so a song captured with ramps replays steppier than the original.
+**Replay.** The next section ("Smooth replay") says how a captured song plays back. Real
+playback on a Lightkey rig is not verified yet.
 
 **Editing.** Rows and effects are separate lists. Saving a song's cue map from the
 timeline (the cue-map `PUT`) changes the rows and keeps the effects the song already has: a
@@ -292,6 +291,92 @@ row edit, a deleted row or a merge never changes an effect. A new recording repl
 captured rows AND the captured effects (rows and effects added by hand stay). Rows keep
 their `fade_seconds` through every save; editing a row's time moves where its ramp starts
 and leaves the fade alone.
+
+### Smooth replay: ramps, effects and the packet budget
+
+Replay plays a song's rows and effects with the same evaluator the capture report uses
+(`lightkey_curve::Timeline`): the value of every fixture property at song position `p` is a
+pure function of the rows and effects. Nothing is accumulated, so **seek, resume and a
+re-sync are all the same thing: evaluate at the new `p`**, send what differs from what was
+last sent, and carry on. Pause, stop, reset and the end of the song stop the engine and
+**clear nothing** (the held-fixture rules above apply unchanged).
+
+**Which songs.** A song with at least one row with a `fade_seconds` above 0, or with an
+effect, is played by the engine. A song captured before smooth capture (no fades, no
+effects) is played exactly as before: one packet per row message at the row's time less
+45 ms, paced, nothing in between (a test with an old-style map pins this).
+
+**One scheduler tick** drives everything. There is no task per fixture. While nothing moves
+the engine sleeps until the next row, ramp end, effect start or end or instant step of an
+effect (it does not tick at all when none is left). Per tick, for every address:
+
+- A **step** (an instant row, the end of a ramp, the first look after a start, seek or
+  take-back, an effect starting or ending, an instant step inside an effect's cycle) is sent
+  at once, at its exact time (the same 45 ms lead as a look row), whatever the budget.
+- A running **ramp** is looked at every 50 ms (20 Hz) and sent only when its value moved by
+  at least **one DMX step of its property** since the last send: 1/255 for levels and
+  colours (8 bit), 540/65535 degrees (about 0.008) for angles (16 bit). A 60 s dimmer ramp
+  from 0 to 1 is therefore about 240 packets, not 1,200.
+- An address driven by an **effect** is looked at every `effect interval` (50 ms, up to
+  125 ms = 8 Hz), with the same one-step rule.
+- A value that is still moving is sent as it will be half a tick later (the middle of the
+  time it will be held), and **half a DMX step higher**, because Lightkey truncates to the
+  DMX resolution. A value at rest is sent exactly.
+
+**Budget.** At most **200 packets per second** leave (the existing 5 ms pacing). A token
+bucket (200 per second, burst 10) decides what a tick may send: steps always go out (they
+only use the bucket up, and the pacing spaces them), then ramps, then effect values, the
+largest change first. When effect values had to wait, the effect interval grows towards
+125 ms (8 Hz) and shrinks back when the budget has room; ramps keep 20 Hz. Beyond that a
+busy second simply sends the biggest changes first. One OSC message per address: **no OSC
+bundles and no pattern addresses** (`P{1,3,5}`), because neither is shown to work with
+Lightkey's fixture overrides; the rig test (S4) decides.
+
+**Effects** play from the cycle template. A member sees the cycle at phase
+`(p - start - offset) mod period`, computed from `p` directly each time (exact period
+arithmetic, no accumulated drift over any number of cycles; a test compares values 240
+periods apart to 1e-9). **Seams:** the window of a detected effect is only approximate, so
+the rows just before it and the effect's first value can differ, and so can the effect's
+last value and the rows after it. Playback (`Timeline::playback_at`) therefore moves
+linearly between the rows' value and the effect's value over the first and the last 0.5 s
+of the window (at the end, towards the value the rows have when the window is over). On the
+two real takes the capture alone left 31 and 30 seams that jump more than the recorded motion
+does by over a tolerance (up to 41x); with the blend all 150 seams are continuous.
+
+**Operator take-over.** The engine's sends go through the same path as a row's, so the echo
+rule of "The operator always wins, per fixture" sees every interpolated value: the same
+fixture and property with the same value (within 2 %, or 1 degree) within about 200 ms is
+the replay's own echo, however fast the property moves. A fixture the operator touched stops
+being driven (its addresses are skipped, nothing is cleared). After 30 seconds without an
+operator change the engine forgets what it last sent to that fixture and its next tick sends
+the **interpolated value for that moment**, then carries on with the ramp or effect. While
+the song is paused it waits for the resume or seek, as before.
+
+**Packet budget report.** `cargo run --release -p stagepilot-lights --example replay_budget
+-- <takes.json> [song]` replays a take on a simulated clock (no sockets) and prints packets
+per second (mean, 99th percentile, max, seconds above 150 per second), the split into steps,
+ramp and effect values, the share sent at the lowered effect rate, how long a step waits in
+the pacing queue, the sent values against the raw recorded motion (inside and outside
+effects, both "as intended" and "as paced"), the seams, and the CPU time.
+`BUDGET_TRACE=<address>,<from>,<to>` also prints that address's packets and timeline.
+
+| | Unstoppable God (255 s) | Able (290 s) |
+|---|---|---|
+| Packets | 20,128 | 15,484 |
+| Packets per second: mean / p99 / max | 78.6 / 200 / 200 | 53.2 / 146 / 200 |
+| Seconds above 150 per second | 8 | 3 |
+| Steps / ramp values / effect values | 398 / 4,455 / 15,275 | 453 / 3,851 / 11,180 |
+| Effect values sent at the lowered rate (below 20 Hz) | 98.0 % | 53.5 % |
+| Step wait behind the pacing queue: median / p99 / max | 15 / 270 / 290 ms | 15 / 460 / 485 ms |
+| Max deviation from the raw motion outside effects (angle / colour / dimmer), as intended | 2.87 deg / 0.124 / 0.122 | 24.4 deg / 0.035 / 0.084 |
+| Share of points beyond the tolerance outside effects (angle / colour / dimmer) | 0.04 % / 2.09 % / 0.23 % | 0.07 % / 0.16 % / 0.17 % |
+| Inside effects, beyond the tolerance (angle / colour / dimmer) | 11.4 % / 57.7 % / 52.7 % | 7.5 % / n/a / 8.9 % |
+| CPU time of the simulated run | 54 ms (0.21 ms per song second) | 61 ms (0.21 ms per song second) |
+
+The large "outside effects" angle maximum of Able is one grid point at the start of a 0.3 s,
+55 degree zoom ramp: 20 Hz cannot follow a ramp that short. Inside effects the deviation
+is the price of the budget: Unstoppable God holds 20 fixtures' colour pulses plus pan sweeps
+at 8 Hz for most of the song.
 
 ### Simplify this song (backend)
 
@@ -568,7 +653,7 @@ the seconds-based scheduler.
 
 ## Look rows and the timeline as replay source
 
-A song lighting row (`osc_cues`) may carry `messages` (a list of `{address, args}`) and a `source` of `manual` or `captured`. A row sends its `messages` when non-empty, otherwise its single address/args. Caps: `MAX_OSC_MESSAGES_PER_ROW`, `MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`. Fixture look rows fire about 45 ms early and are paced to at most 200 packets/s. On start, resume or seek, the latest `/fixture/<name>/overrides/<prop>` message at or before the position is re-sent once. Pause, stop, end and reset hold the last look; fixtures are released (double `overrides/clear`) only when replay is switched off, Lighting is disabled, on shutdown, or when the next song does not use them.
+A song lighting row (`osc_cues`) may carry `messages` (a list of `{address, args}`) and a `source` of `manual` or `captured`. A row sends its `messages` when non-empty, otherwise its single address/args. Caps: `MAX_OSC_MESSAGES_PER_ROW`, `MAX_OSC_ROWS_PER_SONG`, `MAX_OSC_MESSAGES_PER_SONG`. Fixture look rows fire about 45 ms early and are paced to at most 200 packets/s. On start, resume or seek, the latest `/fixture/<name>/overrides/<prop>` message at or before the position is re-sent once (a song with ramps or effects is evaluated at the position instead, see "Smooth replay"). Pause, stop, end and reset hold the last look; fixtures are released (double `overrides/clear`) only when replay is switched off, Lighting is disabled, on shutdown, or when the next song does not use them.
 
 ### Cue types and the legend
 

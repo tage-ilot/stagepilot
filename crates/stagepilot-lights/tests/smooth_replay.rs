@@ -47,7 +47,7 @@ fn num(m: &OscMessage) -> f64 {
 }
 
 fn value(t: &Timeline, address: &str, at: f64) -> f64 {
-    match t.value_at(address, at).expect("a value").first() {
+    match t.playback_at(address, at).expect("a value").first() {
         Some(FixtureArg::Float(x)) => *x,
         other => panic!("{other:?}"),
     }
@@ -248,7 +248,8 @@ fn an_effect_plays_from_its_cycle_with_member_offsets_and_never_drifts() {
         for p in &mine {
             let want = value(&timeline, &address, p.position);
             assert!(
-                (num(&p.message) - want).abs() <= STEP * 1.5 + 1e-9,
+                // sent as it will be half a tick later: the slope (0.5 per second) times 62 ms
+                (num(&p.message) - want).abs() <= 0.5 * SLOW_TICK_SECONDS / 2.0 + STEP * 1.5 + 1e-9,
                 "{member} at {}",
                 p.position
             );
@@ -325,7 +326,7 @@ fn an_effect_meets_the_rows_around_it_without_a_jump_beyond_the_tolerance() {
         assert!(near.len() >= 2, "packets near {seam}");
         for p in near {
             let want = value(&timeline, DIM, p.position);
-            assert!((num(&p.message) - want).abs() <= STEP * 1.5 + 1e-9);
+            assert!((num(&p.message) - want).abs() <= 0.5 * SLOW_TICK_SECONDS / 2.0 + STEP * 1.5);
         }
     }
     // consecutive sent values never differ by more than one tick of the steepest slope + a step
@@ -337,5 +338,86 @@ fn an_effect_meets_the_rows_around_it_without_a_jump_beyond_the_tolerance() {
             "jump {d} at {}",
             pair[1].position
         );
+    }
+}
+
+// ------------------------------------------------- a captured effect meets its rows (S1 fit)
+
+#[test]
+fn a_fitted_effect_hands_over_to_the_rows_around_it_within_the_tolerance() {
+    use stagepilot_lights::lightkey_fixtures::FixtureCommand;
+    use stagepilot_lights::lightkey_smooth::{fit, smooth_rows, SmoothParams};
+    fn triangle(t: f64, period: f64) -> f64 {
+        let p = (t / period).rem_euclid(1.0);
+        -60.0 + 120.0 * if p < 0.5 { 2.0 * p } else { 2.0 - 2.0 * p }
+    }
+    // a ramp up to the first peak at 4 s, a sweep from 4 s to 124 s, then a slow ramp back to 0
+    let fixtures = [("Z1", 0.0), ("Z2", 1.0), ("Z3", 2.0)];
+    let mut changes: Vec<(f64, FixtureCommand)> = Vec::new();
+    for (name, offset) in fixtures {
+        let mut t = 0.0;
+        while t <= 150.0 + 1e-9 {
+            let v = if t < 124.0 {
+                triangle(t - offset, 7.95)
+            } else {
+                // hold the last swept value, then ease to 0 over 20 s
+                let last = triangle(124.0 - offset, 7.95);
+                let f = ((t - 130.0) / 20.0).clamp(0.0, 1.0);
+                last * (1.0 - f)
+            };
+            changes.push((
+                t,
+                FixtureCommand::new(
+                    format!("/fixture/{name}/overrides/panAngle"),
+                    vec![FixtureArg::Float(v)],
+                ),
+            ));
+            t += 0.025;
+        }
+    }
+    let capture = fit(&[], &changes, 150.0, &SmoothParams::default());
+    assert!(!capture.effects.is_empty(), "{:?}", capture.effect_infos);
+    let seams: Vec<f64> = capture
+        .effects
+        .iter()
+        .flat_map(|e| [e.start_seconds, e.end_seconds])
+        .filter(|s| *s > 1.0)
+        .collect();
+    assert!(!seams.is_empty());
+    let rows = smooth_rows(&capture.rows);
+    let mut engine = ReplayEngine::new(&rows, &capture.effects);
+    let packets = simulate(&mut engine, 0.0, 150.0, LEAD, &no_one);
+    let timeline = Timeline::new(&rows, &capture.effects);
+    let tolerance = 1.5;
+    for (name, _) in fixtures {
+        let address = format!("/fixture/{name}/overrides/panAngle");
+        let mine = of(&packets, &address);
+        let want = |t: f64| value(&timeline, &address, t);
+        // 30 degrees a second on the sweep: a tick of up to 125 ms held, centred, is 1.9 degrees
+        let allowed = 2.0 * tolerance + 30.0 * SLOW_TICK_SECONDS / 2.0;
+        for seam in seams.iter().copied() {
+            let near: Vec<_> = mine
+                .iter()
+                .filter(|p| (p.position - seam).abs() < 1.0)
+                .collect();
+            assert!(!near.is_empty(), "{name}: packets near the seam at {seam}");
+            for p in near {
+                assert!(
+                    (num(&p.message) - want(p.position)).abs() <= allowed,
+                    "{name} at {}: sent {} raw {}",
+                    p.position,
+                    num(&p.message),
+                    want(p.position)
+                );
+            }
+            // the value the rows give just before and the effect just after differ by less
+            // than the tolerance
+            let before = value(&timeline, &address, seam - 1e-6);
+            let after = value(&timeline, &address, seam + 1e-6);
+            assert!(
+                (after - before).abs() <= 2.0 * tolerance + 0.01,
+                "{name}: seam {seam} jumps {before} -> {after}"
+            );
+        }
     }
 }

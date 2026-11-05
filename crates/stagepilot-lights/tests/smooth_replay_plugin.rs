@@ -381,7 +381,7 @@ async fn an_effect_plays_through_the_scheduler_with_its_offsets() {
         assert!(sent.len() > 100, "{name}: {}", sent.len());
         for (t, v) in sent.iter().filter(|(t, _)| *t > 3.0) {
             let want = match timeline
-                .value_at(&dim(name), t + LOOK_LEAD_SECONDS)
+                .playback_at(&dim(name), t + LOOK_LEAD_SECONDS)
                 .unwrap()[0]
             {
                 FixtureArg::Float(x) => x,

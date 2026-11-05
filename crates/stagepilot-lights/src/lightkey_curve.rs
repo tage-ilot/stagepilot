@@ -26,10 +26,23 @@
 //! for each member fixture, and overrides the rows for those addresses. A member sees the
 //! cycle at phase `(t - start - offset) mod period`. The first step of a property starts from
 //! the last step's value, so the loop closes. After the window the rows apply again.
+//!
+//! # Playback at the seams
+//!
+//! [`Timeline::value_at`] is the song as captured. A replay uses [`Timeline::playback_at`]: the
+//! same, except that the first and the last [`SEAM_BLEND_SECONDS`] of an effect move linearly
+//! between the value the ordinary rows give there (at the time, at the start; at the end of the
+//! window, at the end) and the effect's value, so an effect
+//! starts from, and returns to, the rows without a jump (the window of a detected effect is
+//! only approximate, so the two can differ at its edges).
 
 use crate::lightkey_fixtures::FixtureArg;
 use stagepilot_core::config::{LightingEffect, OscArgument, OscLightingCue};
 use std::collections::BTreeMap;
+
+/// How long an effect takes to take over from the rows at its start, and to give back to them at
+/// its end, in playback (seconds).
+pub const SEAM_BLEND_SECONDS: f64 = 0.5;
 
 /// One value of an address: numbers (any count) or something that never interpolates.
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +126,11 @@ impl AddressCurve {
             return None;
         }
         Some(self.segments[i - 1].value(t))
+    }
+
+    /// The value of the first row, whatever the time.
+    fn first_value(&self) -> Option<Val> {
+        self.segments.first().map(|s| s.to.clone())
     }
 
     fn push(&mut self, at: f64, fade: f64, to: Val) {
@@ -360,6 +378,46 @@ impl Timeline {
             );
         }
         self.rows.get(address)?.value_at(at).map(Val::into_args)
+    }
+
+    /// What a replay plays at `at`: [`Self::value_at`], with the seams of effects blended (see the
+    /// module docs). A pure function of `at`, like `value_at`.
+    pub fn playback_at(&self, address: &str, at: f64) -> Option<Vec<FixtureArg>> {
+        let Some(effect) = self.effect_at(address, at) else {
+            return self.rows.get(address)?.value_at(at).map(Val::into_args);
+        };
+        let from_start = (at - effect.start) / SEAM_BLEND_SECONDS;
+        let to_end = (effect.end - at) / SEAM_BLEND_SECONDS;
+        let weight = from_start.min(to_end).clamp(0.0, 1.0);
+        let inside = effect.value(at);
+        // Near the start the rows' value is the one they hold now. Near the end it is the one
+        // they have when the effect is over, which is their first value if they only begin then.
+        let curve = self.rows.get(address);
+        let rows = if from_start <= to_end {
+            curve.and_then(|c| c.value_at(at))
+        } else {
+            curve.and_then(|c| c.value_at(effect.end).or_else(|| c.first_value()))
+        };
+        let blended = match rows {
+            Some(Val::Num(row)) if weight < 1.0 && row.len() == inside.len() => row
+                .iter()
+                .zip(&inside)
+                .map(|(r, e)| r + (e - r) * weight)
+                .collect(),
+            _ => inside,
+        };
+        Some(blended.into_iter().map(FixtureArg::Float).collect())
+    }
+
+    /// Whether `playback_at` of `address` is inside a seam blend at `at`.
+    pub fn in_seam(&self, address: &str, at: f64) -> bool {
+        self.effect_at(address, at).is_some_and(|e| {
+            (at - e.start < SEAM_BLEND_SECONDS || e.end - at < SEAM_BLEND_SECONDS)
+                && self
+                    .rows
+                    .get(address)
+                    .is_some_and(|c| c.value_at(at).is_some())
+        })
     }
 
     /// Value of every address that has one at `at`.
