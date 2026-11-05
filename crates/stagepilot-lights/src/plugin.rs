@@ -2,13 +2,14 @@ use crate::lightkey::LightkeyStatus;
 use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
 use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
 use crate::lightkey_operator::OperatorTracker;
+use crate::lightkey_replay::{is_smooth, ReplayEngine};
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    validate_osc_address, LightingCue, LightingMethod, LightkeySettings, LightsSettings,
-    OscArgument, OscLightingCue, OscMessage, SongLightingCueMap,
+    validate_osc_address, LightingCue, LightingEffect, LightingMethod, LightkeySettings,
+    LightsSettings, OscArgument, OscLightingCue, OscMessage, SongLightingCueMap,
 };
 use stagepilot_core::events::{new_event, EventPayload, EventType, Integration, StagePilotEvent};
 use stagepilot_core::plugin::Plugin;
@@ -114,6 +115,16 @@ struct State {
     watchers: HashMap<String, JoinHandle<()>>,
     /// The song the timeline is playing, for taking a fixture back mid-song.
     playback: Option<Playback>,
+    /// The smooth replay engine of the running song (ramps and effects), when it has any.
+    engine: Option<ReplayEngine>,
+}
+
+/// Where a timeline starts and which rows it keeps (song seconds).
+struct Window {
+    now: f64,
+    keep_from: f64,
+    keep_to: f64,
+    remaining: f64,
 }
 
 /// Where the running song is: `position` seconds at `at`.
@@ -141,6 +152,8 @@ struct Inner {
     state: Mutex<State>,
     operation_lock: tokio::sync::Mutex<()>,
     stop: tokio::sync::Notify,
+    /// Wakes the smooth replay's scheduler tick early (a fixture was handed back).
+    engine_wake: tokio::sync::Notify,
     /// When the next OSC packet of a paced send may leave (see `reserve_slots`).
     next_send: Mutex<Option<tokio::time::Instant>>,
     /// Set once in `LightsPlugin::new` (the link needs a handle back to this struct).
@@ -211,9 +224,11 @@ impl LightsPlugin {
                 operator: OperatorTracker::new(),
                 watchers: HashMap::new(),
                 playback: None,
+                engine: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
             stop: tokio::sync::Notify::new(),
+            engine_wake: tokio::sync::Notify::new(),
             next_send: Mutex::new(None),
             lightkey: std::sync::OnceLock::new(),
         });
@@ -775,6 +790,23 @@ impl Inner {
         }
     }
 
+    /// The song's effects (OSC method only; MIDI cues have none).
+    fn active_effects(&self, song: &Song) -> Vec<LightingEffect> {
+        let st = self.st();
+        if st.settings.method != LightingMethod::Osc {
+            return Vec::new();
+        }
+        let key = song
+            .source_song_id
+            .clone()
+            .unwrap_or_else(|| song.id.clone());
+        st.settings
+            .cue_maps
+            .get(&key)
+            .map(|map| map.effects.clone())
+            .unwrap_or_default()
+    }
+
     /// May timeline fixture-override messages go out right now? Needs Lighting on, the OSC
     /// method, the Replay switch on and no recording armed.
     fn replay_allowed(&self) -> bool {
@@ -828,13 +860,17 @@ impl Inner {
             return;
         }
         let now = Self::song_position_now(0.0, payload.started_at);
+        let effects = self.active_effects(&song);
         self.start_timeline(
             &song,
             active,
-            now,
-            f64::NEG_INFINITY,
-            f64::from(payload.duration_seconds),
-            f64::from(payload.duration_seconds),
+            effects,
+            Window {
+                now,
+                keep_from: f64::NEG_INFINITY,
+                keep_to: f64::from(payload.duration_seconds),
+                remaining: f64::from(payload.duration_seconds),
+            },
         );
         // The release goes out after the timeline has started (S-01): releasing 100 unused
         // fixtures takes about a second and must not delay the new song's first look. It
@@ -874,13 +910,17 @@ impl Inner {
             return;
         }
         let now = Self::song_position_now(position, payload.started_at);
+        let effects = self.active_effects(&song);
         self.start_timeline(
             &song,
             active,
-            now,
-            position,
-            total,
-            f64::from(payload.duration_seconds),
+            effects,
+            Window {
+                now,
+                keep_from: position,
+                keep_to: total,
+                remaining: f64::from(payload.duration_seconds),
+            },
         );
     }
 
@@ -894,13 +934,36 @@ impl Inner {
         self: &Arc<Self>,
         song: &Song,
         cues: Vec<AnyCue>,
-        now: f64,
-        keep_from: f64,
-        keep_to: f64,
-        remaining: f64,
+        effects: Vec<LightingEffect>,
+        window: Window,
     ) {
+        let Window {
+            now,
+            keep_from,
+            keep_to,
+            remaining,
+        } = window;
         let cues_for_playback = cues.clone();
-        let mut plan = plan_cues(cues, now, keep_from, keep_to, self.replay_allowed());
+        let allowed = self.replay_allowed();
+        // A song with ramps or effects is played by the replay engine, which owns every
+        // fixture message; the rows then carry only what is not a fixture override. Songs
+        // captured before smooth replay keep the plain row-by-row path.
+        let rows: Vec<OscLightingCue> = cues
+            .iter()
+            .filter_map(|c| match c {
+                AnyCue::Osc(cue) => Some(cue.clone()),
+                AnyCue::Midi(_) => None,
+            })
+            .collect();
+        let smooth = allowed && is_smooth(&rows, &effects);
+        let mut plan = plan_cues(cues, now, keep_from, keep_to, allowed && !smooth);
+        let engine = smooth.then(|| ReplayEngine::new(&rows, &effects));
+        if let Some(engine) = &engine {
+            plan.not_yet = engine
+                .fixtures_without_value(now + LOOK_LEAD_SECONDS)
+                .into_iter()
+                .collect();
+        }
         if keep_from.is_finite() {
             // A resume or seek (S-03): a fixture the replay holds but the song has not touched
             // yet at this position would keep a later look. Give it back to Lightkey; its first
@@ -918,16 +981,21 @@ impl Inner {
             clears.append(&mut plan.sync);
             plan.sync = clears;
         }
-        if plan.sync.is_empty() && plan.rows.is_empty() {
+        if plan.sync.is_empty() && plan.rows.is_empty() && engine.is_none() {
             return;
         }
-        self.st().playback = Some(Playback {
-            cues: cues_for_playback.clone(),
-            position: now,
-            at: Instant::now(),
-            end: now + remaining,
-        });
-        let replaying = plan.has_fixtures().then(|| song.title.clone());
+        {
+            let mut st = self.st();
+            st.playback = Some(Playback {
+                cues: cues_for_playback.clone(),
+                position: now,
+                at: Instant::now(),
+                end: now + remaining,
+            });
+            st.engine = engine;
+        }
+        let replaying =
+            (plan.has_fixtures() || self.st().engine.is_some()).then(|| song.title.clone());
         if let Some(link) = self.lightkey.get() {
             link.set_replaying(replaying.clone());
         }
@@ -942,6 +1010,10 @@ impl Inner {
 
     async fn run_timeline(self: Arc<Self>, plan: Plan, now: f64, replaying: bool, remaining: f64) {
         let mut set = JoinSet::new();
+        if self.st().engine.is_some() {
+            let inner = self.clone();
+            set.spawn(async move { inner.run_engine(now, remaining).await });
+        }
         // The re-sync goes out first and claims its packet slots before any row can.
         if !plan.sync.is_empty() {
             let first = self.reserve_slots(plan.sync.len());
@@ -1031,10 +1103,100 @@ impl Inner {
         // Dropping the set aborts anything still waiting; a pulse in flight sends its note off.
     }
 
+    /// The smooth replay's one scheduler tick: ask the engine what changed at the song position
+    /// (a little ahead, like a look row), send it paced, sleep until the engine needs the next
+    /// tick. It runs until the song's end; pause, stop and seek cancel it, nothing is cleared.
+    async fn run_engine(self: Arc<Self>, start: f64, remaining: f64) -> Result<(), (String, bool)> {
+        let base = Instant::now();
+        let mut failed = false;
+        loop {
+            let now = Instant::now().saturating_duration_since(base).as_secs_f64();
+            if now >= remaining {
+                return Ok(());
+            }
+            let tick = {
+                let mut st = self.st();
+                let State {
+                    engine, operator, ..
+                } = &mut *st;
+                let Some(engine) = engine.as_mut() else {
+                    return Ok(());
+                };
+                engine.tick(now, start + now + LOOK_LEAD_SECONDS, &|address| {
+                    fixture_of(address).is_some_and(|name| operator.is_yielded(name))
+                })
+            };
+            if !tick.messages.is_empty() {
+                let first = self.reserve_slots(tick.messages.len());
+                for (i, message) in tick.messages.iter().enumerate() {
+                    self.wait_slot(first, i).await;
+                    // One failed send is retried once, never the end of the show (S-02).
+                    let mut result = self.send_message(message).await;
+                    if result.is_err() {
+                        tokio::time::sleep(SEND_RETRY_DELAY).await;
+                        result = self.send_message(message).await;
+                    }
+                    match result {
+                        Ok(()) => {
+                            if failed {
+                                failed = false;
+                                {
+                                    let mut st = self.st();
+                                    st.status = PluginStatus::Running;
+                                    st.last_error = None;
+                                }
+                                self.set_connection(
+                                    ConnectionStatus::Connected,
+                                    "Lighting cues are going out again.",
+                                )
+                                .await;
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(error = %error.message, "lighting_timeline_send_failed");
+                            failed = true;
+                            if let Some(engine) = self.st().engine.as_mut() {
+                                engine.mark_unsent(&message.address);
+                            }
+                            self.record_error_text(if error.public {
+                                error.message.clone()
+                            } else {
+                                "A lighting cue could not be sent.".into()
+                            })
+                            .await;
+                            if !self.output_ready() {
+                                if let Some(link) = self.lightkey.get() {
+                                    link.set_replaying(None);
+                                }
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+            let (wake_at, forever) = match tick.wake_in {
+                Some(w) => (
+                    base + Duration::from_secs_f64((now + w).min(remaining.max(0.0))),
+                    false,
+                ),
+                None => (base + Duration::from_secs_f64(remaining.max(0.0)), true),
+            };
+            tokio::select! {
+                () = tokio::time::sleep_until(wake_at) => {
+                    if forever {
+                        return Ok(());
+                    }
+                }
+                () = self.engine_wake.notified() => {}
+            }
+        }
+    }
+
     async fn cancel_timeline(&self) {
         let task = {
             let mut st = self.st();
             st.playback = None;
+            st.engine = None;
             st.timeline.take()
         };
         if let Some(task) = task {
@@ -1106,6 +1268,22 @@ impl Inner {
             };
             let position = playback.now();
             if position > playback.end {
+                return;
+            }
+            if st.engine.is_some() {
+                // The engine knows every value at every position: forget what it last sent to
+                // this fixture and its next tick sends the value for this moment.
+                let ok = st.operator.take_back(fixture);
+                st.watchers.remove(fixture);
+                if ok {
+                    if let Some(engine) = st.engine.as_mut() {
+                        engine.forget_fixture(fixture);
+                    }
+                }
+                drop(st);
+                if ok {
+                    self.engine_wake.notify_one();
+                }
                 return;
             }
             let only: Vec<AnyCue> = playback
