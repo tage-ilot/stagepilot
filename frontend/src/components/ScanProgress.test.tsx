@@ -29,6 +29,23 @@ describe("continuous song scan progress", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "100");
     expect(screen.queryByText(/Checking song|step \d/)).not.toBeInTheDocument();
   }, 15000);
+  it("does not keep requesting animation frames while idle (an idle loop keeps the page rendering at 60 Hz for nothing)", () => {
+    const requests = vi.fn((fn: FrameRequestCallback) => setTimeout(() => fn(Date.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", requests);
+    const view = render(<ScanProgress state="idle" steps={0} total={0}>Idle</ScanProgress>);
+    tick(2000);
+    expect(requests).not.toHaveBeenCalled();
+    view.rerender(<ScanProgress state="running" steps={0} total={0}>Idle</ScanProgress>);
+    tick(160);
+    expect(requests).toHaveBeenCalled();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    view.rerender(<ScanProgress state="done" steps={5} total={5}>Saved</ScanProgress>);
+    tick(1000); // completion glide + hold, then the loop stops by itself
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    const settled = requests.mock.calls.length;
+    tick(2000);
+    expect(requests.mock.calls.length).toBe(settled);
+  });
   it("unknown count omits determinate attributes, completion glides then holds before showing the result", () => {
     const view = render(<ScanProgress state="running" steps={0} total={0}>Saved</ScanProgress>);
     tick(2000);

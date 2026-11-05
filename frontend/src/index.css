@@ -1575,49 +1575,62 @@ textarea:focus-visible {
   }
 }
 
-/* .panel-reveal is excluded: this rule (higher specificity) would replace its open/close animation with the 200ms fade. */
-.stagepilot-dashboard[data-landing="done"] > :not(header):not(.panel-reveal),
-
-/* Config panel reveal (DESIGN.md "Config panel reveal"). The wrapper animates its height (grid rows 0fr <-> 1fr, so the
-   dashboard below moves in lock-step) and is lifted by --genie-gap (the panel's top margin) so the visible panel top meets the card's bottom edge, settling
-   to the normal layout gap in the last 25%. The funnel clip-path lives on the VISIBLE box (.panel-reveal__clip), in % of
-   that box: it starts as a strip exactly the card wide (--genie-l / --genie-r), the bottom edge sweeps out to full
-   width, then the top edge widens. Close is the explicit reverse, ease-in. Transform / clip-path / opacity only. */
-.panel-reveal { --genie-x: 50%; --genie-w: 20%; --genie-l: 40%; --genie-r: 60%; --genie-gap: 0px; display: grid; grid-template-rows: 1fr; }
-.panel-reveal__clip { min-height: 0; overflow: clip; overflow-clip-margin: 0; }
-.panel-reveal[data-phase="opening"] { animation: panel-rows-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both, panel-drop-in var(--genie-ms, 300ms) linear both; }
-.panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-genie-in var(--genie-ms, 300ms) cubic-bezier(.25, .5, .5, 1) both; }
-.panel-reveal[data-phase="closing"] { animation: panel-rows-out var(--genie-ms, 300ms) cubic-bezier(.5, 0, .75, .5) both, panel-drop-out var(--genie-ms, 300ms) linear both; }
-.panel-reveal[data-phase="closing"] .panel-reveal__clip { animation: panel-genie-out var(--genie-ms, 300ms) cubic-bezier(.5, 0, .75, .5) both; }
-@keyframes panel-rows-in { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
-@keyframes panel-rows-out { from { grid-template-rows: 1fr; } to { grid-template-rows: 0fr; } }
-/* The shape's top stays on the card's bottom edge (wrapper lifted by the gap) and settles into the layout gap in the last 25%. */
-@keyframes panel-drop-in { from, 75% { transform: translateY(calc(-1 * var(--genie-gap, 0px))); } to { transform: none; } }
-@keyframes panel-drop-out { from { transform: none; } 25%, to { transform: translateY(calc(-1 * var(--genie-gap, 0px))); } }
-@keyframes panel-genie-in {
-  0% { opacity: .6; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, var(--genie-r) 100%, var(--genie-l) 100%); animation-timing-function: linear; }
-  30% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, calc(var(--genie-r) + (100% - var(--genie-r)) * .6) 100%, calc(var(--genie-l) * .4) 100%); animation-timing-function: linear; }
-  50% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
-  75% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
-  100% { opacity: 1; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+/* Config panel reveal (DESIGN.md "Config panel reveal"). The panel is laid out at its final size at once; PanelReveal.tsx
+   animates transform and opacity only (Web Animations on .panel-reveal__x / __y, the content below, the content and the
+   notch), so nothing here animates height, grid rows, margins, clip-path or filters. flow-root keeps the panel's own top margin inside the
+   box (as the old grid did); the notch is positioned from --emerge-top (that margin) and --notch-x / --notch-accent, all set from layout. */
+.panel-reveal { position: relative; display: flow-root; }
+/* The panel is drawn with an opaque fill. Its normal fill is 94% translucent, so the page shows through it: the backdrop's photo,
+   plus the cards' and widgets' drop shadows. The notch above the panel sits over a different patch of all that, so an equally
+   translucent copy could never equal the panel (up to 13/255 measured near the bright, red left edge). With an opaque fill (the
+   same colour token, alpha 1) the notch's copy of the panel's background is the panel's own pixels wherever it is. */
+.panel-reveal__panel > [data-variant] { background-color: var(--ds-surface-panel); }
+/* Both wrappers scale from the panel's top edge at the horizontal centre (the panel's own top margin collapses out of them). */
+.panel-reveal__x, .panel-reveal__y { transform-origin: 50% 0; }
+/* The notch rises out of the panel's top border. .panel-reveal__notch-clip is a static strip (14px) from just above the border down
+   to the end of the border row, so only the part of the notch above the border is ever drawn; the rise moves the notch inside it
+   (transform only, PanelReveal.tsx). The notch is an upright 45 degree triangle: an accent-coloured 1px chevron (the two slanted
+   edges; the middle is left open so nothing but the page shows through the fill's 6% translucency) and, inset 1px, a
+   fill that is a copy of the panel's own background (colour and wash, set from the panel's computed style) at the panel's position,
+   so it has the panel's exact colour (the copy reaches 12px above the panel, continuing its background upwards). The counter wrappers
+   cancel the notch's movement so the copy never shifts against the panel.
+   Coordinates: the clip's top is 12px above the border's top edge (--emerge-top), so the border row is y 12..13 and the row under it (the panel's inset highlight) y 13..14. */
+/* The track is zero-sized and only carries the translateY that keeps the clip on the panel's top edge while the gap to the card closes. */
+.panel-reveal__notch-track { position: absolute; left: 0; right: 0; top: 0; height: 0; pointer-events: none; }
+.panel-reveal__notch-clip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--emerge-top, 0px) - 12px);
+  height: 14px;
+  z-index: 3;
+  clip-path: inset(0);
+  pointer-events: none;
 }
-@keyframes panel-genie-out {
-  0% { opacity: 1; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); animation-timing-function: linear; }
-  25% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
-  50% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, 100% 100%, 0 100%); animation-timing-function: linear; }
-  70% { opacity: 1; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, calc(var(--genie-r) + (100% - var(--genie-r)) * .6) 100%, calc(var(--genie-l) * .4) 100%); animation-timing-function: linear; }
-  100% { opacity: .6; clip-path: polygon(var(--genie-l) 0, var(--genie-r) 0, var(--genie-r) 100%, var(--genie-l) 100%); }
+.panel-reveal__notch-rise { position: absolute; inset: 0; }
+.panel-reveal__notch {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 14px;
+  color: var(--notch-accent, transparent);
+  transform: translateX(var(--notch-x, 0px));
 }
-/* Single column: a plain vertical emerge (the card spans the row, so there is no funnel). */
-@media (max-width: 639px) {
-  @keyframes panel-genie-in { from { opacity: .6; } 30%, to { opacity: 1; } }
-  @keyframes panel-genie-out { from, 70% { opacity: 1; } to { opacity: .6; } }
+.panel-reveal__notch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  clip-path: polygon(1px 13px, 12.4px 1.6px, 13.15px 0.85px, 14.85px 0.85px, 15.6px 1.6px, 27px 13px, 25.586px 13px, 14.586px 2px, 13.414px 2px, 2.414px 13px);
 }
-/* Reduced motion: no travel, no warp, no height animation; a short fade only. */
-@media (prefers-reduced-motion: reduce) {
-  .panel-reveal[data-phase] { animation: none; }
-  .panel-reveal[data-phase="opening"] .panel-reveal__clip { animation: panel-fade-in var(--genie-ms, 100ms) linear both; }
-  .panel-reveal[data-phase="closing"] .panel-reveal__clip { animation: panel-fade-out var(--genie-ms, 100ms) linear both; }
-  @keyframes panel-fade-in { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes panel-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.panel-reveal__notch-fill {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(1.414px 14px, 13.414px 2px, 14.586px 2px, 26.586px 14px);
 }
+.panel-reveal__notch-cx, .panel-reveal__notch-cy { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.panel-reveal__notch-cx { transform: translateX(calc(var(--notch-x, 0px) * -1)); }
+.panel-reveal__notch-back, .panel-reveal__notch-bg { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 0 solid transparent; background-origin: border-box; }
+/* Decorative only: the selected card's own styling stays the cue, so forced colours simply drop the notch. */
+@media (forced-colors: active) { .panel-reveal__notch-track { display: none; } }

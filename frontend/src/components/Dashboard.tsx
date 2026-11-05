@@ -58,6 +58,7 @@ import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
 import { genieDurationMs } from "../lib/genieDuration";
+import { EMERGE_MS, REDUCED_MS } from "../lib/panelEmerge";
 import { PanelReveal } from "./PanelReveal";
 import { usePanelPresence } from "../hooks/usePanelPresence";
 import { Button, Dialog, Panel, type LiveTone } from "./ui";
@@ -66,6 +67,14 @@ import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { UpdateDialog } from "./UpdateDialog";
 
 type ConnectionPanel = "planning-center" | "midi" | "propresenter" | "lights" | "backend";
+/** The aria-controls id of each connection card, used to find the card a panel belongs to. */
+const PANEL_CONTROLS: Record<ConnectionPanel, string> = {
+  "planning-center": "planning-center-configuration",
+  midi: "midi-configuration",
+  propresenter: "propresenter-configuration",
+  lights: "lighting-configuration",
+  backend: "backend-configuration",
+};
 type HeaderNotification = {
   id: number;
   message: string;
@@ -824,8 +833,8 @@ export function Dashboard({
     ? frozenRemaining
     : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
-  const revealMs = reducedMotion ? 100 : genieDurationMs(300);
-  const { shown, phase } = usePanelPresence(canConfigure ? activeConnection : null, revealMs);
+  const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
+  const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
   const [panelDirty, setPanelDirty] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
@@ -1041,53 +1050,106 @@ export function Dashboard({
         />
       </section>
 
-      {canConfigure && shown === "planning-center" && (
-        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"planning-center-configuration\"]")}>
-        <PlanningCenterSetupPanel
-          onDirtyChange={setPanelDirty}
-          error={planningCenterError}
-          onRetryLoad={retryLoads}
-          message={planningCenterMessage}
-          onClose={closeConnection}
-          onDisconnectOAuth={disconnectPlanningCenter}
-          onLoadServiceTypes={loadPlanningCenterServiceTypes}
-          onReload={() => dispatch("reload_plan")}
-          onSave={savePlanningCenter}
-          onSelectPlan={selectPlan}
-          onSignInOAuth={signInPlanningCenterOAuth}
-          onTest={testPlanningCenterConnection}
-          pendingAction={pendingAction}
-          pendingOperation={pendingPlanningCenterOperation}
-          pendingPlanId={pendingPlanId}
-          serviceTypes={planningCenterServiceTypes}
-          settings={settings}
-          state={state}
-          status={planningCenterStatus}
-        />
-        </PanelReveal>
-      )}
-
-      {canConfigure && shown === "midi" && (
-        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"midi-configuration\"]")}>
-        <MidiSetupPanel
-          playback={playback}
-          error={midiError}
-          onRetryLoad={retryLoads}
-          message={midiMessage}
-          midi={midi}
-          messages={midiMessages}
-          onClose={closeConnection}
-          onDirtyChange={setPanelDirty}
-          onRefresh={refreshMidi}
-          onSelect={selectMidi}
-          onSaveSettings={saveMidiSettings}
-          pendingOperation={pendingMidiOperation}
-          pendingSettingsSave={pendingSettingsOperation}
-          settings={settings}
-          settingsError={settingsError}
-          settingsMessage={settingsMessage}
-          songs={state?.plan?.songs ?? []}
-        />
+      {canConfigure && shown && (
+        <PanelReveal phase={phase} durationMs={revealMs} triggerKey={shown} onCloseEnd={closeEnded} trigger={() => document.querySelector<HTMLElement>(`[aria-controls="${PANEL_CONTROLS[shown]}"]`)}>
+          {shown === "planning-center" && (
+          <PlanningCenterSetupPanel
+            onDirtyChange={setPanelDirty}
+            error={planningCenterError}
+            onRetryLoad={retryLoads}
+            message={planningCenterMessage}
+            onClose={closeConnection}
+            onDisconnectOAuth={disconnectPlanningCenter}
+            onLoadServiceTypes={loadPlanningCenterServiceTypes}
+            onReload={() => dispatch("reload_plan")}
+            onSave={savePlanningCenter}
+            onSelectPlan={selectPlan}
+            onSignInOAuth={signInPlanningCenterOAuth}
+            onTest={testPlanningCenterConnection}
+            pendingAction={pendingAction}
+            pendingOperation={pendingPlanningCenterOperation}
+            pendingPlanId={pendingPlanId}
+            serviceTypes={planningCenterServiceTypes}
+            settings={settings}
+            state={state}
+            status={planningCenterStatus}
+          />
+        )}
+          {shown === "midi" && (
+          <MidiSetupPanel
+            playback={playback}
+            error={midiError}
+            onRetryLoad={retryLoads}
+            message={midiMessage}
+            midi={midi}
+            messages={midiMessages}
+            onClose={closeConnection}
+            onDirtyChange={setPanelDirty}
+            onRefresh={refreshMidi}
+            onSelect={selectMidi}
+            onSaveSettings={saveMidiSettings}
+            pendingOperation={pendingMidiOperation}
+            pendingSettingsSave={pendingSettingsOperation}
+            settings={settings}
+            settingsError={settingsError}
+            settingsMessage={settingsMessage}
+            songs={state?.plan?.songs ?? []}
+          />
+        )}
+          {shown === "propresenter" && (
+          <ProPresenterSetupPanel
+            onDirtyChange={setPanelDirty}
+            error={propresenterError}
+            onRetryLoad={retryLoads}
+            message={propresenterMessage}
+            onClose={closeConnection}
+            onRefreshTimers={refreshProPresenter}
+            onSave={saveProPresenter}
+            onTest={runProPresenterTest}
+            pendingOperation={pendingProPresenterOperation}
+            propresenter={propresenter}
+          />
+        )}
+          {shown === "lights" && (
+          <LightingSetupPanel
+            onDirtyChange={setPanelDirty}
+            connectionStatus={connectionViews.lights.status}
+            error={lightingError}
+            onRetryLoad={retryLoads}
+            lights={lights}
+            message={lightingMessage}
+            onClearAllCues={clearAllLightingCues}
+            onSimplifyLooks={simplifyLightingLooks}
+            onClose={closeConnection}
+            onRefresh={refreshLighting}
+            onSaveCues={saveLightingCues}
+            onPressPad={pressLightingPad}
+            onSavePads={saveLightingPads}
+            onUndoCapture={undoLightingCapture}
+            onClearLoudness={clearLightingLoudness}
+            onSaveSettings={saveLighting}
+            onTest={sendLightingTest}
+            onTestOsc={sendOscLightingTest}
+            pendingOperation={pendingLightingOperation}
+            settings={settings}
+            state={state}
+          />
+        )}
+          {shown === "backend" && (
+          <BackendSetupPanel
+            onDirtyChange={setPanelDirty}
+            error={settingsError}
+            onRetryLoad={retryLoads}
+            health={health}
+            live={live}
+            message={settingsMessage}
+            onClose={closeConnection}
+            onSave={saveGeneralSettings}
+            pending={pendingSettingsOperation}
+            settings={settings}
+            state={state}
+          />
+        )}
         </PanelReveal>
       )}
 
@@ -1104,69 +1166,6 @@ export function Dashboard({
           </>
         }
       />
-
-      {canConfigure && shown === "propresenter" && (
-        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"propresenter-configuration\"]")}>
-        <ProPresenterSetupPanel
-          onDirtyChange={setPanelDirty}
-          error={propresenterError}
-          onRetryLoad={retryLoads}
-          message={propresenterMessage}
-          onClose={closeConnection}
-          onRefreshTimers={refreshProPresenter}
-          onSave={saveProPresenter}
-          onTest={runProPresenterTest}
-          pendingOperation={pendingProPresenterOperation}
-          propresenter={propresenter}
-        />
-        </PanelReveal>
-      )}
-
-      {canConfigure && shown === "lights" && (
-        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"lighting-configuration\"]")}>
-        <LightingSetupPanel
-          onDirtyChange={setPanelDirty}
-          connectionStatus={connectionViews.lights.status}
-          error={lightingError}
-          onRetryLoad={retryLoads}
-          lights={lights}
-          message={lightingMessage}
-          onClearAllCues={clearAllLightingCues}
-          onSimplifyLooks={simplifyLightingLooks}
-          onClose={closeConnection}
-          onRefresh={refreshLighting}
-          onSaveCues={saveLightingCues}
-          onPressPad={pressLightingPad}
-          onSavePads={saveLightingPads}
-          onUndoCapture={undoLightingCapture}
-          onClearLoudness={clearLightingLoudness}
-          onSaveSettings={saveLighting}
-          onTest={sendLightingTest}
-          onTestOsc={sendOscLightingTest}
-          pendingOperation={pendingLightingOperation}
-          settings={settings}
-          state={state}
-        />
-        </PanelReveal>
-      )}
-
-      {canConfigure && shown === "backend" && (
-        <PanelReveal phase={phase} durationMs={revealMs} trigger={() => document.querySelector<HTMLElement>("[aria-controls=\"backend-configuration\"]")}>
-        <BackendSetupPanel
-          onDirtyChange={setPanelDirty}
-          error={settingsError}
-          onRetryLoad={retryLoads}
-          health={health}
-          live={live}
-          message={settingsMessage}
-          onClose={closeConnection}
-          onSave={saveGeneralSettings}
-          pending={pendingSettingsOperation}
-          settings={settings}
-          state={state}
-        />
-        </PanelReveal>
-      )}
 
       <DashboardGrid
         canEditLayout={canConfigure}

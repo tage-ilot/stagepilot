@@ -28,8 +28,11 @@ export function ScanProgress(props: ScanProgressProps) {
     update(); media?.addEventListener?.("change", update);
     return () => media?.removeEventListener?.("change", update);
   }, []);
+  // The loop only runs while a scan is running or finishing. An idle loop would request a frame on every vsync for as long
+  // as the panel is mounted, which keeps the main thread rendering (and re-laying out native controls) while nothing moves.
   useEffect(() => {
-    let frame: number;
+    let frame = 0;
+    const active = () => current.current.state === "running" || clock.current.wasRunning;
     const tick = (now: number) => {
       const p = current.current;
       const c = clock.current;
@@ -58,11 +61,11 @@ export function ScanProgress(props: ScanProgressProps) {
       }
       c.last = now;
       setValue(c.value);
-      frame = requestAnimationFrame(tick);
+      if (active()) frame = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
+    if (active()) frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [reduced]);
+  }, [reduced, props.state]);
   if (!visible || props.state === "failed") return <>{props.children}</>;
   const determinate = props.total > 0 || props.state === "done";
   return <div className="py-2" aria-live="polite">
