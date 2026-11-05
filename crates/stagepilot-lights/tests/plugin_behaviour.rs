@@ -55,6 +55,7 @@ fn osc_cue(at: f64, address: &str, args: Vec<OscArgument>, label: &str) -> OscLi
         messages: Vec::new(),
         source: Default::default(),
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 
@@ -74,6 +75,7 @@ fn settings(
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     );
     LightsSettings {

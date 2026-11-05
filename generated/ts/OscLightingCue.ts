@@ -19,4 +19,11 @@ source?: OscCueSource,
  * Set when someone changed a captured look by hand, so a later recording does not replace it
  * silently. Left out of the saved file while false.
  */
-edited?: boolean, };
+edited?: boolean, 
+/**
+ * Seconds the row's messages take to reach their values, starting at `at_seconds`. Every
+ * numeric message ramps linearly from that address's value just before the row; options,
+ * text and anything that is not a plain number step at once. `0` (the default, left out of
+ * the saved file) is an instant change, exactly as rows always were.
+ */
+fade_seconds?: number, };

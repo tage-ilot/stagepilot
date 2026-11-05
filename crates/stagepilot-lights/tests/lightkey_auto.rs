@@ -25,6 +25,7 @@ fn row(source: OscCueSource) -> OscLightingCue {
         }],
         source,
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 
@@ -37,6 +38,7 @@ fn map(rows: Vec<OscLightingCue>, capture: Option<CaptureStatus>) -> SongLightin
         loudness: None,
         captured_edited: false,
         capture,
+        effects: vec![],
     }
 }
 

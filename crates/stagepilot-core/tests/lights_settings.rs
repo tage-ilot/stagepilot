@@ -31,6 +31,7 @@ fn configured_lights() -> LightsSettings {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     );
     lights

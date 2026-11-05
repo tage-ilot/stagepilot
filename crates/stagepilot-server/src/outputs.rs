@@ -313,11 +313,12 @@ fn looks_sink(
             let _guard = cue_lock.lock().await;
             let mut lights = settings_service.effective_runtime_settings().lights;
             let existing = lights.cue_maps.get(&looks.song_key);
-            let map = match stagepilot_lights::lightkey_looks::save_capture(
+            let map = match stagepilot_lights::lightkey_looks::save_capture_with_effects(
                 existing,
                 &looks.song_key,
                 &looks.song_title,
                 looks.rows,
+                looks.effects,
                 looks.status,
             ) {
                 stagepilot_lights::lightkey_looks::CaptureSave::Saved(map) => map,
@@ -368,6 +369,7 @@ fn loudness_sink(
                     loudness: None,
                     captured_edited: false,
                     capture: None,
+                    effects: Vec::new(),
                 });
             map.loudness = Some(stagepilot_lights::loudness::merge_loudness(
                 map.loudness.as_ref(),

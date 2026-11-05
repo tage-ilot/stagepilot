@@ -641,6 +641,160 @@ fn too_long(errors: &mut Errors, path: &[Value], key: &str, len: usize, max: usi
 
 // ---- lights -----------------------------------------------------------------------------------
 
+/// Rules for the `effects` of one song (finite numbers, ranges, caps). Fixture names follow the
+/// look-message address rule; property names are the last address part, so no `/`.
+fn validate_effects(effects: &[LightingEffect], errors: &mut Errors, path: &[Value]) {
+    if effects.len() > MAX_EFFECTS_PER_SONG {
+        too_long(errors, path, "effects", effects.len(), MAX_EFFECTS_PER_SONG);
+    }
+    let mut step_total = 0usize;
+    for (i, effect) in effects.iter().enumerate() {
+        let mut ep = path.to_vec();
+        ep.push(json!("effects"));
+        ep.push(json!(i));
+        check_range(
+            errors,
+            &ep,
+            "start_seconds",
+            effect.start_seconds,
+            Some(0.0),
+            Some(86_399.0),
+            None,
+        );
+        check_range(
+            errors,
+            &ep,
+            "end_seconds",
+            effect.end_seconds,
+            Some(effect.start_seconds.max(0.0)),
+            Some(86_400.0),
+            None,
+        );
+        check_range(
+            errors,
+            &ep,
+            "period_seconds",
+            effect.period_seconds,
+            Some(MIN_EFFECT_PERIOD_SECONDS),
+            Some(MAX_EFFECT_PERIOD_SECONDS),
+            None,
+        );
+        if effect.members.is_empty() || effect.members.len() > MAX_EFFECT_MEMBERS {
+            if effect.members.is_empty() {
+                value_error(
+                    errors,
+                    &ep,
+                    "An effect needs at least one member.",
+                    json!(effect.members.len()),
+                );
+            } else {
+                too_long(
+                    errors,
+                    &ep,
+                    "members",
+                    effect.members.len(),
+                    MAX_EFFECT_MEMBERS,
+                );
+            }
+        }
+        if effect.cycle.is_empty() {
+            value_error(
+                errors,
+                &ep,
+                "An effect needs at least one cycle step.",
+                json!(0),
+            );
+        }
+        if effect.cycle.len() > MAX_EFFECT_CYCLE_STEPS {
+            too_long(
+                errors,
+                &ep,
+                "cycle",
+                effect.cycle.len(),
+                MAX_EFFECT_CYCLE_STEPS,
+            );
+        }
+        step_total += effect.cycle.len();
+        for member in &effect.members {
+            let address = format!("/fixture/{}/overrides/x", member.fixture);
+            if member.fixture.is_empty()
+                || member.fixture.contains('/')
+                || validate_osc_message_address(&address).is_err()
+            {
+                value_error(
+                    errors,
+                    &ep,
+                    "An effect member needs a fixture name without '/'.",
+                    json!(member.fixture),
+                );
+            }
+            check_range(
+                errors,
+                &ep,
+                "offset_seconds",
+                member.offset_seconds,
+                Some(0.0),
+                Some(effect.period_seconds.clamp(0.0, MAX_EFFECT_PERIOD_SECONDS)),
+                None,
+            );
+        }
+        for step in &effect.cycle {
+            check_range(
+                errors,
+                &ep,
+                "at_seconds",
+                step.at_seconds,
+                Some(0.0),
+                Some(effect.period_seconds.clamp(0.0, MAX_EFFECT_PERIOD_SECONDS)),
+                None,
+            );
+            check_range(
+                errors,
+                &ep,
+                "fade_seconds",
+                step.fade_seconds,
+                Some(0.0),
+                Some(MAX_FADE_SECONDS),
+                None,
+            );
+            if step.property.is_empty() || step.property.contains('/') || step.property.len() > 128
+            {
+                value_error(
+                    errors,
+                    &ep,
+                    "An effect step needs a property name without '/'.",
+                    json!(step.property),
+                );
+            }
+            if step.value.is_empty() || step.value.len() > MAX_EFFECT_VALUES {
+                value_error(
+                    errors,
+                    &ep,
+                    "An effect step needs 1 to 8 numbers.",
+                    json!(step.value.len()),
+                );
+            }
+            if step.value.iter().any(|v| !v.is_finite()) {
+                value_error(
+                    errors,
+                    &ep,
+                    "An effect step value must be a finite number.",
+                    Value::Null,
+                );
+            }
+        }
+    }
+    if step_total > MAX_EFFECT_CYCLE_STEPS_PER_SONG {
+        too_long(
+            errors,
+            path,
+            "effects",
+            step_total,
+            MAX_EFFECT_CYCLE_STEPS_PER_SONG,
+        );
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LightingCue {
@@ -664,6 +818,12 @@ fn velocity_127() -> u8 {
 /// Cue times are kept to 0.1 s (the Live capture and timeline resolution).
 pub fn round_tenths(value: f64) -> f64 {
     (value * 10.0).round_ties_even() / 10.0
+}
+
+/// Times of fitted ramps and effects are kept to a millisecond (a ramp is fitted to samples a
+/// few milliseconds apart; 0.1 s would move its corners).
+pub fn round_millis(value: f64) -> f64 {
+    (value * 1000.0).round_ties_even() / 1000.0
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -705,10 +865,21 @@ pub struct OscLightingCue {
     #[serde(default, skip_serializing_if = "is_false")]
     #[ts(optional, as = "Option<bool>")]
     pub edited: bool,
+    /// Seconds the row's messages take to reach their values, starting at `at_seconds`. Every
+    /// numeric message ramps linearly from that address's value just before the row; options,
+    /// text and anything that is not a plain number step at once. `0` (the default, left out of
+    /// the saved file) is an instant change, exactly as rows always were.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[ts(optional, as = "Option<f64>")]
+    pub fade_seconds: f64,
 }
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
 }
 
 /// One OSC message of a look row.
@@ -744,6 +915,80 @@ pub const MAX_OSC_ARGS_PER_MESSAGE: usize = 8;
 pub const MAX_OSC_STRING_CHARS: usize = 256;
 /// Most look messages one song may hold in total (sized for about 6,000, with headroom).
 pub const MAX_OSC_MESSAGES_PER_SONG: usize = 15_000;
+/// Longest a row (or an effect step) may take to reach its value. A captured ramp is at most
+/// 60 s; hand-made fades may be longer.
+pub const MAX_FADE_SECONDS: f64 = 600.0;
+/// Most effects (detected loops) one song may hold. A busy rig has a handful per group; 200
+/// leaves room for every group changing its loop several times in a song.
+pub const MAX_EFFECTS_PER_SONG: usize = 200;
+/// Most fixtures one effect may drive (a rig has about 106 addresses; same bound as a look row).
+pub const MAX_EFFECT_MEMBERS: usize = 256;
+/// Most cycle steps one effect may hold (a loop of 60 s fitted at 25 ms would be 2,400 raw
+/// points; the fit keeps tens).
+pub const MAX_EFFECT_CYCLE_STEPS: usize = 1_024;
+/// Most cycle steps in all effects of one song.
+pub const MAX_EFFECT_CYCLE_STEPS_PER_SONG: usize = 20_000;
+/// Longest period of an effect, seconds; the shortest is `MIN_EFFECT_PERIOD_SECONDS`.
+pub const MAX_EFFECT_PERIOD_SECONDS: f64 = 600.0;
+pub const MIN_EFFECT_PERIOD_SECONDS: f64 = 0.1;
+/// Most numbers one effect step may carry (a colour has 3; same bound as message arguments).
+pub const MAX_EFFECT_VALUES: usize = MAX_OSC_ARGS_PER_MESSAGE;
+
+/// One fixture that plays an effect, shifted in phase (a chase is the same loop at different
+/// offsets).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct EffectMember {
+    /// Fixture name as in `/fixture/<name>/overrides/<property>`.
+    pub fixture: String,
+    /// The fixture plays the cycle this many seconds later than the effect's start.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[ts(optional, as = "Option<f64>")]
+    pub offset_seconds: f64,
+}
+
+/// One ramp of an effect's cycle: from `at_seconds` (inside the cycle) the property reaches
+/// `value` over `fade_seconds`, starting from the value the previous step of the same property
+/// ended on (the first step starts from the last step's value, so the loop closes).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct EffectStep {
+    pub at_seconds: f64,
+    /// Property name: the last part of `/fixture/<name>/overrides/<property>`.
+    pub property: String,
+    /// The value reached (one number per argument: 1 for a dimmer, 3 for a colour).
+    pub value: Vec<f64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[ts(optional, as = "Option<f64>")]
+    pub fade_seconds: f64,
+}
+
+/// A repeating pattern found in the recording, stored as ONE item: from `start_seconds` to
+/// `end_seconds` every member fixture plays `cycle` over and over, `period_seconds` long. The
+/// effect drives the properties named in `cycle` of its members for that window; outside it the
+/// rows apply. It is edited as a unit and is never changed by editing rows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightingEffect {
+    #[serde(default = "Uuid::new_v4")]
+    #[ts(as = "String")]
+    pub id: Uuid,
+    #[serde(default)]
+    pub label: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub period_seconds: f64,
+    pub members: Vec<EffectMember>,
+    pub cycle: Vec<EffectStep>,
+    /// Where the effect came from. Left out of the saved file while `manual`.
+    #[serde(default, skip_serializing_if = "OscCueSource::is_manual")]
+    #[ts(optional, as = "Option<OscCueSource>")]
+    pub source: OscCueSource,
+    /// Set when someone changed a captured effect by hand. Left out while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub edited: bool,
+}
 
 impl OscLightingCue {
     /// What the row sends: its `messages`, or else the single address and arguments.
@@ -831,6 +1076,11 @@ pub struct SongLightingCueMap {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub capture: Option<CaptureStatus>,
+    /// Repeating patterns found in the recording (see [`LightingEffect`]). Absent on older cue
+    /// maps and on songs with none: they load and save back unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<LightingEffect>>")]
+    pub effects: Vec<LightingEffect>,
 }
 
 /// The state of a song's captured rows (`SongLightingCueMap::capture`).
@@ -863,6 +1113,10 @@ impl SongLightingCueMap {
         self.osc_cues
             .iter()
             .any(|row| row.source == OscCueSource::Captured)
+            || self
+                .effects
+                .iter()
+                .any(|effect| effect.source == OscCueSource::Captured)
     }
 
     /// Hand-built rows: manual look rows and MIDI cues.
@@ -872,6 +1126,10 @@ impl SongLightingCueMap {
                 .osc_cues
                 .iter()
                 .any(|row| row.source != OscCueSource::Captured)
+            || self
+                .effects
+                .iter()
+                .any(|effect| effect.source != OscCueSource::Captured)
     }
 
     /// Captured rows exist and a complete pass produced them.
@@ -1147,7 +1405,16 @@ impl LightsSettings {
                 cue.label = cue.label.trim().to_string();
             }
             for cue in &mut map.osc_cues {
-                cue.at_seconds = round_tenths(cue.at_seconds);
+                // Fitted (captured) rows and fades keep millisecond times; hand-made instant
+                // rows stay on the 0.1 s grid.
+                cue.at_seconds = if cue.fade_seconds > 0.0 || cue.source == OscCueSource::Captured {
+                    round_millis(cue.at_seconds)
+                } else {
+                    round_tenths(cue.at_seconds)
+                };
+                if cue.fade_seconds.is_finite() {
+                    cue.fade_seconds = round_millis(cue.fade_seconds);
+                }
                 cue.address = cue.address.trim().to_string();
                 cue.label = cue.label.trim().to_string();
                 for message in &mut cue.messages {
@@ -1159,9 +1426,32 @@ impl LightsSettings {
                     .total_cmp(&b.at_seconds)
                     .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
             });
+            // Rows at the same time: an instant change before a ramp (a ramp starts from the
+            // value the instant change set), then by id.
             map.osc_cues.sort_by(|a, b| {
                 a.at_seconds
                     .total_cmp(&b.at_seconds)
+                    .then_with(|| a.fade_seconds.total_cmp(&b.fade_seconds))
+                    .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
+            });
+            for effect in &mut map.effects {
+                effect.label = effect.label.trim().to_string();
+                effect.start_seconds = round_millis(effect.start_seconds);
+                effect.end_seconds = round_millis(effect.end_seconds);
+                effect.period_seconds = round_millis(effect.period_seconds);
+                for member in &mut effect.members {
+                    member.fixture = member.fixture.trim().to_string();
+                    member.offset_seconds = round_millis(member.offset_seconds);
+                }
+                for step in &mut effect.cycle {
+                    step.property = step.property.trim().to_string();
+                    step.at_seconds = round_millis(step.at_seconds);
+                    step.fade_seconds = round_millis(step.fade_seconds);
+                }
+            }
+            map.effects.sort_by(|a, b| {
+                a.start_seconds
+                    .total_cmp(&b.start_seconds)
                     .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
             });
         }
@@ -1302,6 +1592,15 @@ impl LightsSettings {
                         value_error(errors, &mp, m, json!(cue.address));
                     }
                 }
+                check_range(
+                    errors,
+                    &mp,
+                    "fade_seconds",
+                    cue.fade_seconds,
+                    Some(0.0),
+                    Some(MAX_FADE_SECONDS),
+                    None,
+                );
                 if cue.messages.len() > MAX_OSC_MESSAGES_PER_ROW {
                     too_long(
                         errors,
@@ -1353,6 +1652,7 @@ impl LightsSettings {
                     MAX_OSC_MESSAGES_PER_SONG,
                 );
             }
+            validate_effects(&map.effects, errors, &mp);
             if let Some(loudness) = &map.loudness {
                 check_range(
                     errors,

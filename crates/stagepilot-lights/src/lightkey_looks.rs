@@ -1,9 +1,16 @@
-//! Thinning and merging of recorded fixture changes into a few smooth timeline "look" rows.
-//! Pure: no I/O, no clock.
+//! Recorded fixture changes into timeline "look" rows.
+//!
+//! A capture is fitted with ramps and effects by `crate::lightkey_smooth` and
+//! `crate::lightkey_effects` ([`LookRecorder::smooth`]). The thin-and-merge functions
+//! ([`thin`], [`merge`], [`simplify`], [`simplify_song`]) are the older way of making rows and
+//! still tidy up captures made before ramps existed: they only ever touch instant rows
+//! (`fade_seconds` 0) of a song with no effects. Pure: no I/O, no clock.
 
 use crate::lightkey_fixtures::{is_replayable, FixtureArg, FixtureCommand, FixtureState};
+use crate::lightkey_smooth::{self, SmoothCapture, SmoothParams};
 use stagepilot_core::config::{
-    round_tenths, CaptureStatus, OscCueSource, OscLightingCue, OscMessage, SongLightingCueMap,
+    round_tenths, CaptureStatus, LightingEffect, OscCueSource, OscLightingCue, OscMessage,
+    SongLightingCueMap, MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG,
     MAX_OSC_MESSAGES_PER_ROW, MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -306,6 +313,18 @@ impl LookRecorder {
         kept
     }
 
+    /// The ramps, steps and effects these changes make (see `crate::lightkey_smooth`). Changes
+    /// after `duration` fold onto it as in [`thin`]; nothing is dropped.
+    pub fn smooth(&self, duration: f64, params: &SmoothParams) -> SmoothCapture {
+        let baseline = self.baseline.commands();
+        lightkey_smooth::fit(&baseline, &self.observed, duration, params)
+    }
+
+    /// The raw baseline and changes (the report compares a fit against them).
+    pub fn raw(&self) -> (Vec<FixtureCommand>, &[(f64, FixtureCommand)]) {
+        (self.baseline.commands(), &self.observed)
+    }
+
     /// The rows these changes make at this Detail `interval` (see [`thin`] and [`merge`]).
     /// The last change of an address after `duration` is folded into the final row; it is never
     /// fatal.
@@ -368,6 +387,7 @@ pub fn look_rows(looks: &[Look]) -> Vec<OscLightingCue> {
                     .collect(),
                 source: OscCueSource::Captured,
                 edited: false,
+                fade_seconds: 0.0,
             });
         }
     }
@@ -375,13 +395,24 @@ pub fn look_rows(looks: &[Look]) -> Vec<OscLightingCue> {
 }
 
 /// The song's cue map with its captured rows replaced by `rows`. Manual rows and MIDI cues stay.
-/// `None` when the result would pass the per-song row or message caps (the caller retries at a
-/// coarser Detail).
+/// `None` when the result would pass the per-song caps (the caller retries with a looser fit).
 pub fn replace_captured(
     existing: Option<&SongLightingCueMap>,
     song_key: &str,
     song_title: &str,
     rows: Vec<OscLightingCue>,
+) -> Option<SongLightingCueMap> {
+    replace_captured_with_effects(existing, song_key, song_title, rows, Vec::new())
+}
+
+/// [`replace_captured`] that also replaces the song's captured effects by `effects`. Manual
+/// (hand-made) effects stay.
+pub fn replace_captured_with_effects(
+    existing: Option<&SongLightingCueMap>,
+    song_key: &str,
+    song_title: &str,
+    rows: Vec<OscLightingCue>,
+    effects: Vec<LightingEffect>,
 ) -> Option<SongLightingCueMap> {
     let mut map = existing.cloned().unwrap_or_else(|| SongLightingCueMap {
         song_key: song_key.to_string(),
@@ -391,20 +422,16 @@ pub fn replace_captured(
         loudness: None,
         captured_edited: false,
         capture: None,
+        effects: Vec::new(),
     });
     map.osc_cues
         .retain(|row| row.source != OscCueSource::Captured);
+    map.effects
+        .retain(|effect| effect.source != OscCueSource::Captured);
     map.captured_edited = false;
     map.osc_cues.extend(rows);
-    let messages: usize = map
-        .osc_cues
-        .iter()
-        .map(|row| row.messages.len().max(1))
-        .sum();
-    if map.osc_cues.len() > MAX_OSC_ROWS_PER_SONG || messages > MAX_OSC_MESSAGES_PER_SONG {
-        return None;
-    }
-    Some(map)
+    map.effects.extend(effects);
+    within_caps(&map).then_some(map)
 }
 
 /// What saving a capture pass did to a song's cue map.
@@ -429,6 +456,18 @@ pub fn save_capture(
     rows: Vec<OscLightingCue>,
     status: CaptureStatus,
 ) -> CaptureSave {
+    save_capture_with_effects(existing, song_key, song_title, rows, Vec::new(), status)
+}
+
+/// [`save_capture`] for a pass that also found effects.
+pub fn save_capture_with_effects(
+    existing: Option<&SongLightingCueMap>,
+    song_key: &str,
+    song_title: &str,
+    rows: Vec<OscLightingCue>,
+    effects: Vec<LightingEffect>,
+    status: CaptureStatus,
+) -> CaptureSave {
     if let Some(old) = existing.filter(|map| map.has_captured_rows()) {
         let stored = old.capture.as_ref();
         let keep = if status.complete {
@@ -442,7 +481,7 @@ pub fn save_capture(
             return CaptureSave::Kept;
         }
     }
-    match replace_captured(existing, song_key, song_title, rows) {
+    match replace_captured_with_effects(existing, song_key, song_title, rows, effects) {
         Some(mut map) => {
             map.capture = Some(status);
             CaptureSave::Saved(map)
@@ -476,6 +515,7 @@ fn fixture_arg(arg: &stagepilot_core::config::OscArgument) -> FixtureArg {
 /// fixture override.
 fn simplifiable(row: &OscLightingCue) -> bool {
     row.source == OscCueSource::Captured
+        && row.fade_seconds == 0.0
         && !row.messages.is_empty()
         && row.messages.iter().all(|m| {
             is_replayable(&FixtureCommand::new(
@@ -490,6 +530,26 @@ fn simplifiable(row: &OscLightingCue) -> bool {
 /// are not fixture overrides stay exactly as they are. The result is not checked against the
 /// per-song caps here; `None` means the song has no captured rows to simplify.
 pub fn simplify_song(map: &SongLightingCueMap, interval: f64) -> Option<Simplified> {
+    if is_smooth(map) {
+        // Ramps start from the value the row before them left; thinning instant rows around a
+        // ramp, or dropping the rows an effect hands over to, would move it. A smooth song is
+        // already fitted: report it unchanged, effects and fades included.
+        let rows = map
+            .osc_cues
+            .iter()
+            .filter(|r| r.source == OscCueSource::Captured);
+        let (n, m) = rows.fold((0, 0), |(n, m), r| (n + 1, m + r.messages.len()));
+        if n == 0 && map.effects.is_empty() {
+            return None;
+        }
+        return Some(Simplified {
+            map: map.clone(),
+            rows_before: n,
+            rows_after: n,
+            messages_before: m,
+            messages_after: m,
+        });
+    }
     let mut rows: Vec<&OscLightingCue> = map.osc_cues.iter().filter(|r| simplifiable(r)).collect();
     if rows.is_empty() {
         return None;
@@ -530,10 +590,20 @@ pub fn simplify_song(map: &SongLightingCueMap, interval: f64) -> Option<Simplifi
     })
 }
 
-/// Whether a cue map is within the per-song row and message caps.
+/// Whether the song carries ramps (a row with a fade) or effects: [`simplify_song`] leaves such
+/// a song alone.
+pub fn is_smooth(map: &SongLightingCueMap) -> bool {
+    !map.effects.is_empty() || map.osc_cues.iter().any(|r| r.fade_seconds > 0.0)
+}
+
+/// Whether a cue map is within the per-song row, message, effect and cycle-step caps.
 pub fn within_caps(map: &SongLightingCueMap) -> bool {
     let messages: usize = map.osc_cues.iter().map(|r| r.messages.len().max(1)).sum();
-    map.osc_cues.len() <= MAX_OSC_ROWS_PER_SONG && messages <= MAX_OSC_MESSAGES_PER_SONG
+    let steps: usize = map.effects.iter().map(|e| e.cycle.len()).sum();
+    map.osc_cues.len() <= MAX_OSC_ROWS_PER_SONG
+        && messages <= MAX_OSC_MESSAGES_PER_SONG
+        && map.effects.len() <= MAX_EFFECTS_PER_SONG
+        && steps <= MAX_EFFECT_CYCLE_STEPS_PER_SONG
 }
 
 #[cfg(test)]
@@ -972,6 +1042,7 @@ mod tests {
             messages: vec![],
             source: OscCueSource::Manual,
             edited: false,
+            fade_seconds: 0.0,
         };
         let old_look = look_rows(&[Look {
             at_seconds: 1.0,
@@ -985,6 +1056,7 @@ mod tests {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         };
         let fresh = look_rows(&[Look {
             at_seconds: 2.0,
