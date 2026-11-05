@@ -24,6 +24,7 @@ fn row(at: f64, messages: usize, tag: usize) -> OscLightingCue {
             .collect(),
         source: OscCueSource::Captured,
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 
@@ -36,6 +37,7 @@ fn song(key: &str, rows: Vec<OscLightingCue>) -> SongLightingCueMap {
         loudness: None,
         captured_edited: false,
         capture: None,
+        effects: Vec::new(),
     }
 }
 

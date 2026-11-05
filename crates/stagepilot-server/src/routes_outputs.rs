@@ -793,6 +793,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         loudness: None,
         captured_edited: false,
         capture: None,
+        effects: Vec::new(),
     };
     let mut check = LightsSettings::default();
     check.cue_maps.insert(song_key.clone(), probe);
@@ -821,6 +822,7 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         });
     let _ = value;
 
@@ -854,6 +856,8 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         loudness: existing.and_then(|m| m.loudness.clone()),
         captured_edited: false,
         capture: None,
+        // Effects are not part of this request: editing rows never changes or drops them.
+        effects: existing.map(|m| m.effects.clone()).unwrap_or_default(),
     };
     let merged = SongLightingCueMap {
         captured_edited: captured_edited_after_save(existing, &merged, is_midi),
@@ -862,7 +866,11 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
     };
     let merged = without_stale_capture(merged);
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
+    if !merged.cues.is_empty()
+        || !merged.osc_cues.is_empty()
+        || !merged.effects.is_empty()
+        || merged.loudness.is_some()
+    {
         updated.cue_maps.insert(song_key.clone(), merged.clone());
     } else {
         updated.cue_maps.remove(&song_key);
@@ -1072,6 +1080,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     messages: Vec::new(),
                     source: Default::default(),
                     edited: false,
+                    fade_seconds: 0.0,
                 };
                 cue_id = Some(cue.id);
                 osc_cues.push(cue);
@@ -1104,6 +1113,7 @@ async fn lights_capture(State(rt): State<Rt>, raw: Bytes) -> Json {
                     .get(song_key)
                     .is_some_and(|m| m.captured_edited),
                 capture: existing.and_then(|m| m.capture.clone()),
+                effects: existing.map(|m| m.effects.clone()).unwrap_or_default(),
             },
         );
         updated.normalise();
@@ -1174,10 +1184,15 @@ async fn lights_capture_undo(State(rt): State<Rt>, raw: Bytes) -> Json {
         loudness: existing.loudness.clone(),
         captured_edited: existing.captured_edited,
         capture: existing.capture.clone(),
+        effects: existing.effects.clone(),
     };
     let merged = without_stale_capture(merged);
     let mut updated = current.clone();
-    if !merged.cues.is_empty() || !merged.osc_cues.is_empty() || merged.loudness.is_some() {
+    if !merged.cues.is_empty()
+        || !merged.osc_cues.is_empty()
+        || !merged.effects.is_empty()
+        || merged.loudness.is_some()
+    {
         updated
             .cue_maps
             .insert(request.song_key.clone(), merged.clone());
@@ -1590,10 +1605,10 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
                 "msg": "Field required", "input": Value::Object(object.clone())})])
         }
     };
-    let detail = match parse_lightkey_settings(&object) {
-        Ok(request) => request.detail,
-        Err(errors) => return unprocessable(errors),
-    };
+    // `detail_level` is still validated (an older client sends it) but no longer changes the result.
+    if let Err(errors) = parse_lightkey_settings(&object) {
+        return unprocessable(errors);
+    }
     let apply = match object.get("apply") {
         None | Some(Value::Null) => false,
         Some(value) => match lax_bool("apply", value) {
@@ -1603,7 +1618,6 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
     };
     let _lock = rt.outputs.cue_lock.lock().await;
     let current = current_lights(&rt);
-    let detail = detail.unwrap_or(current.lightkey.detail);
     let respond = |accepted: bool, applied: bool, message: String, counts: [usize; 4]| {
         let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
         ok(to_value(&LightkeySimplifyResponse {
@@ -1617,7 +1631,7 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
         }))
     };
     let Some(result) = current.cue_maps.get(&song_key).and_then(|map| {
-        stagepilot_lights::lightkey_looks::simplify_song(map, detail.interval_seconds())
+        stagepilot_lights::lightkey_looks::simplify_song(map, SIMPLIFY_INTERVAL_SECONDS)
     }) else {
         return respond(
             false,
@@ -1637,7 +1651,7 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
         return respond(
             false,
             false,
-            format!("Nothing to simplify at this detail ({summary})."),
+            format!("Nothing to simplify ({summary})."),
             counts,
         );
     }
@@ -1645,7 +1659,7 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
         return respond(
             false,
             false,
-            format!("Still too many looks at this detail ({summary}); choose a coarser one."),
+            format!("Still too many looks after simplifying ({summary})."),
             counts,
         );
     }
@@ -1664,6 +1678,9 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
     }
     respond(true, true, format!("Simplified: {summary}."), counts)
 }
+
+/// The grid the older thin-and-merge step simplifies on (the former Normal detail).
+const SIMPLIFY_INTERVAL_SECONDS: f64 = 0.5;
 
 async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
     let object = match object_body(&raw) {
@@ -1777,7 +1794,7 @@ async fn lights_loudness_clear(State(rt): State<Rt>, raw: Bytes) -> Json {
         return lights_operation(&rt, false, "This song has no loudness.".into()).await;
     }
     let mut updated = current.clone();
-    if map.cues.is_empty() && map.osc_cues.is_empty() {
+    if map.cues.is_empty() && map.osc_cues.is_empty() && map.effects.is_empty() {
         updated.cue_maps.remove(&request.song_key);
     } else {
         updated

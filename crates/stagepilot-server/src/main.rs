@@ -141,6 +141,7 @@ fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLighti
         }],
         source: OscCueSource::Captured,
         edited: false,
+        fade_seconds: 0.0,
     };
     std::iter::once((
         "demo-battle-belongs".to_string(),
@@ -152,6 +153,7 @@ fn contract_lightkey_cue_maps() -> std::collections::BTreeMap<String, SongLighti
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     ))
     .collect()

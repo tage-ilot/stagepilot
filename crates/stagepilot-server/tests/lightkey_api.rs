@@ -427,6 +427,7 @@ fn captured_row(at: f64, address: &str, x: f64) -> stagepilot_core::config::OscL
         }],
         source: OscCueSource::Captured,
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 
@@ -440,6 +441,7 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
             song_key: "song-1".into(),
             song_title: "Holy Forever".into(),
             rows,
+            effects: vec![],
             status: complete(),
         })
     };
@@ -459,6 +461,7 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     );
     rt.settings_service.persist_lights(lights).unwrap();
@@ -488,6 +491,7 @@ async fn a_recording_past_the_timeline_caps_asks_for_a_coarser_detail() {
         song_key: "big".into(),
         song_title: "Big".into(),
         rows,
+        effects: vec![],
         status: complete(),
     })
     .await;
@@ -555,6 +559,7 @@ async fn seed_dense_song(rt: &Runtime, count: usize) -> Vec<uuid::Uuid> {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     );
     rt.settings_service.persist_lights(lights).unwrap();
@@ -697,6 +702,7 @@ async fn deleting_a_whole_captured_row_sets_the_song_flag_and_a_recording_clears
         song_key: "song-1".into(),
         song_title: "Holy Forever".into(),
         rows: vec![captured_row(1.0, "/fixture/P1/overrides/dimmer", 0.5)],
+        effects: vec![],
         status: complete(),
     })
     .await
@@ -748,6 +754,7 @@ async fn a_stale_cue_map_put_is_refused_with_409_and_the_fresh_recording_survive
         song_key: "song-1".into(),
         song_title: "Holy Forever".into(),
         rows: vec![captured_row(2.0, "/fixture/P1/overrides/dimmer", 0.9)],
+        effects: vec![],
         status: complete(),
     })
     .await

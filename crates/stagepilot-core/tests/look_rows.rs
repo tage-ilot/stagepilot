@@ -38,6 +38,7 @@ fn look(at: f64, messages: Vec<OscMessage>) -> OscLightingCue {
         messages,
         source: OscCueSource::Captured,
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 
@@ -53,6 +54,7 @@ fn with_cues(cues: Vec<OscLightingCue>) -> LightsSettings {
             loudness: None,
             captured_edited: false,
             capture: None,
+            effects: Vec::new(),
         },
     );
     lights

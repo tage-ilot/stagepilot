@@ -110,8 +110,8 @@ The strip has these controls:
   every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
   kept with its song time, measured from Lightkey's own DMX output with the
   clock difference between the two Macs removed. When the song ends (or Record
-  is turned off mid-song, or a new song starts) the changes are thinned and merged into rows, saved
-  into the song's lighting cue map with the normal, serialized save, and the raw
+  is turned off mid-song, or a new song starts) the changes are fitted with ramps and effects (see
+  Smooth capture), saved into the song's lighting cue map with the normal, serialized save, and the raw
   changes are discarded. A song is saved only if at least half of it was
   recorded and at least one fixture changed. **A pause never ends or saves a
   recording**, however late in the song: resuming in place carries on, and only
@@ -119,8 +119,8 @@ The strip has these controls:
   The last change of a fixture after the song's scheduled
   end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
   playhead during a recording discards it. Messages: `Recording <song>.`,
-  `Saved N looks to <song>'s timeline.` (`... (reduced detail, 0.5 s).` when the song was
-  too large for the chosen Detail and was saved at a coarser spacing), `Not saved: only X of Y seconds recorded.`
+  `Saved N looks (and M loops) to <song>'s timeline.` (`... (fitted loosely: tolerance x2 ...)`
+  when the song was too large for the caps and was fitted at a looser tolerance), `Not saved: only X of Y seconds recorded.`
 - **Replay | Record toggle.** One two-way control. *Replay* (the default) replays
   the captured lights: saved rows play through the normal timeline scheduler (see
   below). *Record* is for capturing and needs a connected link. Switching back to
@@ -155,48 +155,156 @@ hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
 An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or deleted
 (delete it by hand once you have re-recorded).
 
-### Detail: thinning and merging
+### Smooth capture: ramps and effects
 
-`lights.lightkey.detail` is `fine` (0.25 s), `normal` (0.5 s, default) or
-`coarse` (1 s); it can be changed through `PUT /api/v1/lights/lightkey/settings`
-(`{"detail_level": "fine"}`; `detail` is accepted as an older spelling). The status
-(`GET /api/v1/lights/lightkey`) reports it as `detail_level` and leaves it out while
-`normal`. Values are lower case. The same value is the interval and the row grid.
+A recording is fitted, not thinned. Lightkey's DMX output arrives as samples 2 to 25 ms
+apart; a song is 50,000 to 110,000 of them. The fit turns them into a few hundred timeline
+items that replay with smooth motion: straight-line **ramps** ("this changes over N
+seconds") and **effects** (a repeating pattern, stored once as a loop). The old Fine /
+Normal / Coarse **Detail** no longer changes anything: `lights.lightkey.detail` (the API's
+`detail_level`, or `detail`) is still accepted, stored and returned exactly as before so an
+older client and saved settings keep working, but the fit ignores it and the status
+messages no longer mention it.
 
-1. **Thin.** Per address a change is kept only if at least one interval has
-   passed since the last kept one. The last value of a run is always kept, and so
-   are big jumps: a dimmer to or from 0 or full, a colour/level jump past 0.25,
-   an angle jump past 25 degrees, and any non-number or option change.
-2. **Group on the grid.** Kept changes land on the nearest multiple of the
-   interval, so one row holds everything that changed in that slot (an address
-   changed twice in a slot keeps its last value). Idle slots make no row. Changes
-   at or before time 0 (and the start value of any address that moves later)
-   become a row at 0.0. Row times are stored to 0.1 s, so at Fine a row at 0.25 s
-   is stored at 0.2 s and one at 0.75 s at 0.8 s.
-3. **Merge.** One message per address per row (last wins); a message equal to
-   the address's previous kept value is dropped; rows left empty are dropped; a
-   row that only repeats addresses of the row before it with values within
-   tolerance (colour and dimmer 2 %, angles 1 degree) of the last kept value is
-   folded into that earlier row. Comparing with the last kept value means the
-   replayed value never drifts further than the tolerance from the recorded one.
+**Rows with a fade.** A look row may carry `fade_seconds` (default 0, left out of the
+saved file while 0, so every row saved before this change loads and saves back
+unchanged). Every message in the row reaches its value over `fade_seconds`, starting at
+the row's `at_seconds`, in a straight line from that address's value just before the row.
+Options, text, a changed argument count and an address with no earlier value step at the
+row's time. A row that starts while an earlier ramp of the same address is still running
+continues from where that ramp is (no jump). Rows at the same time apply instant ones
+first, then ramps. Row times and fades are stored to the millisecond (hand-made instant
+rows stay on the 0.1 s grid).
 
-A song that would still pass the per-song caps (1,000 rows, 15,000 messages
-including the manual rows) is saved at twice the interval, up to six times.
-The status message then says which spacing was used (`Saved 88 looks to <song>'s
-timeline (reduced detail, 1 s).`); the capture is never dropped for size.
-Motion is steppier on replay than the original (0.5 s steps at Normal); Fine is
-the remedy.
+**The ramp fit.** Per address (`/fixture/<name>/overrides/<property>`), the samples are fitted
+with a greedy piecewise-linear line through the samples:
+
+| Property | Largest error |
+|---|---|
+| level (dimmer, zoom, focus...) and each colour channel | 3 % (0.03 of the 0..1 range) |
+| angle (pan, tilt, ...Angle, rotation) | 1.5 degrees |
+
+A ramp is at most 60 s long. Samples more than 0.5 s apart are never joined: the value is
+held and then steps ("hold then step"), so an idle stretch never becomes a fake ramp.
+Wheels, options, text and bools never interpolate; they step when they change. A segment
+under 0.1 s whose change is inside the tolerance is an instant step; a short but larger move
+keeps its true short fade so the error bound holds. A flat stretch makes no row (the next
+ramp starts from the held value). Values are stored to 4 decimals.
+
+**Grouping.** Ramps and steps of one fixture that start within 20 ms of each other and last
+the same time share one row (a colour and a dimmer that fade together are one row); rows of
+different fixtures that are exactly identical (a chase at zero offset) share one row too.
+The row is labelled `Look - N fixtures`.
+
+**Effects.** Most of a busy song repeats: a mover's pan sweep is a triangle wave, a pixel
+bar pulses with a period of 4 s, and a chase is the same loop at different phase offsets.
+Such a window is stored as ONE item in the song's `effects` list:
+
+```json
+{"id": "...", "label": "Loop - 4 fixtures, 8 s", "start_seconds": 104.7,
+ "end_seconds": 255.0, "period_seconds": 8.0, "source": "captured",
+ "members": [{"fixture": "Z3"}, {"fixture": "Z2", "offset_seconds": 2.628}],
+ "cycle": [{"at_seconds": 0.0, "property": "panAngle", "value": [-58.2], "fade_seconds": 4.0},
+           {"at_seconds": 4.0, "property": "panAngle", "value": [41.0], "fade_seconds": 4.0}]}
+```
+
+Inside `[start_seconds, end_seconds)` every member plays the `cycle` at phase
+`(t - start - offset) mod period`, and it overrides the rows for the properties named in
+`cycle`; outside the window the rows apply. Each cycle step ramps to its `value` over
+`fade_seconds`, from the value the previous step of the same property ended on (the first
+step starts from the last step's value, so the loop closes). Effects with a different
+shape are separate effects. An effect list is optional: older cue maps have none and load
+unchanged.
+
+Detection (`lightkey_effects.rs`):
+
+1. Every numeric address is resampled to 50 ms and compared with itself `T` earlier for `T`
+   from 1 to 30 s: a point matches when the two values are within twice the tolerance and
+   the value moved by at least four tolerances during that period. The longest window where
+   90 % of the points match and which holds at least three cycles is the loop; the
+   fundamental period wins over its multiples. Up to three windows per address, so a loop
+   that stops and starts again is found twice. The period is refined to the millisecond.
+2. Properties of one fixture with the same period are joined; fixtures with the same
+   properties, a period within 2 % and overlapping windows are clustered, each fixture's
+   phase offset found by sliding its series against the first one's and refined on the raw
+   samples. The period is refined on the cluster as a whole (the value that lines up the
+   cycles of all members best).
+3. The cycle is the per-phase median of all members and all cycles, fitted with ramps at
+   half the tolerance and closed into a loop.
+4. **Acceptance by reconstruction.** The effect is evaluated with the same evaluator the
+   replay uses and compared with the raw samples of every member at 25 ms. At least
+   98 % of the window must be within twice the tolerance for every member. If not, the
+   window is narrowed to its best stretch (the start and the end of a pattern are usually
+   not the loop) and tried again; members that still do not fit leave and are tried on
+   their own; the stretches cut off are tried again as windows of their own. An effect must
+   also be worth it: its cycle steps must be at most 60 % of the ramp segments the same
+   window needs as plain rows.
+5. Whatever is not accepted stays plain ramps for that window, so the rest of the fit is
+   exact (see below).
+
+False-positive guards: a flat stretch never matches; a slow monotone fade does not match
+itself one period earlier (it either moved too little to count as moving or too far to be
+within tolerance), so it is never an effect; a window under three cycles is never an
+effect; two overlapping loops on one address match no period at 90 % and stay ramps; an
+effect whose period drifts is cut by the acceptance into windows that hold or falls back
+to ramps.
+
+**Reconstruction metric.** `cargo run --release -p stagepilot-lights --example smooth_report -- takes.json`
+rebuilds every address at 25 ms from the saved rows and effects (with
+`lightkey_curve::Timeline`, the evaluator the replay is built on) and compares it with the
+recorded samples (linear between samples at most 0.5 s apart, held otherwise). It prints,
+per property class (angle, dimmer, colour, other level), the maximum error, the 99th
+percentile and the share of time over the tolerance and over twice the tolerance, outside
+and inside effects, plus every effect (period, window, members, phase offsets), the item
+counts and the JSON size before and after, and which series stay plain ramps and why.
+Acceptance: outside effects the largest error is at most the tolerance; overall the 99th
+percentile is at most twice the tolerance. Over the two real takes (below) both hold; inside an
+effect up to 2 % of the moments can be further off (the report prints the maximum).
+
+**Caps.** `fade_seconds` 0 to 600 s (a captured ramp is at most 60 s). Per song: 1,000
+rows and 15,000 messages as before, **200 effects** (a busy rig has a handful per group, a
+song changing its loops many times stays under it), 256 members per effect, 1,024 cycle
+steps per effect and **20,000 cycle steps** per song, a period of 0.1 to 600 s, at most 8
+numbers per step. A song that would still pass a cap is fitted again at twice the tolerance,
+up to six times (`Saved 120 looks and 4 loops to <song>'s timeline (fitted loosely:
+tolerance x2, the song was very large).`); the capture is never dropped for size.
+
+Real takes (two songs of 255 s and 290 s, 109,353 and 50,800 raw samples; the take
+files are not in the repository). All numbers come from the report tool:
+
+| | Unstoppable God (255 s) | Able (290 s) |
+|---|---|---|
+| Raw samples | 109,361 | 50,832 |
+| Before (thin + merge at 0.5 s) | 439 rows, 7,398 messages, 1,124,595 bytes | 387 rows, 3,631 messages, 431,855 bytes |
+| After (ramps + effects) | 537 rows (1,205 messages) + 9 effects (62 cycle steps) = 546 items, 257,437 bytes | 303 rows (799 messages) + 9 effects (54 cycle steps) = 312 items, 139,345 bytes |
+| Max error outside effects (angle / colour / dimmer) | 1.486 deg / 0.030 / 0.030 | 1.443 deg / 0.008 / 0.030 |
+| p99 error overall (angle / colour / dimmer) | 2.05 deg / 0.022 / 0.026 | 0.47 deg / 0.005 / 0.030 |
+| Inside effects, points beyond 2x tolerance (angle / colour / dimmer) | 1.56 % / 0.68 % / 1.23 % | 1.71 % / n/a / 0.59 % |
+| Plain-ramp sanity (script numbers reproduced) | 8,322 segments, longest 4.0 s | 2,727 segments, longest 3.2 s |
+
+**Not yet.** Replay interpolation (ticks, rate budget, seek, operator take-over) is the next
+change. Until it lands a replay sends each row's final values at the row's time and does
+not play effects, so a song captured with ramps replays steppier than the original.
+
+**Editing.** Rows and effects are separate lists. Saving a song's cue map from the
+timeline (the cue-map `PUT`) changes the rows and keeps the effects the song already has: a
+row edit, a deleted row or a merge never changes an effect. A new recording replaces the
+captured rows AND the captured effects (rows and effects added by hand stay). Rows keep
+their `fade_seconds` through every save; editing a row's time moves where its ramp starts
+and leaves the fade alone.
 
 ### Simplify this song (backend)
 
-`POST /api/v1/lights/lightkey/simplify` `{"song_key": "...", "detail_level": "coarse",
-"apply": false}` runs the same thin + merge step over the song's captured rows at
-the chosen Detail (the saved Detail when omitted) and answers `rows_before`,
-`rows_after`, `messages_before`, `messages_after` (the timeline shows
-"412 rows -> 190"). Without `apply` nothing is changed. With `apply: true` the new
-rows are saved through the serialized cue-map save. Manual rows, MIDI cues and
-captured rows that are not fixture overrides are never touched. Nothing is saved
-when the result would not be smaller or would still pass the per-song caps.
+`POST /api/v1/lights/lightkey/simplify` `{"song_key": "...", "apply": false}` runs the older
+thin + merge step (0.5 s grid; `detail_level` is accepted and ignored) over the song's
+captured instant rows and answers `rows_before`, `rows_after`, `messages_before`,
+`messages_after`. It exists for songs captured before ramps. Without `apply` nothing is
+changed. With `apply: true` the new rows are saved through the serialized cue-map save.
+Manual rows, MIDI cues and captured rows that are not fixture overrides are never touched.
+**A song that has any row with a `fade_seconds` or any effect is left exactly as it is**
+(answered as nothing to simplify): a ramp starts from the value the row before it left, so
+thinning the rows around it, or around the rows an effect hands over to, would move it.
+Nothing is saved when the result would not be smaller or would pass the per-song caps.
 
 ### Saving a song's cue map
 
@@ -234,8 +342,9 @@ the captured rows, and it clears when no captured rows are left. Record asks
 "Recording replaces this song's captured looks, including your edits" while it
 is set.
 
-Size on synthetic data shaped like real takes (25 ms steps, mostly colour, pan
-and dimmer sweeps over 255 s):
+Size of the older thin-and-merge rows (still used by Simplify for songs captured before
+ramps) on synthetic data shaped like real takes (25 ms steps, mostly colour, pan and
+dimmer sweeps over 255 s):
 
 | Take | Detail | Before merge | After merge |
 |---|---|---|---|
@@ -502,7 +611,7 @@ tritanopia to keep the colours apart.
 - Changing a captured row marks it **edited** (`edited` in the saved cue). With Record chosen, starting a recording on a song that has edited captured looks asks "Recording replaces this song's captured looks, including your edits" first. Deleting a whole captured row counts too: the backend sets `captured_edited` on the song's cue map for it.
 - **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
 - **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
-- The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
+- The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip (it no longer changes the capture; the control is removed in a later change) and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
 
 ## Clearing cues
 

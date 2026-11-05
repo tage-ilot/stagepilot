@@ -71,6 +71,7 @@ fn look(at: f64, messages: Vec<OscMessage>) -> OscLightingCue {
         messages,
         source: OscCueSource::Captured,
         edited: false,
+        fade_seconds: 0.0,
     }
 }
 fn plain(at: f64, address: &str) -> OscLightingCue {
@@ -79,6 +80,7 @@ fn plain(at: f64, address: &str) -> OscLightingCue {
         messages: vec![],
         source: OscCueSource::Manual,
         edited: false,
+        fade_seconds: 0.0,
         ..look(at, vec![])
     }
 }
@@ -108,6 +110,7 @@ fn settings(songs: Vec<(&str, Vec<OscLightingCue>)>) -> LightsSettings {
                 loudness: None,
                 captured_edited: false,
                 capture: None,
+                effects: Vec::new(),
             },
         );
     }
@@ -639,6 +642,7 @@ async fn recorded_rows_replay_through_the_scheduler_next_to_a_manual_row() {
         loudness: None,
         captured_edited: false,
         capture: None,
+        effects: Vec::new(),
     };
     let saved = replace_captured(Some(&existing), "s", "s", rows.clone()).unwrap();
     assert!(saved

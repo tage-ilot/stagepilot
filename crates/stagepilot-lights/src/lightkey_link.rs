@@ -20,15 +20,16 @@ use crate::lightkey_auto::{
     decide, judge, Action, Availability, Decision, PassVerdict, Reason, SongCapture,
 };
 use crate::lightkey_fixtures::FixtureCommand;
-use crate::lightkey_looks::{look_rows, LookRecorder};
+use crate::lightkey_looks::LookRecorder;
 use crate::lightkey_relay::{relay_target, RelayClient};
+use crate::lightkey_smooth::{smooth_rows, SmoothParams};
 use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    CaptureStatus, LightkeyMode, LightkeySettings, OscLightingCue, SongLoudness,
+    CaptureStatus, LightingEffect, LightkeyMode, LightkeySettings, OscLightingCue, SongLoudness,
     DEFAULT_LIGHTKEY_RELAY_PORT,
 };
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
@@ -239,6 +240,8 @@ pub struct SongLooks {
     pub song_key: String,
     pub song_title: String,
     pub rows: Vec<OscLightingCue>,
+    /// The repeating patterns found in the pass (empty when none).
+    pub effects: Vec<LightingEffect>,
     /// How much of the song the pass covered and whether it was a complete capture.
     pub status: CaptureStatus,
 }
@@ -246,7 +249,8 @@ pub struct SongLooks {
 /// Why the looks could not be saved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LooksError {
-    /// The song's timeline would pass the row or message caps: the link tries a coarser Detail.
+    /// The song's timeline would pass the row, message, effect or step caps: the link fits it
+    /// again with twice the tolerance.
     TooLarge,
     /// The song already has a capture that is at least as good (a complete capture is never
     /// replaced by a partial one); nothing was changed.
@@ -1469,36 +1473,41 @@ impl Inner {
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         };
         let recorder = Arc::new(recorder);
-        let wanted = (self.settings)().3.detail.interval_seconds();
-        let mut interval = wanted;
-        // A song that would pass the timeline caps is saved coarser, never dropped.
+        let mut scale = 1.0;
+        // A song that would pass the timeline caps is fitted again at twice the tolerance,
+        // never dropped.
         for _ in 0..MAX_COARSER_TRIES {
-            let thin = recorder.clone();
-            let rows =
-                tokio::task::spawn_blocking(move || look_rows(&thin.looks(duration, interval)))
-                    .await
-                    .unwrap_or_default();
-            if rows.is_empty() {
+            let fitter = recorder.clone();
+            let params = SmoothParams {
+                tolerance_scale: scale,
+                ..SmoothParams::default()
+            };
+            let fitted = tokio::task::spawn_blocking(move || fitter.smooth(duration, &params))
+                .await
+                .unwrap_or_default();
+            let rows = smooth_rows(&fitted.rows);
+            if rows.is_empty() && fitted.effects.is_empty() {
                 return self.say(format!(
                     "Not saved: no fixture changes were recorded for {title}."
                 ));
             }
-            let count = rows.len();
+            let (count, loops) = (rows.len(), fitted.effects.len());
             let saved = sink(SongLooks {
                 song_key: session.key.clone(),
                 song_title: title.clone(),
                 rows,
+                effects: fitted.effects,
                 status: status.clone(),
             })
             .await;
             match saved {
                 Ok(()) => {
-                    tracing::info!(song = %session.key, rows = count, complete, reason, "lightkey_looks_saved");
+                    tracing::info!(song = %session.key, rows = count, effects = loops, complete, reason, "lightkey_looks_saved");
                     self.st().captured = Some(LightkeyCaptured {
                         song_title: title.clone(),
-                        looks: u32::try_from(count).unwrap_or(u32::MAX),
+                        looks: u32::try_from(count + loops).unwrap_or(u32::MAX),
                     });
-                    let text = saved_message(count, &title, wanted, interval);
+                    let text = saved_message(count, loops, &title, scale);
                     return self.say(if complete {
                         text
                     } else {
@@ -1512,7 +1521,7 @@ impl Inner {
                         "Not saved: {title} already has a capture that covers more of the song."
                     ));
                 }
-                Err(LooksError::TooLarge) => interval *= 2.0,
+                Err(LooksError::TooLarge) => scale *= 2.0,
                 Err(LooksError::Failed(error)) => {
                     tracing::error!(song = %session.key, error = %error, "lightkey_looks_save_failed");
                     return self.say("Could not save the looks to the timeline.");
@@ -1523,18 +1532,23 @@ impl Inner {
     }
 }
 
-/// "Saved N looks to X's timeline." and, when the song was too large for the chosen Detail and
-/// was saved at a coarser spacing, which spacing was used.
-fn saved_message(count: usize, title: &str, wanted: f64, used: f64) -> String {
-    let plural = if count == 1 { "" } else { "s" };
-    if used > wanted {
-        format!("Saved {count} look{plural} to {title}'s timeline (reduced detail, {used} s).")
+/// "Saved N looks to X's timeline." (and "M loops" when effects were found) and, when the song
+/// was too large for the caps and was fitted at a looser tolerance, how much looser.
+fn saved_message(count: usize, loops: usize, title: &str, scale: f64) -> String {
+    let plural = |n: usize, word: &str| format!("{n} {word}{}", if n == 1 { "" } else { "s" });
+    let what = if loops == 0 {
+        plural(count, "look")
     } else {
-        format!("Saved {count} look{plural} to {title}'s timeline.")
+        format!("{} and {}", plural(count, "look"), plural(loops, "loop"))
+    };
+    if scale > 1.0 {
+        format!("Saved {what} to {title}'s timeline (fitted loosely: tolerance x{scale}, the song was very large).")
+    } else {
+        format!("Saved {what} to {title}'s timeline.")
     }
 }
 
-/// How many times a recording too large for the timeline is retried at twice the interval.
+/// How many times a recording too large for the timeline is fitted again at twice the tolerance.
 const MAX_COARSER_TRIES: usize = 6;
 
 // ------------------------------------------------------- Python-flavoured JSON coercions
