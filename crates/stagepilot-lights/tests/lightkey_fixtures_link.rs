@@ -730,10 +730,7 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
         "the first try was refused"
     );
     let message = rig.link.status().message.unwrap_or_default();
-    assert!(
-        message.contains("fitted loosely"),
-        "message: {message}"
-    );
+    assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
     rig.link.stop().await;
 }
