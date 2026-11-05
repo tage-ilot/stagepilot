@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import type { OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
 import { groupByFixture, isCaptured, lookLabel } from "./lightingLooks";
@@ -15,8 +15,10 @@ import {
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
-import { CONTROL_34 } from "./compactControl";
 import { Select } from "./ui/Select";
+import { StatusDot } from "./ui/StatusDot";
+import type { Tone } from "./ui/types";
+import { CONTROL_40, CUE_ADDRESS_HELP } from "./liveLink";
 import { clampCueTime } from "./lightingTimelineMath";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
@@ -26,16 +28,99 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
   { value: "bool", label: "True or false" },
 ];
 
-/** Host and UDP port. The port has no default to guess at: each app listens on its own, so it is typed in. */
 import { CueTypeBadge } from "./CueTypeParts";
 import { classifyOscCue } from "./lightingCueTypes";
 
+/** The small uppercase caption over a Live Link field. */
+export function LiveLinkField({ caption, className, children }: { caption: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={`flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-medium uppercase tracking-[0.07em] text-ink-muted ${className ?? ""}`}>
+      {caption}
+      {children}
+    </label>
+  );
+}
+
 /**
- * The sACN DMX Live Link line when the live link itself is not on screen (Lighting is not saved as OSC yet): the same shared host
+ * THE one place the connection state is written down on the Live Link block: a dot AND words (never colour alone), announced
+ * politely when it changes. `detail` (why it is not connected) rides in the tooltip and the accessible name, not in extra paragraphs.
+ */
+export function LiveLinkPill({ text, tone, detail }: { text: string; tone: Tone; detail?: string | null }) {
+  const full = detail ? `sACN DMX Live Link: ${text}. ${detail}` : `sACN DMX Live Link: ${text}`;
+  return (
+    <span aria-label={full} aria-live="polite" className="live-link-pill inline-flex items-center gap-[7px] whitespace-nowrap rounded-ds-full border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink" data-testid="lightkey-link" data-tone={tone} role="status" title={full}>
+      <StatusDot ignoreAccent tone={tone} />
+      <span>{text}</span>
+    </span>
+  );
+}
+
+/** The bordered Live Link block: title, the state pill beside it, then whatever the caller lays out. */
+export function LiveLinkShell({ pill, className, testId, children }: { pill?: ReactNode; className?: string; testId?: string; children: ReactNode }) {
+  return (
+    <section aria-label="sACN DMX Live Link" className={`live-link mt-6 rounded-ds-xl border border-edge bg-surface-panel-strong px-3 py-2.5 ${className ?? ""}`} data-testid={testId}>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>
+        {pill}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const subButton = "!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]";
+
+function DisclosureButton({ open, controls, onToggle, children }: { open: boolean; controls: string; onToggle: () => void; children: ReactNode }) {
+  return (
+    <Button aria-controls={controls} aria-expanded={open} className={subButton} onClick={onToggle} variant="secondary">
+      {children}
+      {/* Conventional state arrow: down when open, right when closed. Decorative; aria-expanded carries the state. */}
+      <span aria-hidden="true" className="ml-1.5 text-ink-muted" data-part="arrow">{open ? "\u25BE" : "\u25B8"}</span>
+    </Button>
+  );
+}
+
+/**
+ * The quiet strip under the fields: one line of state text, then Release lights, the Send a test cue disclosure and the
+ * cue-address help. The test cue and the help open as nested boxes under the strip; both stay in the DOM so the words are always readable.
+ */
+export function LiveLinkTools({ stateText, release, testCue, footer }: {
+  stateText?: ReactNode;
+  release?: ReactNode;
+  /** The test cue's fields; leave out to draw no disclosure. */
+  testCue?: ReactNode;
+  /** Notes under the nested boxes (last sent, what is kept while the method is held). */
+  footer?: ReactNode;
+}) {
+  const [cueOpen, setCueOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const cueId = useId();
+  const helpId = useId();
+  return (
+    <>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.78125rem] text-ink-muted" data-testid="live-link-sub">
+        {stateText}
+        {release}
+        {testCue && <DisclosureButton controls={cueId} onToggle={() => setCueOpen(!cueOpen)} open={cueOpen}>Send a test cue</DisclosureButton>}
+        <DisclosureButton controls={helpId} onToggle={() => setHelpOpen(!helpOpen)} open={helpOpen}>How to find a cue&apos;s address</DisclosureButton>
+      </div>
+      <p className="mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body" data-testid="cue-address-help" hidden={!helpOpen} id={helpId}>{CUE_ADDRESS_HELP}</p>
+      {testCue && (
+        <div className="mt-2 rounded-ds-lg border border-edge bg-surface-900/60 p-3" data-testid="test-cue-box" hidden={!cueOpen} id={cueId}>
+          {testCue}
+        </div>
+      )}
+      {footer}
+    </>
+  );
+}
+
+/**
+ * The sACN DMX Live Link block when the live link itself is not on screen (Lighting is not saved as OSC yet): the same shared host
  * and OSC UDP port boxes, so the person can type the machine before saving. Once OSC is saved, LightkeyStrip draws the full line.
  */
 export function OscConnectionFields({
-  host, port, held, attempted, onHost, onPort, children,
+  host, port, held, attempted, onHost, onPort, testCue, footer,
 }: {
   host: string;
   port: string;
@@ -43,47 +128,50 @@ export function OscConnectionFields({
   attempted: boolean;
   onHost: (host: string) => void;
   onPort: (port: string) => void;
-  children?: ReactNode;
+  testCue?: ReactNode;
+  footer?: ReactNode;
 }) {
   const hostError = attempted ? oscHostError(host) : null;
   const portError = attempted ? oscPortError(port) : null;
   return (
-    <section aria-label="sACN DMX Live Link" className="lighting-osc-connection mt-6">
-      <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>
-      <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2" data-testid="live-link-line">
-        <label className="flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-muted">
-          Host or IP
-          <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full sm:!w-52 ${CONTROL_34} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
-        </label>
-        <label className="flex min-w-0 flex-col gap-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-muted">
-          OSC UDP
-          <Input aria-label="OSC UDP port" className={`!w-[5.25rem] tabular-nums ${CONTROL_34} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
-        </label>
+    <LiveLinkShell className="lighting-osc-connection">
+      <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">
+        <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
+          <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
+        </LiveLinkField>
+        <LiveLinkField caption="OSC UDP">
+          <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
+        </LiveLinkField>
       </div>
       {(hostError || portError) && <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, portError].filter(Boolean).join(" ")}</p>}
-      {children}
-    </section>
+      <LiveLinkTools footer={footer} testCue={testCue} />
+    </LiveLinkShell>
   );
 }
 
 
-/** Typed argument rows for the test cue and for each cue. Edits are reported as drafts. */
+/** Typed argument rows for the test cue and for each cue. Edits are reported as drafts. `inline` lays them out beside the other test-cue fields (Live Link block). */
 export function OscArgumentRows({
-  drafts, onChange, disabled = false, label,
+  drafts, onChange, disabled = false, label, inline = false,
 }: {
   drafts: OscArgumentDraft[];
   onChange: (drafts: OscArgumentDraft[]) => void;
   disabled?: boolean;
   label: string;
+  inline?: boolean;
 }) {
   const update = (index: number, change: Partial<OscArgumentDraft>) =>
     onChange(drafts.map((draft, position) => position === index ? { ...draft, ...change } : draft));
+  const control = inline ? CONTROL_40 : undefined;
+  // Inline: the visible caption is just "Type" / "Value"; the row number stays in the accessible name.
+  const caption = (index: number, word: string) => inline ? <><span className="sr-only">{label} {index + 1} </span>{word}</> : `${label} ${index + 1} ${word}`;
   return (
-    <div className="grid gap-2">
+    <div className={inline ? "flex flex-wrap items-end gap-2" : "grid gap-2"}>
       {drafts.map((draft, index) => (
-        <div className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-end gap-2" key={index}>
-          <Field label={`${label} ${index + 1} type`}>
+        <div className={inline ? "flex items-end gap-2" : "grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-end gap-2"} key={index}>
+          <Field className={inline ? "w-36" : undefined} label={caption(index, "type")}>
             <Select
+              className={control}
               disabled={disabled}
               onChange={(event) => {
                 const type = event.target.value as OscArgumentType;
@@ -94,18 +182,19 @@ export function OscArgumentRows({
               {argumentTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </Select>
           </Field>
-          <Field label={`${label} ${index + 1} value`}>
+          <Field className={inline ? "w-28" : undefined} label={caption(index, "value")}>
             {draft.type === "bool" ? (
-              <Select disabled={disabled} onChange={(event) => update(index, { text: event.target.value })} value={draft.text}>
+              <Select className={control} disabled={disabled} onChange={(event) => update(index, { text: event.target.value })} value={draft.text}>
                 <option value="true">True</option>
                 <option value="false">False</option>
               </Select>
             ) : (
-              <Input disabled={disabled} onChange={(event) => update(index, { text: event.target.value })} value={draft.text} />
+              <Input className={inline ? `${control} text-center tabular-nums` : undefined} disabled={disabled} onChange={(event) => update(index, { text: event.target.value })} value={draft.text} />
             )}
           </Field>
           <Button
             aria-label={`Remove ${label.toLowerCase()} ${index + 1}`}
+            className={control}
             disabled={disabled}
             onClick={() => onChange(drafts.filter((_, position) => position !== index))}
             tone="danger"
@@ -116,7 +205,7 @@ export function OscArgumentRows({
         </div>
       ))}
       <div>
-        <Button disabled={disabled || drafts.length >= 16} onClick={() => onChange([...drafts, { type: "int", text: "0" }])} variant="tinted">
+        <Button className={control} disabled={disabled || drafts.length >= 16} onClick={() => onChange([...drafts, { type: "int", text: "0" }])} variant="tinted">
           Add argument
         </Button>
       </div>

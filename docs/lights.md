@@ -524,12 +524,14 @@ on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to i
 
 ### sACN DMX Live Link (one line)
 
-In OSC mode the connection is one titled section, **sACN DMX Live Link**, drawn as a single line that wraps cleanly on
-narrow screens: the link status (and fixture count), **one host or IP box**, a small **OSC UDP** port box (default
-21600), a small **API** port box (default 8770), **Connect / Check again**, and the **Replay | Record** toggle. The
-**Detail** (Fine / Normal / Coarse) toggle appears beside it only while Record is chosen. **Release lights** and the
-"Holding N fixtures" text sit on a second small line. The Lighting computer that receives OSC and the one that runs
-`lightkey-api` are always the same machine, so the host is shared.
+In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and one **state
+pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
+is a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
+a small **API** port box (default 8770), **Connect / Check again**, and at the right the labelled **Mode** (Auto | Replay |
+Record) toggle. The **Detail** (Fine / Normal / Coarse) toggle sits beside it while Auto or Record is chosen, and its
+one-line explanation is its tooltip. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
+1 yielded to the operator"), **Release lights**, **Send a test cue** and **How to find a cue's address**. The Lighting
+computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.
 
 Saved settings are unchanged: `osc_host` and `osc_port` are saved with the Save bar as before, and `lightkey.api_url`
 is saved by Connect. The screen writes `api_url` as `<host>:<API port>`, and leaves it **empty** when the API port is

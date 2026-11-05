@@ -1383,6 +1383,73 @@ textarea:focus-visible {
   container-type: inline-size;
 }
 
+/* The sACN DMX Live Link block (DESIGN.md "Lighting connection block"). It decides by its OWN width: narrow, the host takes a full row, then the
+   ports and Connect share one, then Mode and Detail; wide, host flexes on the first row with Mode and Detail at the far right. */
+.live-link {
+  container-type: inline-size;
+  container-name: live-link;
+}
+
+.live-link-host {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+@container live-link (min-width: 34rem) {
+  .live-link-host {
+    flex: 1 1 11.25rem;
+    min-width: 11.25rem;
+  }
+}
+
+/* The long caption may wrap on a short host box; balance it so no word is left alone on the second line. */
+.live-link-host > :first-child,
+.live-link-host > span {
+  text-wrap: balance;
+}
+
+/* Mode and Detail sit at the far right of the field row when it is wide; once it wraps they start the row like every other field. */
+@container live-link (min-width: 34rem) {
+  .live-link-modes {
+    margin-left: auto;
+  }
+}
+
+/* Field captions inside the block (including the test cue's Field labels) share the small uppercase muted look. */
+.live-link [data-field] > div > label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-ink-muted);
+}
+
+.live-link-connect[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* Forced colours: state never rests on colour alone (the pill always has words); make the dot, the pill and the chosen segment visible in the system palette. */
+@media (forced-colors: active) {
+  .live-link-pill {
+    border-color: CanvasText;
+  }
+
+  .live-link-pill [data-tone] {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+
+  .live-link [data-selected="true"] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .live-link-connect {
+    border-color: ButtonText;
+  }
+}
+
 .lighting-osc-fields {
   grid-template-columns: minmax(0, 1fr);
 }
