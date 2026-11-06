@@ -68,6 +68,23 @@ prompt. Later updates should show none.
 | Local Network access | Granted per executable; with a single executable and a stable identity it survives updates. Scan now detects and explains a refusal; see `playback-api.md`. |
 | Gatekeeper first open | Unavoidable without Developer ID. Right-click **Open** once. |
 
+### While a prompt waits
+
+After an update the new build has a new code signature, so macOS may ask for Keychain access (and
+the microphone) again. StagePilot does not wait for the dialog: it starts, serves the dashboard and
+runs Playback, ProPresenter, MIDI and lights while the dialog is open, even on a locked screen.
+Only the feature that needs the answer shows it. Planning Center reads \"Waiting for keychain
+access\" (or \"Keychain access was refused or failed\" after **Deny**), tries again every 30 s and
+when you sign in or save again, and connects on its own as soon as you click **Always Allow**; no
+restart is needed. A refused or unanswered microphone only leaves out loudness (the Lighting strip
+says so); lights still record. Stored secrets are never deleted because a prompt failed.
+
+Other native calls that could wait, and why they cannot hold anything up: the audio input list and
+open run on blocking threads with a 1.5 s or 2 s wait; the Remote credential broker serves each
+request on its own thread (at most 8 at once) and the Remote status route answers within 3 s; MIDI
+port listing (CoreMIDI, WinMM, ALSA) shows no permission prompt and already runs on a blocking
+thread, so it is left as is.
+
 ## Future Developer ID releases
 
 A paid Developer ID build would use a real Developer ID Application identity, Hardened

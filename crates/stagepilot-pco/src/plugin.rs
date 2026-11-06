@@ -258,6 +258,9 @@ impl Inner {
     fn validate_configuration(&self) -> Result<(), PcoError> {
         let settings = self.settings();
         if !settings.is_configured() {
+            if let Some(issue) = &settings.credential_issue {
+                return Err(PcoError::configuration(issue));
+            }
             return Err(PcoError::configuration(
                 "Planning Center credentials are not configured.",
             ));

@@ -2,7 +2,7 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     thread,
@@ -11,6 +11,9 @@ use std::{
 
 const SERVICE: &str = "org.stagepilot.desktop.remote";
 const MAX_REQUEST_BYTES: usize = 16 * 1024;
+/// Requests served at the same time. A keychain call can wait on a system dialog for as long
+/// as nobody answers it, so each runs on its own thread, but never an unbounded number.
+const MAX_IN_FLIGHT: usize = 8;
 
 pub struct NativeCredentialBroker {
     pub origin: String,
@@ -39,10 +42,32 @@ impl NativeCredentialBroker {
         let shutdown = Arc::new(AtomicBool::new(false));
         let thread_shutdown = Arc::clone(&shutdown);
         let thread_authorization = authorization.clone();
+        let in_flight = Arc::new(AtomicUsize::new(0));
         thread::spawn(move || {
             while !thread_shutdown.load(Ordering::Relaxed) {
                 match listener.accept() {
-                    Ok((stream, _)) => handle(stream, &thread_authorization),
+                    Ok((stream, _)) => {
+                        // Each request on a thread of its own: one keychain call that sits on a
+                        // system approval dialog must not stop the next request from being served.
+                        // A few at once at most; beyond that the caller gets 503 and tries later.
+                        if in_flight.fetch_add(1, Ordering::SeqCst) >= MAX_IN_FLIGHT {
+                            in_flight.fetch_sub(1, Ordering::SeqCst);
+                            let mut stream = stream;
+                            respond(&mut stream, 503, "");
+                            continue;
+                        }
+                        let authorization = thread_authorization.clone();
+                        let counter = Arc::clone(&in_flight);
+                        let spawned = thread::Builder::new()
+                            .name("credential-broker-request".into())
+                            .spawn(move || {
+                                handle(stream, &authorization);
+                                counter.fetch_sub(1, Ordering::SeqCst);
+                            });
+                        if spawned.is_err() {
+                            in_flight.fetch_sub(1, Ordering::SeqCst);
+                        }
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(25));
                     }

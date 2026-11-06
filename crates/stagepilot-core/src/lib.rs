@@ -8,6 +8,7 @@ pub mod api;
 pub mod auth;
 pub mod bus;
 pub mod config;
+pub mod credential_guard;
 pub mod events;
 pub mod logging;
 pub mod plugin;

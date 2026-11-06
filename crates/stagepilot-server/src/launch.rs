@@ -72,6 +72,9 @@ impl DiagnosticsBootstrap for RealBootstrap {
     }
 }
 
+/// How long the Remote status route waits for the credential store before it says it is waiting.
+const REMOTE_STATUS_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// `DesktopRemoteManager` behind the route trait. The manager is blocking (files, HTTP), so each
 /// call runs on the blocking pool.
 pub struct RealRemoteManager {
@@ -94,10 +97,25 @@ impl RealRemoteManager {
 #[async_trait]
 impl RemoteManager for RealRemoteManager {
     async fn status(&self) -> Value {
+        // Reading the installation credential can sit on a keychain approval dialog. The status
+        // route answers within a few seconds either way; the read finishes on its own thread.
         let manager = self.manager.clone();
-        tokio::task::spawn_blocking(move || Value::Object(manager.status()))
-            .await
-            .unwrap_or(Value::Null)
+        let job = tokio::task::spawn_blocking(move || Value::Object(manager.status()));
+        match tokio::time::timeout(REMOTE_STATUS_WAIT, job).await {
+            Ok(status) => status.unwrap_or(Value::Null),
+            Err(_) => serde_json::json!({
+                "available": true,
+                "provisioned": true,
+                "credential_available": false,
+                "enabled": false,
+                "state": "off",
+                "url": null,
+                "needs_operator": false,
+                "message": stagepilot_core::credential_guard::KEYCHAIN_WAITING,
+                "temporary_url": false,
+                "permanently_revoked": false,
+            }),
+        }
     }
 
     async fn enable(&self) -> Result<(), ManagerError> {

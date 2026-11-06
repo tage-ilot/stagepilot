@@ -10,6 +10,7 @@ use crate::plan_cache::{FilePlanCacheStore, MemoryPlanCacheStore, PlanCacheStore
 use crate::plugin::{PcoPlugin, TodayProvider};
 use crate::setup::{current_settings, SetupService};
 use stagepilot_core::bus::EventBus;
+use stagepilot_core::credential_guard::GuardedCredentialStore;
 use stagepilot_core::settings::{
     CredentialStore, KeyringCredentialStore, MemoryCredentialStore, SettingsService,
 };
@@ -54,14 +55,16 @@ impl PcoRuntime {
             .or_else(|| settings.environ().get("STAGEPILOT_PCO_CLIENT_ID").cloned())
             .or_else(|| std::env::var("STAGEPILOT_PCO_CLIENT_ID").ok())
             .unwrap_or_default();
-        let credentials: Arc<dyn CredentialStore> =
+        // Guarded: a keychain that waits on a system dialog never holds up startup or a request.
+        let credentials: Arc<dyn CredentialStore> = Arc::new(GuardedCredentialStore::new(
             options.oauth_credentials.unwrap_or_else(|| {
                 if options.memory_tokens {
                     Arc::new(MemoryCredentialStore::default())
                 } else {
                     Arc::new(KeyringCredentialStore::oauth())
                 }
-            });
+            }),
+        ));
         let control_plane = match &options.control_plane_origin {
             Some(origin) => ControlPlaneClient::for_test_origin(origin),
             None => ControlPlaneClient::new(),

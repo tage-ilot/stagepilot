@@ -724,7 +724,10 @@ a few seconds after you leave. In Replay mode it never opens.
 Opening the input can wait for the microphone permission dialog, so it never blocks
 anything else: opening and closing run on their own thread, the song start waits at
 most 1.5 s for it (loudness then starts when the input opens), the picker answers from
-its last listing after 2 s, and repeated picker polls do not start a second open.
+its last listing after 2 s, and repeated picker polls do not start a second open. This also holds
+when the dialog is never answered, refused or fails: the open stays on its own thread (a later song
+waits the same 1.5 s for it, never longer), Record keeps capturing lights, and the status line says
+why there is no loudness. Covered by `an_audio_open_that_never_returns_never_holds_up_any_song`.
 
 **Choosing the input.** With Record chosen, the Lightkey strip shows an **Audio input** list with a live
 level meter. The default is the system default input (the built-in microphone). Pick an audio interface or a

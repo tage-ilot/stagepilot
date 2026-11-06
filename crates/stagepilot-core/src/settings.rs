@@ -16,13 +16,14 @@
 //! `settings.json.pre-rust.bak` is made (never overwritten once it exists).
 
 use crate::config::*;
+use crate::credential_guard::GuardedCredentialStore;
 use crate::settings_errors::map_serde_error;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use ts_rs::TS;
 
 pub const SETTINGS_SCHEMA_VERSION: u8 = 2;
@@ -789,10 +790,26 @@ impl SettingsStore for MemorySettingsStore {
 
 // ---- credentials ------------------------------------------------------------------------------
 
+/// Whether a credential store is answering. Only the guarded stores can be anything but `Ready`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialAccess {
+    Ready,
+    /// A keychain call is waiting (for example on a system approval dialog).
+    Waiting,
+    /// The keychain refused or failed; it is tried again later.
+    Refused,
+}
+
 pub trait CredentialStore: Send + Sync {
     fn get_secret(&self) -> Result<Option<String>, CredentialStoreError>;
     fn set_secret(&self, secret: &str) -> Result<(), CredentialStoreError>;
     fn remove_secret(&self) -> Result<(), CredentialStoreError>;
+    /// Whether the store is answering now. Plain stores always are.
+    fn access(&self) -> CredentialAccess {
+        CredentialAccess::Ready
+    }
+    /// Try again now what failed earlier (a refused read, an unsaved write). Never blocks.
+    fn retry(&self) {}
 }
 
 #[derive(Default)]
@@ -962,10 +979,14 @@ struct ServiceState {
     secret: Option<String>,
     warning: Option<String>,
     credential_saved: bool,
+    /// The last Planning Center secret read did not succeed (keychain waiting or refused).
+    secret_unread: bool,
 }
 
 pub struct SettingsService {
     store: Box<dyn SettingsStore>,
+    /// Always a [`GuardedCredentialStore`]: a keychain that waits on a dialog never holds up
+    /// startup or a request.
     credentials: Box<dyn CredentialStore>,
     environ: BTreeMap<String, String>,
     state: Mutex<ServiceState>,
@@ -979,7 +1000,7 @@ impl SettingsService {
     ) -> Self {
         Self {
             store,
-            credentials,
+            credentials: Box::new(GuardedCredentialStore::new(Arc::from(credentials))),
             environ,
             state: Mutex::new(ServiceState {
                 persistent: PersistentSettings::default(),
@@ -987,6 +1008,7 @@ impl SettingsService {
                 secret: None,
                 warning: None,
                 credential_saved: false,
+                secret_unread: false,
             }),
         }
     }
@@ -1090,6 +1112,40 @@ impl SettingsService {
         self.lock().credential_saved
     }
 
+    /// The Planning Center secret could not be read at startup and has not been since.
+    pub fn credential_unread(&self) -> bool {
+        self.lock().secret_unread
+    }
+
+    /// Whether the keychain behind the Planning Center secret is answering.
+    pub fn credential_access(&self) -> CredentialAccess {
+        self.credentials.access()
+    }
+
+    /// Tries again a secret the keychain did not give at startup (waiting for a system dialog,
+    /// or refused) and an unsaved write. Never blocks for more than the guard's short wait.
+    /// `true` when the secret has just become available.
+    pub fn refresh_credential(&self) -> bool {
+        self.credentials.retry();
+        if !self.lock().secret_unread {
+            return false;
+        }
+        match self.credentials.get_secret() {
+            Ok(secret) => {
+                let mut s = self.lock();
+                s.credential_saved = secret.is_some();
+                s.secret = secret;
+                s.secret_unread = false;
+                if matches!(s.warning.as_deref(), Some(w) if w == crate::credential_guard::KEYCHAIN_WAITING || w == crate::credential_guard::KEYCHAIN_REFUSED)
+                {
+                    s.warning = None;
+                }
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
     /// The saved Planning Center secret (the manual-connection PAT secret), for trusted backend
     /// integrations only. Never serialise it.
     pub fn planning_center_secret(&self) -> Option<String> {
@@ -1113,17 +1169,22 @@ impl SettingsService {
         };
         let persistent = saved.unwrap_or_default();
         let mut secret = None;
+        let mut secret_unread = false;
         let pc = &persistent.planning_center;
         // No App ID means nothing usable is configured: do not touch the keychain at all (every
         // keychain read can prompt for the login password).
         if pc.app_id.is_some() || pc.connection_method == ConnectionMethod::Oauth {
             match self.credentials.get_secret() {
                 Ok(s) => secret = s,
-                Err(e) => warnings.push(e.0),
+                Err(e) => {
+                    secret_unread = true;
+                    warnings.push(e.0);
+                }
             }
         }
         let runtime = self.resolve(&persistent);
         let mut s = self.lock();
+        s.secret_unread = secret_unread;
         s.persistent = persistent;
         s.credential_saved = secret.is_some();
         s.secret = secret;
