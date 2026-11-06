@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-## [2.43.0-rc.1] - 2026-11-05
+## [2.43.0-rc.2] - 2026-11-05
 
-Release candidate (pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:
+Release candidate 2 (rc.1 was tagged but its release audit stopped on a stray build-directory link that had been committed by mistake; nothing was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:
 
 - **Old Lightkey takes are not replayed.** Captures stored only in `lightkey-takes.json` are ignored (the file is left alone). Record those songs again. Cue maps saved in settings load and replay as before.
 - **Do not edit Lighting cues in v2.42.0 after trying this version.** v2.42.0 starts fine on a file saved here and keeps the new fields, but deleting or reordering rows there can attach ramp or message data to the wrong row.
