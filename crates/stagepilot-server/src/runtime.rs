@@ -53,7 +53,15 @@ pub struct Runtime {
     /// The Services source the running plugins were built for (changing it needs a restart here).
     live_service_source: ServiceSource,
     startup_activation: std::sync::atomic::AtomicBool,
+    /// A keychain read or write has not succeeded yet (waiting on a system dialog, or refused).
+    /// The watcher below tries again and re-applies the credentials when the keychain answers.
+    keychain_degraded: std::sync::atomic::AtomicBool,
+    keychain_interval_ms: std::sync::atomic::AtomicU64,
+    keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
+
+/// How often a keychain that has not answered is asked again.
+pub const KEYCHAIN_RETRY_SECONDS: u64 = 30;
 
 /// The length writer, wired to the live Planning Center settings and to the Playback plugin
 /// (Python `PlaybackInputPlugin.__init__`: `is_playing`, `plan_current`, `on_applied`).
@@ -252,7 +260,7 @@ impl Runtime {
             &pco,
             &playback,
         ));
-        Arc::new(Self {
+        let runtime = Arc::new(Self {
             settings,
             bus,
             store,
@@ -273,7 +281,92 @@ impl Runtime {
             remote: RwLock::new(RemoteWiring::default()),
             live_service_source: settings_source,
             startup_activation: std::sync::atomic::AtomicBool::new(false),
+            keychain_degraded: std::sync::atomic::AtomicBool::new(false),
+            keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
+            keychain_watch: Mutex::new(None),
+        });
+        runtime.note_keychain_state();
+        runtime
+    }
+
+    /// Records whether a keychain answer is missing right now (checked once at build time).
+    fn note_keychain_state(&self) {
+        let degraded = self.settings_service.credential_unread()
+            || self.pco.effective().credential_issue.is_some();
+        self.keychain_degraded
+            .store(degraded, std::sync::atomic::Ordering::SeqCst);
+        if degraded {
+            tracing::warn!("keychain_access_pending");
+        }
+    }
+
+    /// A keychain answer is still missing (the watcher is retrying).
+    pub fn keychain_degraded(&self) -> bool {
+        self.keychain_degraded
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Tests: how often the watcher asks again.
+    pub fn set_keychain_retry_interval(&self, interval: std::time::Duration) {
+        self.keychain_interval_ms.store(
+            interval.as_millis().max(1) as u64,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+    }
+
+    /// One keychain check: ask again what failed, pick up what has arrived, and when everything
+    /// answers hand the credentials to the running Planning Center plugin. Never holds up the
+    /// caller beyond the guard's short wait, and never throws a stored secret away.
+    pub async fn retry_keychain(self: &Arc<Self>) {
+        if !self.keychain_degraded() {
+            return;
+        }
+        let me = self.clone();
+        let checked = tokio::task::spawn_blocking(move || {
+            me.settings_service.refresh_credential();
+            me.pco.oauth.retry_credentials();
+            let effective = me.pco.effective();
+            let answering = !me.settings_service.credential_unread()
+                && me.settings_service.credential_access()
+                    == stagepilot_core::settings::CredentialAccess::Ready
+                && me.pco.oauth.credential_access()
+                    == stagepilot_core::settings::CredentialAccess::Ready
+                && effective.credential_issue.is_none();
+            (answering, effective)
         })
+        .await;
+        let Ok((true, effective)) = checked else {
+            return;
+        };
+        self.keychain_degraded
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        tracing::info!("keychain_access_recovered");
+        if let Some(plugin) = self.pco.plugin() {
+            let _serialised = self.reconcile.lock().await;
+            plugin.reconfigure(effective).await;
+        }
+    }
+
+    fn spawn_keychain_watch(self: &Arc<Self>) {
+        let weak = Arc::downgrade(self);
+        let task = tokio::spawn(async move {
+            loop {
+                let wait = match weak.upgrade() {
+                    Some(rt) => std::time::Duration::from_millis(
+                        rt.keychain_interval_ms
+                            .load(std::sync::atomic::Ordering::SeqCst),
+                    ),
+                    None => return,
+                };
+                tokio::time::sleep(wait).await;
+                let Some(rt) = weak.upgrade() else { return };
+                rt.retry_keychain().await;
+            }
+        });
+        *self
+            .keychain_watch
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(task);
     }
 
     /// `_apply_presentation`: make the running Presentation output match the saved settings.
@@ -353,6 +446,7 @@ impl Runtime {
             }
         }
         self.state_service.start();
+        self.spawn_keychain_watch();
         self.plugins.start_all().await;
         // Proactive OAuth refresh: one lifespan-owned task polling a stop signal.
         let _ = self.oauth_stop.send(false);
@@ -396,6 +490,14 @@ impl Runtime {
             let _ = task.await;
         }
         let _ = self.oauth_stop.send(true);
+        if let Some(task) = self
+            .keychain_watch
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            task.abort();
+        }
         self.plugins.stop_all().await;
         self.state_service.stop();
     }

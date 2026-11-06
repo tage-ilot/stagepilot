@@ -35,6 +35,7 @@ pub fn apply_environment(
         upcoming_lookahead_days: persistent.upcoming_lookahead_days,
         request_timeout_seconds: persistent.request_timeout_seconds,
         user_agent: crate::models::default_user_agent(),
+        credential_issue: None,
     };
     if let Some(v) = optional(environ, "STAGEPILOT_PCO_APP_ID") {
         settings.app_id = v.map(Secret::new);

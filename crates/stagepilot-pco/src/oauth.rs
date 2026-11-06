@@ -250,6 +250,14 @@ impl OAuthTokenStore {
         }
     }
 
+    pub fn access(&self) -> stagepilot_core::settings::CredentialAccess {
+        self.credentials.access()
+    }
+
+    pub fn retry(&self) {
+        self.credentials.retry();
+    }
+
     pub fn save(
         &self,
         tokens: &OAuthTokens,
@@ -585,6 +593,16 @@ impl OAuthService {
         self.tokens.load()
     }
 
+    /// Whether the keychain holding the tokens is answering.
+    pub fn credential_access(&self) -> stagepilot_core::settings::CredentialAccess {
+        self.tokens.access()
+    }
+
+    /// Tries again what the keychain did not answer (never blocks).
+    pub fn retry_credentials(&self) {
+        self.tokens.retry();
+    }
+
     pub fn disconnect(&self) -> Result<(), stagepilot_core::settings::CredentialStoreError> {
         *self.pending() = None;
         self.tokens.clear()
@@ -699,9 +717,9 @@ impl crate::client::TokenSource for OAuthService {
             CompleteError::OAuth(_) => {
                 PcoError::Transport("Could not refresh the Planning Center sign-in.".into())
             }
-            CompleteError::Credential(_) => {
-                PcoError::configuration("Planning Center credentials are not available.")
-            }
+            // The keychain is waiting or refused: transient, retried by the plugin and by the
+            // keychain watcher; the text says what is wrong.
+            CompleteError::Credential(error) => PcoError::Transport(error.0),
         })
     }
 

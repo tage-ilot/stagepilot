@@ -69,6 +69,9 @@ pub struct PcoSettings {
     pub upcoming_lookahead_days: u16,
     pub request_timeout_seconds: f64,
     pub user_agent: String,
+    /// Why a needed credential cannot be read right now (keychain waiting or refused). Set only
+    /// while the credential is missing for that reason; never a secret.
+    pub credential_issue: Option<String>,
 }
 
 impl Default for PcoSettings {
@@ -84,6 +87,7 @@ impl Default for PcoSettings {
             upcoming_lookahead_days: 30,
             request_timeout_seconds: 10.0,
             user_agent: default_user_agent(),
+            credential_issue: None,
         }
     }
 }

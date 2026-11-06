@@ -97,5 +97,26 @@ pub fn current_settings(settings: &SettingsService, oauth: Option<&OAuthService>
         .flatten()
         .filter(|t| !t.needs_reconnect)
         .map(|t| t.access_token);
-    pco_settings::effective(settings, token)
+    let mut effective = pco_settings::effective(settings, token);
+    if !effective.is_configured() {
+        effective.credential_issue = credential_issue(settings, oauth);
+    }
+    effective
+}
+
+/// Why the keychain cannot give the credential this connection method needs right now.
+fn credential_issue(settings: &SettingsService, oauth: Option<&OAuthService>) -> Option<String> {
+    use stagepilot_core::credential_guard::{KEYCHAIN_REFUSED, KEYCHAIN_WAITING};
+    use stagepilot_core::settings::CredentialAccess;
+    let access = if settings.snapshot().planning_center.connection_method == ConnectionMethod::Oauth
+    {
+        oauth?.credential_access()
+    } else {
+        settings.credential_access()
+    };
+    match access {
+        CredentialAccess::Ready => None,
+        CredentialAccess::Waiting => Some(KEYCHAIN_WAITING.to_string()),
+        CredentialAccess::Refused => Some(KEYCHAIN_REFUSED.to_string()),
+    }
 }

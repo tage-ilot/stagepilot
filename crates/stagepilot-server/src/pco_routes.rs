@@ -242,6 +242,22 @@ fn persistence_error(message: &str) -> Response {
 
 // ---- status -----------------------------------------------------------------------------------------------
 
+/// What the operator reads while the keychain has not given the credential: it says what is
+/// wrong instead of "not connected".
+fn keychain_detail(rt: &Runtime, method: ConnectionMethod) -> Option<String> {
+    use stagepilot_core::credential_guard::{KEYCHAIN_REFUSED, KEYCHAIN_WAITING};
+    use stagepilot_core::settings::CredentialAccess;
+    let access = match method {
+        ConnectionMethod::Oauth => rt.pco.oauth.credential_access(),
+        ConnectionMethod::Manual => rt.settings_service.credential_access(),
+    };
+    match access {
+        CredentialAccess::Ready => None,
+        CredentialAccess::Waiting => Some(KEYCHAIN_WAITING.to_string()),
+        CredentialAccess::Refused => Some(KEYCHAIN_REFUSED.to_string()),
+    }
+}
+
 pub async fn status(State(rt): State<Rt>) -> Response {
     let state = rt.store.snapshot();
     let effective = rt.pco.effective();
@@ -260,7 +276,7 @@ pub async fn status(State(rt): State<Rt>) -> Response {
         connection_method: method,
         oauth_connected: oauth.connected,
         oauth_needs_reconnect: oauth.needs_reconnect,
-        detail: state.service_load.message.clone(),
+        detail: keychain_detail(&rt, method).or_else(|| state.service_load.message.clone()),
     };
     respond(ok(to_value(&body)))
 }
@@ -313,6 +329,8 @@ async fn ensure_show_idle(rt: &Runtime, message: &str) -> Option<Response> {
 /// Hand the current credentials to the running plugin, or apply the saved source when there is none.
 #[allow(clippy::result_large_err)]
 async fn apply_credentials(rt: &Rt) -> Result<(), Response> {
+    // Signing in or saving again is also the operator's "try the keychain again".
+    rt.retry_keychain().await;
     match rt.pco.plugin() {
         Some(plugin) => {
             plugin.reconfigure(rt.pco.effective()).await;
