@@ -1087,10 +1087,11 @@ pub struct SongLightingCueMap {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CaptureStatus {
-    /// A pass that covered at least 95 % of the song with no seek, no link drop of a minute or
-    /// more and at least one change. Only a complete capture is replayed by Auto.
+    /// A pass that recorded all of the song but at most 10 s in total (wherever those seconds
+    /// are: a link drop, a seek, a pause, a late start) and at least one change. Only a complete
+    /// capture is replayed by Auto.
     pub complete: bool,
-    /// Seconds of the song the pass covered.
+    /// Seconds of the song the pass recorded in total (the union of the recorded stretches).
     pub coverage_seconds: f64,
     /// When the pass was saved, RFC 3339 UTC.
     pub recorded_at: String,

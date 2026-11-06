@@ -101,7 +101,9 @@ impl Acc {
 pub struct LoudnessRecorder {
     started_at: f64,
     running: bool,
-    slots: BTreeMap<usize, Acc>,
+    /// Per slot: the stretch that heard it (see [`next_stretch`](Self::next_stretch)) and its level.
+    slots: BTreeMap<usize, (u32, Acc)>,
+    stretch: u32,
 }
 
 impl LoudnessRecorder {
@@ -110,7 +112,15 @@ impl LoudnessRecorder {
             started_at,
             running: true,
             slots: BTreeMap::new(),
+            stretch: 0,
         }
+    }
+
+    /// The song was moved (a seek or restart): what is heard from here on replaces anything heard
+    /// earlier in the same slots, so the latest recording of a stretch wins. A pause that resumes
+    /// in place is not a new stretch. Slots nobody heard stay empty (a gap).
+    pub fn next_stretch(&mut self) {
+        self.stretch += 1;
     }
 
     /// Song time 0 moved (the song resumed).
@@ -144,10 +154,14 @@ impl LoudnessRecorder {
             // Samples left in this slot, at least one so the loop always moves.
             let slot_end = (slot + 1) as f64 * STEP_SECONDS;
             let take = (((slot_end - t) * rate).ceil() as usize).clamp(1, samples.len() - index);
-            self.slots
+            let entry = self
+                .slots
                 .entry(slot)
-                .or_default()
-                .add(&samples[index..index + take]);
+                .or_insert_with(|| (self.stretch, Acc::default()));
+            if entry.0 != self.stretch {
+                *entry = (self.stretch, Acc::default());
+            }
+            entry.1.add(&samples[index..index + take]);
             index += take;
         }
     }
@@ -160,7 +174,7 @@ impl LoudnessRecorder {
             .map(|slot| {
                 self.slots
                     .get(&slot)
-                    .map_or(0, |acc| level_byte(acc.level().rms_db))
+                    .map_or(0, |(_, acc)| level_byte(acc.level().rms_db))
             })
             .collect();
         values.iter().any(|v| *v != 0).then_some(SongLoudness {

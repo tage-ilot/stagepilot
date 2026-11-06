@@ -688,7 +688,9 @@ async fn a_short_capture_is_saved_as_incomplete() {
     let message = rig.link.set_recording(false).await;
     assert!(message.starts_with("Saved "), "{message}");
     assert!(
-        message.contains("Incomplete capture: 1 of 300 seconds; it captures again next time."),
+        message.contains(
+            "Incomplete capture: 1 of 300 seconds recorded; it captures again next time."
+        ),
         "{message}"
     );
     {
@@ -888,4 +890,123 @@ async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_
         at("P2")
     );
     rig.link.stop().await;
+}
+
+/// One take with a link drop and a seek forward. Returns the saved looks, the seconds the link
+/// was down (measured), the song position the seek left and the song second it jumped to.
+async fn take_with_a_drop_and_a_seek(
+    duration: u32,
+    skip: f64,
+) -> (SongLooks, f64, f64, f64, f64, Vec<String>) {
+    let rig = Rig::new(vec![dim("P1", 0.0), dim("P2", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    let t0 = Instant::now();
+    let s = song(duration);
+    rig.song_start(&s).await;
+    pause(0.4).await;
+    rig.relay.change(vec![dim("P1", 0.3)], 0.0, 0).await;
+    pause(0.4).await;
+    // the stream drops; P1 moves while nobody is listening
+    let off = t0.elapsed().as_secs_f64();
+    rig.settings.lock().unwrap().1 = false;
+    pause(1.5).await;
+    rig.relay.change(vec![dim("P1", 0.6)], 0.0, 0).await;
+    rig.settings.lock().unwrap().1 = true;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .fixtures
+                .is_some_and(|s| s.link == FixtureLink::Live)
+        },
+        5.0,
+    )
+    .await;
+    pause(0.8).await;
+    let live = t0.elapsed().as_secs_f64();
+    // the operator seeks forward `skip` seconds, the song keeps running
+    let left = t0.elapsed().as_secs_f64();
+    let target = left + skip;
+    rig.bus
+        .publish(new_event(
+            EventType::TimerSeeked,
+            "t",
+            EventPayload::Timer(TimerPayload {
+                duration_seconds: duration,
+                song: Some(s.clone()),
+                position_seconds: Some(target),
+                running: true,
+                started_at: Some(Utc::now()),
+                ..TimerPayload::default()
+            }),
+        ))
+        .await;
+    pause(0.5).await;
+    rig.relay.change(vec![dim("P2", 0.9)], 0.0, 0).await;
+    pause(0.5).await;
+    rig.song_stop(&s, f64::from(duration)).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let message = rig.link.status().message.unwrap_or_default();
+    rig.link.stop().await;
+    (saved, live - off, left, target, live, vec![message])
+}
+
+fn dimmer_rows(saved: &SongLooks, fixture: &str, value: f64) -> Vec<f64> {
+    saved
+        .rows
+        .iter()
+        .filter(|r| {
+            r.messages.iter().any(|m| {
+                m.address == format!("/fixture/{fixture}/overrides/dimmer")
+                    && matches!(m.args.first(), Some(stagepilot_core::config::OscArgument::Float(x)) if (x - value).abs() < 0.001)
+            })
+        })
+        .map(|r| r.at_seconds)
+        .collect()
+}
+
+/// Hunter, 2026-11-06: a capture is complete even when it misses a few seconds anywhere (a drop,
+/// a seek forward). The link drop does not end the pass, the seek does not discard it, the
+/// stretch after each gap starts with the value the property has by then, and the status counts
+/// the seconds recorded in total.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_take_with_a_drop_and_a_seek_is_saved_once_complete_with_the_gaps_counted() {
+    let (saved, down, left, target, live, message) = take_with_a_drop_and_a_seek(12, 3.0).await;
+    let expected = (left - down) + (12.0 - target);
+    assert!(
+        (saved.status.coverage_seconds - expected).abs() < 1.0,
+        "recorded {} s, expected about {expected} (down {down}, left {left}, target {target})",
+        saved.status.coverage_seconds
+    );
+    assert!(saved.status.complete, "{:?} {message:?}", saved.status);
+    assert!(
+        message[0].contains("s of the song were not captured"),
+        "{message:?}"
+    );
+    // P1 moved to 0.6 while the stream was down: the stretch after the drop starts with it
+    let at = dimmer_rows(&saved, "P1", 0.6);
+    assert!(
+        at.iter()
+            .any(|t| (*t - live).abs() < 1.5 && *t > live - 1.5),
+        "no row of P1 = 0.6 near the reconnection at {live}: {at:?} {:?}",
+        saved.rows
+    );
+    // the change made after the seek is at the new position, not before it
+    let after = dimmer_rows(&saved, "P2", 0.9);
+    assert!(
+        after.iter().any(|t| *t >= target - 0.2),
+        "{after:?} target {target}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_seek_that_skips_more_than_ten_seconds_saves_an_incomplete_capture() {
+    let (saved, _, _, _, _, message) = take_with_a_drop_and_a_seek(30, 18.0).await;
+    assert!(!saved.status.complete, "{:?}", saved.status);
+    assert!(saved.status.coverage_seconds < 20.0);
+    assert!(message[0].contains("Incomplete capture"), "{message:?}");
+    assert!(message[0].contains("seconds recorded"), "{message:?}");
 }

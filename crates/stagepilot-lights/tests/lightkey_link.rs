@@ -545,7 +545,7 @@ async fn a_recording_with_no_changes_says_not_saved() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn seek_while_recording_discards_the_recording() {
+async fn seek_while_recording_goes_on_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -554,9 +554,11 @@ async fn seek_while_recording_discards_the_recording() {
     rig.seek(&s, 7.0, 3).await;
     pause(0.1).await;
     let status = rig.link.status();
-    assert_eq!(status.recording_song, None);
-    assert!(status.message.unwrap_or_default().contains("moved"));
-    assert!(rig.saved.lock().unwrap().is_empty());
+    assert!(
+        status.recording_song.is_some(),
+        "a seek no longer discards the pass"
+    );
+    assert!(!status.message.unwrap_or_default().contains("discarded"));
     rig.link.stop().await;
 }
 

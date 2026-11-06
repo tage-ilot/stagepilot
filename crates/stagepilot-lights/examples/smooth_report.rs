@@ -238,7 +238,7 @@ fn main() {
 
         println!("\nreconstruction (rebuilt at 25 ms from rows + effects vs the recorded samples)");
         let (base, changes) = recorder.raw();
-        let report = reconstruct_report(&base, changes, duration, &rows, &fit.effects, 1.0);
+        let report = reconstruct_report(&base, &changes, duration, &rows, &fit.effects, 1.0);
         table(
             "outside effects (acceptance: max <= tolerance)",
             &report.outside_effects,

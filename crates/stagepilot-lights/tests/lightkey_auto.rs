@@ -6,7 +6,7 @@ use stagepilot_core::config::{
     SongLightingCueMap,
 };
 use stagepilot_lights::lightkey_auto::{
-    decide, judge, song_capture, Action, Availability, PassVerdict, Reason, SongCapture,
+    decide, judge, song_capture, Action, Availability, Coverage, PassVerdict, Reason, SongCapture,
     GRACE_SECONDS,
 };
 use stagepilot_lights::lightkey_looks::{save_capture, CaptureSave};
@@ -201,7 +201,7 @@ fn a_link_that_was_never_up_is_not_available() {
 }
 
 #[test]
-fn a_drop_is_covered_for_sixty_seconds_then_fails() {
+fn a_drop_is_covered_for_sixty_seconds_when_a_song_starts() {
     let mut a = Availability::default();
     a.observe(100.0, true);
     assert!(a.usable(100.0, true));
@@ -209,9 +209,6 @@ fn a_drop_is_covered_for_sixty_seconds_then_fails() {
     assert!(a.usable(110.0, false));
     assert!(a.usable(110.0 + GRACE_SECONDS - 0.1, false));
     assert!(!a.usable(110.0 + GRACE_SECONDS, false));
-    assert!(!a.dropped_too_long(110.0 + 40.0)); // a 40 s drop is fine
-    assert!(a.dropped_too_long(110.0 + 70.0)); // a 70 s drop is not
-    assert!(a.dropped_too_long(110.0 + GRACE_SECONDS)); // 60 s or more
 }
 
 #[test]
@@ -219,11 +216,9 @@ fn coming_back_resets_the_drop() {
     let mut a = Availability::default();
     a.observe(0.0, true);
     a.observe(10.0, false);
+    assert_eq!(a.down_since(), Some(10.0));
     a.observe(50.0, true); // back after 40 s
-    assert!(!a.dropped_too_long(200.0));
-    a.observe(300.0, false); // a new drop starts at 300
-    assert!(!a.dropped_too_long(330.0));
-    assert!(a.dropped_too_long(360.0));
+    assert_eq!(a.down_since(), None);
 }
 
 // ---------------------------------------------------------------------------- pass verdict
@@ -231,36 +226,94 @@ fn coming_back_resets_the_drop() {
 #[test]
 fn the_pass_verdict() {
     use PassVerdict::*;
-    // (duration, covered, has changes, link failed)
+    // (duration, covered in total, has changes)
     let cases = [
-        (200.0, 200.0, true, false, Complete),
-        (200.0, 190.0, true, false, Complete), // exactly 10 s short
-        (200.0, 189.0, true, false, Partial),  // 11 s short
-        (200.0, 189.9, true, false, Partial),
-        (200.0, 190.1, true, false, Complete),
-        (1000.0, 990.0, true, false, Complete), // 10 s, not 5 %, on a long song
-        (1000.0, 950.0, true, false, Partial),  // 95 % no longer completes
-        (200.0, 200.0, false, false, NoChanges), // a pass with no changes is nothing
-        (200.0, 0.0, false, false, NoChanges),
-        (200.0, 130.0, true, true, Partial), // 70 s drop: incomplete
-        (200.0, 200.0, true, true, Partial), // a link drop is never complete
-        (200.0, 120.0, true, false, Partial), // stopped at 60 %
-        (200.0, 0.0, true, false, Partial),  // a change at 0 s is still saved
-        (200.0, 0.5, true, false, Partial),  // however short
-        (200.0, 9.0, true, false, Partial),
-        (8.0, 0.0, true, false, Partial), // short song: half is the floor
-        (8.0, 4.0, true, false, Complete),
-        (200.0, 250.0, true, false, Complete), // an overrun is clamped, not refused
-        (0.0, 30.0, true, false, UnknownLength),
-        (0.0, 0.0, false, false, UnknownLength),
+        (200.0, 200.0, true, Complete),
+        (200.0, 190.0, true, Complete), // exactly 10 s missing
+        (200.0, 189.9, true, Partial),  // 10.1 s missing
+        (200.0, 190.1, true, Complete),
+        (1000.0, 990.0, true, Complete), // 10 s, not 5 %, on a long song
+        (1000.0, 950.0, true, Partial),  // 95 % no longer completes
+        (200.0, 200.0, false, NoChanges), // a pass with no changes is nothing
+        (200.0, 0.0, false, NoChanges),
+        (200.0, 120.0, true, Partial), // stopped at 60 %
+        (200.0, 0.0, true, Partial),   // a change at 0 s is still saved
+        (200.0, 0.5, true, Partial),   // however short
+        (200.0, 9.0, true, Partial),
+        (8.0, 0.0, true, Partial), // short song: half is the floor
+        (8.0, 4.0, true, Complete),
+        (200.0, 250.0, true, Complete), // an overrun is clamped, not refused
+        (0.0, 30.0, true, UnknownLength),
+        (0.0, 0.0, false, UnknownLength),
     ];
-    for (duration, covered, changes, failed, want) in cases {
+    for (duration, covered, changes, want) in cases {
         assert_eq!(
-            judge(duration, covered, changes, failed),
+            judge(duration, covered, changes),
             want,
-            "{duration} {covered} {changes} {failed}"
+            "{duration} {covered} {changes}"
         );
     }
+}
+
+fn covered(spans: &[(f64, f64)]) -> Coverage {
+    let mut c = Coverage::new();
+    for &(a, b) in spans {
+        c.add(a, b);
+    }
+    c
+}
+
+fn verdict(duration: f64, spans: &[(f64, f64)]) -> PassVerdict {
+    judge(duration, covered(spans).total(duration), true)
+}
+
+#[test]
+fn coverage_is_the_union_of_the_recorded_stretches() {
+    let mut c = Coverage::new();
+    assert!(c.is_empty());
+    c.add(10.0, 20.0);
+    c.add(15.0, 30.0); // overlap merges
+    c.add(30.0, 40.0); // touching merges
+    c.add(50.0, 60.0);
+    c.add(5.0, 5.0); // empty
+    c.add(9.0, 3.0); // reversed
+    c.add(f64::NAN, 9.0);
+    assert_eq!(c.total(200.0), 40.0);
+    c.add(-5.0, 2.0); // a negative start is cut to 0
+    assert_eq!(c.total(200.0), 42.0);
+    c.add(0.0, 100.0); // re-recording a stretch counts it once
+    assert_eq!(c.total(200.0), 100.0);
+    assert_eq!(c.total(80.0), 80.0); // past the end is not coverage
+    assert_eq!(c.missing(200.0), 100.0);
+    assert_eq!(c.missing(50.0), 0.0);
+}
+
+#[test]
+fn gaps_anywhere_are_fine_when_at_most_ten_seconds_in_total_are_missing() {
+    use PassVerdict::*;
+    let d = 200.0;
+    assert_eq!(verdict(d, &[(0.0, 200.0)]), Complete); // no gaps
+    assert_eq!(
+        verdict(d, &[(0.0, 60.0), (64.0, 120.0), (125.0, 200.0)]),
+        Complete
+    ); // 4 s + 5 s
+    assert_eq!(verdict(d, &[(0.0, 100.0), (110.0, 200.0)]), Complete); // exactly 10 s
+    assert_eq!(verdict(d, &[(0.0, 100.0), (110.1, 200.0)]), Partial); // 10.1 s
+    assert_eq!(verdict(d, &[(0.0, 50.0), (80.0, 200.0)]), Partial); // seek forward 30 s
+    assert_eq!(verdict(d, &[(0.0, 50.0), (58.0, 200.0)]), Complete); // seek forward 8 s
+                                                                     // seek back 20 s at 120 and record on to the end: the union counts once
+    assert_eq!(verdict(d, &[(0.0, 120.0), (100.0, 200.0)]), Complete);
+    assert_eq!(covered(&[(0.0, 120.0), (100.0, 200.0)]).total(d), 200.0);
+    // a link drop of 5, 20 and 90 s mid-song: the pass goes on and is judged by the total
+    assert_eq!(verdict(d, &[(0.0, 80.0), (85.0, 200.0)]), Complete);
+    assert_eq!(verdict(d, &[(0.0, 80.0), (100.0, 200.0)]), Partial);
+    assert_eq!(verdict(d, &[(0.0, 80.0), (170.0, 200.0)]), Partial);
+    assert_eq!(verdict(300.0, &[(0.0, 80.0), (170.0, 300.0)]), Partial); // 90 s of 300
+                                                                         // a late start of 6 s and 14 s
+    assert_eq!(verdict(d, &[(6.0, 200.0)]), Complete);
+    assert_eq!(verdict(d, &[(14.0, 200.0)]), Partial);
+    // unknown length is unchanged
+    assert_eq!(judge(0.0, 30.0, true), UnknownLength);
 }
 
 // ---------------------------------------------------------------- which capture a song keeps

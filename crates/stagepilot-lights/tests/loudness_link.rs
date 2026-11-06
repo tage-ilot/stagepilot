@@ -441,23 +441,48 @@ fn db_ok(v: u8) -> bool {
     byte_db(v).is_none_or(|d| d < -15.0)
 }
 
+/// Seeking forward skips a stretch: it is a gap (slots with no data), the take goes on.
 #[tokio::test]
-async fn moving_the_playhead_discards_the_recording() {
+async fn seeking_forward_leaves_a_gap_and_the_take_goes_on() {
     let input = FakeInput::new(&["Mic"]);
     let rig = Rig::armed(input.clone()).await;
     let s = song(10);
     rig.start(&s).await;
-    rig.hear(3.0, 0.1);
-    rig.seek(&s, 8.0).await;
-    assert_eq!(
-        input.open_count(),
-        0,
-        "a discarded recording releases the input"
-    );
-    rig.hear(2.0, 0.1);
+    rig.hear(3.0, 0.1); // song 0..3
+    rig.seek(&s, 7.0).await;
+    assert_eq!(input.open_count(), 1, "the input stays open");
+    rig.hear(3.0, 0.1); // song 7..10
     rig.stop(&s, 10.0).await;
-    assert!(rig.saved.lock().unwrap().is_empty());
-    assert!(rig.link.status().message.unwrap().contains("discarded"));
+    let l = rig.saved.lock().unwrap()[0].loudness.clone();
+    assert!(l.values[..11].iter().all(|v| *v != 0), "{:?}", l.values);
+    assert!(
+        l.values[13..27].iter().all(|v| *v == 0),
+        "the skipped stretch is empty"
+    );
+    assert!(l.values[29..].iter().all(|v| *v != 0), "{:?}", l.values);
+}
+
+/// Seeking back records the same stretch again: the latest recording of a slot wins.
+#[tokio::test]
+async fn seeking_back_replaces_what_was_heard_in_the_stretch() {
+    let input = FakeInput::new(&["Mic"]);
+    let rig = Rig::armed(input.clone()).await;
+    let s = song(10);
+    rig.start(&s).await;
+    rig.hear(4.0, 0.5); // song 0..4, loud (-6 dBFS)
+    rig.seek(&s, 2.0).await;
+    rig.hear(8.0, 0.05); // song 2..10, quiet (-26 dBFS)
+    rig.stop(&s, 10.0).await;
+    let l = rig.saved.lock().unwrap()[0].loudness.clone();
+    assert!(
+        l.values[..7].iter().all(|v| !db_ok(*v)),
+        "0..2 s stays loud"
+    );
+    assert!(
+        l.values[10..].iter().all(|v| db_ok(*v)),
+        "2..4 s is the later, quiet take: {:?}",
+        l.values
+    );
 }
 
 #[tokio::test]

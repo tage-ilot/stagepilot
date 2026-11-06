@@ -2,16 +2,18 @@
 //!
 //! The Lighting link decides once per song, when its timer starts: capture a song that is not
 //! fully captured yet, replay one that is, and replay when there is no lighting connection. The
-//! decision never changes mid-song. A link drop of up to a minute is covered ("grace"); a longer
-//! one fails the capture, which is then saved as incomplete if it qualifies.
+//! decision never changes mid-song. A capture is judged by how much of the song was recorded in
+//! total ([`Coverage`]); gaps anywhere (a link drop, a seek, a pause, a late start) are fine as
+//! long as no more than [`COMPLETE_MARGIN_SECONDS`] of the song are missing.
 
 use serde::{Deserialize, Serialize};
 use stagepilot_core::config::{LightkeyMode, SongLightingCueMap};
 use ts_rs::TS;
 
-/// A link that was usable this recently still counts as usable; a drop this long fails a capture.
+/// A link that was usable this recently still counts as usable when a song starts and the mode
+/// is Auto (a short drop never flips the decision to replay).
 pub const GRACE_SECONDS: f64 = 60.0;
-/// A pass is a complete capture when it reached within this many seconds of the song's length.
+/// A pass is a complete capture when no more than this many seconds of the song are missing.
 pub const COMPLETE_MARGIN_SECONDS: f64 = 10.0;
 
 /// What a song's cue map says about capturing, as far as the decision cares.
@@ -111,21 +113,79 @@ impl Availability {
                     .is_some_and(|since| now - since < GRACE_SECONDS))
     }
 
-    /// The connection has been down for the grace period or longer.
-    pub fn dropped_too_long(&self, now: f64) -> bool {
-        self.down_since
-            .is_some_and(|since| now - since >= GRACE_SECONDS)
-    }
-
     pub fn down_since(&self) -> Option<f64> {
         self.down_since
+    }
+}
+
+/// The stretches of song time that were really recorded, as a set of disjoint spans in seconds.
+/// A stretch is recorded only while the timer runs and the lighting connection is live; the
+/// union is what counts, so a stretch recorded twice counts once.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Coverage {
+    /// Sorted, disjoint, non-empty `(start, end)` spans.
+    spans: Vec<(f64, f64)>,
+}
+
+impl Coverage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add the stretch `start..end` (song seconds). Empty, reversed and non-finite stretches are
+    /// ignored; negative starts are cut to 0.
+    pub fn add(&mut self, start: f64, end: f64) {
+        if !start.is_finite() || !end.is_finite() {
+            return;
+        }
+        let start = start.max(0.0);
+        if end <= start {
+            return;
+        }
+        let (mut lo, mut hi) = (start, end);
+        let mut spans = Vec::with_capacity(self.spans.len() + 1);
+        for &(a, b) in &self.spans {
+            if b < lo || a > hi {
+                spans.push((a, b));
+            } else {
+                lo = lo.min(a);
+                hi = hi.max(b);
+            }
+        }
+        spans.push((lo, hi));
+        spans.sort_by(|x, y| x.0.total_cmp(&y.0));
+        self.spans = spans;
+    }
+
+    /// Seconds recorded, counting only `0..duration` (a take past the end is not coverage).
+    /// A `duration` of 0 or less (unknown) counts everything.
+    pub fn total(&self, duration: f64) -> f64 {
+        self.spans
+            .iter()
+            .map(|&(a, b)| {
+                if duration > 0.0 {
+                    (b.min(duration) - a.min(duration)).max(0.0)
+                } else {
+                    b - a
+                }
+            })
+            .sum()
+    }
+
+    /// Seconds of a `duration`-second song that were not recorded.
+    pub fn missing(&self, duration: f64) -> f64 {
+        (duration - self.total(duration)).max(0.0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_empty()
     }
 }
 
 /// What a finished pass is worth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassVerdict {
-    /// Covered the song from the start to within [`COMPLETE_MARGIN_SECONDS`] of its end.
+    /// Recorded all of the song but at most [`COMPLETE_MARGIN_SECONDS`], wherever those seconds are.
     Complete,
     /// Has at least one change but is not complete: saved as "Incomplete capture", however short.
     Partial,
@@ -135,9 +195,10 @@ pub enum PassVerdict {
     UnknownLength,
 }
 
-/// `covered` seconds of a `duration`-second song were recorded; `link_failed`: the connection was
-/// down for a minute or more. (A seek or reset never gets here: it discards the pass.)
-pub fn judge(duration: f64, covered: f64, has_changes: bool, link_failed: bool) -> PassVerdict {
+/// `covered` seconds in total of a `duration`-second song were recorded (see [`Coverage`]).
+/// Where the missing seconds are does not matter: a link drop, a seek, a pause or a late start
+/// all just leave a gap.
+pub fn judge(duration: f64, covered: f64, has_changes: bool) -> PassVerdict {
     if duration <= 0.0 {
         return PassVerdict::UnknownLength;
     }
@@ -147,7 +208,8 @@ pub fn judge(duration: f64, covered: f64, has_changes: bool, link_failed: bool) 
     // A song shorter than twice the margin needs at least half of it, so a few seconds never
     // count as complete.
     let margin = COMPLETE_MARGIN_SECONDS.min(duration / 2.0);
-    if !link_failed && covered.min(duration) >= duration - margin {
+    // The tolerance only absorbs float error in summing spans (exactly 10 s missing is complete).
+    if covered.min(duration) >= duration - margin - 1e-6 {
         PassVerdict::Complete
     } else {
         PassVerdict::Partial
