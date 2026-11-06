@@ -465,14 +465,30 @@ function publicInstallation(installation: Installation): Record<string, unknown>
   };
 }
 
+// Known test-environment device names (CI runners and the AgentHub dev host).
+// deviceName is untrusted self-reported data: this is display-only and must
+// never be used for auth or any security decision.
+const TEST_DEVICE_PATTERNS: readonly RegExp[] = [
+  /^runnervm[a-z0-9]+$/i,
+  /^[a-z]{3}\d{2}-[a-z]{2}\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9a-f]{12}\.local$/i,
+  /^agent-hub$/i,
+  /^stagepilot-ci$/i,
+];
+
+export function isKnownTestDevice(deviceName: string | undefined): boolean {
+  if (typeof deviceName !== 'string') return false;
+  return TEST_DEVICE_PATTERNS.some((pattern) => pattern.test(deviceName));
+}
+
 function formatInstallationLocation(installation: Installation): string {
-  // Unpinned installs expire after 48h by policy, so an unpinned install with
-  // no geolocation is treated as a test install; a pinned one stays Unknown.
+  // Only an unpinned install whose self-reported deviceName matches a known
+  // test host shows "Test Install"; any other install with no geolocation is
+  // Unknown. Display-only, never a security decision.
   return installation.locationOverride
     || installation.lastCity
     || installation.lastRegion
     || installation.lastCountry
-    || (installation.keep ? 'Unknown' : 'Test Install');
+    || (!installation.keep && isKnownTestDevice(installation.deviceName) ? 'Test Install' : 'Unknown');
 }
 
 function publicAlert(alert: AlertRecord): Record<string, unknown> {
