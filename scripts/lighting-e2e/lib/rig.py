@@ -90,7 +90,7 @@ class Rig:
             self.backend.stop()
         await self.relay.stop()
         await self.lk.stop()
-        await self.pb.stop()
+        await self.pb.shutdown()
 
     def configure(self):
         """Lighting setup through the HTTP API only: OSC to the fake Lightkey, the API at 127.0.0.1."""

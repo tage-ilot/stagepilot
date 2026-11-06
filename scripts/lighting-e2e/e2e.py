@@ -348,9 +348,13 @@ async def stage_control(rig, takes, out):
                                "fixtures_cleared": len({an.fixture(a) for a in clT}), "each_twice": all(clT.count(a) == 2 for a in set(clT))}
     rig.backend.start()
     await rig.wait_link()
-    rig.pb.pause(); rig.pb.stop()
+    rig.pb.stop()
     await asyncio.sleep(2)
-    rig.pb.play(PB_ID[key], 30.0)
+    # a fresh backend only resolves a song that starts at its beginning (it learns the setlist
+    # from the Playback heartbeat); start at 0 and seek to 30 s
+    rig.pb.play(PB_ID[key], 0.0)
+    await asyncio.sleep(1.5)
+    rig.pb.seek(30.0)
     await asyncio.sleep(12)
     markK = rig.lk.mark()
     playing_k = (rig.state().get("playing_song") or {}).get("title")

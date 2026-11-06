@@ -280,6 +280,6 @@ class FakePlayback:
 
         self.server = await websockets.serve(handler, "127.0.0.1", self.port, subprotocols=["pr-protocol"])
 
-    async def stop(self):
+    async def shutdown(self):
         if self.server:
             self.server.close()
