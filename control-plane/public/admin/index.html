@@ -287,7 +287,7 @@
   </section>
 
   <section class="panel">
-    <h2>Cities</h2>
+    <h2>Locations</h2>
     <div id="cities-list"></div>
   </section>
 </div>
@@ -555,6 +555,30 @@
       });
       actions.appendChild(nameInput);
       actions.appendChild(saveBtn);
+
+      var locInput = document.createElement('input');
+      locInput.type = 'text';
+      locInput.maxLength = 80;
+      locInput.placeholder = 'Set location';
+      locInput.title = 'Override the displayed location (blank = use automatic). Display only.';
+      locInput.value = inst.locationOverride || '';
+      locInput.style.cssText = nameInput.style.cssText;
+      var locBtn = el('button', null, 'Set location');
+      locBtn.addEventListener('click', function () {
+        locBtn.disabled = true;
+        api('/v1/admin/installations/' + encodeURIComponent(inst.installationId) + '/location', {
+          method: 'PATCH',
+          body: { location: locInput.value.trim() },
+        }).then(function () {
+          setStatus('Location saved.', 'ok');
+          loadAll();
+        }).catch(function (err) {
+          locBtn.disabled = false;
+          setStatus('Could not save: ' + err.message, 'error');
+        });
+      });
+      actions.appendChild(locInput);
+      actions.appendChild(locBtn);
 
       if (!inst.revoked) {
         var pinBtn = el('button', null, inst.keep ? 'Pinned ✓' : 'Pin');

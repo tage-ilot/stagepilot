@@ -1443,13 +1443,13 @@ describe('fleet alert ingestion and admin endpoints', () => {
     expect(listAfterUpdateBody.alerts[0]?.location).toBe('Denver');
   });
 
-  it('falls back to "Unknown" for an alert from an installation with no known location', async () => {
+  it('shows "Test Install" for an alert from an unpinned installation with no known location', async () => {
     const installation = await enroll(registry, 'alert-geo-unknown-0001');
     const created = await registry.fetch(request(
       installationPath(installation, 'alerts'), 'POST', String(installation.installationCredential), alertBody(),
     ));
     expect(created.status).toBe(201);
-    expect((await json(created)).location).toBe('Unknown');
+    expect((await json(created)).location).toBe('Test Install');
   });
 });
 
@@ -1503,7 +1503,7 @@ describe('fleet city list (edge geolocation, never raw IP)', () => {
     expect(citiesBody.cities.find((row) => row.location === 'Austin')).toBeUndefined();
   });
 
-  it('falls back to region, then country, then "Unknown" when finer geolocation is unavailable', async () => {
+  it('falls back to region, then country, then "Test Install" (unpinned) when finer geolocation is unavailable', async () => {
     const noCity = await enroll(registry, 'geo-fleet-0002');
     await registry.fetch(requestWithCf(
       installationPath(noCity, 'status'), 'GET', String(noCity.installationCredential), undefined,
@@ -1526,7 +1526,33 @@ describe('fleet city list (edge geolocation, never raw IP)', () => {
     const byLocation = new Map(body.cities.map((row) => [row.location, row.count]));
     expect(byLocation.get('Ontario')).toBe(1);
     expect(byLocation.get('DE')).toBe(1);
-    expect(byLocation.get('Unknown')).toBe(1);
+    expect(byLocation.get('Test Install')).toBe(1);
+  });
+
+  it('recordRequestGeo never clobbers a manual locationOverride', async () => {
+    const installation = await enroll(registry, 'geo-fleet-override-0001');
+    const id = String(installation.installationId);
+    const credential = String(installation.installationCredential);
+    const set = await registry.fetch(request(`/v1/admin/installations/${id}/location`, 'PATCH', adminToken, { location: 'Pasadena' }));
+    expect(set.status).toBe(200);
+    await registry.fetch(requestWithCf(
+      installationPath(installation, 'status'), 'GET', credential, undefined,
+      { city: 'Austin', region: 'Texas', country: 'US' },
+    ));
+    await registry.fetch(requestWithCf(
+      installationPath(installation, 'reconcile'), 'POST', credential, undefined,
+      { city: 'Denver', region: 'Colorado', country: 'US' },
+    ));
+    const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    const row = (list.installations as Array<Record<string, unknown>>).find((r) => r.installationId === id)!;
+    expect(row.location).toBe('Pasadena');
+    expect(row.locationOverride).toBe('Pasadena');
+    // Clearing restores the latest geolocation.
+    await registry.fetch(request(`/v1/admin/installations/${id}/location`, 'PATCH', adminToken, { location: '  ' }));
+    const after = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    const row2 = (after.installations as Array<Record<string, unknown>>).find((r) => r.installationId === id)!;
+    expect(row2.location).toBe('Denver');
+    expect(row2.locationOverride).toBe('');
   });
 
   it('aggregates across multiple installations sharing a city and sorts by count descending', async () => {
@@ -2724,5 +2750,63 @@ describe('installation expiry sweep', () => {
     expect((await registry.fetch(request(keepPath(id), 'PATCH', adminToken, {}))).status).toBe(400);
     expect((await registry.fetch(request(keepPath('f'.repeat(32)), 'PATCH', adminToken, { keep: true }))).status).toBe(404);
     expect(get(id).keep).toBeUndefined();
+  });
+
+  describe('location display and override', () => {
+    const locPath = (id: string) => `/v1/admin/installations/${id}/location`;
+    const listRow = async (id: string) => {
+      const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+      return (list.installations as Array<Record<string, unknown>>).find((r) => r.installationId === id)!;
+    };
+
+    it('unpinned no-geo => Test Install; pinned no-geo => Unknown', async () => {
+      const unpinned = seed({}, HOUR);
+      const pinned = seed({ keep: true }, HOUR);
+      expect((await listRow(unpinned)).location).toBe('Test Install');
+      expect((await listRow(pinned)).location).toBe('Unknown');
+    });
+
+    it('override beats geo and Test Install; clearing restores them', async () => {
+      const geo = seed({ lastCity: 'Austin' }, HOUR);
+      const bare = seed({}, HOUR);
+      expect((await registry.fetch(request(locPath(geo), 'PATCH', adminToken, { location: '  Pasadena  ' }))).status).toBe(200);
+      expect((await registry.fetch(request(locPath(bare), 'PATCH', adminToken, { location: 'Lab' }))).status).toBe(200);
+      expect((await listRow(geo)).location).toBe('Pasadena');
+      expect(get(geo).locationOverride).toBe('Pasadena');
+      expect((await listRow(bare)).location).toBe('Lab');
+      expect((await registry.fetch(request(locPath(geo), 'PATCH', adminToken, { location: '' }))).status).toBe(200);
+      expect((await registry.fetch(request(locPath(bare), 'PATCH', adminToken, { location: '' }))).status).toBe(200);
+      expect((await listRow(geo)).location).toBe('Austin');
+      expect((await listRow(bare)).location).toBe('Test Install');
+      expect(get(geo).locationOverride).toBeUndefined();
+    });
+
+    it('Locations counts group many Test Install plus one override city', async () => {
+      for (let i = 0; i < 5; i += 1) seed({}, HOUR);
+      const home = seed({}, HOUR);
+      await registry.fetch(request(locPath(home), 'PATCH', adminToken, { location: 'Pasadena' }));
+      const body = await json(await registry.fetch(request('/v1/admin/cities', 'GET', adminToken)));
+      expect(body.cities).toEqual([{ location: 'Test Install', count: 5 }, { location: 'Pasadena', count: 1 }]);
+    });
+
+    it('location route: 401 without token, 400 on bad input, 404 unknown id', async () => {
+      const id = seed({}, HOUR);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', undefined, { location: 'x' }))).status).toBe(401);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', 'wrong-token-wrong-token-wrong-token-xx', { location: 'x' }))).status).toBe(401);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, { location: 'x'.repeat(81) }))).status).toBe(400);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, { location: 'a\u0007b' }))).status).toBe(400);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, { location: 'a\nb' }))).status).toBe(400);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, { location: 5 }))).status).toBe(400);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, {}))).status).toBe(400);
+      expect((await registry.fetch(request(locPath('f'.repeat(32)), 'PATCH', adminToken, { location: 'x' }))).status).toBe(404);
+      expect((await registry.fetch(request(locPath(id), 'PATCH', adminToken, { location: 'x'.repeat(80) }))).status).toBe(200);
+      expect(get(id).locationOverride).toBe('x'.repeat(80));
+    });
+
+    it('admin list includes locationOverride', async () => {
+      const id = seed({ locationOverride: 'Pasadena' }, HOUR);
+      expect((await listRow(id)).locationOverride).toBe('Pasadena');
+      expect((await listRow(seed({}, HOUR))).locationOverride).toBe('');
+    });
   });
 });
