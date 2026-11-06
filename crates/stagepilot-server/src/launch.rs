@@ -116,22 +116,6 @@ impl RemoteManager for RealRemoteManager {
         self.blocking(|m| m.regenerate().map(drop)).await
     }
 
-    async fn location(&self) -> Option<String> {
-        let manager = self.manager.clone();
-        tokio::task::spawn_blocking(move || manager.location())
-            .await
-            .unwrap_or(None)
-    }
-
-    fn supports_location(&self) -> bool {
-        true
-    }
-
-    async fn set_location(&self, location: Option<String>) -> Result<Option<String>, ManagerError> {
-        self.blocking(move |m| m.set_location(location.as_deref()))
-            .await
-    }
-
     fn bootstrap(&self) -> Option<Arc<dyn DiagnosticsBootstrap>> {
         Some(Arc::new(RealBootstrap(self.manager.bootstrap.clone())))
     }
@@ -219,11 +203,16 @@ pub async fn attach_with(
                 .installation_generation(&uuid::Uuid::new_v4().to_string());
         }) as Arc<dyn Fn() + Send + Sync>
     };
-    let options = DesktopOptions {
+    // Only the app itself (no caller-supplied options) does the weekly city lookup.
+    let production = options.is_none();
+    let mut options = DesktopOptions {
         revoke_sessions: Some(revoke),
         lan_port,
         ..options.unwrap_or_default()
     };
+    if production {
+        options.ip_lookup = Some(Arc::new(stagepilot_remote::http::ReqwestTransport::new()));
+    }
     let manager = Arc::new(DesktopRemoteManager::new(
         root,
         cloudflared,

@@ -356,15 +356,13 @@ LAN mode does not provide TLS, so PIN protection is an access barrier for a
 trusted private network rather than permission to expose StagePilot to the
 internet. See [security.md](security.md).
 
-## Install location
+## Privacy
 
-Settings > Location (visible to Operators on the local computer) holds an optional city such as
-`Pasadena, CA`, up to 80 characters. It is saved as `location.json` in the Remote data directory
-and sent with the periodic check-in so the StagePilot team's fleet page shows the right place.
-**Detect my location** fills the field from the system location service (the system asks for
-permission first); the coordinates are turned into a city name on your computer and are never
-saved or sent. Leave the field empty to report no location. Local API: `GET`/`PUT
-/api/v1/install-location` with `{"location": "City, ST"}`.
+Once a week the app asks db-ip.com (`api.db-ip.com`, no account or key) which city its own
+public internet address belongs to, and reports only that city text (for example
+`Rancho Mirage, CA`) on its normal check-in. The address itself is never stored or sent by
+StagePilot. There is no setting for this. To turn it off, start StagePilot with
+`STAGEPILOT_DISABLE_IP_LOOKUP=1`.
 
 ## Local files
 

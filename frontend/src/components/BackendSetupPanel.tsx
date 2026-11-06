@@ -10,7 +10,6 @@ import type {
   HealthResponse,
   SettingsResponse,
 } from "../types";
-import { InstallLocationField } from "./InstallLocationField";
 import { ButtonSpinner, RemoteAccessPanel } from "./RemoteAccessPanel";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
@@ -488,8 +487,6 @@ export function BackendSetupPanel({
         )}
         {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
       </div>
-
-      {remote.canManage && <InstallLocationField allowDetect={remote.local} />}
 
       {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

@@ -1,13 +1,14 @@
 //! Packaged-desktop Remote lifecycle and bundled connector supervision (`remote_desktop.py`).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Map, Value};
 
 use crate::beta_control::BetaRemoteControl;
 use crate::bootstrap::{
-    sanitize_device_name, sanitize_location, BootstrapMetadata, DesktopBootstrapStore, Pacing,
+    sanitize_device_name, BootstrapMetadata, DesktopBootstrapStore, Pacing,
     DEFAULT_CONTROL_PLANE_ORIGIN, DEFAULT_REMOTE_PORT,
 };
 use crate::connector::Connector;
@@ -15,6 +16,7 @@ use crate::error::{RemoteError, Res};
 use crate::feature::RemoteFeature;
 use crate::files::{atomic_write, read_desired, safe_status, BetaControlConfig};
 use crate::http::{HttpClient, HttpTransport};
+use crate::ip_location::{disabled_in_env, lookup_city, LocationState};
 use crate::platform::{Platform, StopFlag};
 use crate::status_map;
 
@@ -42,6 +44,9 @@ pub struct DesktopRemoteManager {
     pacing: Pacing,
     device_name: Option<String>,
     location_path: PathBuf,
+    ip_lookup: Option<Arc<dyn HttpTransport>>,
+    ip_lookup_disabled: bool,
+    lookup_running: AtomicBool,
 }
 
 pub struct DesktopOptions {
@@ -53,6 +58,11 @@ pub struct DesktopOptions {
     pub remote_port: u16,
     pub pacing: Pacing,
     pub device_name: Option<String>,
+    /// Transport for the weekly db-ip city lookup. `None` (the default) never looks anything up,
+    /// so tests cannot reach the network; the app wires the real one in.
+    pub ip_lookup: Option<Arc<dyn HttpTransport>>,
+    /// Overrides `STAGEPILOT_DISABLE_IP_LOOKUP` when set.
+    pub ip_lookup_disabled: Option<bool>,
 }
 
 impl Default for DesktopOptions {
@@ -66,6 +76,8 @@ impl Default for DesktopOptions {
             remote_port: DEFAULT_REMOTE_PORT,
             pacing: Pacing::real(),
             device_name: None,
+            ip_lookup: None,
+            ip_lookup_disabled: None,
         }
     }
 }
@@ -128,6 +140,9 @@ impl DesktopRemoteManager {
             // Captured once per process, untrusted and display-only.
             device_name: options.device_name.or_else(local_device_name),
             location_path: root.join("location.json"),
+            ip_lookup: options.ip_lookup,
+            ip_lookup_disabled: options.ip_lookup_disabled.unwrap_or_else(disabled_in_env),
+            lookup_running: AtomicBool::new(false),
         })
     }
 
@@ -313,6 +328,14 @@ impl DesktopRemoteManager {
             if clock.monotonic() >= checkin_at {
                 let me = self.clone();
                 let _ = tokio::task::spawn_blocking(move || me.lightweight_checkin()).await;
+                // The city lookup runs on its own task so a slow or failing lookup can never
+                // hold up the check-in or this loop; a changed city is reported right away.
+                let me = self.clone();
+                drop(tokio::task::spawn_blocking(move || {
+                    if me.refresh_location_if_due() {
+                        me.lightweight_checkin();
+                    }
+                }));
                 checkin_at = clock.monotonic() + LIGHTWEIGHT_CHECKIN_INTERVAL_SECONDS;
             }
             if self.feature.intent().enabled
@@ -419,44 +442,41 @@ impl DesktopRemoteManager {
         .with_location(self.location().as_deref()))
     }
 
-    /// The install location (city) the user entered, if any. Read on every check-in so a change
-    /// is reported without a restart. Never contains coordinates.
+    /// The city last looked up for this installation, if any (a stale value is still sent).
+    /// Read on every check-in. Never contains an address or coordinates.
     pub fn location(&self) -> Option<String> {
-        let text = std::fs::read_to_string(&self.location_path).ok()?;
-        let value: Value = serde_json::from_str(&text).ok()?;
-        sanitize_location(value.get("location").and_then(Value::as_str))
+        LocationState::load(&self.location_path).location
     }
 
-    /// Store (or, with `None`/blank, clear) the install location. Returns the stored value; an
-    /// over-long or control-only value is a `ValueError`-style rejection.
-    pub fn set_location(&self, requested: Option<&str>) -> Res<Option<String>> {
-        let wanted = requested.map(str::trim).filter(|v| !v.is_empty());
-        let clean = match wanted {
-            Some(raw) => Some(
-                sanitize_location(Some(raw))
-                    .ok_or_else(|| RemoteError::value("Location must be 1 to 80 characters"))?,
-            ),
-            None => None,
+    /// Weekly IP-based city lookup (see [`crate::ip_location`]). Blocking; run it off the
+    /// check-in path. Returns true when the stored city changed. Does nothing when disabled,
+    /// not configured, not due, or already running; a failure keeps the previous value.
+    pub fn refresh_location_if_due(&self) -> bool {
+        let Some(transport) = self.ip_lookup.clone() else {
+            return false;
         };
-        match &clean {
-            Some(city) => {
-                let body = json!({ "location": city }).to_string();
-                if let Some(parent) = self.location_path.parent() {
-                    crate::files::create_private_dir(parent)
-                        .map_err(|_| RemoteError::io("Could not save the location"))?;
-                }
-                let tmp = self.location_path.with_extension("json.tmp");
-                std::fs::write(&tmp, body)
-                    .and_then(|()| std::fs::rename(&tmp, &self.location_path))
-                    .map_err(|_| RemoteError::io("Could not save the location"))?;
-            }
-            None => match std::fs::remove_file(&self.location_path) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(RemoteError::io("Could not clear the location")),
-            },
+        if self.ip_lookup_disabled || self.lookup_running.swap(true, Ordering::SeqCst) {
+            return false;
         }
-        Ok(clean)
+        let changed = self.refresh_location(transport.as_ref());
+        self.lookup_running.store(false, Ordering::SeqCst);
+        changed
+    }
+
+    fn refresh_location(&self, transport: &dyn HttpTransport) -> bool {
+        let now = self.platform.clock.wall();
+        let mut state = LocationState::load(&self.location_path);
+        if !state.due(now) {
+            return false;
+        }
+        let before = state.location.clone();
+        match lookup_city(transport) {
+            Some(city) => state.record_success(city, now),
+            None => state.record_failure(now),
+        }
+        // Best effort: a state file that cannot be written must not affect anything else.
+        let _ = state.save(&self.location_path);
+        state.location != before
     }
 
     fn apply(&self, metadata: &BootstrapMetadata, action: &str) -> Res<Object> {

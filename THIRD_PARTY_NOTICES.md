@@ -1,12 +1,10 @@
 # Third-party notices
 
-## GeoNames city data
+## IP Geolocation by DB-IP
 
-`frontend/data/cities.txt` is derived from the GeoNames `cities15000` extract
-(<https://download.geonames.org/export/dump/>): cities with a population above 15,000, reduced to
-name, country, US state and coordinates rounded to two decimals. It is used only offline, to turn a
-position into the nearest city name on the user's own computer.
+Once a week the app looks up the city of its own public internet address with the free
+[db-ip.com](https://db-ip.com) API (`https://api.db-ip.com/v2/free/self`). Only the resulting city
+name is kept. The free API terms require a link back to db-ip.com and allow about 1,000 requests
+per day per address; a weekly lookup is far below that.
 
-Data from [GeoNames](https://www.geonames.org/), licensed under
-[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). The reduced file
-was produced by `frontend/scripts/build-cities.mjs`; it is modified from the original.
+[IP Geolocation by DB-IP](https://db-ip.com)
