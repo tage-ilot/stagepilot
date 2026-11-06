@@ -406,6 +406,115 @@ impl ReplayEngine {
     }
 }
 
+/// A message waiting in the [`PacingQueue`].
+#[derive(Debug, Clone)]
+pub struct Queued {
+    pub message: OscMessage,
+    pub kind: Kind,
+    /// When the tick that chose this value queued it, seconds.
+    pub queued_at: f64,
+    /// An effect value chosen while the effect rate was lowered.
+    pub reduced: bool,
+    seq: u64,
+}
+
+fn rank(kind: Kind) -> u8 {
+    match kind {
+        Kind::Step => 0,
+        Kind::Ramp => 1,
+        Kind::Effect => 2,
+    }
+}
+
+/// The queue between the engine's ticks and the 5 ms pacing. Steps leave first, then ramp
+/// values, then effect values, oldest first inside a class. A ramp or effect value that is
+/// still waiting when a newer value for the same address is queued is replaced by it (only the
+/// latest value of an address matters, and a stale one is never sent after a newer one); the
+/// replacement keeps the place of the value it replaces when both are of one class. Two steps
+/// of one address are both kept, in order. Pure: the caller owns the clock.
+#[derive(Debug, Clone, Default)]
+pub struct PacingQueue {
+    items: Vec<Queued>,
+    seq: u64,
+    next_free: f64,
+}
+
+impl PacingQueue {
+    pub fn new() -> Self {
+        Self {
+            items: Vec::new(),
+            seq: 0,
+            next_free: f64::NEG_INFINITY,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    /// Drop everything waiting (a seek, a stop).
+    pub fn clear(&mut self) {
+        self.items.clear();
+    }
+
+    /// Queue `message` chosen at time `now`.
+    pub fn push(&mut self, message: OscMessage, kind: Kind, now: f64, reduced: bool) {
+        let mut seq = None;
+        // A waiting ramp or effect value of this address is older, hence stale.
+        if let Some(i) = self
+            .items
+            .iter()
+            .position(|q| q.kind != Kind::Step && q.message.address == message.address)
+        {
+            let old = self.items.remove(i);
+            if old.kind == kind {
+                seq = Some(old.seq);
+            }
+        }
+        let seq = seq.unwrap_or_else(|| {
+            self.seq += 1;
+            self.seq
+        });
+        self.items.push(Queued {
+            message,
+            kind,
+            queued_at: now,
+            reduced,
+            seq,
+        });
+    }
+
+    /// Take the next message to send (highest class, oldest first), ignoring the clock.
+    pub fn pop(&mut self) -> Option<Queued> {
+        let best = self
+            .items
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, q)| (rank(q.kind), q.seq))
+            .map(|(i, _)| i)?;
+        Some(self.items.remove(best))
+    }
+
+    /// The earliest time a packet may leave, not before `now`.
+    pub fn next_slot(&self, now: f64) -> f64 {
+        self.next_free.max(now)
+    }
+
+    /// The next message when the 5 ms spacing allows one at `now`, spending that slot.
+    pub fn pop_due(&mut self, now: f64) -> Option<Queued> {
+        if now + EPSILON < self.next_free {
+            return None;
+        }
+        let item = self.pop()?;
+        self.next_free = now.max(self.next_free) + PACKET_GAP_SECONDS;
+        Some(item)
+    }
+}
+
 /// One packet of a simulated replay.
 #[derive(Debug, Clone)]
 pub struct SentPacket {
@@ -420,8 +529,9 @@ pub struct SentPacket {
 }
 
 /// Run the engine on a simulated clock from `from` to `to` (song seconds; the clock and the song
-/// position agree, the position being `lead` ahead): tick when the engine asks, pace the packets
-/// 5 ms apart like the plugin, return every packet. No sockets, no sleeping.
+/// position agree, the position being `lead` ahead): tick when the engine asks (on time, not
+/// after the queue has drained), send through a [`PacingQueue`] 5 ms apart like the plugin,
+/// return every packet. No sockets, no sleeping.
 /// `yielded(now, address)` says whether the operator has that address's fixture at `now`.
 pub fn simulate(
     engine: &mut ReplayEngine,
@@ -430,32 +540,48 @@ pub fn simulate(
     lead: f64,
     yielded: &dyn Fn(f64, &str) -> bool,
 ) -> Vec<SentPacket> {
+    // Send what the 5 ms spacing allows before `until` (all of it when `None`); everything
+    // waiting was queued at or before `avail`.
+    fn send_until(
+        queue: &mut PacingQueue,
+        avail: f64,
+        until: Option<f64>,
+        lead: f64,
+        out: &mut Vec<SentPacket>,
+    ) {
+        while !queue.is_empty() {
+            let at = queue.next_slot(avail);
+            if until.is_some_and(|t| at >= t) {
+                break;
+            }
+            let Some(item) = queue.pop_due(at) else {
+                break;
+            };
+            out.push(SentPacket {
+                at,
+                position: item.queued_at + lead,
+                message: item.message,
+                kind: item.kind,
+                reduced: item.reduced,
+            });
+        }
+    }
+
     let mut out = Vec::new();
-    let mut free_at = f64::NEG_INFINITY;
+    let mut queue = PacingQueue::new();
     let mut now = from;
     while now < to {
         let tick = engine.tick(now, now + lead, &|a| yielded(now, a));
-        let mut slot = free_at.max(now);
         for (message, kind) in tick.messages.into_iter().zip(tick.kinds) {
-            out.push(SentPacket {
-                at: slot,
-                position: now + lead,
-                message,
-                kind,
-                reduced: tick.reduced && kind == Kind::Effect,
-            });
-            slot += PACKET_GAP_SECONDS;
+            let reduced = tick.reduced && kind == Kind::Effect;
+            queue.push(message, kind, now, reduced);
         }
-        free_at = slot;
-        let finished = if slot > now {
-            slot - PACKET_GAP_SECONDS
-        } else {
-            now
-        };
         let Some(wake) = tick.wake_in else {
             break;
         };
-        now = (now + wake).max(finished);
+        send_until(&mut queue, now, Some(now + wake), lead, &mut out);
+        now += wake;
     }
+    send_until(&mut queue, now, None, lead, &mut out);
     out
 }

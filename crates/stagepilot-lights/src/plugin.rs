@@ -2,7 +2,7 @@ use crate::lightkey::LightkeyStatus;
 use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
 use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
 use crate::lightkey_operator::OperatorTracker;
-use crate::lightkey_replay::{is_smooth, ReplayEngine};
+use crate::lightkey_replay::{is_smooth, Kind, PacingQueue, ReplayEngine};
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -1109,74 +1109,100 @@ impl Inner {
     async fn run_engine(self: Arc<Self>, start: f64, remaining: f64) -> Result<(), (String, bool)> {
         let base = Instant::now();
         let mut failed = false;
+        // Between the ticks and the 5 ms pacing: steps first, then ramps, then effects, and a
+        // waiting ramp or effect value is replaced by a newer one for its address.
+        let mut queue = PacingQueue::new();
+        // When the next tick is due; `None` = nothing to look at until the song's end.
+        let mut next_tick: Option<f64> = Some(0.0);
         loop {
             let now = Instant::now().saturating_duration_since(base).as_secs_f64();
             if now >= remaining {
                 return Ok(());
             }
-            let tick = {
-                let mut st = self.st();
-                let State {
-                    engine, operator, ..
-                } = &mut *st;
-                let Some(engine) = engine.as_mut() else {
-                    return Ok(());
+            if next_tick.is_some_and(|t| now + 1e-9 >= t) {
+                let tick = {
+                    let mut st = self.st();
+                    let State {
+                        engine, operator, ..
+                    } = &mut *st;
+                    let Some(engine) = engine.as_mut() else {
+                        return Ok(());
+                    };
+                    engine.tick(now, start + now + LOOK_LEAD_SECONDS, &|address| {
+                        fixture_of(address).is_some_and(|name| operator.is_yielded(name))
+                    })
                 };
-                engine.tick(now, start + now + LOOK_LEAD_SECONDS, &|address| {
-                    fixture_of(address).is_some_and(|name| operator.is_yielded(name))
-                })
-            };
-            if !tick.messages.is_empty() {
-                let first = self.reserve_slots(tick.messages.len());
-                for (i, message) in tick.messages.iter().enumerate() {
-                    self.wait_slot(first, i).await;
-                    // One failed send is retried once, never the end of the show (S-02).
-                    let mut result = self.send_message(message).await;
-                    if result.is_err() {
-                        tokio::time::sleep(SEND_RETRY_DELAY).await;
-                        result = self.send_message(message).await;
+                for (message, kind) in tick.messages.into_iter().zip(tick.kinds) {
+                    let reduced = tick.reduced && kind == Kind::Effect;
+                    queue.push(message, kind, now, reduced);
+                }
+                next_tick = tick.wake_in.map(|w| now + w);
+            }
+            if !queue.is_empty() {
+                // Wait for the next 5 ms slot, but not past the next tick: a step it brings
+                // goes out before the older ramp and effect values still waiting.
+                let slot = self.peek_slot();
+                let tick_at = next_tick.map(|t| base + Duration::from_secs_f64(t.min(remaining)));
+                if slot > tokio::time::Instant::now() {
+                    let until = tick_at.map_or(slot, |t| t.min(slot));
+                    tokio::select! {
+                        () = tokio::time::sleep_until(until) => {}
+                        () = self.engine_wake.notified() => { next_tick = Some(0.0); }
                     }
-                    match result {
-                        Ok(()) => {
-                            if failed {
-                                failed = false;
-                                {
-                                    let mut st = self.st();
-                                    st.status = PluginStatus::Running;
-                                    st.last_error = None;
-                                }
-                                self.set_connection(
-                                    ConnectionStatus::Connected,
-                                    "Lighting cues are going out again.",
-                                )
-                                .await;
+                    continue;
+                }
+                let Some(item) = queue.pop() else {
+                    continue;
+                };
+                self.reserve_slots(1);
+                let message = item.message;
+                // One failed send is retried once, never the end of the show (S-02).
+                let mut result = self.send_message(&message).await;
+                if result.is_err() {
+                    tokio::time::sleep(SEND_RETRY_DELAY).await;
+                    result = self.send_message(&message).await;
+                }
+                match result {
+                    Ok(()) => {
+                        if failed {
+                            failed = false;
+                            {
+                                let mut st = self.st();
+                                st.status = PluginStatus::Running;
+                                st.last_error = None;
                             }
-                        }
-                        Err(error) => {
-                            tracing::warn!(error = %error.message, "lighting_timeline_send_failed");
-                            failed = true;
-                            if let Some(engine) = self.st().engine.as_mut() {
-                                engine.mark_unsent(&message.address);
-                            }
-                            self.record_error_text(if error.public {
-                                error.message.clone()
-                            } else {
-                                "A lighting cue could not be sent.".into()
-                            })
+                            self.set_connection(
+                                ConnectionStatus::Connected,
+                                "Lighting cues are going out again.",
+                            )
                             .await;
-                            if !self.output_ready() {
-                                if let Some(link) = self.lightkey.get() {
-                                    link.set_replaying(None);
-                                }
-                                return Ok(());
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(error = %error.message, "lighting_timeline_send_failed");
+                        failed = true;
+                        if let Some(engine) = self.st().engine.as_mut() {
+                            engine.mark_unsent(&message.address);
+                        }
+                        self.record_error_text(if error.public {
+                            error.message.clone()
+                        } else {
+                            "A lighting cue could not be sent.".into()
+                        })
+                        .await;
+                        if !self.output_ready() {
+                            if let Some(link) = self.lightkey.get() {
+                                link.set_replaying(None);
                             }
+                            return Ok(());
                         }
                     }
                 }
+                continue;
             }
-            let (wake_at, forever) = match tick.wake_in {
-                Some(w) => (
-                    base + Duration::from_secs_f64((now + w).min(remaining.max(0.0))),
+            let (wake_at, forever) = match next_tick {
+                Some(t) => (
+                    base + Duration::from_secs_f64(t.min(remaining.max(0.0))),
                     false,
                 ),
                 None => (base + Duration::from_secs_f64(remaining.max(0.0)), true),
@@ -1187,7 +1213,7 @@ impl Inner {
                         return Ok(());
                     }
                 }
-                () = self.engine_wake.notified() => {}
+                () = self.engine_wake.notified() => { next_tick = Some(0.0); }
             }
         }
     }
@@ -1346,6 +1372,12 @@ impl Inner {
         let count = u32::try_from(count).unwrap_or(u32::MAX);
         *next = Some(first + MIN_SEND_GAP * count);
         first
+    }
+
+    /// The next free packet slot (now when none is reserved), without reserving it.
+    fn peek_slot(&self) -> tokio::time::Instant {
+        let now = tokio::time::Instant::now();
+        lock(&self.next_send).map_or(now, |at| at.max(now))
     }
 
     async fn pace(&self) {

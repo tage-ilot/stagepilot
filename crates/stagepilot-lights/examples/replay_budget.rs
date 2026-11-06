@@ -25,7 +25,7 @@ use stagepilot_core::config::OscArgument;
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand, FixtureState};
 use stagepilot_lights::lightkey_looks::LookRecorder;
 use stagepilot_lights::lightkey_replay::{
-    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS,
+    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, PACKET_GAP_SECONDS,
 };
 use stagepilot_lights::lightkey_smooth::{
     prepare, property_class, smooth_rows, tolerance_for, Series, SmoothParams, CHECK_STEP_SECONDS,
@@ -436,6 +436,48 @@ fn main() {
             percentile(&waits, 0.5),
             percentile(&waits, 0.99),
             waits.last().copied().unwrap_or(0.0)
+        );
+        // Steps that share one tick queue behind each other: that part of the wait is the
+        // 5 ms spacing itself (n steps take (n - 1) x 5 ms) and no queue order removes it.
+        let mut bursts: Vec<f64> = {
+            let mut by_tick: std::collections::BTreeMap<u64, usize> = Default::default();
+            for p in packets.iter().filter(|p| p.kind == Kind::Step) {
+                *by_tick.entry((p.position * 1e6) as u64).or_default() += 1;
+            }
+            by_tick.values().map(|n| *n as f64).collect()
+        };
+        bursts.sort_by(f64::total_cmp);
+        println!(
+            "steps sharing one tick (burst size): median {:.0}, p99 {:.0}, max {:.0}; floor of the wait from the 5 ms spacing alone for the largest burst: {:.0} ms",
+            percentile(&bursts, 0.5),
+            percentile(&bursts, 0.99),
+            bursts.last().copied().unwrap_or(0.0),
+            (bursts.last().copied().unwrap_or(1.0) - 1.0) * PACKET_GAP_SECONDS * 1000.0
+        );
+        // What the queue itself adds: the wait minus the 5 ms each earlier step of the same tick
+        // takes. Zero means no ramp, effect or older step was ahead.
+        let mut excess: Vec<f64> = {
+            let mut seen: std::collections::BTreeMap<u64, usize> = Default::default();
+            let mut steps: Vec<&SentPacket> =
+                packets.iter().filter(|p| p.kind == Kind::Step).collect();
+            steps.sort_by(|a, b| a.at.total_cmp(&b.at));
+            steps
+                .iter()
+                .map(|p| {
+                    let n = seen.entry((p.position * 1e6) as u64).or_default();
+                    let ahead = *n as f64;
+                    *n += 1;
+                    ((p.at - (p.position - LOOK_LEAD_SECONDS)) - ahead * PACKET_GAP_SECONDS)
+                        * 1000.0
+                })
+                .collect()
+        };
+        excess.sort_by(f64::total_cmp);
+        println!(
+            "steps, wait added by the queue beyond the spacing of steps of the same tick (ms): median {:.0}, p99 {:.0}, max {:.0}",
+            percentile(&excess, 0.5),
+            percentile(&excess, 0.99),
+            excess.last().copied().unwrap_or(0.0)
         );
         let mut busiest: Vec<(usize, usize)> = per_second.iter().copied().enumerate().collect();
         busiest.sort_by_key(|b| std::cmp::Reverse(b.1));

@@ -328,7 +328,19 @@ bucket (200 per second, burst 10) decides what a tick may send: steps always go 
 only use the bucket up, and the pacing spaces them), then ramps, then effect values, the
 largest change first. When effect values had to wait, the effect interval grows towards
 125 ms (8 Hz) and shrinks back when the budget has room; ramps keep 20 Hz. Beyond that a
-busy second simply sends the biggest changes first. One OSC message per address: **no OSC
+busy second simply sends the biggest changes first.
+
+**Pacing queue.** Between the ticks and the 5 ms spacing sits one priority queue: **steps
+leave first, then ramp values, then effect values, oldest first inside a class**. A ramp or
+effect value that is still waiting when a newer value for the same address is queued is
+**replaced** by it (only the latest value of an address matters and a stale value is never
+sent after a newer one; the replacement keeps the place of the value it replaces). Two steps
+of one address are both kept, in order. The tick runs on time and does not wait for the queue
+to drain, and the sender looks at the queue again at every 5 ms slot, so a step that arrives
+behind a long run of effect values goes out in the next slot. What the queue cannot remove is
+the spacing among steps themselves: a look change that touches 98 values takes 98 slots,
+485 ms, however it is ordered (the `replay_budget` report prints the burst sizes and the wait
+the queue adds beyond that floor: at most 6 / 20 ms on the two real takes). One OSC message per address: **no OSC
 bundles and no pattern addresses** (`P{1,3,5}`), because neither is shown to work with
 Lightkey's fixture overrides; the rig test (S4) decides.
 
