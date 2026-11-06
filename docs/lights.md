@@ -604,6 +604,31 @@ router. Do not use Wi-Fi. Its timing is not steady enough: the agent's multicast
 over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
 recording, the message says that levels were not recorded.
 
+### The clock between the two Macs
+
+Each fixture change carries Lightkey's own clock; StagePilot converts it to its own clock
+with an offset measured by NTP-style pings (`/relay/ping`, a burst of 12 at the start of a
+session and every 120 s). Rules (rc.4; rc.3 threw the estimate away at every burst):
+
+- **Best sample in a window.** Samples of the last 10 minutes are kept and the one with the
+  smallest round trip is used. A new burst never clears a good estimate: its samples only
+  join the window. A ping that waited in a frozen or stalled agent's buffer comes back with a
+  huge round trip (and an offset wrong by half of it), so it can never win against a good
+  sample. This was the 6.6 s error of the rig test: the agent was frozen for 20 s while a burst
+  was sent, the answers were stamped when the agent woke, and the offset stayed wrong until the
+  next burst two minutes later.
+- **Poor estimate, ask again soon.** If one second after a burst there is no estimate or the
+  best round trip is above 0.2 s (a stalled relay), the burst is repeated after 3 s instead of
+  after 120 s.
+- **Re-dating.** If a later estimate moves the clock by more than 50 ms, the changes the
+  running capture recorded since the previous estimate took effect are moved by the
+  difference (log `lightkey_capture_redated`), so a poor start does not stay in the take.
+- **Log.** Every sample is logged as `lightkey_clock_offset` (`source` relay or http, `offset`,
+  `round_trip`, `used`, `adopted`, `redate`). Every HTTP `/time` measurement is also compared
+  with the relay's: a difference of more than 50 ms is logged as
+  `lightkey_clock_offset_mismatch`. Search the backend log for these when a take looks
+  early or late.
+
 ## Cue board, live capture and the timeline
 
 The timeline follows the song that is playing (or the last one that played) and

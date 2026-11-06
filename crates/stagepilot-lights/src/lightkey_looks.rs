@@ -313,6 +313,19 @@ impl LookRecorder {
         kept
     }
 
+    /// Move the changes from index `mark` on by `shift` seconds (they were dated with a clock
+    /// offset that turned out wrong), keeping the list in time order. Returns how many moved.
+    pub fn shift_from(&mut self, mark: usize, shift: f64) -> usize {
+        if mark >= self.observed.len() || !shift.is_finite() {
+            return 0;
+        }
+        for (at, _) in &mut self.observed[mark..] {
+            *at += shift;
+        }
+        self.observed.sort_by(|a, b| a.0.total_cmp(&b.0));
+        self.observed.len() - mark
+    }
+
     /// The ramps, steps and effects these changes make (see `crate::lightkey_smooth`). Changes
     /// after `duration` fold onto it as in [`thin`]; nothing is dropped.
     pub fn smooth(&self, duration: f64, params: &SmoothParams) -> SmoothCapture {
@@ -1082,5 +1095,24 @@ mod tests {
             .collect();
         assert!(replace_captured(None, "s", "Song", look_rows(&looks)).is_none());
         assert!(replace_captured(None, "s", "Song", look_rows(&looks[..10])).is_some());
+    }
+
+    #[test]
+    fn shift_from_moves_only_the_later_changes_and_keeps_time_order() {
+        let mut base = FixtureState::new();
+        base.apply_all(&[at("P1", 0.0), at("P2", 0.0)]);
+        let mut r = LookRecorder::new(&base);
+        r.observe(10.0, &[at("P1", 0.5)]);
+        r.observe(20.0, &[at("P2", 0.5)]);
+        r.observe(21.0, &[at("P1", 1.0)]);
+        assert_eq!(r.shift_from(1, 6.5), 2);
+        let (_, observed) = r.raw();
+        let times: Vec<f64> = observed.iter().map(|(t, _)| *t).collect();
+        assert_eq!(times, vec![10.0, 26.5, 27.5]);
+        // moving earlier past an unmoved change keeps the list sorted
+        assert_eq!(r.shift_from(1, -20.0), 2);
+        let times: Vec<f64> = r.raw().1.iter().map(|(t, _)| *t).collect();
+        assert_eq!(times, vec![6.5, 7.5, 10.0]);
+        assert_eq!(r.shift_from(9, 1.0), 0);
     }
 }

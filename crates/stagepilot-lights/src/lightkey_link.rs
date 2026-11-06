@@ -303,6 +303,9 @@ struct Session {
     down_position: Option<f64>,
     /// Song position where the link had been down for a minute: the pass ends there.
     cutoff: Option<f64>,
+    /// Index of the first recorded change dated with the clock offset now in force; a better
+    /// offset re-dates the changes from here on (see `LightkeyLink::redate`).
+    offset_mark: usize,
 }
 
 impl Session {
@@ -318,6 +321,7 @@ impl Session {
             loudness: None,
             down_position: None,
             cutoff: None,
+            offset_mark: 0,
         }
     }
 }
@@ -971,6 +975,10 @@ impl Inner {
             if let Some(tap) = &self.fixture_tap {
                 tap(FixtureEvent::StreamReset);
             }
+            let offset_sink: crate::lightkey_relay::OffsetSink = {
+                let this = self.clone();
+                Arc::new(move |shift: f64| this.redate(shift))
+            };
             let clock = self.clock.clone();
             let clock_b = self.clock.clone();
             let watch = target.clone();
@@ -983,8 +991,25 @@ impl Inner {
                         !this.is_stopped() && this.relay_target_now().as_deref() == Some(&watch)
                     },
                     sink,
+                    offset_sink,
                 )
                 .await;
+        }
+    }
+
+    /// A better clock estimate arrived that moves the clock by more than 50 ms: the changes
+    /// recorded since the previous estimate took effect were dated with the worse one. Move them
+    /// by `shift` seconds (`old_offset - new_offset`) and start counting from here.
+    fn redate(&self, shift: f64) {
+        let mut st = self.st();
+        for session in st.session.iter_mut() {
+            if let Some(recorder) = session.fixtures.as_mut() {
+                let moved = recorder.shift_from(session.offset_mark, shift);
+                if moved > 0 {
+                    tracing::warn!(moved, shift, "lightkey_capture_redated");
+                }
+                session.offset_mark = recorder.len();
+            }
         }
     }
 
@@ -1137,6 +1162,11 @@ impl Inner {
     }
 
     /// Clock offset from the lowest-round-trip of several samples (NTP style).
+    ///
+    /// Captured changes are dated with the relay's own clock estimate (`lightkey_relay`); this
+    /// HTTP measurement is the independent check on it. Every sample is logged
+    /// (`lightkey_clock_offset`), and a result that differs from the relay's by more than 50 ms
+    /// is logged as `lightkey_clock_offset_mismatch`.
     async fn measure_offset(&self, http: &dyn LightkeyHttp, base: &str) -> Result<(), HttpFailure> {
         let mut best: Option<(f64, f64)> = None;
         for _ in 0..OFFSET_SAMPLES {
@@ -1148,14 +1178,36 @@ impl Inner {
                 None => return Err(HttpFailure::Other("no t in /time".into())),
             };
             let rtt = received - sent;
+            tracing::info!(
+                source = "http",
+                offset = remote - (sent + received) / 2.0,
+                round_trip = rtt,
+                "lightkey_clock_offset"
+            );
             if best.is_none_or(|(best_rtt, _)| rtt < best_rtt) {
                 best = Some((rtt, remote - (sent + received) / 2.0));
             }
         }
-        if let Some((_, offset)) = best {
+        if let Some((rtt, offset)) = best {
             let mut st = self.st();
             st.offset = offset;
             st.offset_at = self.clock.mono();
+            drop(st);
+            let relay = self.relay.clock_offset();
+            tracing::info!(
+                source = "http",
+                offset,
+                round_trip = rtt,
+                relay_offset = relay,
+                "lightkey_clock_offset_best"
+            );
+            if let Some(relay) = relay {
+                if (relay - offset).abs() > crate::lightkey_fixtures::CLOCK_REDATE_THRESHOLD
+                    && rtt < crate::lightkey_fixtures::CLOCK_POOR_ROUND_TRIP
+                {
+                    tracing::warn!(http = offset, relay, "lightkey_clock_offset_mismatch");
+                }
+            }
         }
         Ok(())
     }

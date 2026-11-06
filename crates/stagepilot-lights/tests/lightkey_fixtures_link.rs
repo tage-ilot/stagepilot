@@ -46,6 +46,9 @@ struct FakeRelay {
     log: Arc<Mutex<Vec<String>>>,
     state: Arc<Mutex<Vec<FixtureCommand>>>,
     answer_pings: Arc<Mutex<bool>>,
+    /// While true the relay process is "frozen" (SIGSTOP): datagrams queue up unread, and are
+    /// answered and stamped with the time they are finally processed after it thaws.
+    frozen: Arc<Mutex<bool>>,
 }
 
 fn packet(time: f64, head: [OscType; 4], messages: Vec<OscMessage>) -> Vec<u8> {
@@ -93,7 +96,9 @@ impl FakeRelay {
             log: Arc::default(),
             state: Arc::new(Mutex::new(initial)),
             answer_pings: Arc::new(Mutex::new(true)),
+            frozen: Arc::new(Mutex::new(false)),
         };
+        let frozen = me.frozen.clone();
         let (sub, seq, log, state, answer) = (
             me.subscriber.clone(),
             me.seq.clone(),
@@ -104,13 +109,18 @@ impl FakeRelay {
         tokio::spawn(async move {
             let mut buf = vec![0u8; 2048];
             while let Ok((n, from)) = socket.recv_from(&mut buf).await {
-                let t2 = wall() + OFFSET;
                 let Ok((_, OscPacket::Message(m))) = rosc::decoder::decode_udp(&buf[..n]) else {
                     continue;
                 };
+                if m.addr == "/relay/ping" {
+                    log.lock().unwrap().push("ping".into());
+                }
+                while *frozen.lock().unwrap() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                let t2 = wall() + OFFSET;
                 match m.addr.as_str() {
                     "/relay/ping" => {
-                        log.lock().unwrap().push("ping".into());
                         if !*answer.lock().unwrap() {
                             continue;
                         }
@@ -804,5 +814,78 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
     let message = rig.link.status().message.unwrap_or_default();
     assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
+    rig.link.stop().await;
+}
+
+/// Rig finding 7: the relay was frozen when a clock-ping burst was sent, so the answers carried
+/// the time they were finally processed and the offset came out wrong by half the freeze. The
+/// changes recorded after it were stored early until the next burst. The stored times must come
+/// out right: the burst is repeated soon, the better estimate wins, and the changes dated with
+/// the poor one are moved.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_the_take() {
+    let rig = Rig::new(vec![dim("P1", 0.0), dim("P2", 0.0)]).await;
+    rig.connect().await;
+    assert_eq!(
+        rig.link.set_recording(true).await,
+        "Recording starts with the next song."
+    );
+    let t0 = Instant::now();
+    rig.song_start(&song(30)).await;
+    pause(0.5).await;
+    // the relay session restarts (a new burst) while the relay process is frozen
+    *rig.relay.frozen.lock().unwrap() = true;
+    rig.settings.lock().unwrap().1 = false;
+    pause(0.3).await;
+    rig.settings.lock().unwrap().1 = true;
+    // the link restarts its relay session within 2 s; the freeze outlasts that and the burst
+    pause(3.0).await;
+    *rig.relay.frozen.lock().unwrap() = false;
+    pause(1.0).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .fixtures
+                .is_some_and(|s| s.link == FixtureLink::Live)
+        },
+        5.0,
+    )
+    .await;
+    pause(0.3).await;
+    let first = t0.elapsed().as_secs_f64();
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    // the clock is asked again soon after a poor answer; the second change comes after that
+    pause(4.0).await;
+    let second = t0.elapsed().as_secs_f64();
+    rig.relay.change(vec![dim("P2", 1.0)], 0.0, 0).await;
+    pause(0.5).await;
+    // a stop at the song's end finishes the pass
+    rig.song_stop(&song(30), 30.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let at = |fixture: &str| -> f64 {
+        saved
+            .rows
+            .iter()
+            .find(|r| {
+                r.messages
+                    .iter()
+                    .any(|m| m.address == format!("/fixture/{fixture}/overrides/dimmer"))
+                    && r.at_seconds > 0.0
+            })
+            .unwrap_or_else(|| panic!("no row for {fixture}: {:?}", saved.rows))
+            .at_seconds
+    };
+    assert!(
+        (at("P1") - first).abs() <= 0.15,
+        "change after the freeze stored at {} but happened at {first}",
+        at("P1")
+    );
+    assert!(
+        (at("P2") - second).abs() <= 0.15,
+        "later change stored at {} but happened at {second}",
+        at("P2")
+    );
     rig.link.stop().await;
 }
