@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.1] - 2026-11-05
+
+Release candidate (pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:
+
+- **Old Lightkey takes are not replayed.** Captures stored only in `lightkey-takes.json` are ignored (the file is left alone). Record those songs again. Cue maps saved in settings load and replay as before.
+- **Do not edit Lighting cues in v2.42.0 after trying this version.** v2.42.0 starts fine on a file saved here and keeps the new fields, but deleting or reordering rows there can attach ramp or message data to the wrong row.
+- The passive learned song order is on by default (Playback API settings has the switch). It stays idle while a scanned order exists.
+- Known limits for this candidate: the first look of a song can still leave 290 to 485 ms after its time (it cannot be sent before the song starts); later looks are within about 45 ms. Real Lightkey behaviour with the new replay is being checked on the rig.
+
 ### Changed
 
 - Lighting UI for smooth capture: the **Detail** control (Fine / Normal / Coarse), its tooltip and the **Simplify** action are gone (a recording is fitted, not thinned; the API still accepts `detail_level` and ignores it, the UI never sends it). The timeline draws a **ramp** (a row with `fade_seconds`) as a bar from its start to start + duration (at least 4 px) with a tooltip of fixtures and from → to values, and a song's **effect loops** as striped bands (`4.0 s loop x 16 fixtures`, on at most three lanes) that open to period, window, fixtures with phase offsets, properties and a sparkline of one cycle. The legend has a new **Effect loop** type. The cue rows show a `+3.2 s` duration for ramps, edit it (0 to 60 s, inside the song), list each loop as one read-only expandable row, and ask \"Remove this loop?\" before removing one (new optional `remove_effect_ids` on the cue-map save; Clear song also clears its loops). Merge is disabled, with the reason, for a ramp with an instant row and other combinations that would change meaning. The strip reads \"N captured items (R ramps/steps, E loops)\". Fixes from PR #296: the state line joins statements with ` · ` and ends each with a full stop, the three strip actions wrap as one group so `How to find a cue's address` is never alone on a row, and Connect / Check again is a neutral outlined primary instead of the crimson of a selected segment.
