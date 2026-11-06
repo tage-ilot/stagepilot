@@ -1384,7 +1384,7 @@ textarea:focus-visible {
 }
 
 /* The sACN DMX Live Link block (DESIGN.md "Lighting connection block"). It decides by its OWN width: narrow, the host takes a full row, then the
-   ports and Connect share one, then Mode and Detail; wide, host flexes on the first row with Mode and Detail at the far right. */
+   ports and Connect share one, then Mode; wide, host flexes on the first row with Mode at the far right. */
 .live-link {
   container-type: inline-size;
   container-name: live-link;
@@ -1408,7 +1408,7 @@ textarea:focus-visible {
   text-wrap: balance;
 }
 
-/* Mode and Detail sit at the far right of the field row when it is wide; once it wraps they start the row like every other field. */
+/* Mode sits at the far right of the field row when it is wide; once it wraps it starts the row like every other field. */
 @container live-link (min-width: 34rem) {
   .live-link-modes {
     margin-left: auto;
@@ -1567,6 +1567,12 @@ textarea:focus-visible {
 /* Lighting timeline cue types: bar styles that do not rely on colour (solid = fill, hollow, dashed, striped). */
 .cue-bar-off { background: transparent; border: 3px solid var(--ds-cue-live); }
 .cue-bar-other { background: repeating-linear-gradient(180deg, var(--ds-cue-other) 0 5px, transparent 5px 9px); }
+.cue-bar-effect { background: repeating-linear-gradient(135deg, var(--ds-cue-effect) 0 3px, transparent 3px 6px); }
+/* A loop on the timeline: lightly striped in its colour so it reads as a band of repeating motion, quieter than the cue bars. */
+.effect-band {
+  border: 1px solid var(--ds-cue-effect);
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ds-cue-effect) 34%, transparent) 0 4px, color-mix(in srgb, var(--ds-cue-effect) 10%, transparent) 4px 9px);
+}
 .cue-bar-sharp { background-image: repeating-linear-gradient(135deg, var(--ds-surface-950) 0 2px, transparent 2px 5px); }
 
 /* Setup panel header. The header decides by its OWN width (it spans the panel), not the window's.

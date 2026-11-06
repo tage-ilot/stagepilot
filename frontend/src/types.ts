@@ -240,6 +240,35 @@ export interface OscLightingCue {
   source?: OscCueSource;
   /** A captured row someone changed by hand. A later recording must not replace it silently. */
   edited?: boolean;
+  /** Seconds the row's messages take to reach their values, from `at_seconds`. Absent or 0 = instant (a step). */
+  fade_seconds?: number;
+}
+
+export interface EffectMember {
+  fixture: string;
+  /** The fixture plays the cycle this many seconds later than the effect's start. Absent = 0. */
+  offset_seconds?: number;
+}
+
+/** One ramp of an effect's cycle: from `at_seconds` (inside the cycle) the property reaches `value` over `fade_seconds`. */
+export interface EffectStep {
+  at_seconds: number;
+  property: string;
+  value: number[];
+  fade_seconds?: number;
+}
+
+/** A repeating pattern found in a recording, stored once. Never changed by editing rows; removed as a whole. */
+export interface LightingEffect {
+  id: string;
+  label: string;
+  start_seconds: number;
+  end_seconds: number;
+  period_seconds: number;
+  members: EffectMember[];
+  cycle: EffectStep[];
+  source?: OscCueSource;
+  edited?: boolean;
 }
 
 export interface OscMessage {
@@ -249,7 +278,6 @@ export interface OscMessage {
 
 export type OscCueSource = "manual" | "captured";
 
-/** How finely a recording is thinned: finer replays motion smoother but makes more rows. */
 /** The song most recently saved to the timeline by a recording. */
 export interface LightkeyCaptured {
   song_title: string;
@@ -309,6 +337,8 @@ export interface SongLightingCueMap {
   captured_edited?: boolean;
   /** Whether a complete pass produced the captured rows. Absent: no capture, or an older file (incomplete). */
   capture?: CaptureStatus;
+  /** Repeating loops found in the recording. Absent on older cue maps and songs with none. */
+  effects?: LightingEffect[];
 }
 
 /**
@@ -339,6 +369,8 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   method?: LightingMethod;
   /** The song's revision the list was edited from; an older one is refused with 409. */
   revision?: number;
+  /** Loops to remove from the song. Editing rows never changes loops; only this list does. */
+  remove_effect_ids?: string[];
 }
 
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
@@ -372,7 +404,7 @@ export interface LightkeyStatus {
   message: string | null;
   /** The song most recently saved to the timeline; absent until one has been. */
   captured?: LightkeyCaptured;
-  /** Recording detail (the backend's thinning setting). Absent on backends without it. */
+  /** Accepted and ignored by the backend since smooth capture; the UI neither shows nor sends it. */
   detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
   /** Fixtures the replay holds with overrides; absent when none. */
@@ -381,17 +413,6 @@ export interface LightkeyStatus {
   yielded_fixtures?: number;
   /** Fixtures the saved looks can override; Release lights clears these even after a restart. */
   known_fixtures?: number;
-}
-
-/** What "Simplify this song" would do (preview) or did (apply): the backend thins and merges the captured rows. */
-export interface LightkeySimplifyResponse {
-  accepted: boolean;
-  applied: boolean;
-  message: string;
-  rows_before: number;
-  rows_after: number;
-  messages_before: number;
-  messages_after: number;
 }
 
 export interface LightkeyActionResponse {

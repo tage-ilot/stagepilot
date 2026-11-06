@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 
-import type { OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
+import type { LightingEffect, OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
 import { groupByFixture, isCaptured, lookLabel } from "./lightingLooks";
 import {
   argumentToDraft,
@@ -20,6 +20,8 @@ import { StatusDot } from "./ui/StatusDot";
 import type { Tone } from "./ui/types";
 import { CONTROL_40, CUE_ADDRESS_HELP } from "./liveLink";
 import { clampCueTime } from "./lightingTimelineMath";
+import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary } from "./lightingSmooth";
+import { EffectDetail } from "./LightingEffectDetail";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
   { value: "int", label: "Whole number" },
@@ -100,9 +102,13 @@ export function LiveLinkTools({ stateText, release, testCue, footer }: {
     <>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.78125rem] text-ink-muted" data-testid="live-link-sub">
         {stateText}
-        {release}
-        {testCue && <DisclosureButton controls={cueId} onToggle={() => setCueOpen(!cueOpen)} open={cueOpen}>Send a test cue</DisclosureButton>}
-        <DisclosureButton controls={helpId} onToggle={() => setHelpOpen(!helpOpen)} open={helpOpen}>How to find a cue&apos;s address</DisclosureButton>
+        {/* The three actions travel together: when the strip is too narrow for them beside the state text they drop under it as one
+            group, so "How to find a cue's address" never sits alone on a row (it did at about 820 px). */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="live-link-actions">
+          {release}
+          {testCue && <DisclosureButton controls={cueId} onToggle={() => setCueOpen(!cueOpen)} open={cueOpen}>Send a test cue</DisclosureButton>}
+          <DisclosureButton controls={helpId} onToggle={() => setHelpOpen(!helpOpen)} open={helpOpen}>How to find a cue&apos;s address</DisclosureButton>
+        </div>
       </div>
       <p className="mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body" data-testid="cue-address-help" hidden={!helpOpen} id={helpId}>{CUE_ADDRESS_HELP}</p>
       {testCue && (
@@ -359,9 +365,11 @@ function LookMessageEditor({
  * messages by fixture, each editable and deletable, with Add message and Remove fixture from this song.
  */
 export function LookRow({
-  cue, disabled, songDuration, selected, onCommit, onRemove, onRemoveFixture, onToggleSelect, highlight = false,
+  cue, disabled, songDuration, selected, onCommit, onRemove, onRemoveFixture, onToggleSelect, highlight = false, allRows,
 }: {
   cue: OscLightingCue;
+  /** Every row of the song, so a ramp can say what value it starts from. */
+  allRows?: OscLightingCue[];
   disabled: boolean;
   songDuration: number | null;
   selected: boolean;
@@ -376,9 +384,23 @@ export function LookRow({
   useEffect(() => setTime(formatElapsed(cue.at_seconds)), [cue.at_seconds]);
   const messages = cue.messages ?? [];
   const parsedTime = parseElapsed(time);
-  const timeError = parsedTime === null ? "Use mm:ss." : songDuration !== null && parsedTime > songDuration ? "Past the song length." : null;
+  const fade = fadeOf(cue);
+  const ramp = fade > 0;
+  const [fadeText, setFadeText] = useState(String(fade));
+  useEffect(() => setFadeText(String(fadeOf(cue))), [cue.fade_seconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parsedFade = parseFadeInput(fadeText);
+  const fadeProblem = fadeError(parsedFade, cue.at_seconds, songDuration);
+  const timeError = parsedTime === null ? "Use mm:ss." : songDuration !== null && parsedTime > songDuration ? "Past the song length." : ramp && songDuration !== null && parsedTime + fade > songDuration + 1e-9 ? "This ramp would run past the end of the song." : null;
   const captured = isCaptured(cue);
-  const move = (at: number) => onCommit({ ...cue, at_seconds: clampCueTime(at, songDuration) });
+  const move = (at: number) => onCommit({ ...cue, at_seconds: ramp ? clampRampStart(clampCueTime(at, songDuration), fade, songDuration) : clampCueTime(at, songDuration) });
+  const commitFade = () => {
+    if (parsedFade === null || fadeProblem) { setFadeText(String(fadeOf(cue))); return; }
+    if (parsedFade !== fadeOf(cue)) {
+      const next = { ...cue };
+      if (parsedFade > 0) next.fade_seconds = parsedFade; else delete next.fade_seconds;
+      onCommit(next);
+    }
+  };
   const setMessage = (index: number, message: OscMessage) =>
     onCommit({ ...cue, messages: messages.map((item, position) => (position === index ? message : item)) });
   const label = lookLabel(cue);
@@ -398,6 +420,7 @@ export function LookRow({
         <CueTypeBadge type={classifyOscCue(cue)} />
         <span className="font-semibold text-ink">{label}</span>
         <span className="font-mono tabular-nums text-ink-body">{at}</span>
+        {ramp && <span className="rounded-ds-sm border border-cue-look-captured/60 px-1.5 font-mono tabular-nums text-ink-body" data-testid="look-fade" title={`A ramp: reaches its values over ${fade.toFixed(1)} s`}>Ramp {formatFade(fade)}</span>}
         <span className={`rounded-ds-full border px-2 text-type-body-sm ${captured ? "border-integration-lighting-osc-soft/60 bg-integration-lighting-osc-soft/15 text-ink-body" : "border-edge-medium text-ink-muted"}`} data-testid="look-badge">
           {captured ? (cue.edited ? "Captured · edited" : "Captured") : "Manual"}
         </span>
@@ -418,6 +441,24 @@ export function LookRow({
               value={time}
             />
           </Field>
+          <Field error={fadeProblem ?? undefined} label="Look duration (seconds, 0 = instant)">
+            <Input
+              className="w-28 font-mono tabular-nums"
+              disabled={disabled}
+              inputMode="decimal"
+              onBlur={commitFade}
+              onChange={(event) => setFadeText(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+              value={fadeText}
+            />
+          </Field>
+          {ramp && (
+            <ul aria-label="What this ramp does" className="grid gap-0.5 text-type-body-sm text-ink-body" data-testid="ramp-summary">
+              {rowSummary(cue, allRows ?? [cue]).map((line, index) => (
+                <li className="tabular-nums" key={index}>{line.fixture} {line.property}: {line.ramps ? `${line.from ?? "start"} → ${line.to}` : line.to}</li>
+              ))}
+            </ul>
+          )}
           {groupByFixture(messages).map((group) => (
             <section aria-label={`Fixture ${group.fixture}`} className="grid gap-2 rounded-ds-md border border-edge-subtle p-2" key={group.fixture}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -440,6 +481,42 @@ export function LookRow({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/**
+ * One loop of the song: a single line (closed) with what it is and when it plays, and Show / Hide for the details. It has no
+ * checkbox and no fields: loops are never merged, never edited by the rows, and removed only after a question.
+ */
+export function EffectRow({ effect, disabled, highlight = false, onRemove }: {
+  effect: LightingEffect;
+  disabled: boolean;
+  highlight?: boolean;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const text = effectLabel(effect);
+  const from = formatElapsed(effect.start_seconds);
+  return (
+    <div
+      className={`lighting-effect-row grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 ${highlight ? "rounded-ds-md bg-surface-panel" : ""}`}
+      data-source={effect.source === "captured" ? "captured" : "manual"}
+      data-testid="effect-row"
+      id={`look-row-${effect.id}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Button aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} loop ${text} at ${from}`} onClick={() => setOpen(!open)} variant="tinted">{open ? "Hide" : "Show"}</Button>
+        <CueTypeBadge type="effect-loop" />
+        <span className="font-semibold text-ink">{text}</span>
+        <span className="font-mono tabular-nums text-ink-body">{from} to {formatElapsed(effect.end_seconds)}</span>
+        <span className="rounded-ds-full border border-edge-medium px-2 text-type-body-sm text-ink-muted" data-testid="effect-badge">{effect.source === "captured" ? "Captured loop" : "Loop"}</span>
+        <span className="ml-auto flex gap-1">
+          <Button aria-label={`Remove loop ${text} at ${from}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Remove...</Button>
+        </span>
+      </div>
+      {open && <EffectDetail className="pl-2" effect={effect} />}
     </div>
   );
 }

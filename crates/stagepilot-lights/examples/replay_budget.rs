@@ -16,7 +16,13 @@
 //! * the largest difference between what the lights would show (the sent values, each active
 //!   from `at + lead`) and the raw recorded motion, per property class, inside and outside
 //!   effects, with the share beyond the tolerance (no operator take-over is simulated);
+//! * the lateness of each step value against the time its row's step is meant to leave (row
+//!   time minus the look lead; negative = early): median / p99 / max, the share later than 25 ms
+//!   and the share earlier than 100 ms, the earliest value and the worst rows;
+//! * the ramp values that had to wait for budget and the seconds in which one did;
 //! * the CPU time of the simulation.
+//!
+//! `BURST_LEAD_MAX_MS=<ms>` overrides `STEP_LEAD_MAX_MS` (0 = step bursts exactly on the row).
 //!
 //! The take file is read only; nothing is written.
 
@@ -25,7 +31,7 @@ use stagepilot_core::config::OscArgument;
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand, FixtureState};
 use stagepilot_lights::lightkey_looks::LookRecorder;
 use stagepilot_lights::lightkey_replay::{
-    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS,
+    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, PACKET_GAP_SECONDS,
 };
 use stagepilot_lights::lightkey_smooth::{
     prepare, property_class, smooth_rows, tolerance_for, Series, SmoothParams, CHECK_STEP_SECONDS,
@@ -81,6 +87,7 @@ struct Deviation {
     over_double: usize,
     max: f64,
     tolerance: f64,
+    at_max: (String, f64),
 }
 
 /// Compare what the sent values would show (each packet active from `visible(p)`, held until the
@@ -186,7 +193,10 @@ fn deviation(
                         .or_default();
                     e.tolerance = tolerance;
                     e.points += 1;
-                    e.max = e.max.max(err);
+                    if err > e.max {
+                        e.max = err;
+                        e.at_max = (d.address.clone(), t);
+                    }
                     e.over_tolerance += usize::from(err > tolerance);
                     e.over_double += usize::from(err > 2.0 * tolerance);
                 }
@@ -202,12 +212,14 @@ fn deviation(
         }
         for (class, e) in table {
             println!(
-                "    {class:<12} {:>9} points  tolerance {:>6.3}  max {:>7.3}  beyond tol {:>6.2} %  beyond 2x tol {:>6.2} %",
+                "    {class:<12} {:>9} points  tolerance {:>6.3}  max {:>7.3}  beyond tol {:>6.2} %  beyond 2x tol {:>6.2} %  (max at {} {:.2} s)",
                 e.points,
                 e.tolerance,
                 e.max,
                 e.over_tolerance as f64 * 100.0 / e.points.max(1) as f64,
-                e.over_double as f64 * 100.0 / e.points.max(1) as f64
+                e.over_double as f64 * 100.0 / e.points.max(1) as f64,
+                e.at_max.0,
+                e.at_max.1
             );
         }
     }
@@ -282,6 +294,12 @@ fn main() {
 
         // ---- the simulated replay
         let mut engine = ReplayEngine::new(&rows, &effects);
+        if let Some(ms) = std::env::var("BURST_LEAD_MAX_MS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+        {
+            engine = engine.with_step_lead_max_ms(ms);
+        }
         let started = Instant::now();
         let packets = simulate(&mut engine, 0.0, duration, LOOK_LEAD_SECONDS, &|_, _| false);
         let cpu = started.elapsed();
@@ -436,6 +454,131 @@ fn main() {
             percentile(&waits, 0.5),
             percentile(&waits, 0.99),
             waits.last().copied().unwrap_or(0.0)
+        );
+        // Lateness against the row: the tick that sends a single step runs when the song
+        // position (time + look lead) reaches the row, so a packet is on time when it leaves
+        // at `position - lead`.
+        {
+            let mut late: Vec<(f64, &SentPacket)> = packets
+                .iter()
+                .filter(|p| p.kind == Kind::Step)
+                .map(|p| ((p.at - (p.position - LOOK_LEAD_SECONDS)) * 1000.0, p))
+                .collect();
+            late.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let summary = |label: &str, ms: &[f64]| {
+                let n = ms.len().max(1) as f64;
+                println!(
+                    "{label}: median {:.0}, p99 {:.0}, max {:.0}, earliest {:.0}; later than 25 ms: {:.1} % ({} of {}), later than 60 ms: {}, earlier than 100 ms: {:.1} % ({})",
+                    percentile(ms, 0.5),
+                    percentile(ms, 0.99),
+                    ms.last().copied().unwrap_or(0.0),
+                    ms.first().copied().unwrap_or(0.0),
+                    ms.iter().filter(|m| **m > 25.0).count() as f64 * 100.0 / n,
+                    ms.iter().filter(|m| **m > 25.0).count(),
+                    ms.len(),
+                    ms.iter().filter(|m| **m > 60.0).count(),
+                    ms.iter().filter(|m| **m < -100.0).count() as f64 * 100.0 / n,
+                    ms.iter().filter(|m| **m < -100.0).count()
+                );
+            };
+            // The first look of the song (the tick at position 0) cannot start early: nothing
+            // exists before position 0. It is reported on its own.
+            let is_start = |p: &SentPacket| p.position <= LOOK_LEAD_SECONDS + 1e-3;
+            let ms: Vec<f64> = late.iter().map(|l| l.0).collect();
+            let rest: Vec<f64> = late
+                .iter()
+                .filter(|l| !is_start(l.1))
+                .map(|l| l.0)
+                .collect();
+            let start_look: Vec<f64> = late.iter().filter(|l| is_start(l.1)).map(|l| l.0).collect();
+            summary(
+                "lateness of step values against their row (ms, negative = early), all",
+                &ms,
+            );
+            summary("  without the first look of the song", &rest);
+            println!(
+                "  first look of the song (position 0, cannot start early): {} values, latest {:.0} ms",
+                start_look.len(),
+                start_look.last().copied().unwrap_or(0.0)
+            );
+            // the rows (song positions) with the latest values
+            let mut per_row: BTreeMap<u64, (f64, f64, usize, String)> = BTreeMap::new();
+            for (l, p) in &late {
+                let e = per_row
+                    .entry((p.position * 1000.0).round() as u64)
+                    .or_insert((f64::INFINITY, f64::NEG_INFINITY, 0, String::new()));
+                e.0 = e.0.min(*l);
+                if *l > e.1 {
+                    e.1 = *l;
+                    e.3 = p.message.address.clone();
+                }
+                e.2 += 1;
+            }
+            let mut worst: Vec<_> = per_row.iter().collect();
+            worst.sort_by(|a, b| b.1 .1.total_cmp(&a.1 .1));
+            println!(
+                "  worst rows (row time, values, earliest .. latest lateness ms, latest value):"
+            );
+            for (t, (lo, hi, n, a)) in worst.iter().take(4) {
+                println!(
+                    "    {:.3} s: {n} values, {lo:.0} .. {hi:.0} ms ({a})",
+                    **t as f64 / 1000.0
+                );
+            }
+            println!("  rows with 10 or more values (row time, values, earliest .. latest ms):");
+            for (t, (lo, hi, n, _)) in per_row.iter().filter(|(_, v)| v.2 >= 10) {
+                println!(
+                    "    {:.3} s: {n} values, {lo:.0} .. {hi:.0} ms",
+                    *t as f64 / 1000.0
+                );
+            }
+        }
+        let stats = engine.stats();
+        println!(
+            "ramp values that waited for budget: {} (each up to 50 ms of a ramp not updated); seconds with a ramp value waiting: {:.2}; step bursts started early: {}",
+            stats.ramp_deferred, stats.ramp_skipped_seconds, stats.bursts_early
+        );
+        // Steps that share one tick queue behind each other: that part of the wait is the
+        // 5 ms spacing itself (n steps take (n - 1) x 5 ms) and no queue order removes it.
+        let mut bursts: Vec<f64> = {
+            let mut by_tick: std::collections::BTreeMap<u64, usize> = Default::default();
+            for p in packets.iter().filter(|p| p.kind == Kind::Step) {
+                *by_tick.entry((p.position * 1e6) as u64).or_default() += 1;
+            }
+            by_tick.values().map(|n| *n as f64).collect()
+        };
+        bursts.sort_by(f64::total_cmp);
+        println!(
+            "steps sharing one tick (burst size): median {:.0}, p99 {:.0}, max {:.0}; floor of the wait from the 5 ms spacing alone for the largest burst: {:.0} ms",
+            percentile(&bursts, 0.5),
+            percentile(&bursts, 0.99),
+            bursts.last().copied().unwrap_or(0.0),
+            (bursts.last().copied().unwrap_or(1.0) - 1.0) * PACKET_GAP_SECONDS * 1000.0
+        );
+        // What the queue itself adds: the wait minus the 5 ms each earlier step of the same tick
+        // takes. Zero means no ramp, effect or older step was ahead.
+        let mut excess: Vec<f64> = {
+            let mut seen: std::collections::BTreeMap<u64, usize> = Default::default();
+            let mut steps: Vec<&SentPacket> =
+                packets.iter().filter(|p| p.kind == Kind::Step).collect();
+            steps.sort_by(|a, b| a.at.total_cmp(&b.at));
+            steps
+                .iter()
+                .map(|p| {
+                    let n = seen.entry((p.position * 1e6) as u64).or_default();
+                    let ahead = *n as f64;
+                    *n += 1;
+                    ((p.at - (p.position - LOOK_LEAD_SECONDS)) - ahead * PACKET_GAP_SECONDS)
+                        * 1000.0
+                })
+                .collect()
+        };
+        excess.sort_by(f64::total_cmp);
+        println!(
+            "steps, wait added by the queue beyond the spacing of steps of the same tick (ms): median {:.0}, p99 {:.0}, max {:.0}",
+            percentile(&excess, 0.5),
+            percentile(&excess, 0.99),
+            excess.last().copied().unwrap_or(0.0)
         );
         let mut busiest: Vec<(usize, usize)> = per_second.iter().copied().enumerate().collect();
         busiest.sort_by_key(|b| std::cmp::Reverse(b.1));

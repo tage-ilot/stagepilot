@@ -328,9 +328,57 @@ bucket (200 per second, burst 10) decides what a tick may send: steps always go 
 only use the bucket up, and the pacing spaces them), then ramps, then effect values, the
 largest change first. When effect values had to wait, the effect interval grows towards
 125 ms (8 Hz) and shrinks back when the budget has room; ramps keep 20 Hz. Beyond that a
-busy second simply sends the biggest changes first. One OSC message per address: **no OSC
+busy second simply sends the biggest changes first.
+
+**Pacing queue.** Between the ticks and the 5 ms spacing sits one priority queue: **steps
+leave first, then ramp values, then effect values, oldest first inside a class**. A ramp or
+effect value that is still waiting when a newer value for the same address is queued is
+**replaced** by it (only the latest value of an address matters and a stale value is never
+sent after a newer one; the replacement keeps the place of the value it replaces). Two steps
+of one address are both kept, in order. The tick runs on time and does not wait for the queue
+to drain, and the sender looks at the queue again at every 5 ms slot, so a step that arrives
+behind a long run of effect values goes out in the next slot. What the queue cannot remove is
+the spacing among steps themselves: a look change that touches 98 values takes 98 slots,
+485 ms, however it is ordered (the `replay_budget` report prints the burst sizes and the wait
+the queue adds beyond that floor: at most 6 / 20 ms on the two real takes). One OSC message per address: **no OSC
 bundles and no pattern addresses** (`P{1,3,5}`), because neither is shown to work with
 Lightkey's fixture overrides; the rig test (S4) decides.
+
+**Step bursts start before their row.** A look change can be 60 to 100 values at one row
+time, and `(n - 1) x 5 ms` (490 ms for 99 values) is a floor no queue order lowers. The
+schedule is known in advance, so a burst that would take **longer than 40 ms** (10 or more
+values; `STEP_BURST_MIN_MS`) is **started early and spread so that its middle lands on the row
+time**: it starts `(n - 1) x 5 ms / 2` before the row (122 ms for 50 values, 242 ms for 98),
+never more than `STEP_LEAD_MAX_MS` = **300 ms** (an engine can be given another value with
+`with_step_lead_max_ms`, 0 = off; a per-song setting is meant to use that later; no UI).
+Single steps and small bursts keep exact timing. Rules:
+- *Order inside a burst* (fixed): dimmer / intensity, then colour, then other levels and
+  options, then angles (pan, tilt, ...); by address inside a class. A step burst of several
+  rows is sent in row order.
+- *Never* before the song position of the tick (so not before position 0, and a resume or a
+  seek, which builds the engine at the new position, never sends values of rows already
+  past), *never* before the previous burst has left the pacing (a later row never overtakes
+  an earlier one; rows closer together than a burst takes are late rather than early), and a
+  small row right before a big burst that would start before it is sent together with that
+  burst. A position that goes back on the same engine forgets what was sent early.
+- The fixtures of an early burst are **held** at the row's values until the row time: their
+  ramp and effect values in between are superseded by the step that follows. A fixture the
+  operator takes over while its value waits is skipped (it takes no slot, nobody waits for it).
+- *Budget*: a burst's steps are not charged to the token bucket, and while steps drain,
+  **every 4th slot goes to a waiting ramp value** (a burst takes at most 3 of 4 slots, so ramps
+  keep 50 packets a second instead of standing still; a burst next to running ramps is planned
+  a third longer for that). Ramps also compete **by their distance in tolerances, not DMX steps**
+  (an angle has 184 DMX steps per tolerance, a level 8): in a busy second the angles no longer
+  take the whole budget from the dimmers.
+
+*Why earliness up to a few hundred milliseconds is acceptable:* a look change is read by the
+eye over 100 ms or more, a fixture's own dimmer and the haze take longer than that to show it,
+and only part of a big look is early: the first values of the burst (the dimmers and colours
+by the order above) lead by at most the lead, the last ones trail by the same amount. *The
+price:* during a big look change some fixtures change slightly before the beat and others
+slightly after it, spread symmetrically around it; with `STEP_LEAD_MAX_MS` = 0 all of them
+trail it by up to 490 ms. The first look of a song (position 0) cannot start early: nothing
+exists before position 0.
 
 **Effects** play from the cycle template. A member sees the cycle at phase
 `(p - start - offset) mod period`, computed from `p` directly each time (exact period
@@ -356,8 +404,12 @@ the song is paused it waits for the resume or seek, as before.
 -- <takes.json> [song]` replays a take on a simulated clock (no sockets) and prints packets
 per second (mean, 99th percentile, max, seconds above 150 per second), the split into steps,
 ramp and effect values, the share sent at the lowered effect rate, how long a step waits in
-the pacing queue, the sent values against the raw recorded motion (inside and outside
-effects, both "as intended" and "as paced"), the seams, and the CPU time.
+the pacing queue, the **lateness of every step value against its row** (negative = early:
+median / p99 / max, the share later than 25 ms, the share earlier than 100 ms, with and
+without the first look of the song, the worst rows), the ramp values that had to wait for
+budget, the sent values against the raw recorded motion (inside and outside effects, both
+"as intended" and "as paced", with where the maximum is), the seams, and the CPU time.
+`BURST_LEAD_MAX_MS=<ms>` overrides `STEP_LEAD_MAX_MS` for the run (0 = no lead).
 `BUDGET_TRACE=<address>,<from>,<to>` also prints that address's packets and timeline.
 
 | | Unstoppable God (255 s) | Able (290 s) |
@@ -372,6 +424,19 @@ effects, both "as intended" and "as paced"), the seams, and the CPU time.
 | Share of points beyond the tolerance outside effects (angle / colour / dimmer) | 0.04 % / 2.09 % / 0.23 % | 0.07 % / 0.16 % / 0.17 % |
 | Inside effects, beyond the tolerance (angle / colour / dimmer) | 11.4 % / 57.7 % / 52.7 % | 7.5 % / n/a / 8.9 % |
 | CPU time of the simulated run | 54 ms (0.21 ms per song second) | 61 ms (0.21 ms per song second) |
+
+With step bursts started early (this section's numbers replace the step rows above where
+they differ; same two takes):
+
+| | Unstoppable God (255 s) | Able (290 s) |
+|---|---|---|
+| Step lateness against the row, without the first look of the song: median / p99 / max | 2 / 35 / 45 ms | 5 / 35 / 40 ms |
+| ... the same with the lead off (`BURST_LEAD_MAX_MS=0`) | 11 / 102 / 117 ms | 10 / 80 / 95 ms |
+| Earliest step value (limit `STEP_LEAD_MAX_MS` = 300) | 70 ms early | 50 ms early |
+| First look of the song (cannot start early): values / latest | 59 / 290 ms | 98 / 485 ms |
+| Seconds above 150 packets per second | 8 | 2 |
+| Ramp values that waited for budget / seconds with one waiting | 4,051 / 10.9 s | 2,074 / 4.2 s |
+| Max dimmer deviation outside effects, as intended | 0.137 | 0.057 |
 
 The large "outside effects" angle maximum of Able is one grid point at the start of a 0.3 s,
 55 degree zoom ramp: 20 Hz cannot follow a ramp that short. Inside effects the deviation
@@ -694,9 +759,10 @@ tritanopia to keep the colours apart.
 - A row with several messages is a **look**: "Look - N fixtures". Rows from a recording (`captured`) are drawn in the Lighting colour and badged *Captured*; rows made by hand are *Manual*. Press **Edit** on a row to see its messages grouped by fixture. Each message's address and values are editable (the same typed values as a single cue), each can be deleted, and **Add message** adds one (it saves once its address is valid). A row left with no messages is removed. **−0.1 s / +0.1 s**, the time box, dragging the marker and the arrow keys move a row; times snap to 0.1 s.
 - **Remove fixture from this song** (in each fixture's heading) asks first, then deletes that fixture's messages from every row of the song. Rows left empty are removed.
 - Changing a captured row marks it **edited** (`edited` in the saved cue). With Record chosen, starting a recording on a song that has edited captured looks asks "Recording replaces this song's captured looks, including your edits" first. Deleting a whole captured row counts too: the backend sets `captured_edited` on the song's cue map for it.
-- **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
+- **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. Ramps merge only with ramps of the same length that start together and move different properties, and never with instant rows (the button is disabled and says why). There is no Simplify action in the app any more: a recording is already fitted, and the backend route (`POST /api/v1/lights/lightkey/simplify`) stays for old clients. Merge and Remove fixture each have one step of Undo until the next edit.
+- **Ramps and loops.** A row with `fade_seconds` is drawn as a bar from its start to start + duration (at least 4 px), the row list shows its duration (`+3.2 s`) and edits it (0 to 60 s, ending inside the song). A song's loops are bands on lanes under the timeline (at most three) and one expandable row each; selecting one shows its period, window, fixtures with phase offsets, properties and a one-cycle sparkline. A loop is never edited: removing it asks first and sends `remove_effect_ids` with the cue-map save (the only way a save changes loops).
 - **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
-- The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip (it no longer changes the capture; the control is removed in a later change) and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
+- The Lightkey strip reads "N captured items (R ramps/steps, E loops) on this song"; there is no Detail setting (the API still accepts `detail_level` and ignores it); the old list of takes is gone.
 
 ## Clearing cues
 
@@ -722,8 +788,7 @@ In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its he
 pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
 is a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
 a small **API** port box (default 8770), **Connect / Check again**, and at the right the labelled **Mode** (Auto | Replay |
-Record) toggle. The **Detail** (Fine / Normal / Coarse) toggle sits beside it while Auto or Record is chosen, and its
-one-line explanation is its tooltip. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
+Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
 1 yielded to the operator"), **Release lights**, **Send a test cue** and **How to find a cue's address**. The Lighting
 computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.
 
@@ -753,7 +818,7 @@ list scrolls inside a fixed height, so 40 songs do not push the page around.
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
-the following-live status, Add cue, Clear song..., Merge rows, Simplify, Undo, then at the right Zoom (- / Fit / +) and
+the following-live status, Add cue, Clear song..., Merge rows, Undo, then at the right Zoom (- / Fit / +) and
 timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
 cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
 how you left it on this device.

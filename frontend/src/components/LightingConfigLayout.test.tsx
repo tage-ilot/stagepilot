@@ -160,7 +160,7 @@ describe("songs strip in the panel", () => {
     expect(onSaveCues).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Erase permanently" }));
     expect(onSaveCues).toHaveBeenCalledTimes(1);
-    expect(onSaveCues).toHaveBeenCalledWith(songs[2], [], "osc");
+    expect(onSaveCues).toHaveBeenCalledWith(songs[2], [], "osc", { removeEffectIds: [] });
   });
 
   it("Clear all songs... uses the same dialog", async () => {
@@ -174,12 +174,12 @@ describe("songs strip in the panel", () => {
 });
 
 describe("song lighting timeline toolbar", () => {
-  it("is one wrapping toolbar with Song, Add cue, Clear song, Merge, Simplify, zoom and height; no old bottom Clear buttons", async () => {
+  it("is one wrapping toolbar with Song, Add cue, Clear song, Merge, zoom and height (no Simplify); no old bottom Clear buttons", async () => {
     mount();
     const bar = screen.getByRole("toolbar", { name: "Timeline tools" });
     expect(bar.className).toContain("flex-wrap");
     expect(within(bar).getByLabelText("Song")).toBeInTheDocument();
-    for (const name of ["Add cue", "Clear song...", "Merge rows", "Simplify this song", "Zoom out", "Fit", "Zoom in"]) {
+    for (const name of ["Add cue", "Clear song...", "Merge rows", "Zoom out", "Fit", "Zoom in"]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
     }
     expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
@@ -188,13 +188,10 @@ describe("song lighting timeline toolbar", () => {
     expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
   });
 
-  it("Merge rows needs two selected rows and Simplify needs captured looks", async () => {
+  it("Merge rows needs two selected rows, and there is no Simplify action", async () => {
     mount();
     expect(screen.getByRole("button", { name: "Merge rows" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Simplify this song" })).toBeEnabled();
-    await userEvent.setup().click(screen.getByRole("button", { name: /^Amazing Grace/ }));
-    await userEvent.setup().click(screen.getByRole("button", { name: /^Goodness/ }));
-    expect(screen.getByRole("button", { name: "Simplify this song" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /simplify/i })).toBeNull();
   });
 });
 

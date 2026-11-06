@@ -262,6 +262,12 @@ function renderDashboard(
   );
 }
 
+// A test that fails before its own cleanup (or never restores) must not leave fake timers behind for the next test: under
+// --sequence.shuffle that made unrelated tests time out.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   window.localStorage.removeItem("stagepilot.dashboard-layout.v2");
   window.localStorage.removeItem("stagepilot.dashboard-layout.invalid");
@@ -766,7 +772,8 @@ describe("Dashboard Planning Center plan states", () => {
       expect((screen.getByLabelText(field) as HTMLInputElement).value).toBe(value);
       await user.click(screen.getByRole("button", { name: close }));
       await user.click(within(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).getByRole("button", { name: "Discard" }));
-      await waitFor(() => expect(screen.queryByLabelText(field)).not.toBeInTheDocument());
+      // The panel unmounts when its 500 ms close fallback fires; allow for a loaded runner instead of the 1 s default.
+      await waitFor(() => expect(screen.queryByLabelText(field)).not.toBeInTheDocument(), { timeout: 5_000 });
     });
   });
 
@@ -1400,6 +1407,11 @@ describe("Dashboard reduced motion", () => {
   });
 });
 
+/** Longer than the panel reveal (EMERGE_MS, 500 ms) so a closing panel's fallback timer has fired. */
+const CLOSE_REVEAL_MS = 1_000;
+/** waitFor budget for a panel that swaps or unmounts on a real timer: the reveal plus headroom for a loaded runner. */
+const WAIT_FOR_REVEAL_MS = 5_000;
+
 describe("Dashboard connection configuration panels", () => {
   it("keeps the retained first-launch setup UI disabled", () => {
     renderDashboard(loadedServiceState, {
@@ -1433,13 +1445,13 @@ describe("Dashboard connection configuration panels", () => {
 
     expect(planningCenter).toHaveAttribute("aria-expanded", "false");
     expect(midiConnection).toHaveAttribute("aria-expanded", "true");
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Services" })).not.toBeInTheDocument(), { timeout: WAIT_FOR_REVEAL_MS });
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Playback" })).toBeInTheDocument(), { timeout: WAIT_FOR_REVEAL_MS });
 
     await user.click(midiConnection);
 
     expect(midiConnection).toHaveAttribute("aria-expanded", "false");
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Playback" })).not.toBeInTheDocument(), { timeout: WAIT_FOR_REVEAL_MS });
   });
 
   it("keeps all connection cards in one row with persistent icons", () => {
@@ -1463,7 +1475,12 @@ describe("Dashboard connection configuration panels", () => {
   });
 
   it("provides close buttons for all five connection panels", async () => {
-    const user = userEvent.setup();
+    // A closing panel leaves the accessibility tree at once but stays mounted until the reveal's fallback timer (jsdom has no
+    // animations to finish) fires, and the next panel only opens after that. The old test waited for that 500 ms timer with real
+    // timers behind a 1 s waitFor, which a loaded full-suite run overran. Fake timers make it deterministic: advance past the
+    // reveal explicitly instead of racing the wall clock.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderDashboard(loadedServiceState, {
       state: applicationState(loadedServiceState, { plugins: {} }),
     });
@@ -1496,15 +1513,19 @@ describe("Dashboard connection configuration panels", () => {
       },
     ] as const;
 
+    const setupSections = () => document.querySelectorAll("section[data-variant=\"setup\"]");
     for (const panel of panels) {
       const panelHeading = () => screen.queryAllByRole("heading", { name: panel.heading }).filter((h) => h.closest("section[data-variant=\"setup\"]") !== null);
       await user.click(screen.getByRole("button", { name: panel.card }));
-      await waitFor(() => expect(panelHeading()).toHaveLength(1));
+      expect(panelHeading()).toHaveLength(1);
 
       await user.click(screen.getByRole("button", { name: panel.close }));
-      await waitFor(() => expect(panelHeading()).toHaveLength(0));
+      // The closing panel leaves the accessibility tree at once but stays mounted until the reveal ends.
+      expect(panelHeading()).toHaveLength(0);
+      act(() => { vi.advanceTimersByTime(CLOSE_REVEAL_MS); });
+      expect(setupSections()).toHaveLength(0);
     }
-  });
+  }, 20_000); // five full panel mounts: ~0.7 s idle, but 7x slower on a loaded runner (the 5 s default was overrun)
 
   it("shows a live remaining clock alongside elapsed song duration", () => {
     vi.useFakeTimers();

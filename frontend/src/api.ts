@@ -12,9 +12,7 @@ import type {
   LightingPad,
   LightkeyActionResponse,
   LightkeyAudio,
-  LightkeyDetail,
   LightkeyMode,
-  LightkeySimplifyResponse,
   LightkeyStatus,
   LightsOperationResponse,
   LightsSettingsInput,
@@ -364,7 +362,7 @@ export const undoLightingCapture = (songKey: string, cueId: string) =>
   });
 
 export const getLightkeyStatus = () => requestJson<LightkeyStatus>("/api/v1/lights/lightkey");
-export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; mode?: LightkeyMode; detail_level?: LightkeyDetail; audio_device?: string }) =>
+export const saveLightkeySettings = (settings: { api_url?: string; replay?: boolean; mode?: LightkeyMode; audio_device?: string }) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -384,13 +382,6 @@ export const clearLightingLoudness = (songKey: string) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ song_key: songKey }),
-  });
-/** Thin + merge a song's captured rows on the backend. Without `apply` it only counts ("412 rows -> 190"). */
-export const simplifyLightkeyLooks = (songKey: string, detailLevel: LightkeyDetail, apply: boolean) =>
-  requestJson<LightkeySimplifyResponse>("/api/v1/lights/lightkey/simplify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ song_key: songKey, detail_level: detailLevel, apply }),
   });
 export const setLightkeyRecording = (recording: boolean) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/recording", {

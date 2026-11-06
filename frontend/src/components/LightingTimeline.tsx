@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
-import type { SongLoudness } from "../types";
+import type { LightingEffect, SongLoudness } from "../types";
 import { barClassFor } from "./cueTypeBars";
 import { CueTypeLegend } from "./CueTypeParts";
 import { useHiddenCueTypes } from "./useHiddenCueTypes";
-import { describeTypeCounts, dominantType, glyphFor, typeSpokenLabel, type CueTypeId } from "./lightingCueTypes";
+import { CUE_TYPES, describeTypeCounts, dominantType, glyphFor, typeSpokenLabel, type CueTypeId } from "./lightingCueTypes";
 import { clusterMarkers } from "./lightingLooks";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
@@ -18,6 +18,8 @@ import {
   type TimelineMarker,
 } from "./lightingTimelineMath";
 import { loudnessAltText, loudnessPath } from "./loudness";
+import { EffectDetail } from "./LightingEffectDetail";
+import { assignEffectLanes, clampRampStart, effectLabel, formatFade, rampGeometry } from "./lightingSmooth";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
@@ -29,6 +31,7 @@ const ZOOMS = [0, 6, 12, 24, 60, 120] as const; // pixels per second; 0 = fit th
 const CLUSTER_GAP_PX = 14; // markers closer than this on screen become one cluster
 const LONG_PRESS_MS = 500;
 const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of squeezing
+const EFFECT_LANE_PX = 24; // one line of loops under the track (44 on touch, set in the class)
 
 /**
  * The selected song's lighting timeline: ruler, cue markers and a live playhead.
@@ -36,8 +39,14 @@ const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of sq
  */
 export function LightingTimeline({
   songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect, loudness,
-  method = "osc", hiddenTypes, onToggleType, onShowAllTypes, toolbar,
+  method = "osc", hiddenTypes, onToggleType, onShowAllTypes, toolbar, effects = [], onRemoveEffect, mergeBlockedReason = null,
 }: {
+  /** The song's repeating loops, drawn as striped bands under the cue bars (one line each, at most three lines). */
+  effects?: LightingEffect[];
+  /** Asks to remove a loop (the panel confirms first). Loops are never moved or edited from here. */
+  onRemoveEffect?: (id: string) => void;
+  /** Why the picked rows cannot be merged, or null. Shown beside the disabled Merge rows button. */
+  mergeBlockedReason?: string | null;
   /** The panel's own controls (Song, Add cue, Clear song, Merge, Simplify, Undo): they lead the toolbar row; zoom and height sit at its right. */
   toolbar?: ReactNode;
   /** Which method's cues these are; the legend lists that method's types. */
@@ -68,7 +77,12 @@ export function LightingTimeline({
   const showAllTypes = onShowAllTypes ?? ownHidden.showAll;
   const [zoomIndex, setZoomIndex] = useState(0);
   const [heightMode, setHeightMode] = useHeightMode();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdRaw] = useState<string | null>(null);
+  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
+  const setSelectedId = (id: string | null | ((current: string | null) => string | null)) => {
+    setSelectedIdRaw(id);
+    if (id !== null) setSelectedEffectId(null);
+  };
   const [drag, setDrag] = useState<{ id: string; at: number } | null>(null);
   const [trackWidth, setTrackWidth] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -86,8 +100,10 @@ export function LightingTimeline({
   const clearPress = () => { if (pressTimer.current !== null) { window.clearTimeout(pressTimer.current); pressTimer.current = null; } pressStart.current = null; };
 
   // A song with no known length still gets a usable bar: the last cue plus a minute.
-  const length = songLength ?? Math.max(60, ...markers.map((marker) => marker.at + 60));
+  const length = songLength ?? Math.max(60, ...markers.map((marker) => marker.at + 60), ...effects.map((effect) => effect.end_seconds + 60));
   const zoom = ZOOMS[zoomIndex]!;
+  // A ramp has to end inside the song, so it can only be moved as far as its own length allows.
+  const keepRampInside = (marker: TimelineMarker | undefined, at: number) => (marker && (marker.fade ?? 0) > 0 ? clampCueTime(clampRampStart(at, marker.fade!, length), length) : at);
   const trackStyle = {
     minWidth: `${MIN_TRACK_REM}rem`,
     width: zoom === 0 ? "100%" : `${Math.max(length * zoom, 1)}px`,
@@ -125,9 +141,24 @@ export function LightingTimeline({
     if (selectedId && !markers.some((marker) => marker.id === selectedId)) setSelectedId(null);
   }, [markers, selectedId]);
 
+  useEffect(() => {
+    if (selectedEffectId && !effects.some((effect) => effect.id === selectedEffectId)) setSelectedEffectId(null);
+  }, [effects, selectedEffectId]);
+
   // A hidden type is only hidden from view: the picked, selected and dragged markers always stay.
   const visibleMarkers = markers.filter((marker) => !hidden.has(markerType(marker)) || marker.id === selectedId || marker.id === drag?.id || picked.has(marker.id));
-  const presentTypes = new Set(markers.map(markerType));
+  const presentTypes = new Set<CueTypeId>([...markers.map(markerType), ...(effects.length ? ["effect-loop" as const] : [])]);
+  const visibleEffects = effects.filter((effect) => !hidden.has("effect-loop") || effect.id === selectedEffectId);
+  const effectLanes = assignEffectLanes(visibleEffects);
+  const laneCount = visibleEffects.length ? Math.max(...effectLanes.values()) + 1 : 0;
+  const selectedEffect = effects.find((effect) => effect.id === selectedEffectId) ?? null;
+  const selectEffect = (id: string | null) => { setSelectedEffectId(id); if (id !== null) { setSelectedIdRaw(null); if (picked.size) setPicked([]); } };
+  const onEffectKey = (event: KeyboardEvent<HTMLButtonElement>, effect: LightingEffect) => {
+    if (disabled) return;
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectEffect(effect.id === selectedEffectId ? null : effect.id); }
+    else if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); onRemoveEffect?.(effect.id); }
+    else if (event.key === "Escape") selectEffect(null);
+  };
   const percent = (at: number) => `${Math.min(100, Math.max(0, (at / length) * 100))}%`;
   const selected = markers.find((marker) => marker.id === selectedId) ?? null;
 
@@ -158,13 +189,13 @@ export function LightingTimeline({
   const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
     if (pressStart.current && Math.hypot(event.clientX - pressStart.current.x, event.clientY - pressStart.current.y) > 6) clearPress();
     if (!drag) return;
-    setDrag({ id: drag.id, at: clampCueTime(timeAt(event.clientX), length) });
+    setDrag({ id: drag.id, at: keepRampInside(markers.find((marker) => marker.id === drag.id), clampCueTime(timeAt(event.clientX), length)) });
   };
   const endDrag = (event: PointerEvent<HTMLButtonElement>) => {
     clearPress();
     if (!drag) return;
-    const at = clampCueTime(timeAt(event.clientX), length);
     const original = markers.find((marker) => marker.id === drag.id);
+    const at = keepRampInside(original, clampCueTime(timeAt(event.clientX), length));
     setDrag(null);
     if (original && at !== original.at) onMove(drag.id, at);
   };
@@ -214,7 +245,7 @@ export function LightingTimeline({
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
       setSelectedId(marker.id);
-      const next = nudgeCueTime(marker.at, event.key === "ArrowLeft" ? -1 : 1, event.shiftKey, length);
+      const next = keepRampInside(marker, nudgeCueTime(marker.at, event.key === "ArrowLeft" ? -1 : 1, event.shiftKey, length));
       if (next !== marker.at) onMove(marker.id, next);
     } else if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
@@ -323,15 +354,19 @@ export function LightingTimeline({
               const isSelected = marker.id === selectedId || picked.has(marker.id);
               const type = markerType(marker);
               const spoken = marker.spokenLabel ?? typeSpokenLabel(type, marker.label || "Cue");
+              const fade = marker.fade ?? 0;
+              const bar = fade > 0 ? rampGeometry(at, fade, length, trackWidth) : null;
               return (
                 <button
-                  aria-label={`${spoken}, at ${formatElapsed(at)}`}
+                  aria-label={`${spoken}, at ${formatElapsed(at)}${fade > 0 ? `, ramp over ${fade.toFixed(1)} seconds` : ""}`}
                   aria-pressed={isSelected}
                   className={`absolute flex w-4 -translate-x-1/2 cursor-grab touch-none items-start justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${drag?.id === marker.id ? "cursor-grabbing" : ""}`}
                   data-selected={isSelected ? "true" : "false"}
                   data-source={marker.captured ? "captured" : "manual"}
+                  data-fade={fade > 0 ? fade : undefined}
                   data-testid="lighting-marker"
                   data-type={type}
+                  title={marker.description}
                   aria-disabled={disabled || undefined}
                   key={marker.id}
                   onClick={() => { if (longPressed.current) { longPressed.current = false; return; } setSelectedId(marker.id); }}
@@ -344,6 +379,14 @@ export function LightingTimeline({
                   type="button"
                 >
                   <span className={`block h-full ${isSelected ? "w-2.5" : type === "cue-off" ? "w-2" : "w-1.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
+                  {bar && (
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute bottom-1 left-1/2 h-2 rounded-r-ds-full ${barClassFor(type)} ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : "opacity-90"}`}
+                      data-testid="lighting-ramp-bar"
+                      style={{ width: `${trackWidth > 0 ? bar.width : 4}px` }}
+                    />
+                  )}
                   <span
                     className={`pointer-events-none absolute left-[14px] top-0 flex items-center gap-1 text-type-body-sm text-ink-body ${isSelected ? "z-10 rounded-ds-sm bg-surface-panel-strong pr-1 font-semibold text-ink ring-2 ring-ink" : ""}`}
                     data-testid="lighting-marker-label"
@@ -358,16 +401,46 @@ export function LightingTimeline({
               );
             })}
           </div>
+          {laneCount > 0 && (
+            <div aria-label={`Effect loops, ${visibleEffects.length}`} className="relative mt-2" data-testid="lighting-effect-lanes" role="group" style={{ height: `${laneCount * (EFFECT_LANE_PX + 2)}px` }}>
+              {visibleEffects.map((effect) => {
+                const lane = effectLanes.get(effect.id) ?? 0;
+                const isSelected = effect.id === selectedEffectId;
+                const text = effectLabel(effect);
+                return (
+                  <button
+                    aria-label={`Effect loop, ${text}, from ${formatElapsed(effect.start_seconds)} to ${formatElapsed(effect.end_seconds)}`}
+                    aria-pressed={isSelected}
+                    className={`effect-band absolute flex min-h-[24px] touch-manipulation items-center gap-1 overflow-hidden rounded-ds-sm px-1 text-left text-type-body-sm text-ink coarse:min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`}
+                    data-lane={lane}
+                    data-selected={isSelected ? "true" : "false"}
+                    data-testid="lighting-effect"
+                    data-type="effect-loop"
+                    key={effect.id}
+                    onClick={() => selectEffect(isSelected ? null : effect.id)}
+                    onKeyDown={(event) => onEffectKey(event, effect)}
+                    style={{ left: percent(effect.start_seconds), width: `max(4px, ${Math.min(100 - Math.min(100, Math.max(0, (effect.start_seconds / length) * 100)), Math.max(0, ((effect.end_seconds - effect.start_seconds) / length) * 100))}%)`, top: `${lane * (EFFECT_LANE_PX + 2)}px`, height: `${EFFECT_LANE_PX}px` }}
+                    title={text}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="shrink-0 rounded-ds-sm bg-surface-panel-strong px-1 text-ink" data-testid="lighting-effect-glyph">{CUE_TYPES["effect-loop"].glyph}</span>
+                    <span className="truncate" data-testid="lighting-effect-label">{text}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </ScrollRegion>
       {selectedIds.length > 0 && (
         <div aria-label="Selected rows" className="mt-2 flex flex-wrap items-center gap-2 rounded-ds-lg border border-edge-medium bg-surface-panel p-2" data-testid="lighting-selection" role="group">
           <span className="text-type-body-sm text-ink-body">{selectedIds.length} row{selectedIds.length === 1 ? "" : "s"} selected</span>
-          <Button disabled={disabled || selectedIds.length < 2 || !onMerge} onClick={() => onMerge?.(selectedIds)} variant="tinted">Merge rows</Button>
+          <Button aria-describedby={mergeBlockedReason ? "lighting-merge-blocked" : undefined} disabled={disabled || selectedIds.length < 2 || !onMerge || Boolean(mergeBlockedReason)} onClick={() => onMerge?.(selectedIds)} variant="tinted">Merge rows</Button>
           <Button onClick={() => setPicked([])} variant="secondary">Clear selection</Button>
+          {mergeBlockedReason && <span className="min-w-0 basis-full text-type-body-sm text-ink-muted" data-testid="lighting-merge-blocked" id="lighting-merge-blocked">{mergeBlockedReason}</span>}
         </div>
       )}
-      {!markers.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
+      {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
       {selected && (
         <div aria-label="Selected cue" className="mt-2 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-ds-lg border border-edge-medium bg-surface-panel px-2 py-1" data-testid="lighting-marker-popover" role="group">
           <span className="shrink-0 text-type-body-sm text-ink-body">
@@ -384,7 +457,7 @@ export function LightingTimeline({
               onBlur={(event) => {
                 const parsed = parseElapsed(event.target.value);
                 if (parsed === null) { event.target.value = formatElapsed(selected.at); return; }
-                const next = clampCueTime(parsed, length);
+                const next = keepRampInside(selected, clampCueTime(parsed, length));
                 if (next !== selected.at) onMove(selected.id, next);
                 else event.target.value = formatElapsed(selected.at);
               }}
@@ -394,6 +467,18 @@ export function LightingTimeline({
           <span className="hidden min-w-0 flex-1 truncate text-type-body-sm text-ink-muted xl:inline" title="Arrow keys move a marker 0.1 s, Shift 1 s. To merge, Shift-click rows, drag across the timeline, or press and hold on touch.">Arrow keys move a marker 0.1 s, Shift 1 s. To merge, Shift-click rows, drag across the timeline, or press and hold on touch.</span>
           <Button className={`shrink-0 ${CONTROL_34}`} aria-label={`Delete cue at ${formatElapsed(selected.at)}`} disabled={disabled} onClick={() => onRemove(selected.id)} tone="danger" variant="tinted">Delete</Button>
           <Button className={`shrink-0 ${CONTROL_34}`} onClick={() => { setSelectedId(null); }} variant="secondary">Close</Button>
+        </div>
+      )}
+      {selected && (selected.fade ?? 0) > 0 && selected.description && (
+        <p className="mt-1 text-type-body-sm text-ink-body" data-testid="lighting-ramp-detail"><span className="font-semibold text-ink">Ramp {formatFade(selected.fade!)}.</span> {selected.description}</p>
+      )}
+      {selectedEffect && (
+        <div aria-label="Selected loop" className="mt-2 rounded-ds-lg border border-edge-medium bg-surface-panel p-3" data-testid="lighting-effect-popover" role="group">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <strong className="text-ink">{selectedEffect.label || "Effect loop"}</strong>
+            <Button className={`ml-auto ${CONTROL_34}`} onClick={() => selectEffect(null)} variant="secondary">Close</Button>
+          </div>
+          <EffectDetail disabled={disabled} effect={selectedEffect} onRemove={onRemoveEffect ? () => onRemoveEffect(selectedEffect.id) : undefined} />
         </div>
       )}
     </div>

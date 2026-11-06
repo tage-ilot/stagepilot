@@ -9,7 +9,6 @@ import {
   rememberServerPort,
   refreshMidiInputs,
   saveLightkeySettings,
-  simplifyLightkeyLooks,
   selectMidiInput,
   selectPlanningCenterPlan,
   simulateMidiCue,
@@ -295,26 +294,22 @@ describe("MIDI API", () => {
   });
 });
 
-describe("Lightkey Detail and Simplify API", () => {
-  const answer = { accepted: true, message: "Saved.", lightkey: { detail_level: "fine" } };
-  it("PUTs exactly {detail_level} to the Lightkey settings route (the body the Rust test frontend_detail_level_round_trips_through_settings_and_status sends)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue(answer) });
+describe("Lightkey settings and cue-map API", () => {
+  it("PUTs only what the caller names to the Lightkey settings route (the UI never sends detail_level)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ accepted: true, message: "Saved.", lightkey: {} }) });
     vi.stubGlobal("fetch", fetchMock);
-    await saveLightkeySettings({ detail_level: "fine" });
+    await saveLightkeySettings({ mode: "auto", replay: true });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toContain("/api/v1/lights/lightkey/settings");
     expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body)).toEqual({ detail_level: "fine" });
+    expect(JSON.parse(init.body)).toEqual({ mode: "auto", replay: true });
   });
 
-  it("POSTs song_key, detail_level and apply to the simplify route", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ accepted: true, applied: false, message: "412 rows -> 190" }) });
+  it("sends the loops to remove with a cue-map save, and nothing about loops otherwise", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ accepted: true, message: "Saved.", lights: {} }) });
     vi.stubGlobal("fetch", fetchMock);
-    await simplifyLightkeyLooks("song-1", "coarse", false);
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toContain("/api/v1/lights/lightkey/simplify");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ song_key: "song-1", detail_level: "coarse", apply: false });
+    await updateLightingCueMap({ song_key: "s", song_title: "S", method: "osc", cues: [], osc_cues: [], remove_effect_ids: ["e1"] });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body).remove_effect_ids).toEqual(["e1"]);
   });
 });
 
