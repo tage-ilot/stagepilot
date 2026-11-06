@@ -293,6 +293,44 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(screen.getByText("song_started")).toBeInTheDocument();
   });
 
+  it("shows the newest connection entry per integration beside the real events", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T16:30:00Z"));
+    const state = applicationState(loadedServiceState, {
+      recent_events: [
+        // Connected 30 minutes ago and not refreshed since: still the last time it was connected.
+        { id: "pp-connected", type: "connection.changed", timestamp: "2026-07-13T16:00:00Z", source: "propresenter" },
+        { id: "lights-connected", type: "connection.changed", timestamp: "2026-07-13T16:10:00Z", source: "lights" },
+        { id: "song", type: "song_started", timestamp: "2026-07-13T16:29:30Z", source: "propresenter" },
+      ],
+    });
+    renderDashboard(loadedServiceState, { state });
+
+    const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent);
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((row) => row?.includes("connection.changed"))).toHaveLength(2);
+    expect(screen.getByText("song_started")).toBeInTheDocument();
+  });
+
+  it("never lets connection entries push real events out of the Latest 10", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T16:05:30Z"));
+    const real = Array.from({ length: 10 }, (_, i) => ({
+      id: `real-${i}`, type: "song_started", timestamp: "2026-07-13T16:05:00Z", source: "propresenter",
+    }));
+    const state = applicationState(loadedServiceState, {
+      recent_events: [
+        ...real,
+        { id: "c1", type: "connection.changed", timestamp: "2026-07-13T16:05:10Z", source: "propresenter" },
+        { id: "c2", type: "connection.changed", timestamp: "2026-07-13T16:05:20Z", source: "lights" },
+      ],
+    });
+    renderDashboard(loadedServiceState, { state });
+
+    expect(screen.getAllByText("song_started")).toHaveLength(10);
+    expect(screen.getAllByText("connection.changed")).toHaveLength(2);
+  });
+
   it("re-evaluates live: an event disappears on its own once it crosses 5 minutes", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-13T16:00:00Z"));

@@ -781,12 +781,25 @@ export function Dashboard({
   const pinnedError = latestActiveError(state);
   const activeErrorEventId = pinnedError?.event_id;
   const EVENT_DISPLAY_WINDOW_MS = 300_000;
-  const activity = [...state.recent_events].reverse()
-    .filter((event) => (
-      event.id === activeErrorEventId
-      || clockNow - Date.parse(event.timestamp) <= EVENT_DISPLAY_WINDOW_MS
-    ))
-    .slice(0, 10);
+  // The backend keeps at most one connected and one not-connected connection.changed entry per
+  // source. They are the "last time it was connected" record, so they do not age out after 5
+  // minutes and do not use up the 10 slots of real events.
+  const connectionRowsPerSource = new Map<string, number>();
+  let realEventRows = 0;
+  const activity = [...state.recent_events].reverse().filter((event) => {
+    if (event.type === "connection.changed") {
+      const seen = connectionRowsPerSource.get(event.source) ?? 0;
+      if (seen >= 2) return false;
+      connectionRowsPerSource.set(event.source, seen + 1);
+      return true;
+    }
+    if (
+      event.id !== activeErrorEventId
+      && clockNow - Date.parse(event.timestamp) > EVENT_DISPLAY_WINDOW_MS
+    ) return false;
+    realEventRows += 1;
+    return realEventRows <= 10;
+  });
   // The active-error summary can reference an event that has already been
   // evicted from the capped recent_events list (after 100 newer events).
   // Keep the pinned error inspectable in the stream by synthesizing its row
