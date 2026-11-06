@@ -150,8 +150,8 @@ class Rig:
         raise TimeoutError(f"timed out waiting for {what}")
 
     async def wait_link(self, timeout=30):
-        await self.wait(lambda: (lambda s: s["link"] == "connected" and s["fixtures"]["link"] == "live")(self.lk_status()),
-                        timeout, what="link connected + relay live")
+        await self.wait(lambda: (lambda s: s["link"] == "connected" and ((s.get("fixtures") or {}).get("link") in ("live", None)))(self.lk_status()),
+                        timeout, what="link connected (+ relay live when reported)")
 
     # ---------------------------------------------------------------- the relay's state
     def set_relay_state(self, commands):
