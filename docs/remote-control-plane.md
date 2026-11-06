@@ -55,8 +55,12 @@ Effective location, in order:
 
 1. `locationOverride`, if set by the operator;
 2. geolocation city, then region, then country;
-3. otherwise `Test Install` if the installation is not pinned (unpinned installs expire after 48h,
-   so they are test installs), or `Unknown` if it is pinned.
+3. otherwise `Test Install` only if the installation is not pinned **and** its self-reported
+   `deviceName` is a known test host (case-insensitive, whole-name match): a GitHub-hosted Linux
+   runner (`^runnervm[a-z0-9]+$`), a GitHub-hosted macOS runner
+   (`^[a-z]{3}\d{2}-[a-z]{2}\d+-<uuid>-<12 hex>\.local$`), exactly `agent-hub`, or exactly
+   `stagepilot-ci`. Everything else with no location, including pinned installs and installs
+   with no `deviceName`, is `Unknown`. `deviceName` is untrusted and this is display-only.
 
 `PATCH /v1/admin/installations/:id/location` with `{"location": "Pasadena"}` (admin bearer token;
 same id format as `/label`). The value is trimmed, at most 80 characters, with no control

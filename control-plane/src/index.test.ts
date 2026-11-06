@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Registry } from './index';
+import { Registry, isKnownTestDevice } from './index';
 
 class MemoryStorage {
   readonly values = new Map<string, unknown>();
@@ -171,9 +171,9 @@ async function json(response: Response): Promise<Record<string, unknown>> {
   return await response.json() as Record<string, unknown>;
 }
 
-async function enroll(registry: Registry, key: string): Promise<Record<string, unknown>> {
+async function enroll(registry: Registry, key: string, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const response = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, {
-    nonce: key,
+    nonce: key, ...extra,
   }));
   expect(response.status).toBe(201);
   return json(response);
@@ -1443,8 +1443,17 @@ describe('fleet alert ingestion and admin endpoints', () => {
     expect(listAfterUpdateBody.alerts[0]?.location).toBe('Denver');
   });
 
-  it('shows "Test Install" for an alert from an unpinned installation with no known location', async () => {
+  it('shows "Unknown" for an alert from an installation with no location and no test deviceName', async () => {
     const installation = await enroll(registry, 'alert-geo-unknown-0001');
+    const created = await registry.fetch(request(
+      installationPath(installation, 'alerts'), 'POST', String(installation.installationCredential), alertBody(),
+    ));
+    expect(created.status).toBe(201);
+    expect((await json(created)).location).toBe('Unknown');
+  });
+
+  it('shows "Test Install" for an alert from an unpinned known-test-host installation with no location', async () => {
+    const installation = await enroll(registry, 'alert-geo-unknown-0002', { deviceName: 'agent-hub' });
     const created = await registry.fetch(request(
       installationPath(installation, 'alerts'), 'POST', String(installation.installationCredential), alertBody(),
     ));
@@ -1516,7 +1525,7 @@ describe('fleet city list (edge geolocation, never raw IP)', () => {
       { country: 'DE' },
     ));
 
-    const noGeo = await enroll(registry, 'geo-fleet-0004');
+    const noGeo = await enroll(registry, 'geo-fleet-0004', { deviceName: 'runnervmdaln5' });
     await registry.fetch(requestWithCf(
       installationPath(noGeo, 'status'), 'GET', String(noGeo.installationCredential), undefined, undefined,
     ));
@@ -2759,16 +2768,20 @@ describe('installation expiry sweep', () => {
       return (list.installations as Array<Record<string, unknown>>).find((r) => r.installationId === id)!;
     };
 
-    it('unpinned no-geo => Test Install; pinned no-geo => Unknown', async () => {
-      const unpinned = seed({}, HOUR);
-      const pinned = seed({ keep: true }, HOUR);
+    it('unpinned no-geo test host => Test Install; pinned or non-test host => Unknown', async () => {
+      const unpinned = seed({ deviceName: 'runnervmdaln5' }, HOUR);
+      const pinned = seed({ keep: true, deviceName: 'runnervmdaln5' }, HOUR);
+      const real = seed({ deviceName: 'JPL-Graphics-iMac.local' }, HOUR);
+      const noName = seed({}, HOUR);
       expect((await listRow(unpinned)).location).toBe('Test Install');
       expect((await listRow(pinned)).location).toBe('Unknown');
+      expect((await listRow(real)).location).toBe('Unknown');
+      expect((await listRow(noName)).location).toBe('Unknown');
     });
 
     it('override beats geo and Test Install; clearing restores them', async () => {
       const geo = seed({ lastCity: 'Austin' }, HOUR);
-      const bare = seed({}, HOUR);
+      const bare = seed({ deviceName: 'stagepilot-ci' }, HOUR);
       expect((await registry.fetch(request(locPath(geo), 'PATCH', adminToken, { location: '  Pasadena  ' }))).status).toBe(200);
       expect((await registry.fetch(request(locPath(bare), 'PATCH', adminToken, { location: 'Lab' }))).status).toBe(200);
       expect((await listRow(geo)).location).toBe('Pasadena');
@@ -2782,7 +2795,7 @@ describe('installation expiry sweep', () => {
     });
 
     it('Locations counts group many Test Install plus one override city', async () => {
-      for (let i = 0; i < 5; i += 1) seed({}, HOUR);
+      for (let i = 0; i < 5; i += 1) seed({ deviceName: 'agent-hub' }, HOUR);
       const home = seed({}, HOUR);
       await registry.fetch(request(locPath(home), 'PATCH', adminToken, { location: 'Pasadena' }));
       const body = await json(await registry.fetch(request('/v1/admin/cities', 'GET', adminToken)));
@@ -2809,4 +2822,25 @@ describe('installation expiry sweep', () => {
       expect((await listRow(seed({}, HOUR))).locationOverride).toBe('');
     });
   });
+});
+
+describe('isKnownTestDevice', () => {
+  const mac = 'sjc20-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F.local';
+  it.each([
+    'runnervmdaln5', 'runnervm48cm3', 'RUNNERVMDALN5', mac, mac.toLowerCase(), mac.toUpperCase(),
+    'agent-hub', 'Agent-Hub', 'AGENT-HUB', 'stagepilot-ci', 'StagePilot-CI',
+  ])('accepts %s', (name) => expect(isKnownTestDevice(name)).toBe(true));
+
+  it.each([
+    'JPL-Graphics-iMac.local', 'Johns-MacBook-Pro.local', 'Church-PC', 'runner', 'my-runnervm1',
+    'runnervm1-extra-host', 'runnervm', 'agent-hub-2', 'old-agent-hub', 'stagepilot-ci-2', 'x-stagepilot-ci',
+    '', ' agent-hub', 'agent-hub\n',
+    'sjc2-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F.local',
+    '1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F.local',
+    'sjc20-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F',
+    'xsjc20-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F.local',
+    'sjc20-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845.local',
+  ])('rejects %j', (name) => expect(isKnownTestDevice(name)).toBe(false));
+
+  it('rejects undefined', () => expect(isKnownTestDevice(undefined)).toBe(false));
 });
