@@ -42,6 +42,30 @@ A never-provisioned backlog of ~400 drains in about 4 runs.
 
 ## Locations, Test Install, and the manual override
 
+### App-reported location
+
+The network guess below is often wrong (a Pasadena studio shows as Los Angeles), so the app can
+report its own city. In **Settings > Location** the user types a short place such as
+`Pasadena, CA` (at most 80 characters), or presses **Detect my location**. The always-on check-in
+(`GET /v1/installations/:id/status`, also `provision`/`reconcile`) then sends it as a `location`
+query parameter (JSON body on the POST routes), next to `deviceName`. It is stored locally in
+`location.json` beside the installation identity.
+
+The control plane validates it (string, trimmed, at most 80 characters, no control characters;
+bad values are ignored), stores it as `reportedLocation`, and treats it as **untrusted and
+display-only**, exactly like `deviceName`. A request with no `location` never erases it; an empty
+`location` clears it. The admin list exposes `reportedLocation` and a `locationSource`
+(`admin`, `app`, `network`, `none`); the page shows a small hint next to each location.
+
+Privacy: **Detect my location** asks the webview for the position (the operating system shows its
+own permission prompt), converts it to the nearest city **on the computer** with a bundled offline
+dataset (GeoNames, see `THIRD_PARTY_NOTICES.md`), and fills the text field. Coordinates are
+never stored, never sent, and no third-party service is called. Only the final city text is sent,
+and only if the user saves it. The control plane still never records the raw IP address. Apps
+that predate this feature keep using the network guess; use the manual override meanwhile.
+
+### Network guess and manual override
+
 The admin page's **Locations** list (API route `/v1/admin/cities`, response key `cities`, kept for
 compatibility) groups non-revoked installations by their effective location. The same value is
 the `location` shown on each installation row and on alerts.
@@ -54,8 +78,9 @@ records or uses the raw IP address.
 Effective location, in order:
 
 1. `locationOverride`, if set by the operator;
-2. geolocation city, then region, then country;
-3. otherwise `Test Install` only if the installation is not pinned **and** its self-reported
+2. `reportedLocation`, the city the app itself reports (see below);
+3. geolocation city, then region, then country;
+4. otherwise `Test Install` only if the installation is not pinned **and** its self-reported
    `deviceName` is a known test host (case-insensitive, whole-name match): a GitHub-hosted Linux
    runner (`^runnervm[a-z0-9]+$`), a GitHub-hosted macOS runner
    (`^[a-z]{3}\d{2}-[a-z]{2}\d+-<uuid>-<12 hex>\.local$`), exactly `agent-hub`, or exactly

@@ -116,6 +116,22 @@ impl RemoteManager for RealRemoteManager {
         self.blocking(|m| m.regenerate().map(drop)).await
     }
 
+    async fn location(&self) -> Option<String> {
+        let manager = self.manager.clone();
+        tokio::task::spawn_blocking(move || manager.location())
+            .await
+            .unwrap_or(None)
+    }
+
+    fn supports_location(&self) -> bool {
+        true
+    }
+
+    async fn set_location(&self, location: Option<String>) -> Result<Option<String>, ManagerError> {
+        self.blocking(move |m| m.set_location(location.as_deref()))
+            .await
+    }
+
     fn bootstrap(&self) -> Option<Arc<dyn DiagnosticsBootstrap>> {
         Some(Arc::new(RealBootstrap(self.manager.bootstrap.clone())))
     }

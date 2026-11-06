@@ -519,7 +519,8 @@
       var main = el('div', 'row-main');
       var titleText = inst.label || inst.hostname || inst.installationId;
       main.appendChild(el('div', 'row-title', titleText + (inst.archived ? ' (archived)' : '')));
-      var subBits = [phaseLabel(inst), inst.location, 'last seen ' + timeAgo(inst.updatedAt)];
+      var locHint = inst.locationSource === 'app' ? ' (reported by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
+      var subBits = [phaseLabel(inst), inst.location + locHint, 'last seen ' + timeAgo(inst.updatedAt)];
       var expiry = expiryLabel(inst);
       if (expiry) subBits.push(expiry);
       main.appendChild(el('div', 'row-sub', subBits.join(' · ')));

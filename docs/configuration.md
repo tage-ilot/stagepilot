@@ -356,6 +356,16 @@ LAN mode does not provide TLS, so PIN protection is an access barrier for a
 trusted private network rather than permission to expose StagePilot to the
 internet. See [security.md](security.md).
 
+## Install location
+
+Settings > Location (visible to Operators on the local computer) holds an optional city such as
+`Pasadena, CA`, up to 80 characters. It is saved as `location.json` in the Remote data directory
+and sent with the periodic check-in so the StagePilot team's fleet page shows the right place.
+**Detect my location** fills the field from the system location service (the system asks for
+permission first); the coordinates are turned into a city name on your computer and are never
+saved or sent. Leave the field empty to report no location. Local API: `GET`/`PUT
+/api/v1/install-location` with `{"location": "City, ST"}`.
+
 ## Local files
 
 The following patterns are ignored because they can contain secrets or

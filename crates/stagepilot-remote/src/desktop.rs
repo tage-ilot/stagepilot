@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 
 use crate::beta_control::BetaRemoteControl;
 use crate::bootstrap::{
-    sanitize_device_name, BootstrapMetadata, DesktopBootstrapStore, Pacing,
+    sanitize_device_name, sanitize_location, BootstrapMetadata, DesktopBootstrapStore, Pacing,
     DEFAULT_CONTROL_PLANE_ORIGIN, DEFAULT_REMOTE_PORT,
 };
 use crate::connector::Connector;
@@ -41,6 +41,7 @@ pub struct DesktopRemoteManager {
     platform: Platform,
     pacing: Pacing,
     device_name: Option<String>,
+    location_path: PathBuf,
 }
 
 pub struct DesktopOptions {
@@ -126,6 +127,7 @@ impl DesktopRemoteManager {
             pacing: options.pacing,
             // Captured once per process, untrusted and display-only.
             device_name: options.device_name.or_else(local_device_name),
+            location_path: root.join("location.json"),
         })
     }
 
@@ -413,7 +415,48 @@ impl DesktopRemoteManager {
             Some(Arc::new(move || store.credential(&meta))),
             self.pacing.clone(),
             self.device_name.as_deref(),
-        ))
+        )
+        .with_location(self.location().as_deref()))
+    }
+
+    /// The install location (city) the user entered, if any. Read on every check-in so a change
+    /// is reported without a restart. Never contains coordinates.
+    pub fn location(&self) -> Option<String> {
+        let text = std::fs::read_to_string(&self.location_path).ok()?;
+        let value: Value = serde_json::from_str(&text).ok()?;
+        sanitize_location(value.get("location").and_then(Value::as_str))
+    }
+
+    /// Store (or, with `None`/blank, clear) the install location. Returns the stored value; an
+    /// over-long or control-only value is a `ValueError`-style rejection.
+    pub fn set_location(&self, requested: Option<&str>) -> Res<Option<String>> {
+        let wanted = requested.map(str::trim).filter(|v| !v.is_empty());
+        let clean = match wanted {
+            Some(raw) => Some(
+                sanitize_location(Some(raw))
+                    .ok_or_else(|| RemoteError::value("Location must be 1 to 80 characters"))?,
+            ),
+            None => None,
+        };
+        match &clean {
+            Some(city) => {
+                let body = json!({ "location": city }).to_string();
+                if let Some(parent) = self.location_path.parent() {
+                    crate::files::create_private_dir(parent)
+                        .map_err(|_| RemoteError::io("Could not save the location"))?;
+                }
+                let tmp = self.location_path.with_extension("json.tmp");
+                std::fs::write(&tmp, body)
+                    .and_then(|()| std::fs::rename(&tmp, &self.location_path))
+                    .map_err(|_| RemoteError::io("Could not save the location"))?;
+            }
+            None => match std::fs::remove_file(&self.location_path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err(RemoteError::io("Could not clear the location")),
+            },
+        }
+        Ok(clean)
     }
 
     fn apply(&self, metadata: &BootstrapMetadata, action: &str) -> Res<Object> {
