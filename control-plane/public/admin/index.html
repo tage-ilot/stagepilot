@@ -493,6 +493,15 @@
     return 'Off';
   }
 
+  function expiryLabel(inst) {
+    if (inst.revoked) return 'expired';
+    if (inst.keep || !inst.expiresAt) return 'pinned';
+    var ms = new Date(inst.expiresAt).getTime() - Date.now();
+    if (!(ms > 0)) return 'expires soon';
+    var hours = Math.floor(ms / 3600000);
+    return hours >= 1 ? 'expires in ' + hours + 'h' : 'expires in <1h';
+  }
+
   var lastInstallations = [];
 
   function renderInstallations(installations) {
@@ -511,6 +520,8 @@
       var titleText = inst.label || inst.hostname || inst.installationId;
       main.appendChild(el('div', 'row-title', titleText + (inst.archived ? ' (archived)' : '')));
       var subBits = [phaseLabel(inst), inst.location, 'last seen ' + timeAgo(inst.updatedAt)];
+      var expiry = expiryLabel(inst);
+      if (expiry) subBits.push(expiry);
       main.appendChild(el('div', 'row-sub', subBits.join(' · ')));
       if (inst.deviceName && inst.deviceName !== titleText) {
         main.appendChild(el('div', 'row-sub', 'reported hostname: ' + inst.deviceName));
@@ -544,6 +555,25 @@
       });
       actions.appendChild(nameInput);
       actions.appendChild(saveBtn);
+
+      if (!inst.revoked) {
+        var pinBtn = el('button', null, inst.keep ? 'Pinned ✓' : 'Pin');
+        pinBtn.title = inst.keep ? 'Pinned: never auto-removed. Click to unpin.' : 'Click to keep this installation from expiring.';
+        pinBtn.addEventListener('click', function () {
+          pinBtn.disabled = true;
+          api('/v1/admin/installations/' + encodeURIComponent(inst.installationId) + '/keep', {
+            method: 'PATCH',
+            body: { keep: !inst.keep },
+          }).then(function () {
+            setStatus(inst.keep ? 'Unpinned.' : 'Pinned.', 'ok');
+            loadAll();
+          }).catch(function (err) {
+            pinBtn.disabled = false;
+            setStatus('Could not update: ' + err.message, 'error');
+          });
+        });
+        actions.appendChild(pinBtn);
+      }
 
       var archiveBtn = el('button', null, inst.archived ? 'Unarchive' : 'Archive');
       archiveBtn.addEventListener('click', function () {

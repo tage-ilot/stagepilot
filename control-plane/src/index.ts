@@ -27,6 +27,9 @@ interface Env {
   // promoted to stable or opened to real friend-beta users -- do not ship
   // the 1-hour window as the permanent default.
   ENROLLMENT_WINDOW_SECONDS?: string;
+  // Optional override (hours, >= 1) for the unpinned-installation lifetime.
+  // Invalid values fall back to the 48h default.
+  INSTALLATION_TTL_HOURS?: string;
   // Static asset binding for the fleet admin panel (control-plane/public),
   // configured via the [assets] block in wrangler.toml.
   ASSETS?: Fetcher;
@@ -75,6 +78,9 @@ interface Installation {
   // or access-control state. Use `revoked` (via the existing revoke
   // endpoint) to actually cut off an installation's access.
   archived?: boolean;
+  // Pinned: never auto-revoked by the expiry sweep. Set via the admin keep
+  // route, or once by the grandfather migration for provisioned installs.
+  keep?: boolean;
   // Self-reported device hostname (Python `platform.node()`), sent on the
   // always-on lightweight check-in and on the authenticated status/
   // provision/reconcile requests. UNTRUSTED and display-only: never use
@@ -219,6 +225,13 @@ const RECONCILE_CACHE_SECONDS = 30;
 const PROVIDER_WINDOW_SECONDS = 300;
 const PROVIDER_TOTAL_BUDGET = 600;
 const PROVIDER_NORMAL_BUDGET = 480;
+// Unpinned installations expire (are revoked) this long after creation.
+const DEFAULT_INSTALLATION_TTL_HOURS = 48;
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+// Per sweep run: expired installs needing no provider calls vs. ones that do.
+const SWEEP_MAX_LOCAL = 100;
+const SWEEP_MAX_PROVIDER = 10;
+const SWEEP_GRANDFATHER_FLAG = 'sweep:grandfathered';
 const BETA_RELEASE_REPOSITORY = 'tage-ilot/stagepilot-beta';
 const RELEASE_VERSION = /^\d+\.\d+\.\d+-beta\.\d+$/;
 const RELEASE_METADATA_PER_MINUTE = 30;
@@ -504,21 +517,114 @@ export class Registry {
     private readonly env: Env,
   ) {}
 
-  async fetch(request: Request): Promise<Response> {
+  private alarmEnsured = false;
+
+  private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
     let release = (): void => {};
     const previous = this.serial;
     this.serial = new Promise((resolve) => { release = resolve; });
     await previous;
     try {
-      return await this.handle(request);
+      return await operation();
     } finally {
       release();
+    }
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    return await this.exclusive(() => this.handle(request));
+  }
+
+  // Durable Object alarm: hourly expiry sweep. Always re-armed, even when the
+  // sweep throws, so a failure retries next hour instead of stopping forever.
+  async alarm(): Promise<void> {
+    await this.exclusive(async () => {
+      try {
+        await this.sweepExpired();
+      } catch {
+        console.error('installation expiry sweep failed');
+      } finally {
+        try {
+          await this.state.storage.setAlarm(Date.now() + SWEEP_INTERVAL_MS);
+        } catch {
+          console.error('installation expiry sweep could not re-arm');
+        }
+      }
+    });
+  }
+
+  // Arms the first alarm lazily on the first request after deploy; later
+  // re-arming is done by alarm() itself.
+  private async ensureAlarm(): Promise<void> {
+    if (this.alarmEnsured) return;
+    this.alarmEnsured = true;
+    try {
+      if ((await this.state.storage.getAlarm()) === null) {
+        await this.state.storage.setAlarm(Date.now() + 60_000);
+      }
+    } catch {
+      this.alarmEnsured = false;
+    }
+  }
+
+  private installationTtlMs(): number {
+    const configured = Number(this.env.INSTALLATION_TTL_HOURS ?? '');
+    const hours = Number.isFinite(configured) && configured >= 1 ? configured : DEFAULT_INSTALLATION_TTL_HOURS;
+    return hours * 60 * 60 * 1000;
+  }
+
+  private async sweepExpired(): Promise<void> {
+    this.validateConfiguration();
+    const rows = await this.state.storage.list<Installation>({ prefix: 'installation:' });
+    // One-time migration: protect installs that were provisioned before this
+    // feature existed (the real fleet). Recorded so it never repeats.
+    if (!(await this.state.storage.get<boolean>(SWEEP_GRANDFATHER_FLAG))) {
+      for (const installation of rows.values()) {
+        if (installation.phase === 'provisioned' && !installation.revoked && !installation.keep) {
+          installation.keep = true;
+          await this.save(installation);
+        }
+      }
+      await this.state.storage.put(SWEEP_GRANDFATHER_FLAG, true);
+    }
+    const now = Date.now();
+    const ttl = this.installationTtlMs();
+    const expired = [...rows.values()]
+      .filter((row) => !row.revoked && !row.keep && now - Date.parse(row.createdAt) >= ttl)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    let local = 0;
+    let provider = 0;
+    let providerExhausted = false;
+    for (const installation of expired) {
+      const needsProvider = Boolean(installation.generation || installation.tunnelId);
+      if (needsProvider ? (provider >= SWEEP_MAX_PROVIDER || providerExhausted) : local >= SWEEP_MAX_LOCAL) continue;
+      if (needsProvider) provider += 1; else local += 1;
+      try {
+        await this.withProviderLane('recovery', () => this.disable(installation, true));
+        installation.archived = true;
+        await this.save(installation);
+      } catch (error) {
+        console.error('installation expiry revoke failed');
+        if (error instanceof Limited) providerExhausted = true;
+        try {
+          // disable() flags revoked before its provider calls; undo that so
+          // next hour's retry runs the full path and decrements the counter.
+          const stored = await this.state.storage.get<Installation>(`installation:${installation.id}`);
+          if (stored?.revoked && stored.phase === 'revoking') {
+            stored.revoked = false;
+            await this.save(stored);
+          }
+        } catch {
+          // retried next hour
+        }
+      }
     }
   }
 
   private async handle(request: Request): Promise<Response> {
     try {
       this.validateConfiguration();
+      await this.ensureAlarm();
       const url = new URL(request.url);
       if (request.method === 'POST' && url.pathname === '/v1/installations/enroll') {
         return await this.enroll(request);
@@ -560,6 +666,11 @@ export class Registry {
       if (request.method === 'PATCH' && adminSetArchived) {
         if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
         return await this.adminSetArchived(request, adminSetArchived[1]);
+      }
+      const adminSetKeep = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/keep$/);
+      if (request.method === 'PATCH' && adminSetKeep) {
+        if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
+        return await this.adminSetKeep(request, adminSetKeep[1]);
       }
       const adminRevoke = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/revoke$/);
       if (request.method === 'POST' && adminRevoke) {
@@ -1570,12 +1681,16 @@ export class Registry {
   // a past revoke's effect stays visible/auditable.
   private async adminListInstallations(): Promise<Response> {
     const rows = await this.state.storage.list<Installation>({ prefix: 'installation:' });
+    const ttlMs = this.installationTtlMs();
     const installations = [...rows.values()]
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((installation) => ({
         ...publicInstallation(installation),
         label: installation.label || '',
         archived: installation.archived ?? false,
+        keep: installation.keep ?? false,
+        // When the sweep will revoke this installation; null if pinned/revoked.
+        expiresAt: installation.keep || installation.revoked ? null : new Date(Date.parse(installation.createdAt) + ttlMs).toISOString(),
         location: formatInstallationLocation(installation),
         everProvisioned: installation.everProvisioned ?? false,
       }));
@@ -1617,6 +1732,21 @@ export class Registry {
     const updated: Installation = { ...installation, archived, updatedAt: new Date().toISOString() };
     await this.state.storage.put(`installation:${id}`, updated);
     return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, location: formatInstallationLocation(updated) });
+  }
+
+  // Pin/unpin: pinned installations are never auto-revoked by the expiry
+  // sweep. Pure metadata; never touches access or calls the provider.
+  private async adminSetKeep(request: Request, id: string): Promise<Response> {
+    const installation = await this.state.storage.get<Installation>(`installation:${id}`);
+    if (!installation) return reply({ error: 'not found' }, 404);
+    const input = await body(request);
+    const { keep } = input;
+    if (typeof keep !== 'boolean') {
+      return reply({ error: 'invalid request' }, 400);
+    }
+    const updated: Installation = { ...installation, keep, updatedAt: new Date().toISOString() };
+    await this.state.storage.put(`installation:${id}`, updated);
+    return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, keep: updated.keep ?? false, location: formatInstallationLocation(updated) });
   }
 
   // Simple passive "which cities are running an installation" list for the
