@@ -949,3 +949,155 @@ async fn find_rejects_an_invalid_typed_host_and_cancel_resets_the_scan() {
     assert!(matches!(snap.state, ScanState::Idle | ScanState::NotFound));
     r.plugin.stop().await.unwrap();
 }
+
+// ---- countdown accuracy -----------------------------------------------------------------------
+
+/// Where the song is at `at` according to the StagePilot timer state (what the dashboard, the
+/// lights and the ProPresenter countdown read): the position it was re-based to plus the time
+/// since it started.
+fn timer_position_at(
+    timer: &stagepilot_core::state::TimerState,
+    at: chrono::DateTime<chrono::Utc>,
+) -> f64 {
+    let started = timer.started_at.expect("timer is running");
+    timer.position_seconds.unwrap_or(0.0) + (at - started).num_milliseconds() as f64 / 1000.0
+}
+
+fn seconds(ms: i64) -> f64 {
+    ms as f64 / 1000.0
+}
+
+/// The countdown must agree with the Playback heartbeat: the Song event carries the position the
+/// heartbeat reported and when it was received, so the countdown starts at `observed - position`.
+/// Before the fix the timer started when the action finished (position + hops late: +0.57 s on
+/// the rig; here the heartbeat position is 1.5 s).
+#[tokio::test]
+async fn timer_matches_the_heartbeat_on_play_resume_and_seek() {
+    use chrono::Utc;
+    const TOLERANCE_S: f64 = 0.25; // generous for slow CI; the measured error is printed
+    let fake = FakePlayback::start().await;
+    songs(&fake); // heartbeats every 100 ms, like the real Playback's ~10 Hz
+    let r = rig(&fake).await;
+    r.load_plan().await;
+    r.plugin.start().await.unwrap();
+    until("connected", || r.plugin.connection().connected).await;
+    r.plugin.discover_song_order().await.unwrap();
+    until("order valid", || !r.plugin.mapper_stale()).await;
+    fake.send_raw(r#"{"setlistSelectSong":{"setlistSongID":102}}"#);
+    until("selection observed", || {
+        r.plugin
+            .events()
+            .iter()
+            .any(|e| e.event.kind == stagepilot_playback::normalizer::EventType::SongSelected)
+    })
+    .await;
+
+    // 1. Play: Playback is already 1.5 s into the song when its first playing heartbeat arrives.
+    let position = 1.5;
+    let sent = Utc::now();
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.playing = true;
+        s.position = position;
+    }
+    fake.beat();
+    until("song started", || {
+        r.store.snapshot().playing_song_index == Some(1)
+    })
+    .await;
+    let (pos, observed) = {
+        let events = r.events.lock().unwrap();
+        let song = events
+            .iter()
+            .find_map(|e| match &e.payload {
+                EventPayload::Song {
+                    position_seconds: Some(p),
+                    observed_at: Some(o),
+                    ..
+                } => Some((*p, *o)),
+                _ => None,
+            })
+            .expect("the started song event carries the Playback position and heartbeat time");
+        song
+    };
+    assert_eq!(pos, position);
+    let started_at = observed - chrono::Duration::milliseconds((pos * 1000.0).round() as i64);
+    // Song time 0 happened at `sent - position`; the timer must agree.
+    let start_error =
+        seconds((started_at - (sent - chrono::Duration::milliseconds(1500))).num_milliseconds());
+    eprintln!("play: start error {start_error:+.3} s (before the fix: the timer started {position:.1} s plus the hops late)");
+    assert!(start_error.abs() < TOLERANCE_S, "start error {start_error}");
+    // Make the timer run the way the ProPresenter plugin does on this Song event.
+    r.bus
+        .publish(new_event(
+            EventType::TimerStarted,
+            "test",
+            EventPayload::Timer(stagepilot_core::events::TimerPayload {
+                duration_seconds: 120,
+                song: r.store.snapshot().current_song.clone(),
+                started_at: Some(started_at),
+                ..Default::default()
+            }),
+        ))
+        .await;
+    until("timer running", || {
+        r.store.snapshot().timer.status == stagepilot_core::state::TimerStatus::Running
+    })
+    .await;
+
+    // 2. Pause at 20 s.
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.playing = false;
+        s.position = 20.0;
+    }
+    fake.beat();
+    until("paused", || {
+        r.store.snapshot().timer.status == stagepilot_core::state::TimerStatus::Stopped
+    })
+    .await;
+
+    // 3. Resume at 20 s: the heartbeat that reports playing again.
+    let sent = Utc::now();
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.playing = true;
+    }
+    fake.beat();
+    until("resumed", || {
+        r.store.snapshot().timer.status == stagepilot_core::state::TimerStatus::Running
+    })
+    .await;
+    let timer = r.store.snapshot().timer.clone();
+    let expected = |t: chrono::DateTime<Utc>| 20.0 + (t - sent).num_milliseconds() as f64 / 1000.0;
+    for after in [0, 60] {
+        let at = sent + chrono::Duration::seconds(after);
+        let error = timer_position_at(&timer, at) - expected(at);
+        eprintln!("resume: timer minus heartbeat position {error:+.3} s at +{after} s");
+        assert!(
+            error.abs() < TOLERANCE_S,
+            "resume error {error} at +{after}"
+        );
+    }
+
+    // 4. Seek forward to 90 s while playing (Playback's waveformSeek message).
+    let sent = Utc::now();
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.position = 90.0;
+    }
+    fake.send_raw(r#"{"waveformSeek":{"sequenceTime":90.0}}"#);
+    until("seeked", || {
+        r.store.snapshot().timer.position_seconds == Some(90.0)
+    })
+    .await;
+    let timer = r.store.snapshot().timer.clone();
+    for after in [0, 60] {
+        let at = sent + chrono::Duration::seconds(after);
+        let want = 90.0 + after as f64;
+        let error = timer_position_at(&timer, at) - want;
+        eprintln!("seek: timer minus heartbeat position {error:+.3} s at +{after} s");
+        assert!(error.abs() < TOLERANCE_S, "seek error {error} at +{after}");
+    }
+    r.plugin.stop().await.unwrap();
+}

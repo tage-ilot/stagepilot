@@ -847,3 +847,31 @@ fn song_clock_start(
         _ => fallback,
     }
 }
+
+#[cfg(test)]
+mod song_clock_tests {
+    use super::song_clock_start;
+    use chrono::{Duration, TimeZone, Utc};
+
+    #[test]
+    fn countdown_start_is_back_dated_by_the_playback_position() {
+        let observed = Utc.with_ymd_and_hms(2026, 11, 6, 12, 0, 10).unwrap();
+        let fallback = observed + Duration::milliseconds(80); // ProPresenter calls finished later
+                                                              // Playback was 0.57 s into the song when the heartbeat arrived: song time 0 was 0.57 s earlier.
+        assert_eq!(
+            song_clock_start(fallback, Some(0.57), Some(observed)),
+            observed - Duration::milliseconds(570)
+        );
+        // No Playback clock (MIDI start, manual Next): the moment the countdown started.
+        assert_eq!(song_clock_start(fallback, None, None), fallback);
+        // Nonsense positions are ignored.
+        assert_eq!(
+            song_clock_start(fallback, Some(f64::NAN), Some(observed)),
+            fallback
+        );
+        assert_eq!(
+            song_clock_start(fallback, Some(-1.0), Some(observed)),
+            fallback
+        );
+    }
+}

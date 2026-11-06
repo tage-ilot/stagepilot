@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Now playing card: **Elapsed time** is now the song position after a pause and resume or a seek (it was counted from the last resume, so 01:09 elapsed with 03:24 remaining on a 05:36 song). Elapsed and remaining come from one source, so they always add up to the song length, also when stopped, after a seek and past the end (remaining holds 00:00).
+- The song countdown no longer runs about 0.57 s behind Playback. It started when the song-started event was handled, after the first playing heartbeat had already reported a position; it is now anchored to Playback's reported position and the heartbeat's receive time, for song start, resume and seek. Docs: `docs/playback-api.md`.
+
 ## [2.43.0-rc.3] - 2026-11-05
 
 Release candidate 3 (rc.1 stopped on a stray build-directory link committed by mistake; rc.2 stopped on a slow-runner test timeout on macOS Intel; neither was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:
