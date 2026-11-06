@@ -1132,9 +1132,16 @@ impl Inner {
                         fixture_of(address).is_some_and(|name| operator.is_yielded(name))
                     })
                 };
-                for (message, kind) in tick.messages.into_iter().zip(tick.kinds) {
+                let tick_position = start + now + LOOK_LEAD_SECONDS;
+                for ((message, kind), position) in tick
+                    .messages
+                    .into_iter()
+                    .zip(tick.kinds)
+                    .zip(tick.positions)
+                {
                     let reduced = tick.reduced && kind == Kind::Effect;
-                    queue.push(message, kind, now, reduced);
+                    let early = (position - tick_position).abs() > 1e-9;
+                    queue.push_for(message, kind, now, reduced, early.then_some(position));
                 }
                 next_tick = tick.wake_in.map(|w| now + w);
             }
@@ -1150,6 +1157,14 @@ impl Inner {
                         () = self.engine_wake.notified() => { next_tick = Some(0.0); }
                     }
                     continue;
+                }
+                // A fixture the operator took over while its value waited (the middle of a step
+                // burst, say) is skipped; it takes no slot and delays no one.
+                {
+                    let st = self.st();
+                    queue.drop_where(&|m| {
+                        fixture_of(&m.address).is_some_and(|name| st.operator.is_yielded(name))
+                    });
                 }
                 let Some(item) = queue.pop() else {
                     continue;
