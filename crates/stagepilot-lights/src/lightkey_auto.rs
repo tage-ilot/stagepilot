@@ -11,12 +11,8 @@ use ts_rs::TS;
 
 /// A link that was usable this recently still counts as usable; a drop this long fails a capture.
 pub const GRACE_SECONDS: f64 = 60.0;
-/// A pass that covered this share of the song (and changed something) is a complete capture.
-pub const COMPLETE_FRACTION: f64 = 0.95;
-/// A partial pass is kept when it covered this share of the song ...
-pub const PARTIAL_FRACTION: f64 = 0.10;
-/// ... or this many seconds, whichever is less.
-pub const PARTIAL_MIN_SECONDS: f64 = 10.0;
+/// A pass is a complete capture when it reached within this many seconds of the song's length.
+pub const COMPLETE_MARGIN_SECONDS: f64 = 10.0;
 
 /// What a song's cue map says about capturing, as far as the decision cares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,27 +125,29 @@ impl Availability {
 /// What a finished pass is worth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassVerdict {
+    /// Covered the song from the start to within [`COMPLETE_MARGIN_SECONDS`] of its end.
     Complete,
+    /// Has at least one change but is not complete: saved as "Incomplete capture", however short.
     Partial,
     /// Nothing changed after the starting state: the song stays "not captured".
     NoChanges,
-    TooShort,
+    /// The song's length is unknown, so the pass cannot be judged (nothing is saved).
+    UnknownLength,
 }
 
 /// `covered` seconds of a `duration`-second song were recorded; `link_failed`: the connection was
 /// down for a minute or more. (A seek or reset never gets here: it discards the pass.)
 pub fn judge(duration: f64, covered: f64, has_changes: bool, link_failed: bool) -> PassVerdict {
     if duration <= 0.0 {
-        return PassVerdict::TooShort;
-    }
-    let covered = covered.min(duration);
-    if covered < duration * PARTIAL_FRACTION && covered < PARTIAL_MIN_SECONDS {
-        return PassVerdict::TooShort;
+        return PassVerdict::UnknownLength;
     }
     if !has_changes {
         return PassVerdict::NoChanges;
     }
-    if !link_failed && covered >= duration * COMPLETE_FRACTION {
+    // A song shorter than twice the margin needs at least half of it, so a few seconds never
+    // count as complete.
+    let margin = COMPLETE_MARGIN_SECONDS.min(duration / 2.0);
+    if !link_failed && covered.min(duration) >= duration - margin {
         PassVerdict::Complete
     } else {
         PassVerdict::Partial

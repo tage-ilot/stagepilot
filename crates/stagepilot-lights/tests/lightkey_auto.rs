@@ -234,20 +234,25 @@ fn the_pass_verdict() {
     // (duration, covered, has changes, link failed)
     let cases = [
         (200.0, 200.0, true, false, Complete),
-        (200.0, 190.0, true, false, Complete), // exactly 95 %
-        (200.0, 189.0, true, false, Partial),
+        (200.0, 190.0, true, false, Complete), // exactly 10 s short
+        (200.0, 189.0, true, false, Partial),  // 11 s short
+        (200.0, 189.9, true, false, Partial),
+        (200.0, 190.1, true, false, Complete),
+        (1000.0, 990.0, true, false, Complete), // 10 s, not 5 %, on a long song
+        (1000.0, 950.0, true, false, Partial),  // 95 % no longer completes
         (200.0, 200.0, false, false, NoChanges), // a pass with no changes is nothing
-        (200.0, 130.0, true, true, Partial),     // 70 s drop: incomplete
-        (200.0, 120.0, true, false, Partial),    // stopped at 60 %
-        (200.0, 20.0, true, false, Partial),     // exactly 10 %
-        (200.0, 19.0, true, false, Partial),     // 10 s is enough on any song
-        (200.0, 9.0, true, false, TooShort),
-        (1000.0, 10.0, true, false, Partial), // 10 s is enough on a long song
-        (1000.0, 9.0, true, false, TooShort),
-        (30.0, 3.0, true, false, Partial), // exactly 10 %
-        (30.0, 2.9, true, false, TooShort),
-        (30.0, 10.0, true, false, Partial),
+        (200.0, 0.0, false, false, NoChanges),
+        (200.0, 130.0, true, true, Partial), // 70 s drop: incomplete
+        (200.0, 200.0, true, true, Partial), // a link drop is never complete
+        (200.0, 120.0, true, false, Partial), // stopped at 60 %
+        (200.0, 0.0, true, false, Partial),  // a change at 0 s is still saved
+        (200.0, 0.5, true, false, Partial),  // however short
+        (200.0, 9.0, true, false, Partial),
+        (8.0, 0.0, true, false, Partial), // short song: half is the floor
+        (8.0, 4.0, true, false, Complete),
         (200.0, 250.0, true, false, Complete), // an overrun is clamped, not refused
+        (0.0, 30.0, true, false, UnknownLength),
+        (0.0, 0.0, false, false, UnknownLength),
     ];
     for (duration, covered, changes, failed, want) in cases {
         assert_eq!(

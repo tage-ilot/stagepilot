@@ -47,6 +47,11 @@ use tokio::task::JoinHandle;
 /// How long a song-start handler waits for the audio input to open before it carries on.
 const AUDIO_OPEN_WAIT: Duration = Duration::from_millis(1500);
 const SONG_END_TOLERANCE_SECONDS: f64 = 2.0;
+/// A recording finishes by itself this long after the song's scheduled length (the timer keeps
+/// counting into overrun, so there is no stop). The grace keeps a fade-out after the last cue.
+const SONG_END_GRACE_SECONDS: f64 = 5.0;
+/// How long a shutdown waits for an unfinished recording to be saved before it gives up.
+const SHUTDOWN_SAVE_WAIT: Duration = Duration::from_secs(3);
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
 pub const RETRY_SECONDS: f64 = 2.0;
@@ -812,6 +817,16 @@ impl Inner {
     async fn stop(self: Arc<Self>) {
         self.st().stopped = true;
         self.wake.notify_one();
+        // Save what a recording in progress captured (as an incomplete capture), but never hold
+        // the exit up for long.
+        let unfinished = self.st().session.take();
+        if let Some(session) = unfinished {
+            let _ = tokio::time::timeout(
+                SHUTDOWN_SAVE_WAIT,
+                self.finish(session, "StagePilot is shutting down."),
+            )
+            .await;
+        }
         let task = self.st().poll_task.take();
         if let Some(task) = task {
             task.abort();
@@ -924,6 +939,7 @@ impl Inner {
                 delay = RETRY_SECONDS;
             }
             self.tick();
+            self.finish_if_song_over().await;
             tokio::select! {
                 () = self.wake.notified() => {}
                 () = tokio::time::sleep(Duration::from_secs_f64(delay)) => {}
@@ -1338,6 +1354,31 @@ impl Inner {
         }
     }
 
+    /// The song's clock passed its scheduled length plus the grace while still running: the song
+    /// is over, whether or not the timer stopped (it deliberately keeps counting into overrun, and
+    /// Playback's own song end does not reach the link). The pass is saved once; with the session
+    /// gone, later changes cannot start or reopen one.
+    async fn finish_if_song_over(self: &Arc<Self>) {
+        let over = {
+            let mut st = self.st();
+            let wall = self.clock.wall();
+            let due = st.session.as_ref().is_some_and(|session| {
+                let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
+                session.running
+                    && duration > 0.0
+                    && wall - session.started_at >= duration + SONG_END_GRACE_SECONDS
+            });
+            if due {
+                st.session.take()
+            } else {
+                None
+            }
+        };
+        if let Some(session) = over {
+            self.finish(session, "Song finished.").await;
+        }
+    }
+
     /// Reset discards a recording in progress.
     async fn on_reset(self: &Arc<Self>, _event: &StagePilotEvent) {
         let had = {
@@ -1444,9 +1485,9 @@ impl Inner {
         let recorder = session.fixtures.take().filter(|r| !r.is_empty());
         let verdict = judge(duration, covered, recorder.is_some(), link_failed);
         let complete = match verdict {
-            PassVerdict::TooShort => {
+            PassVerdict::UnknownLength => {
                 return self.say(format!(
-                    "Not saved: only {covered:.0} of {duration:.0} seconds recorded."
+                    "Not saved: the length of {title} is unknown, so the capture cannot be judged."
                 ));
             }
             PassVerdict::NoChanges => {

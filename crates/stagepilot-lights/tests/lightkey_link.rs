@@ -529,15 +529,17 @@ async fn a_short_paused_recording_saves_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_recording_turned_off_short_says_not_saved() {
+async fn a_recording_with_no_changes_says_not_saved() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(100), None).await;
     pause(0.1).await;
     let message = rig.link.set_recording(false).await;
-    assert!(message.starts_with("Not saved: only "), "{message}");
-    assert!(message.ends_with("seconds recorded."), "{message}");
+    assert!(
+        message.starts_with("Not saved: no fixture changes"),
+        "{message}"
+    );
     assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }

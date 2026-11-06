@@ -633,6 +633,78 @@ async fn a_late_pause_does_not_end_or_save_the_recording() {
     rig.link.stop().await;
 }
 
+/// The ProPresenter timer keeps counting into overrun, so no stop ever arrives: the capture
+/// finishes by itself 5 s after the song's length, is saved once as complete, and changes in the
+/// overrun neither add to it nor start another pass.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_capture_finishes_by_itself_at_the_natural_end_of_the_song() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.5).await;
+    assert!(rig.saved.lock().unwrap().is_empty(), "not before the end");
+    // No stop event at all. Length 2 s + 5 s grace = 7 s after the start.
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 12.0).await;
+    assert!(rig.link.status().recording_song.is_none());
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(message.starts_with("Saved "), "{message}");
+    assert!(!message.contains("Incomplete"), "{message}");
+    // Later changes in the overrun are not recorded and do not reopen the song.
+    rig.relay.change(vec![dim("P1", 0.2)], 0.0, 0).await;
+    pause(1.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
+    assert!(rig.link.status().recording_song.is_none());
+    let late = rig.saved.lock().unwrap()[0]
+        .rows
+        .iter()
+        .any(|r| r.at_seconds > 2.0);
+    assert!(!late);
+    rig.link.stop().await;
+}
+
+/// "It should always save the captures": a short pass with a change is saved, as incomplete.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_short_capture_is_saved_as_incomplete() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(300)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.3).await;
+    let message = rig.link.set_recording(false).await;
+    assert!(message.starts_with("Saved "), "{message}");
+    assert!(
+        message.contains("Incomplete capture: 1 of 300 seconds; it captures again next time."),
+        "{message}"
+    );
+    {
+        let saved = rig.saved.lock().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert!(!saved[0].status.complete);
+    }
+    rig.link.stop().await;
+}
+
+/// Quitting StagePilot mid-pass saves what was captured, as incomplete.
+#[tokio::test(flavor = "multi_thread")]
+async fn shutting_down_mid_pass_saves_the_capture_as_incomplete() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(300)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.3).await;
+    rig.link.stop().await;
+    let saved = rig.saved.lock().unwrap();
+    assert_eq!(saved.len(), 1);
+    assert!(!saved[0].status.complete);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_lost_packet_is_repaired_by_asking_for_a_keyframe() {
     let rig = Rig::new(vec![dim("P1", 0.0)]).await;

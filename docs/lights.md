@@ -109,18 +109,27 @@ The strip has these controls:
 - **Record from Lightkey.** While on, the next song's countdown is recorded:
   every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
   kept with its song time, measured from Lightkey's own DMX output with the
-  clock difference between the two Macs removed. When the song ends (or Record
-  is turned off mid-song, or a new song starts) the changes are fitted with ramps and effects (see
+  clock difference between the two Macs removed. A recording finishes when the song
+  ends **by itself** (the song clock reaches its scheduled length plus 5 s, so a
+  fade-out after the last cue is kept; the ProPresenter timer deliberately keeps
+  counting into overrun, so no stop event is needed or expected), when Record is turned
+  off mid-song, when a new song starts, on a stop within 2 s of the song's length, or
+  when StagePilot shuts down (saved as incomplete; the wait is capped at 3 s so
+  quitting is never held up). The changes are fitted with ramps and effects (see
   Smooth capture), saved into the song's lighting cue map with the normal, serialized save, and the raw
-  changes are discarded. A song is saved only if at least half of it was
-  recorded and at least one fixture changed. **A pause never ends or saves a
-  recording**, however late in the song: resuming in place carries on, and only
-  the song's end (within 2 s of its length), a new song, or Record off saves it.
+  changes are discarded. **Every capture with at least one fixture change is saved,
+  however short;** one with no change is not (`Not saved: no fixture changes ...`), and
+  neither is a song whose length is unknown. **A pause never ends or saves a
+  recording**, however late in the song: resuming in place carries on. After the
+  capture has finished, later changes in the overrun are not recorded and do not
+  start another pass.
   The last change of a fixture after the song's scheduled
   end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
   playhead during a recording discards it. Messages: `Recording <song>.`,
   `Saved N looks (and M loops) to <song>'s timeline.` (`... (fitted loosely: tolerance x2 ...)`
-  when the song was too large for the caps and was fitted at a looser tolerance), `Not saved: only X of Y seconds recorded.`
+  when the song was too large for the caps and was fitted at a looser tolerance),
+  followed by `Incomplete capture: X of Y seconds; it captures again next time.` when
+  the pass did not reach within 10 s of the end.
 - **Replay | Record toggle.** One two-way control. *Replay* (the default) replays
   the captured lights: saved rows play through the normal timeline scheduler (see
   below). *Record* is for capturing and needs a connected link. Switching back to
@@ -141,11 +150,16 @@ song; Auto decides when each song's timer starts and never changes its mind mid-
 | yes | not fully captured, incomplete, or manual-only | capture ("Auto: capturing this song") |
 | yes | fully captured | replay ("Auto: replaying (fully captured)") |
 
-A pass is *fully captured* when it covered at least 95 % of the song with no playhead
-move or restart (pauses are fine), no link drop of 60 s or more, and at least one lighting
-change. A pass with no change is not saved and the song stays not captured. A partial pass
-(at least 10 % or 10 s, with a change) is saved as **Incomplete capture**; it replaces a stored
-partial only if it covers at least as much, and never replaces a complete capture. A seek
+A pass is *fully captured* when it covered the song from the start to at least 10 s
+before its length (a 10 s margin, not a percentage; on a song shorter than 20 s, at
+least half of it) with no playhead move or restart (pauses are fine), no link drop of
+60 s or more, and at least one lighting change. Anything else with a change is saved as
+**Incomplete capture** (the Songs strip shows "Incomplete capture"; a complete one shows
+"Fully captured"), however short, and the strip says `Incomplete capture: X of Y
+seconds; it captures again next time.` It replaces a stored
+partial only if it covers at least as much, and never replaces a complete capture. A pass
+with no change is not saved and the song stays not captured. A song whose length is
+unknown cannot be judged and is not saved (unchanged). A seek
 during a pass discards it. Older cue maps whose captured rows have no status count as
 incomplete and are captured again. To re-capture a fully captured song, pin Record or
 Clear it. An old settings file with no `mode` loads as Auto; `replay` stays the master replay switch (`false` replays nothing in any mode). Record is set through the recording switch and is not saved by the settings route.

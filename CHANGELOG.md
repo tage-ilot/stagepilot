@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lightkey captures are always saved and finish by themselves.** A capture used to stay "recording" (and unsaved) until the next song started when the song ended without a stop event (the ProPresenter timer deliberately runs on into overrun). It now finishes and saves when the song clock passes the scheduled length plus 5 s, and also when StagePilot shuts down mid-pass (saved as incomplete, wait capped at 3 s). Every capture with at least one fixture change is saved, however short (the "too short" refusal is gone). A capture is "Fully captured" only when it reached within 10 s of the song's end (was 95 %); the rest are saved as "Incomplete capture" and are captured again next time. Songs with an unknown length are still not saved.
+
 ## [2.43.0-rc.3] - 2026-11-05
 
 Release candidate 3 (rc.1 stopped on a stray build-directory link committed by mistake; rc.2 stopped on a slow-runner test timeout on macOS Intel; neither was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:
