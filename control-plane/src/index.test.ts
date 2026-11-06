@@ -1,9 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Registry } from './index';
 
 class MemoryStorage {
   readonly values = new Map<string, unknown>();
+  alarmAt: number | null = null;
+  failSetAlarmOnce = false;
+
+  async getAlarm(): Promise<number | null> {
+    return this.alarmAt;
+  }
+
+  async setAlarm(at: number): Promise<void> {
+    if (this.failSetAlarmOnce) {
+      this.failSetAlarmOnce = false;
+      throw new Error('setAlarm failed');
+    }
+    this.alarmAt = at;
+  }
 
   async get<T>(key: string): Promise<T | undefined> {
     return this.values.get(key) as T | undefined;
@@ -2488,3 +2502,227 @@ describe('diagnostic bundle uploads and admin retrieval', () => {
   });
 });
 
+
+describe('installation expiry sweep', () => {
+  const HOUR = 60 * 60 * 1000;
+  const NOW = Date.parse('2026-11-05T12:00:00.000Z');
+  let storage: MemoryStorage;
+  let provider: FakeCloudflare;
+  let registry: Registry;
+  let seq = 0;
+
+  function makeRegistry(extraEnv: Record<string, string> = {}): Registry {
+    return new Registry({ storage } as unknown as DurableObjectState, { ...env, ...extraEnv } as never);
+  }
+
+  function seed(overrides: Record<string, unknown> = {}, ageMs = 49 * HOUR): string {
+    seq += 1;
+    const id = seq.toString(16).padStart(32, '0');
+    const created = new Date(NOW - ageMs).toISOString();
+    storage.values.set(`installation:${id}`, {
+      id, hostname: `h${seq}.remote.example.com`, label: '', phase: 'disabled', desiredEnabled: false,
+      revoked: false, createdAt: created, updatedAt: created, ...overrides,
+    });
+    return id;
+  }
+
+  function seedProvisioned(overrides: Record<string, unknown> = {}, ageMs = 49 * HOUR): string {
+    return seed({ phase: 'provisioned', desiredEnabled: true, generation: 'g1', tunnelId: 't1', everProvisioned: true, ...overrides }, ageMs);
+  }
+
+  const get = (id: string) => storage.values.get(`installation:${id}`) as Record<string, unknown>;
+  const setStats = (active: number) => storage.values.set('registry:stats', {
+    activeInstallations: active, enrollments: active, enrollmentDenied: 0, statusDenied: 0, mutationDenied: 0, providerDenied: 0, diagnosticsBytesUsed: 0,
+  });
+  const stats = () => storage.values.get('registry:stats') as { activeInstallations: number };
+  const revokedCount = () => [...storage.values.entries()].filter(([k, v]) => k.startsWith('installation:') && (v as { revoked: boolean }).revoked).length;
+  const keepPath = (id: string) => `/v1/admin/installations/${id}/keep`;
+
+  beforeEach(() => {
+    seq = 0;
+    storage = new MemoryStorage();
+    provider = new FakeCloudflare();
+    vi.stubGlobal('fetch', provider.fetch);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    registry = makeRegistry();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('expires at exactly 48h, not at 47h59m', async () => {
+    const young = seed({}, 48 * HOUR - 60_000);
+    const old = seed({}, 48 * HOUR);
+    setStats(2);
+    await registry.alarm();
+    expect(get(young).revoked).toBe(false);
+    expect(get(old).revoked).toBe(true);
+  });
+
+  it('honors INSTALLATION_TTL_HOURS and falls back to 48h for invalid values', async () => {
+    const id = seed({}, 5 * HOUR);
+    setStats(1);
+    await makeRegistry({ INSTALLATION_TTL_HOURS: '4' }).alarm();
+    expect(get(id).revoked).toBe(true);
+    const other = seed({}, 5 * HOUR);
+    setStats(1);
+    for (const bad of ['0', '0.5', 'abc', '-3']) {
+      await makeRegistry({ INSTALLATION_TTL_HOURS: bad }).alarm();
+      expect(get(other).revoked).toBe(false);
+    }
+  });
+
+  it('never revokes a pinned installation', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    const id = seed({ keep: true }, 500 * HOUR);
+    setStats(1);
+    await registry.alarm();
+    expect(get(id).revoked).toBe(false);
+    expect(stats().activeInstallations).toBe(1);
+  });
+
+  it('grandfathers provisioned installs once; later provisioned installs are revoked', async () => {
+    const real = seedProvisioned({}, 900 * HOUR);
+    const disabledOld = seed({}, 900 * HOUR);
+    setStats(2);
+    await registry.alarm();
+    expect(get(real).keep).toBe(true);
+    expect(get(real).revoked).toBe(false);
+    expect(get(disabledOld).revoked).toBe(true);
+    expect(storage.values.get('sweep:grandfathered')).toBe(true);
+
+    // Post-migration provisioned, unpinned install is NOT grandfathered.
+    const later = seedProvisioned();
+    setStats(2);
+    await registry.alarm();
+    expect(get(later).keep).toBeUndefined();
+    expect(get(later).revoked).toBe(true);
+    expect(get(real).revoked).toBe(false);
+  });
+
+  it('revokes with archived=true, decrements the counter by exactly N, and removes provider resources', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    const ids = [seed(), seed(), seed()];
+    const withTunnel = seedProvisioned();
+    const keepMe = seed({ keep: true });
+    const fresh = seed({}, HOUR);
+    setStats(6);
+    await registry.alarm();
+    for (const id of [...ids, withTunnel]) {
+      expect(get(id).revoked).toBe(true);
+      expect(get(id).archived).toBe(true);
+    }
+    expect(get(keepMe).revoked).toBe(false);
+    expect(get(fresh).revoked).toBe(false);
+    expect(stats().activeInstallations).toBe(2);
+  });
+
+  it('caps a run at 100 local and 10 provider revokes, draining a 500-install backlog over runs', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    for (let i = 0; i < 400; i += 1) seed({ archived: true });
+    for (let i = 0; i < 25; i += 1) seedProvisioned();
+    for (let i = 0; i < 75; i += 1) seed({}, HOUR);
+    setStats(500);
+    await registry.alarm();
+    expect(revokedCount()).toBe(110);
+    expect(stats().activeInstallations).toBe(390);
+    for (let run = 0; run < 3; run += 1) await registry.alarm();
+    expect(revokedCount()).toBe(425);
+    expect(stats().activeInstallations).toBe(75);
+    await registry.alarm();
+    expect(revokedCount()).toBe(425);
+  });
+
+  it('one failing install does not stop the run and is retried (counter intact) next hour', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    const bad = seedProvisioned({}, 100 * HOUR);
+    const good = seed();
+    const good2 = seedProvisioned();
+    setStats(3);
+    const original = provider.fetch.getMockImplementation()!;
+    let failing = true;
+    provider.fetch.mockImplementation(async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url);
+      if (failing && url.searchParams.get('name') && String(init?.method ?? 'GET') === 'GET' && url.pathname.endsWith('/cfd_tunnel')
+        && url.searchParams.get('name')!.includes(bad)) {
+        throw new TypeError('boom');
+      }
+      return original(input, init);
+    });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await registry.alarm();
+    expect(get(good).revoked).toBe(true);
+    expect(get(good2).revoked).toBe(true);
+    expect(get(bad).revoked).toBe(false);
+    expect(stats().activeInstallations).toBe(1);
+    expect(errors).toHaveBeenCalledWith('installation expiry revoke failed');
+    expect(JSON.stringify(errors.mock.calls)).not.toContain('boom');
+    failing = false;
+    await registry.alarm();
+    expect(get(bad).revoked).toBe(true);
+    expect(stats().activeInstallations).toBe(0);
+    errors.mockRestore();
+  });
+
+  it('re-arms the alarm after every run, including when the sweep errors', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    await registry.alarm();
+    expect(storage.alarmAt).toBe(NOW + HOUR);
+    vi.setSystemTime(NOW + 2 * HOUR);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const broken = makeRegistry({ CLOUDFLARE_ACCOUNT_ID: 'bad' });
+    await broken.alarm();
+    expect(storage.alarmAt).toBe(NOW + 3 * HOUR);
+    errors.mockRestore();
+  });
+
+  it('survives a setAlarm failure without throwing', async () => {
+    storage.failSetAlarmOnce = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(registry.alarm()).resolves.toBeUndefined();
+    errors.mockRestore();
+  });
+
+  it('arms the first alarm lazily on the first request', async () => {
+    expect(storage.alarmAt).toBeNull();
+    await registry.fetch(request('/v1/admin/metrics', 'GET', adminToken));
+    expect(storage.alarmAt).not.toBeNull();
+  });
+
+  it('PATCH keep pins/unpins, shows in admin list, and pinned installs survive the sweep', async () => {
+    storage.values.set('sweep:grandfathered', true);
+    const id = seed();
+    setStats(1);
+    const pin = await registry.fetch(request(keepPath(id), 'PATCH', adminToken, { keep: true }));
+    expect(pin.status).toBe(200);
+    expect((await json(pin)).keep).toBe(true);
+    const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    expect((list.installations as Array<Record<string, unknown>>)[0].keep).toBe(true);
+    expect((list.installations as Array<Record<string, unknown>>)[0].expiresAt).toBeNull();
+    await registry.alarm();
+    expect(get(id).revoked).toBe(false);
+    await registry.fetch(request(keepPath(id), 'PATCH', adminToken, { keep: false }));
+    await registry.alarm();
+    expect(get(id).revoked).toBe(true);
+  });
+
+  it('admin list exposes expiresAt (createdAt + TTL) for unpinned installs', async () => {
+    const id = seed({}, 10 * HOUR);
+    const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    const row = (list.installations as Array<Record<string, unknown>>).find((r) => r.installationId === id)!;
+    expect(row.keep).toBe(false);
+    expect(row.expiresAt).toBe(new Date(NOW - 10 * HOUR + 48 * HOUR).toISOString());
+  });
+
+  it('keep route rejects missing auth (401), bad body (400), and unknown id (404)', async () => {
+    const id = seed();
+    expect((await registry.fetch(request(keepPath(id), 'PATCH', undefined, { keep: true }))).status).toBe(401);
+    expect((await registry.fetch(request(keepPath(id), 'PATCH', 'wrong-token-wrong-token-wrong-token-xx', { keep: true }))).status).toBe(401);
+    expect((await registry.fetch(request(keepPath(id), 'PATCH', adminToken, { keep: 'yes' }))).status).toBe(400);
+    expect((await registry.fetch(request(keepPath(id), 'PATCH', adminToken, {}))).status).toBe(400);
+    expect((await registry.fetch(request(keepPath('f'.repeat(32)), 'PATCH', adminToken, { keep: true }))).status).toBe(404);
+    expect(get(id).keep).toBeUndefined();
+  });
+});
