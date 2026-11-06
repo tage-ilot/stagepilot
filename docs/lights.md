@@ -109,18 +109,28 @@ The strip has these controls:
 - **Record from Lightkey.** While on, the next song's countdown is recorded:
   every fixture change (color, intensity, pan and tilt, gobo, zoom and more) is
   kept with its song time, measured from Lightkey's own DMX output with the
-  clock difference between the two Macs removed. When the song ends (or Record
-  is turned off mid-song, or a new song starts) the changes are fitted with ramps and effects (see
+  clock difference between the two Macs removed. A recording finishes when the song
+  ends **by itself** (the song clock reaches its scheduled length plus 5 s, so a
+  fade-out after the last cue is kept; the ProPresenter timer deliberately keeps
+  counting into overrun, so no stop event is needed or expected), when Record is turned
+  off mid-song, when a new song starts, on a stop within 2 s of the song's length, or
+  when StagePilot shuts down (saved as incomplete; the wait is capped at 3 s so
+  quitting is never held up). The changes are fitted with ramps and effects (see
   Smooth capture), saved into the song's lighting cue map with the normal, serialized save, and the raw
-  changes are discarded. A song is saved only if at least half of it was
-  recorded and at least one fixture changed. **A pause never ends or saves a
-  recording**, however late in the song: resuming in place carries on, and only
-  the song's end (within 2 s of its length), a new song, or Record off saves it.
+  changes are discarded. **Every capture with at least one fixture change is saved,
+  however short;** one with no change is not (`Not saved: no fixture changes ...`), and
+  neither is a song whose length is unknown. **A pause never ends or saves a
+  recording**, however late in the song: resuming in place carries on. After the
+  capture has finished, later changes in the overrun are not recorded and do not
+  start another pass.
   The last change of a fixture after the song's scheduled
   end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
-  playhead during a recording discards it. Messages: `Recording <song>.`,
+  playhead during a recording does not discard it (see Auto mode). Messages: `Recording <song>.`,
   `Saved N looks (and M loops) to <song>'s timeline.` (`... (fitted loosely: tolerance x2 ...)`
-  when the song was too large for the caps and was fitted at a looser tolerance), `Not saved: only X of Y seconds recorded.`
+  when the song was too large for the caps and was fitted at a looser tolerance),
+  followed by `Incomplete capture: X of Y seconds recorded; it captures again next time.` when
+  more than 10 s of the song were missing, or `(N s of the song were not captured)` after the
+  save message of a complete capture that has gaps.
 - **Replay | Record toggle.** One two-way control. *Replay* (the default) replays
   the captured lights: saved rows play through the normal timeline scheduler (see
   below). *Record* is for capturing and needs a connected link. Switching back to
@@ -141,12 +151,33 @@ song; Auto decides when each song's timer starts and never changes its mind mid-
 | yes | not fully captured, incomplete, or manual-only | capture ("Auto: capturing this song") |
 | yes | fully captured | replay ("Auto: replaying (fully captured)") |
 
-A pass is *fully captured* when it covered at least 95 % of the song with no playhead
-move or restart (pauses are fine), no link drop of 60 s or more, and at least one lighting
-change. A pass with no change is not saved and the song stays not captured. A partial pass
-(at least 10 % or 10 s, with a change) is saved as **Incomplete capture**; it replaces a stored
-partial only if it covers at least as much, and never replaces a complete capture. A seek
-during a pass discards it. Older cue maps whose captured rows have no status count as
+A pass is *fully captured* when the **total** of the song it recorded is at least its
+length minus 10 s (a 10 s margin, not a percentage; on a song shorter than 20 s, at least
+half of it) and it has at least one lighting change. **Where the missing seconds are does
+not matter**: a link or fixture-stream drop of any length, a pause, a small seek, a
+restart and a late start are all just gaps. Only seconds when the timer ran and the
+connection (API linked, Lightkey running, fixture stream live) was live count as
+recorded; the stretches recorded are kept as a set, so a stretch recorded twice counts
+once. Anything else with a change is saved as
+**Incomplete capture** (the Songs strip shows "Incomplete capture"; a complete one shows
+"Fully captured"), however short, and the strip says `Incomplete capture: X of Y
+seconds recorded; it captures again next time.` (X is the total recorded). A complete one
+with gaps says `Saved N looks to <song>'s timeline (6 s of the song were not captured).`
+`capture.coverage_seconds` is that total, so a pass replaces a stored
+partial only if it covers at least as much, and never replaces a complete capture. A pass
+with no change is not saved and the song stays not captured. A song whose length is
+unknown cannot be judged and is not saved (unchanged).
+
+Moving the playhead no longer discards a pass. Seeking forward leaves the skipped stretch
+as a gap and the pass goes on. Seeking back, or restarting the song, records the same
+stretch again and **the latest recording of a stretch wins**: the earlier changes inside it
+are dropped and the stretch counts once. Every stretch after a gap (link drop, seek, resume
+after a pause) starts with a snapshot of the current value of every fixture property, so a
+value that changed during the gap is right from the first moment of the stretch, and replay
+holds the last value across the gap (samples more than 0.5 s apart are never joined). A
+pause is not a gap in song time (the clock stops); changes made while paused are caught up
+by the snapshot taken at the resume. The explicit **Reset position** still discards the pass and
+Record off finishes and saves it. Older cue maps whose captured rows have no status count as
 incomplete and are captured again. To re-capture a fully captured song, pin Record or
 Clear it. An old settings file with no `mode` loads as Auto; `replay` stays the master replay switch (`false` replays nothing in any mode). Record is set through the recording switch and is not saved by the settings route.
 
@@ -590,6 +621,31 @@ router. Do not use Wi-Fi. Its timing is not steady enough: the agent's multicast
 over Wi-Fi stalled for up to 0.8 s in a test. If the stream stops during a
 recording, the message says that levels were not recorded.
 
+### The clock between the two Macs
+
+Each fixture change carries Lightkey's own clock; StagePilot converts it to its own clock
+with an offset measured by NTP-style pings (`/relay/ping`, a burst of 12 at the start of a
+session and every 120 s). Rules (rc.4; rc.3 threw the estimate away at every burst):
+
+- **Best sample in a window.** Samples of the last 10 minutes are kept and the one with the
+  smallest round trip is used. A new burst never clears a good estimate: its samples only
+  join the window. A ping that waited in a frozen or stalled agent's buffer comes back with a
+  huge round trip (and an offset wrong by half of it), so it can never win against a good
+  sample. This was the 6.6 s error of the rig test: the agent was frozen for 20 s while a burst
+  was sent, the answers were stamped when the agent woke, and the offset stayed wrong until the
+  next burst two minutes later.
+- **Poor estimate, ask again soon.** If one second after a burst there is no estimate or the
+  best round trip is above 0.2 s (a stalled relay), the burst is repeated after 3 s instead of
+  after 120 s.
+- **Re-dating.** If a later estimate moves the clock by more than 50 ms, the changes the
+  running capture recorded since the previous estimate took effect are moved by the
+  difference (log `lightkey_capture_redated`), so a poor start does not stay in the take.
+- **Log.** Every sample is logged as `lightkey_clock_offset` (`source` relay or http, `offset`,
+  `round_trip`, `used`, `adopted`, `redate`). Every HTTP `/time` measurement is also compared
+  with the relay's: a difference of more than 50 ms is logged as
+  `lightkey_clock_offset_mismatch`. Search the backend log for these when a take looks
+  early or late.
+
 ## Cue board, live capture and the timeline
 
 The timeline follows the song that is playing (or the last one that played) and
@@ -659,8 +715,9 @@ minute song. Sound is measured the moment it arrives and thrown away. No audio i
 or sent anywhere, and nothing leaves the machine.
 
 **When it listens.** Only while Record is chosen **and** a song is running, on the same song clock as the
-lights capture, and with the same rules: a pause leaves a gap, moving the playhead or resetting discards
-the take, and it is saved only if at least half the song was recorded. While Record is chosen but no song
+lights capture, and with the same rules: a pause leaves a gap, a seek forward leaves a gap and the take goes on, a seek
+back (or restart) replaces what was heard in the stretch heard again (the latest take of a slot
+wins), resetting discards the take, and it is saved only if the timer ran for at least half the song. While Record is chosen but no song
 runs, the input is open only as long as the input picker is on screen (to show its level meter) and closes
 a few seconds after you leave. In Replay mode it never opens.
 

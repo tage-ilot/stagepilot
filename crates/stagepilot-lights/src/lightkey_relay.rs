@@ -9,7 +9,7 @@
 use crate::lightkey::{FixtureLink, FixtureStatus};
 use crate::lightkey_fixtures::{
     clock_sample, parse_packet, parse_pong, ClockEstimate, FixtureCommand, FixtureState, Joined,
-    PacketKind, StreamTracker, RELAY_VERSION,
+    PacketKind, StreamTracker, CLOCK_REDATE_THRESHOLD, RELAY_VERSION,
 };
 use rosc::{encoder, OscMessage, OscPacket, OscType};
 use std::sync::{Arc, Mutex};
@@ -34,6 +34,16 @@ const TICK: Duration = Duration::from_millis(30);
 /// clock. `from_keyframe` marks differences found by a keyframe (a missed packet, handed on
 /// late): they are real changes for a recording but never operator input.
 pub type FixtureSink = Arc<dyn Fn(f64, Vec<FixtureCommand>, bool) + Send + Sync>;
+
+/// Called when a later clock estimate moves the clock by more than `CLOCK_REDATE_THRESHOLD`,
+/// with the number of seconds to ADD to the local times already handed to the `FixtureSink`
+/// since the previous estimate took effect (`old_offset - new_offset`).
+pub type OffsetSink = Arc<dyn Fn(f64) + Send + Sync>;
+
+/// After a ping burst, wait this long for the answers, then ask again if the best is poor.
+const BURST_SETTLE_SECONDS: f64 = 1.0;
+/// Ask again this soon after a burst that left a poor estimate (the relay was stalled).
+const POOR_RETRY_SECONDS: f64 = 3.0;
 
 #[derive(Debug)]
 struct Shared {
@@ -123,6 +133,11 @@ impl RelayClient {
     }
 
     /// True once a keyframe arrived and packets are still coming.
+    /// `agent_clock - our_clock` as the relay clock pings measured it (None before any answer).
+    pub fn clock_offset(&self) -> Option<f64> {
+        lock(&self.shared).offset
+    }
+
     pub fn is_live(&self) -> bool {
         let s = lock(&self.shared);
         s.link == FixtureLink::Live && s.have_keyframe
@@ -160,6 +175,7 @@ impl RelayClient {
         mono: impl Fn() -> f64,
         keep_going: impl Fn() -> bool,
         sink: FixtureSink,
+        offset_sink: OffsetSink,
     ) {
         self.reset();
         let Ok(mut addrs) = tokio::net::lookup_host(target).await else {
@@ -195,6 +211,7 @@ impl RelayClient {
         let mut next_burst = 0.0_f64;
         let mut pings_left = 0u32;
         let mut next_ping = 0.0_f64;
+        let mut settle_at = f64::INFINITY;
         let mut ticker = tokio::time::interval(TICK);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
@@ -215,7 +232,16 @@ impl RelayClient {
                     if now >= next_burst {
                         next_burst = now + PING_REFRESH_SECONDS;
                         pings_left = PING_BURST;
-                        lock(&self.shared).clock.reset();
+                        settle_at = now + BURST_SETTLE_SECONDS;
+                        self.begin_burst();
+                    }
+                    if now >= settle_at && pings_left == 0 {
+                        settle_at = f64::INFINITY;
+                        // Answers that sat in a stalled relay's buffer have a huge round trip
+                        // and cannot be trusted: do not wait two minutes for the next burst.
+                        if lock(&self.shared).clock.is_poor() {
+                            next_burst = now + POOR_RETRY_SECONDS;
+                        }
                     }
                     if pings_left > 0 && now >= next_ping {
                         pings_left -= 1;
@@ -226,7 +252,7 @@ impl RelayClient {
                 }
                 received = socket.recv(&mut buffer) => {
                     match received {
-                        Ok(n) => self.on_datagram(&buffer[..n], wall(), mono(), &socket, &sink).await,
+                        Ok(n) => self.on_datagram(&buffer[..n], wall(), mono(), &socket, &sink, &offset_sink).await,
                         // The relay is not listening: the OS reports it on the next receive.
                         Err(_) => {
                             self.fail("The Lightkey API relay is not reachable.");
@@ -236,6 +262,12 @@ impl RelayClient {
                 }
             }
         }
+    }
+
+    /// A ping burst starts. The estimate already held stays: the burst's samples join the window
+    /// and only a sample with a smaller round trip replaces it.
+    fn begin_burst(&self) {
+        tracing::debug!("lightkey_clock_burst");
     }
 
     fn fail(&self, detail: &str) {
@@ -260,12 +292,36 @@ impl RelayClient {
         mono: f64,
         socket: &UdpSocket,
         sink: &FixtureSink,
+        offset_sink: &OffsetSink,
     ) {
         if let Some((t1, t2, t3)) = parse_pong(data) {
             let (round_trip, offset) = clock_sample(t1, t2, t3, wall);
-            let mut s = lock(&self.shared);
-            if s.clock.add(round_trip, offset) {
-                s.offset = Some(offset);
+            let shift = {
+                let mut s = lock(&self.shared);
+                let changed = s.clock.add(mono, round_trip, offset);
+                let mut shift = None;
+                if changed {
+                    if let Some((_, best)) = s.clock.best() {
+                        let old = s.offset.unwrap_or(0.0);
+                        s.offset = Some(best);
+                        if (old - best).abs() > CLOCK_REDATE_THRESHOLD {
+                            shift = Some(old - best);
+                        }
+                    }
+                }
+                tracing::info!(
+                    source = "relay",
+                    offset,
+                    round_trip,
+                    used = s.offset,
+                    adopted = changed,
+                    redate = shift,
+                    "lightkey_clock_offset"
+                );
+                shift
+            };
+            if let Some(shift) = shift {
+                offset_sink(shift);
             }
             return;
         }
@@ -365,5 +421,76 @@ mod tests {
         );
         assert_eq!(relay_target("http://:8770", 21700), None);
         assert_eq!(relay_target("", 21700), None);
+    }
+
+    fn pong(t1: f64, t2: f64, t3: f64) -> Vec<u8> {
+        message(
+            "/relay/pong",
+            vec![
+                OscType::Double(t1),
+                OscType::Double(t2),
+                OscType::Double(t3),
+            ],
+        )
+    }
+
+    async fn pair() -> UdpSocket {
+        let a = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let b = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        a.connect(b.local_addr().unwrap()).await.unwrap();
+        a
+    }
+
+    /// Rig finding 7: a ping burst whose answers sat in a frozen relay's buffer (sent 13.1 s
+    /// before they were answered) must not replace a good estimate, and a poor first estimate
+    /// that a later answer improves must tell the link to re-date.
+    #[tokio::test]
+    async fn a_stalled_burst_never_replaces_a_good_clock_estimate() {
+        let client = RelayClient::new();
+        let socket = pair().await;
+        let shifts: Arc<Mutex<Vec<f64>>> = Arc::default();
+        let sink: FixtureSink = Arc::new(|_, _, _| {});
+        let seen = shifts.clone();
+        let offset_sink: OffsetSink = Arc::new(move |shift| seen.lock().unwrap().push(shift));
+        // good burst: the agent is 3.25 s ahead, 2 ms each way
+        client.begin_burst();
+        let t1 = 1000.0;
+        let data = pong(t1, t1 + 3.252, t1 + 3.252);
+        client
+            .on_datagram(&data, t1 + 0.004, 10.0, &socket, &sink, &offset_sink)
+            .await;
+        assert!((client.clock_offset().unwrap() - 3.250).abs() < 1e-6);
+        // the first estimate moves events recorded before it by -3.25 s
+        assert_eq!(shifts.lock().unwrap().len(), 1);
+        shifts.lock().unwrap().clear();
+        // 20 s freeze, then a burst sent into it: answered 13.1 s later
+        client.begin_burst();
+        let t1 = 1100.0;
+        let data = pong(t1, t1 + 13.1 + 3.25, t1 + 13.1 + 3.25);
+        client
+            .on_datagram(&data, t1 + 13.1, 123.1, &socket, &sink, &offset_sink)
+            .await;
+        assert!((client.clock_offset().unwrap() - 3.250).abs() < 1e-6);
+        assert!(shifts.lock().unwrap().is_empty());
+        // a session that starts into a freeze: the poor first estimate is improved later and
+        // the link is told to move what it recorded by (old - new)
+        let client = RelayClient::new();
+        client.begin_burst();
+        let t1 = 2000.0;
+        let data = pong(t1, t1 + 2.0 + 3.25, t1 + 2.0 + 3.25);
+        client
+            .on_datagram(&data, t1 + 2.0, 20.0, &socket, &sink, &offset_sink)
+            .await;
+        assert!((client.clock_offset().unwrap() - 4.25).abs() < 1e-6);
+        let t1 = 2005.0;
+        let data = pong(t1, t1 + 3.252, t1 + 3.252);
+        client
+            .on_datagram(&data, t1 + 0.004, 25.0, &socket, &sink, &offset_sink)
+            .await;
+        assert!((client.clock_offset().unwrap() - 3.25).abs() < 1e-6);
+        let shifts = shifts.lock().unwrap();
+        // first -4.25 (events before any estimate), then +1.0 (the poor estimate corrected)
+        assert_eq!(shifts.len(), 2, "{shifts:?}");
+        assert!((shifts[0] + 4.25).abs() < 1e-6 && (shifts[1] - 1.0).abs() < 1e-6);
     }
 }

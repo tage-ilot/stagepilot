@@ -46,6 +46,9 @@ struct FakeRelay {
     log: Arc<Mutex<Vec<String>>>,
     state: Arc<Mutex<Vec<FixtureCommand>>>,
     answer_pings: Arc<Mutex<bool>>,
+    /// While true the relay process is "frozen" (SIGSTOP): datagrams queue up unread, and are
+    /// answered and stamped with the time they are finally processed after it thaws.
+    frozen: Arc<Mutex<bool>>,
 }
 
 fn packet(time: f64, head: [OscType; 4], messages: Vec<OscMessage>) -> Vec<u8> {
@@ -93,7 +96,9 @@ impl FakeRelay {
             log: Arc::default(),
             state: Arc::new(Mutex::new(initial)),
             answer_pings: Arc::new(Mutex::new(true)),
+            frozen: Arc::new(Mutex::new(false)),
         };
+        let frozen = me.frozen.clone();
         let (sub, seq, log, state, answer) = (
             me.subscriber.clone(),
             me.seq.clone(),
@@ -104,13 +109,18 @@ impl FakeRelay {
         tokio::spawn(async move {
             let mut buf = vec![0u8; 2048];
             while let Ok((n, from)) = socket.recv_from(&mut buf).await {
-                let t2 = wall() + OFFSET;
                 let Ok((_, OscPacket::Message(m))) = rosc::decoder::decode_udp(&buf[..n]) else {
                     continue;
                 };
+                if m.addr == "/relay/ping" {
+                    log.lock().unwrap().push("ping".into());
+                }
+                while *frozen.lock().unwrap() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                let t2 = wall() + OFFSET;
                 match m.addr.as_str() {
                     "/relay/ping" => {
-                        log.lock().unwrap().push("ping".into());
                         if !*answer.lock().unwrap() {
                             continue;
                         }
@@ -633,6 +643,80 @@ async fn a_late_pause_does_not_end_or_save_the_recording() {
     rig.link.stop().await;
 }
 
+/// The ProPresenter timer keeps counting into overrun, so no stop ever arrives: the capture
+/// finishes by itself 5 s after the song's length, is saved once as complete, and changes in the
+/// overrun neither add to it nor start another pass.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_capture_finishes_by_itself_at_the_natural_end_of_the_song() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.5).await;
+    assert!(rig.saved.lock().unwrap().is_empty(), "not before the end");
+    // No stop event at all. Length 2 s + 5 s grace = 7 s after the start.
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 12.0).await;
+    assert!(rig.link.status().recording_song.is_none());
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(message.starts_with("Saved "), "{message}");
+    assert!(!message.contains("Incomplete"), "{message}");
+    // Later changes in the overrun are not recorded and do not reopen the song.
+    rig.relay.change(vec![dim("P1", 0.2)], 0.0, 0).await;
+    pause(1.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
+    assert!(rig.link.status().recording_song.is_none());
+    let late = rig.saved.lock().unwrap()[0]
+        .rows
+        .iter()
+        .any(|r| r.at_seconds > 2.0);
+    assert!(!late);
+    rig.link.stop().await;
+}
+
+/// "It should always save the captures": a short pass with a change is saved, as incomplete.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_short_capture_is_saved_as_incomplete() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(300)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.3).await;
+    let message = rig.link.set_recording(false).await;
+    assert!(message.starts_with("Saved "), "{message}");
+    assert!(
+        message.contains(
+            "Incomplete capture: 1 of 300 seconds recorded; it captures again next time."
+        ),
+        "{message}"
+    );
+    {
+        let saved = rig.saved.lock().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert!(!saved[0].status.complete);
+    }
+    rig.link.stop().await;
+}
+
+/// Quitting StagePilot mid-pass saves what was captured, as incomplete.
+#[tokio::test(flavor = "multi_thread")]
+async fn shutting_down_mid_pass_saves_the_capture_as_incomplete() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(300)).await;
+    pause(0.3).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.3).await;
+    rig.link.stop().await;
+    let saved = rig.saved.lock().unwrap();
+    assert_eq!(saved.len(), 1);
+    assert!(!saved[0].status.complete);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_lost_packet_is_repaired_by_asking_for_a_keyframe() {
     let rig = Rig::new(vec![dim("P1", 0.0)]).await;
@@ -733,4 +817,196 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
     assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
     rig.link.stop().await;
+}
+
+/// Rig finding 7: the relay was frozen when a clock-ping burst was sent, so the answers carried
+/// the time they were finally processed and the offset came out wrong by half the freeze. The
+/// changes recorded after it were stored early until the next burst. The stored times must come
+/// out right: the burst is repeated soon, the better estimate wins, and the changes dated with
+/// the poor one are moved.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_the_take() {
+    let rig = Rig::new(vec![dim("P1", 0.0), dim("P2", 0.0)]).await;
+    rig.connect().await;
+    assert_eq!(
+        rig.link.set_recording(true).await,
+        "Recording starts with the next song."
+    );
+    let t0 = Instant::now();
+    rig.song_start(&song(30)).await;
+    pause(0.5).await;
+    // the relay session restarts (a new burst) while the relay process is frozen
+    *rig.relay.frozen.lock().unwrap() = true;
+    rig.settings.lock().unwrap().1 = false;
+    pause(0.3).await;
+    rig.settings.lock().unwrap().1 = true;
+    // the link restarts its relay session within 2 s; the freeze outlasts that and the burst
+    pause(3.0).await;
+    *rig.relay.frozen.lock().unwrap() = false;
+    pause(1.0).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .fixtures
+                .is_some_and(|s| s.link == FixtureLink::Live)
+        },
+        5.0,
+    )
+    .await;
+    pause(0.3).await;
+    let first = t0.elapsed().as_secs_f64();
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    // the clock is asked again soon after a poor answer; the second change comes after that
+    pause(4.0).await;
+    let second = t0.elapsed().as_secs_f64();
+    rig.relay.change(vec![dim("P2", 1.0)], 0.0, 0).await;
+    pause(0.5).await;
+    // a stop at the song's end finishes the pass
+    rig.song_stop(&song(30), 30.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let at = |fixture: &str| -> f64 {
+        saved
+            .rows
+            .iter()
+            .find(|r| {
+                r.messages
+                    .iter()
+                    .any(|m| m.address == format!("/fixture/{fixture}/overrides/dimmer"))
+                    && r.at_seconds > 0.0
+            })
+            .unwrap_or_else(|| panic!("no row for {fixture}: {:?}", saved.rows))
+            .at_seconds
+    };
+    assert!(
+        (at("P1") - first).abs() <= 0.15,
+        "change after the freeze stored at {} but happened at {first}",
+        at("P1")
+    );
+    assert!(
+        (at("P2") - second).abs() <= 0.15,
+        "later change stored at {} but happened at {second}",
+        at("P2")
+    );
+    rig.link.stop().await;
+}
+
+/// One take with a link drop and a seek forward. Returns the saved looks, the seconds the link
+/// was down (measured), the song position the seek left and the song second it jumped to.
+async fn take_with_a_drop_and_a_seek(
+    duration: u32,
+    skip: f64,
+) -> (SongLooks, f64, f64, f64, f64, Vec<String>) {
+    let rig = Rig::new(vec![dim("P1", 0.0), dim("P2", 0.0)]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    let t0 = Instant::now();
+    let s = song(duration);
+    rig.song_start(&s).await;
+    pause(0.4).await;
+    rig.relay.change(vec![dim("P1", 0.3)], 0.0, 0).await;
+    pause(0.4).await;
+    // the stream drops; P1 moves while nobody is listening
+    let off = t0.elapsed().as_secs_f64();
+    rig.settings.lock().unwrap().1 = false;
+    pause(1.5).await;
+    rig.relay.change(vec![dim("P1", 0.6)], 0.0, 0).await;
+    rig.settings.lock().unwrap().1 = true;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .fixtures
+                .is_some_and(|s| s.link == FixtureLink::Live)
+        },
+        5.0,
+    )
+    .await;
+    pause(0.8).await;
+    let live = t0.elapsed().as_secs_f64();
+    // the operator seeks forward `skip` seconds, the song keeps running
+    let left = t0.elapsed().as_secs_f64();
+    let target = left + skip;
+    rig.bus
+        .publish(new_event(
+            EventType::TimerSeeked,
+            "t",
+            EventPayload::Timer(TimerPayload {
+                duration_seconds: duration,
+                song: Some(s.clone()),
+                position_seconds: Some(target),
+                running: true,
+                started_at: Some(Utc::now()),
+                ..TimerPayload::default()
+            }),
+        ))
+        .await;
+    pause(0.5).await;
+    rig.relay.change(vec![dim("P2", 0.9)], 0.0, 0).await;
+    pause(0.5).await;
+    rig.song_stop(&s, f64::from(duration)).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
+    let saved = rig.saved.lock().unwrap().remove(0);
+    let message = rig.link.status().message.unwrap_or_default();
+    rig.link.stop().await;
+    (saved, live - off, left, target, live, vec![message])
+}
+
+fn dimmer_rows(saved: &SongLooks, fixture: &str, value: f64) -> Vec<f64> {
+    saved
+        .rows
+        .iter()
+        .filter(|r| {
+            r.messages.iter().any(|m| {
+                m.address == format!("/fixture/{fixture}/overrides/dimmer")
+                    && matches!(m.args.first(), Some(stagepilot_core::config::OscArgument::Float(x)) if (x - value).abs() < 0.001)
+            })
+        })
+        .map(|r| r.at_seconds)
+        .collect()
+}
+
+/// Hunter, 2026-11-06: a capture is complete even when it misses a few seconds anywhere (a drop,
+/// a seek forward). The link drop does not end the pass, the seek does not discard it, the
+/// stretch after each gap starts with the value the property has by then, and the status counts
+/// the seconds recorded in total.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_take_with_a_drop_and_a_seek_is_saved_once_complete_with_the_gaps_counted() {
+    let (saved, down, left, target, live, message) = take_with_a_drop_and_a_seek(12, 3.0).await;
+    let expected = (left - down) + (12.0 - target);
+    assert!(
+        (saved.status.coverage_seconds - expected).abs() < 1.0,
+        "recorded {} s, expected about {expected} (down {down}, left {left}, target {target})",
+        saved.status.coverage_seconds
+    );
+    assert!(saved.status.complete, "{:?} {message:?}", saved.status);
+    assert!(
+        message[0].contains("s of the song were not captured"),
+        "{message:?}"
+    );
+    // P1 moved to 0.6 while the stream was down: the stretch after the drop starts with it
+    let at = dimmer_rows(&saved, "P1", 0.6);
+    assert!(
+        at.iter()
+            .any(|t| (*t - live).abs() < 1.5 && *t > live - 1.5),
+        "no row of P1 = 0.6 near the reconnection at {live}: {at:?} {:?}",
+        saved.rows
+    );
+    // the change made after the seek is at the new position, not before it
+    let after = dimmer_rows(&saved, "P2", 0.9);
+    assert!(
+        after.iter().any(|t| *t >= target - 0.2),
+        "{after:?} target {target}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_seek_that_skips_more_than_ten_seconds_saves_an_incomplete_capture() {
+    let (saved, _, _, _, _, message) = take_with_a_drop_and_a_seek(30, 18.0).await;
+    assert!(!saved.status.complete, "{:?}", saved.status);
+    assert!(saved.status.coverage_seconds < 20.0);
+    assert!(message[0].contains("Incomplete capture"), "{message:?}");
+    assert!(message[0].contains("seconds recorded"), "{message:?}");
 }

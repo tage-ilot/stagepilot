@@ -529,21 +529,23 @@ async fn a_short_paused_recording_saves_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_recording_turned_off_short_says_not_saved() {
+async fn a_recording_with_no_changes_says_not_saved() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
     rig.song_start(&song(100), None).await;
     pause(0.1).await;
     let message = rig.link.set_recording(false).await;
-    assert!(message.starts_with("Not saved: only "), "{message}");
-    assert!(message.ends_with("seconds recorded."), "{message}");
+    assert!(
+        message.starts_with("Not saved: no fixture changes"),
+        "{message}"
+    );
     assert!(rig.saved.lock().unwrap().is_empty());
     rig.link.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn seek_while_recording_discards_the_recording() {
+async fn seek_while_recording_goes_on_recording() {
     let rig = Rig::new(&["A"]).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
@@ -552,9 +554,11 @@ async fn seek_while_recording_discards_the_recording() {
     rig.seek(&s, 7.0, 3).await;
     pause(0.1).await;
     let status = rig.link.status();
-    assert_eq!(status.recording_song, None);
-    assert!(status.message.unwrap_or_default().contains("moved"));
-    assert!(rig.saved.lock().unwrap().is_empty());
+    assert!(
+        status.recording_song.is_some(),
+        "a seek no longer discards the pass"
+    );
+    assert!(!status.message.unwrap_or_default().contains("discarded"));
     rig.link.stop().await;
 }
 

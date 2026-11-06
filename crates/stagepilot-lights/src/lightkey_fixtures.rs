@@ -333,10 +333,24 @@ pub fn clock_sample(t1: f64, t2: f64, t3: f64, t4: f64) -> (f64, f64) {
     (round_trip, offset)
 }
 
-/// Keeps the sample with the smallest round trip.
+/// How long a clock sample stays in the window (seconds). Short enough that crystal drift
+/// (tens of ppm) cannot add up to more than a few milliseconds, long enough to span several
+/// ping bursts.
+pub const CLOCK_WINDOW_SECONDS: f64 = 600.0;
+/// An estimate whose best round trip is above this is "poor": another burst is worth asking for.
+pub const CLOCK_POOR_ROUND_TRIP: f64 = 0.2;
+/// A later estimate that moves the clock by more than this re-dates the events recorded since.
+pub const CLOCK_REDATE_THRESHOLD: f64 = 0.05;
+const CLOCK_MAX_SAMPLES: usize = 256;
+
+/// Clock samples in a sliding window; the one with the smallest round trip is the estimate. A
+/// sample sent before a freeze and answered after it has a huge round trip (and an offset wrong
+/// by half of it), so it can never beat a good sample, and a new ping burst never throws the
+/// good estimate away: it only joins the window.
 #[derive(Debug, Clone, Default)]
 pub struct ClockEstimate {
-    best: Option<(f64, f64)>,
+    /// `(taken_at, round_trip, offset)`; `taken_at` is on the caller's monotonic clock.
+    samples: Vec<(f64, f64, f64)>,
 }
 
 impl ClockEstimate {
@@ -344,25 +358,42 @@ impl ClockEstimate {
         Self::default()
     }
 
-    /// Returns true when this sample became the best.
-    pub fn add(&mut self, round_trip: f64, offset: f64) -> bool {
+    /// Add a sample taken at `now` (monotonic seconds). Returns true when the estimate (the
+    /// lowest-round-trip sample in the window) changed.
+    pub fn add(&mut self, now: f64, round_trip: f64, offset: f64) -> bool {
         if round_trip < 0.0 || !round_trip.is_finite() || !offset.is_finite() {
             return false;
         }
-        if self.best.is_none_or(|(best, _)| round_trip < best) {
-            self.best = Some((round_trip, offset));
-            return true;
+        let before = self.best();
+        self.samples
+            .retain(|(at, _, _)| now - at <= CLOCK_WINDOW_SECONDS);
+        self.samples.push((now, round_trip, offset));
+        if self.samples.len() > CLOCK_MAX_SAMPLES {
+            self.samples.remove(0);
         }
-        false
+        self.best() != before
     }
 
+    /// `(round_trip, offset)` of the best sample in the window.
     pub fn best(&self) -> Option<(f64, f64)> {
-        self.best
+        self.samples.iter().fold(
+            None,
+            |best: Option<(f64, f64)>, &(_, rtt, offset)| match best {
+                Some((b, _)) if b <= rtt => best,
+                _ => Some((rtt, offset)),
+            },
+        )
     }
 
-    /// Start a new burst. The previous offset stays in use until a new sample beats it.
+    /// No estimate yet, or the best round trip is too long to trust to a few milliseconds.
+    pub fn is_poor(&self) -> bool {
+        self.best()
+            .is_none_or(|(rtt, _)| rtt > CLOCK_POOR_ROUND_TRIP)
+    }
+
+    /// Forget everything (a new session with the agent).
     pub fn reset(&mut self) {
-        self.best = None;
+        self.samples.clear();
     }
 }
 
@@ -680,15 +711,23 @@ mod tests {
     }
 
     #[test]
-    fn clock_estimate_keeps_the_lowest_round_trip() {
+    fn clock_estimate_keeps_the_lowest_round_trip_in_a_window() {
         let mut c = ClockEstimate::new();
-        assert!(c.add(0.050, 30.020));
-        assert!(c.add(0.002, 30.000));
-        assert!(!c.add(0.010, 30.004));
-        assert!(!c.add(-1.0, 1.0));
+        assert!(c.add(0.0, 0.050, 30.020));
+        assert!(c.add(0.1, 0.002, 30.000));
+        assert!(!c.add(0.2, 0.010, 30.004));
+        assert!(!c.add(0.3, -1.0, 1.0));
         assert_eq!(c.best(), Some((0.002, 30.000)));
+        assert!(!c.is_poor());
+        // a late answer (sent before a freeze) has a huge round trip and never wins
+        assert!(!c.add(10.0, 13.1, 36.55));
+        assert_eq!(c.best(), Some((0.002, 30.000)));
+        // the good sample ages out of the window; then the next best takes over
+        assert!(c.add(CLOCK_WINDOW_SECONDS + 5.0, 0.004, 30.001));
+        assert_eq!(c.best(), Some((0.004, 30.001)));
         c.reset();
         assert_eq!(c.best(), None);
+        assert!(c.is_poor());
     }
 
     fn pk(

@@ -269,20 +269,97 @@ pub fn state_at(looks: &[Look], at: f64) -> HashMap<String, Vec<FixtureArg>> {
 /// recording that long is thinned like any other, it is never thrown away.
 pub const MAX_RECORDED_CHANGES: usize = 3_000_000;
 
+/// One recorded stretch of the song: it starts with a snapshot of every fixture property and
+/// holds the changes seen until it ends (a link drop, a pause, a seek, the end of the pass).
+#[derive(Debug, Clone)]
+struct Piece {
+    start: f64,
+    /// `None` while the stretch is still open.
+    end: Option<f64>,
+    snapshot: Vec<FixtureCommand>,
+}
+
+#[derive(Debug, Clone)]
+struct Change {
+    at: f64,
+    command: FixtureCommand,
+    /// Index into `pieces`.
+    piece: usize,
+}
+
+/// A piece with its changes, while the latest recording of each stretch is worked out.
+struct Work {
+    start: f64,
+    end: Option<f64>,
+    snapshot: Vec<FixtureCommand>,
+    changes: Vec<(f64, FixtureCommand)>,
+}
+
+impl Work {
+    /// What is left of this piece outside the later recording `lo..hi`: the part before it and the
+    /// part after it. The part after starts with a snapshot of the state at `hi` (what this piece
+    /// knew then), so nothing stale is carried across the re-recorded stretch.
+    fn clip(self, lo: f64, hi: f64) -> Vec<Work> {
+        let end = self.end.unwrap_or(f64::INFINITY);
+        if !(self.start < hi && end > lo) {
+            return vec![self];
+        }
+        let mut out = Vec::new();
+        if self.start < lo {
+            out.push(Work {
+                start: self.start,
+                end: Some(lo),
+                snapshot: self.snapshot.clone(),
+                changes: self.changes.iter().filter(|c| c.0 <= lo).cloned().collect(),
+            });
+        }
+        if end > hi {
+            let mut state = FixtureState::new();
+            state.apply_all(&self.snapshot);
+            for (at, command) in &self.changes {
+                if *at <= hi {
+                    state.apply(command);
+                }
+            }
+            out.push(Work {
+                start: hi,
+                end: self.end,
+                snapshot: state.commands(),
+                changes: self.changes.into_iter().filter(|c| c.0 > hi).collect(),
+            });
+        }
+        out
+    }
+}
+
 /// Collects the fixture changes of one song as they arrive, then turns them into rows.
+///
+/// The song is recorded in stretches (see [`begin_stretch`](Self::begin_stretch)); where two
+/// stretches cover the same song time the later recording wins, and a stretch starts with a
+/// snapshot of every property, so a gap never leaves a stale value behind it.
 #[derive(Debug, Clone)]
 pub struct LookRecorder {
     baseline: FixtureState,
+    /// State inside the open stretch (to drop changes that change nothing).
     current: FixtureState,
-    observed: Vec<(f64, FixtureCommand)>,
+    pieces: Vec<Piece>,
+    open: Option<usize>,
+    /// In the order recorded.
+    observed: Vec<Change>,
 }
 
 impl LookRecorder {
-    /// `baseline` is the fixture state when the song started.
+    /// `baseline` is the fixture state when the song started; the first stretch opens at 0.
     pub fn new(baseline: &FixtureState) -> Self {
         Self {
             baseline: baseline.clone(),
             current: baseline.clone(),
+            pieces: vec![Piece {
+                start: 0.0,
+                end: None,
+                snapshot: baseline.commands(),
+            }],
+            open: Some(0),
             observed: Vec::new(),
         }
     }
@@ -296,33 +373,136 @@ impl LookRecorder {
         self.observed.is_empty()
     }
 
+    /// Whether a stretch is open (changes are being kept).
+    pub fn is_recording(&self) -> bool {
+        self.open.is_some()
+    }
+
+    /// A recorded stretch starts at song `position` with `state`, the value of every property at
+    /// that moment. Any stretch still open ends there.
+    pub fn begin_stretch(&mut self, position: f64, state: &FixtureState) {
+        self.end_stretch(position);
+        self.pieces.push(Piece {
+            start: position,
+            end: None,
+            snapshot: state.commands(),
+        });
+        self.open = Some(self.pieces.len() - 1);
+        self.current = state.clone();
+    }
+
+    /// The open stretch ends at `position` (the link dropped, the song paused or was moved, the
+    /// pass ended). Changes after this are ignored until the next stretch begins.
+    pub fn end_stretch(&mut self, position: f64) {
+        let Some(index) = self.open.take() else {
+            return;
+        };
+        let start = self.pieces[index].start;
+        let end = position.max(start);
+        // A stretch with no length and no changes would only cut older data for nothing.
+        if end - start < 1e-9
+            && index + 1 == self.pieces.len()
+            && !self.observed.iter().any(|c| c.piece == index)
+        {
+            self.pieces.pop();
+        } else {
+            self.pieces[index].end = Some(end);
+        }
+    }
+
     /// Record the commands of one change `position` seconds into the song. Commands that do not
-    /// change anything, or cannot be replayed as a fixture override, are dropped. Returns how
-    /// many were kept.
+    /// change anything, or cannot be replayed as a fixture override, are dropped, and so is
+    /// everything while no stretch is open. Returns how many were kept.
     pub fn observe(&mut self, position: f64, commands: &[FixtureCommand]) -> usize {
+        let Some(piece) = self.open else {
+            return 0;
+        };
         let mut kept = 0;
         for command in commands.iter().filter(|c| is_replayable(c)) {
             if self.observed.len() >= MAX_RECORDED_CHANGES {
                 break;
             }
             if self.current.apply(command) {
-                self.observed.push((position, command.clone()));
+                self.observed.push(Change {
+                    at: position,
+                    command: command.clone(),
+                    piece,
+                });
                 kept += 1;
             }
         }
         kept
     }
 
+    /// Move the changes from index `mark` on by `shift` seconds (they were dated with a clock
+    /// offset that turned out wrong). Returns how many moved.
+    pub fn shift_from(&mut self, mark: usize, shift: f64) -> usize {
+        if mark >= self.observed.len() || !shift.is_finite() {
+            return 0;
+        }
+        for change in &mut self.observed[mark..] {
+            change.at += shift;
+        }
+        self.observed.len() - mark
+    }
+
+    /// The changes to fit, in time order: per stretch the snapshot (where it differs from what
+    /// went before) and its changes, with the earlier recording of any re-recorded stretch cut
+    /// out.
+    fn flattened(&self) -> Vec<(f64, FixtureCommand)> {
+        let mut by_piece: Vec<Vec<(f64, FixtureCommand)>> = vec![Vec::new(); self.pieces.len()];
+        for change in &self.observed {
+            let piece = &self.pieces[change.piece];
+            let mut at = change.at.max(piece.start);
+            if let Some(end) = piece.end {
+                at = at.min(end);
+            }
+            by_piece[change.piece].push((at, change.command.clone()));
+        }
+        let mut works: Vec<Work> = Vec::new();
+        for (piece, mut changes) in self.pieces.iter().zip(by_piece) {
+            changes.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let (lo, hi) = (piece.start, piece.end.unwrap_or(f64::INFINITY));
+            let mut next = Vec::new();
+            for old in works {
+                next.extend(old.clip(lo, hi));
+            }
+            next.push(Work {
+                start: piece.start,
+                end: piece.end,
+                snapshot: piece.snapshot.clone(),
+                changes,
+            });
+            works = next;
+        }
+        works.sort_by(|a, b| a.start.total_cmp(&b.start));
+        let mut state = self.baseline.clone();
+        let mut out = Vec::new();
+        for work in works {
+            for command in &work.snapshot {
+                if state.apply(command) {
+                    out.push((work.start, command.clone()));
+                }
+            }
+            for (at, command) in work.changes {
+                if state.apply(&command) {
+                    out.push((at, command));
+                }
+            }
+        }
+        out
+    }
+
     /// The ramps, steps and effects these changes make (see `crate::lightkey_smooth`). Changes
     /// after `duration` fold onto it as in [`thin`]; nothing is dropped.
     pub fn smooth(&self, duration: f64, params: &SmoothParams) -> SmoothCapture {
         let baseline = self.baseline.commands();
-        lightkey_smooth::fit(&baseline, &self.observed, duration, params)
+        lightkey_smooth::fit(&baseline, &self.flattened(), duration, params)
     }
 
     /// The raw baseline and changes (the report compares a fit against them).
-    pub fn raw(&self) -> (Vec<FixtureCommand>, &[(f64, FixtureCommand)]) {
-        (self.baseline.commands(), &self.observed)
+    pub fn raw(&self) -> (Vec<FixtureCommand>, Vec<(f64, FixtureCommand)>) {
+        (self.baseline.commands(), self.flattened())
     }
 
     /// The rows these changes make at this Detail `interval` (see [`thin`] and [`merge`]).
@@ -330,9 +510,9 @@ impl LookRecorder {
     /// fatal.
     pub fn looks(&self, duration: f64, interval: f64) -> Vec<Look> {
         let baseline = self.baseline.commands();
-        let looks = simplify(&baseline, &self.observed, duration, interval);
-        let late = self
-            .observed
+        let observed = self.flattened();
+        let looks = simplify(&baseline, &observed, duration, interval);
+        let late = observed
             .iter()
             .filter(|(at, _)| duration > 0.0 && *at > duration)
             .count();
@@ -1082,5 +1262,96 @@ mod tests {
             .collect();
         assert!(replace_captured(None, "s", "Song", look_rows(&looks)).is_none());
         assert!(replace_captured(None, "s", "Song", look_rows(&looks[..10])).is_some());
+    }
+
+    #[test]
+    fn shift_from_moves_only_the_later_changes_and_keeps_time_order() {
+        let mut base = FixtureState::new();
+        base.apply_all(&[at("P1", 0.0), at("P2", 0.0)]);
+        let mut r = LookRecorder::new(&base);
+        r.observe(10.0, &[at("P1", 0.5)]);
+        r.observe(20.0, &[at("P2", 0.5)]);
+        r.observe(21.0, &[at("P1", 1.0)]);
+        assert_eq!(r.shift_from(1, 6.5), 2);
+        let observed = r.raw().1;
+        let times: Vec<f64> = observed.iter().map(|(t, _)| *t).collect();
+        assert_eq!(times, vec![10.0, 26.5, 27.5]);
+        // moving earlier past an unmoved change keeps the list sorted
+        assert_eq!(r.shift_from(1, -20.0), 2);
+        let times: Vec<f64> = r.raw().1.iter().map(|(t, _)| *t).collect();
+        assert_eq!(times, vec![6.5, 7.5, 10.0]);
+        assert_eq!(r.shift_from(9, 1.0), 0);
+    }
+
+    fn state_of(commands: &[FixtureCommand]) -> FixtureState {
+        let mut state = FixtureState::new();
+        state.apply_all(commands);
+        state
+    }
+
+    fn times_values(r: &LookRecorder) -> Vec<(f64, FixtureCommand)> {
+        r.raw().1
+    }
+
+    #[test]
+    fn a_stretch_recorded_again_replaces_the_earlier_recording_of_it() {
+        let base = state_of(&[at("P1", 0.0)]);
+        let mut r = LookRecorder::new(&base);
+        r.observe(10.0, &[at("P1", 0.5)]);
+        r.observe(110.0, &[at("P1", 0.7)]);
+        r.end_stretch(120.0);
+        // seek back to 100 s: the stretch 100..120 is recorded again (the light was at 0.5)
+        r.begin_stretch(100.0, &state_of(&[at("P1", 0.5)]));
+        r.observe(150.0, &[at("P1", 0.8)]);
+        r.end_stretch(200.0);
+        let got = times_values(&r);
+        assert_eq!(got, vec![(10.0, at("P1", 0.5)), (150.0, at("P1", 0.8))]);
+    }
+
+    #[test]
+    fn a_short_re_recording_inside_a_long_one_keeps_the_state_after_it() {
+        let base = state_of(&[at("P1", 0.0)]);
+        let mut r = LookRecorder::new(&base);
+        r.observe(10.0, &[at("P1", 0.5)]);
+        r.observe(120.0, &[at("P1", 0.6)]);
+        r.observe(250.0, &[at("P1", 0.9)]);
+        r.end_stretch(300.0);
+        // 100..150 is recorded again, and the light was at 0.2 then
+        r.begin_stretch(100.0, &state_of(&[at("P1", 0.2)]));
+        r.end_stretch(150.0);
+        let got = times_values(&r);
+        // before: 10 s -> 0.5; the later take starts at 100 with 0.2; what the long take knew at
+        // 150 (0.6) starts its remaining part; then 250 -> 0.9
+        assert_eq!(
+            got,
+            vec![
+                (10.0, at("P1", 0.5)),
+                (100.0, at("P1", 0.2)),
+                (150.0, at("P1", 0.6)),
+                (250.0, at("P1", 0.9)),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_gap_starts_the_next_stretch_with_the_value_the_light_has_by_then() {
+        let base = state_of(&[at("P1", 0.0), at("P2", 0.0)]);
+        let mut r = LookRecorder::new(&base);
+        r.observe(10.0, &[at("P1", 0.5)]);
+        r.end_stretch(20.0); // the link drops; both lights move meanwhile
+        assert_eq!(r.observe(25.0, &[at("P2", 0.4)]), 0, "nothing in a gap");
+        assert!(!r.is_recording());
+        r.begin_stretch(40.0, &state_of(&[at("P1", 0.8), at("P2", 0.4)]));
+        r.observe(45.0, &[at("P2", 0.6)]);
+        let got = times_values(&r);
+        assert_eq!(
+            got,
+            vec![
+                (10.0, at("P1", 0.5)),
+                (40.0, at("P1", 0.8)),
+                (40.0, at("P2", 0.4)),
+                (45.0, at("P2", 0.6)),
+            ]
+        );
     }
 }

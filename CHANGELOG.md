@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Lightkey capture is complete when the total recorded time is within 10 s of the song, gaps allowed anywhere.** Before, the capture had to cover the song from the start with no seek, no restart and no link drop of a minute or more. Now the stretches of song time really recorded (timer running, link and fixture stream live) are tracked, and a pass is complete when no more than 10 s of the song in total are missing, wherever they are: link drops of any length, small seeks, pauses, restarts and a late start are just gaps (shorter than 20 s songs still need half). Seeking no longer discards a capture or a loudness take; seeking back records the stretch again and the latest recording wins. Each stretch after a gap starts with a snapshot of every fixture property, so replay never carries a stale value across it. `coverage_seconds` is now the total recorded seconds. Messages: `Saved N looks to X's timeline (6 s of the song were not captured).` and `Incomplete capture: X of Y seconds recorded; it captures again next time.` Docs: `docs/lights.md`.
+
+### Fixed
+
+- **Lightkey captures made after a link drop were stored about 6.6 s early.** Cause: every 120 s the relay clock estimate was cleared when a ping burst started, so a burst sent while the Lightkey agent was frozen (answers sat in its buffer and were stamped when it woke) became the offset, wrong by half the stall, until the next burst. The estimate is now the smallest-round-trip sample of a 10-minute window and a burst never clears it; a poor estimate (no answer, or round trip over 0.2 s) repeats the burst after 3 s; a later estimate that moves the clock by more than 50 ms re-dates the changes recorded in between; every clock sample is logged (`lightkey_clock_offset`) and the HTTP and relay offsets are cross-checked. Reproduced with a frozen fake relay (test fails on rc.3); the 20 s mid-song freeze on the rig itself was not re-run.
+- **Lightkey captures are always saved and finish by themselves.** A capture used to stay "recording" (and unsaved) until the next song started when the song ended without a stop event (the ProPresenter timer deliberately runs on into overrun). It now finishes and saves when the song clock passes the scheduled length plus 5 s, and also when StagePilot shuts down mid-pass (saved as incomplete, wait capped at 3 s). Every capture with at least one fixture change is saved, however short (the "too short" refusal is gone). A capture is "Fully captured" only when it reached within 10 s of the song's end (was 95 %); the rest are saved as "Incomplete capture" and are captured again next time. Songs with an unknown length are still not saved.
+
 ## [2.43.0-rc.3] - 2026-11-05
 
 Release candidate 3 (rc.1 stopped on a stray build-directory link committed by mistake; rc.2 stopped on a slow-runner test timeout on macOS Intel; neither was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:

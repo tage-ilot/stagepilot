@@ -338,7 +338,7 @@ fn main() {
         // ---- the seams between effects and the rows around them
         {
             let (base, changes) = recorder.raw();
-            let data = prepare(&base, changes, duration);
+            let data = prepare(&base, &changes, duration);
             let raw_series: BTreeMap<&str, Series> = data
                 .iter()
                 .filter_map(|d| Series::from_data(d).map(|s| (d.address.as_str(), s)))
@@ -594,7 +594,7 @@ fn main() {
 
         // ---- deviation from the raw motion
         let (base, changes) = recorder.raw();
-        let data = prepare(&base, changes, duration);
+        let data = prepare(&base, &changes, duration);
         deviation(
             "as intended: each value active at the song position it was evaluated for",
             &packets,

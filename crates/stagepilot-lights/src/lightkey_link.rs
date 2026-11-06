@@ -17,9 +17,9 @@ use crate::lightkey::{
     LightkeyLink as Link, LightkeyStatus,
 };
 use crate::lightkey_auto::{
-    decide, judge, Action, Availability, Decision, PassVerdict, Reason, SongCapture,
+    decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
 };
-use crate::lightkey_fixtures::FixtureCommand;
+use crate::lightkey_fixtures::{FixtureCommand, FixtureState};
 use crate::lightkey_looks::LookRecorder;
 use crate::lightkey_relay::{relay_target, RelayClient};
 use crate::lightkey_smooth::{smooth_rows, SmoothParams};
@@ -47,6 +47,11 @@ use tokio::task::JoinHandle;
 /// How long a song-start handler waits for the audio input to open before it carries on.
 const AUDIO_OPEN_WAIT: Duration = Duration::from_millis(1500);
 const SONG_END_TOLERANCE_SECONDS: f64 = 2.0;
+/// A recording finishes by itself this long after the song's scheduled length (the timer keeps
+/// counting into overrun, so there is no stop). The grace keeps a fade-out after the last cue.
+const SONG_END_GRACE_SECONDS: f64 = 5.0;
+/// How long a shutdown waits for an unfinished recording to be saved before it gives up.
+const SHUTDOWN_SAVE_WAIT: Duration = Duration::from_secs(3);
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
 pub const RETRY_SECONDS: f64 = 2.0;
@@ -287,17 +292,25 @@ struct Session {
     key: String,
     /// Wall-clock seconds when song time 0 happened.
     started_at: f64,
-    /// Furthest song position reached.
-    last_position: f64,
+    /// Where the song stands when it is not running (the position it was paused or moved to).
+    position: f64,
     running: bool,
     /// Fixture changes from the `lightkey-api` relay, when it is connected.
     fixtures: Option<LookRecorder>,
     /// Loudness windows from the audio input, on the same song clock.
     loudness: Option<SharedRecorder>,
-    /// Song position when the current lighting-link drop began.
-    down_position: Option<f64>,
-    /// Song position where the link had been down for a minute: the pass ends there.
-    cutoff: Option<f64>,
+    /// The stretches of the song really recorded: the timer ran and the lighting connection was
+    /// live. Their union is the coverage that judges the pass.
+    covered: Coverage,
+    /// Where the open recorded stretch began (`None`: nothing is being recorded now).
+    recorded_from: Option<f64>,
+    /// The stretches the timer ran, whatever the link did (judges the loudness).
+    played: Coverage,
+    /// Where the timer's current run began.
+    played_from: Option<f64>,
+    /// Index of the first recorded change dated with the clock offset now in force; a better
+    /// offset re-dates the changes from here on (see `LightkeyLink::redate`).
+    offset_mark: usize,
 }
 
 impl Session {
@@ -307,13 +320,63 @@ impl Session {
             song,
             key,
             started_at,
-            last_position: 0.0,
+            position: 0.0,
             running: true,
             fixtures: None,
             loudness: None,
-            down_position: None,
-            cutoff: None,
+            covered: Coverage::new(),
+            recorded_from: None,
+            played: Coverage::new(),
+            played_from: Some(0.0),
+            offset_mark: 0,
         }
+    }
+
+    /// Where the song is at wall-clock second `wall`.
+    fn position_at(&self, wall: f64) -> f64 {
+        if self.running {
+            (wall - self.started_at).max(0.0)
+        } else {
+            self.position
+        }
+    }
+
+    /// A recorded stretch begins at `position`, with `state` as the value of every property.
+    fn open_stretch(&mut self, position: f64, state: &FixtureState) {
+        if self.recorded_from.is_some() {
+            return;
+        }
+        if let Some(recorder) = self.fixtures.as_mut() {
+            recorder.begin_stretch(position, state);
+            self.recorded_from = Some(position);
+        }
+    }
+
+    /// The open recorded stretch ends at `position`.
+    fn close_stretch(&mut self, position: f64) {
+        if let Some(from) = self.recorded_from.take() {
+            self.covered.add(from, position);
+            if let Some(recorder) = self.fixtures.as_mut() {
+                recorder.end_stretch(position);
+            }
+        }
+    }
+
+    /// The timer stops (or the song is moved) at `position`: ends the open stretches.
+    fn close_run(&mut self, position: f64) {
+        self.close_stretch(position);
+        if let Some(from) = self.played_from.take() {
+            self.played.add(from, position);
+        }
+    }
+
+    /// Seconds the timer ran, including the run in progress at `wall`.
+    fn played_total(&self, wall: f64, duration: f64) -> f64 {
+        let mut played = self.played.clone();
+        if let Some(from) = self.played_from {
+            played.add(from, self.position_at(wall));
+        }
+        played.total(duration)
     }
 }
 
@@ -601,29 +664,28 @@ impl Inner {
         enabled && osc && link == Link::Connected && self.relay.is_live()
     }
 
-    /// Note the connection (call often: the poll loop does), and end a capture whose link has
-    /// been down for a minute or more at the song position where the drop began.
+    /// Note the connection (call often: the poll loop does), and open or close the recorded
+    /// stretch of the running pass to match it: a stretch of the song is recorded only while the
+    /// timer runs and the lighting connection is live. A drop of any length just leaves a gap;
+    /// when the connection is back, a new stretch starts with a snapshot of every property.
     fn tick(&self) {
         let link = self.st().link;
         let available = self.available_now(link);
         let now = self.clock.mono();
         let wall = self.clock.wall();
+        let wants_open = available
+            && self.st().session.as_ref().is_some_and(|session| {
+                session.running && session.fixtures.is_some() && session.recorded_from.is_none()
+            });
+        let state = wants_open.then(|| self.relay.state());
         let mut st = self.st();
         st.availability.observe(now, available);
-        let down = st.availability.down_since().is_some();
-        let too_long = st.availability.dropped_too_long(now);
         if let Some(session) = st.session.as_mut() {
-            if !down {
-                session.down_position = None;
-            } else if session.down_position.is_none() {
-                session.down_position = Some(if session.running {
-                    (wall - session.started_at).max(session.last_position)
-                } else {
-                    session.last_position
-                });
-            }
-            if too_long && session.cutoff.is_none() {
-                session.cutoff = session.down_position;
+            let position = session.position_at(wall);
+            match (&state, session.running && available) {
+                (Some(state), true) => session.open_stretch(position, state),
+                (_, false) => session.close_stretch(position),
+                _ => {}
             }
         }
     }
@@ -812,6 +874,16 @@ impl Inner {
     async fn stop(self: Arc<Self>) {
         self.st().stopped = true;
         self.wake.notify_one();
+        // Save what a recording in progress captured (as an incomplete capture), but never hold
+        // the exit up for long.
+        let unfinished = self.st().session.take();
+        if let Some(session) = unfinished {
+            let _ = tokio::time::timeout(
+                SHUTDOWN_SAVE_WAIT,
+                self.finish(session, "StagePilot is shutting down."),
+            )
+            .await;
+        }
         let task = self.st().poll_task.take();
         if let Some(task) = task {
             task.abort();
@@ -924,6 +996,7 @@ impl Inner {
                 delay = RETRY_SECONDS;
             }
             self.tick();
+            self.finish_if_song_over().await;
             tokio::select! {
                 () = self.wake.notified() => {}
                 () = tokio::time::sleep(Duration::from_secs_f64(delay)) => {}
@@ -955,6 +1028,10 @@ impl Inner {
             if let Some(tap) = &self.fixture_tap {
                 tap(FixtureEvent::StreamReset);
             }
+            let offset_sink: crate::lightkey_relay::OffsetSink = {
+                let this = self.clone();
+                Arc::new(move |shift: f64| this.redate(shift))
+            };
             let clock = self.clock.clone();
             let clock_b = self.clock.clone();
             let watch = target.clone();
@@ -967,8 +1044,25 @@ impl Inner {
                         !this.is_stopped() && this.relay_target_now().as_deref() == Some(&watch)
                     },
                     sink,
+                    offset_sink,
                 )
                 .await;
+        }
+    }
+
+    /// A better clock estimate arrived that moves the clock by more than 50 ms: the changes
+    /// recorded since the previous estimate took effect were dated with the worse one. Move them
+    /// by `shift` seconds (`old_offset - new_offset`) and start counting from here.
+    fn redate(&self, shift: f64) {
+        let mut st = self.st();
+        for session in st.session.iter_mut() {
+            if let Some(recorder) = session.fixtures.as_mut() {
+                let moved = recorder.shift_from(session.offset_mark, shift);
+                if moved > 0 {
+                    tracing::warn!(moved, shift, "lightkey_capture_redated");
+                }
+                session.offset_mark = recorder.len();
+            }
         }
     }
 
@@ -985,10 +1079,12 @@ impl Inner {
         if let Some(tap) = &self.fixture_tap {
             tap(FixtureEvent::Changed { commands, keyframe });
         }
+        // A change proves the stream is live: make sure its stretch is open first.
+        self.tick();
         let mut st = self.st();
         let stopped = st.stopped;
         if let Some(session) = st.session.as_mut() {
-            if session.running && !stopped && session.cutoff.is_none() {
+            if session.running && !stopped && session.recorded_from.is_some() {
                 let position = local_time - session.started_at;
                 if let Some(recorder) = session.fixtures.as_mut() {
                     recorder.observe(position, commands);
@@ -1121,6 +1217,11 @@ impl Inner {
     }
 
     /// Clock offset from the lowest-round-trip of several samples (NTP style).
+    ///
+    /// Captured changes are dated with the relay's own clock estimate (`lightkey_relay`); this
+    /// HTTP measurement is the independent check on it. Every sample is logged
+    /// (`lightkey_clock_offset`), and a result that differs from the relay's by more than 50 ms
+    /// is logged as `lightkey_clock_offset_mismatch`.
     async fn measure_offset(&self, http: &dyn LightkeyHttp, base: &str) -> Result<(), HttpFailure> {
         let mut best: Option<(f64, f64)> = None;
         for _ in 0..OFFSET_SAMPLES {
@@ -1132,14 +1233,36 @@ impl Inner {
                 None => return Err(HttpFailure::Other("no t in /time".into())),
             };
             let rtt = received - sent;
+            tracing::info!(
+                source = "http",
+                offset = remote - (sent + received) / 2.0,
+                round_trip = rtt,
+                "lightkey_clock_offset"
+            );
             if best.is_none_or(|(best_rtt, _)| rtt < best_rtt) {
                 best = Some((rtt, remote - (sent + received) / 2.0));
             }
         }
-        if let Some((_, offset)) = best {
+        if let Some((rtt, offset)) = best {
             let mut st = self.st();
             st.offset = offset;
             st.offset_at = self.clock.mono();
+            drop(st);
+            let relay = self.relay.clock_offset();
+            tracing::info!(
+                source = "http",
+                offset,
+                round_trip = rtt,
+                relay_offset = relay,
+                "lightkey_clock_offset_best"
+            );
+            if let Some(relay) = relay {
+                if (relay - offset).abs() > crate::lightkey_fixtures::CLOCK_REDATE_THRESHOLD
+                    && rtt < crate::lightkey_fixtures::CLOCK_POOR_ROUND_TRIP
+                {
+                    tracing::warn!(http = offset, relay, "lightkey_clock_offset_mismatch");
+                }
+            }
         }
         Ok(())
     }
@@ -1189,7 +1312,16 @@ impl Inner {
                 if !pinned || st.link == Link::Connected {
                     let mut session = Session::new(song.clone(), started_at);
                     if self.relay.is_live() || !pinned {
-                        session.fixtures = Some(LookRecorder::new(&self.relay.state()));
+                        let state = self.relay.state();
+                        let mut recorder = LookRecorder::new(&state);
+                        // Not live yet (Auto rides out a short drop): the first stretch opens
+                        // when the stream is, so the start is a gap.
+                        if self.available_now(st.link) {
+                            session.recorded_from = Some(0.0);
+                        } else {
+                            recorder.end_stretch(0.0);
+                        }
+                        session.fixtures = Some(recorder);
                     }
                     if self.audio.is_some() {
                         session.loudness =
@@ -1232,44 +1364,46 @@ impl Inner {
         }
     }
 
+    /// Resume and seek. The pass goes on from the new position: the stretch recorded so far
+    /// ends where the song was, and a new one begins at the new position (if the timer runs and
+    /// the link is live). Moving forward leaves a gap; moving back (or restarting) records the
+    /// same stretch again, and the later recording wins (see `LookRecorder`).
     async fn on_repositioned(self: &Arc<Self>, event: &StagePilotEvent) {
         let EventPayload::Timer(payload) = &event.payload else {
             return;
         };
         let position = payload.position_seconds.unwrap_or(0.0).max(0.0);
-        let had_session = {
+        let wall = self.clock.wall();
+        {
             let mut st = self.st();
             if let Some(session) = st.session.as_mut() {
-                let same_place =
-                    (position - session.last_position).abs() <= RESUME_TOLERANCE_SECONDS;
-                if event.event_type == EventType::TimerResumed && payload.running && same_place {
-                    // Paused and resumed in place: carry on, and catch up on anything changed
-                    // meanwhile.
-                    session.started_at = payload
-                        .started_at
-                        .map_or_else(|| self.clock.wall(), datetime_seconds)
-                        - position;
-                    session.running = true;
-                    if let Some(recorder) = session.fixtures.as_mut() {
-                        recorder.observe(position, &self.relay.state().commands());
-                    }
-                    if let Some(loudness) = &session.loudness {
-                        let mut loudness = loudness.lock().unwrap_or_else(|p| p.into_inner());
-                        loudness.set_started_at(session.started_at);
-                        loudness.set_running(true);
-                    }
-                    Some(true)
-                } else {
-                    st.session = None;
-                    Some(false)
+                let before = session.position_at(wall);
+                // Only a resume in place continues the same stretch; any seek starts a new one,
+                // however small.
+                let same_place = event.event_type == EventType::TimerResumed
+                    && (position - before).abs() <= RESUME_TOLERANCE_SECONDS;
+                // The old stretch ends where the song was.
+                session.close_run(before);
+                session.started_at = payload.started_at.map_or(wall, datetime_seconds) - position;
+                session.position = position;
+                session.running = payload.running;
+                if payload.running {
+                    session.played_from = Some(position);
                 }
-            } else {
-                None
+                if let Some(loudness) = &session.loudness {
+                    let mut loudness = loudness.lock().unwrap_or_else(|p| p.into_inner());
+                    loudness.set_started_at(session.started_at);
+                    if !same_place {
+                        // Anything heard here before is replaced by this take.
+                        loudness.next_stretch();
+                    }
+                    loudness.set_running(payload.running);
+                }
             }
-        };
-        if had_session == Some(false) {
-            self.say("Recording discarded: the song was moved.");
         }
+        // Opens the new stretch (with a snapshot of every property, which also catches up on
+        // anything changed while paused or moved) when the connection is live.
+        self.tick();
         self.sync_audio().await;
     }
 
@@ -1299,7 +1433,8 @@ impl Inner {
                         // event): this says nothing new and must not move the position.
                         Next::Nothing
                     } else {
-                        session.last_position = session.last_position.max(position);
+                        session.close_run(position);
+                        session.position = position;
                         session.running = false;
                         if let Some(loudness) = &session.loudness {
                             loudness
@@ -1312,7 +1447,7 @@ impl Inner {
                         // however late in the song, keeps it: the resume carries on, and a new
                         // song or Record off saves what was captured (R-01).
                         let ended = event.event_type == EventType::TimerFailed
-                            || session.last_position >= duration - SONG_END_TOLERANCE_SECONDS;
+                            || session.position >= duration - SONG_END_TOLERANCE_SECONDS;
                         if ended {
                             match st.session.take() {
                                 Some(session) => Next::Finish(Box::new(session)),
@@ -1335,6 +1470,31 @@ impl Inner {
                 ));
             }
             Next::Nothing => {}
+        }
+    }
+
+    /// The song's clock passed its scheduled length plus the grace while still running: the song
+    /// is over, whether or not the timer stopped (it deliberately keeps counting into overrun, and
+    /// Playback's own song end does not reach the link). The pass is saved once; with the session
+    /// gone, later changes cannot start or reopen one.
+    async fn finish_if_song_over(self: &Arc<Self>) {
+        let over = {
+            let mut st = self.st();
+            let wall = self.clock.wall();
+            let due = st.session.as_ref().is_some_and(|session| {
+                let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
+                session.running
+                    && duration > 0.0
+                    && wall - session.started_at >= duration + SONG_END_GRACE_SECONDS
+            });
+            if due {
+                st.session.take()
+            } else {
+                None
+            }
+        };
+        if let Some(session) = over {
+            self.finish(session, "Song finished.").await;
         }
     }
 
@@ -1391,15 +1551,8 @@ impl Inner {
         let problem = self.audio.as_ref().and_then(|hub| hub.snapshot().reason);
         self.sync_audio().await;
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
-        let mut covered = session.last_position;
-        if session.running {
-            covered = covered.max(self.clock.wall() - session.started_at);
-        }
-        let covered = if duration > 0.0 {
-            covered.min(duration)
-        } else {
-            covered
-        };
+        // The take is kept when the timer ran for half the song, whatever the link did.
+        let covered = session.played_total(self.clock.wall(), duration);
         if !recording_is_worth_keeping(covered, duration) {
             return None;
         }
@@ -1426,27 +1579,19 @@ impl Inner {
         self.tick();
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         if session.running {
-            session.last_position = session
-                .last_position
-                .max(self.clock.wall() - session.started_at);
+            let now = session.position_at(self.clock.wall());
+            session.close_run(now);
+            session.running = false;
         }
-        let mut covered = if duration > 0.0 {
-            session.last_position.min(duration)
-        } else {
-            session.last_position
-        };
-        // A link that was down for a minute ends the pass where the drop began.
-        let link_failed = session.cutoff.is_some();
-        if let Some(cutoff) = session.cutoff {
-            covered = covered.min(cutoff.max(0.0));
-        }
+        // Where the missing seconds are does not matter, only how many.
+        let covered = session.covered.total(duration);
         let title = session.song.title.clone();
         let recorder = session.fixtures.take().filter(|r| !r.is_empty());
-        let verdict = judge(duration, covered, recorder.is_some(), link_failed);
+        let verdict = judge(duration, covered, recorder.is_some());
         let complete = match verdict {
-            PassVerdict::TooShort => {
+            PassVerdict::UnknownLength => {
                 return self.say(format!(
-                    "Not saved: only {covered:.0} of {duration:.0} seconds recorded."
+                    "Not saved: the length of {title} is unknown, so the capture cannot be judged."
                 ));
             }
             PassVerdict::NoChanges => {
@@ -1508,12 +1653,18 @@ impl Inner {
                         looks: u32::try_from(count + loops).unwrap_or(u32::MAX),
                     });
                     let text = saved_message(count, loops, &title, scale);
-                    return self.say(if complete {
-                        text
-                    } else {
+                    let missing = duration - covered;
+                    return self.say(if !complete {
                         format!(
-                            "{text} Incomplete capture: {covered:.0} of {duration:.0} seconds; it captures again next time."
+                            "{text} Incomplete capture: {covered:.0} of {duration:.0} seconds recorded; it captures again next time."
                         )
+                    } else if missing >= 0.5 {
+                        format!(
+                            "{} ({missing:.0} s of the song were not captured).",
+                            text.trim_end_matches('.')
+                        )
+                    } else {
+                        text
                     });
                 }
                 Err(LooksError::Kept) => {
