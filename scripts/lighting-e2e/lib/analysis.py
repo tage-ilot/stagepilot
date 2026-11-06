@@ -162,22 +162,34 @@ def deviation(pk, raw, cue_map, duration, grid=0.05):
 
 
 def step_rows(cue_map):
-    """Instant (step) look messages of the saved rows: [(row_time, addr, [values])]."""
+    """Instant (step) look messages of the saved rows: [(row_time, addr, [values])]. A step row
+    that is only the start value of a ramp (a ramp row for the same address at the same time)
+    is left out: replay evaluates the ramp's curve instead of sending that start value."""
+    def values(m):
+        return [x.get("value") if isinstance(x, dict) else x for x in (m.get("args") or [])]
+
+    def messages(r):
+        return r.get("messages") or ([{"address": r["address"], "args": r.get("args", [])}] if r.get("address") else [])
+
+    rows = (cue_map or {}).get("osc_cues") or []
+    ramp_starts = {(round(r["at_seconds"], 3), m["address"]) for r in rows if (r.get("fade_seconds") or 0) > 0 for m in messages(r)}
     out = []
-    for r in (cue_map or {}).get("osc_cues") or []:
-        if r.get("fade_seconds", 0) > 0:
+    for r in rows:
+        if (r.get("fade_seconds") or 0) > 0:
             continue
-        msgs = r.get("messages") or ([{"address": r["address"], "args": r.get("args", [])}] if r.get("address") else [])
-        for m in msgs:
-            vals = [x for x in (m.get("args") or [])]
-            vals = [list(x.values())[0] if isinstance(x, dict) else x for x in vals]
-            out.append((r["at_seconds"], m["address"], vals))
+        for m in messages(r):
+            if (round(r["at_seconds"], 3), m["address"]) in ramp_starts:
+                continue
+            out.append((r["at_seconds"], m["address"], values(m)))
     return out
 
 
 def close(a, b, eps=2e-3):
     na, nb = numeric(a), numeric(b)
     return len(na) == len(nb) and all(abs(x - y) <= eps for x, y in zip(na, nb))
+
+
+FIRST_LOOK_S = 0.05  # rows at the very start of the song leave as one burst; they cannot start early
 
 
 def step_lateness(pk, cue_map, lo, hi):
@@ -191,7 +203,15 @@ def step_lateness(pk, cue_map, lo, hi):
     rows = {}
     for t, a, vals in step_rows(cue_map):
         rows.setdefault(a, []).append((t, vals))
-    late, missing, stale, considered = [], 0, 0, 0
+    # ramps and effects send interpolated values that can equal an old step's value by chance
+    # (a ramp ending where an earlier step began): packets inside them are not step values
+    moving = {}
+    for r in (cue_map or {}).get("osc_cues") or []:
+        if (r.get("fade_seconds") or 0) > 0:
+            for m in r.get("messages") or []:
+                moving.setdefault(m["address"], []).append((r["at_seconds"] - 0.1, r["at_seconds"] + r["fade_seconds"] + 0.3))
+    eidx = effect_index(cue_map)
+    late, late_rest, missing, stale, considered = [], [], 0, 0, 0
     for a, lst in rows.items():
         lst.sort(key=lambda x: x[0])
         packets = by_addr_pk.get(a, [])
@@ -212,10 +232,14 @@ def step_lateness(pk, cue_map, lo, hi):
                 missing += 1
                 continue
             late.append(found[1] - t)
+            if t >= FIRST_LOOK_S:
+                late_rest.append(found[1] - t)
         # stale: packets that equal an older row's value after a newer row was due
         row_times = [x[0] for x in lst]
         for pi, (p, args) in enumerate(packets):
             if not (lo <= p < hi):
+                continue
+            if any(a0 <= p <= b0 for a0, b0 in moving.get(a, ())) or in_effect(eidx, a, p):
                 continue
             due = bisect.bisect_right(row_times, p + LEAD + 0.005) - 1
             if due < 1:
@@ -232,6 +256,13 @@ def step_lateness(pk, cue_map, lo, hi):
         "p99_ms": 1000 * pct(late, 99) if late else None,
         "max_ms": 1000 * max(late) if late else None,
         "min_ms": 1000 * min(late) if late else None,
+        "rest_matched": len(late_rest),
+        "rest_median_ms": 1000 * statistics.median(late_rest) if late_rest else None,
+        "rest_p99_ms": 1000 * pct(late_rest, 99) if late_rest else None,
+        "rest_max_ms": 1000 * max(late_rest) if late_rest else None,
+        "rest_min_ms": 1000 * min(late_rest) if late_rest else None,
+        "rest_late_over_100ms": sum(1 for x in late_rest if x > 0.1 - LEAD),
+        "first_look_max_ms": 1000 * max((x for x in late if x not in late_rest), default=0.0),
         "stale_packets": stale,
         "late_over_100ms": sum(1 for x in late if x > 0.1 - LEAD),
         "values": late,

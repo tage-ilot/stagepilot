@@ -98,7 +98,7 @@ async def settle(rig):
     is empty. Record is only a switch and needs no wait."""
     await asyncio.sleep(0.3)
     await rig.wait_link()
-    await asyncio.sleep(2.0)
+    await asyncio.sleep(float(os.environ.get("E2E_SETTLE_S", "40")))
 
 
 async def status_message(rig):
@@ -126,19 +126,27 @@ async def capture_song(rig, take, key, out, tag, record=True):
 
         async def sample():
             while True:
-                await asyncio.sleep(30)
-                mid.append({"t": round(time.time() - origin, 1), "message": (await status_message(rig)),
-                            "rss_kb": rig.backend.stats()["rss_kb"]})
+                await asyncio.sleep(4)
+                m = await status_message(rig)
+                if m != (mid[-1]["message"] if mid else None) or len(mid) % 8 == 0:
+                    mid.append({"t": round(time.time() - origin, 1), "message": m,
+                                "rss_kb": rig.backend.stats()["rss_kb"]})
         sampler = asyncio.create_task(sample())
         sent = await rig.feed(take, origin)
         await finish_song(rig, origin, key)
         t_end = time.time()
         sampler.cancel()
         try:
-            saved = await rig.wait(lambda: (lambda m: m if m and (m.startswith("Saved") or m.startswith("Not saved")) else None)(rig.lk_status().get("message")),
-                                   60, 0.1, "save message")
+            seen = []
+
+            def save_message():
+                m = rig.lk_status().get("message")
+                if m and (not seen or seen[-1] != m):
+                    seen.append(m)
+                return m if m and (m.startswith("Saved") or m.startswith("Not saved")) else None
+            saved = await rig.wait(save_message, 60, 0.1, "save message")
         except TimeoutError:
-            log("no save message; status:", json.dumps(rig.lk_status())[:1500], "log:", json.dumps(grab_log(rig))[:800])
+            log("no save message; status:", json.dumps(rig.lk_status())[:1500], "timer:", json.dumps(rig.state().get("timer")), "messages after the end:", json.dumps(seen), "samples:", json.dumps([x for x in mid if x["message"]])[:1200], "log:", json.dumps(grab_log(rig))[:800])
             raise
         save_latency = time.time() - t_end
     st = rig.lk_status()
@@ -206,7 +214,7 @@ async def replay_song(rig, take, key, out, tag, with_analysis=True):
 async def stage_replay(rig, takes, out):
     results = []
     for title, key in TAKE_FOR.items():
-        results.append(await replay_song(rig, takes[title], key, out, "replay"))
+        results.append(await replay_song(rig, takes[title], key, out, f"replay-{key}"))
     save(out, "replay", results)
     return results
 
@@ -329,7 +337,7 @@ async def stage_control(rig, takes, out):
     mark5 = rig.lk.mark()
     t0 = time.time()
     held_status = rig.lk_status()
-    rel = rig.backend.post("/api/v1/lights/lightkey/release")
+    rel = await asyncio.to_thread(rig.backend.post, "/api/v1/lights/lightkey/release")  # the call returns after the clears: do not block the sink's loop
     await asyncio.sleep(3.0)
     pk5 = [(w, a) for _, w, a, _ in rig.lk.packets[mark5:]]
     cl = [(w, a) for w, a in pk5 if a.endswith("/clear")]
@@ -458,6 +466,7 @@ async def stage_auto(rig, takes, out):
     take = takes["Unstoppable God"]
     quiet = take["initial"]
     key = "demo-battle-belongs"
+    other = "demo-holy-forever"
     rig.set_relay_state(quiet)
     await rig.wait_link()
     rig.set_mode("auto")
@@ -479,11 +488,23 @@ async def stage_auto(rig, takes, out):
     await asyncio.sleep(1)
     rig.pb.stop()
     # 2. a complete capture, then its next play replays
-    cap = await capture_song(rig, take, key, out, "auto", record=False)
-    res["auto_capture"] = {"save_message": cap["save_message"], "cue_map": cap["cue_map"],
-                           "status_start": cap["start_status_message"]}
+    try:
+        cap = await capture_song(rig, take, key, out, "auto", record=False)
+        res["auto_capture"] = {"save_message": cap["save_message"], "cue_map": cap["cue_map"],
+                               "status_start": cap["start_status_message"]}
+    except TimeoutError:
+        # the capture ended without a Saved / Not saved message (seen: "too many rows"); keep going
+        st_end = rig.lk_status()
+        res["auto_capture"] = {"save_message": "NO SAVE MESSAGE (see run.log and backend.log: lightkey_looks_too_large)",
+                               "cue_map": summarize_cue_map(rig.cue_map(key)), "status_start": None,
+                               "status_end": {k: st_end.get(k) for k in ("auto", "message", "mode")}}
     rig.pb.stop()
     await asyncio.sleep(2)
+    # NOTE (finding, see README): the demo service source publishes TimerStarted without
+    # `started_at`, and the link caches its per-song decision by (song, started_at), so a second
+    # play of the same song reuses the first decision. A different song in between clears it
+    # (as a real timer output, which sets started_at, does on every start).
+    await flush_decision(rig, other)
     origin = await rig.play(key)
     await asyncio.sleep(1.5)
     st2 = rig.lk_status()
@@ -494,14 +515,24 @@ async def stage_auto(rig, takes, out):
     rig.pb.stop()
     await asyncio.sleep(1)
     # 3. link drop under 60 s: the next uncaptured song still captures
-    key2 = "demo-gratitude"
-    res["drop_30s"] = await drop_case(rig, key2, drop_seconds=30)
+    res["drop_30s"] = await drop_case(rig, other, drop_seconds=30)
     await asyncio.sleep(3)
-    # 4. link drop over 60 s: it replays
-    res["drop_70s"] = await drop_case(rig, key2, drop_seconds=70)
+    # 4. link drop over 60 s: it replays (the captured song is played first to clear the cached decision)
+    await flush_decision(rig, key)
+    res["drop_70s"] = await drop_case(rig, other, drop_seconds=70)
     res["log"] = grab_log(rig)
     save(out, "auto", res)
     return res
+
+
+async def flush_decision(rig, key):
+    """Play another song for a moment so the link forgets its cached per-song decision."""
+    await rig.play(key)
+    await asyncio.sleep(1.5)
+    rig.pb.pause()
+    await asyncio.sleep(0.5)
+    rig.pb.stop()
+    await asyncio.sleep(1.0)
 
 
 async def drop_case(rig, key, drop_seconds):

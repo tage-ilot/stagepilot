@@ -57,6 +57,14 @@ Belongs" (281 s), Able (290 s) to "Holy Forever" (336 s). The take is silent for
 
 `lib/analysis.py` holds the numbers; `report.py` renders the tables.
 
+## Things the harness had to learn (read before changing it)
+
+- **A settings change restarts the link's relay session.** `PUT .../lightkey/settings` (Auto/Replay) makes StagePilot resubscribe, so the harness waits `E2E_SETTLE_S` (default 40 s) after it before a song starts. The Record switch is not a settings change and needs no wait.
+- **Seek is a command, not a heartbeat jump.** The real Playback sends `{"waveformSeek": {"sequenceTime": N}}` and then heartbeats at the new position; the fake does the same. A heartbeat jump alone is not read as a seek.
+- **Song numbers are learned in order.** The first Playback song seen after a backend start resolves to the plan's Up next, so stages that need a given song run after one that plays the earlier songs (the default order does). `--stages control` on its own against a fresh directory plays the wrong song.
+- **The demo service source publishes `TimerStarted` without `started_at`.** The link caches its per-song decision by (song, `started_at`), so with this source a second play of the same song reuses the first decision until another song starts. The `auto` stage plays another song in between, as a real timer output (which sets `started_at`) makes unnecessary. See the report, findings.
+- The harness HTTP client is synchronous: long calls (Release lights returns after its clears) run in a thread so the sink's event loop keeps timestamping.
+
 ## What it does not prove
 
 Real Lightkey behaviour, a real network, DMX decode, the real Playback, audio loudness, the UI.

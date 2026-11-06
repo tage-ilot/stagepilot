@@ -229,6 +229,7 @@ class FakePlayback:
         self.song, self.base, self.since, self.playing = 101, 0.0, 0.0, False
         self.server = None
         self.clients = 0
+        self.sockets = []
         self.received: list[str] = []
 
     def position(self) -> float:
@@ -244,7 +245,12 @@ class FakePlayback:
         self.base, self.playing = self.position(), False
 
     def seek(self, position):
+        """The Playback app sends a `waveformSeek` command, then its heartbeat carries the new
+        position (the heartbeat alone is not read as a seek)."""
         self.base, self.since = position, time.monotonic()
+        msg = json.dumps({"waveformSeek": {"sequenceTime": position}})
+        for ws in list(self.sockets):
+            asyncio.get_running_loop().create_task(ws.send(msg))
 
     def stop(self):
         self.base, self.playing = 0.0, False
@@ -264,6 +270,7 @@ class FakePlayback:
 
         async def handler(ws):
             self.clients += 1
+            self.sockets.append(ws)
             async def reader():
                 async for m in ws:
                     self.received.append(m if isinstance(m, str) else "<binary>")
@@ -277,6 +284,8 @@ class FakePlayback:
             finally:
                 r.cancel()
                 self.clients -= 1
+                if ws in self.sockets:
+                    self.sockets.remove(ws)
 
         self.server = await websockets.serve(handler, "127.0.0.1", self.port, subprotocols=["pr-protocol"])
 

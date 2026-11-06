@@ -50,6 +50,12 @@ def offline():
         m = re.search(r"steps behind the pacing queue.*?median (\d+), p99 (\d+), max (\d+)", b)
         if m:
             d["step_wait"] = tuple(map(int, m.groups()))
+        m = re.search(r"without the first look of the song: median (-?\d+), p99 (-?\d+), max (-?\d+), earliest (-?\d+)", b)
+        if m:
+            d["step_late_rest"] = tuple(map(int, m.groups()))
+        m = re.search(r"first look of the song \(position 0, cannot start early\): (\d+) values, latest (\d+) ms", b)
+        if m:
+            d["first_look"] = tuple(map(int, m.groups()))
         paced = b.split("as paced:")[-1] if "as paced:" in b else ""
         dev = {}
         place = None
@@ -126,9 +132,13 @@ if rep:
     for r in rep:
         s = r["steps"]
         off = OFF.get(r["take"], {})
-        rows.append([r["take"], s["considered"], s["matched"], s["unmatched"], f(s["min_ms"], 0), f(s["median_ms"], 0), f(s["p99_ms"], 0), f(s["max_ms"], 0),
-                     s["late_over_100ms"], s["stale_packets"], "/".join(map(str, off.get("step_wait", ("n/a",))))])
-    w(table(["take", "step messages", "matched", "unmatched", "min ms", "median ms", "p99 ms", "max ms", "later than target + 100 ms", "stale packets", "S2 sim queue wait median/p99/max ms"], rows))
+        o = off.get("step_late_rest")
+        rows.append([r["take"], s["considered"], s["matched"], s["unmatched"],
+                     f"{f(s['rest_min_ms'], 0)} / {f(s['rest_median_ms'], 0)} / {f(s['rest_p99_ms'], 0)} / {f(s['rest_max_ms'], 0)}",
+                     f"{o[3]} / {o[0]} / {o[1]} / {o[2]}" if o else "n/a",
+                     s["rest_late_over_100ms"], f(s["first_look_max_ms"], 0), off.get("first_look", ("n/a", "n/a"))[1], s["stale_packets"]])
+    w(table(["take", "step messages", "matched", "unmatched", "e2e without the first look: min / median / p99 / max ms", "S2 sim (earliest / median / p99 / max ms)", "e2e later than target + 100 ms", "e2e first look: latest ms", "S2 sim first look latest ms", "stale packets"], rows))
+    w("Rows that are only the start value of a ramp are left out (replay evaluates the ramp curve instead). The first look of the song (rows at position 0, around 60-100 values paced 5 ms apart) cannot start early and is reported separately. A step is matched to the first packet carrying its value within [row - 250 ms, row + 3 s]; a stale packet is one carrying an older step's exact value after a newer step was due (packets inside ramps and effects are excluded).\n")
     w("### Process cost, addresses and echo\n")
     rows = []
     for r in rep:
@@ -143,16 +153,16 @@ c = load("control")
 w("## 3. Pause, seek, operator take-over, Release lights, stopping StagePilot (Able on Holy Forever)\n")
 if c:
     t = c["takeover"]
-    w("### Operator take-over (one fixture, an unexpected DMX change injected into the relay at 15 s)\n")
+    w(f"### Operator take-over (one fixture, an unexpected DMX change injected into the relay at {t["injected_at_s"]} s)\n")
     w(table(["item", "result"], [
         ["fixture / address", f"{t['fixture']} / {t['address']}"], ["injected value", t["injected"]],
-        ["packets for that address in the 6.9 s before", t["packets_before_inj_8_14.9s"]],
+        ["packets for that address in the 5 s before", t["packets_before_inj_5s"]],
         ["last packet to the fixture before the change (song s)", t["target_last_packet_before_s"]],
         ["packets to the fixture in the 29.8 s of quiet after", t["target_packets_in_quiet_window"]],
         ["fixture taken back after (s, expect ~30)", t["taken_back_after_s"]],
         ["value sent at take-back vs the take then", f"{t.get('first_back_value')} vs {t.get('raw_value_then')}"],
         ["other fixtures pkts/s before vs during", f"{t['other_fixtures_pkts_per_s_before']} vs {t['other_fixtures_pkts_per_s_during']}"],
-        ["status text 2 s after", json.dumps({k: v for k, v in t['status_2s_after'].items() if k in ('message', 'detail', 'replay_blocked', 'replaying_song', 'holding', 'yielded')})],
+        ["status text 2 s after", json.dumps({k: v for k, v in t['status_2s_after'].items() if k in ('message', 'detail', 'replay_blocked', 'replaying_song', 'holding_fixtures', 'yielded_fixtures')})],
     ]))
     p, rs = c["pause"], c["resume"]
     sf, sb = c["seek_forward"], c["seek_back"]
@@ -163,7 +173,7 @@ if c:
         ["pause: clears sent", p["clears_while_paused"]],
         ["resume in place: packets / addresses in the first 1.5 s", f"{rs['packets_first_1.5s']} / {rs['addresses_first_1.5s']}"],
         ["resume: addresses beyond 2x tolerance vs the take, max dev", json.dumps(rs["max_dev_at_resume+1.5s"])],
-        ["seek forward to 200 s: packets 199-202.5 s / addresses", f"{sf['packets_199_202.5']} / {sf['addresses']}"],
+        [f"seek forward to {sf['to_s']:.0f} s: packets in song s {sf['to_s']-1:.0f}-{sf['to_s']+2.5:.1f} / addresses / first packet at song s", f"{sf['packets_around']} / {sf['addresses']} / {sf['first_packet_song_s']}"],
         ["seek forward: re-sync check (last value per address vs take)", json.dumps(sf["max_dev_1.5s_after"])],
         ["seek back to 2 s: clears / fixtures given back / packets in 2 s", f"{sb['clears']} / {sb['fixtures_cleared']} / {sb['packets_first_2s']}"],
     ]))
@@ -200,15 +210,16 @@ if s:
     w(table(["step", "tag", "RSS kB", "threads", "open fds", "CPU ms / song s", "error/warn lines (cumulative)"], rows))
     rss = [x[2] for x in rows]
     first_replay = rows[1][2]
-    w(f"RSS growth from the end of the first replay to the end: {rss[-1] - first_replay} kB; from start: {rss[-1] - rss[0]} kB. Tokio tasks cannot be read from outside the process: threads and open file descriptors are the leak proxy.\n")
+    by_tag = {x["tag"]: x["stats_end"]["rss_kb"] for x in s["runs"]}
+    w(f"RSS: start {rss[0]} kB; end of the first replay {first_replay} kB ({first_replay - rss[0]:+d} kB); after the capture {by_tag.get('soak2')} kB ({by_tag.get('soak2', 0) - first_replay:+d} kB: the fit's working memory is not handed back to the OS); the two replays after the capture {by_tag.get('soak3')} kB and {by_tag.get('soak4')} kB (replay to replay {by_tag.get('soak4', 0) - by_tag.get('soak3', 0):+d} kB); idle end {rss[-1]} kB. Replays alone grow by the last figure; Tokio tasks cannot be read from outside the process, so threads and open file descriptors are the leak proxy (constant above).\n")
     rows = []
     for r in s["runs"]:
         if r["kind"] == "replay":
             rt = r["rate_take_window"]
-            rows.append([r["tag"], rt["packets"], f"{rt['mean']:.1f} / {rt['p99']} / {rt['max']}", r["steps"]["stale_packets"], f(r["steps"]["median_ms"], 0)])
+            rows.append([r["tag"], rt["packets"], f"{rt['mean']:.1f} / {rt['p99']} / {rt['max']}", r["steps"]["stale_packets"], f(r["steps"]["rest_median_ms"], 0)])
         else:
-            rows.append([r["tag"] + " (capture)", r["cue_map"]["items"], r["save_message"].split(" Loudness")[0], "-", "-"])
-    w(table(["run", "packets / items", "pkts/s mean / p99 / max | message", "stale", "step median ms"], rows))
+            rows.append([r["tag"] + " (capture)", r["cue_map"]["items"], "-", "-", "-"])
+    w(table(["run", "packets / items", "pkts/s mean / p99 / max", "stale", "step median ms (without first look)"], rows))
 else:
     w("not run\n")
 

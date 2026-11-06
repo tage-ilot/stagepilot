@@ -1521,7 +1521,10 @@ impl Inner {
                         "Not saved: {title} already has a capture that covers more of the song."
                     ));
                 }
-                Err(LooksError::TooLarge) => scale *= 2.0,
+                Err(LooksError::TooLarge) => {
+                    tracing::warn!(song = %session.key, rows = count, effects = loops, scale, "lightkey_looks_too_large");
+                    scale *= 2.0;
+                }
                 Err(LooksError::Failed(error)) => {
                     tracing::error!(song = %session.key, error = %error, "lightkey_looks_save_failed");
                     return self.say("Could not save the looks to the timeline.");
