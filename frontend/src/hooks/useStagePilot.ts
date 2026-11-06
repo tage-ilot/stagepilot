@@ -27,7 +27,6 @@ import {
   captureLightingPad,
   undoLightingCapture,
   clearLightingLoudness,
-  simplifyLightkeyLooks,
   updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
@@ -64,8 +63,6 @@ import type {
   SettingsResponse,
   Song,
   LightingMethod,
-  LightkeyDetail,
-  LightkeySimplifyResponse,
   OscArgument,
   OscLightingCue,
   SongLightingCueMapInput,
@@ -921,6 +918,7 @@ export function useStagePilot() {
     song: Song,
     cues: LightingCue[] | OscLightingCue[],
     method: LightingMethod = "midi",
+    options?: { removeEffectIds?: string[] },
   ) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -937,6 +935,7 @@ export function useStagePilot() {
       cues: method === "midi" ? (cues as LightingCue[]) : [],
       osc_cues: method === "osc" ? (cues as OscLightingCue[]) : [],
       ...(settingsRef.current ? { revision: revision ?? 0 } : {}),
+      ...(method === "osc" && options?.removeEffectIds?.length ? { remove_effect_ids: options.removeEffectIds } : {}),
     };
     try {
       const response = await updateLightingCueMap(cueMap);
@@ -1029,25 +1028,6 @@ export function useStagePilot() {
     }
   }, [claim, release, canOperate]);
 
-  /** "Simplify this song" Apply: the backend thins and merges the captured rows, then the saved settings are reread. */
-  const simplifyLightingLooks = useCallback(async (songKey: string, detail: LightkeyDetail): Promise<LightkeySimplifyResponse | null> => {
-    if (!canConfigure) return null;
-    if (!claim("lights")) return null;
-    setLightingError(null);
-    try {
-      const response = await simplifyLightkeyLooks(songKey, detail, true);
-      setSettings(await getSettings());
-      if (response.applied) setLightingMessage(response.message);
-      else setLightingError(response.message);
-      return response;
-    } catch (cause) {
-      setLightingError(describeError(cause, "Simplify failed."));
-      return null;
-    } finally {
-      release("lights");
-    }
-  }, [claim, release, canConfigure]);
-
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -1063,6 +1043,7 @@ export function useStagePilot() {
           method,
           cues: [],
           osc_cues: [],
+          ...(method === "osc" ? { remove_effect_ids: (settingsRef.current?.settings.lights.cue_maps[song.source_song_id ?? song.id]?.effects ?? []).map((effect) => effect.id) } : {}),
         });
         latestLighting = response.lights;
       }
@@ -1190,7 +1171,6 @@ export function useStagePilot() {
     undoLightingCapture: undoLightingCapture_,
     clearLightingLoudness: clearLightingLoudness_,
     clearAllLightingCues,
-    simplifyLightingLooks,
     activateConfiguredServices,
   };
 }

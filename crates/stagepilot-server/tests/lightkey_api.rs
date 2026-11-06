@@ -410,6 +410,87 @@ async fn a_look_row_round_trips_through_the_cue_map_api_and_the_saved_settings()
     assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+#[tokio::test]
+async fn row_saves_keep_effects_and_only_a_remove_list_drops_one() {
+    use stagepilot_core::config::{EffectMember, EffectStep, LightingEffect, OscCueSource};
+    let (router, rt) = app(osc_lights()).await;
+    let effect = |label: &str| LightingEffect {
+        id: uuid::Uuid::new_v4(),
+        label: label.into(),
+        start_seconds: 10.0,
+        end_seconds: 50.0,
+        period_seconds: 4.0,
+        members: vec![EffectMember {
+            fixture: "P1".into(),
+            offset_seconds: 0.0,
+        }],
+        cycle: vec![EffectStep {
+            at_seconds: 0.0,
+            property: "dimmer".into(),
+            value: vec![1.0],
+            fade_seconds: 2.0,
+        }],
+        source: OscCueSource::Captured,
+        edited: false,
+    };
+    let (keep, drop_it) = (effect("keep"), effect("drop"));
+    let mut lights = osc_lights();
+    lights.cue_maps.insert(
+        "s1".into(),
+        stagepilot_core::config::SongLightingCueMap {
+            song_key: "s1".into(),
+            song_title: "Song".into(),
+            cues: vec![],
+            osc_cues: vec![],
+            loudness: None,
+            captured_edited: false,
+            capture: None,
+            effects: vec![keep.clone(), drop_it.clone()],
+        },
+    );
+    rt.settings_service.persist_lights(lights).unwrap();
+    let count = |settings: &Value| {
+        settings["settings"]["lights"]["cue_maps"]["s1"]["effects"]
+            .as_array()
+            .map_or(0, Vec::len)
+    };
+    let put = |extra: Value| {
+        let mut body =
+            json!({"song_key": "s1", "song_title": "Song", "method": "osc", "osc_cues": []});
+        body.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        body
+    };
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(put(json!({}))),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(count(&settings), 2, "a plain row save keeps every effect");
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(put(
+            json!({"remove_effect_ids": [drop_it.id.to_string(), "no-such-id"]}),
+        )),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
+    rt.stop().await;
+    assert_eq!(count(&settings), 1);
+    assert_eq!(
+        settings["settings"]["lights"]["cue_maps"]["s1"]["effects"][0]["label"],
+        "keep"
+    );
+}
+
 // ------------------------------------------------------------ recordings save to the timeline
 
 fn captured_row(at: f64, address: &str, x: f64) -> stagepilot_core::config::OscLightingCue {

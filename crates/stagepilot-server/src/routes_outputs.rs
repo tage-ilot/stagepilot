@@ -856,8 +856,17 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
         loudness: existing.and_then(|m| m.loudness.clone()),
         captured_edited: false,
         capture: None,
-        // Effects are not part of this request: editing rows never changes or drops them.
-        effects: existing.map(|m| m.effects.clone()).unwrap_or_default(),
+        // Editing rows never changes or drops effects; only an explicit remove list (OSC) does.
+        effects: existing
+            .map(|m| {
+                let remove = request.remove_effect_ids.as_deref().unwrap_or(&[]);
+                m.effects
+                    .iter()
+                    .filter(|e| is_midi || !remove.iter().any(|id| *id == e.id.to_string()))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default(),
     };
     let merged = SongLightingCueMap {
         captured_edited: captured_edited_after_save(existing, &merged, is_midi),

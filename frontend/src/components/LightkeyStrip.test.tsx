@@ -188,30 +188,36 @@ describe("LightkeyStrip", () => {
     }));
     render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
     expect(await screen.findByText("Connected \u00B7 66 fixtures")).toBeInTheDocument();
-    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured looks on this song");
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured items (190 ramps/steps, 0 loops) on this song");
     expect(screen.queryByRole("list", { name: "Captured songs" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Clear capture/ })).toBeNull();
   });
 
-  it("says 1 captured look in the singular", async () => {
+  it("says 1 captured item in the singular, and counts loops separately", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
     render(<LightkeyStrip lightingEnabled looks={{ count: 1, edited: false }} />);
-    expect(await screen.findByText("1 captured look on this song")).toBeInTheDocument();
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("1 captured item (1 ramps/steps, 0 loops) on this song.");
   });
 
-  it("shows the Detail setting only for Record, with its one-line explanation", async () => {
-    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: false }));
-    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+  it("counts loops with the ramps and steps: N items = rows + loops", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
+    render(<LightkeyStrip lightingEnabled looks={{ count: 546, loops: 6, edited: false }} />);
     await screen.findByTestId("lightkey-headline");
-    expect(screen.queryByTestId("lightkey-detail-setting")).toBeNull();
-    unmount();
-    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: true, detail_level: "normal" }));
-    render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByTestId("lightkey-detail-setting")).toBeInTheDocument();
-    expect(screen.getByText("Finer detail replays motion smoother but makes more rows.")).toBeInTheDocument();
-    vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ recording: true, detail_level: "fine" })));
-    await userEvent.setup().click(screen.getByRole("radio", { name: "Fine" }));
-    await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ detail_level: "fine" }));
+    expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("552 captured items (546 ramps/steps, 6 loops) on this song.");
+  });
+
+  it("has no Detail setting in any mode, and never sends detail_level", async () => {
+    for (const recording of [false, true]) {
+      vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording, detail_level: "normal" }));
+      const { unmount } = render(<LightkeyStrip lightingEnabled />);
+      await screen.findByTestId("lightkey-headline");
+      expect(screen.queryByTestId("lightkey-detail-setting")).toBeNull();
+      expect(screen.queryByRole("radiogroup", { name: "Detail" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: /^(Fine|Normal|Coarse)$/ })).toBeNull();
+      unmount();
+    }
+    expect(api.saveLightkeySettings).not.toHaveBeenCalled();
   });
 
   it("Record asks first when the song has edited captured looks, and does nothing on Cancel", async () => {
@@ -221,7 +227,7 @@ describe("LightkeyStrip", () => {
     render(<LightkeyStrip lightingEnabled looks={{ count: 12, edited: true }} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("radio", { name: "Record" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recording replaces this song's captured looks, including your edits"));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recording replaces this song's captured looks and loops, including your edits"));
     expect(api.setLightkeyRecording).not.toHaveBeenCalled();
     confirm.mockReturnValue(true);
     await user.click(screen.getByRole("radio", { name: "Record" }));
@@ -277,8 +283,8 @@ describe("lightkeyHeadline", () => {
   });
   it("tells a first-time operator what to do, then counts captures", () => {
     expect(lightkeyHeadline(status())).toMatch(/Switch to Record/);
-    expect(lightkeyHeadline(status(), { count: 1, edited: false })).toBe("1 captured look on this song");
-    expect(lightkeyHeadline(status(), { count: 2, edited: false })).toBe("2 captured looks on this song");
+    expect(lightkeyHeadline(status(), { count: 1, edited: false })).toBe("1 captured item (1 ramps/steps, 0 loops) on this song");
+    expect(lightkeyHeadline(status(), { count: 2, edited: false })).toBe("2 captured items (2 ramps/steps, 0 loops) on this song");
   });
 });
 
@@ -310,7 +316,7 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   });
 
   it("Record off + Replay on: no paused line, and it is gone once recording stops", () => {
-    expect(lightkeyLines(status({ captured }), null)).toEqual(["14 captured looks on “Holy Forever”."]);
+    expect(lightkeyLines(status({ captured }), null)).toEqual(["14 captured items on “Holy Forever”."]);
     expect(lightkeyLines(status({ captured, replaying_song: "Holy Forever" }), null)).toEqual(["Replaying “Holy Forever”."]);
   });
 
@@ -321,7 +327,7 @@ describe("lightkeyLines (B3: no line twice, replay-paused line)", () => {
   it("a message that differs from the headline is kept next to it", () => {
     expect(lightkeyLines(status({ captured, message: "Saved 14 looks to Holy Forever's timeline." }), null)).toEqual([
       "Saved 14 looks to Holy Forever's timeline.",
-      "14 captured looks on “Holy Forever”.",
+      "14 captured items on “Holy Forever”.",
     ]);
   });
 
@@ -358,7 +364,7 @@ describe("LightkeyStrip lines on screen (B3)", () => {
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ captured, message: null })));
     render(<LightkeyStrip lightingEnabled />);
     await userEvent.setup().click(await screen.findByRole("radio", { name: "Replay" }));
-    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("14 captured looks on “Holy Forever”."));
+    await waitFor(() => expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("14 captured items on “Holy Forever”."));
   });
 
   it("an expired message (backend sends null) falls back to the headline", async () => {
@@ -459,7 +465,7 @@ describe("Auto | Replay | Record", () => {
   });
 
   it("the song header says what the rows are", () => {
-    expect(lightkeyHeadline(status({ mode: "replay" }), { count: 12, edited: false, label: "fully_captured" })).toBe("Fully captured: 12 captured looks on this song");
+    expect(lightkeyHeadline(status({ mode: "replay" }), { count: 12, edited: false, label: "fully_captured" })).toBe("Fully captured: 12 captured items (12 ramps/steps, 0 loops) on this song");
     expect(lightkeyHeadline(status({ mode: "replay" }), { count: 0, edited: false, label: "manually_cued" })).toBe("Manually cued on this song");
   });
 });

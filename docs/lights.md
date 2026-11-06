@@ -694,9 +694,10 @@ tritanopia to keep the colours apart.
 - A row with several messages is a **look**: "Look - N fixtures". Rows from a recording (`captured`) are drawn in the Lighting colour and badged *Captured*; rows made by hand are *Manual*. Press **Edit** on a row to see its messages grouped by fixture. Each message's address and values are editable (the same typed values as a single cue), each can be deleted, and **Add message** adds one (it saves once its address is valid). A row left with no messages is removed. **−0.1 s / +0.1 s**, the time box, dragging the marker and the arrow keys move a row; times snap to 0.1 s.
 - **Remove fixture from this song** (in each fixture's heading) asks first, then deletes that fixture's messages from every row of the song. Rows left empty are removed.
 - Changing a captured row marks it **edited** (`edited` in the saved cue). With Record chosen, starting a recording on a song that has edited captured looks asks "Recording replaces this song's captured looks, including your edits" first. Deleting a whole captured row counts too: the backend sets `captured_edited` on the song's cue map for it.
-- **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. **Simplify this song** runs on the backend (`POST /api/v1/lights/lightkey/simplify`): it thins and merges the captured rows exactly as a recording does, at Fine (0.25 s), Normal (0.5 s) or Coarse (1 s), asks for the count first ("412 rows → 190") and applies through the normal cue-map save. Manual rows are never touched. Merge, Simplify and Remove fixture each have one step of Undo until the next edit.
+- **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. Ramps merge only with ramps of the same length that start together and move different properties, and never with instant rows (the button is disabled and says why). There is no Simplify action in the app any more: a recording is already fitted, and the backend route (`POST /api/v1/lights/lightkey/simplify`) stays for old clients. Merge and Remove fixture each have one step of Undo until the next edit.
+- **Ramps and loops.** A row with `fade_seconds` is drawn as a bar from its start to start + duration (at least 4 px), the row list shows its duration (`+3.2 s`) and edits it (0 to 60 s, ending inside the song). A song's loops are bands on lanes under the timeline (at most three) and one expandable row each; selecting one shows its period, window, fixtures with phase offsets, properties and a one-cycle sparkline. A loop is never edited: removing it asks first and sends `remove_effect_ids` with the cue-map save (the only way a save changes loops).
 - **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
-- The **Detail** setting (Fine / Normal / Coarse) sits in the Lightkey strip (it no longer changes the capture; the control is removed in a later change) and shows only while Record is chosen. The strip reads "N captured looks on this song"; the old list of takes is gone.
+- The Lightkey strip reads "N captured items (R ramps/steps, E loops) on this song"; there is no Detail setting (the API still accepts `detail_level` and ignores it); the old list of takes is gone.
 
 ## Clearing cues
 
@@ -722,8 +723,7 @@ In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its he
 pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
 is a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
 a small **API** port box (default 8770), **Connect / Check again**, and at the right the labelled **Mode** (Auto | Replay |
-Record) toggle. The **Detail** (Fine / Normal / Coarse) toggle sits beside it while Auto or Record is chosen, and its
-one-line explanation is its tooltip. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
+Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
 1 yielded to the operator"), **Release lights**, **Send a test cue** and **How to find a cue's address**. The Lighting
 computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.
 
@@ -753,7 +753,7 @@ list scrolls inside a fixed height, so 40 songs do not push the page around.
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
-the following-live status, Add cue, Clear song..., Merge rows, Simplify, Undo, then at the right Zoom (- / Fit / +) and
+the following-live status, Add cue, Clear song..., Merge rows, Undo, then at the right Zoom (- / Fit / +) and
 timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
 cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
 how you left it on this device.

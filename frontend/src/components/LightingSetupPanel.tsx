@@ -4,9 +4,8 @@ import type {
   ApplicationState,
   LightingCaptureResponse,
   LightingCue,
+  LightingEffect,
   LightingMethod,
-  LightkeyDetail,
-  LightkeySimplifyResponse,
   LightingPad,
   OscArgument,
   OscLightingCue,
@@ -24,7 +23,6 @@ import {
   sumCounts,
   type ClearCuesRequest,
 } from "./lightingCueConfirmations";
-import { simplifyLightkeyLooks } from "../api";
 import { ClearCuesDialog } from "./ClearCuesDialog";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
@@ -39,9 +37,11 @@ import { accentClasses } from "./ui/accent";
 import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
-import { LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { EffectRow, LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
+import { Dialog } from "./ui/Dialog";
+import { fadeOf, isRamp, mergeBlockReason, rampDescription } from "./lightingSmooth";
 import {
-  capturedCount, detailLabels, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
+  capturedCount, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
   removeFixtureFromRows,
   captureLabelOf,
 } from "./lightingLooks";
@@ -99,8 +99,6 @@ export interface LightingPanelActions {
   /** Removes the selected song's loudness envelope (nothing else). */
   onClearLoudness?: (songKey: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
-  /** Apply "Simplify this song" on the backend and reread the saved cue maps. */
-  onSimplifyLooks: (songKey: string, detail: LightkeyDetail) => Promise<LightkeySimplifyResponse | null>;
 }
 
 export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
@@ -127,7 +125,6 @@ export function LightingSetupPanel({
   onUndoCapture,
   onClearLoudness,
   onSavePads,
-  onSimplifyLooks,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -143,7 +140,7 @@ export function LightingSetupPanel({
   onSaveSettings: (settings: LightsSettingsInput) => void;
   onTest: (note: number, velocity: number) => void;
   onTestOsc?: (address: string, args: OscArgument[]) => void;
-  onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod) => void;
+  onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod, options?: { removeEffectIds?: string[] }) => void;
   onClearAllCues?: (songs: Song[], method: LightingMethod) => void;
 } & Partial<LightingPanelActions>) {
   const testReasonId = useId();
@@ -356,17 +353,26 @@ export function LightingSetupPanel({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [simplify, setSimplify] = useState<{ detail: LightkeyDetail } | null>(null);
-  useEffect(() => { setUndo(null); setSelectedIds([]); setSimplify(null); setPage(0); setFocusId(null); }, [selectedSongKey]);
+  useEffect(() => { setUndo(null); setSelectedIds([]); setPage(0); setFocusId(null); setPendingRemoveEffect(null); }, [selectedSongKey]);
   useEffect(() => {
     setSelectedIds((ids) => (ids.every((id) => oscCues.some((cue) => cue.id === id)) ? ids : ids.filter((id) => oscCues.some((cue) => cue.id === id))));
   }, [oscCues]);
 
-  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false) => {
+  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false, options?: { removeEffectIds?: string[] }) => {
     if (!keepUndo) setUndo(null);
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setOscCues(sortedCues);
-    if (selectedSong) onSaveCues(selectedSong, sortedCues, "osc");
+    if (selectedSong) { if (options) onSaveCues(selectedSong, sortedCues, "osc", options); else onSaveCues(selectedSong, sortedCues, "osc"); }
+  };
+
+  // The song's loops come from the saved map only: rows never carry them, and a row save never changes them.
+  const effects: LightingEffect[] = savedCueMap?.effects ?? [];
+  const [pendingRemoveEffect, setPendingRemoveEffect] = useState<string | null>(null);
+  const effectToRemove = effects.find((effect) => effect.id === pendingRemoveEffect) ?? null;
+  const removeEffect = (id: string) => {
+    persistOscCues(oscCues, true, { removeEffectIds: [id] });
+    setPendingRemoveEffect(null);
+    setFocusId((current) => (current === id ? null : current));
   };
 
   // Timeline edits go through the same save as the cue rows, so the two stay in sync.
@@ -406,7 +412,9 @@ export function LightingSetupPanel({
     if (messages.some((message) => message.address === "")) setOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
     else persistOscCues(oscCues.map((cue) => cue.id === next.id ? edited : cue));
   };
+  const mergeBlocked = mergeBlockReason(oscCues, selectedIds);
   const mergeSelected = (ids: string[]) => {
+    if (mergeBlockReason(oscCues, ids)) return;
     const result = mergeRows(oscCues, ids);
     if (!result) return;
     if (result.changedAddresses.length && !confirmMergeChangesValues(result.changedAddresses)) return;
@@ -421,34 +429,12 @@ export function LightingSetupPanel({
     persistOscCues(removeFixtureFromRows(oscCues, fixture), true);
     setUndo({ cues: before, text: `Undo removing ${fixture}` });
   };
-  // The counts come from the backend (the same thin + merge step a recording uses), never from the browser.
-  const [simplifyPreview, setSimplifyPreview] = useState<LightkeySimplifyResponse | null>(null);
-  const simplifyDetail = simplify?.detail ?? null;
-  const capturedNow = capturedCount(oscCues);
-  useEffect(() => {
-    setSimplifyPreview(null);
-    if (!simplifyDetail || !selectedSongKey) return;
-    let current = true;
-    simplifyLightkeyLooks(selectedSongKey, simplifyDetail, false)
-      .then((response) => { if (current) setSimplifyPreview(response); })
-      .catch(() => { if (current) setSimplifyPreview({ accepted: false, applied: false, message: "Could not count the rows.", rows_before: 0, rows_after: 0, messages_before: 0, messages_after: 0 }); });
-    return () => { current = false; };
-  }, [simplifyDetail, selectedSongKey, capturedNow]);
-  const applySimplify = async () => {
-    if (!simplify || !selectedSongKey || !onSimplifyLooks) return;
-    const before = oscCues;
-    const result = await onSimplifyLooks(selectedSongKey, simplify.detail);
-    if (result?.applied) {
-      setUndo({ cues: before, text: "Undo simplify" });
-      setSimplify(null);
-    }
-  };
   const undoLast = () => {
     if (!undo) return;
     persistOscCues(undo.cues, true);
     setUndo(null);
   };
-  const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), loops: effects.length, edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
   const PAGE_SIZE = 40;
 
   const addOscCue = () => {
@@ -461,10 +447,16 @@ export function LightingSetupPanel({
   const [pendingClear, setPendingClear] = useState<ClearCuesRequest | null>(null);
   const cueMaps = settings?.settings.lights.cue_maps;
 
+  // Clearing a song's OSC cues clears its loops too; the MIDI clear sends nothing about loops.
+  const saveEmpty = (song: Song, forMethod: LightingMethod, loops: LightingEffect[] = []) => {
+    if (forMethod === "osc") onSaveCues(song, [], forMethod, { removeEffectIds: loops.map((effect) => effect.id) });
+    else onSaveCues(song, [], forMethod);
+  };
+
   const clearSelectedSongCues = () => {
     if (!selectedSong || !shownCues.length) return;
     setPendingClear(clearSongRequest(selectedSong.title, countCueMap(savedCueMap, method), () => {
-      if (method === "osc") persistOscCues([]);
+      if (method === "osc") persistOscCues([], false, { removeEffectIds: effects.map((effect) => effect.id) });
       else persistCues([]);
     }));
   };
@@ -476,7 +468,7 @@ export function LightingSetupPanel({
       if (method === "osc") setOscCues([]);
       else setCues([]);
       if (onClearAllCues) onClearAllCues(songs, method);
-      else songs.forEach((song) => onSaveCues(song, [], method));
+      else songs.forEach((song) => saveEmpty(song, method, cueMaps?.[songKey(song)]?.effects));
     }));
   };
 
@@ -486,13 +478,13 @@ export function LightingSetupPanel({
     if (!song) return;
     if (key === selectedSongKey && shownCues.length) { clearSelectedSongCues(); return; }
     const counts = countCueMap(cueMaps?.[key], method);
-    if (counts.looks + counts.handmade === 0) return;
-    setPendingClear(clearSongRequest(song.title, counts, () => onSaveCues(song, [], method)));
+    if (counts.looks + counts.handmade + (counts.loops ?? 0) === 0) return;
+    setPendingClear(clearSongRequest(song.title, counts, () => saveEmpty(song, method, cueMaps?.[key]?.effects)));
   };
   const songChips: SongChip[] = songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
-    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
+    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
   });
 
   const askClearLoudness = () => {
@@ -506,6 +498,7 @@ export function LightingSetupPanel({
   const keepRows = new Set([...selectedIds, ...(focusId ? [focusId] : [])]);
   const rowVisible = (id: string, type: CueTypeId) => !typeFilter.hidden.has(type) || keepRows.has(id);
   const listedOsc = oscCues.filter((cue) => rowVisible(cue.id, classifyOscCue(cue)));
+  const listedEffects = effects.filter((effect) => rowVisible(effect.id, "effect-loop"));
   const listedMidi = cues.filter((cue) => rowVisible(cue.id, classifyMidiCue(cue).type));
   const pageCount = Math.max(1, Math.ceil(listedOsc.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -516,7 +509,7 @@ export function LightingSetupPanel({
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE));
     document.getElementById(`look-row-${focusId}`)?.scrollIntoView?.({ block: "nearest" });
   }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownCues = method === "osc" ? listedOsc : listedMidi;
+  const shownCues = method === "osc" ? [...listedEffects, ...listedOsc] : listedMidi;
   const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
     (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
   ).length;
@@ -536,7 +529,11 @@ export function LightingSetupPanel({
     ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => {
       const type = classifyOscCue(cue);
       const label = isLook(cue) ? lookLabel(cue) : cue.label || cue.address;
-      return { id: cue.id, at: cue.at_seconds, label, color: cue.color ?? null, captured: isCaptured(cue), type, spokenLabel: typeSpokenLabel(type, label) };
+      const ramp = isRamp(cue);
+      return {
+        id: cue.id, at: cue.at_seconds, label, color: cue.color ?? null, captured: isCaptured(cue), type, spokenLabel: typeSpokenLabel(type, label),
+        ...(ramp ? { fade: fadeOf(cue), description: rampDescription(cue, oscCues) } : {}),
+      };
     })
     : cues.map((cue) => {
       const { type, sharp } = classifyMidiCue(cue);
@@ -745,14 +742,13 @@ export function LightingSetupPanel({
         <>
           <Button
             className={CONTROL_34}
-            disabled={selectedIds.length < 2 || pendingOperation !== null}
+            disabled={selectedIds.length < 2 || pendingOperation !== null || Boolean(mergeBlocked)}
             onClick={() => mergeSelected(selectedIds)}
-            title="Tick two or more rows, or Shift-click markers, to merge them."
+            title={mergeBlocked ?? "Tick two or more rows, or Shift-click markers, to merge them."}
             variant="tinted"
           >
             {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
           </Button>
-          <Button aria-label="Simplify this song" className={CONTROL_34} disabled={looks.count === 0 || pendingOperation !== null} onClick={() => setSimplify(simplify ? null : { detail: "normal" })} variant="tinted">Simplify</Button>
           {undo && <Button className={CONTROL_34} onClick={undoLast} variant="secondary">{undo.text}</Button>}
         </>
       )}
@@ -904,28 +900,15 @@ export function LightingSetupPanel({
             selectedIds={selectedIds}
             playhead={elapsed}
             loudness={savedCueMap?.loudness ?? null}
+            effects={method === "osc" ? effects : []}
             hiddenTypes={typeFilter.hidden}
+            mergeBlockedReason={mergeBlocked}
             method={method}
+            onRemoveEffect={(id) => setPendingRemoveEffect(id)}
             onShowAllTypes={typeFilter.showAll}
             onToggleType={typeFilter.toggle}
             songLength={songLength}
           />
-        )}
-
-        {method === "osc" && simplify && (
-          <div className="mt-2 flex flex-wrap items-end gap-3 rounded-ds-lg border border-edge-medium bg-surface-panel p-3" data-testid="simplify-panel" role="group" aria-label="Simplify this song">
-            <Field label="Detail">
-              <Select onChange={(event) => setSimplify({ detail: event.target.value as LightkeyDetail })} value={simplify.detail}>
-                {(Object.keys(detailLabels) as LightkeyDetail[]).map((detail) => <option key={detail} value={detail}>{detailLabels[detail]}</option>)}
-              </Select>
-            </Field>
-            <p className="text-ink" data-testid="simplify-preview">
-              {simplifyPreview === null ? "Counting…" : simplifyPreview.rows_before > 0 ? `${simplifyPreview.rows_before} rows → ${simplifyPreview.rows_after}` : simplifyPreview.message}
-            </p>
-            {simplifyPreview !== null && !simplifyPreview.accepted && simplifyPreview.rows_before > 0 && <p className="text-ink-muted" data-testid="simplify-note">{simplifyPreview.message}</p>}
-            <Button disabled={!simplifyPreview?.accepted || pendingOperation !== null} onClick={() => void applySimplify()} variant="tinted">Apply</Button>
-            <Button onClick={() => setSimplify(null)} variant="secondary">Cancel</Button>
-          </div>
         )}
 
         {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
@@ -939,8 +922,18 @@ export function LightingSetupPanel({
           role={shownCues.length > 0 ? "region" : undefined}
           tabIndex={shownCues.length > 0 ? 0 : undefined}
         >
+          {method === "osc" && listedEffects.map((effect) => (
+            <EffectRow
+              disabled={pendingOperation !== null}
+              effect={effect}
+              highlight={effect.id === focusId}
+              key={effect.id}
+              onRemove={() => setPendingRemoveEffect(effect.id)}
+            />
+          ))}
           {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
             <LookRow
+              allRows={oscCues}
               cue={cue}
               disabled={pendingOperation !== null}
               highlight={cue.id === focusId}
@@ -1006,6 +999,19 @@ export function LightingSetupPanel({
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
       <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
+      <Dialog
+        actions={effectToRemove && (
+          <>
+            <Button autoFocus onClick={() => setPendingRemoveEffect(null)} size="touch" variant="secondary">Keep loop</Button>
+            <Button onClick={() => removeEffect(effectToRemove.id)} size="touch" variant="destructive">Remove loop</Button>
+          </>
+        )}
+        description={effectToRemove && "The motion it plays is lost until you record again."}
+        onClose={() => setPendingRemoveEffect(null)}
+        open={effectToRemove !== null}
+        title="Remove this loop?"
+        tone="danger"
+      />
     </Panel>
   );
 }
