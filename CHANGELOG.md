@@ -13,6 +13,10 @@
 ### Fixed
 
 - The Event Stream is no longer flooded by ProPresenter connection events (one every 10 s pushed real events out within two minutes). Plugins publish a connection event only when the status or detail changes, and the event list keeps one `connection.changed` entry per source for connected and one for not-connected statuses (the newest replaces the older, moving to the top), so the last time an integration was connected stays visible. Dashboard connection entries no longer age out after 5 minutes.
+### Fixed
+
+- Now playing card: **Elapsed time** is now the song position after a pause and resume or a seek (it was counted from the last resume, so 01:09 elapsed with 03:24 remaining on a 05:36 song). Elapsed and remaining come from one source, so they always add up to the song length, also when stopped, after a seek and past the end (remaining holds 00:00).
+- The song countdown no longer runs about 0.57 s behind Playback. It started when the song-started event was handled, after the first playing heartbeat had already reported a position; it is now anchored to Playback's reported position and the heartbeat's receive time, for song start, resume and seek. Docs: `docs/playback-api.md`.
 
 ## [2.43.0-rc.3] - 2026-11-05
 

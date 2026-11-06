@@ -217,6 +217,8 @@ impl Rig {
                 EventPayload::Song {
                     song: s.clone(),
                     index: 0,
+                    position_seconds: None,
+                    observed_at: None,
                 },
             ))
             .await;

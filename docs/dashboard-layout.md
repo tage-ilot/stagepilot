@@ -105,3 +105,10 @@ The earlier fixed-slot implementation was removed because it stored only an
 order and mapped array positions to hard-coded CSS cells. It could not
 represent dimensions, practical two-dimensional placement, responsive layouts,
 or intentional space.
+
+## Now playing: elapsed and remaining
+
+Elapsed time and Time remaining are both computed from one song position (see "Countdown
+accuracy" in `docs/playback-api.md`), so they always add up to the song length: while running,
+stopped, after a resume or seek, and past the end (Time remaining holds 00:00, Elapsed time
+holds the song length).

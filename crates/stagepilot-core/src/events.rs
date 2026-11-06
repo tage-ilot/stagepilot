@@ -161,6 +161,13 @@ pub enum EventPayload {
     Song {
         song: Song,
         index: usize,
+        /// Song position (seconds) Playback reported when it started this song, if the start came
+        /// from a Playback heartbeat. Used to back-date the countdown so it matches Playback.
+        #[serde(default)]
+        position_seconds: Option<f64>,
+        /// When StagePilot received the heartbeat that reported `position_seconds`.
+        #[serde(default)]
+        observed_at: Option<DateTime<Utc>>,
     },
     MidiNote {
         channel: u8,

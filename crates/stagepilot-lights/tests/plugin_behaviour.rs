@@ -134,6 +134,8 @@ async fn publish_song_start(bus: &EventBus, duration: u32) {
         EventPayload::Song {
             song: song(),
             index: 0,
+            position_seconds: None,
+            observed_at: None,
         },
     ))
     .await;
@@ -334,6 +336,8 @@ async fn restart_cancels_old_timeline_and_starts_exactly_one_new_timeline() {
             EventPayload::Song {
                 song: song(),
                 index: 0,
+                position_seconds: None,
+                observed_at: None,
             },
         ))
         .await;

@@ -174,8 +174,30 @@ remaining seconds and song position instead of blanking them; the dashboard keep
 its existing stopped wording and shows the frozen remaining time. Reset position
 still clears it. Remaining time is the Planning Center duration minus the Playback
 position, rounded and clamped at 0. A song start at position under two seconds
-(seek to start, then play) is still the existing song-started restart. Heartbeats are
-one second apart, so about one second of timing error is expected.
+(seek to start, then play) is still the existing song-started restart.
+
+Countdown accuracy. The countdown is anchored to Playback's song clock, not to the moment
+StagePilot finishes handling the event. The first playing heartbeat of a song reports a
+position (0.57 s on the rig, up to 2 s for a start StagePilot still accepts); the Song event
+carries that `position_seconds` and `observed_at` (when the heartbeat was received), and the
+countdown starts at `observed_at - position`, so the clock agrees with Playback instead of
+running that much behind. Resume and seek (`resume_timer_at`, `seek_timer`) take the same
+receive time as the moment the new position was true. Remaining error: Playback sends
+heartbeats about every 100 ms, so the reported position can be up to one heartbeat interval
+older than Playback's clock when it arrives (worst case about 0.1 s, plus network delay, which
+is not measured and not corrected), and the ProPresenter countdown is started by a separate call
+that takes a few tens of milliseconds more (not corrected; the displayed StagePilot clock
+and the lights are anchored to Playback, the ProPresenter countdown is not shifted). A
+heartbeat older than 10 s, or in the future, is not used and the timer falls back to the old
+behaviour.
+
+Elapsed and remaining on the Now playing card are both derived from one position (song length
+from the playing song; position = the timer's `position_seconds` plus the time since
+`started_at` while running, the frozen position or remaining time while stopped), so
+elapsed + remaining always equals the song length, also after a resume or seek (the backend
+re-bases the timer's `duration_seconds` to the time left, which is no longer the song
+length). Past the end the card holds 00:00 remaining and the full length elapsed; the
+ProPresenter countdown's own negative count-up is unchanged.
 
 Consumers: the presentation countdown holds on stop and, on resume or seek, sets the
 remaining seconds and starts it again (seek while stopped only updates the held value).

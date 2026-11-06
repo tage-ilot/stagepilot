@@ -329,7 +329,13 @@ impl Inner {
     // ---- events -------------------------------------------------------------------------------
 
     async fn on_song_event(self: &Arc<Self>, event: &StagePilotEvent) {
-        let EventPayload::Song { song, .. } = &event.payload else {
+        let EventPayload::Song {
+            song,
+            position_seconds,
+            observed_at,
+            ..
+        } = &event.payload
+        else {
             return;
         };
         let duration = song.duration_seconds.unwrap_or(0);
@@ -349,6 +355,7 @@ impl Inner {
             match self.configure_and_start_locked(duration).await {
                 Ok(started_at) => {
                     drop(_guard);
+                    let started_at = song_clock_start(started_at, *position_seconds, *observed_at);
                     let name = self.st().settings.timer_name.clone();
                     self.record_success(&format!("Countdown timer \"{name}\" is running."))
                         .await;
@@ -824,5 +831,52 @@ impl Inner {
                 }),
             ))
             .await;
+    }
+}
+
+/// When song time 0 happened. Without a Playback clock it is `fallback` (the moment the
+/// ProPresenter countdown was started). With one (the song was at `position` when the heartbeat
+/// was received at `observed_at`) it is `observed_at - position`, so the countdown matches
+/// Playback instead of starting late by the heartbeat position and the ProPresenter calls.
+fn song_clock_start(
+    fallback: DateTime<Utc>,
+    position: Option<f64>,
+    observed_at: Option<DateTime<Utc>>,
+) -> DateTime<Utc> {
+    match (position, observed_at) {
+        (Some(position), Some(observed_at)) if position.is_finite() && position >= 0.0 => {
+            let start =
+                observed_at - chrono::Duration::milliseconds((position * 1000.0).round() as i64);
+            start.min(fallback)
+        }
+        _ => fallback,
+    }
+}
+
+#[cfg(test)]
+mod song_clock_tests {
+    use super::song_clock_start;
+    use chrono::{Duration, TimeZone, Utc};
+
+    #[test]
+    fn countdown_start_is_back_dated_by_the_playback_position() {
+        let observed = Utc.with_ymd_and_hms(2026, 11, 6, 12, 0, 10).unwrap();
+        let fallback = observed + Duration::milliseconds(80); // ProPresenter calls finished later
+                                                              // Playback was 0.57 s into the song when the heartbeat arrived: song time 0 was 0.57 s earlier.
+        assert_eq!(
+            song_clock_start(fallback, Some(0.57), Some(observed)),
+            observed - Duration::milliseconds(570)
+        );
+        // No Playback clock (MIDI start, manual Next): the moment the countdown started.
+        assert_eq!(song_clock_start(fallback, None, None), fallback);
+        // Nonsense positions are ignored.
+        assert_eq!(
+            song_clock_start(fallback, Some(f64::NAN), Some(observed)),
+            fallback
+        );
+        assert_eq!(
+            song_clock_start(fallback, Some(-1.0), Some(observed)),
+            fallback
+        );
     }
 }

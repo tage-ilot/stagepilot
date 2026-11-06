@@ -1638,7 +1638,7 @@ describe("Dashboard connection configuration panels", () => {
       });
 
       expect(screen.getByText("04:22")).toBeInTheDocument();
-      expect(screen.getByText("00:00")).toBeInTheDocument();
+      expect(screen.getByText("00:01")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

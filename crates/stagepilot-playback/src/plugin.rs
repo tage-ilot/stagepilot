@@ -37,7 +37,7 @@ use stagepilot_core::events::{new_event, EventPayload, EventType, Integration};
 use stagepilot_core::plugin::Plugin;
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
 use stagepilot_core::state::{ConnectionStatus, PluginHealth, PluginStatus, ServicePlan};
-use stagepilot_core::state_service::StateService;
+use stagepilot_core::state_service::{SongClock, StateService};
 use stagepilot_core::store::StateStore;
 use std::collections::VecDeque;
 use std::future::Future;
@@ -396,7 +396,8 @@ impl StateView for CoreState {
 
 enum Item {
     Connection,
-    Observation(Observation),
+    /// The observation and when its heartbeat was received.
+    Observation(Observation, DateTime<Utc>),
 }
 
 struct Shared {
@@ -1312,7 +1313,7 @@ impl Inner {
             }
             if self.with_arbiter(|a| a.allows(Source::PlaybackApi)) {
                 for o in observations {
-                    self.put(&mut s, generation, Item::Observation(o));
+                    self.put(&mut s, generation, Item::Observation(o, at));
                 }
             }
             true
@@ -1357,10 +1358,10 @@ impl Inner {
             }
             match item {
                 Item::Connection => self.publish_connection().await,
-                Item::Observation(observation) => {
+                Item::Observation(observation, received_at) => {
                     if self.with_arbiter(|a| a.allows(Source::PlaybackApi)) {
                         self.publish_connection().await;
-                        self.dispatch(&observation).await;
+                        self.dispatch(&observation, received_at).await;
                     }
                 }
             }
@@ -1368,7 +1369,7 @@ impl Inner {
     }
 
     /// Execute what the mapper decides (Python `PlaybackMapper.dispatch`).
-    async fn dispatch(&self, observation: &Observation) {
+    async fn dispatch(&self, observation: &Observation, received_at: DateTime<Utc>) {
         let state = self.store.snapshot();
         let decision = lock(&self.shared).mapper.decide(observation, &state);
         if let Some(index) = decision.restore_up_next {
@@ -1378,6 +1379,23 @@ impl Inner {
         let Some(plan) = decision.plan else { return };
         let source = "playback_api";
         let d = &self.dispatcher;
+        // Playback reported this position when the heartbeat arrived; tell the countdown so it
+        // counts from then and not from whenever this action finishes.
+        let clock = observation
+            .event
+            .position
+            .map(|position_seconds| SongClock {
+                position_seconds,
+                observed_at: received_at,
+            });
+        let clocked = clock.is_some()
+            && matches!(
+                plan,
+                Plan::Restart | Plan::Position(_) | Plan::ResumeAt(_) | Plan::SeekTo(_)
+            );
+        if clocked {
+            self.state_service.set_song_clock(clock);
+        }
         let _ = match plan {
             Plan::Stop => d.dispatch(PbAction::StopTimer, source).await,
             Plan::StopAt(p) => d.stop_timer_at(p, source).await,
@@ -1386,6 +1404,9 @@ impl Inner {
             Plan::ResumeAt(p) => d.resume_timer_at(p, source).await,
             Plan::SeekTo(p) => d.seek_timer(p, source).await,
         };
+        if clocked {
+            self.state_service.set_song_clock(None);
+        }
     }
 
     // ---- scanning ---------------------------------------------------------------------------
