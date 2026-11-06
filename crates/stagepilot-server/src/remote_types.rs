@@ -102,6 +102,20 @@ pub trait RemoteManager: Send + Sync {
     async fn regenerate(&self) -> Result<(), ManagerError> {
         Ok(())
     }
+    /// The user-entered install location (city). Display-only; no coordinates are ever held.
+    async fn location(&self) -> Option<String> {
+        None
+    }
+    fn supports_location(&self) -> bool {
+        false
+    }
+    /// Store (or, with `None`, clear) the install location; returns what was stored.
+    async fn set_location(
+        &self,
+        _location: Option<String>,
+    ) -> Result<Option<String>, ManagerError> {
+        Err(ManagerError::Value("unsupported".into()))
+    }
     /// `manager.bootstrap`: the enrolled identity the diagnostics upload reuses.
     fn bootstrap(&self) -> Option<Arc<dyn DiagnosticsBootstrap>> {
         None

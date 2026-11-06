@@ -36,6 +36,21 @@ pub fn sanitize_device_name(value: Option<&str>) -> Option<String> {
     Some(cleaned.chars().take(253).collect())
 }
 
+/// Longest self-reported install location (e.g. "Pasadena, CA") the app sends.
+pub const MAX_LOCATION_CHARS: usize = 80;
+
+/// Validate a self-reported install location before it is stored or sent: control characters
+/// are dropped, whitespace trimmed, and an empty or over-long value is rejected (never
+/// truncated, so a half-cut city name cannot be reported). Untrusted, display-only.
+pub fn sanitize_location(value: Option<&str>) -> Option<String> {
+    let cleaned: String = value?.chars().filter(|c| !c.is_control()).collect();
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() || cleaned.chars().count() > MAX_LOCATION_CHARS {
+        return None;
+    }
+    Some(cleaned.to_owned())
+}
+
 fn credential_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
-use crate::bootstrap::{parse_retry_after, sanitize_device_name, Pacing};
+use crate::bootstrap::{parse_retry_after, sanitize_device_name, sanitize_location, Pacing};
 use crate::control::Phase;
 use crate::error::{RemoteError, Res};
 use crate::files::{
@@ -53,6 +53,7 @@ pub struct BetaRemoteControl {
     /// Cleanup-only compatibility path for tokens written by older beta builds.
     pub token_path: PathBuf,
     device_name: Option<String>,
+    location: Option<String>,
 }
 
 type Object = Map<String, Value>;
@@ -78,7 +79,15 @@ impl BetaRemoteControl {
             action_handlers: BTreeMap::new(),
             connector_token: None,
             device_name: sanitize_device_name(device_name),
+            location: None,
         }
+    }
+
+    /// The user-entered install location (city), sent with the device name when set. Only the
+    /// final city text is ever sent; display-only on the control plane.
+    pub fn with_location(mut self, location: Option<&str>) -> Self {
+        self.location = sanitize_location(location);
+        self
     }
 
     /// Handlers for operator-queued pending actions (see `apply_pending_actions`).
@@ -383,16 +392,20 @@ impl BetaRemoteControl {
 
     fn request(&mut self, method: &str, path: &str, mut payload: Value) -> Res<Object> {
         let mut query: Vec<(String, String)> = Vec::new();
-        if let Some(name) = &self.device_name {
-            if ["/status", "/provision", "/reconcile"]
-                .iter()
-                .any(|s| path.ends_with(s))
-            {
+        if ["/status", "/provision", "/reconcile"]
+            .iter()
+            .any(|s| path.ends_with(s))
+        {
+            // GET requests carry these as query parameters, not a JSON body.
+            for (key, value) in [
+                ("deviceName", &self.device_name),
+                ("location", &self.location),
+            ] {
+                let Some(value) = value else { continue };
                 if method == "GET" {
-                    // GET requests carry deviceName as a query parameter, not a JSON body.
-                    query.push(("deviceName".into(), name.clone()));
+                    query.push((key.into(), value.clone()));
                 } else if let Value::Object(map) = &mut payload {
-                    map.insert("deviceName".into(), json!(name));
+                    map.insert(key.into(), json!(value));
                 }
             }
         }

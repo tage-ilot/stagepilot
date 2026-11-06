@@ -91,6 +91,11 @@ interface Installation {
   // for auth, matching, or any security decision -- an installation can
   // claim any value here. See docs/remote-control-plane.md.
   deviceName?: string;
+  // Self-reported city (e.g. "Pasadena, CA") sent by the app. UNTRUSTED and
+  // display-only, like deviceName: never used for auth or any security
+  // decision. Preferred over the network (Cloudflare edge) guess, but below
+  // an admin `locationOverride`.
+  reportedLocation?: string;
   // Set true the first time this installation completes an actual
   // provisioning side effect (tunnel/DNS created via ensureProvisioned()).
   // Distinguishes "never enrolled Remote Access" (lightweight-check-in-only
@@ -439,6 +444,16 @@ function sanitizeDeviceName(value: unknown): string | undefined {
   return cleaned.slice(0, 253);
 }
 
+// Self-reported, UNTRUSTED, display-only city. Returns undefined when the
+// value is absent/not a string/has control characters/is over 80 chars after
+// trim (rejected, never truncated); '' means "clear".
+function sanitizeReportedLocation(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 // Dedicated, much larger size cap for diagnostic bundle uploads only -- the
 // 4096-byte cap enforced by body() above is unchanged for every other route.
 // Returns the raw bytes (the bundle is an opaque JSON/text blob built by the
@@ -465,14 +480,39 @@ function publicInstallation(installation: Installation): Record<string, unknown>
   };
 }
 
+// Known test-environment device names (CI runners and the AgentHub dev host).
+// deviceName is untrusted self-reported data: this is display-only and must
+// never be used for auth or any security decision.
+const TEST_DEVICE_PATTERNS: readonly RegExp[] = [
+  /^runnervm[a-z0-9]+$/i,
+  /^[a-z]{3}\d{2}-[a-z]{2}\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9a-f]{12}\.local$/i,
+  /^agent-hub$/i,
+  /^stagepilot-ci$/i,
+];
+
+export function isKnownTestDevice(deviceName: string | undefined): boolean {
+  if (typeof deviceName !== 'string') return false;
+  return TEST_DEVICE_PATTERNS.some((pattern) => pattern.test(deviceName));
+}
+
 function formatInstallationLocation(installation: Installation): string {
-  // Unpinned installs expire after 48h by policy, so an unpinned install with
-  // no geolocation is treated as a test install; a pinned one stays Unknown.
+  // Only an unpinned install whose self-reported deviceName matches a known
+  // test host shows "Test Install"; any other install with no geolocation is
+  // Unknown. Display-only, never a security decision.
   return installation.locationOverride
+    || installation.reportedLocation
     || installation.lastCity
     || installation.lastRegion
     || installation.lastCountry
-    || (installation.keep ? 'Unknown' : 'Test Install');
+    || (!installation.keep && isKnownTestDevice(installation.deviceName) ? 'Test Install' : 'Unknown');
+}
+
+// Where the displayed location came from, for the admin page hint.
+function installationLocationSource(installation: Installation): string {
+  if (installation.locationOverride) return 'admin';
+  if (installation.reportedLocation) return 'app';
+  if (installation.lastCity || installation.lastRegion || installation.lastCountry) return 'network';
+  return 'none';
 }
 
 function publicAlert(alert: AlertRecord): Record<string, unknown> {
@@ -811,7 +851,10 @@ export class Registry {
         // the standard Fetch API, and this status route must remain a
         // normal body-less GET for the many plain status polls that never
         // send deviceName at all.
-        if (this.applyDeviceName(installation, url.searchParams.get('deviceName'))) {
+        const nameChanged = this.applyDeviceName(installation, url.searchParams.get('deviceName'));
+        // An absent `location` param never erases a stored value; an empty one clears it.
+        const locationChanged = this.applyReportedLocation(installation, url.searchParams.get('location'));
+        if (nameChanged || locationChanged) {
           installation.updatedAt = new Date().toISOString();
           await this.save(installation);
         }
@@ -1147,7 +1190,7 @@ export class Registry {
   private async enroll(request: Request): Promise<Response> {
     const input = await body(request);
     const idempotencyKey = input.nonce;
-    const allowedKeys = new Set(['nonce', 'deviceName']);
+    const allowedKeys = new Set(['nonce', 'deviceName', 'location']);
     if (
       !Object.keys(input).every((key) => allowedKeys.has(key))
       || typeof idempotencyKey !== 'string'
@@ -1185,6 +1228,7 @@ export class Registry {
       installation.credentialGeneration = (installation.credentialGeneration ?? 0) + 1;
       installation.updatedAt = new Date().toISOString();
       this.applyDeviceName(installation, input.deviceName);
+      this.applyReportedLocation(installation, input.location);
       stats.activeInstallations += 1;
       await this.state.storage.put({
         [`installation:${id}`]: installation,
@@ -1235,6 +1279,7 @@ export class Registry {
         updatedAt: now,
       };
       this.applyDeviceName(installation, input.deviceName);
+      this.applyReportedLocation(installation, input.location);
       const nextQuota: SourceQuota = {
         startedAt: quota?.startedAt ?? nowSeconds,
         count: (quota?.count ?? 0) + 1,
@@ -1255,7 +1300,8 @@ export class Registry {
       // common case for the lightweight check-in that calls this route on
       // every run() start): still allow deviceName to be refreshed/stored
       // without touching credential/phase/quota bookkeeping.
-      if (this.applyDeviceName(installation, input.deviceName)) {
+      const nameChanged = this.applyDeviceName(installation, input.deviceName);
+      if (this.applyReportedLocation(installation, input.location) || nameChanged) {
         installation.updatedAt = new Date().toISOString();
         await this.save(installation);
       }
@@ -1473,18 +1519,23 @@ export class Registry {
     installation.phase = 'enabling';
     installation.updatedAt = new Date().toISOString();
     this.applyDeviceName(installation, input.deviceName);
+    this.applyReportedLocation(installation, input.location);
     await this.save(installation);
     return this.ensureProvisioned(installation);
   }
 
   private async reconcile(request: Request, installation: Installation): Promise<Response> {
     let deviceNameInput: unknown;
+    let locationInput: unknown;
     try {
-      deviceNameInput = (await body(request)).deviceName;
+      const input = await body(request);
+      deviceNameInput = input.deviceName;
+      locationInput = input.location;
     } catch {
       deviceNameInput = undefined;
     }
-    if (this.applyDeviceName(installation, deviceNameInput)) {
+    const nameChanged = this.applyDeviceName(installation, deviceNameInput);
+    if (this.applyReportedLocation(installation, locationInput) || nameChanged) {
       installation.updatedAt = new Date().toISOString();
       await this.save(installation);
     }
@@ -1705,6 +1756,8 @@ export class Registry {
         expiresAt: installation.keep || installation.revoked ? null : new Date(Date.parse(installation.createdAt) + ttlMs).toISOString(),
         location: formatInstallationLocation(installation),
         locationOverride: installation.locationOverride ?? '',
+        reportedLocation: installation.reportedLocation ?? '',
+        locationSource: installationLocationSource(installation),
         everProvisioned: installation.everProvisioned ?? false,
       }));
     return reply({ installations });
@@ -2152,6 +2205,21 @@ export class Registry {
     if (!hadDeviceNameBefore && !installation.label) {
       installation.label = deviceName;
     }
+    return true;
+  }
+
+  // Applies a self-reported location: validates and stores it, '' clears it,
+  // absent/invalid values change nothing. Display-only. Caller persists.
+  private applyReportedLocation(installation: Installation, raw: unknown): boolean {
+    const location = sanitizeReportedLocation(raw);
+    if (location === undefined) return false;
+    if (location === '') {
+      if (installation.reportedLocation === undefined) return false;
+      delete installation.reportedLocation;
+      return true;
+    }
+    if (location === installation.reportedLocation) return false;
+    installation.reportedLocation = location;
     return true;
   }
 
