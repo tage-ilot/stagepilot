@@ -1874,6 +1874,9 @@ impl Inner {
     async fn set_connection(&self, status: ConnectionStatus, detail: &str) {
         {
             let mut st = self.st();
+            if st.connection_status == status && st.detail.as_deref() == Some(detail) {
+                return;
+            }
             st.connection_status = status;
             st.detail = Some(detail.to_string());
         }

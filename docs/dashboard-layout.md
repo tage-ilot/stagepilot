@@ -21,6 +21,13 @@ While editing:
 - Select **Add spacer** to preserve an intentional gap.
 - Select **Done** to lock the layout again.
 
+The Event Stream lists the latest 10 real events from the last 5 minutes. Connection
+status (`connection.changed`) is kept apart from them: the backend keeps one entry per
+integration for a connected status and one for a not-connected status, each replaced
+(moved to the top with a fresh time) when the integration reports again. Those entries do not
+age out, so you can always see when each integration was last connected, and a periodic
+status check can never push song, timer or playback events out of the list.
+
 Service Plan and Recent Event Stream scroll internally when their saved height
 is smaller than their content. Each widget has minimum dimensions that protect
 its controls and primary information.

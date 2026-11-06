@@ -768,3 +768,64 @@ async fn a_failing_timers_current_call_does_not_break_the_probe() {
     assert_eq!(snapshot.timers[0].state, None);
     r.plugin.stop().await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn repeated_healthy_checks_publish_no_further_connection_event_but_refresh_last_checked() {
+    let fake = Fake::new();
+    let settings = ProPresenterSettings {
+        health_check_interval_seconds: 0.03,
+        ..quick()
+    };
+    let r = rig_with(vec![fake.clone()], settings);
+    r.plugin.start().await.unwrap();
+    wait_for("connected event", || {
+        events_of(&r, EventType::ConnectionChanged).iter().any(|e| {
+            matches!(
+                &e.payload,
+                EventPayload::Connection {
+                    status: ConnectionStatus::Connected,
+                    ..
+                }
+            )
+        })
+    })
+    .await;
+    let events_before = events_of(&r, EventType::ConnectionChanged).len();
+    let first_checked = r.plugin.snapshot(false).await.last_checked_at;
+    let calls = fake.list_calls.load(Ordering::SeqCst);
+    wait_for("several more health checks", || {
+        fake.list_calls.load(Ordering::SeqCst) >= calls + 4
+    })
+    .await;
+    // Nothing changed: no further event, but "last checked" moved on.
+    assert_eq!(
+        events_of(&r, EventType::ConnectionChanged).len(),
+        events_before
+    );
+    assert!(r.plugin.snapshot(false).await.last_checked_at > first_checked);
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_changed_connection_status_still_publishes_an_event() {
+    let fake = recovering(vec![
+        Err(PpError::Connection("offline".into())),
+        Ok(vec![timer("Song Countdown", "timer-uuid", 0, true)]),
+    ]);
+    let r = rig_with(vec![fake], quick());
+    r.plugin.start().await.unwrap();
+    wait_for("connected after an outage", || {
+        events_of(&r, EventType::ConnectionChanged).iter().any(|e| {
+            matches!(
+                &e.payload,
+                EventPayload::Connection {
+                    status: ConnectionStatus::Connected,
+                    ..
+                }
+            )
+        })
+    })
+    .await;
+    assert!(events_of(&r, EventType::ConnectionChanged).len() >= 2);
+    r.plugin.stop().await.unwrap();
+}

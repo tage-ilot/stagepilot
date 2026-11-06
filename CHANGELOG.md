@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The Event Stream is no longer flooded by ProPresenter connection events (one every 10 s pushed real events out within two minutes). Plugins publish a connection event only when the status or detail changes, and the event list keeps one `connection.changed` entry per source for connected and one for not-connected statuses (the newest replaces the older, moving to the top), so the last time an integration was connected stays visible. Dashboard connection entries no longer age out after 5 minutes.
+
 ## [2.43.0-rc.3] - 2026-11-05
 
 Release candidate 3 (rc.1 stopped on a stray build-directory link committed by mistake; rc.2 stopped on a slow-runner test timeout on macOS Intel; neither was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:

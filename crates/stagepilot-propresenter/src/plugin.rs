@@ -766,9 +766,14 @@ impl Inner {
     async fn set_connection(&self, status: ConnectionStatus, detail: &str) {
         {
             let mut st = self.st();
+            st.last_checked_at = Some(Utc::now());
+            // The periodic check only refreshes `last_checked_at` when nothing changed; an
+            // event every 10 s would flood the event stream.
+            if st.connection_status == status && st.connection_detail.as_deref() == Some(detail) {
+                return;
+            }
             st.connection_status = status;
             st.connection_detail = Some(detail.to_string());
-            st.last_checked_at = Some(Utc::now());
         }
         self.bus
             .publish(new_event(

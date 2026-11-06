@@ -37,6 +37,16 @@ STAGEPILOT_PROPRESENTER_RECONNECT_MAX_SECONDS=30
 STAGEPILOT_PROPRESENTER_HEALTH_CHECK_SECONDS=10
 ```
 
+## Connection status
+
+ProPresenter is checked every few seconds (`STAGEPILOT_PROPRESENTER_HEALTH_CHECK_SECONDS`
+while a timer is running, the reconnect interval otherwise). A connection event is published
+only when the status or its detail changes; an unchanged check just refreshes "last checked".
+In the event stream (`recent_events`, also in `GET /api/v1/state`) the newest `connection.changed`
+entry per source replaces the older one, separately for connected and not-connected
+statuses, so the last time ProPresenter was properly connected stays visible after a
+disconnect.
+
 ## Timer sequence
 
 For `song.started` and `song.restarted`, StagePilot performs:

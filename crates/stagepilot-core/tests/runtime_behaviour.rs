@@ -525,6 +525,93 @@ async fn recent_events_are_bounded_and_in_publication_order() {
     assert_eq!(store.snapshot().recent_events.len(), 5);
 }
 
+fn connection_event(source: &str, status: ConnectionStatus) -> StagePilotEvent {
+    new_event(
+        EventType::ConnectionChanged,
+        source,
+        EventPayload::Connection {
+            integration: Integration::Propresenter,
+            status,
+            detail: None,
+        },
+    )
+}
+
+#[tokio::test]
+async fn connection_events_replace_their_predecessor_and_never_displace_real_events() {
+    let bus = EventBus::new();
+    let store = StateStore::default();
+    let service = StateService::new(bus.clone(), store.clone(), 6, 50);
+    service.start();
+    bus.publish(empty_event(EventType::ApplicationStarted, "t"))
+        .await;
+    bus.publish(connection_event(
+        "propresenter",
+        ConnectionStatus::Connected,
+    ))
+    .await;
+    bus.publish(empty_event(EventType::ApplicationStopping, "t"))
+        .await;
+    // A flood of repeats (and of another source) must not push the real events out.
+    for _ in 0..40 {
+        bus.publish(connection_event(
+            "propresenter",
+            ConnectionStatus::Connected,
+        ))
+        .await;
+        bus.publish(connection_event("lights", ConnectionStatus::Connected))
+            .await;
+    }
+    let events = store.snapshot().recent_events;
+    let types: Vec<_> = events
+        .iter()
+        .map(|e| (e.event_type.as_str(), e.source.as_str()))
+        .collect();
+    assert_eq!(
+        types,
+        [
+            ("application.started", "t"),
+            ("application.stopping", "t"),
+            ("connection.changed", "propresenter"),
+            ("connection.changed", "lights"),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn connected_and_not_connected_entries_are_kept_separately_per_source() {
+    let bus = EventBus::new();
+    let store = StateStore::default();
+    let service = StateService::new(bus.clone(), store.clone(), 20, 50);
+    service.start();
+    bus.publish(connection_event(
+        "propresenter",
+        ConnectionStatus::Connected,
+    ))
+    .await;
+    let connected_id = store.snapshot().recent_events[0].id;
+    bus.publish(connection_event(
+        "propresenter",
+        ConnectionStatus::Disconnected,
+    ))
+    .await;
+    bus.publish(connection_event("propresenter", ConnectionStatus::Error))
+        .await;
+    let events = store.snapshot().recent_events;
+    // The last "Connected" survives; the Error replaced the Disconnected entry.
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].id, connected_id);
+    // A fresh Connected replaces the old Connected and moves to the end (newest).
+    bus.publish(connection_event(
+        "propresenter",
+        ConnectionStatus::Connected,
+    ))
+    .await;
+    let events = store.snapshot().recent_events;
+    assert_eq!(events.len(), 2);
+    assert_ne!(events[1].id, connected_id);
+}
+
 #[tokio::test]
 async fn revision_increases_on_every_mutation_and_a_slow_observer_never_blocks_writers() {
     let store = StateStore::default();

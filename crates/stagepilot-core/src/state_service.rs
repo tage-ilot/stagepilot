@@ -51,6 +51,9 @@ struct Inner {
     action_lock: tokio::sync::Mutex<()>,
     action_results: Mutex<HashMap<Uuid, ActionOutcome>>,
     active: AtomicBool,
+    /// Newest `connection.changed` entry in `recent_events` per (source, connected?) so a new
+    /// one replaces it instead of flooding the list.
+    connection_entries: Mutex<HashMap<(String, bool), Uuid>>,
 }
 
 #[derive(Clone)]
@@ -83,6 +86,7 @@ impl StateService {
                 action_lock: tokio::sync::Mutex::new(()),
                 action_results: Mutex::new(HashMap::new()),
                 active: AtomicBool::new(false),
+                connection_entries: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -964,7 +968,27 @@ impl StateService {
 
     fn record_event(&self, event: &StagePilotEvent) {
         let limit = self.inner.recent_event_limit;
+        // A connection event replaces the previous one of the same source and kind (connected
+        // vs not connected), so periodic status checks never push real events out of the list
+        // while the last time the source was properly connected stays visible.
+        let replaces = match (&event.event_type, &event.payload) {
+            (EventType::ConnectionChanged, EventPayload::Connection { status, .. }) => {
+                let key = (event.source.clone(), *status == ConnectionStatus::Connected);
+                let previous = self
+                    .inner
+                    .connection_entries
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(key, event.id);
+                Some(previous)
+            }
+            _ => None,
+        };
+        let previous = replaces.flatten();
         self.inner.store.mutate(|s| {
+            if let Some(previous) = previous {
+                s.recent_events.retain(|e| e.id != previous);
+            }
             s.recent_events.push(EventSummary {
                 id: event.id,
                 event_type: event.event_type.as_str(),
