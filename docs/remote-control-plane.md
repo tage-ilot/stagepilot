@@ -39,3 +39,28 @@ Per run, oldest first:
 
 A failure on one installation logs a generic message, is skipped, and is retried next hour.
 A never-provisioned backlog of ~400 drains in about 4 runs.
+
+## Locations, Test Install, and the manual override
+
+The admin page's **Locations** list (API route `/v1/admin/cities`, response key `cities`, kept for
+compatibility) groups non-revoked installations by their effective location. The same value is
+the `location` shown on each installation row and on alerts.
+
+Automatic location comes from Cloudflare edge geolocation (`request.cf` city/region/country).
+That reflects the registered area of the network address the request came from (often the ISP's
+hub or a VPN/carrier exit), **not** the physical site, so it can be wrong. StagePilot still never
+records or uses the raw IP address.
+
+Effective location, in order:
+
+1. `locationOverride`, if set by the operator;
+2. geolocation city, then region, then country;
+3. otherwise `Test Install` if the installation is not pinned (unpinned installs expire after 48h,
+   so they are test installs), or `Unknown` if it is pinned.
+
+`PATCH /v1/admin/installations/:id/location` with `{"location": "Pasadena"}` (admin bearer token;
+same id format as `/label`). The value is trimmed, at most 80 characters, with no control
+characters (400 otherwise; 404 for an unknown id). An empty string clears the override. The
+override is display-only: never used for auth or any security decision, and geolocation refreshes
+never overwrite it. The admin list exposes it as `locationOverride`, and the page has an inline
+"Set location" editor next to the name editor.

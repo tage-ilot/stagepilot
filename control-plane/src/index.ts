@@ -81,6 +81,10 @@ interface Installation {
   // Pinned: never auto-revoked by the expiry sweep. Set via the admin keep
   // route, or once by the grandfather migration for provisioned installs.
   keep?: boolean;
+  // Operator-set display location (admin location route). DISPLAY-ONLY: never
+  // used for auth or any security decision, and never written by
+  // recordRequestGeo. Wins over geolocation and over "Test Install".
+  locationOverride?: string;
   // Self-reported device hostname (Python `platform.node()`), sent on the
   // always-on lightweight check-in and on the authenticated status/
   // provision/reconcile requests. UNTRUSTED and display-only: never use
@@ -462,10 +466,13 @@ function publicInstallation(installation: Installation): Record<string, unknown>
 }
 
 function formatInstallationLocation(installation: Installation): string {
-  return installation.lastCity
-    ?? installation.lastRegion
-    ?? installation.lastCountry
-    ?? 'Unknown';
+  // Unpinned installs expire after 48h by policy, so an unpinned install with
+  // no geolocation is treated as a test install; a pinned one stays Unknown.
+  return installation.locationOverride
+    || installation.lastCity
+    || installation.lastRegion
+    || installation.lastCountry
+    || (installation.keep ? 'Unknown' : 'Test Install');
 }
 
 function publicAlert(alert: AlertRecord): Record<string, unknown> {
@@ -661,6 +668,11 @@ export class Registry {
       if (request.method === 'PATCH' && adminSetLabel) {
         if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
         return await this.adminSetLabel(request, adminSetLabel[1]);
+      }
+      const adminSetLocation = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/location$/);
+      if (request.method === 'PATCH' && adminSetLocation) {
+        if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
+        return await this.adminSetLocation(request, adminSetLocation[1]);
       }
       const adminSetArchived = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/archive$/);
       if (request.method === 'PATCH' && adminSetArchived) {
@@ -1692,6 +1704,7 @@ export class Registry {
         // When the sweep will revoke this installation; null if pinned/revoked.
         expiresAt: installation.keep || installation.revoked ? null : new Date(Date.parse(installation.createdAt) + ttlMs).toISOString(),
         location: formatInstallationLocation(installation),
+        locationOverride: installation.locationOverride ?? '',
         everProvisioned: installation.everProvisioned ?? false,
       }));
     return reply({ installations });
@@ -1713,6 +1726,27 @@ export class Registry {
     const updated: Installation = { ...installation, label, updatedAt: new Date().toISOString() };
     await this.state.storage.put(`installation:${id}`, updated);
     return reply({ ...publicInstallation(updated), label: updated.label, location: formatInstallationLocation(updated) });
+  }
+
+  // Operator-set display location. Display-only: never used for auth or any
+  // security decision. Trimmed, max 80 chars, no control characters; an empty
+  // string clears the override (geolocation / Test Install applies again).
+  private async adminSetLocation(request: Request, id: string): Promise<Response> {
+    const installation = await this.state.storage.get<Installation>(`installation:${id}`);
+    if (!installation) return reply({ error: 'not found' }, 404);
+    const input = await body(request);
+    const { location } = input;
+    if (typeof location !== 'string') return reply({ error: 'invalid request' }, 400);
+    const trimmed = location.trim();
+    // eslint-disable-next-line no-control-regex
+    if (trimmed.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(trimmed)) {
+      return reply({ error: 'invalid request' }, 400);
+    }
+    const updated: Installation = { ...installation, updatedAt: new Date().toISOString() };
+    if (trimmed) updated.locationOverride = trimmed;
+    else delete updated.locationOverride;
+    await this.state.storage.put(`installation:${id}`, updated);
+    return reply({ ...publicInstallation(updated), label: updated.label || '', locationOverride: updated.locationOverride ?? '', location: formatInstallationLocation(updated) });
   }
 
   // Hide/unhide from the default admin-panel list WITHOUT touching access.
@@ -1749,6 +1783,9 @@ export class Registry {
     return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, keep: updated.keep ?? false, location: formatInstallationLocation(updated) });
   }
 
+  // NOTE: the route (/v1/admin/cities) and its `cities` response key keep their
+  // original names for compatibility with deployed admin pages; the UI calls
+  // this the "Locations" list.
   // Simple passive "which cities are running an installation" list for the
   // fleet admin panel. Location comes only from `lastCity`/`lastRegion`/
   // `lastCountry`, themselves populated from Cloudflare edge geolocation
