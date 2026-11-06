@@ -209,3 +209,51 @@ fn nothing_is_due_before_its_slot() {
     assert!(q.pop_due(0.001).is_none());
     assert!(q.pop_due(0.005).is_some());
 }
+
+#[test]
+fn ramps_keep_a_quarter_of_the_slots_while_steps_drain() {
+    use stagepilot_lights::lightkey_replay::RAMP_SHARE_EVERY;
+    let mut q = PacingQueue::new();
+    for i in 0..60 {
+        q.push(msg(&addr(i), 1.0), Kind::Step, 0.0, false);
+    }
+    for i in 100..110 {
+        q.push(msg(&addr(i), 0.5), Kind::Ramp, 0.0, false);
+    }
+    let sent = drain(&mut q, 0.0);
+    let kinds: Vec<Kind> = sent.iter().map(|s| s.2).collect();
+    // every RAMP_SHARE_EVERY-th slot is a ramp value while there are ramp values waiting
+    for (n, k) in kinds
+        .iter()
+        .take(10 * RAMP_SHARE_EVERY as usize)
+        .enumerate()
+    {
+        assert_eq!(
+            *k == Kind::Ramp,
+            (n + 1) % RAMP_SHARE_EVERY as usize == 0,
+            "slot {n}"
+        );
+    }
+    // the steps still leave in order and all of them go
+    let steps: Vec<usize> = sent
+        .iter()
+        .filter(|s| s.2 == Kind::Step)
+        .map(|s| value(&s.1) as usize)
+        .collect();
+    assert_eq!(steps.len(), 60);
+    // the first step is not held up by a ramp
+    assert_eq!(kinds[0], Kind::Step);
+}
+
+#[test]
+fn waiting_messages_can_be_dropped_without_taking_a_slot() {
+    let mut q = PacingQueue::new();
+    for i in 0..10 {
+        q.push(msg(&addr(i), i as f64), Kind::Step, 0.0, false);
+    }
+    assert_eq!(q.drop_where(&|m| m.address == addr(3)), 1);
+    let sent = drain(&mut q, 0.0);
+    assert_eq!(sent.len(), 9);
+    // no hole where it was
+    assert!((sent[8].0 - 8.0 * PACKET_GAP_SECONDS).abs() < 1e-9);
+}

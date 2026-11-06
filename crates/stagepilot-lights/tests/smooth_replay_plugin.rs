@@ -493,3 +493,69 @@ async fn every_new_operator_change_restarts_the_thirty_seconds() {
     r.run_with_echo(11.0).await;
     assert!(r.of(&dim("A")).len() > held);
 }
+
+// ------------------------------------------------------------------------------ step bursts
+
+fn big_look_song() -> Vec<OscLightingCue> {
+    let all = |x: f64| -> Vec<OscMessage> {
+        (0..98).map(|i| msg(&dim(&format!("F{i:02}")), x)).collect()
+    };
+    vec![
+        look(0.0, 0.0, all(0.0)),
+        // a ramp elsewhere makes the song smooth
+        look(1.0, 20.0, vec![msg(&dim("R"), 0.8)]),
+        look(10.0, 0.0, all(1.0)),
+    ]
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_98_value_look_leaves_centred_on_its_row_through_the_scheduler() {
+    let mut r = rig(settings(big_look_song(), vec![])).await;
+    r.start().await;
+    run_for(12.0).await;
+    let burst: Vec<(f64, String, f64)> = r
+        .sent()
+        .into_iter()
+        .filter(|(t, a, v)| *t > 5.0 && *v == 1.0 && a.contains("/F"))
+        .collect();
+    assert_eq!(burst.len(), 98);
+    let (first, last) = (burst[0].0, burst[97].0);
+    let centre = (first + last) / 2.0;
+    assert!(
+        (centre - (10.0 - LOOK_LEAD_SECONDS)).abs() < 0.02,
+        "centre {centre}"
+    );
+    assert!((last - first - 0.485).abs() < 0.03, "span {}", last - first);
+    // the values go in the documented order: by address inside the class
+    let names: Vec<&String> = burst.iter().map(|b| &b.1).collect();
+    let mut sorted = names.clone();
+    sorted.sort();
+    assert_eq!(names, sorted);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_fixture_the_operator_takes_mid_burst_is_skipped_and_the_rest_still_go() {
+    let mut r = rig(settings(big_look_song(), vec![])).await;
+    r.start().await;
+    // the burst runs from about 9.71 s to 10.2 s; fixture F90 is still waiting at 9.8 s
+    run_for(9.8).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&dim("F90"), 0.3)], false);
+    run_for(3.0).await;
+    let burst: Vec<(f64, String, f64)> = r
+        .sent()
+        .into_iter()
+        .filter(|(t, a, v)| *t > 5.0 && *v == 1.0 && a.contains("/F"))
+        .collect();
+    assert!(
+        burst.iter().all(|b| b.1 != dim("F90")),
+        "F90 is the operator's now"
+    );
+    assert_eq!(burst.len(), 97);
+    // the skipped value took no slot: no 10 ms hole where it would have gone
+    let widest = burst
+        .windows(2)
+        .map(|w| w[1].0 - w[0].0)
+        .fold(0.0, f64::max);
+    assert!(widest < 0.0075, "a gap of {widest} s inside the burst");
+}
