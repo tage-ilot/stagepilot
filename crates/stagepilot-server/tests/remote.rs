@@ -423,68 +423,6 @@ async fn manager_routes_map_errors_to_fixed_texts() {
 }
 
 #[tokio::test]
-async fn install_location_get_put_clear_and_validate() {
-    let dir = tempfile::tempdir().unwrap();
-    let h = harness(dir.path(), false, None);
-    let path = "/api/v1/install-location";
-    // No manager: reported as unavailable, writes are 503.
-    let none = call(&h.local, "GET", path, None, &[]).await;
-    assert_eq!(
-        (none.0, none.1["available"].clone()),
-        (StatusCode::OK, json!(false))
-    );
-    let put = |body: Value, headers: &'static [(&'static str, &'static str)]| {
-        let router = h.local.clone();
-        async move { call(&router, "PUT", path, Some(body), headers).await }
-    };
-    assert_eq!(
-        put(json!({"location": "Pasadena, CA"}), &[REMOTE]).await.0,
-        StatusCode::SERVICE_UNAVAILABLE
-    );
-
-    let manager = Arc::new(FakeManager::default());
-    h.runtime.set_remote_manager(Some(manager.clone()));
-    let stored = put(json!({"location": "  Pasadena, CA "}), &[REMOTE]).await;
-    assert_eq!(stored.0, StatusCode::OK);
-    assert_eq!(stored.1["location"], json!("Pasadena, CA"));
-    assert_eq!(
-        call(&h.local, "GET", path, None, &[]).await.1["location"],
-        json!("Pasadena, CA")
-    );
-    // Blank and null clear it.
-    assert_eq!(
-        put(json!({"location": "  "}), &[REMOTE]).await.1["location"],
-        Value::Null
-    );
-    put(json!({"location": "Austin, TX"}), &[REMOTE]).await;
-    assert_eq!(
-        put(json!({"location": null}), &[REMOTE]).await.1["location"],
-        Value::Null
-    );
-    // Rejections: over-length, control characters, wrong type, extra keys, missing header.
-    for bad in [
-        json!({"location": "x".repeat(81)}),
-        json!({"location": "a\u{7}b"}),
-        json!({"location": 5}),
-        json!({"location": "ok", "lat": 1.0}),
-        json!({}),
-    ] {
-        assert_eq!(
-            put(bad, &[REMOTE]).await.0,
-            StatusCode::UNPROCESSABLE_ENTITY
-        );
-    }
-    assert_eq!(
-        put(json!({"location": "x".repeat(80)}), &[REMOTE]).await.0,
-        StatusCode::OK
-    );
-    assert_eq!(
-        put(json!({"location": "Denver, CO"}), &[]).await.0,
-        StatusCode::FORBIDDEN
-    );
-}
-
-#[tokio::test]
 async fn reset_and_regenerate_need_manager_support() {
     let dir = tempfile::tempdir().unwrap();
     let h = harness(dir.path(), false, None);

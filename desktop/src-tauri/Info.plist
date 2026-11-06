@@ -8,10 +8,6 @@
   <string>org.stagepilot.desktop.help</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>StagePilot measures how loud the room is while you record lights. It never saves audio.</string>
-  <key>NSLocationUsageDescription</key>
-  <string>StagePilot can find your city when you press Detect my location. The coordinates stay on this computer; only the city name is saved.</string>
-  <key>NSLocationWhenInUseUsageDescription</key>
-  <string>StagePilot can find your city when you press Detect my location. The coordinates stay on this computer; only the city name is saved.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>StagePilot looks for Playback on your local network so it can follow your service.</string>
 </dict>

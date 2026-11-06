@@ -290,6 +290,9 @@
     <h2>Locations</h2>
     <div id="cities-list"></div>
   </section>
+  <footer class="sub" style="margin-top:24px;color:var(--quiet);font-size:12px">
+    <a href="https://db-ip.com" rel="noopener noreferrer" style="color:inherit">IP Geolocation by DB-IP</a>
+  </footer>
 </div>
 
 <script>
@@ -519,7 +522,7 @@
       var main = el('div', 'row-main');
       var titleText = inst.label || inst.hostname || inst.installationId;
       main.appendChild(el('div', 'row-title', titleText + (inst.archived ? ' (archived)' : '')));
-      var locHint = inst.locationSource === 'app' ? ' (reported by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
+      var locHint = inst.locationSource === 'app' ? ' (IP lookup by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
       var subBits = [phaseLabel(inst), inst.location + locHint, 'last seen ' + timeAgo(inst.updatedAt)];
       var expiry = expiryLabel(inst);
       if (expiry) subBits.push(expiry);

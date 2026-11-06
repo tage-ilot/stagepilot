@@ -44,25 +44,32 @@ A never-provisioned backlog of ~400 drains in about 4 runs.
 
 ### App-reported location
 
-The network guess below is often wrong (a Pasadena studio shows as Los Angeles), so the app can
-report its own city. In **Settings > Location** the user types a short place such as
-`Pasadena, CA` (at most 80 characters), or presses **Detect my location**. The always-on check-in
-(`GET /v1/installations/:id/status`, also `provision`/`reconcile`) then sends it as a `location`
-query parameter (JSON body on the POST routes), next to `deviceName`. It is stored locally in
-`location.json` beside the installation identity.
+The network guess below is often wrong (a Rancho Mirage studio shows as Los Angeles), so the app
+reports its own city. About once a week (on the first check-in after start when nothing is stored
+or the stored city is older than 7 days) the app calls `GET https://api.db-ip.com/v2/free/self`
+(db-ip free API, no key), formats the answer as `City, ST` (US) or `City, Country`, and stores
+`{location, looked_up_at}` in `location.json` beside the installation identity. The always-on
+check-in (`GET /v1/installations/:id/status`, also `provision`/`reconcile`) sends the stored value
+as a `location` query parameter (JSON body on the POST routes), next to `deviceName`. There is no
+user-facing setting. `STAGEPILOT_DISABLE_IP_LOOKUP=1` turns the lookup off.
 
-The control plane validates it (string, trimmed, at most 80 characters, no control characters;
-bad values are ignored), stores it as `reportedLocation`, and treats it as **untrusted and
-display-only**, exactly like `deviceName`. A request with no `location` never erases it; an empty
-`location` clears it. The admin list exposes `reportedLocation` and a `locationSource`
-(`admin`, `app`, `network`, `none`); the page shows a small hint next to each location.
+A failed lookup (network error, HTTP 429, bad JSON, no city) keeps the previous value and is not
+retried for at least an hour (at most 4 failed attempts per day). It runs on its own task and
+never delays or fails the check-in.
 
-Privacy: **Detect my location** asks the webview for the position (the operating system shows its
-own permission prompt), converts it to the nearest city **on the computer** with a bundled offline
-dataset (GeoNames, see `THIRD_PARTY_NOTICES.md`), and fills the text field. Coordinates are
-never stored, never sent, and no third-party service is called. Only the final city text is sent,
-and only if the user saves it. The control plane still never records the raw IP address. Apps
-that predate this feature keep using the network guess; use the manual override meanwhile.
+The control plane validates the value (string, trimmed, at most 80 characters, no control
+characters; bad values are ignored), stores it as `reportedLocation`, and treats it as
+**untrusted and display-only**, exactly like `deviceName`. A request with no `location` never
+erases it; an empty `location` clears it. The admin list exposes `reportedLocation` and a
+`locationSource` (`admin`, `app`, `network`, `none`); the page shows a small hint next to each
+location (`IP lookup by app`, `network guess`, `set by admin`).
+
+Privacy: the app and the control plane **never store, log or send the raw IP address**; only the
+final city text is reported. db-ip itself sees the address, as any web service you call does. The
+admin override beats everything. Accuracy is city/metro level: IP lookups can be off by roughly
+5-30 miles. Apps that predate this keep using the network guess until a release containing the
+lookup is installed; use the manual override meanwhile. The free API allows about 1,000 requests
+per day per address, far above one a week. Credit: IP Geolocation by [DB-IP](https://db-ip.com).
 
 ### Network guess and manual override
 
