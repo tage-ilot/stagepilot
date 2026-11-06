@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A keychain (or Credential Manager) prompt that is pending, refused or fails can no longer hold StagePilot up. On the macOS rig, rc.3 over 2.42.0 never opened its port while nobody answered the keychain approval dialog (the screen was locked). Every credential read and write now runs on a thread of its own and is waited for only 150 ms at startup (writes: 10 s on a request that is already off the main path). The server, the dashboard, Playback, ProPresenter, MIDI and lights come up at once. Only Planning Center says what is wrong (\"Waiting for keychain access\" or \"Keychain access was refused or failed\" in its status), asks again every 30 s, also when you sign in or save again, and connects by itself as soon as the keychain answers, with no restart. A stored secret is never replaced or wiped because a read failed, and a token that could not be saved yet stays in use for the session and is saved again later. **After an update macOS may ask for keychain access again; StagePilot keeps running while it waits.** The Remote credential broker serves each request on its own thread (one waiting dialog no longer stops the next), and the Remote status answers within 3 s even while the dialog waits. The microphone for the Lighting loudness feature behaves the same: an input open that never returns, is refused or fails never delays a song start beyond the documented 1.5 s and Record keeps capturing lights (new test).
+
 ## [2.43.0-rc.3] - 2026-11-05
 
 Release candidate 3 (rc.1 stopped on a stray build-directory link committed by mistake; rc.2 stopped on a slow-runner test timeout on macOS Intel; neither was published). Pre-release; the in-app updater does not offer it). Smooth Lightkey capture and replay, a new Lighting screen, config panels that emerge from their card, and countdowns that work before the song order scan. Read before installing:

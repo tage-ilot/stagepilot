@@ -31,6 +31,14 @@ If download, signature verification, or installation fails, the installed
 version remains open. The dialog offers **Retry** and **Close**. A failed
 background check does not make the dashboard unhealthy or show a modal.
 
+## After an update
+
+The updated app has a new code signature, so macOS may ask for Keychain access (Planning Center
+sign-in) and microphone access again. StagePilot keeps running while it waits: the dashboard,
+Playback, ProPresenter, MIDI and lights start at once, Planning Center shows \"Waiting for keychain
+access\" and connects by itself when you allow it, and a refused prompt is retried every 30 s. See
+`macos-adhoc-signing.md` (While a prompt waits).
+
 ## Recovery
 
 An authorized release operator may draft a bad GitHub Release, preserving its

@@ -76,6 +76,9 @@ struct FakeInput {
     open_now: Arc<AtomicUsize>,
     /// How long `open` blocks, like a microphone permission dialog.
     open_delay: Mutex<Duration>,
+    /// When set, `open` never returns until `release_opens`: a permission dialog nobody answers.
+    open_forever: std::sync::atomic::AtomicBool,
+    gate: Arc<(Mutex<bool>, std::sync::Condvar)>,
 }
 impl FakeInput {
     fn new(devices: &[&str]) -> Arc<Self> {
@@ -89,6 +92,10 @@ impl FakeInput {
         if let Some(sink) = sink {
             sink(samples, 1000);
         }
+    }
+    fn release_opens(&self) {
+        *self.gate.0.lock().unwrap() = true;
+        self.gate.1.notify_all();
     }
     fn open_count(&self) -> usize {
         self.open_now.load(Ordering::SeqCst)
@@ -104,6 +111,12 @@ impl AudioInput for FakeInput {
         samples: SampleSink,
         errors: ErrorSink,
     ) -> Result<Box<dyn AudioStream>, AudioError> {
+        if self.open_forever.load(Ordering::SeqCst) {
+            let mut released = self.gate.0.lock().unwrap();
+            while !*released {
+                released = self.gate.1.wait(released).unwrap();
+            }
+        }
         let delay = *self.open_delay.lock().unwrap();
         if !delay.is_zero() {
             std::thread::sleep(delay);
@@ -326,6 +339,38 @@ async fn a_blocked_audio_open_does_not_hold_up_the_song_start() {
     );
     // The open finishes on its own and loudness starts then.
     wait_for(|| input.open_count() == 1).await;
+}
+
+#[tokio::test]
+async fn an_audio_open_that_never_returns_never_holds_up_any_song() {
+    // The microphone dialog is never answered: the open never returns. Every song start, stop and
+    // the next song still go on within the documented wait (1.5 s) plus a generous margin, the
+    // lights recording carries on, and the line says why there is no loudness.
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    input.open_forever.store(true, Ordering::SeqCst);
+    let rig = Rig::armed(input.clone()).await;
+    for round in 0..3 {
+        let started = Instant::now();
+        rig.start(&song(10)).await;
+        let waited = started.elapsed();
+        assert!(
+            waited < Duration::from_millis(4000),
+            "round {round}: song start waited {waited:?} for an open that never returns"
+        );
+        let message = rig.link.status().message.unwrap_or_default();
+        assert!(message.starts_with("Recording"), "round {round}: {message}");
+        let stopped = Instant::now();
+        rig.stop(&song(10), 5.0).await;
+        assert!(
+            stopped.elapsed() < Duration::from_millis(4000),
+            "round {round}: stop waited {:?}",
+            stopped.elapsed()
+        );
+    }
+    assert_eq!(input.open_count(), 0, "nothing ever opened");
+    // The dialog is finally answered: the stuck opens finish and close again, nothing hangs.
+    input.release_opens();
+    wait_for(|| input.open_count() == 0).await;
 }
 
 #[tokio::test]
