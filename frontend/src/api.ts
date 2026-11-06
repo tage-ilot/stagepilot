@@ -389,3 +389,9 @@ export const setLightkeyRecording = (recording: boolean) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recording }),
   });
+
+/** Where this installation says it is (a city the user typed or detected). Text only: never coordinates. */
+export interface InstallLocation { available: boolean; location: string | null }
+export const getInstallLocation = () => requestJson<InstallLocation>("/api/v1/install-location", {cache: "no-store"});
+export const setInstallLocation = (location: string) =>
+  remoteMutation<InstallLocation>("/api/v1/install-location", "PUT", {location});

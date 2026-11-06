@@ -2106,6 +2106,88 @@ describe('fleet admin actions: rate-limit reset and approval requests', () => {
     ))).status).toBe(404);
   });
 
+  describe('app-reported location', () => {
+    const statusWithLocation = (inst: Record<string, unknown>, location: string) =>
+      `${installationPath(inst, 'status')}?location=${encodeURIComponent(location)}`;
+    const listRow = async (inst: Record<string, unknown>) => {
+      const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+      return (list.installations as Record<string, unknown>[]).find((r) => r.installationId === inst.installationId)!;
+    };
+    const stored = (inst: Record<string, unknown>) =>
+      storage.values.get(`installation:${String(inst.installationId)}`) as Record<string, unknown>;
+    const checkin = (inst: Record<string, unknown>, path: string) =>
+      registry.fetch(request(path, 'GET', String(inst.installationCredential)));
+
+    it('stores a valid location from enroll and exposes it in the admin list', async () => {
+      const inst = await enroll(registry, 'reported-loc-0001', { location: '  Pasadena, CA ' });
+      expect(stored(inst).reportedLocation).toBe('Pasadena, CA');
+      const row = await listRow(inst);
+      expect(row.reportedLocation).toBe('Pasadena, CA');
+      expect(row.location).toBe('Pasadena, CA');
+      expect(row.locationSource).toBe('app');
+    });
+
+    it('accepts location on the GET status query, then a status request without it keeps it', async () => {
+      const inst = await enroll(registry, 'reported-loc-0002');
+      expect((await checkin(inst, statusWithLocation(inst, 'Austin, TX'))).status).toBe(200);
+      expect(stored(inst).reportedLocation).toBe('Austin, TX');
+      expect((await checkin(inst, installationPath(inst, 'status'))).status).toBe(200);
+      expect(stored(inst).reportedLocation).toBe('Austin, TX');
+      expect((await checkin(inst, `${installationPath(inst, 'status')}?deviceName=Mac`)).status).toBe(200);
+      expect(stored(inst).reportedLocation).toBe('Austin, TX');
+    });
+
+    it('an empty location clears it', async () => {
+      const inst = await enroll(registry, 'reported-loc-0003', { location: 'Austin, TX' });
+      expect((await checkin(inst, statusWithLocation(inst, ''))).status).toBe(200);
+      expect(stored(inst).reportedLocation).toBeUndefined();
+      expect((await listRow(inst)).reportedLocation).toBe('');
+    });
+
+    it('ignores non-string, over-length and control-character values without erasing', async () => {
+      const inst = await enroll(registry, 'reported-loc-0004', { location: 'Austin, TX' });
+      for (const bad of [5, 'x'.repeat(81), 'a\u0007b', 'a\nb']) {
+        const res = await registry.fetch(request(installationPath(inst, 'reconcile'), 'POST', String(inst.installationCredential), { location: bad }));
+        expect(res.status).toBe(200);
+        expect(stored(inst).reportedLocation).toBe('Austin, TX');
+      }
+      expect((await checkin(inst, statusWithLocation(inst, 'x'.repeat(81)))).status).toBe(200);
+      expect((await checkin(inst, statusWithLocation(inst, 'a\u0007b'))).status).toBe(200);
+      expect(stored(inst).reportedLocation).toBe('Austin, TX');
+      const bad = await enroll(registry, 'reported-loc-0005', { location: 'x'.repeat(81) });
+      expect(stored(bad).reportedLocation).toBeUndefined();
+      const ok = await enroll(registry, 'reported-loc-0006', { location: 'x'.repeat(80) });
+      expect(stored(ok).reportedLocation).toBe('x'.repeat(80));
+    });
+
+    it('location arrives on reconcile body and on idempotent enroll replay', async () => {
+      const inst = await enroll(registry, 'reported-loc-0007');
+      await registry.fetch(request(installationPath(inst, 'reconcile'), 'POST', String(inst.installationCredential), { location: 'Denver, CO' }));
+      expect(stored(inst).reportedLocation).toBe('Denver, CO');
+      await enroll(registry, 'reported-loc-0007', { location: 'Boulder, CO' });
+      expect(stored(inst).reportedLocation).toBe('Boulder, CO');
+    });
+
+    it('reported beats network guess; admin override beats reported', async () => {
+      const inst = await enroll(registry, 'reported-loc-0008', { location: 'Pasadena, CA' });
+      await registry.fetch(requestWithCf(installationPath(inst, 'status'), 'GET', String(inst.installationCredential), undefined, { city: 'Los Angeles', region: 'California', country: 'US' }));
+      expect((await listRow(inst)).location).toBe('Pasadena, CA');
+      await registry.fetch(request(`/v1/admin/installations/${String(inst.installationId)}/location`, 'PATCH', adminToken, { location: 'Lab' }));
+      const row = await listRow(inst);
+      expect(row.location).toBe('Lab');
+      expect(row.locationSource).toBe('admin');
+      expect(row.reportedLocation).toBe('Pasadena, CA');
+    });
+
+    it('without a reported location the network guess is used and labelled', async () => {
+      const inst = await enroll(registry, 'reported-loc-0009');
+      await registry.fetch(requestWithCf(installationPath(inst, 'status'), 'GET', String(inst.installationCredential), undefined, { city: 'Los Angeles' }));
+      const row = await listRow(inst);
+      expect(row.location).toBe('Los Angeles');
+      expect(row.locationSource).toBe('network');
+    });
+  });
+
   describe('self-reported deviceName', () => {
     it('captures a valid deviceName on enroll and surfaces it in admin list', async () => {
       const response = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, {

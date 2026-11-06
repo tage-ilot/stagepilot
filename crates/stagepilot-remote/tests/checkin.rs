@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use common::*;
 use serde_json::json;
-use stagepilot_remote::bootstrap::{sanitize_device_name, Pacing};
+use stagepilot_remote::bootstrap::{sanitize_device_name, sanitize_location, Pacing};
 use stagepilot_remote::desktop::{DesktopOptions, DesktopRemoteManager};
 use stagepilot_remote::http::{HttpRequest, HttpResponse, HttpTransport, TransportError};
 use stagepilot_remote::platform::StopFlag;
@@ -22,6 +22,8 @@ struct CheckinState {
     status_calls: u32,
     last_enroll_device_name: Option<String>,
     last_status_device_name: Option<String>,
+    last_status_location: Option<String>,
+    status_had_location_param: bool,
 }
 
 #[derive(Clone, Default)]
@@ -55,6 +57,12 @@ impl HttpTransport for CheckinOnly {
                 .query
                 .iter()
                 .find(|(k, _)| k == "deviceName")
+                .map(|(_, v)| v.clone());
+            s.status_had_location_param = r.query.iter().any(|(k, _)| k == "location");
+            s.last_status_location = r
+                .query
+                .iter()
+                .find(|(k, _)| k == "location")
                 .map(|(_, v)| v.clone());
             return Ok(HttpResponse::json_response(
                 200,
@@ -194,5 +202,68 @@ fn sanitize_device_name_table() {
     ];
     for (raw, expected) in cases {
         assert_eq!(sanitize_device_name(raw), expected, "{raw:?}");
+    }
+}
+
+#[test]
+fn lightweight_checkin_sends_location_when_set_and_omits_it_when_unset() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake = CheckinOnly::default();
+    let manager = build_manager(dir.path(), &fake, Some("stage-pc"), false);
+    manager.lightweight_checkin();
+    assert!(!fake.0.lock().unwrap().status_had_location_param);
+
+    assert_eq!(
+        manager
+            .set_location(Some("  Pasadena, CA "))
+            .unwrap()
+            .as_deref(),
+        Some("Pasadena, CA")
+    );
+    manager.lightweight_checkin();
+    assert_eq!(
+        fake.0.lock().unwrap().last_status_location.as_deref(),
+        Some("Pasadena, CA")
+    );
+
+    assert_eq!(manager.set_location(Some("  ")).unwrap(), None);
+    manager.lightweight_checkin();
+    assert!(!fake.0.lock().unwrap().status_had_location_param);
+}
+
+#[test]
+fn location_persists_across_manager_restarts_and_rejects_bad_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake = CheckinOnly::default();
+    let manager = build_manager(dir.path(), &fake, None, false);
+    assert_eq!(manager.location(), None);
+    manager.set_location(Some("Austin, TX")).unwrap();
+    let again = build_manager(dir.path(), &fake, None, false);
+    assert_eq!(again.location().as_deref(), Some("Austin, TX"));
+    assert!(again.set_location(Some(&"x".repeat(81))).is_err());
+    assert_eq!(again.location().as_deref(), Some("Austin, TX"));
+    assert_eq!(again.set_location(None).unwrap(), None);
+    assert_eq!(
+        build_manager(dir.path(), &fake, None, false).location(),
+        None
+    );
+}
+
+#[test]
+fn sanitize_location_table() {
+    let long = "a".repeat(81);
+    let exact = "a".repeat(80);
+    let cases: [(Option<&str>, Option<String>); 8] = [
+        (Some("Pasadena, CA"), Some("Pasadena, CA".into())),
+        (Some("  padded  "), Some("padded".into())),
+        (Some("Bad\u{7}City\n"), Some("BadCity".into())),
+        (Some(&exact), Some(exact.clone())),
+        (Some(&long), None),
+        (Some(""), None),
+        (Some("\u{7}"), None),
+        (None, None),
+    ];
+    for (raw, expected) in cases {
+        assert_eq!(sanitize_location(raw), expected, "{raw:?}");
     }
 }

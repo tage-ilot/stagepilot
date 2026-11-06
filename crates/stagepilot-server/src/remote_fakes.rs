@@ -57,6 +57,8 @@ pub struct FakeManager {
     pub regenerate_supported: bool,
     pub bootstrap: Option<Arc<dyn DiagnosticsBootstrap>>,
     pub calls: Mutex<Vec<String>>,
+    pub location: Mutex<Option<String>>,
+    pub location_supported: bool,
 }
 
 impl Default for FakeManager {
@@ -78,6 +80,8 @@ impl Default for FakeManager {
             regenerate_supported: true,
             bootstrap: None,
             calls: Mutex::new(Vec::new()),
+            location: Mutex::new(None),
+            location_supported: true,
         }
     }
 }
@@ -114,6 +118,23 @@ impl RemoteManager for FakeManager {
     async fn disable(&self) -> Result<(), ManagerError> {
         self.record("disable");
         Self::result(&self.disable_result)
+    }
+    async fn location(&self) -> Option<String> {
+        self.location
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+    fn supports_location(&self) -> bool {
+        self.location_supported
+    }
+    async fn set_location(&self, location: Option<String>) -> Result<Option<String>, ManagerError> {
+        self.record("set_location");
+        if location.as_deref().is_some_and(|l| l.chars().count() > 80) {
+            return Err(ManagerError::Value("too long".into()));
+        }
+        *self.location.lock().unwrap_or_else(|p| p.into_inner()) = location.clone();
+        Ok(location)
     }
     fn supports_reset(&self) -> bool {
         self.reset_supported
