@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pre-release end-to-end lighting test (fake relay + fake Lightkey + fake Playback, no rig).
 # One command:   scripts/lighting-e2e/run.sh            (about 50 minutes: every run is real time)
-# Options:       --out DIR  --takes FILE  --stages capture,replay,control,soak,auto  --skip-build
+# Options:       --out DIR  --takes FILE  --stages capture,replay,control,soak,stop,auto  --skip-build
 # Needs: Rust toolchain, python3 (3.11+) with the `websockets` package, free ports
 # 21600 (OSC), 21700 (relay), 8770 (status API), 18981 (fake Playback) and 18900 (backend).
 # Never starts or touches the preview's services (ports 18766 / 8101) or any real settings file.
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../.."
 HERE=scripts/lighting-e2e
 TAKES="${TAKES:-$HOME/AgentHub-data/projects/stagepilot-lightkey-smooth/data/takes-fixtures.json}"
 OUT="${E2E_OUT:-$HOME/AgentHub-data/projects/stagepilot-lighting-e2e/run-$(date +%Y%m%d-%H%M%S)}"
-STAGES="capture,replay,control,soak,auto"
+STAGES="capture,replay,control,soak,stop,auto"
 BUILD=1
 while [ $# -gt 0 ]; do
   case "$1" in

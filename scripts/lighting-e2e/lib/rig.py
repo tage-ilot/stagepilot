@@ -60,6 +60,7 @@ class Rig:
         self.backend: Backend | None = None
         self.echo, self.echo_delay, self.relay_latency = echo, echo_delay, relay_latency
         self.echoed = 0
+        self.pbmap = dict(PB_ID)
 
     # ---------------------------------------------------------------- lifecycle
     def _settings(self):
@@ -84,6 +85,18 @@ class Rig:
     def restart_backend(self, kill=False):
         self.backend.stop(kill=kill)
         self.backend.start()
+
+    def pb_id(self, key):
+        return self.pbmap[key]
+
+    async def restart_stopped(self):
+        """Start the (stopped) backend again with the Playback stopped. The Playback song ->
+        plan song pairing lives in memory and is learned while songs play (it needs a whole song to
+        advance), so after a restart the first Playback song seen resolves to the plan's Up next."""
+        self.pb.stop()
+        self.backend.start()
+        await self.wait_link()
+        await asyncio.sleep(1)
 
     async def down(self):
         if self.backend:
@@ -166,7 +179,7 @@ class Rig:
     async def play(self, song_key, position=0.0):
         """Start (or move to) a song on the fake Playback; returns the song's wall-clock origin as
         StagePilot's own timer sees it."""
-        self.pb.play(PB_ID[song_key], position)
+        self.pb.play(self.pb_id(song_key), position)
         st = await self.wait(lambda: (lambda s: s if s["timer"]["status"] == "running" and s["timer"]["started_at"] else None)(self.state()),
                              15, 0.05, "timer running")
         return iso(st["timer"]["started_at"])

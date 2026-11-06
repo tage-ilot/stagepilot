@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import gzip
 import json
 import re
@@ -91,6 +92,15 @@ async def prepare_relay(rig, take):
     await asyncio.sleep(1.5)
 
 
+async def settle(rig):
+    """A settings change (Auto/Replay) makes the link restart its relay session: wait until the
+    fixture stream is live again (keyframe received) before a song starts, or the capture's baseline
+    is empty. Record is only a switch and needs no wait."""
+    await asyncio.sleep(0.3)
+    await rig.wait_link()
+    await asyncio.sleep(2.0)
+
+
 async def status_message(rig):
     s = rig.lk_status()
     return s.get("message")
@@ -107,6 +117,7 @@ async def finish_song(rig, origin, key):
 async def capture_song(rig, take, key, out, tag, record=True):
     await prepare_relay(rig, take)
     rig.set_mode("record" if record else "auto")
+    await settle(rig)
     start_status = rig.lk_status()
     with Probe(rig) as pr:
         origin = await rig.play(key)
@@ -123,8 +134,12 @@ async def capture_song(rig, take, key, out, tag, record=True):
         await finish_song(rig, origin, key)
         t_end = time.time()
         sampler.cancel()
-        saved = await rig.wait(lambda: (lambda m: m if m and (m.startswith("Saved") or m.startswith("Not saved")) else None)(rig.lk_status().get("message")),
-                               60, 0.1, "save message")
+        try:
+            saved = await rig.wait(lambda: (lambda m: m if m and (m.startswith("Saved") or m.startswith("Not saved")) else None)(rig.lk_status().get("message")),
+                                   60, 0.1, "save message")
+        except TimeoutError:
+            log("no save message; status:", json.dumps(rig.lk_status())[:1500], "log:", json.dumps(grab_log(rig))[:800])
+            raise
         save_latency = time.time() - t_end
     st = rig.lk_status()
     cm = rig.cue_map(key)
@@ -202,7 +217,8 @@ def fixtures_of(pk):
 
 
 async def stage_control(rig, takes, out):
-    title, key = "Able", TAKE_FOR["Able"]
+    title = os.environ.get("E2E_CONTROL_SONG", "Able")
+    key = TAKE_FOR[title]
     take = takes[title]
     cm = rig.cue_map(key)
     raw = an.Raw(take)
@@ -260,6 +276,7 @@ async def stage_control(rig, takes, out):
         res["takeover"]["first_back_value"] = v[2]
         res["takeover"]["raw_value_then"] = raw.at(v[1], v[0] + an.LEAD)
 
+    save_packets(out, "control_takeover", rig.lk.packets[mark:], origin)
     # ---- pause for 8 s
     mark_p = rig.lk.mark()
     rig.pb.pause()
@@ -330,10 +347,23 @@ async def stage_control(rig, takes, out):
     # one more release: nothing held -> still names every saved fixture (documented)
     res["log"] = grab_log(rig)
 
+    save(out, "control", res)
+    return res
+
+
+async def stage_stop(rig, takes, out):
+    """Stop StagePilot mid-song (SIGTERM, then SIGKILL). Last stage: a restarted backend has to
+    learn the Playback pairing again, so the song that plays afterwards is whatever resolves."""
+    res = {}
+    key = TAKE_FOR["Able"]
+    rig.set_mode("replay")
+    await rig.wait_link()
     # ---- stop StagePilot mid-song: SIGTERM, then SIGKILL
     rig.pb.stop()
     await asyncio.sleep(1)
-    rig.pb.play(PB_ID[key], 30.0)
+    rig.pb.play(101, 0.0)  # a (re)started backend resolves the first Playback song it sees to Up next
+    await asyncio.sleep(1.5)
+    rig.pb.seek(30.0)
     await asyncio.sleep(1.5)
     org = origin_now(rig)
     await asyncio.sleep(10)
@@ -346,28 +376,22 @@ async def stage_control(rig, takes, out):
     clT = [a for _, w, a, _ in pT if a.endswith("/clear")]
     res["sigterm_mid_song"] = {"playing": playing_t, "packets_after_term": len(pT), "clears": len(clT),
                                "fixtures_cleared": len({an.fixture(a) for a in clT}), "each_twice": all(clT.count(a) == 2 for a in set(clT))}
-    rig.backend.start()
-    await rig.wait_link()
-    rig.pb.stop()
-    await asyncio.sleep(2)
-    # a fresh backend only resolves a song that starts at its beginning (it learns the setlist
-    # from the Playback heartbeat); start at 0 and seek to 30 s
-    rig.pb.play(PB_ID[key], 0.0)
+    await rig.restart_stopped()
+    # the restarted backend resolves the first Playback song it sees to Up next
+    rig.pb.play(101, 0.0)
     await asyncio.sleep(1.5)
     rig.pb.seek(30.0)
     await asyncio.sleep(12)
     markK = rig.lk.mark()
     playing_k = (rig.state().get("playing_song") or {}).get("title")
-    sent_before_kill = len(an.packets_in(rig.lk.packets[mark:], origin)) and sum(1 for p in rig.lk.packets[markK - 400:markK] if not p[2].endswith("/clear"))
+    sent_before_kill = sum(1 for p in rig.lk.packets[max(0, markK - 400):markK] if not p[2].endswith("/clear"))
     rig.backend.stop(kill=True)  # SIGKILL
     await asyncio.sleep(2.0)
     pK = rig.lk.packets[markK:]
     res["sigkill_mid_song"] = {"playing": playing_k, "packets_in_400_before_kill": sent_before_kill, "packets_after_kill": len(pK), "clears": sum(1 for _, _, a, _ in pK if a.endswith("/clear"))}
-    rig.backend.start()
-    await rig.wait_link()
-    rig.pb.stop()
+    await rig.restart_stopped()
     res["log_after_restarts"] = grab_log(rig)
-    save(out, "control", res)
+    save(out, "stop", res)
     return res
 
 
@@ -437,7 +461,7 @@ async def stage_auto(rig, takes, out):
     rig.set_relay_state(quiet)
     await rig.wait_link()
     rig.set_mode("auto")
-    await asyncio.sleep(1)
+    await settle(rig)
     # 1. quiet song (no lighting change in the whole song): stays "not captured"
     origin = await rig.play(key)
     st0 = rig.lk_status()
@@ -515,10 +539,11 @@ async def amain(args):
         try:
             for s in main_stages:
                 log("=== stage", s)
-                await {"capture": stage_capture, "replay": stage_replay, "control": stage_control, "soak": stage_soak}[s](rig, takes, out)
+                await {"capture": stage_capture, "replay": stage_replay, "control": stage_control, "soak": stage_soak, "stop": stage_stop}[s](rig, takes, out)
         finally:
             await rig.down()
     if "auto" in stages:
+        await asyncio.sleep(5)  # let the first rig's sockets go
         rig = Rig(out / "rig-auto", Path(args.binary) if args.binary else None, backend_port=args.port)
         await rig.up()
         try:
@@ -534,7 +559,7 @@ def main():
     ap.add_argument("--takes", default=None)
     ap.add_argument("--binary", default=None)
     ap.add_argument("--port", type=int, default=18900)
-    ap.add_argument("--stages", default="capture,replay,control,soak,auto")
+    ap.add_argument("--stages", default="capture,replay,control,soak,stop,auto")
     asyncio.run(amain(ap.parse_args()))
 
 

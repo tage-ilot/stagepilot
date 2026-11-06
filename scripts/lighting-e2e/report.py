@@ -175,7 +175,9 @@ if c:
         ["fixtures in the take / not cleared", f"{r['fixtures_in_take']} / {r['fixtures_in_take_not_cleared']}"],
         ["non-clear packets in the 3 s after", r["non_clear_packets"]],
     ]))
-    a, b = c["sigterm_mid_song"], c["sigkill_mid_song"]
+stp = load("stop")
+if stp:
+    a, b = stp["sigterm_mid_song"], stp["sigkill_mid_song"]
     w("### Stopping StagePilot mid-song\n")
     w(table(["how", "packets in the 2 s after", "clears", "fixtures cleared", "each twice"], [
         ["SIGTERM (graceful: documented 'StagePilot shuts down' gives the lights back)", a["packets_after_term"], a["clears"], a["fixtures_cleared"], a["each_twice"]],
