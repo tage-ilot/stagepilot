@@ -98,6 +98,9 @@ APPROVED_DIVERGENCES = [
      "m3: an unknown ProPresenter look is refused and not saved"),
     (r"\.message: type str != NoneType \('Capture cleared\.' vs None\)$",
      "B3: Lightkey status messages expire after 10 s or on a state change"),
+    (r"^(pco|outputs: )[^.]*\.response\.body\.(state\.)?recent_events",
+     "rc.4 C2: a connection.changed event replaces the previous one of the same source and "
+     "kind in recent_events, so the repeated connection entries of the recording collapse"),
 ]
 _APPROVED = [(re.compile(pattern), reason) for pattern, reason in APPROVED_DIVERGENCES]
 
