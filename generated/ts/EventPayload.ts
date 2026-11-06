@@ -10,4 +10,13 @@ import type { SkippedServiceItem } from "./SkippedServiceItem";
 import type { Song } from "./Song";
 import type { TimerPayload } from "./TimerPayload";
 
-export type EventPayload = { "kind": "empty" } | { "kind": "action", action: ActionName, request_id: string, } | { "kind": "service", plan: ServicePlan, } | { "kind": "service_plan_selection", plan_id: string, } | { "kind": "service_load", status: ServiceLoadStatus, target_date: string | null, candidates: Array<ServicePlanCandidate>, skipped_items: Array<SkippedServiceItem>, message: string | null, is_stale: boolean, } | { "kind": "song", song: Song, index: number, } | { "kind": "midi_note", channel: number, note: number, velocity: number, action: ActionName, song_position: number | null, connection_id: string | null, simulated: boolean, } | { "kind": "timer" } & TimerPayload | { "kind": "connection", integration: Integration, status: ConnectionStatus, detail: string | null, } | { "kind": "plugin", name: string, version: string, status: PluginStatus, error: string | null, };
+export type EventPayload = { "kind": "empty" } | { "kind": "action", action: ActionName, request_id: string, } | { "kind": "service", plan: ServicePlan, } | { "kind": "service_plan_selection", plan_id: string, } | { "kind": "service_load", status: ServiceLoadStatus, target_date: string | null, candidates: Array<ServicePlanCandidate>, skipped_items: Array<SkippedServiceItem>, message: string | null, is_stale: boolean, } | { "kind": "song", song: Song, index: number, 
+/**
+ * Song position (seconds) Playback reported when it started this song, if the start came
+ * from a Playback heartbeat. Used to back-date the countdown so it matches Playback.
+ */
+position_seconds: number | null, 
+/**
+ * When StagePilot received the heartbeat that reported `position_seconds`.
+ */
+observed_at: string | null, } | { "kind": "midi_note", channel: number, note: number, velocity: number, action: ActionName, song_position: number | null, connection_id: string | null, simulated: boolean, } | { "kind": "timer" } & TimerPayload | { "kind": "connection", integration: Integration, status: ConnectionStatus, detail: string | null, } | { "kind": "plugin", name: string, version: string, status: PluginStatus, error: string | null, };

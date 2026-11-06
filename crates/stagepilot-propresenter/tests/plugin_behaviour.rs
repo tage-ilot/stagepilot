@@ -228,7 +228,12 @@ async fn publish_song(bus: &EventBus, kind: EventType, song: Song) {
     bus.publish(new_event(
         kind,
         "test",
-        EventPayload::Song { song, index: 0 },
+        EventPayload::Song {
+            song,
+            index: 0,
+            position_seconds: None,
+            observed_at: None,
+        },
     ))
     .await;
 }

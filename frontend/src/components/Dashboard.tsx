@@ -6,6 +6,7 @@ import lightingIcon from "../assets/lights-icon-purple.png";
 import multitracksIcon from "../assets/multitracks-icon.png";
 import planningCenterIcon from "../assets/planning-center-icon.png";
 import propresenterIcon from "../assets/propresenter-icon.png";
+import { songClock } from "../lib/songClock";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
 import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
@@ -804,12 +805,7 @@ export function Dashboard({
     activity.splice(10);
   }
   const midiDetail = connectionViews.midi.detail;
-  const timerDuration = state.timer.duration_seconds ?? state.playing_song?.duration_seconds ?? 0;
-  const elapsedMilliseconds = state.timer.status === "running" && state.timer.started_at
-    ? Math.max(0, clockNow - Date.parse(state.timer.started_at))
-    : 0;
-  // Stop keeps the remaining time: a stopped countdown shows the frozen value instead of blanking.
-  const frozenRemaining = state.timer.status === "stopped" ? state.timer.remaining_seconds ?? null : null;
+  const { elapsed: timerElapsed, remaining: timerRemaining } = songClock(state.timer, state.playing_song, clockNow);
   // The Now playing rail sweeps to the live colour from its top end while the countdown runs. A CSS animation cannot be removed
   // smoothly (it would snap to blue), so for one moment after a stop data-settling plays the blue sweeping down the same way.
   const nowPlayingRail = useRef<HTMLElement>(null);
@@ -824,12 +820,6 @@ export function Dashboard({
     return () => window.clearTimeout(done);
   }, [state.timer.status]);
 
-  const timerElapsed = frozenRemaining !== null
-    ? Math.max(0, (state.playing_song?.duration_seconds ?? timerDuration) - frozenRemaining)
-    : Math.min(timerDuration, Math.floor(elapsedMilliseconds / 1_000));
-  const timerRemaining = frozenRemaining !== null
-    ? frozenRemaining
-    : Math.max(0, timerDuration - Math.ceil(elapsedMilliseconds / 1_000));
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
   const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
   const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });

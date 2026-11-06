@@ -41,7 +41,19 @@ enum Playing {
     Set(Option<usize>),
 }
 
+/// Where Playback's song clock stood when the heartbeat that triggered the current action was
+/// received. The action uses it so the countdown matches Playback instead of starting late.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SongClock {
+    pub position_seconds: f64,
+    pub observed_at: DateTime<Utc>,
+}
+
+/// A heartbeat older than this is not trusted to back-date a countdown (clock jump, stall).
+const MAX_CLOCK_AGE_MS: i64 = 10_000;
+
 struct Inner {
+    song_clock: Mutex<Option<SongClock>>,
     bus: EventBus,
     store: StateStore,
     recent_event_limit: usize,
@@ -74,6 +86,7 @@ impl StateService {
     ) -> Self {
         Self {
             inner: Arc::new(Inner {
+                song_clock: Mutex::new(None),
                 bus,
                 store,
                 recent_event_limit,
@@ -85,6 +98,28 @@ impl StateService {
                 active: AtomicBool::new(false),
             }),
         }
+    }
+
+    /// Tell the next start/resume/seek where Playback's song clock was when its heartbeat was
+    /// received. The caller clears it again when the action is done.
+    pub fn set_song_clock(&self, clock: Option<SongClock>) {
+        *self
+            .inner
+            .song_clock
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = clock;
+    }
+
+    /// The pending Playback clock, if it is plausible (not in the future, not stale).
+    fn song_clock(&self, now: DateTime<Utc>) -> Option<SongClock> {
+        let clock = (*self
+            .inner
+            .song_clock
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()))?;
+        let age = (now - clock.observed_at).num_milliseconds();
+        (clock.position_seconds.is_finite() && (0..=MAX_CLOCK_AGE_MS).contains(&age))
+            .then_some(clock)
     }
 
     fn pending(&self) -> usize {
@@ -311,7 +346,12 @@ impl StateService {
         let was_running = state.timer.status == TimerStatus::Running;
         let remaining = remaining(duration, position);
         let running = remaining > 0 && (resume || was_running);
-        let now = Utc::now();
+        // The song was at `position` when the heartbeat arrived, not now: count from then.
+        let wall = Utc::now();
+        let now = self
+            .song_clock(wall)
+            .filter(|c| (c.position_seconds - position).abs() < 1e-6)
+            .map_or(wall, |c| c.observed_at);
         self.inner.store.mutate(|s| {
             s.timer = if running {
                 TimerState {
@@ -425,6 +465,7 @@ impl StateService {
         }
         self.set_pending(target + 1);
         self.set_labels(Playing::Set(Some(target)));
+        let clock = self.song_clock(Utc::now());
         self.inner
             .bus
             .publish(new_event(
@@ -433,6 +474,8 @@ impl StateService {
                 EventPayload::Song {
                     song: song.clone(),
                     index: target,
+                    position_seconds: clock.map(|c| c.position_seconds),
+                    observed_at: clock.map(|c| c.observed_at),
                 },
             ))
             .await;
@@ -470,6 +513,7 @@ impl StateService {
         }
         self.set_pending(target + 1);
         self.set_labels(Playing::Set(Some(target)));
+        let clock = self.song_clock(Utc::now());
         self.inner
             .bus
             .publish(new_event(
@@ -478,6 +522,8 @@ impl StateService {
                 EventPayload::Song {
                     song: song.clone(),
                     index: target,
+                    position_seconds: clock.map(|c| c.position_seconds),
+                    observed_at: clock.map(|c| c.observed_at),
                 },
             ))
             .await;
@@ -518,6 +564,7 @@ impl StateService {
         }
         self.set_last_action(ActionName::RestartCurrent);
         self.set_labels(Playing::Set(Some(index)));
+        let clock = self.song_clock(Utc::now());
         self.inner
             .bus
             .publish(new_event(
@@ -526,6 +573,8 @@ impl StateService {
                 EventPayload::Song {
                     song: song.clone(),
                     index,
+                    position_seconds: clock.map(|c| c.position_seconds),
+                    observed_at: clock.map(|c| c.observed_at),
                 },
             ))
             .await;
@@ -652,7 +701,12 @@ impl StateService {
                 .publish(new_event(
                     EventType::SongSelected,
                     "state_service",
-                    EventPayload::Song { song, index },
+                    EventPayload::Song {
+                        song,
+                        index,
+                        position_seconds: None,
+                        observed_at: None,
+                    },
                 ))
                 .await;
         }

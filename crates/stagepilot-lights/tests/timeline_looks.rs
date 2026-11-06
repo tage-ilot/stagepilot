@@ -180,6 +180,8 @@ impl Rig {
                 EventPayload::Song {
                     song: song(key),
                     index: 0,
+                    position_seconds: None,
+                    observed_at: None,
                 },
             ))
             .await;

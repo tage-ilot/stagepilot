@@ -329,7 +329,13 @@ impl Inner {
     // ---- events -------------------------------------------------------------------------------
 
     async fn on_song_event(self: &Arc<Self>, event: &StagePilotEvent) {
-        let EventPayload::Song { song, .. } = &event.payload else {
+        let EventPayload::Song {
+            song,
+            position_seconds,
+            observed_at,
+            ..
+        } = &event.payload
+        else {
             return;
         };
         let duration = song.duration_seconds.unwrap_or(0);
@@ -349,6 +355,7 @@ impl Inner {
             match self.configure_and_start_locked(duration).await {
                 Ok(started_at) => {
                     drop(_guard);
+                    let started_at = song_clock_start(started_at, *position_seconds, *observed_at);
                     let name = self.st().settings.timer_name.clone();
                     self.record_success(&format!("Countdown timer \"{name}\" is running."))
                         .await;
@@ -819,5 +826,24 @@ impl Inner {
                 }),
             ))
             .await;
+    }
+}
+
+/// When song time 0 happened. Without a Playback clock it is `fallback` (the moment the
+/// ProPresenter countdown was started). With one (the song was at `position` when the heartbeat
+/// was received at `observed_at`) it is `observed_at - position`, so the countdown matches
+/// Playback instead of starting late by the heartbeat position and the ProPresenter calls.
+fn song_clock_start(
+    fallback: DateTime<Utc>,
+    position: Option<f64>,
+    observed_at: Option<DateTime<Utc>>,
+) -> DateTime<Utc> {
+    match (position, observed_at) {
+        (Some(position), Some(observed_at)) if position.is_finite() && position >= 0.0 => {
+            let start =
+                observed_at - chrono::Duration::milliseconds((position * 1000.0).round() as i64);
+            start.min(fallback)
+        }
+        _ => fallback,
     }
 }
