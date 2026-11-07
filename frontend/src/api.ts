@@ -203,12 +203,17 @@ export const selectPlanningCenterPlan = (planId: string) =>
     body: JSON.stringify({ plan_id: planId }),
   });
 export const getSettings = () => requestJson<SettingsResponse>("/api/v1/settings");
-export const updateSettings = (settings: PersistentSettings) =>
-  requestJson<SettingsResponse>("/api/v1/settings", {
+// Lighting (captures, cue maps, Lightkey options) is saved by its own routes and by the server
+// itself, so the general settings save never sends it back: a page opened earlier would erase it.
+export const updateSettings = (settings: PersistentSettings) => {
+  const body: Partial<PersistentSettings> = { ...settings };
+  delete body.lights;
+  return requestJson<SettingsResponse>("/api/v1/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(body),
   });
+};
 export const getPlanningCenterStatus = () =>
   requestJson<PlanningCenterStatusResponse>("/api/v1/planning-center/status");
 export const testPlanningCenter = (settings: PlanningCenterTestInput) =>

@@ -754,6 +754,9 @@ impl PlaybackPlugin {
         }
         let mut settings = settings;
         settings.planning_center_length_undo = current.planning_center_length_undo.clone();
+        // Lighting is written by its own routes and by captures, never by the general settings
+        // page. A page opened before a capture still holds the old copy, so keep what is saved.
+        settings.lights = current.lights.clone();
         settings.playback_api.planning_center_update_service_type_id =
             saved.planning_center_update_service_type_id.clone();
         settings.playback_api.scan_plan_key = saved.scan_plan_key.clone();

@@ -17,6 +17,7 @@ import {
   updatePlanningCenterSettings,
   updateLightingCueMap,
   updateLightsSettings,
+  updateSettings,
 } from "./api";
 import type {
   MidiCueSimulationResponse,
@@ -483,5 +484,25 @@ describe("remote access API", () => {
       await expect(getState()).rejects.toMatchObject({ status });
       expect(invalidated).toHaveBeenCalledOnce();
     } finally { unsubscribe(); }
+  });
+});
+
+describe("updateSettings", () => {
+  it("does not send the server-owned lighting block back", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ settings: {} }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateSettings({
+      timezone: "America/Chicago",
+      lights: { cue_maps: { "song-1": {} }, cue_revisions: { "song-1": 3 } },
+    } as unknown as Parameters<typeof updateSettings>[0]);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body).toEqual({ timezone: "America/Chicago" });
+    expect("lights" in body).toBe(false);
   });
 });

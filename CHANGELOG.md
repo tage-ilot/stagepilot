@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving a setting from a page that was already open no longer erases Lightkey captures or other saved lighting data.
+
 ## [2.43.0-rc.4] - 2026-11-06
 
 Release candidate 4 (pre-release; the in-app updater does not offer it). Fixes from the rc.3 rig test: Lightkey captures are always saved, are "fully captured" when the total recorded time is within 10 s of the song (gaps allowed), and no longer drift after a link drop; the countdown and Elapsed time are accurate after pauses and seeks; the Event Stream is no longer flooded; and a pending keychain prompt can no longer hold StagePilot up. From rc.3: old `lightkey-takes.json` captures are not replayed (record those songs again), and do not edit Lighting cues in v2.42.0 after trying this version.
