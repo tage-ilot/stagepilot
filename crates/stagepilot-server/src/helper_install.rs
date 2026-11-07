@@ -444,7 +444,11 @@ pub fn local_address_toward(target: SocketAddr) -> Option<Ipv4Addr> {
 
 /// Resolve `host` (an address or a name) and find the local address that routes to it.
 pub async fn detect_lan_ip(host: &str, port: u16) -> Option<Ipv4Addr> {
-    let found = tokio::net::lookup_host((host, port)).await.ok()?;
+    // An empty name must not reach the resolver: Windows answers it with this computer's own addresses.
+    if host.trim().is_empty() {
+        return None;
+    }
+    let found = tokio::net::lookup_host((host.trim(), port)).await.ok()?;
     found
         .filter(SocketAddr::is_ipv4)
         .find_map(local_address_toward)
