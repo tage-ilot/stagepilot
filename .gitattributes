@@ -1,0 +1,2 @@
+# The vendored Lightkey helper is hashed byte for byte: never convert line endings.
+crates/stagepilot-lights/assets/lightkey-helper/* -text

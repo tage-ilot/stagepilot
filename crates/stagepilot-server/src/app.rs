@@ -84,6 +84,12 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::routes_outputs::routes())
         // Remote access, remote auth and diagnostics.
         .merge(crate::remote_routes::routes())
+        // "Set up the Lighting computer": the session routes, and the token-guarded files the
+        // Lighting Mac fetches (LAN only; the remote ingress refuses this prefix).
+        .merge(crate::helper_install::api_routes())
+        .merge(crate::helper_install::served_routes(
+            runtime.helper_install.clone(),
+        ))
         .route("/ws", get(ws_state))
         .merge(crate::playback_routes::routes())
         .with_state(runtime.clone());

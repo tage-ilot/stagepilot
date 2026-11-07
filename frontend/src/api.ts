@@ -11,6 +11,7 @@ import type {
   LightingCaptureResponse,
   LightingPad,
   LightkeyActionResponse,
+  LightkeyHelperInstall,
   LightkeyReadFixtures,
   LightkeyAudio,
   LightkeyMode,
@@ -377,6 +378,16 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
 /** Asks the Lightkey helper to read the open project's fixtures again. Always answers 200 with {ok, message, ...}. */
 export const readLightkeyFixtures = () =>
   requestJson<LightkeyReadFixtures>("/api/v1/lights/lightkey/read-fixtures", { method: "POST" });
+/** Opens (or extends) the 30-minute setup session and answers the command to paste on the Lighting Mac. `address` is this computer's address when StagePilot could not find it itself (409). */
+export const startLightkeyHelperInstall = (address?: string) =>
+  requestJson<LightkeyHelperInstall>("/api/v1/lights/lightkey/helper-install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(address ? { address } : {}),
+  });
+/** Ends the setup session (the command stops working at once). */
+export const endLightkeyHelperInstall = () =>
+  requestJson<{ ended: boolean }>("/api/v1/lights/lightkey/helper-install", { method: "DELETE" });
 export const releaseLightkeyLights = () =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/release", { method: "POST" });
 /** Turns the input meter on (it switches itself off after a few seconds) or off; answers the picker's data. */

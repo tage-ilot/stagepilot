@@ -58,6 +58,8 @@ pub struct Runtime {
     keychain_degraded: std::sync::atomic::AtomicBool,
     keychain_interval_ms: std::sync::atomic::AtomicU64,
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
+    pub helper_install: Arc<crate::helper_install::HelperInstall>,
 }
 
 /// How often a keychain that has not answered is asked again.
@@ -284,6 +286,7 @@ impl Runtime {
             keychain_degraded: std::sync::atomic::AtomicBool::new(false),
             keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
             keychain_watch: Mutex::new(None),
+            helper_install: Arc::new(crate::helper_install::HelperInstall::new()),
         });
         runtime.note_keychain_state();
         runtime
