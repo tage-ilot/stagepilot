@@ -11,9 +11,10 @@ use sha2::{Digest, Sha256};
 use stagepilot_core::auth::{csrf_token, RemoteStore};
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_lights::lightkey_helper_assets as bundled;
-use stagepilot_server::helper_install::{
-    served_routes, Assets, HelperInstall, MAX_REQUESTS, NO_ADDRESS,
-};
+use stagepilot_server::helper_install::{MAX_REQUESTS, NO_ADDRESS};
+// Only the tests that run the generated script with a real `sh` and `curl` (Unix) use these.
+#[cfg(unix)]
+use stagepilot_server::helper_install::{served_routes, Assets, HelperInstall};
 use stagepilot_server::remote_types::RemoteContext;
 use stagepilot_server::{build_app, AppOptions, RemoteAccess, RemoteIngress, Runtime};
 use std::net::{Ipv4Addr, SocketAddr};
