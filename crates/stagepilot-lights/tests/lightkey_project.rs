@@ -896,7 +896,15 @@ async fn read_fixtures_with_nobody_listening_or_lighting_off_says_so() {
     let gone = rig.link.read_fixtures().await;
     assert!(!gone.ok);
     assert_eq!(gone.code.as_deref(), Some("unreachable"));
-    assert_eq!(gone.message, "Cannot reach the Lightkey API.");
+    // Linux and macOS refuse a closed local port at once; Windows retries it for a while and the
+    // request can run out of time first. Either way the operator reads that the helper is not there.
+    assert!(
+        matches!(
+            gone.message.as_str(),
+            "Cannot reach the Lightkey API." | "The Lightkey API did not answer."
+        ),
+        "{gone:?}"
+    );
     rig.settings.lock().unwrap().0 = false;
     let off = rig.link.read_fixtures().await;
     assert_eq!(off.code.as_deref(), Some("lighting_off"));
