@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.5] - 2026-11-06
+
+Release candidate 5 (pre-release; the in-app updater does not offer it). Everything in rc.4 applies. This candidate fixes one problem found while testing rc.4 on the rig: saving a setting from a StagePilot window that was already open could put an old copy of the lighting data back and erase Lightkey captures. Refresh or restart an open StagePilot window before saving settings if it is still running rc.4 or older.
+
 ### Fixed
 
 - Saving a setting from a page that was already open no longer erases Lightkey captures or other saved lighting data.
