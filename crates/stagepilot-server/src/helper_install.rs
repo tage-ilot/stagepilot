@@ -491,16 +491,16 @@ fn body(content_type: &'static str, bytes: Vec<u8>) -> Response {
 }
 
 /// The check every served request goes through.
-fn admit(svc: &HelperInstall, request: &Request, token: &str) -> Result<SessionInfo, Response> {
+fn admit(svc: &HelperInstall, request: &Request, token: &str) -> Result<SessionInfo, Denied> {
     // Never through the remote tunnel: only the trusted ingress sets this.
     if request.extensions().get::<RemoteContext>().is_some() {
-        return Err(empty(StatusCode::NOT_FOUND));
+        return Err(Denied::NotFound);
     }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0.ip());
-    svc.access(peer, token).map_err(denied)
+    svc.access(peer, token)
 }
 
 /// What a path under the prefix asks for.
@@ -525,7 +525,10 @@ async fn dispatch(
     Path(rest): Path<String>,
     request: Request,
 ) -> Response {
-    if !matches!(*request.method(), axum::http::Method::GET | axum::http::Method::HEAD) {
+    if !matches!(
+        *request.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD
+    ) {
         return empty(StatusCode::NOT_FOUND);
     }
     match wanted(&rest) {
@@ -537,11 +540,11 @@ async fn dispatch(
                     .wrapper(&info.base_url(), info.lan_ip)
                     .into_bytes(),
             ),
-            Err(response) => response,
+            Err(reason) => denied(reason),
         },
         Some(Wanted::File(token, name)) => {
-            if let Err(response) = admit(&svc, &request, token) {
-                return response;
+            if let Err(reason) = admit(&svc, &request, token) {
+                return denied(reason);
             }
             match svc.assets.get(name) {
                 Some(bytes) => body(embedded::content_type(name), bytes.to_vec()),
@@ -836,7 +839,10 @@ mod tests {
         assert_eq!(svc.access(Some(PEER), &almost), Err(Denied::NotFound));
         let public = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
         // Source first: a stranger cannot tell a good token from a bad one.
-        assert_eq!(svc.access(Some(public), &info.token), Err(Denied::Forbidden));
+        assert_eq!(
+            svc.access(Some(public), &info.token),
+            Err(Denied::Forbidden)
+        );
         assert_eq!(svc.access(Some(public), "nope"), Err(Denied::Forbidden));
         assert_eq!(svc.access(None, &info.token), Err(Denied::Forbidden));
         assert!(svc.access(Some(PEER), &info.token).is_ok());
@@ -901,16 +907,20 @@ mod tests {
     fn the_command_and_url_carry_the_address_port_and_token() {
         let (svc, _) = service();
         let info = svc.begin(LAN, 8123, None, false, None).unwrap();
-        let url = format!("http://192.168.1.20:8123/lightkey-helper/{}/install.sh", info.token);
+        let url = format!(
+            "http://192.168.1.20:8123/lightkey-helper/{}/install.sh",
+            info.token
+        );
         assert_eq!(info.url(), url);
         assert_eq!(info.command(), format!("curl -fsS {url} | sh"));
     }
 
     fn stub_assets(installer: &str) -> Assets {
-        let mut files: Vec<(String, Vec<u8>)> = ["lightkey_api.py", "lightkey_cues.py", "uninstall.sh"]
-            .iter()
-            .map(|n| (n.to_string(), format!("# {n}\n").into_bytes()))
-            .collect();
+        let mut files: Vec<(String, Vec<u8>)> =
+            ["lightkey_api.py", "lightkey_cues.py", "uninstall.sh"]
+                .iter()
+                .map(|n| (n.to_string(), format!("# {n}\n").into_bytes()))
+                .collect();
         files.push(("install.sh".into(), installer.as_bytes().to_vec()));
         let mut sums = String::new();
         for (name, bytes) in &files {
@@ -954,7 +964,8 @@ mod tests {
     fn the_wrapper_is_valid_shell() {
         // `sh -n` parses without running anything.
         for installer in ["# old\n", "# --allow-for\n"] {
-            let script = stub_assets(installer).wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN);
+            let script =
+                stub_assets(installer).wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN);
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("wrapper.sh");
             std::fs::write(&path, script).unwrap();
@@ -980,12 +991,17 @@ mod tests {
         // Even a caller that hands over a sixth file cannot get it served.
         let mut files = stub_assets("").files;
         files.push(("secret.txt".into(), b"x".to_vec()));
-        assert!(Assets::from_files(files, "1.0.0").get("secret.txt").is_none());
+        assert!(Assets::from_files(files, "1.0.0")
+            .get("secret.txt")
+            .is_none());
     }
 
     #[test]
     fn the_address_toward_loopback_or_an_unresolvable_name_is_not_found() {
-        assert_eq!(local_address_toward("127.0.0.1:8770".parse().unwrap()), None);
+        assert_eq!(
+            local_address_toward("127.0.0.1:8770".parse().unwrap()),
+            None
+        );
         assert_eq!(
             local_address_toward("0.0.0.0:8770".parse().unwrap()),
             None,

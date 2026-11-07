@@ -132,7 +132,13 @@ async fn a_public_source_address_is_403_even_with_the_right_token() {
             assert!(reply.body.is_empty());
         }
     }
-    for peer in ["192.168.1.50", "10.1.2.3", "172.16.4.4", "169.254.7.7", "127.0.0.1"] {
+    for peer in [
+        "192.168.1.50",
+        "10.1.2.3",
+        "172.16.4.4",
+        "169.254.7.7",
+        "127.0.0.1",
+    ] {
         let path = format!("/lightkey-helper/{token}/files/uninstall.sh");
         assert_eq!(
             send(&app, "GET", &path, None, peer).await.status,
@@ -180,7 +186,13 @@ async fn exactly_the_five_vendored_files_are_served_with_their_content_types() {
         assert_eq!(reply.body, bundled::file(name).unwrap(), "{name}");
     }
     for name in [
-        "VERSION", "config.json", "..%2Finstall.sh", "install.sh%00", "", "INSTALL.SH", "lightkey_api.pyc",
+        "VERSION",
+        "config.json",
+        "..%2Finstall.sh",
+        "install.sh%00",
+        "",
+        "INSTALL.SH",
+        "lightkey_api.pyc",
     ] {
         let reply = send(
             &app,
@@ -236,9 +248,14 @@ async fn the_served_wrapper_names_the_session_url_and_checksums() {
         "text/x-shellscript; charset=utf-8"
     );
     let script = String::from_utf8(reply.body).unwrap();
-    assert!(script.contains(&format!("BASE='http://192.168.1.20:8000/lightkey-helper/{token}'")));
+    assert!(script.contains(&format!(
+        "BASE='http://192.168.1.20:8000/lightkey-helper/{token}'"
+    )));
     for (hash, name) in bundled::checksums() {
-        assert!(script.contains(&format!("{name}) want='{hash}' ;;")), "{name}");
+        assert!(
+            script.contains(&format!("{name}) want='{hash}' ;;")),
+            "{name}"
+        );
     }
     let sums = hex::encode(Sha256::digest(bundled::file("SHA256SUMS").unwrap()));
     assert!(script.contains(&format!("SHA256SUMS) want='{sums}' ;;")));
@@ -296,11 +313,21 @@ async fn post_opens_a_session_with_its_own_listener_extends_it_and_delete_closes
     let rt = runtime();
     let app = build_app(rt.clone(), AppOptions { web_root: None });
     let body = Some(json!({"address": ip.to_string()}));
-    let first = send(&app, "POST", "/api/v1/lights/lightkey/helper-install", body.clone(), "127.0.0.1").await;
+    let first = send(
+        &app,
+        "POST",
+        "/api/v1/lights/lightkey/helper-install",
+        body.clone(),
+        "127.0.0.1",
+    )
+    .await;
     assert_eq!(first.status, StatusCode::OK, "{:?}", first.json());
     let first = first.json();
     let port = first["port"].as_u64().unwrap() as u16;
-    assert_ne!(port, rt.settings.bind_port, "the extra listener has its own port");
+    assert_ne!(
+        port, rt.settings.bind_port,
+        "the extra listener has its own port"
+    );
     assert_eq!(first["lan_ip"], ip.to_string());
     assert_eq!(first["bundled_version"], bundled::bundled_version());
     let url = first["url"].as_str().unwrap().to_string();
@@ -319,7 +346,11 @@ async fn post_opens_a_session_with_its_own_listener_extends_it_and_delete_closes
         .send()
         .await
         .unwrap();
-    assert_eq!(api.status(), 404, "the dashboard API is not on this listener");
+    assert_eq!(
+        api.status(),
+        404,
+        "the dashboard API is not on this listener"
+    );
     assert!(
         std::net::TcpStream::connect_timeout(
             &SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port),
@@ -330,10 +361,25 @@ async fn post_opens_a_session_with_its_own_listener_extends_it_and_delete_closes
     );
 
     // A second POST extends: same token, same port.
-    let second = send(&app, "POST", "/api/v1/lights/lightkey/helper-install", body, "127.0.0.1").await.json();
+    let second = send(
+        &app,
+        "POST",
+        "/api/v1/lights/lightkey/helper-install",
+        body,
+        "127.0.0.1",
+    )
+    .await
+    .json();
     assert_eq!(second["url"], first["url"]);
 
-    let ended = send(&app, "DELETE", "/api/v1/lights/lightkey/helper-install", None, "127.0.0.1").await;
+    let ended = send(
+        &app,
+        "DELETE",
+        "/api/v1/lights/lightkey/helper-install",
+        None,
+        "127.0.0.1",
+    )
+    .await;
     assert_eq!(ended.json()["ended"], json!(true));
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     assert!(
@@ -350,11 +396,22 @@ async fn the_remote_ingress_never_passes_the_installer_prefix() {
     let rt = runtime();
     let access = RemoteAccess::new(RemoteStore::new(dir.path().join("identity.db")));
     rt.set_remote_access(Some(access.clone()));
-    let info = rt.helper_install.begin(LAN, 8000, None, false, None).unwrap();
+    let info = rt
+        .helper_install
+        .begin(LAN, 8000, None, false, None)
+        .unwrap();
     let local = build_app(rt.clone(), AppOptions { web_root: None });
-    let edge = RemoteIngress::new(access.clone(), ORIGIN).unwrap().wrap(local);
-    access.store.bootstrap("operator@example.test", PASSWORD).unwrap();
-    let session = access.store.login("operator@example.test", PASSWORD, None).unwrap();
+    let edge = RemoteIngress::new(access.clone(), ORIGIN)
+        .unwrap()
+        .wrap(local);
+    access
+        .store
+        .bootstrap("operator@example.test", PASSWORD)
+        .unwrap();
+    let session = access
+        .store
+        .login("operator@example.test", PASSWORD, None)
+        .unwrap();
     let cookie = format!("__Host-stagepilot_remote={session}");
     let csrf = csrf_token(&session);
     let paths = [
@@ -372,13 +429,19 @@ async fn the_remote_ingress_never_passes_the_installer_prefix() {
                     .header("origin", ORIGIN)
                     .header("x-stagepilot-remote", "1");
                 if signed_in {
-                    builder = builder.header("cookie", &cookie).header("x-csrf-token", &csrf);
+                    builder = builder
+                        .header("cookie", &cookie)
+                        .header("x-csrf-token", &csrf);
                 }
                 let mut request = builder.body(Body::empty()).unwrap();
                 let peer: SocketAddr = "192.168.1.50:50000".parse().unwrap();
                 request.extensions_mut().insert(ConnectInfo(peer));
                 let response = edge.clone().oneshot(request).await.unwrap();
-                assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path} ({name})");
+                assert_eq!(
+                    response.status(),
+                    StatusCode::NOT_FOUND,
+                    "{method} {path} ({name})"
+                );
                 let body = response.into_body().collect().await.unwrap().to_bytes();
                 assert!(
                     !String::from_utf8_lossy(&body).contains("#!/bin/sh"),
@@ -401,7 +464,9 @@ async fn the_handlers_refuse_a_request_that_carries_a_remote_context() {
         format!("/lightkey-helper/{token}/files/install.sh"),
     ] {
         let mut request = Request::builder().uri(&path).body(Body::empty()).unwrap();
-        request.extensions_mut().insert(ConnectInfo("192.168.1.50:5".parse::<SocketAddr>().unwrap()));
+        request
+            .extensions_mut()
+            .insert(ConnectInfo("192.168.1.50:5".parse::<SocketAddr>().unwrap()));
         request.extensions_mut().insert(RemoteContext {
             access: access.clone(),
             token: None,
@@ -427,10 +492,11 @@ mod wrapper {
             pwd > \"$HOME/installer-dir\"\n\
             ls > \"$HOME/installer-files\"\n\
             echo 'stub installer ran'\n";
-        let mut files: Vec<(String, Vec<u8>)> = ["lightkey_api.py", "lightkey_cues.py", "uninstall.sh"]
-            .iter()
-            .map(|n| (n.to_string(), bundled::file(n).unwrap().to_vec()))
-            .collect();
+        let mut files: Vec<(String, Vec<u8>)> =
+            ["lightkey_api.py", "lightkey_cues.py", "uninstall.sh"]
+                .iter()
+                .map(|n| (n.to_string(), bundled::file(n).unwrap().to_vec()))
+                .collect();
         files.push(("install.sh".into(), installer.as_bytes().to_vec()));
         let mut sums = String::new();
         for (name, bytes) in &files {
@@ -447,11 +513,16 @@ mod wrapper {
         let port = listener.local_addr().unwrap().port();
         let app = served_routes::<()>(svc.clone());
         tokio::spawn(async move {
-            axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-                .await
-                .unwrap();
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
-        let info = svc.begin(Ipv4Addr::LOCALHOST, port, None, false, None).unwrap();
+        let info = svc
+            .begin(Ipv4Addr::LOCALHOST, port, None, false, None)
+            .unwrap();
         (info.base_url(), svc)
     }
 
@@ -503,12 +574,9 @@ mod wrapper {
     }
 
     fn curl_and_sh_exist() -> bool {
-        ["curl", "sh"].iter().all(|tool| {
-            Command::new(tool)
-                .arg("--version")
-                .output()
-                .is_ok()
-        })
+        ["curl", "sh"]
+            .iter()
+            .all(|tool| Command::new(tool).arg("--version").output().is_ok())
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -520,10 +588,17 @@ mod wrapper {
         let (base, svc) = serve(stub_assets()).await;
         let run = paste(base, None).await;
         assert!(run.ok, "{}", run.output);
-        assert!(run.output.contains("Done. Go back to StagePilot."), "{}", run.output);
+        assert!(
+            run.output.contains("Done. Go back to StagePilot."),
+            "{}",
+            run.output
+        );
         assert!(run.output.contains("stub installer ran"), "{}", run.output);
         // The installer was called with the right arguments, from a folder holding the files.
-        assert_eq!(run.file("installer-args").unwrap(), "--allow-for\n127.0.0.1\n");
+        assert_eq!(
+            run.file("installer-args").unwrap(),
+            "--allow-for\n127.0.0.1\n"
+        );
         let mut files: Vec<String> = run
             .file("installer-files")
             .unwrap()
@@ -533,7 +608,13 @@ mod wrapper {
         files.sort();
         assert_eq!(
             files,
-            ["SHA256SUMS", "install.sh", "lightkey_api.py", "lightkey_cues.py", "uninstall.sh"]
+            [
+                "SHA256SUMS",
+                "install.sh",
+                "lightkey_api.py",
+                "lightkey_cues.py",
+                "uninstall.sh"
+            ]
         );
         // It cleaned up after itself.
         assert!(nothing_left_in(&run.home.path().join("tmp")));
@@ -552,7 +633,11 @@ mod wrapper {
         let (honest_base, _a) = serve(stub_assets()).await;
         for tampered in ["lightkey_api.py", "install.sh", "uninstall.sh"] {
             let mut assets = stub_assets();
-            let entry = assets.files_mut().iter_mut().find(|(n, _)| n == tampered).unwrap();
+            let entry = assets
+                .files_mut()
+                .iter_mut()
+                .find(|(n, _)| n == tampered)
+                .unwrap();
             entry.1.extend_from_slice(b"\necho pwned\n");
             let (evil_base, _b) = serve(assets).await;
 
@@ -592,12 +677,19 @@ mod wrapper {
             .unwrap();
             assert!(!run.ok, "{tampered}: {}", run.output);
             assert!(
-                run.output.contains(&format!("{tampered} does not match its checksum")),
+                run.output
+                    .contains(&format!("{tampered} does not match its checksum")),
                 "{tampered}: {}",
                 run.output
             );
-            assert!(run.file("installer-args").is_none(), "the installer must not run");
-            assert!(nothing_left_in(&run.home.path().join("tmp")), "the temp folder is removed");
+            assert!(
+                run.file("installer-args").is_none(),
+                "the installer must not run"
+            );
+            assert!(
+                nothing_left_in(&run.home.path().join("tmp")),
+                "the temp folder is removed"
+            );
         }
     }
 
@@ -609,7 +701,12 @@ mod wrapper {
         }
         let (base, svc) = serve(stub_assets()).await;
         // The session ends after the wrapper was fetched: the file downloads fail.
-        let script = reqwest::get(format!("{base}/install.sh")).await.unwrap().text().await.unwrap();
+        let script = reqwest::get(format!("{base}/install.sh"))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
         svc.end();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("w.sh");
@@ -622,6 +719,9 @@ mod wrapper {
         .unwrap();
         assert!(!output.status.success());
         let text = String::from_utf8_lossy(&output.stderr).to_string();
-        assert!(text.contains("StagePilot setup failed: could not download"), "{text}");
+        assert!(
+            text.contains("StagePilot setup failed: could not download"),
+            "{text}"
+        );
     }
 }

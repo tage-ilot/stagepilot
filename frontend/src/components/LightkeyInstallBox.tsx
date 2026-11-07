@@ -3,19 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, endLightkeyHelperInstall, startLightkeyHelperInstall } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyHelperInstall, LightkeyStatus } from "../types";
-import { helperIsOutdated } from "./lightkeyProject";
+import { countdownText, helperIsOutdated } from "./lightkeyProject";
 import { CONTROL_34 } from "./compactControl";
 import { LiveLinkField } from "./LightingOscParts";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
 type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
-
-/** The countdown as `m:ss`. */
-export function countdownText(ms: number): string {
-  const seconds = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 /**
  * "Set up the Lighting computer", in the Lightkey strip. Shown while there is no connected Lighting
