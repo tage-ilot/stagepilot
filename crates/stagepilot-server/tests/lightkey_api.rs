@@ -959,3 +959,48 @@ fn complete() -> stagepilot_core::config::CaptureStatus {
         recorded_at: "2026-11-02T00:00:00Z".into(),
     }
 }
+
+#[tokio::test]
+async fn saving_general_settings_from_an_older_page_keeps_captures_revisions_and_audio_device() {
+    use stagepilot_lights::lightkey_link::SongLooks;
+    let (router, rt) = app(osc_lights()).await;
+    // A page loads the settings, then stays open.
+    let (_, old) = call(&router, "GET", "/api/v1/settings", None).await;
+    let stale = old["settings"].clone();
+    // Meanwhile a song is captured and an audio device is chosen.
+    (rt.outputs.looks_sink)(SongLooks {
+        song_key: "song-1".into(),
+        song_title: "Holy Forever".into(),
+        rows: vec![captured_row(1.0, "/fixture/P1/overrides/dimmer", 0.5)],
+        effects: vec![],
+        status: complete(),
+    })
+    .await
+    .unwrap();
+    let (code, _) = call(
+        &router,
+        "PUT",
+        &format!("{LK}/settings"),
+        Some(json!({"audio_device": "Scarlett 2i2"})),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, fresh) = call(&router, "GET", "/api/v1/settings", None).await;
+    let fresh_lights = fresh["settings"]["lights"].clone();
+    assert_eq!(fresh_lights["lightkey"]["audio_device"], "Scarlett 2i2");
+    // Saving a setting the page really edits, sent with the older copy.
+    let mut body = stale;
+    body["timezone"] = json!("America/Chicago");
+    let (code, response) = call(&router, "PUT", "/api/v1/settings", Some(body)).await;
+    let (_, after) = call(&router, "GET", "/api/v1/settings", None).await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::OK, "{response}");
+    assert_eq!(after["settings"]["timezone"], "America/Chicago");
+    assert_eq!(after["settings"]["lights"], fresh_lights);
+    assert_eq!(
+        after["settings"]["lights"]["cue_maps"]["song-1"]["osc_cues"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+}
