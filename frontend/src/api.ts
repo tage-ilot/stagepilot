@@ -11,6 +11,7 @@ import type {
   LightingCaptureResponse,
   LightingPad,
   LightkeyActionResponse,
+  LightkeyReadFixtures,
   LightkeyAudio,
   LightkeyMode,
   LightkeyStatus,
@@ -373,6 +374,9 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+/** Asks the Lightkey helper to read the open project's fixtures again. Always answers 200 with {ok, message, ...}. */
+export const readLightkeyFixtures = () =>
+  requestJson<LightkeyReadFixtures>("/api/v1/lights/lightkey/read-fixtures", { method: "POST" });
 export const releaseLightkeyLights = () =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/release", { method: "POST" });
 /** Turns the input meter on (it switches itself off after a few seconds) or off; answers the picker's data. */

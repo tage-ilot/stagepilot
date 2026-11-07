@@ -12,6 +12,7 @@ vi.mock("../api", async (original) => ({
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
   releaseLightkeyLights: vi.fn(),
+  readLightkeyFixtures: vi.fn(),
   setLightkeyAudioMeter: vi.fn().mockResolvedValue({ available: false, reason: "No input.", devices: [], selected: null, note: null, level: null, metering: false }),
 }));
 
@@ -467,5 +468,123 @@ describe("Auto | Replay | Record", () => {
   it("the song header says what the rows are", () => {
     expect(lightkeyHeadline(status({ mode: "replay" }), { count: 12, edited: false, label: "fully_captured" })).toBe("Fully captured: 12 captured items (12 ramps/steps, 0 loops) on this song");
     expect(lightkeyHeadline(status({ mode: "replay" }), { count: 0, edited: false, label: "manually_cued" })).toBe("Manually cued on this song");
+  });
+});
+
+const helper = (over: Partial<NonNullable<LightkeyStatus["helper"]>> = {}) => ({ version: "0.5.0", outdated: false, project: "Show.lightkeyproj", fixtures: 66, map: 7, watch_state: "ok", ...over });
+const live = { link: "live" as const, detail: null, fixtures: 66, lost_packets: 0, recording: false };
+
+describe("LightkeyStrip project line", () => {
+  it("shows the project and the fixture count under the pill", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ project: "Show.lightkeyproj", fixtures: live }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-project")).toHaveTextContent("Project: Show.lightkeyproj \u00B7 66 fixtures");
+  });
+
+  it("takes the count from the helper while the relay is silent, and says 1 fixture in the singular", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ project: "Solo", helper: helper({ fixtures: 1 }) }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-project")).toHaveTextContent("Project: Solo \u00B7 1 fixture");
+    expect(screen.getByTestId("lightkey-project")).not.toHaveTextContent("fixtures");
+  });
+
+  it("says plainly when the project is not known yet", async () => {
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-project")).toHaveTextContent("Project not reported yet");
+  });
+});
+
+describe("LightkeyStrip project notice (warn only)", () => {
+  it("shows the mismatch notice while the song is current, and leaves Record and the rest usable", async () => {
+    const message = "Captured with Old Show. Lightkey has Show open.";
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ project: "Show", project_mismatch: { song: "Holy Forever", captured: "Old Show", current: "Show", message } }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-project-mismatch")).toHaveTextContent(message);
+    expect(screen.getByRole("radio", { name: "Record" })).toBeEnabled();
+  });
+
+  it("shows no notice without one from the backend", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ project: "Show" }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-project");
+    expect(screen.queryByTestId("lightkey-project-mismatch")).not.toBeInTheDocument();
+  });
+
+  it("shows the not-saved message the backend sends after a project change mid-recording", async () => {
+    const message = "Not saved: the Lightkey project or its fixtures changed during the recording (A -> B). It captures again next time.";
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ message }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-headline")).toHaveTextContent(message);
+  });
+
+  it("tells the panel the status it read", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ project: "Show" }));
+    const onStatus = vi.fn();
+    render(<LightkeyStrip lightingEnabled onStatus={onStatus} />);
+    await waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ project: "Show" })));
+  });
+});
+
+describe("LightkeyStrip helper update and Read fixtures", () => {
+  it("offers the helper update for a helper older than 0.5.0 and disables Read fixtures with the reason", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-helper-update")).toHaveTextContent("Helper update available");
+    expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
+    expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Update the helper to use this.");
+    // everything else still works
+    expect(screen.getByRole("radio", { name: "Record" })).toBeEnabled();
+  });
+
+  it("shows no update line for a current helper, and Read fixtures is enabled", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-project");
+    expect(screen.queryByTestId("lightkey-helper-update")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read fixtures" })).toBeEnabled();
+  });
+
+  it("disables Read fixtures when not connected", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API." }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByText("Not connected");
+    expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
+    expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Connect to Lightkey first.");
+  });
+
+  it("shows what was read, then re-reads the status", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    vi.mocked(api.readLightkeyFixtures).mockResolvedValue({ ok: true, message: "Read 66 fixtures from Show.lightkeyproj", project: "Show.lightkeyproj", count: 66, changed: true });
+    render(<LightkeyStrip lightingEnabled />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Read fixtures" }));
+    expect(await screen.findByTestId("lightkey-read-result")).toHaveTextContent("Read 66 fixtures from Show.lightkeyproj");
+    expect(api.readLightkeyFixtures).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.getLightkeyStatus).mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("says no change when nothing changed", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    vi.mocked(api.readLightkeyFixtures).mockResolvedValue({ ok: true, message: "No change: 66 fixtures", project: "Show.lightkeyproj", count: 66, changed: false });
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Read fixtures" }));
+    expect(await screen.findByTestId("lightkey-read-result")).toHaveTextContent("No change: 66 fixtures");
+  });
+
+  it("shows the helper's own words when it refuses", async () => {
+    const text = "macOS has not allowed this helper to read your Documents folder. Open System Settings > Privacy & Security > Files and Folders and allow python3, then press Read fixtures again.";
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    vi.mocked(api.readLightkeyFixtures).mockResolvedValue({ ok: false, message: text, code: "permission_denied" });
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Read fixtures" }));
+    expect(await screen.findByTestId("lightkey-read-result")).toHaveTextContent(text);
+  });
+
+  it("shows a failed request instead of nothing", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    vi.mocked(api.readLightkeyFixtures).mockRejectedValue(new Error("boom"));
+    render(<LightkeyStrip lightingEnabled />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Read fixtures" }));
+    expect(await screen.findByTestId("lightkey-read-result")).toBeInTheDocument();
   });
 });

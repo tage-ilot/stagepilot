@@ -313,3 +313,32 @@ describe("timeline clustering and touch", () => {
     });
   });
 });
+
+describe("the project notice on the song's timeline (warn only)", () => {
+  const connected = (project?: string) => ({ api_url: "http://192.0.2.10:8770", link: "connected", detail: null, active_count: null, recording: false, recording_song: null, replay: true, replay_blocked: null, replaying_song: null, message: null, ...(project ? { project } : {}) }) as never;
+  const withCapture = (project?: string) => {
+    const settings = settingsWith(threeLooks());
+    (settings.settings.lights.cue_maps["song-1"] as { capture?: unknown }).capture = { complete: true, coverage_seconds: 290, recorded_at: "2026-11-02T00:00:00Z", ...(project ? { project } : {}) };
+    return settings;
+  };
+  const show = (settings: SettingsResponse) => render(
+    <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()}
+      onTest={vi.fn()} onTestOsc={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+  );
+
+  it("says which project the song was captured under when another one is open", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(connected("Show"));
+    show(withCapture("Old Show"));
+    expect(await screen.findByTestId("lighting-project-notice")).toHaveTextContent("Captured with Old Show. Lightkey has Show open.");
+  });
+
+  it("is silent for the same project, an old capture with no project, and an unknown open project", async () => {
+    for (const [captured, open] of [["Show", "Show"], [undefined, "Show"], ["Old Show", undefined]] as const) {
+      vi.mocked(api.getLightkeyStatus).mockResolvedValue(connected(open));
+      const { unmount } = show(withCapture(captured));
+      await screen.findByTestId("lightkey-project");
+      expect(screen.queryByTestId("lighting-project-notice")).toBeNull();
+      unmount();
+    }
+  });
+});

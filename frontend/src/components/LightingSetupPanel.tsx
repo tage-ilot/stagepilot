@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type {
   ApplicationState,
@@ -7,6 +7,7 @@ import type {
   LightingEffect,
   LightingMethod,
   LightingPad,
+  LightkeyStatus,
   OscArgument,
   OscLightingCue,
   LightsSettingsInput,
@@ -45,6 +46,7 @@ import {
   removeFixtureFromRows,
   captureLabelOf,
 } from "./lightingLooks";
+import { projectMismatchText } from "./lightkeyProject";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { LightingCueBoard, type CaptureMode } from "./LightingCueBoard";
 import { CueTypeBadge } from "./CueTypeParts";
@@ -236,6 +238,9 @@ export function LightingSetupPanel({
   // ---- Cue board, live capture and timeline ----
   const pads = settings?.settings.lights.pads ?? [];
   const [captureMode, setCaptureMode] = useState<CaptureMode>("capture");
+  // The Lightkey project that is open now (the strip reads it); the song's timeline compares it with the project the song was captured under.
+  const [openProject, setOpenProject] = useState<string | null>(null);
+  const onLightkeyStatus = useCallback((status: LightkeyStatus) => setOpenProject(status.project ?? null), []);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [lastCapture, setLastCapture] = useState<{ songKey: string; cueId: string } | null>(null);
   const [boardBusy, setBoardBusy] = useState(false);
@@ -435,6 +440,8 @@ export function LightingSetupPanel({
     setUndo(null);
   };
   const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), loops: effects.length, edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  // Warn only: replay is never held or skipped for this.
+  const projectNotice = projectMismatchText(savedCueMap?.capture?.project, openProject);
   const PAGE_SIZE = 40;
 
   const addOscCue = () => {
@@ -786,6 +793,7 @@ export function LightingSetupPanel({
             connection={{ host: oscHost, onHost: setOscHost, oscPort, onPort: setOscPort, savedOscHost: savedLighting?.osc_host ?? "127.0.0.1", attempted: attempt.attempted, held: { host: heldHost, port: heldPort } }}
             lightingEnabled={Boolean(lights?.enabled)}
             looks={looks}
+            onStatus={onLightkeyStatus}
             loudness={loudnessProp}
             footer={oscFooter}
             testCue={oscTestCue}
@@ -837,6 +845,7 @@ export function LightingSetupPanel({
       {method === "midi" && savedMethod === "osc" && <LightkeyStrip
         lightingEnabled={Boolean(lights?.enabled)}
         looks={looks}
+            onStatus={onLightkeyStatus}
         loudness={loudnessProp}
       />}
       <SongsStrip
@@ -864,6 +873,7 @@ export function LightingSetupPanel({
       >
         {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
         {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{testReasonText}</p>}
+        {selectedSong && projectNotice && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lighting-project-notice" role="status">{projectNotice}</p>}
         <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
         {onSavePads && (

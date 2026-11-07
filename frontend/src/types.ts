@@ -303,6 +303,8 @@ export interface CaptureStatus {
   complete: boolean;
   coverage_seconds: number;
   recorded_at: string;
+  /** The Lightkey project (base name) open when the recording began. Absent on older captures: they never warn. */
+  project?: string;
 }
 
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */
@@ -386,6 +388,35 @@ export interface LightkeyFixtureStatus {
 
 export type LightkeyLink = "off" | "connected" | "lightkey_closed" | "unreachable";
 
+/** What the Lightkey helper's GET /health said. `outdated`: older than 0.5.0 (no version reported). */
+export interface LightkeyHelper {
+  version?: string;
+  outdated: boolean;
+  project?: string;
+  fixtures?: number;
+  map?: number;
+  watch_state?: string;
+  watch_detail?: string;
+}
+
+/** The current song was captured under another project than the one open now. A notice only. */
+export interface LightkeyProjectMismatch {
+  song: string;
+  captured: string;
+  current: string;
+  message: string;
+}
+
+/** POST /api/v1/lights/lightkey/read-fixtures. */
+export interface LightkeyReadFixtures {
+  ok: boolean;
+  message: string;
+  project?: string;
+  count?: number;
+  changed?: boolean;
+  code?: string;
+}
+
 export interface LightkeyStatus {
   api_url: string;
   link: LightkeyLink;
@@ -413,6 +444,12 @@ export interface LightkeyStatus {
   yielded_fixtures?: number;
   /** Fixtures the saved looks can override; Release lights clears these even after a restart. */
   known_fixtures?: number;
+  /** The open Lightkey project (base name), from the relay hello; absent until the helper says. */
+  project?: string;
+  /** The helper's own report (version, fixture map, watch state); absent until /health answered. */
+  helper?: LightkeyHelper;
+  /** Set when the current song was captured under another project than the open one. */
+  project_mismatch?: LightkeyProjectMismatch;
 }
 
 export interface LightkeyActionResponse {
