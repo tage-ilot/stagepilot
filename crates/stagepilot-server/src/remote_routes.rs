@@ -59,10 +59,6 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/remote-access/reset", post(reset))
         .route("/api/v1/remote-access/disable", post(disable))
         .route("/api/v1/remote-access/regenerate", post(regenerate))
-        .route(
-            "/api/v1/install-location",
-            get(get_install_location).put(put_install_location),
-        )
         // The bundle cap (2 MB) is checked by the handler, so the extractor's own 2 MB body
         // limit must not answer first.
         .route(
@@ -528,64 +524,6 @@ async fn bootstrap(State(rt): State<Rt>, request: Request) -> Response {
     {
         Ok(user) => reply(201, Some(serde_json::to_value(user).unwrap_or(Value::Null))),
         Err(error) => auth_fail(error),
-    }
-}
-
-/// The user-entered install location (city): where this installation reports itself on the
-/// fleet admin page. Operators only; the value is a short text, never coordinates.
-async fn get_install_location(State(rt): State<Rt>, request: Request) -> Response {
-    if let Err(response) = admin(&rt, &request) {
-        return response;
-    }
-    match rt.remote_wiring().manager {
-        Some(manager) if manager.supports_location() => reply(
-            200,
-            Some(json!({ "available": true, "location": manager.location().await })),
-        ),
-        _ => reply(200, Some(json!({ "available": false, "location": null }))),
-    }
-}
-
-/// `{"location": "City, ST"}`; blank or null clears it. At most 80 characters.
-fn parse_location(raw: &[u8]) -> Option<Option<String>> {
-    let map = object_of(raw)?;
-    only_keys(&map, &["location"]).then_some(())?;
-    match map.get("location")? {
-        Value::Null => Some(None),
-        Value::String(text) => {
-            let trimmed = text.trim();
-            if trimmed.chars().count() > 80 || trimmed.chars().any(char::is_control) {
-                return None;
-            }
-            Some((!trimmed.is_empty()).then(|| trimmed.to_owned()))
-        }
-        _ => None,
-    }
-}
-
-async fn put_install_location(State(rt): State<Rt>, request: Request) -> Response {
-    let headers = request.headers().clone();
-    let gate = admin_after_body(&rt, request, parse_location).await;
-    let (_access, location) = match gate {
-        Ok(pair) => pair,
-        Err(response) => return response,
-    };
-    if headers
-        .get("x-stagepilot-remote")
-        .is_none_or(|v| v.as_bytes() != b"1")
-    {
-        return http_fail(403, "Remote settings request required.");
-    }
-    let wiring = rt.remote_wiring();
-    let Some(manager) = wiring.manager.filter(|m| m.supports_location()) else {
-        return http_fail(
-            503,
-            "Setting the location is unavailable on this installation.",
-        );
-    };
-    match manager.set_location(location).await {
-        Ok(stored) => reply(200, Some(json!({ "available": true, "location": stored }))),
-        Err(_) => invalid(),
     }
 }
 
