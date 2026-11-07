@@ -22,6 +22,8 @@ use tower::ServiceExt;
 /// `_fake_agent`: `/time` answers 1000 ms, `/log` reports two active cues at seq 3.
 struct FakeAgent {
     down: bool,
+    /// What `POST /fixtures/refresh` answers (`None`: the connection fails).
+    refresh: Option<(u16, Value)>,
 }
 
 #[async_trait]
@@ -33,7 +35,21 @@ impl LightkeyHttp for FakeAgent {
         if url.ends_with("/time") {
             return Ok(json!({"t": 1000.0}));
         }
+        if url.ends_with("/health") {
+            return Ok(json!({
+                "ok": true, "lightkey": true, "version": "0.5.0",
+                "fixture_map": {"project": "Show.lightkeyproj", "count": 66, "read_at": 1, "map": 7},
+                "watch": {"state": "permission_denied", "detail": "macOS has not allowed this helper to read your Documents folder."}
+            }));
+        }
         Ok(json!({"events": [], "state": {"online": true, "active": ["A", "B"], "seq": 3}}))
+    }
+
+    async fn post_json(&self, url: &str) -> Result<(u16, Value), HttpFailure> {
+        assert!(url.ends_with("/fixtures/refresh"), "{url}");
+        self.refresh
+            .clone()
+            .ok_or_else(|| HttpFailure::Other("down".into()))
     }
 }
 
@@ -42,6 +58,14 @@ async fn app(lights: LightsSettings) -> (axum::Router, Arc<Runtime>) {
 }
 
 async fn app_with(lights: LightsSettings, down: bool) -> (axum::Router, Arc<Runtime>) {
+    app_refreshing(lights, down, None).await
+}
+
+async fn app_refreshing(
+    lights: LightsSettings,
+    down: bool,
+    refresh: Option<(u16, Value)>,
+) -> (axum::Router, Arc<Runtime>) {
     let service = SettingsService::ephemeral_persistent(PersistentSettings {
         lights,
         ..PersistentSettings::default()
@@ -49,7 +73,12 @@ async fn app_with(lights: LightsSettings, down: bool) -> (axum::Router, Arc<Runt
     let osc = Arc::new(FakeOscBackend::default());
     let backends = OutputBackends {
         osc: Arc::new(move || osc.clone() as Arc<dyn OscBackend>),
-        lightkey_http: Arc::new(move || Arc::new(FakeAgent { down })),
+        lightkey_http: Arc::new(move || {
+            Arc::new(FakeAgent {
+                down,
+                refresh: refresh.clone(),
+            })
+        }),
         ..OutputBackends::fake_midi()
     };
     let runtime = Runtime::with_backends(Arc::new(service), false, backends);
@@ -595,7 +624,7 @@ async fn an_old_takes_file_next_to_the_settings_is_ignored_and_left_alone() {
     );
     service.load();
     let backends = OutputBackends {
-        lightkey_http: Arc::new(|| Arc::new(FakeAgent { down: false })),
+        lightkey_http: Arc::new(|| Arc::new(FakeAgent { down: false, refresh: None })),
         ..OutputBackends::fake_midi()
     };
     let runtime = Runtime::with_backends(Arc::new(service), false, backends);
@@ -957,6 +986,7 @@ fn complete() -> stagepilot_core::config::CaptureStatus {
         complete: true,
         coverage_seconds: 100.0,
         recorded_at: "2026-11-02T00:00:00Z".into(),
+        project: None,
     }
 }
 
@@ -1003,4 +1033,105 @@ async fn saving_general_settings_from_an_older_page_keeps_captures_revisions_and
             .map(Vec::len),
         Some(1)
     );
+}
+
+// ------------------------------------------------------------------------ Read fixtures
+
+const READ: &str = "/api/v1/lights/lightkey/read-fixtures";
+
+async fn read_fixtures(refresh: Option<(u16, Value)>) -> (StatusCode, Value) {
+    let (router, rt) = app_refreshing(osc_lights(), false, refresh).await;
+    let answer = call(&router, "POST", READ, None).await;
+    rt.stop().await;
+    answer
+}
+
+#[tokio::test]
+async fn read_fixtures_answers_changed_and_no_change() {
+    let (code, body) = read_fixtures(Some((
+        200,
+        json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": true}),
+    )))
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(
+        body,
+        json!({"ok": true, "message": "Read 66 fixtures from Show.lightkeyproj", "project": "Show.lightkeyproj", "count": 66, "changed": true})
+    );
+    let (_, body) = read_fixtures(Some((
+        200,
+        json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": false}),
+    )))
+    .await;
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["message"], "No change: 66 fixtures");
+    assert_eq!(body["changed"], false);
+    assert!(body.get("code").is_none());
+}
+
+#[tokio::test]
+async fn read_fixtures_passes_every_helper_error_through() {
+    let permission = "macOS has not allowed this helper to read your Documents folder. Open System Settings > Privacy & Security > Files and Folders and allow python3, then press Read fixtures again.";
+    for (status, code, text) in [
+        (409, "lightkey_closed", "Lightkey is not running."),
+        (409, "no_project", "Lightkey is open with no saved project."),
+        (409, "busy", "A read is already running."),
+        (403, "permission_denied", permission),
+        (422, "unreadable", "The project file could not be read."),
+    ] {
+        let (http, body) = read_fixtures(Some((
+            status,
+            json!({"ok": false, "code": code, "error": text, "folder": "Documents"}),
+        )))
+        .await;
+        assert_eq!(http, StatusCode::OK, "the app answers, the helper refused");
+        assert_eq!(body["ok"], false, "{code}");
+        assert_eq!(body["code"], code);
+        assert_eq!(body["message"], text);
+        assert!(body.get("project").is_none() && body.get("count").is_none());
+    }
+}
+
+#[tokio::test]
+async fn read_fixtures_on_an_old_helper_or_with_no_helper_says_so() {
+    let (_, old) = read_fixtures(Some((404, json!({"error": "not found"})))).await;
+    assert_eq!(old["ok"], false);
+    assert_eq!(old["code"], "old_helper");
+    assert_eq!(old["message"], "Update the helper to use this.");
+    let (_, gone) = read_fixtures(None).await;
+    assert_eq!(gone["code"], "unreachable");
+    assert_eq!(gone["message"], "Cannot reach the Lightkey API.");
+}
+
+#[tokio::test]
+async fn read_fixtures_needs_lighting_on_takes_no_body_and_is_post_only() {
+    let (router, rt) = app(LightsSettings::default()).await;
+    let (code, body) = call(&router, "POST", READ, None).await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(body["code"], "lighting_off");
+    assert_eq!(body["message"], "Turn Lighting on first.");
+    let (code, _) = call(&router, "GET", READ, None).await;
+    assert_eq!(code, StatusCode::METHOD_NOT_ALLOWED);
+    rt.stop().await;
+}
+
+#[tokio::test]
+async fn the_status_carries_the_helper_health_once_connected() {
+    let (router, rt) = app(osc_lights()).await;
+    let mut helper = Value::Null;
+    for _ in 0..100 {
+        let (_, body) = call(&router, "GET", LK, None).await;
+        if body["helper"].is_object() {
+            helper = body["helper"].clone();
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    }
+    rt.stop().await;
+    assert_eq!(helper["version"], "0.5.0");
+    assert_eq!(helper["outdated"], false);
+    assert_eq!(helper["project"], "Show.lightkeyproj");
+    assert_eq!(helper["fixtures"], 66);
+    assert_eq!(helper["map"], 7);
+    assert_eq!(helper["watch_state"], "permission_denied");
 }

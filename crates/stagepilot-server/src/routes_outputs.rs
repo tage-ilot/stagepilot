@@ -75,6 +75,10 @@ pub fn routes() -> Router<Rt> {
             post(lightkey_recording),
         )
         .route("/api/v1/lights/lightkey/release", post(lightkey_release))
+        .route(
+            "/api/v1/lights/lightkey/read-fixtures",
+            post(lightkey_read_fixtures),
+        )
         .route("/api/v1/lights/lightkey/audio", get(lightkey_audio))
         .route(
             "/api/v1/lights/lightkey/audio/meter",
@@ -1585,6 +1589,14 @@ fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
 async fn lightkey_release(State(rt): State<Rt>) -> Json {
     let (accepted, message) = rt.outputs.lights.lightkey_release_lights().await;
     lightkey_response(&rt, accepted, message).await
+}
+
+/// `POST /api/v1/lights/lightkey/read-fixtures`: ask the Lightkey helper to read the open
+/// project's fixtures again (its `POST /fixtures/refresh`). Always 200 with
+/// `{ok, message, project?, count?, changed?, code?}`; a refusal carries the helper's own
+/// plain-language text. Takes no body.
+async fn lightkey_read_fixtures(State(rt): State<Rt>) -> Json {
+    ok(to_value(&rt.outputs.lights.lightkey_read_fixtures().await))
 }
 
 /// `POST /api/v1/lights/lightkey/simplify` `{song_key, detail_level?, apply?}`: the recording's

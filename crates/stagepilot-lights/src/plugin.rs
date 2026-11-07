@@ -284,7 +284,22 @@ impl LightsPlugin {
         status.holding_fixtures = some(st.held_fixtures.len());
         status.yielded_fixtures = some(st.operator.yielded_count());
         status.known_fixtures = some(Self::releasable(&st).len());
+        // Warn only: the notice never touches replay.
+        if let Some(key) = self.link().current_song_key() {
+            if let Some(map) = st.settings.cue_maps.get(&key) {
+                status.project_mismatch = crate::lightkey::project_mismatch(
+                    &map.song_title,
+                    map.capture.as_ref().and_then(|c| c.project.as_deref()),
+                    status.project.as_deref(),
+                );
+            }
+        }
         status
+    }
+
+    /// "Read fixtures": ask the helper to re-read the open Lightkey project.
+    pub async fn lightkey_read_fixtures(&self) -> crate::lightkey::LightkeyReadFixtures {
+        self.link().read_fixtures().await
     }
 
     /// Fixture properties changed on the Lightkey Mac (relay stream). A change on a held fixture

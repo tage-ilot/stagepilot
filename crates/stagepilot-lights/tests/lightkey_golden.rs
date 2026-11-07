@@ -143,10 +143,38 @@ fn a_cue_map_capture_status_is_optional_and_round_trips() {
             complete: false,
             coverage_seconds: 12.5,
             recorded_at: "2026-11-02T00:00:00Z".into(),
+            project: None,
         }),
         ..old
     };
     let back: SongLightingCueMap =
         serde_json::from_value(serde_json::to_value(&with).unwrap()).unwrap();
     assert_eq!(back, with);
+}
+
+#[test]
+fn a_capture_project_is_optional_additive_and_round_trips() {
+    use stagepilot_core::config::CaptureStatus;
+    // a capture saved before this field existed loads with no project and saves back without one
+    let old: CaptureStatus = serde_json::from_value(serde_json::json!({
+        "complete": true, "coverage_seconds": 100.0, "recorded_at": "2026-11-02T00:00:00Z"
+    }))
+    .unwrap();
+    assert_eq!(old.project, None);
+    assert!(serde_json::to_value(&old).unwrap().get("project").is_none());
+    // with a project it is stored under "project" and survives a round trip
+    let with = CaptureStatus {
+        project: Some("Show.lightkeyproj".into()),
+        ..old
+    };
+    let value = serde_json::to_value(&with).unwrap();
+    assert_eq!(value["project"], "Show.lightkeyproj");
+    let back: CaptureStatus = serde_json::from_value(value).unwrap();
+    assert_eq!(back, with);
+    // a build that does not know the field (rc.5) must still load the file: no capture struct
+    // on the settings path forbids unknown keys, so the extra key is simply ignored
+    let mut lights = serde_json::json!({"enabled": false});
+    lights["cue_maps"] = serde_json::json!({"s": {"song_key": "s", "song_title": "S", "capture": serde_json::to_value(&with).unwrap()}});
+    let parsed: stagepilot_core::config::LightsSettings = serde_json::from_value(lights).unwrap();
+    assert_eq!(parsed.cue_maps["s"].capture.as_ref().unwrap().project.as_deref(), Some("Show.lightkeyproj"));
 }
