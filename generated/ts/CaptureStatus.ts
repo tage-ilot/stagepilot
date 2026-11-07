@@ -17,4 +17,10 @@ coverage_seconds: number,
 /**
  * When the pass was saved, RFC 3339 UTC.
  */
-recorded_at: string, };
+recorded_at: string, 
+/**
+ * The Lightkey project (base name) that was open when the recording began, as the helper
+ * reported it. Absent on older captures and when the helper did not say; such a capture
+ * never triggers the "different project" notice.
+ */
+project?: string, };

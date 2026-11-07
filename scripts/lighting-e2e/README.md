@@ -55,6 +55,15 @@ Belongs" (281 s), Able (290 s) to "Holy Forever" (336 s). The take is silent for
 5. `auto` (own backend, nothing captured): a song with no lighting change stays "not captured";
    a complete capture replays next time; a 30 s link drop still captures, a 70 s drop replays.
 
+6. `project` (own backend, about 8 minutes, asserts and fails the run on a mismatch): the helper 0.5.0 surface of
+   `CONTRACT.md`. The fake helper serves `GET /health` (`version`, `fixture_map`, `watch`; `version = None` makes it a
+   0.4.x helper: no such keys, `POST /fixtures/refresh` is a 404) and answers `POST /fixtures/refresh` with every code
+   (`changed` true/false, `lightkey_closed`, `no_project`, `busy`, `permission_denied`, `unreadable`); `rig.set_project(name, map)`
+   changes the project or map mid-run (the relay says hello at once). Checks: project and helper version in the status, every
+   Read fixtures answer through the backend route, an old helper noticed within the 30 s poll, a capture that stores its
+   project, the warn-only notice with replay still sending OSC, a recording discarded by a project change with the exact
+   message and left unsaved, and a repeated hello that is not a change.
+
 `lib/analysis.py` holds the numbers; `report.py` renders the tables.
 
 ## Things the harness had to learn (read before changing it)

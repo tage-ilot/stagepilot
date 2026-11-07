@@ -614,6 +614,39 @@ Fixtures already yielded to the operator are not cleared. **While a song is
 playing the release is momentary**: the running timeline picks a fixture up again at
 that fixture's next look row. To keep the lights released, pause or stop first.
 
+### The Lightkey project, Read fixtures and the helper version
+
+The Lighting section shows which Lightkey project the helper is reading, under the state pill:
+`Project: Show.lightkeyproj · 66 fixtures`. The name is the project's base name (never a path) and comes from the
+relay's `/relay/hello` (project, fixture count and map id); until a hello arrives the helper's own `GET /health` answer
+fills it in, and before that the line says `Project not reported yet`.
+
+- **Helper version and watch state.** On connect and about every 30 s StagePilot reads the helper's `GET /health`
+  and keeps `version`, `fixture_map` (project, count, map id) and `watch` (state and a plain sentence) in the status
+  (`GET /api/v1/lights/lightkey`, key `helper`). A helper that reports no `version` is older than 0.5.0.
+- **Helper update notice.** For a helper older than 0.5.0 the strip says `Helper update available`. Capture and
+  replay keep working exactly as before; only the new features below need 0.5.0.
+- **Read fixtures** (button in the strip, `POST /api/v1/lights/lightkey/read-fixtures`) asks the helper to read the
+  open Lightkey project again, for fixtures added to the same project. The answer is `{ok, message, project, count,
+  changed, code?}` and the strip shows `message`: `Read 66 fixtures from Show.lightkeyproj`, `No change: 66 fixtures`,
+  or the helper's own plain-language reason (Lightkey closed, no saved project, a read already running, the macOS
+  folder permission text, an unreadable project). The button is disabled when not connected and, for a helper
+  older than 0.5.0, shows `Update the helper to use this.` The route is served like the other lights routes (same
+  host and session checks, no body) and is not on any remote-tunnel allow-list.
+- **Captures remember their project.** A saved recording stores `capture.project`, the project name the hello gave
+  when the recording began (optional: older captures have none and are never warned about; an rc.5 build ignores the
+  extra key and drops it the next time it saves that song).
+- **Different project than the song was captured under: a notice, nothing more.** When both the song's stored
+  project and the open project are known and differ, `Captured with <X>. Lightkey has <Y> open.` is shown on the
+  song's lighting timeline and in the Lightkey strip while that song is current. Replay is never held, skipped or
+  stopped because of it: captures name fixtures (B1, D1 ...), so a different project may drive other or missing
+  fixtures, and the notice is how you notice.
+- **A project change during a recording discards it.** If the hello's map id or project name changes while a
+  song is being recorded, the recording is thrown away (a mix of two fixture maps is never saved) with
+  `Not saved: the Lightkey project or its fixtures changed during the recording (<old> -> <new>). It captures again
+  next time.` Replay is not affected. A hello sent again with the same map id and name is not a change, so the
+  helper's repeated hellos and a project saved without changing its fixtures do nothing.
+
 ### Wired network
 
 The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired
@@ -846,10 +879,10 @@ on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to i
 
 In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and one **state
 pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
-is a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
+is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
 a small **API** port box (default 8770), **Connect / Check again**, and at the right the labelled **Mode** (Auto | Replay |
 Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
-1 yielded to the operator"), **Release lights**, **Send a test cue** and **How to find a cue's address**. The Lighting
+1 yielded to the operator"), **Release lights**, **Read fixtures**, **Send a test cue** and **How to find a cue's address**. The Lighting
 computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.
 
 Saved settings are unchanged: `osc_host` and `osc_port` are saved with the Save bar as before, and `lightkey.api_url`

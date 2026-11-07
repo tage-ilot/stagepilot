@@ -3,8 +3,10 @@ import type { FixtureStatus } from "./FixtureStatus";
 import type { LightkeyAuto } from "./LightkeyAuto";
 import type { LightkeyCaptured } from "./LightkeyCaptured";
 import type { LightkeyDetail } from "./LightkeyDetail";
+import type { LightkeyHelper } from "./LightkeyHelper";
 import type { LightkeyLink } from "./LightkeyLink";
 import type { LightkeyMode } from "./LightkeyMode";
+import type { LightkeyProjectMismatch } from "./LightkeyProjectMismatch";
 
 /**
  * What the StagePilot Lightkey strip shows (`LightkeyStatus`).
@@ -38,4 +40,18 @@ yielded_fixtures?: number,
  * Fixtures the saved looks can override, left out when none. After a restart the held set
  * is empty but Lightkey may still hold overrides: Release lights clears all of these.
  */
-known_fixtures?: number, };
+known_fixtures?: number, 
+/**
+ * The Lightkey project (base name) that is open, from the relay hello, else from the
+ * helper's health answer. Left out until one of them says.
+ */
+project?: string, 
+/**
+ * What the helper's `GET /health` said (version, fixture map, watch state).
+ */
+helper?: LightkeyHelper, 
+/**
+ * The current song was captured under another project than the one open now. Never
+ * changes what replay does.
+ */
+project_mismatch?: LightkeyProjectMismatch, };

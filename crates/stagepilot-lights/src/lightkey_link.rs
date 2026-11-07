@@ -13,9 +13,9 @@
 
 use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
-    clean_project, effective_api_url, fixtures_word, helper_is_outdated, recording_is_worth_keeping,
-    LightkeyAuto, LightkeyCaptured, LightkeyHelper, LightkeyLink as Link, LightkeyReadFixtures,
-    LightkeyStatus,
+    clean_project, effective_api_url, fixtures_word, helper_is_outdated,
+    recording_is_worth_keeping, LightkeyAuto, LightkeyCaptured, LightkeyHelper,
+    LightkeyLink as Link, LightkeyReadFixtures, LightkeyStatus,
 };
 use crate::lightkey_auto::{
     decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
@@ -1188,8 +1188,9 @@ impl Inner {
         st.health_at = Some(self.clock.mono());
         match answer {
             Ok(body) => st.health = Some(parse_health(&body)),
-            // A helper too old to have /health at all.
-            Err(HttpFailure::Status(404 | 405)) => st.health = Some(parse_health(&Value::Null)),
+            // No /health page at all (every real helper has one, 0.4.x included): nothing is
+            // known about the helper, so nothing is claimed about its version.
+            Err(HttpFailure::Status(404 | 405)) => st.health = None,
             // Keep what was known; ask again next time.
             Err(_) => {}
         }
@@ -1977,10 +1978,7 @@ pub fn interpret_refresh(status: u16, body: &Value) -> LightkeyReadFixtures {
             .get("count")
             .and_then(Value::as_u64)
             .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
-        let changed = body
-            .get("changed")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
+        let changed = body.get("changed").and_then(Value::as_bool).unwrap_or(true);
         let message = if !changed {
             format!("No change: {}", fixtures_word(count))
         } else if let Some(name) = &project {

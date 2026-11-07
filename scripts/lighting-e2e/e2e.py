@@ -556,6 +556,144 @@ async def drop_case(rig, key, drop_seconds):
     return r
 
 
+# ------------------------------------------------------------------ stage: project awareness
+async def end_recording_early(rig):
+    """Only the song's end, a new song or Record off closes a recording (a pause or stop keeps it
+    open): pause, switch Record off (that saves what was captured), then stop."""
+    rig.pb.pause()
+    await asyncio.sleep(0.5)
+    rig.backend.post("/api/v1/lights/lightkey/recording", {"recording": False})
+    rig.pb.stop()
+
+
+async def stage_project(rig, takes, out):
+    """The Lightkey project in StagePilot (helper 0.5.0 surface, CONTRACT.md): the project and the
+    helper's version/watch state in the status, Read fixtures with every answer the helper has, a
+    capture that records its project, the warn-only notice with replay still running, a recording
+    thrown away by a project change (and not by a repeated hello). Own rig, fresh settings."""
+    res, checks = {}, {}
+
+    def check(name, ok, detail=None):
+        checks[name] = {"ok": bool(ok), "detail": detail}
+        log("PASS" if ok else "FAIL", name, "" if ok else json.dumps(detail, default=str)[:300])
+
+    take = takes["Unstoppable God"]
+    key, other = "demo-battle-belongs", "demo-holy-forever"
+    a, b, c = "Show A.lightkeyproj", "Show B.lightkeyproj", "Show C.lightkeyproj"
+    rig.set_relay_state(take["initial"])
+    rig.set_project(a, 1)
+    await rig.wait_link()
+    count = len(rig.relay.fixtures())
+
+    # 1. the project and the helper's own report
+    st = await rig.wait(lambda: (lambda s: s if s.get("helper") and s.get("project") else None)(rig.lk_status()), 45, what="project and helper health")
+    h = st["helper"]
+    check("status_project", st["project"] == a, st.get("project"))
+    check("status_helper", h.get("version") == "0.5.0" and not h["outdated"] and h.get("project") == a and h.get("fixtures") == count and h.get("watch_state") in ("ok", "changed"), h)
+    check("status_fixture_count", (st.get("fixtures") or {}).get("fixtures") == count, st.get("fixtures"))
+
+    # 2. Read fixtures: every answer in CONTRACT.md, through the backend route
+    read = lambda: rig.backend.post("/api/v1/lights/lightkey/read-fixtures")  # noqa: E731
+    word = lambda n: f"{n} fixture{'' if n == 1 else 's'}"  # noqa: E731
+    rig.lk.refresh_response = (200, {"ok": True, "project": a, "count": count, "map": 2, "changed": True})
+    r = read()
+    check("read_changed", r["ok"] and r["message"] == f"Read {word(count)} from {a}" and r["changed"] is True and r["count"] == count, r)
+    rig.lk.refresh_response = (200, {"ok": True, "project": a, "count": count, "map": 2, "changed": False})
+    r = read()
+    check("read_no_change", r["ok"] and r["message"] == f"No change: {word(count)}" and r["changed"] is False, r)
+    permission = ("macOS has not allowed this helper to read your Documents folder. Open System Settings > Privacy & Security > "
+                  "Files and Folders and allow python3, then press Read fixtures again.")
+    for code, doc in [
+        (409, {"ok": False, "code": "lightkey_closed", "error": "Lightkey is not running."}),
+        (409, {"ok": False, "code": "no_project", "error": "Lightkey is open with no saved project."}),
+        (409, {"ok": False, "code": "busy", "error": "A read is already running."}),
+        (403, {"ok": False, "code": "permission_denied", "folder": "Documents", "error": permission}),
+        (422, {"ok": False, "code": "unreadable", "error": "The project file could not be read."}),
+    ]:
+        rig.lk.refresh_response = (code, doc)
+        r = read()
+        check(f"read_{doc['code']}", r["ok"] is False and r.get("code") == doc["code"] and r["message"] == doc["error"], r)
+    # an old helper: no version in /health, and no refresh endpoint
+    rig.lk.version = None
+    r = read()
+    check("read_old_helper", r["ok"] is False and r.get("code") == "old_helper" and r["message"] == "Update the helper to use this.", r)
+    t0 = time.time()
+    st = await rig.wait(lambda: (lambda s: s if (s.get("helper") or {}).get("outdated") else None)(rig.lk_status()), 45, 0.5, "old helper noticed")
+    check("old_helper_noticed_within_poll", time.time() - t0 < 40, round(time.time() - t0, 1))
+    check("old_helper_project_still_from_hello", st.get("project") == a, st.get("project"))
+    rig.lk.version = "0.5.0"
+    rig.lk.refresh_response = (200, {"ok": True, "project": a, "count": count, "map": 1, "changed": False})
+
+    # 3. a capture records its project (stopped at 150 s of 281: more than half is kept, as incomplete)
+    rig.set_mode("record")
+    origin = await rig.play(key)
+    await rig.feed(take, origin, end=150)
+    await rig.sleep_until_song(origin, 150)
+    await end_recording_early(rig)
+    saved = await rig.wait(lambda: (lambda m: m if m and (m.startswith("Saved") or m.startswith("Not saved")) else None)(rig.lk_status().get("message")), 60, 0.2, "save message")
+    cm = rig.cue_map(key)
+    first_recorded_at = (cm or {}).get("capture", {}).get("recorded_at")
+    check("capture_stores_project", bool(cm) and (cm.get("capture") or {}).get("project") == a, {"message": saved, "capture": (cm or {}).get("capture")})
+    res["capture"] = {"message": saved, "cue_map": summarize_cue_map(cm)}
+    st = rig.lk_status()
+    check("same_project_no_notice", st.get("project_mismatch") is None, st.get("project_mismatch"))
+    h = st.get("helper") or {}
+    check("helper_current_again", h and not h.get("outdated"), h)
+
+    # 4. another project is open: a notice only, and replay keeps running
+    rig.set_project(b, 2)
+    st = await rig.wait(lambda: (lambda s: s if s.get("project") == b else None)(rig.lk_status()), 10, 0.2, "new project shown")
+    want = f"Captured with {a}. Lightkey has {b} open."
+    check("mismatch_notice", (st.get("project_mismatch") or {}).get("message") == want, st.get("project_mismatch"))
+    rig.set_mode("replay")
+    await rig.wait_link()
+    await asyncio.sleep(1)
+    mark = rig.lk.mark()
+    origin = await rig.play(key)
+    await asyncio.sleep(12)
+    st = rig.lk_status()
+    sent = len(rig.lk.packets) - mark
+    check("replay_keeps_running_despite_notice", sent > 0 and st.get("replaying_song") == "Battle Belongs" and st.get("replay_blocked") is None, {"packets": sent, "replaying": st.get("replaying_song"), "blocked": st.get("replay_blocked")})
+    check("notice_stays_while_replaying", (st.get("project_mismatch") or {}).get("message") == want, st.get("project_mismatch"))
+    rig.pb.pause()
+    await asyncio.sleep(0.5)
+    rig.pb.stop()
+    await asyncio.sleep(1)
+
+    # 5. a recording in progress when the project changes is thrown away; a repeated hello is nothing
+    await flush_decision(rig, other)
+    rig.set_mode("record")
+    origin = await rig.play(key)
+    await rig.feed(take, origin, end=6)
+    await rig.sleep_until_song(origin, 6)
+    rig.relay.say_hello()  # same project, same map: not a change
+    await asyncio.sleep(3)
+    m = rig.lk_status().get("message") or ""
+    check("repeated_hello_is_not_a_change", "changed during the recording" not in m, m)
+    rig.set_project(c, 3)
+    want_msg = (f"Not saved: the Lightkey project or its fixtures changed during the recording ({b} -> {c}). "
+                "It captures again next time.")
+    got = await rig.wait(lambda: (lambda msg: msg if msg and "changed during the recording" in msg else None)(rig.lk_status().get("message")), 6, 0.2, "discard message")
+    check("recording_discarded_message", got == want_msg, got)
+    await rig.feed(take, origin, start=6, end=150)
+    await rig.sleep_until_song(origin, 150)
+    await end_recording_early(rig)
+    await asyncio.sleep(3)
+    final = rig.lk_status().get("message")
+    cm2 = rig.cue_map(key)
+    check("recording_not_saved", (final or "").startswith(want_msg) and (cm2 or {}).get("capture", {}).get("recorded_at") == first_recorded_at and (cm2["capture"].get("project") == a), {"message": final, "capture": (cm2 or {}).get("capture")})
+    st = rig.lk_status()
+    check("replay_unaffected_after_discard", st.get("replay") is True, st.get("replay"))
+    res["checks"] = checks
+    res["log"] = grab_log(rig)
+    save(out, "project", res)
+    failed = [k for k, v in checks.items() if not v["ok"]]
+    log(f"project stage: {len(checks) - len(failed)} of {len(checks)} checks passed")
+    if failed:
+        raise AssertionError("project stage failed: " + ", ".join(failed))
+    return res
+
+
 # ------------------------------------------------------------------ main
 async def amain(args):
     out = Path(args.out)
@@ -563,7 +701,7 @@ async def amain(args):
     takes = load_takes(args.takes)
     stages = args.stages.split(",")
     # one rig for capture..soak (cue maps persist in its temp settings); a fresh one for auto
-    main_stages = [s for s in stages if s != "auto"]
+    main_stages = [s for s in stages if s not in ("auto", "project")]
     if main_stages:
         rig = Rig(out / "rig-main", Path(args.binary) if args.binary else None, backend_port=args.port)
         await rig.up()
@@ -582,6 +720,15 @@ async def amain(args):
             await stage_auto(rig, takes, out)
         finally:
             await rig.down()
+    if "project" in stages:
+        await asyncio.sleep(5)
+        rig = Rig(out / "rig-project", Path(args.binary) if args.binary else None, backend_port=args.port)
+        await rig.up()
+        try:
+            log("=== stage project")
+            await stage_project(rig, takes, out)
+        finally:
+            await rig.down()
 
 
 def main():
@@ -590,7 +737,7 @@ def main():
     ap.add_argument("--takes", default=None)
     ap.add_argument("--binary", default=None)
     ap.add_argument("--port", type=int, default=18900)
-    ap.add_argument("--stages", default="capture,replay,control,soak,stop,auto")
+    ap.add_argument("--stages", default="capture,replay,control,soak,stop,auto,project")
     asyncio.run(amain(ap.parse_args()))
 
 

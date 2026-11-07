@@ -176,5 +176,13 @@ fn a_capture_project_is_optional_additive_and_round_trips() {
     let mut lights = serde_json::json!({"enabled": false});
     lights["cue_maps"] = serde_json::json!({"s": {"song_key": "s", "song_title": "S", "capture": serde_json::to_value(&with).unwrap()}});
     let parsed: stagepilot_core::config::LightsSettings = serde_json::from_value(lights).unwrap();
-    assert_eq!(parsed.cue_maps["s"].capture.as_ref().unwrap().project.as_deref(), Some("Show.lightkeyproj"));
+    assert_eq!(
+        parsed.cue_maps["s"]
+            .capture
+            .as_ref()
+            .unwrap()
+            .project
+            .as_deref(),
+        Some("Show.lightkeyproj")
+    );
 }

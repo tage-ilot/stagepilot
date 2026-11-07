@@ -624,7 +624,12 @@ async fn an_old_takes_file_next_to_the_settings_is_ignored_and_left_alone() {
     );
     service.load();
     let backends = OutputBackends {
-        lightkey_http: Arc::new(|| Arc::new(FakeAgent { down: false, refresh: None })),
+        lightkey_http: Arc::new(|| {
+            Arc::new(FakeAgent {
+                down: false,
+                refresh: None,
+            })
+        }),
         ..OutputBackends::fake_midi()
     };
     let runtime = Runtime::with_backends(Arc::new(service), false, backends);

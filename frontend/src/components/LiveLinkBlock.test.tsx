@@ -180,20 +180,20 @@ describe("Live Link block: Connect is an action, not a state (#296 nit 3)", () =
 });
 
 describe("Live Link block: the strip under the fields", () => {
-  it("tab order is host, UDP, API, Connect, Mode, Release lights, Send a test cue, How to find", async () => {
+  it("tab order is host, UDP, API, Connect, Mode, Release lights, Read fixtures, Send a test cue, How to find", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", holding_fixtures: 3, fixtures: live() }));
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
     await screen.findByRole("radiogroup", { name: "Mode" });
     const user = userEvent.setup();
     const names: string[] = [];
-    for (let step = 0; step < 8; step += 1) {
+    for (let step = 0; step < 9; step += 1) {
       await user.tab();
       const el = document.activeElement as HTMLElement;
       names.push(el.getAttribute("aria-label") ?? (el.getAttribute("type") === "radio" ? `radio:${el.getAttribute("value")}` : (el.textContent ?? "")));
     }
     expect(names).toEqual([
       "Host or IP address", "OSC UDP port", "API port", "Check again", "radio:auto",
-      "Release lights", "Send a test cue\u25B8", "How to find a cue's address\u25B8",
+      "Release lights", "Read fixtures", "Send a test cue\u25B8", "How to find a cue's address\u25B8",
     ]);
   });
 
@@ -235,7 +235,7 @@ describe("Live Link block: the strip under the fields", () => {
     const actions = screen.getByTestId("live-link-actions");
     // Two children of the strip: the state text and ONE group holding Release, Send a test cue and How to find.
     expect(Array.from(sub.children)).toEqual([screen.getByTestId("lightkey-headline"), actions]);
-    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Send a test cue", "How to find a cue's address"]);
+    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Read fixtures", "Send a test cue", "How to find a cue's address"]);
     // The state text may shrink and wrap (basis 16rem) so the group stays on the first row when there is room.
     expect(screen.getByTestId("lightkey-headline").className).toContain("flex-[1_1_16rem]");
     expect(actions.className).toContain("flex-wrap");

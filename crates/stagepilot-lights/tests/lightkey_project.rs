@@ -317,12 +317,20 @@ fn health_0_5_0() -> serde_json::Value {
 async fn serve_http(active: Active, helper: Arc<Helper>) -> u16 {
     async fn health(State(h): State<(Active, Arc<Helper>)>) -> Response {
         let (code, body) = h.1.health.lock().unwrap().clone();
-        (axum::http::StatusCode::from_u16(code).unwrap(), axum::Json(body)).into_response()
+        (
+            axum::http::StatusCode::from_u16(code).unwrap(),
+            axum::Json(body),
+        )
+            .into_response()
     }
     async fn refresh(State(h): State<(Active, Arc<Helper>)>) -> Response {
         *h.1.refreshes.lock().unwrap() += 1;
         let (code, body) = h.1.refresh.lock().unwrap().clone();
-        (axum::http::StatusCode::from_u16(code).unwrap(), axum::Json(body)).into_response()
+        (
+            axum::http::StatusCode::from_u16(code).unwrap(),
+            axum::Json(body),
+        )
+            .into_response()
     }
     async fn time() -> Response {
         axum::Json(json!({"t": (wall() + OFFSET) * 1000.0})).into_response()
@@ -543,7 +551,8 @@ fn song(duration: u32) -> Song {
 
 // ----------------------------------------------------------------------------------- tests
 
-const CHANGED_MESSAGE: &str = "Not saved: the Lightkey project or its fixtures changed during the recording";
+const CHANGED_MESSAGE: &str =
+    "Not saved: the Lightkey project or its fixtures changed during the recording";
 
 /// Record `Holy Forever` (2 s) with `during` run half a second in, then stop it at 2 s.
 async fn record_with<F, Fut>(rig: &Rig, during: F)
@@ -572,10 +581,12 @@ async fn the_project_in_the_hello_is_shown_and_stored_with_the_capture() {
     let rig = Rig::new(vec![dim("P1", 0.0), color("P1", 0.0, 0.0, 0.0)]).await;
     record_with(&rig, || async {}).await;
     assert_eq!(rig.link.status().project.as_deref(), Some("Show"));
-    let saved = rig.saved.lock().unwrap();
-    assert_eq!(saved.len(), 1, "{:?}", rig.link.status().message);
-    assert_eq!(saved[0].status.project.as_deref(), Some("Show"));
-    drop(saved);
+    {
+        let message = rig.link.status().message;
+        let saved = rig.saved.lock().unwrap();
+        assert_eq!(saved.len(), 1, "{message:?}");
+        assert_eq!(saved[0].status.project.as_deref(), Some("Show"));
+    }
     rig.link.stop().await;
 }
 
@@ -587,7 +598,10 @@ async fn a_hello_with_no_project_name_stores_none_and_shows_none() {
     // the hello names nothing, so the capture records no project and never warns; the strip
     // falls back to the name in the helper's own health answer
     assert_eq!(rig.saved.lock().unwrap()[0].status.project, None);
-    assert_eq!(rig.link.status().project.as_deref(), Some("Show.lightkeyproj"));
+    assert_eq!(
+        rig.link.status().project.as_deref(),
+        Some("Show.lightkeyproj")
+    );
     rig.link.stop().await;
 }
 
@@ -598,7 +612,9 @@ async fn a_project_change_during_a_recording_discards_it_with_the_reason() {
     assert!(rig.saved.lock().unwrap().is_empty(), "nothing is saved");
     assert_eq!(
         rig.link.status().message.as_deref(),
-        Some(&*format!("{CHANGED_MESSAGE} (Show -> Other). It captures again next time."))
+        Some(&*format!(
+            "{CHANGED_MESSAGE} (Show -> Other). It captures again next time."
+        ))
     );
     // the strip follows the project that is open now
     assert_eq!(rig.link.status().project.as_deref(), Some("Other"));
@@ -626,10 +642,12 @@ async fn a_hello_sent_again_with_the_same_map_is_not_a_change() {
         rig.relay.say_hello("Show", 3, 1).await;
     })
     .await;
-    let saved = rig.saved.lock().unwrap();
-    assert_eq!(saved.len(), 1, "{:?}", rig.link.status().message);
-    assert_eq!(saved[0].status.project.as_deref(), Some("Show"));
-    drop(saved);
+    {
+        let message = rig.link.status().message;
+        let saved = rig.saved.lock().unwrap();
+        assert_eq!(saved.len(), 1, "{message:?}");
+        assert_eq!(saved[0].status.project.as_deref(), Some("Show"));
+    }
     rig.link.stop().await;
 }
 
@@ -638,8 +656,16 @@ async fn a_change_while_nothing_records_only_changes_what_the_next_capture_store
     let rig = Rig::new(vec![dim("P1", 0.0), color("P1", 0.0, 0.0, 0.0)]).await;
     rig.connect().await;
     rig.relay.say_hello("Other", 5, 2).await;
-    wait_for(|| rig.link.status().project.as_deref() == Some("Other"), 3.0).await;
-    assert_eq!(rig.link.status().message, None, "no recording, nothing to discard");
+    wait_for(
+        || rig.link.status().project.as_deref() == Some("Other"),
+        3.0,
+    )
+    .await;
+    assert_eq!(
+        rig.link.status().message,
+        None,
+        "no recording, nothing to discard"
+    );
     rig.link.set_recording(true).await;
     rig.song_start(&song(2)).await;
     pause(0.5).await;
@@ -678,7 +704,8 @@ async fn a_helper_that_sends_a_permission_problem_shows_its_sentence() {
     let rig = Rig::new(vec![]).await;
     let mut health = health_0_5_0();
     health["watch"]["state"] = json!("permission_denied");
-    health["watch"]["detail"] = json!("macOS has not allowed this helper to read your Documents folder.");
+    health["watch"]["detail"] =
+        json!("macOS has not allowed this helper to read your Documents folder.");
     *rig.helper.health.lock().unwrap() = (200, health);
     rig.connect().await;
     wait_for(|| rig.link.status().helper.is_some(), 3.0).await;
@@ -707,16 +734,22 @@ async fn a_helper_with_no_version_is_older_than_0_5_0_and_everything_else_works(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_helper_without_a_health_page_counts_as_older() {
+async fn a_helper_with_no_health_page_claims_nothing() {
     let rig = Rig::new(vec![]).await;
     *rig.helper.health.lock().unwrap() = (404, json!({"error": "not found"}));
     rig.connect().await;
-    wait_for(|| rig.link.status().helper.is_some(), 3.0).await;
-    assert!(rig.link.status().helper.unwrap().outdated);
+    pause(0.8).await;
+    // no version was reported, so no "older than 0.5.0" is claimed either
+    assert!(rig.link.status().helper.is_none());
+    assert_eq!(rig.link.status().link, Link::Connected);
     rig.link.stop().await;
 }
 
-async fn refresh_answer(rig: &Rig, status: u16, body: serde_json::Value) -> stagepilot_lights::lightkey::LightkeyReadFixtures {
+async fn refresh_answer(
+    rig: &Rig,
+    status: u16,
+    body: serde_json::Value,
+) -> stagepilot_lights::lightkey::LightkeyReadFixtures {
     *rig.helper.refresh.lock().unwrap() = (status, body);
     rig.link.read_fixtures().await
 }
@@ -725,15 +758,28 @@ async fn refresh_answer(rig: &Rig, status: u16, body: serde_json::Value) -> stag
 async fn read_fixtures_says_what_was_read_and_when_nothing_changed() {
     let rig = Rig::new(vec![]).await;
     rig.connect().await;
-    let ok = refresh_answer(&rig, 200, json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": true})).await;
+    let ok = refresh_answer(
+        &rig,
+        200,
+        json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": true}),
+    )
+    .await;
     assert!(ok.ok);
     assert_eq!(ok.message, "Read 66 fixtures from Show.lightkeyproj");
-    assert_eq!((ok.project.as_deref(), ok.count, ok.changed, ok.code), (Some("Show.lightkeyproj"), Some(66), Some(true), None));
+    assert_eq!(
+        (ok.project.as_deref(), ok.count, ok.changed, ok.code),
+        (Some("Show.lightkeyproj"), Some(66), Some(true), None)
+    );
     let same = refresh_answer(&rig, 200, json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": false})).await;
     assert!(same.ok);
     assert_eq!(same.message, "No change: 66 fixtures");
     assert_eq!(same.changed, Some(false));
-    let one = refresh_answer(&rig, 200, json!({"ok": true, "project": "Solo.lightkeyproj", "count": 1, "changed": true})).await;
+    let one = refresh_answer(
+        &rig,
+        200,
+        json!({"ok": true, "project": "Solo.lightkeyproj", "count": 1, "changed": true}),
+    )
+    .await;
     assert_eq!(one.message, "Read 1 fixture from Solo.lightkeyproj");
     assert_eq!(*rig.helper.refreshes.lock().unwrap(), 3);
     rig.link.stop().await;
@@ -743,14 +789,37 @@ async fn read_fixtures_says_what_was_read_and_when_nothing_changed() {
 async fn a_successful_read_refreshes_the_helper_numbers_without_waiting_for_the_next_poll() {
     let rig = Rig::new(vec![]).await;
     rig.connect().await;
-    wait_for(|| rig.link.status().helper.is_some_and(|h| h.fixtures == Some(3)), 3.0).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .helper
+                .is_some_and(|h| h.fixtures == Some(3))
+        },
+        3.0,
+    )
+    .await;
     let mut health = health_0_5_0();
     health["fixture_map"]["count"] = json!(66);
     health["fixture_map"]["map"] = json!(9);
     *rig.helper.health.lock().unwrap() = (200, health);
-    let ok = refresh_answer(&rig, 200, json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": true})).await;
+    let ok = refresh_answer(
+        &rig,
+        200,
+        json!({"ok": true, "project": "Show.lightkeyproj", "count": 66, "map": 9, "changed": true}),
+    )
+    .await;
     assert!(ok.ok);
-    wait_for(|| rig.link.status().helper.is_some_and(|h| h.fixtures == Some(66)), 3.0).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .helper
+                .is_some_and(|h| h.fixtures == Some(66))
+        },
+        3.0,
+    )
+    .await;
     rig.link.stop().await;
 }
 
@@ -760,18 +829,46 @@ async fn read_fixtures_passes_each_helper_error_through_in_its_own_words() {
     rig.connect().await;
     let permission = "macOS has not allowed this helper to read your Documents folder. Open System Settings > Privacy & Security > Files and Folders and allow python3, then press Read fixtures again.";
     let cases = [
-        (409, json!({"ok": false, "code": "lightkey_closed", "error": "Lightkey is not running."}), "lightkey_closed", "Lightkey is not running."),
-        (409, json!({"ok": false, "code": "no_project", "error": "Lightkey is open with no saved project."}), "no_project", "Lightkey is open with no saved project."),
-        (409, json!({"ok": false, "code": "busy", "error": "A read is already running."}), "busy", "A read is already running."),
-        (403, json!({"ok": false, "code": "permission_denied", "folder": "Documents", "error": permission}), "permission_denied", permission),
-        (422, json!({"ok": false, "code": "unreadable", "error": "The project file could not be read."}), "unreadable", "The project file could not be read."),
+        (
+            409,
+            json!({"ok": false, "code": "lightkey_closed", "error": "Lightkey is not running."}),
+            "lightkey_closed",
+            "Lightkey is not running.",
+        ),
+        (
+            409,
+            json!({"ok": false, "code": "no_project", "error": "Lightkey is open with no saved project."}),
+            "no_project",
+            "Lightkey is open with no saved project.",
+        ),
+        (
+            409,
+            json!({"ok": false, "code": "busy", "error": "A read is already running."}),
+            "busy",
+            "A read is already running.",
+        ),
+        (
+            403,
+            json!({"ok": false, "code": "permission_denied", "folder": "Documents", "error": permission}),
+            "permission_denied",
+            permission,
+        ),
+        (
+            422,
+            json!({"ok": false, "code": "unreadable", "error": "The project file could not be read."}),
+            "unreadable",
+            "The project file could not be read.",
+        ),
     ];
     for (status, body, code, text) in cases {
         let answer = refresh_answer(&rig, status, body).await;
         assert!(!answer.ok, "{code}");
         assert_eq!(answer.code.as_deref(), Some(code));
         assert_eq!(answer.message, text);
-        assert_eq!((answer.project, answer.count, answer.changed), (None, None, None));
+        assert_eq!(
+            (answer.project, answer.count, answer.changed),
+            (None, None, None)
+        );
     }
     // an answer with no text still says something plain
     let bare = refresh_answer(&rig, 500, json!({})).await;
@@ -953,8 +1050,14 @@ mod notice {
     async fn a_song_captured_under_another_project_warns_and_still_replays() {
         let (status, sent) = replay_captured_under(Some("Old Project")).await;
         let notice = status.project_mismatch.expect("the notice");
-        assert_eq!(notice.message, "Captured with Old Project. Lightkey has Show open.");
-        assert_eq!((notice.captured.as_str(), notice.current.as_str()), ("Old Project", "Show"));
+        assert_eq!(
+            notice.message,
+            "Captured with Old Project. Lightkey has Show open."
+        );
+        assert_eq!(
+            (notice.captured.as_str(), notice.current.as_str()),
+            ("Old Project", "Show")
+        );
         assert_eq!(status.replay_blocked, None, "replay is not held");
         assert!(
             sent.iter().any(|a| a == "/fixture/P1/overrides/dimmer"),
@@ -967,7 +1070,10 @@ mod notice {
         for captured in [Some("Show"), None] {
             let (status, sent) = replay_captured_under(captured).await;
             assert_eq!(status.project_mismatch, None, "{captured:?}");
-            assert!(sent.iter().any(|a| a == "/fixture/P1/overrides/dimmer"), "{sent:?}");
+            assert!(
+                sent.iter().any(|a| a == "/fixture/P1/overrides/dimmer"),
+                "{sent:?}"
+            );
         }
     }
 }
