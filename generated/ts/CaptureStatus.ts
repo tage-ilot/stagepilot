@@ -29,4 +29,12 @@ project?: string,
  * Set when the song was too busy to keep as recorded and was simplified to fit. Absent on
  * a normal capture and on older files (an older build ignores the key).
  */
-simplified?: CaptureSimplified, };
+simplified?: CaptureSimplified, 
+/**
+ * How many lights the capture's starting look holds (the state of the whole rig when the
+ * recording began, stored at the first look so the replay recreates the picture whatever
+ * presets are on). `Some(0)`: the pass tried but the relay's state could not be read.
+ * Absent: the capture was recorded before the starting look was saved (older files and
+ * older builds), so its house lights are not in it.
+ */
+start_lights?: number, };

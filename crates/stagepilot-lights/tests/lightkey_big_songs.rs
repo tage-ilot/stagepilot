@@ -183,6 +183,7 @@ fn saves(fitted: &Fitted) -> SongLightingCueMap {
         recorded_at: "2026-11-08T00:00:00Z".into(),
         project: None,
         simplified: None,
+        start_lights: None,
     };
     match save_capture_with_effects(
         None,

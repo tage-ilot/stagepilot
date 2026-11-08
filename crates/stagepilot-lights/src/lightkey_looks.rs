@@ -294,6 +294,17 @@ struct Change {
     piece: usize,
 }
 
+/// The state of every fixture when a pass began recording, and the song position it is from.
+pub type StartState = (f64, Vec<FixtureCommand>);
+
+/// What a finished pass recorded (see [`LookRecorder::raw_with_start`]).
+#[derive(Debug, Clone)]
+pub struct RawPass {
+    pub baseline: Vec<FixtureCommand>,
+    pub changes: Vec<(f64, FixtureCommand)>,
+    pub start: Option<StartState>,
+}
+
 /// A piece with its changes, while the latest recording of each stretch is worked out.
 struct Work {
     start: f64,
@@ -587,6 +598,34 @@ impl LookRecorder {
     /// went before) and its changes, with the earlier recording of any re-recorded stretch cut
     /// out.
     fn flattened(&self) -> Vec<(f64, FixtureCommand)> {
+        self.flattened_with_start().0
+    }
+
+    fn flattened_with_start(&self) -> (Vec<(f64, FixtureCommand)>, Option<StartState>) {
+        let works = self.works();
+        let start = works
+            .iter()
+            .find(|w| !w.snapshot.is_empty())
+            .map(|w| (w.start, w.snapshot.clone()));
+        let mut state = self.baseline.clone();
+        let mut out = Vec::new();
+        for work in works {
+            for command in &work.snapshot {
+                if state.apply(command) {
+                    out.push((work.start, command.clone()));
+                }
+            }
+            for (at, command) in work.changes {
+                if state.apply(&command) {
+                    out.push((at, command));
+                }
+            }
+        }
+        (out, start)
+    }
+
+    /// The stretches of the pass in song order, the latest recording of each part winning.
+    fn works(&self) -> Vec<Work> {
         let mut by_piece: Vec<Vec<(f64, FixtureCommand)>> = vec![Vec::new(); self.pieces.len()];
         for change in &self.observed {
             let piece = &self.pieces[change.piece];
@@ -613,21 +652,7 @@ impl LookRecorder {
             works = next;
         }
         works.sort_by(|a, b| a.start.total_cmp(&b.start));
-        let mut state = self.baseline.clone();
-        let mut out = Vec::new();
-        for work in works {
-            for command in &work.snapshot {
-                if state.apply(command) {
-                    out.push((work.start, command.clone()));
-                }
-            }
-            for (at, command) in work.changes {
-                if state.apply(&command) {
-                    out.push((at, command));
-                }
-            }
-        }
-        out
+        works
     }
 
     /// The ramps, steps and effects these changes make (see `crate::lightkey_smooth`). Changes
@@ -640,6 +665,19 @@ impl LookRecorder {
     /// The raw baseline and changes (the report compares a fit against them).
     pub fn raw(&self) -> (Vec<FixtureCommand>, Vec<(f64, FixtureCommand)>) {
         (self.baseline.commands(), self.flattened())
+    }
+
+    /// [`Self::raw`] and the starting look: the state of every fixture when the pass began
+    /// recording, with the song position it was taken at (the first recorded stretch's snapshot:
+    /// 0 when the stream was live at the song's start, later when recording began late). `None`
+    /// when the relay's state was never read. See `crate::lightkey_start`.
+    pub fn raw_with_start(&self) -> RawPass {
+        let (changes, start) = self.flattened_with_start();
+        RawPass {
+            baseline: self.baseline.commands(),
+            changes,
+            start,
+        }
     }
 
     /// The rows these changes make at this Detail `interval` (see [`thin`] and [`merge`]).

@@ -23,6 +23,7 @@ pub mod lightkey_recording;
 pub mod lightkey_relay;
 pub mod lightkey_replay;
 pub mod lightkey_smooth;
+pub mod lightkey_start;
 pub mod loudness;
 pub mod models;
 pub mod plugin;
