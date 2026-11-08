@@ -663,11 +663,11 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
 }
 
 #[tokio::test]
-async fn a_recording_past_the_timeline_caps_asks_for_a_coarser_detail() {
+async fn a_recording_past_the_timeline_caps_is_refused_for_the_link_to_trim() {
     use stagepilot_lights::lightkey_link::{LooksError, SongLooks};
     let (_router, rt) = app(osc_lights()).await;
-    let rows: Vec<_> = (0..=1_000)
-        .map(|i| captured_row(f64::from(i), "/fixture/P1/overrides/dimmer", 0.5))
+    let rows: Vec<_> = (0..=stagepilot_core::config::MAX_OSC_ROWS_PER_SONG)
+        .map(|i| captured_row(i as f64 * 0.01, "/fixture/P1/overrides/dimmer", 0.5))
         .collect();
     let result = (rt.outputs.looks_sink)(SongLooks {
         song_key: "big".into(),
