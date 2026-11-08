@@ -163,10 +163,25 @@ While Playback loads a setlist it keeps sending valid heartbeats (position, tran
 | `song.paused`, otherwise (stale order, other song, no position) | `stop_timer`, even while stale |
 | `song.stopped` outside discovery | `stop_timer`, even while stale |
 | `song.resumed`, valid order, Playback song is StagePilot's current song | `resume_timer_at(position)`: countdown continues from the Playback position |
-| `seek`, same conditions | `seek_timer(position)`: remaining time re-applied from the new position; keeps running if running, otherwise only the frozen value changes |
+| `seek`, same conditions, and not after a Playback section loop or jump (monitor-only) | `seek_timer(position)`: remaining time re-applied from the new position; keeps running if running, otherwise only the frozen value changes |
 | First heartbeat after a reconnect, playing, same conditions | `resume_timer_at(position)` (alignment); ignored when Playback is not playing |
 | `song.resumed`/`seek`/reconnect, stale order or a different song | Monitor only |
+| Position safety net: a playing heartbeat more than 3 s from the running timer's position, twice in a row, same conditions | `seek_timer(heartbeat position)` (a `seek` event with reason `resync`) and a `playback_position_resync` log line with `app_position` and `playback_position` |
 | selected/changed/ended, section, jump, fade, pad and unknown | Monitor only |
+
+Pause, jump, play: a `transportPlay` shows the resume at once (provisional) and the
+heartbeat that confirms it arrives later. A `waveformSeek` made while the player is not
+playing is remembered, and a play that follows uses that position until a heartbeat
+agrees with it (or 3 s have passed with heartbeats that disagree), so the resume carries the
+jump position and not the position of the last heartbeat from before the jump. A seek made
+while playing never changes the position of a later pause. Normal playback drift (under 1 s) never
+triggers the safety net, and it never acts while an event or queued action is being handled.
+
+Section loops and section jumps stay monitor-only and never move the timer. When a playing
+heartbeat of the current song moves more than 1.5 s away from the clock (a `position.jump`,
+or a `section.loop` / `section.jump` event), the safety net is suspended for that song, so a
+loop that repeats every 22 s does not pull the countdown back each time. The next start,
+resume, seek, snapshot or song change re-arms it, so pause, jump, play is still corrected.
 
 Stop and pause are the same state: there is one stopped timer status, not a separate
 paused one. A stop (Playback pause or stop, or the manual Stop timer control) keeps the

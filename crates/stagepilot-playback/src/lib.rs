@@ -9,4 +9,5 @@ pub mod lengths;
 pub mod mapping;
 pub mod normalizer;
 pub mod plugin;
+pub mod resync;
 pub mod testkit;

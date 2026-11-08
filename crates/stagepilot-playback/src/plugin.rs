@@ -414,6 +414,7 @@ struct Shared {
     heartbeat: Option<Heartbeat>,
     loading_setlist: bool,
     seen_serial: u64,
+    drift: crate::resync::DriftWatch,
     published: Option<(bool, String)>,
     ownership_revision: u64,
     consumer: Option<JoinHandle<()>>,
@@ -510,6 +511,7 @@ impl PlaybackPlugin {
             heartbeat: None,
             loading_setlist: false,
             seen_serial: 0,
+            drift: crate::resync::DriftWatch::default(),
             published: None,
             ownership_revision: 0,
             consumer: None,
@@ -1285,9 +1287,14 @@ impl Inner {
             } else {
                 None
             };
-            let plan_id = self.store.snapshot().plan.map(|p| p.id);
+            let snapshot = self.store.snapshot();
+            let plan_id = snapshot.plan.as_ref().map(|p| p.id.clone());
             s.mapper.note_plan(plan_id.as_deref());
-            let observations = s.mapper.observe(hb, events, setlist);
+            s.drift.note_events(events);
+            let mut observations = s.mapper.observe(hb, events, setlist);
+            if let Some(resync) = self.position_resync(&mut s, hb, !events.is_empty(), &snapshot) {
+                observations.push(resync);
+            }
             if s.mapper.stale
                 && s.discovery != DiscoveryState::Running
                 && !s.config.song_lengths.is_empty()
@@ -1329,6 +1336,50 @@ impl Inner {
         if wake {
             self.wake.notify_one();
         }
+    }
+
+    /// The safety net for the song position: a playing heartbeat that is more than 3 s from
+    /// the timer's position for two heartbeats in a row makes the timer (and so ProPresenter
+    /// and the lights) follow Playback. Never acts while an event or queued work is in flight,
+    /// since those move the timer themselves.
+    fn position_resync(
+        &self,
+        s: &mut Shared,
+        heartbeat: Option<Heartbeat>,
+        has_events: bool,
+        state: &stagepilot_core::state::ApplicationState,
+    ) -> Option<Observation> {
+        let h = heartbeat?;
+        let timer = crate::resync::timer_position(&state.timer, Utc::now());
+        let comparable = h.playing
+            && !has_events
+            && s.queue.is_empty()
+            && !s.mapper.stale
+            && !s.mapper.discovery
+            && s.mapper.song_is_current(h.song_id, state)
+            // Section loops and jumps are monitor-only: Playback moved itself, not a fault.
+            && !s.drift.is_suspended_for(h.song_id);
+        let Some(app) = timer.filter(|_| comparable) else {
+            s.drift.reset();
+            return None;
+        };
+        if !s.drift.check(h.position, app) {
+            return None;
+        }
+        playback_log(
+            "playback_position_resync",
+            json!({
+                "song_id": h.song_id,
+                "playback_position": h.position,
+                "app_position": app,
+            }),
+        );
+        let event = PlaybackEvent::resync(
+            Utc::now().timestamp_millis() as f64 / 1000.0,
+            h.song_id,
+            h.position,
+        );
+        Some(s.mapper.resync_observation(event))
     }
 
     fn put(&self, s: &mut Shared, generation: u64, item: Item) {

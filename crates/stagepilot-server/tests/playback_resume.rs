@@ -369,3 +369,106 @@ async fn connecting_while_not_playing_does_nothing() {
     ));
     r.runtime.stop().await;
 }
+
+/// Every position the timer announced to its consumers (ProPresenter's countdown and the
+/// lights timeline start from these events), oldest first.
+fn watch_timer_positions(rt: &Runtime) -> Arc<std::sync::Mutex<Vec<f64>>> {
+    use stagepilot_core::events::{EventPayload, EventType};
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut rx = rt.bus.observe();
+    let sink = seen.clone();
+    tokio::spawn(async move {
+        while let Ok(event) = rx.recv().await {
+            if matches!(
+                event.event_type,
+                EventType::TimerResumed | EventType::TimerSeeked | EventType::TimerStarted
+            ) {
+                if let EventPayload::Timer(t) = &event.payload {
+                    if let Some(p) = t.position_seconds {
+                        sink.lock().unwrap().push(p);
+                    }
+                }
+            }
+        }
+    });
+    seen
+}
+
+/// The 2026-11-08 rig fault: pause, jump, play. The play outruns the heartbeat that carries the
+/// new position, so the countdown (and with it ProPresenter and the lights) must still start from
+/// the jump position.
+#[tokio::test]
+async fn pause_seek_play_follows_the_jump_not_the_last_heartbeat() {
+    let r = Rig::new().await;
+    r.play_ten_seconds().await;
+    r.set(|s| s.playing = false);
+    r.pump().await;
+    assert_eq!(r.timer().status, TimerStatus::Stopped);
+    let seen = watch_timer_positions(&r.runtime);
+    // The jump and the play arrive back to back; the next heartbeat is still the old one.
+    r.fake
+        .send_raw(r#"{"waveformSeek":{"sequenceTime":229.25}}"#);
+    r.fake.send_raw(r#"{"transportPlay":{"playing":true}}"#);
+    r.set(|s| {
+        s.position = 229.25;
+        s.playing = true;
+    });
+    until("the countdown runs from the jump", || {
+        let t = r.timer();
+        t.status == TimerStatus::Running && t.position_seconds.is_some_and(|p| p > 200.0)
+    })
+    .await;
+    r.pump().await;
+    let running = r.timer();
+    assert_eq!(running.status, TimerStatus::Running);
+    let p = running.position_seconds.unwrap();
+    assert!(
+        (p - 229.25).abs() < 1.0,
+        "the countdown started from {p}, not from the jump"
+    );
+    let announced = seen.lock().unwrap().clone();
+    assert!(!announced.is_empty());
+    assert!(
+        announced.iter().all(|p| (p - 229.25).abs() < 1.0),
+        "every consumer must be told the jump position, got {announced:?}"
+    );
+    r.runtime.stop().await;
+}
+
+/// Safety net: a timer 119 s away from what Playback reports is pulled back after two
+/// heartbeats.
+#[tokio::test]
+async fn a_large_disagreement_between_timer_and_heartbeat_is_corrected() {
+    let r = Rig::new().await;
+    r.play_ten_seconds().await;
+    // Make the timer wrong without Playback's say-so, like the rig's 119 s fault.
+    let wrong = r.runtime.state_service.seek_timer(129.0, "test").await;
+    assert!(wrong.accepted, "{wrong:?}");
+    until("timer back with the heartbeat", || {
+        r.timer()
+            .position_seconds
+            .is_some_and(|p| (p - 10.0).abs() < 2.0)
+    })
+    .await;
+    assert_eq!(r.timer().status, TimerStatus::Running);
+    r.runtime.stop().await;
+}
+
+/// ...and normal drift is left alone (no jitter).
+#[tokio::test]
+async fn a_small_drift_is_not_resynced() {
+    let r = Rig::new().await;
+    r.play_ten_seconds().await;
+    let nudged = r.runtime.state_service.seek_timer(10.8, "test").await;
+    assert!(nudged.accepted, "{nudged:?}");
+    // Many heartbeats (100 ms apart) pass; the fake's position stays at 10 s, so the gap stays
+    // under 3 s for the first second or so.
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    settle(&r.runtime).await;
+    let p = r.timer().position_seconds.unwrap();
+    assert!(
+        (p - 10.8).abs() < 1e-9,
+        "a 0.8 s drift was re-synced to {p}"
+    );
+    r.runtime.stop().await;
+}
