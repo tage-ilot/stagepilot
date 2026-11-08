@@ -15,6 +15,10 @@ PLIST="$HOME/Library/LaunchAgents/io.github.lightkey-api.plist"
 LABEL=io.github.lightkey-api
 PY=${LIGHTKEY_PY:-/usr/bin/python3}      # LIGHTKEY_PY, LIGHTKEY_ROUTE and LIGHTKEY_UNAME exist so the tests can stub the Mac
 ROUTE=${LIGHTKEY_ROUTE:-/sbin/route}
+CC=${LIGHTKEY_CC:-/usr/bin/clang}                  # the same hooks for the launcher build and the folder-permission reset
+CODESIGN=${LIGHTKEY_CODESIGN:-/usr/bin/codesign}
+TCCUTIL=${LIGHTKEY_TCCUTIL:-/usr/bin/tccutil}
+LAUNCHER_APP="$APP/Lightkey API.app"    # macOS names the app in its questions after this folder name
 ALLOW=""
 ALLOW_FOR=""
 CUES=no
@@ -104,13 +108,80 @@ json.dump(cfg, open(path, "w"), indent=2)
 PYEOF
 fi
 
+# 2b. The agent starts through a tiny signed app named "Lightkey API". macOS asks about Documents and Downloads only for
+#     something it can name; a bare python3 background job is refused without any question. If this step fails, the
+#     agent still runs the old way, just without access to those two folders.
+build_launcher() {
+  LB=$(mktemp -d "${TMPDIR:-/tmp}/lightkey-launcher.XXXXXX") || return 1
+  cat > "$LB/launcher.c" <<'CEOF'
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+static pid_t child = 0;
+static void forward(int sig) { if (child > 0) kill(child, sig); }
+int main(int argc, char **argv) {
+    if (argc < 2) { fprintf(stderr, "usage: lightkey-api script [args...]\n"); return 2; }
+    signal(SIGTERM, forward); signal(SIGINT, forward); signal(SIGHUP, forward);
+    setenv("LIGHTKEY_LAUNCHER", "1", 1);
+    child = fork();
+    if (child == 0) {
+        char **args = calloc((size_t)argc + 2, sizeof(char *));
+        args[0] = "/usr/bin/python3"; args[1] = "-u";
+        for (int i = 1; i < argc; i++) args[i + 1] = argv[i];
+        execv("/usr/bin/python3", args); perror("exec python3"); _exit(127);
+    }
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) { }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+CEOF
+  cat > "$LB/Info.plist" <<'PEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.lightkey-api</string>
+  <key>CFBundleName</key><string>Lightkey API</string>
+  <key>CFBundleExecutable</key><string>lightkey-api</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSUIElement</key><true/>
+  <key>NSLocalNetworkUsageDescription</key><string>Lightkey API lets StagePilot on your network read Lightkey's lights.</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>Lightkey API reads your Lightkey project to learn the fixtures.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>Lightkey API reads your Lightkey project to learn the fixtures.</string>
+</dict></plist>
+PEOF
+  cat "$LB/launcher.c" "$LB/Info.plist" > "$LB/both"
+  NEWSTAMP=$(sha256 "$LB/both")
+  if [ -x "$LAUNCHER_APP/Contents/MacOS/lightkey-api" ] && [ "$(cat "$APP/launcher.stamp" 2>/dev/null || true)" = "$NEWSTAMP" ]; then
+    rm -rf "$LB"; return 0          # same launcher as last time: keep it, so macOS keeps the answers it was given
+  fi
+  mkdir -p "$LB/Lightkey API.app/Contents/MacOS"
+  "$CC" -O2 -o "$LB/Lightkey API.app/Contents/MacOS/lightkey-api" "$LB/launcher.c" || { rm -rf "$LB"; return 1; }
+  cp "$LB/Info.plist" "$LB/Lightkey API.app/Contents/Info.plist"
+  "$CODESIGN" --force --sign - "$LB/Lightkey API.app" || { rm -rf "$LB"; return 1; }
+  rm -rf "$LAUNCHER_APP" "$APP/LightkeyAPI.app"        # the second name is what the first 0.5.0 builds used
+  mv "$LB/Lightkey API.app" "$LAUNCHER_APP"
+  printf '%s' "$NEWSTAMP" > "$APP/launcher.stamp"
+  rm -rf "$LB"
+}
+if build_launcher >"$APP/launcher-build.log" 2>&1; then
+  START="$LAUNCHER_APP/Contents/MacOS/lightkey-api"
+  START_ARGS="<string>$APP/lightkey_api.py</string><string>run</string>"
+else
+  echo "Could not set up the Lightkey API launcher (see $APP/launcher-build.log). The agent will run without access to Documents and Downloads."
+  START="$PY"
+  START_ARGS="<string>-u</string><string>$APP/lightkey_api.py</string><string>run</string>"
+fi
+
 # 3. Start it at login.
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key><array><string>$PY</string><string>-u</string><string>$APP/lightkey_api.py</string><string>run</string></array>
+  <key>ProgramArguments</key><array><string>$START</string>$START_ARGS</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
@@ -122,18 +193,35 @@ EOF
 plutil -lint "$PLIST" >/dev/null
 UIDN=$(id -u)
 echo
-echo "macOS may ask to let python3 read your Documents and Downloads folders. Click Allow. It is only used to find your Lightkey project."
+echo "macOS may ask to let Lightkey API use your local network and read your Documents and Downloads folders. Click Allow each time. The folders are only used to find your Lightkey project."
 rm -f "$APP/tcc_primed"        # the agent asks again after an install or upgrade, while someone is at the Mac
+# A folder the running agent was refused is forgotten here, so macOS asks again instead of keeping the old No.
+curl -fsS -m 2 http://127.0.0.1:8770/health 2>/dev/null | $PY -c '
+import json, sys
+try:
+    f = json.load(sys.stdin)["watch"]["folders"]
+except Exception:
+    f = {}
+for name, state in sorted(f.items()):
+    if state == "denied" and name in ("Documents", "Downloads"):
+        print("SystemPolicy%sFolder" % name)' 2>/dev/null | while read -r SERVICE; do
+  "$TCCUTIL" reset "$SERVICE" "$LABEL" >/dev/null 2>&1 || true
+done
 launchctl bootout "gui/$UIDN/$LABEL" 2>/dev/null || true
-launchctl bootstrap "gui/$UIDN" "$PLIST"
+STARTED=no
+for _ in 1 2 3 4 5; do          # bootstrap right after bootout can fail with an I/O error while launchd is still removing the old job
+  sleep 1
+  if launchctl bootstrap "gui/$UIDN" "$PLIST" 2>/dev/null; then STARTED=yes; break; fi
+done
+[ "$STARTED" = yes ] || launchctl bootstrap "gui/$UIDN" "$PLIST"
 
 # 4. Read the fixtures from the project Lightkey has open (needs Lightkey running).
 if $PY "$APP/lightkey_api.py" export-fixtures >/dev/null 2>&1; then
   FIX="fixtures: loaded from the open project"
 elif [ -f "$APP/fixtures.json" ]; then
-  FIX="fixtures: using the map from an earlier install. To refresh it, open your project in Lightkey and run:  $PY \"$APP/lightkey_api.py\" export-fixtures"
+  FIX="fixtures: using the map from an earlier install. The agent re-reads the open Lightkey project by itself (or press Read fixtures in StagePilot)."
 else
-  FIX="fixtures: not loaded yet. Open your project in Lightkey, then run:  $PY \"$APP/lightkey_api.py\" export-fixtures"
+  FIX="fixtures: not loaded yet. Open your project in Lightkey; the agent reads it by itself within a few minutes (or press Read fixtures in StagePilot)."
 fi
 
 # 5. Check that it answers.
@@ -144,10 +232,10 @@ for _ in 1 2 3 4 5 6 7 8; do
 done
 VER=$($PY "$APP/lightkey_api.py" --version)
 
-# 6. Wait up to 20 seconds for the answer to the folder question (the agent reports it in /health).
+# 6. Wait up to 45 seconds for the answers to the folder question (the agent reports it in /health).
 FOLDERS=unknown
 if [ "$UP" = yes ]; then
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  for _ in $(seq 1 45); do
     FOLDERS=$(curl -fsS -m 2 http://127.0.0.1:8770/health 2>/dev/null | $PY -c '
 import json, sys
 try:
@@ -163,7 +251,7 @@ echo
 echo "lightkey-api $VER installed. Running: $UP"
 echo "  $FIX"
 case "$FOLDERS" in
-  *denied*) echo "  folders: $FOLDERS. Open System Settings > Privacy & Security > Files and Folders and allow python3." ;;
+  *denied*) echo "  folders: $FOLDERS. Run this installer again to be asked once more, or open System Settings > Privacy & Security > Files and Folders and allow Lightkey API." ;;
   *unknown*) echo "  folders: no answer yet. Click Allow if macOS is asking." ;;
   *) echo "  folders: $FOLDERS" ;;
 esac

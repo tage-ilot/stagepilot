@@ -365,14 +365,29 @@ UNUSED_PARAMS = ("default", "rotates", "rotating", "style")      # in the projec
 LAYOUT_KEYS = ("profile", "personality", "beams", "footprint", "panRange", "tiltRange", "capabilities")
 
 
+def _cap_key(c):
+    return (c.get("channel", 0), str(c.get("kind", "")), json.dumps(c, sort_keys=True, separators=(",", ":")))
+
+
+def canonical_map(m):
+    """The same map with each layout's capabilities in one fixed order. Lightkey writes them in a different order every
+    time it saves a project, so two maps of one unchanged show can differ in order only; the agent sorts them by channel
+    anyway. Used to tell a real change from a re-save."""
+    out = dict(m)
+    out["layouts"] = [dict(l, capabilities=sorted(l.get("capabilities", []), key=_cap_key)) for l in m.get("layouts", [])]
+    return out
+
+
 def compact_map(fmap):
-    """Version 2: each distinct channel layout once, and one short row per fixture. Same data, about a quarter of the size."""
+    """Version 2: each distinct channel layout once, and one short row per fixture. Same data, about a quarter of the size.
+    Capabilities are written in a fixed order, so reading an unchanged project always gives the same map."""
     layouts, index, rows = [], {}, []
     for f in fmap["fixtures"]:
         caps = []
         for c in f["capabilities"]:
             caps.append(dict(c, settings=[dict(st, params={k: v for k, v in st["params"].items() if k not in UNUSED_PARAMS})
                                           for st in c["settings"]]))
+        caps.sort(key=_cap_key)
         layout = {k: (caps if k == "capabilities" else f[k]) for k in LAYOUT_KEYS if k == "capabilities" or k in f}
         key = json.dumps(layout, sort_keys=True, separators=(",", ":"))
         if key not in index:
@@ -960,7 +975,7 @@ IO = {
 }
 WATCH_FOLDERS = ("Documents", "Downloads")
 PERMISSION_TEXT = ("macOS has not allowed this helper to read %s. Open System Settings > Privacy & Security > "
-                   "Files and Folders and allow python3, then press Read fixtures again.")
+                   "Files and Folders and allow Lightkey API (if it is not listed, run the helper installer again), then press Read fixtures again.")
 REFRESH_MESSAGES = {
     "lightkey_closed": "Lightkey is not running. Open Lightkey and your project, then press Read fixtures again.",
     "no_project": "Lightkey has no saved project open. Open or save a project in Lightkey, then press Read fixtures again.",
@@ -1136,7 +1151,7 @@ class Watcher:
         with self.state_lock:
             self.read_at = now_ms()
         old = {k: v for k, v in (saved or {}).items() if k != "source"}
-        if saved is not None and old == cmap:
+        if saved is not None and canonical_map(old) == canonical_map(cmap):
             self.seen_sig = sig                # same fixtures: leave fixtures.json (and the map id) alone
             self._set("ok", base)
             return self._ok(base, False)

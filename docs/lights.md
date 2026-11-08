@@ -632,8 +632,9 @@ runs the helper's own installer there with `--allow-for <this computer's address
 the network that reaches StagePilot, prints `Done. Go back to StagePilot.` and removes the temporary folder.
 
 **What it needs.** `curl`, `sh` and Python 3 on the Lighting Mac. Python comes with Apple's command-line tools; if
-Terminal says it is missing, run `xcode-select --install` first. macOS may ask to let `python3` read your Documents and
-Downloads folders so the helper can find your Lightkey project: click Allow.
+Terminal says it is missing, run `xcode-select --install` first. The helper starts through a small signed app named "Lightkey API" (the installer builds it with the Mac's own developer tools), so macOS
+can ask about it by name: it may ask to let Lightkey API use your local network and read your Documents and Downloads folders so the helper
+can find your Lightkey project. Click Allow each time. If you click Don't Allow, run the same command again and macOS asks once more.
 
 **LAN only, and it expires.** Each press creates a setup session: a random 128-bit token held in memory only (never
 written to disk or logs), valid for 30 minutes (pressing again extends it), ended when the helper connects or when you

@@ -80,7 +80,8 @@ describe("LightkeyInstallBox", () => {
     expect(screen.getByTestId("lightkey-install-command").tagName).toBe("CODE");
     expect(screen.getByTestId("lightkey-install-waiting")).toHaveTextContent(/Waiting for the helper… The command works for (30:00|29:5\d) more/);
     expect(ready).toHaveTextContent("xcode-select --install");
-    expect(ready).toHaveTextContent("python3");
+    expect(ready).toHaveTextContent("Lightkey API");
+    expect(ready).toHaveTextContent("local network");
     expect(ready).toHaveTextContent("Documents and Downloads");
     expect(ready).toHaveTextContent("Click Allow");
     expect(screen.getByTestId("lightkey-install-live")).toHaveTextContent("Waiting for the helper…");

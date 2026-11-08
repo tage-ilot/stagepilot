@@ -4,7 +4,7 @@
 
 ## [2.43.0-rc.6] - 2026-11-07
 
-Release candidate 6 (pre-release; the in-app updater does not offer it). Everything in rc.5 applies. This candidate sets up and follows the Lighting computer: the Lighting section can install the Lightkey helper for you, shows which Lightkey project is open, warns when a song was captured under another project, and can re-read the fixtures. It bundles helper 0.5.0, which notices a changed project by itself and asks macOS once for Documents and Downloads access. Update the helper on the Lighting Mac to 0.5.0 (the new box in the Lighting section does it); a 0.4.x helper keeps working but cannot re-read fixtures. It also replaces the manual Location setting with a weekly automatic city lookup.
+Release candidate 6 (pre-release; the in-app updater does not offer it). Everything in rc.5 applies. This candidate sets up and follows the Lighting computer: the Lighting section can install the Lightkey helper for you, shows which Lightkey project is open, warns when a song was captured under another project, and can re-read the fixtures. It bundles helper 0.5.0, which notices a changed project by itself and starts through a small signed "Lightkey API" app so macOS can ask once for local-network, Documents and Downloads access (a plain background python3 is refused without any question). A Lightkey re-save that only reorders a fixture's channels is no longer mistaken for a changed show. Update the helper on the Lighting Mac to 0.5.0 (the new box in the Lighting section does it); a 0.4.x helper keeps working but cannot re-read fixtures. It also replaces the manual Location setting with a weekly automatic city lookup.
 
 ### Added
 
