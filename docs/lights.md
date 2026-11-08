@@ -628,13 +628,15 @@ connected helper older than the one StagePilot carries gets the same box as **Up
 short generated `sh` script. It downloads the five bundled helper files (`install.sh`, `lightkey_api.py`,
 `lightkey_cues.py`, `uninstall.sh`, `SHA256SUMS`) from the same address into a temporary folder, checks each against
 checksums written inside the script (and against `SHA256SUMS`), and stops with a message if any file differs. It then
-runs the helper's own installer there with `--allow-for <this computer's address>`, so the helper accepts requests from
-the network that reaches StagePilot, prints `Done. Go back to StagePilot.` and removes the temporary folder.
+runs the helper's own installer there with `--allow-for <this computer's address>` and, when the saved Lighting address is a
+local IP address, `--allow-address <that address>`. The installer then opens the network interface that has the Lighting
+address (the one StagePilot connects on), which is not always the one that reaches StagePilot: on a Mac with a wired lighting
+network and a second network, the two differ. Without a saved local address it uses the interface that reaches StagePilot. It prints `Done. Go back to StagePilot.` and removes the temporary folder.
 
 **What it needs.** `curl`, `sh` and Python 3 on the Lighting Mac. Python comes with Apple's command-line tools; if
 Terminal says it is missing, run `xcode-select --install` first. The helper starts through a small signed app named "Lightkey API" (the installer builds it with the Mac's own developer tools), so macOS
 can ask about it by name: it may ask to let Lightkey API use your local network and read your Documents and Downloads folders so the helper
-can find your Lightkey project. Click Allow each time. If you click Don't Allow, run the same command again and macOS asks once more.
+can find your Lightkey project. Click Allow each time; the Lighting Mac's screen must be unlocked for the questions to appear. If you click Don't Allow, run the same command again and macOS asks once more.
 
 **LAN only, and it expires.** Each press creates a setup session: a random 128-bit token held in memory only (never
 written to disk or logs), valid for 30 minutes (pressing again extends it), ended when the helper connects or when you

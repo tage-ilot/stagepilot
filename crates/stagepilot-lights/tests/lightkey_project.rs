@@ -634,6 +634,18 @@ async fn new_fixtures_in_the_same_project_also_discard_the_recording() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn changed_fixtures_with_the_same_name_and_count_say_so_plainly() {
+    let rig = Rig::new(vec![dim("P1", 0.0), color("P1", 0.0, 0.0, 0.0)]).await;
+    record_with(&rig, || rig.relay.say_hello("Show", 3, 2)).await;
+    assert!(rig.saved.lock().unwrap().is_empty());
+    assert_eq!(
+        rig.link.status().message.as_deref(),
+        Some("Not saved: the fixtures in the Lightkey project changed during the recording (Show, 3 fixtures). It captures again next time.")
+    );
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_hello_sent_again_with_the_same_map_is_not_a_change() {
     let rig = Rig::new(vec![dim("P1", 0.0), color("P1", 0.0, 0.0, 0.0)]).await;
     record_with(&rig, || async {

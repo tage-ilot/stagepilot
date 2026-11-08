@@ -21,20 +21,38 @@ TCCUTIL=${LIGHTKEY_TCCUTIL:-/usr/bin/tccutil}
 LAUNCHER_APP="$APP/Lightkey API.app"    # macOS names the app in its questions after this folder name
 ALLOW=""
 ALLOW_FOR=""
+ALLOW_ADDRESS=""
 CUES=no
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --allow) [ $# -ge 2 ] || { echo "--allow needs an interface name, for example en0"; exit 1; }; ALLOW="$2"; shift 2 ;;
     --allow-for) [ $# -ge 2 ] || { echo "--allow-for needs the IP address of the computer that will use the API"; exit 1; }; ALLOW_FOR="$2"; shift 2 ;;
+    --allow-address) [ $# -ge 2 ] || { echo "--allow-address needs the IP address of this Mac that the other computer connects to"; exit 1; }; ALLOW_ADDRESS="$2"; shift 2 ;;
     --cues) CUES=yes; shift ;;
     -h|--help) sed -n '2,9p' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
-# --allow-for: the interface that routes to that computer. Both --allow and --allow-for may be given.
+# --allow-address: the interface that has this Mac's own address, the one the other computer connects to. That is
+# the interface that matters when this Mac reaches the other computer through a different network than the one
+# the other computer reaches it on. --allow-for: the interface that routes to that computer. Both --allow and
+# --allow-for may be given; when --allow-address finds its interface it is used instead of --allow-for.
+IFCONFIG=${LIGHTKEY_IFCONFIG:-/sbin/ifconfig}
 ALLOW_LIST="$ALLOW"
+if [ -n "$ALLOW_ADDRESS" ]; then
+  OWN_IFACE=$("$IFCONFIG" 2>/dev/null | awk -v ip="$ALLOW_ADDRESS" '/^[a-z0-9]+:/ {name = $1; sub(/:$/, "", name)} $1 == "inet" && $2 == ip {print name; exit}')
+  if [ -n "$OWN_IFACE" ]; then
+    echo "Allowing network interface $OWN_IFACE (it has $ALLOW_ADDRESS, the address StagePilot uses)."
+    ALLOW_LIST="$ALLOW_LIST $OWN_IFACE"
+    ALLOW_FOR=""
+  elif [ -z "$ALLOW_FOR" ] && [ -z "$ALLOW" ]; then
+    echo "This Mac has no network interface with the address $ALLOW_ADDRESS. Check the Lighting address in StagePilot, or use --allow <interface> (for example en0)."; exit 1
+  else
+    echo "This Mac has no interface with the address $ALLOW_ADDRESS; using the one that reaches StagePilot instead."
+  fi
+fi
 if [ -n "$ALLOW_FOR" ]; then
   IFACE=$("$ROUTE" -n get "$ALLOW_FOR" 2>/dev/null | awk '$1 == "interface:" {print $2; exit}')
   [ -n "$IFACE" ] || { echo "Could not find a network interface that reaches $ALLOW_FOR. Check the address, or use --allow <interface> (for example en0)."; exit 1; }

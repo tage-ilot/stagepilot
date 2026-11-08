@@ -148,7 +148,7 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
           </p>
           <p className="mt-1 text-ink-muted">
             Python comes with Apple&apos;s command-line tools. If Terminal says it is missing, run <code className="font-mono">xcode-select --install</code> first.
-            macOS may ask to let Lightkey API use your local network and read your Documents and Downloads folders. Click Allow each time.
+            macOS may ask to let Lightkey API use your local network and read your Documents and Downloads folders. Click Allow each time (the Lighting Mac must be unlocked).
           </p>
           {error && <p className="mt-1 text-danger-text" role="alert">{error}</p>}
           <div className="mt-1.5">

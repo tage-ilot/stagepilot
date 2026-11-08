@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.7] - 2026-11-07
+
+Release candidate 7 (pre-release; the in-app updater does not offer it). Everything in rc.6 applies. Found on the real rig: a brand-new Lighting Mac set up from the Lighting section did not connect when it reaches StagePilot through a different network than the one StagePilot talks to it on.
+
+### Fixed
+
+- **The Lighting setup command now opens the right network interface.** The Lighting Mac used to allow only the interface that routes back to StagePilot, so a Mac with a wired lighting network plus a second network refused StagePilot ("Lightkey API refused this address"). The command now also passes the saved Lighting address when it is a local IP, and the helper opens the interface that has it. Bundles helper 0.5.0 with `install.sh --allow-address`.
+- **A changed show says what changed.** When the fixtures change during a recording but the project name and fixture count stay the same, the notice reads "the fixtures in the Lightkey project changed during the recording (Show, 66 fixtures)" instead of repeating the same words on both sides of an arrow.
+- **Removing the helper forgets its folder answers.** `uninstall.sh --purge` resets the Documents and Downloads answers while the helper app still exists, so macOS asks again after a reinstall. The setup note also says the Lighting Mac must be unlocked to see the questions.
+
 ## [2.43.0-rc.6] - 2026-11-07
 
 Release candidate 6 (pre-release; the in-app updater does not offer it). Everything in rc.5 applies. This candidate sets up and follows the Lighting computer: the Lighting section can install the Lightkey helper for you, shows which Lightkey project is open, warns when a song was captured under another project, and can re-read the fixtures. It bundles helper 0.5.0, which notices a changed project by itself and starts through a small signed "Lightkey API" app so macOS can ask once for local-network, Documents and Downloads access (a plain background python3 is refused without any question). A Lightkey re-save that only reorders a fixture's channels is no longer mistaken for a changed show. Update the helper on the Lighting Mac to 0.5.0 (the new box in the Lighting section does it); a 0.4.x helper keeps working but cannot re-read fixtures. It also replaces the manual Location setting with a weekly automatic city lookup.

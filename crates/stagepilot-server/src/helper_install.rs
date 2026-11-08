@@ -98,13 +98,26 @@ impl Assets {
             .is_some_and(|b| String::from_utf8_lossy(b).contains("--allow-for"))
     }
 
-    /// The generated `sh` wrapper for one session.
-    pub fn wrapper(&self, base_url: &str, lan_ip: Ipv4Addr) -> String {
+    /// The bundled installer understands `--allow-address <ip>` (the interface that has the Lighting Mac's own address).
+    fn supports_allow_address(&self) -> bool {
+        self.get("install.sh")
+            .is_some_and(|b| String::from_utf8_lossy(b).contains("--allow-address"))
+    }
+
+    /// The generated `sh` wrapper for one session. `lighting_ip` is the saved Lighting address, when it is a
+    /// local IPv4 address: the Lighting Mac then opens the interface that has it, which is the one StagePilot
+    /// connects on even when that Mac reaches StagePilot through another network.
+    pub fn wrapper(
+        &self,
+        base_url: &str,
+        lan_ip: Ipv4Addr,
+        lighting_ip: Option<Ipv4Addr>,
+    ) -> String {
         let mut wants = String::new();
         for name in embedded::FILE_NAMES {
             wants.push_str(&format!("    {name}) want='{}' ;;\n", self.sha256(name)));
         }
-        let (flag, flag_note) = if self.supports_allow_for() {
+        let (mut flag, flag_note) = if self.supports_allow_for() {
             (format!(" --allow-for {lan_ip}"), "")
         } else {
             (
@@ -112,6 +125,9 @@ impl Assets {
                 "# This helper's installer has no --allow-for; the owner vendors 0.5.0 before shipping.\n",
             )
         };
+        if let Some(ip) = lighting_ip.filter(|_| self.supports_allow_address()) {
+            flag.push_str(&format!(" --allow-address {ip}"));
+        }
         let names = embedded::FILE_NAMES.join(" ");
         format!(
             r#"#!/bin/sh
@@ -188,6 +204,8 @@ struct Session {
     expires_ms: u64,
     requests: u32,
     lan_ip: Ipv4Addr,
+    /// The saved Lighting address when it is a local IPv4 address (the one StagePilot connects to).
+    lighting_ip: Option<Ipv4Addr>,
     port: u16,
     _listener: Option<ListenerGuard>,
     started_connected: bool,
@@ -207,6 +225,8 @@ pub struct SessionInfo {
     pub token: String,
     pub expires_ms: u64,
     pub lan_ip: Ipv4Addr,
+    /// The Lighting computer's own address as StagePilot has it saved, when it is a local IPv4 address.
+    pub lighting_ip: Option<Ipv4Addr>,
     pub port: u16,
 }
 
@@ -303,7 +323,16 @@ impl HelperInstall {
             token: session.token.clone(),
             expires_ms: session.expires_ms,
             lan_ip: session.lan_ip,
+            lighting_ip: session.lighting_ip,
             port: session.port,
+        }
+    }
+
+    /// Remember the saved Lighting address on the live session (it can change between two clicks).
+    pub fn set_lighting_ip(&self, lighting_ip: Option<Ipv4Addr>) {
+        let mut state = self.lock();
+        if let Some(session) = self.live(&mut state) {
+            session.lighting_ip = lighting_ip;
         }
     }
 
@@ -338,6 +367,7 @@ impl HelperInstall {
             expires_ms: self.now() + SESSION_MS,
             requests: 0,
             lan_ip,
+            lighting_ip: None,
             port,
             _listener: listener,
             started_connected,
@@ -465,6 +495,15 @@ fn lighting_target(rt: &Runtime) -> Option<(String, u16)> {
     ))
 }
 
+/// The saved Lighting address as a local IPv4 address, when it is one (not a name, not loopback, not public).
+fn lighting_ipv4(rt: &Runtime) -> Option<Ipv4Addr> {
+    let (host, _) = lighting_target(rt)?;
+    match host.parse::<IpAddr>().ok()? {
+        IpAddr::V4(ip) if ip.is_private() || ip.is_link_local() => Some(ip),
+        _ => None,
+    }
+}
+
 // ---- serving -----------------------------------------------------------------------------------
 
 fn empty(status: StatusCode) -> Response {
@@ -541,7 +580,7 @@ async fn dispatch(
             Ok(info) => body(
                 "text/x-shellscript; charset=utf-8",
                 svc.assets
-                    .wrapper(&info.base_url(), info.lan_ip)
+                    .wrapper(&info.base_url(), info.lan_ip, info.lighting_ip)
                     .into_bytes(),
             ),
             Err(reason) => denied(reason),
@@ -649,7 +688,9 @@ pub async fn create(State(rt): State<Arc<Runtime>>, raw: Bytes) -> Json {
     let Some(lan_ip) = lan_ip else {
         return failure(409, "no_lan_address", NO_ADDRESS);
     };
+    let lighting_ip = lighting_ipv4(&rt);
     if let Some(info) = svc.extend(lan_ip) {
+        svc.set_lighting_ip(lighting_ip);
         return reply(&info);
     }
     let (port, guard) = if main_listener_is_lan(&rt, lan_ip) {
@@ -673,6 +714,7 @@ pub async fn create(State(rt): State<Arc<Runtime>>, raw: Bytes) -> Json {
         Ok(info) => info,
         Err(message) => return http_error(500, &message),
     };
+    svc.set_lighting_ip(lighting_ip);
     watch(Arc::downgrade(&rt), svc.clone(), info.id);
     reply(&info)
 }
@@ -938,7 +980,7 @@ mod tests {
     fn the_wrapper_has_the_base_url_the_checksums_and_allow_for() {
         let assets = stub_assets("# understands --allow-for\n");
         let base = "http://192.168.1.20:8123/lightkey-helper/abc";
-        let script = assets.wrapper(base, LAN);
+        let script = assets.wrapper(base, LAN, None);
         assert!(script.starts_with("#!/bin/sh\n"));
         assert!(script.contains("set -eu"));
         assert!(script.contains(&format!("BASE='{base}'")));
@@ -957,9 +999,44 @@ mod tests {
     }
 
     #[test]
+    fn the_wrapper_passes_the_lighting_address_when_the_installer_understands_it() {
+        let assets = stub_assets("# understands --allow-for and --allow-address\n");
+        let lighting = Some("10.30.0.211".parse().unwrap());
+        let script = assets.wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN, lighting);
+        assert!(script.contains(
+            "sh ./install.sh --allow-for 192.168.1.20 --allow-address 10.30.0.211 </dev/null"
+        ));
+        // No saved local address (a name, nothing, a public address): the flag is left out.
+        let script = assets.wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN, None);
+        assert!(script.contains("sh ./install.sh --allow-for 192.168.1.20 </dev/null"));
+        assert!(!script.contains("--allow-address"));
+    }
+
+    #[test]
+    fn the_wrapper_leaves_the_lighting_address_out_when_the_installer_lacks_it() {
+        let assets = stub_assets("# understands --allow-for only\n");
+        let lighting = Some("10.30.0.211".parse().unwrap());
+        let script = assets.wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN, lighting);
+        assert!(script.contains("sh ./install.sh --allow-for 192.168.1.20 </dev/null"));
+        assert!(!script.contains("10.30.0.211"));
+    }
+
+    #[test]
+    fn a_session_carries_the_lighting_address_and_can_change_it() {
+        let (svc, _clock) = service();
+        let info = svc.begin(LAN, 8000, None, false, None).unwrap();
+        assert_eq!(info.lighting_ip, None);
+        svc.set_lighting_ip(Some("10.30.0.211".parse().unwrap()));
+        let again = svc.extend(LAN).unwrap();
+        assert_eq!(again.lighting_ip, Some("10.30.0.211".parse().unwrap()));
+        svc.set_lighting_ip(None);
+        assert_eq!(svc.extend(LAN).unwrap().lighting_ip, None);
+    }
+
+    #[test]
     fn the_wrapper_leaves_allow_for_out_when_the_installer_lacks_it() {
         let assets = stub_assets("# the old installer\n");
-        let script = assets.wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN);
+        let script = assets.wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN, None);
         assert!(!script.contains("--allow-for 192.168.1.20"));
         assert!(script.contains("sh ./install.sh </dev/null"));
     }
@@ -968,8 +1045,11 @@ mod tests {
     fn the_wrapper_is_valid_shell() {
         // `sh -n` parses without running anything.
         for installer in ["# old\n", "# --allow-for\n"] {
-            let script =
-                stub_assets(installer).wrapper("http://192.168.1.20:1/lightkey-helper/x", LAN);
+            let script = stub_assets(installer).wrapper(
+                "http://192.168.1.20:1/lightkey-helper/x",
+                LAN,
+                None,
+            );
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("wrapper.sh");
             std::fs::write(&path, script).unwrap();

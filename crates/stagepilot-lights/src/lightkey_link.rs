@@ -814,11 +814,18 @@ impl Inner {
                 return;
             }
             let counts = before.project == now.project;
-            let text = format!(
-                "Not saved: the Lightkey project or its fixtures changed during the recording ({} -> {}). It captures again next time.",
-                before.label(counts),
-                now.label(counts)
-            );
+            let (was, is) = (before.label(counts), now.label(counts));
+            // Same name and same fixture count: only the fixtures themselves changed, so say that instead of
+            // printing the same words on both sides of an arrow.
+            let text = if was == is {
+                format!(
+                    "Not saved: the fixtures in the Lightkey project changed during the recording ({is}). It captures again next time."
+                )
+            } else {
+                format!(
+                    "Not saved: the Lightkey project or its fixtures changed during the recording ({was} -> {is}). It captures again next time."
+                )
+            };
             tracing::warn!(old = %before.label(true), new = %now.label(true), "lightkey_project_changed");
             match st.session.as_mut() {
                 Some(session) if session.fixtures.is_some() && session.discarded.is_none() => {
