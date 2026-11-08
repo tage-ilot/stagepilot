@@ -302,7 +302,7 @@ effect up to 2 % of the moments can be further off (the report prints the maximu
 **Caps.** `fade_seconds` 0 to 600 s (a captured ramp is at most 60 s). Per song: **50,000
 rows and 600,000 messages** (256 messages per row, a longer row is split), **1,000 effects**,
 256 members per effect, 4,096 cycle steps per effect and **250,000 cycle steps** per song, a
-period of 0.1 to 600 s, at most 8 numbers per step. (Before 2.43.0-rc.10 the caps were 1,000
+period of 0.1 to 600 s, at most 8 numbers per step. (Before this change the caps were 1,000
 rows, 15,000 messages, 200 effects and 20,000 steps; a busy 5-minute song on a 66-fixture rig
 is about 11,000 rows as recorded.) A song that would still pass a cap is never dropped, see
 the next section.
@@ -321,10 +321,12 @@ fits; a fit budget of 30 s sends a slower song straight to the last stage):
    than 5 %. `... (fitted loosely: tolerance x4, the song was very large).`
 3. **Thinning**, T = 0.1, 0.25, 0.5, 1, 2, 4, 8 s: per address, changes closer than T collapse
    to the last value in each T-window. The song's final value of every address stays.
-4. **Trim**, the guarantee: whole units (a step with the ramps that follow it, so a ramp is never
-   left half removed) with the smallest effect (size of the change times the time until the next
+4. **Trim**, the guarantee: chunks (a step with the ramps that follow it, or at most 8 items of a
+   long ramp chain) with the smallest effect (size of the change times the time until the next
    change) are dropped, busiest addresses first, until the song is inside the caps; then loops
-   with the least effect. A song is only ever dropped by a real storage failure.
+   with the least effect. A ramp is never left half removed: a kept chunk that continues a ramp
+   whose chunk before it was dropped gets one step to the value that part ended on, so no ramp
+   starts from a value that is gone. The final value of every address stays. A song is only ever dropped by a real storage failure.
 
 Stages 3 and 4 say so: `Saved N looks to <song>'s timeline. The song was very busy, so it was
 simplified: kept N of M changes.` (M is what the exact fit needed). The saved capture records
