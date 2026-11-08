@@ -64,6 +64,17 @@ Belongs" (281 s), Able (290 s) to "Holy Forever" (336 s). The take is silent for
    project, the warn-only notice with replay still sending OSC, a recording discarded by a project change with the exact
    message and left unsaved, and a repeated hello that is not a change.
 
+7. `discovery` (own rig, about 6 minutes, real timing, asserts and fails the run on a mismatch; needs no take file:
+   `scripts/lighting-e2e/run.sh --stages discovery`): StagePilot finding the Lighting computer by itself. The backend is
+   started with `STAGEPILOT_LIGHTKEY_DISCOVERY=loopback:127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.6,127.0.0.7`, so it can
+   only ever ask those loopback addresses (it never probes a real network). `127.0.0.1` is the rig's own fake helper,
+   `lib/fakes.py` `FakeHelper` puts a healthy helper on `127.0.0.2`, a refusing one (403) on `.3`, a web page on `.4` and a slow
+   one on `.7`. Checks: found after the 5 s settle and not before, the exact messages, the saved `found_url` and untouched
+   Replay host, no probe at all while connected for a full 60 s cycle, several found (connects to none, then Use),
+   a restart that tries the last found helper first, a down chosen address that is only offered, Keep waiting that
+   survives the next scan and ends when the chosen address changes, Use, nothing found with a refusing helper named, Search
+   again, scans repeating every ~60 s, and no search with Lighting off.
+
 `lib/analysis.py` holds the numbers; `report.py` renders the tables.
 
 ## Things the harness had to learn (read before changing it)
