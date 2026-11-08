@@ -69,10 +69,13 @@ fn the_rig_sequence_resumes_at_the_jump_position() {
     r.feed(&play(false), 0.5);
     r.feed(&hb(307.282, false), 0.4);
     r.feed(&hb(308.061, false), 1.0); // a late, still-paused beat: the stale position
-    // 20:13:06.131 seek, 20:13:06.332 play (0.2 s later): before any heartbeat shows 229.253.
+                                      // 20:13:06.131 seek, 20:13:06.332 play (0.2 s later): before any heartbeat shows 229.253.
     r.feed(&seek(229.253), 2.0);
     let resumed = r.feed(&play(true), 0.2);
-    let e = resumed.iter().find(|e| e.kind == EventType::SongResumed).unwrap();
+    let e = resumed
+        .iter()
+        .find(|e| e.kind == EventType::SongResumed)
+        .unwrap();
     close(e.position, 229.253);
     // The player confirms: playing at 229.5, then 5 s later paused at 233.445.
     r.feed(&hb(229.5, true), 0.3);
@@ -82,7 +85,10 @@ fn the_rig_sequence_resumes_at_the_jump_position() {
     // 20:13:13.130 seek 114.625, 20:13:13.506 play (0.376 s later).
     r.feed(&seek(114.625), 2.0);
     let resumed = r.feed(&play(true), 0.376);
-    let e = resumed.iter().find(|e| e.kind == EventType::SongResumed).unwrap();
+    let e = resumed
+        .iter()
+        .find(|e| e.kind == EventType::SongResumed)
+        .unwrap();
     close(e.position, 114.625);
     // Playback agrees: the settle must not emit a revert or a second resume.
     let kinds: Vec<_> = r
@@ -103,7 +109,11 @@ fn the_jumps_that_worked_stay_correct() {
     r.feed(&hb(182.688, false), 0.4); // the heartbeat did arrive this time
     let resumed = r.feed(&play(true), 0.05);
     close(
-        resumed.iter().find(|e| e.kind == EventType::SongResumed).unwrap().position,
+        resumed
+            .iter()
+            .find(|e| e.kind == EventType::SongResumed)
+            .unwrap()
+            .position,
         182.688,
     );
     // 204.917 paused -> seek 304.477 -> resumed 304.477, 0.459 s later.
@@ -111,9 +121,14 @@ fn the_jumps_that_worked_stay_correct() {
     r.feed(&play(false), 0.5);
     r.feed(&hb(204.917, false), 0.4);
     r.feed(&seek(304.477), 2.8);
+    r.feed(&hb(304.477, false), 0.3);
     let resumed = r.feed(&play(true), 0.459);
     close(
-        resumed.iter().find(|e| e.kind == EventType::SongResumed).unwrap().position,
+        resumed
+            .iter()
+            .find(|e| e.kind == EventType::SongResumed)
+            .unwrap()
+            .position,
         304.477,
     );
 }

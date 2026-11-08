@@ -1348,9 +1348,7 @@ impl Inner {
         has_events: bool,
         state: &stagepilot_core::state::ApplicationState,
     ) -> Option<Observation> {
-        let Some(h) = heartbeat else {
-            return None;
-        };
+        let h = heartbeat?;
         let timer = crate::resync::timer_position(&state.timer, Utc::now());
         let comparable = h.playing
             && !has_events
