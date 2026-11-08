@@ -36,7 +36,7 @@ import urllib.parse
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.4.3"
+__version__ = "0.5.0"
 
 HOME = os.path.expanduser("~")
 DEFAULT_CONFIG_PATH = os.path.join(HOME, "Library", "Application Support", "LightkeyAPI", "config.json")
@@ -64,6 +64,7 @@ DEFAULTS = {
     "relay_max_subscribers": 8,
     "interface_check_s": 5.0,        # how often to look for network interface changes (re-joins sACN when they change)
     "osc_lead_s": 0.045,             # OSC command -> first changed DMX frame (measured 40-50 ms)
+    "project_check_s": 180,          # how often to check whether the open project changed (minimum 30)
     "take_max_events": 200000,       # a recording keeps going past this, but is marked truncated
 }
 
@@ -397,13 +398,14 @@ def export_fixtures(project=None, out=None):
     project = project or open_project_path()
     if not project:
         raise SystemExit("Pass the project file: lightkey_api.py export-fixtures /path/to/Show.lightkeyproj")
-    fmap = parse_project(os.path.expanduser(project))
+    project = os.path.expanduser(project)
+    fmap = parse_project(project)
     out = out or CFG["fixtures_file"]
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    tmp = out + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(compact_map(fmap), f, separators=(",", ":"))
-    os.replace(tmp, out)
+    try:
+        source = _signature(project, os.stat(project))
+    except OSError:
+        source = None
+    write_map(compact_map(fmap), source, out)
     print("wrote %d fixtures from %s to %s" % (len(fmap["fixtures"]), fmap["project"], out))
 
 
@@ -945,6 +947,245 @@ def load_fixtures():
     log.info("loaded %d fixtures from %s (%s)", len(fx.fixtures), path, fx.project)
 
 
+# ---------------------------------------------------------------- project watcher
+# The fixture map follows the open Lightkey project: every project_check_s the agent looks at the project file and,
+# only when it changed, reads it again. The map (and so the map id the relay sends) is rewritten only when the
+# fixtures really differ. Everything that touches the disk or Lightkey goes through IO so tests can fake it.
+IO = {
+    "running": lightkey_running,    # () -> bool, is Lightkey running
+    "find": open_project_path,      # () -> path or None
+    "stat": os.stat,                # (path) -> stat_result
+    "parse": parse_project,         # (path) -> fixture map
+    "listdir": os.listdir,          # (dir) -> names; the folder-permission probe
+}
+WATCH_FOLDERS = ("Documents", "Downloads")
+PERMISSION_TEXT = ("macOS has not allowed this helper to read %s. Open System Settings > Privacy & Security > "
+                   "Files and Folders and allow python3, then press Read fixtures again.")
+REFRESH_MESSAGES = {
+    "lightkey_closed": "Lightkey is not running. Open Lightkey and your project, then press Read fixtures again.",
+    "no_project": "Lightkey has no saved project open. Open or save a project in Lightkey, then press Read fixtures again.",
+    "busy": "The helper is already reading the project. Try again in a few seconds.",
+    "unreadable": "The helper could not read the open project file. The earlier fixture map is still in use.",
+}
+
+
+def project_check_interval():
+    """Seconds between project checks: config project_check_s, default 180, never below 30."""
+    try:
+        return max(30.0, float(CFG.get("project_check_s", 180)))
+    except (TypeError, ValueError):
+        return 180.0
+
+
+def data_dir():
+    return os.path.dirname(CFG["fixtures_file"])
+
+
+def write_map(cmap, source, out=None):
+    """Write a compact fixture map (with the source project signature) atomically: temp file, then rename."""
+    out = out or CFG["fixtures_file"]
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    tmp = out + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(dict(cmap, source=source) if source else cmap, f, separators=(",", ":"))
+    os.replace(tmp, out)
+
+
+def _signature(path, st):
+    return {"path": path, "mtime": st.st_mtime, "size": st.st_size}
+
+
+def _folder_of(path):
+    """'Documents' or 'Downloads' when the path is inside one of them, else None. Never a full path."""
+    for name in WATCH_FOLDERS:
+        if path.startswith(os.path.join(HOME, name) + os.sep):
+            return name
+    return None
+
+
+class Watcher:
+    def __init__(self):
+        self.lock = threading.Lock()           # held while a check runs: single flight
+        self.state_lock = threading.Lock()
+        self.enabled = False
+        self.last_check_at = None
+        self.open_project = None
+        self.state = "ok"
+        self.folder = None
+        self.detail = None
+        self.read_at = None
+        self.seen_sig = None                   # signature of a project that was read and found identical to the saved map
+        self.folders = {n: "unknown" for n in WATCH_FOLDERS}
+
+    # -- folder permission
+    def _flag(self):
+        return os.path.join(data_dir(), "tcc_primed")
+
+    def prime_folders(self):
+        """List Documents and Downloads once after an install or upgrade, so macOS asks while someone is at the Mac."""
+        flag = self._flag()
+        try:
+            with open(flag) as f:
+                saved = json.load(f)
+            with self.state_lock:
+                for n in WATCH_FOLDERS:
+                    if saved.get(n) in ("allowed", "denied"):
+                        self.folders[n] = saved[n]
+            return
+        except (OSError, ValueError, AttributeError):
+            pass
+        for n in WATCH_FOLDERS:
+            self._probe(n)
+        try:
+            os.makedirs(os.path.dirname(flag), exist_ok=True)
+            with open(flag, "w") as f:
+                json.dump(dict(self.folders), f)
+        except OSError as e:
+            log.warning("could not write %s: %s", flag, e)
+
+    def _probe(self, name):
+        try:
+            IO["listdir"](os.path.join(HOME, name))
+            result = "allowed"
+        except PermissionError:
+            result = "denied"
+        except OSError:
+            result = "unknown"
+        with self.state_lock:
+            self.folders[name] = result
+        return result
+
+    # -- one check
+    def check(self, force=False):
+        """Look at the open project and re-read it when needed. Returns the result dict that /fixtures/refresh answers with."""
+        if not self.lock.acquire(blocking=False):
+            return {"ok": False, "code": "busy", "error": REFRESH_MESSAGES["busy"]}
+        try:
+            res = self._check(force)
+        except Exception as e:                 # never let a check kill the thread
+            log.exception("project check failed")
+            res = self._fail("unreadable", None, REFRESH_MESSAGES["unreadable"])
+        finally:
+            self.lock.release()
+        with self.state_lock:
+            self.last_check_at = now_ms()
+        return res
+
+    def _set(self, state, project=None, folder=None, detail=None):
+        with self.state_lock:
+            self.state, self.open_project, self.folder, self.detail = state, project, folder, detail
+
+    def _fail(self, code, project, error, folder=None):
+        self._set(code, project, folder, error)
+        res = {"ok": False, "code": code, "error": error}
+        if folder is not None or code == "permission_denied":
+            res["folder"] = folder
+        return res
+
+    def _denied(self, path):
+        folder = _folder_of(path)
+        if folder:
+            with self.state_lock:
+                self.folders[folder] = "denied"
+        where = ("your %s folder" % folder) if folder else "the folder that holds your project"
+        return self._fail("permission_denied", os.path.basename(path), PERMISSION_TEXT % where, folder)
+
+    @staticmethod
+    def _saved():
+        try:
+            with open(CFG["fixtures_file"]) as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else None
+        except (OSError, ValueError):
+            return None
+
+    def _check(self, force):
+        for n in WATCH_FOLDERS:                # a folder that was denied may have been allowed since
+            if self.folders[n] == "denied":
+                self._probe(n)
+        if not IO["running"]():
+            return self._fail("lightkey_closed", None, REFRESH_MESSAGES["lightkey_closed"])
+        path = IO["find"]()
+        if not path:
+            return self._fail("no_project", None, REFRESH_MESSAGES["no_project"])
+        base = os.path.basename(path)
+        try:
+            st = IO["stat"](path)
+        except PermissionError:
+            return self._denied(path)
+        except OSError:
+            return self._fail("unreadable", base, REFRESH_MESSAGES["unreadable"])
+        sig = _signature(path, st)
+        saved = self._saved()
+        known = (saved or {}).get("source")
+        if not force and (sig == known or sig == self.seen_sig):
+            self._set("ok", base)
+            return self._ok(base, False)
+        try:
+            fmap = IO["parse"](path)
+            cmap = compact_map(fmap)
+        except PermissionError:
+            return self._denied(path)
+        except Exception as e:
+            log.warning("could not read project %s: %s", base, e)
+            return self._fail("unreadable", base, REFRESH_MESSAGES["unreadable"])
+        folder = _folder_of(path)
+        if folder:
+            with self.state_lock:
+                self.folders[folder] = "allowed"
+        with self.state_lock:
+            self.read_at = now_ms()
+        old = {k: v for k, v in (saved or {}).items() if k != "source"}
+        if saved is not None and old == cmap:
+            self.seen_sig = sig                # same fixtures: leave fixtures.json (and the map id) alone
+            self._set("ok", base)
+            return self._ok(base, False)
+        try:
+            write_map(cmap, sig)
+        except OSError as e:
+            log.warning("could not save the fixture map: %s", e)
+            return self._fail("unreadable", base, "The helper could not save the fixture map. The earlier one is still in use.")
+        self.seen_sig = None
+        load_fixtures()
+        log.info("fixture map updated from %s: %d fixtures", base, len(fmap["fixtures"]))
+        self._set("changed", base)
+        return self._ok(base, True)
+
+    def _ok(self, base, changed):
+        load_fixtures()
+        fx = FIXTURES[0]
+        return {"ok": True, "project": fx[0].project if fx else base, "count": len(fx[0].fixtures) if fx else 0,
+                "map": int(fx[1]) if fx else 0, "changed": changed}
+
+    # -- thread and report
+    def loop(self):
+        self.enabled = True
+        try:
+            self.prime_folders()
+        except Exception:
+            log.exception("folder priming failed")
+        while True:
+            self.check()
+            time.sleep(project_check_interval())
+
+    def report(self):
+        with self.state_lock:
+            return {"enabled": self.enabled, "interval_s": int(project_check_interval()), "last_check_at": self.last_check_at,
+                    "open_project": self.open_project, "state": self.state, "folder": self.folder, "detail": self.detail,
+                    "folders": dict(self.folders)}
+
+    def fixture_map(self):
+        load_fixtures()
+        fx = FIXTURES[0]
+        if not fx:
+            return None
+        return {"project": fx[0].project, "count": len(fx[0].fixtures),
+                "read_at": self.read_at or int(fx[1] * 1000), "map": int(fx[1])}
+
+
+WATCH = Watcher()
+
+
 LEVELS = {}   # universe -> latest 512 slots (bytes), kept even before a fixture map exists
 
 
@@ -1286,7 +1527,8 @@ INDEX = {
         "/record": "recording status",
         "/relay": "OSC relay status: port, subscribers, packets sent (docs/relay.md)",
         "/takes": "saved takes; /takes/<name> returns one (initial OSC + timed OSC commands)",
-        "/health": "liveness and last error",
+        "POST /fixtures/refresh": "read the open Lightkey project again now; answers whether the fixture map changed",
+        "/health": "liveness, version, fixture map and project watcher",
     },
 }
 
@@ -1361,6 +1603,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.connection.getsockname()[0] not in _allowed_ips():
             return self._json({"error": "not available on this interface"}, 403)
         path = self.path.partition("?")[0]
+        if path == "/fixtures/refresh":
+            self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 65536))
+            res = WATCH.check(force=True)
+            code = 200 if res["ok"] else {"permission_denied": 403, "unreadable": 422}.get(res["code"], 409)
+            return self._json(res, code)
         try:
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}") if n else {}
@@ -1421,6 +1668,9 @@ class Handler(BaseHTTPRequestHandler):
                     "dmx_age_ms": (sn["server_time"] - sn["dmx_seen_at"]) if sn["dmx_seen_at"] else None}
             if CFG["cues"]:
                 body["reads"] = S.get("reads", 0)
+            body["version"] = __version__
+            body["fixture_map"] = WATCH.fixture_map()
+            body["watch"] = WATCH.report()
             return self._json(body)
         self._json({"error": "not found"}, 404)
 
@@ -1504,7 +1754,7 @@ def run():
              json.dumps({k: v for k, v in CFG.items() if k != "log_file"}))
     S["online"] = lightkey_running()
     load_fixtures()
-    loops = [process_loop, sacn_loop]
+    loops = [process_loop, sacn_loop, WATCH.loop]
     if CFG["cues"]:
         cues = load_cues()
         if cues:

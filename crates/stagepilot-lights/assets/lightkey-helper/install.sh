@@ -2,7 +2,10 @@
 # Install lightkey-api for the current user on the Mac that runs Lightkey.
 #   curl -fsSL https://github.com/huntrw6/lightkey-api/releases/latest/download/install.sh | sh
 #   ... | sh -s -- --allow en0     let other computers on that network interface use the API
+#   ... | sh -s -- --allow-for 10.30.0.5   same, using the interface that reaches that computer
 #   ... | sh -s -- --cues          also install the optional active-cue-name reader
+# Offline: put install.sh, lightkey_api.py, SHA256SUMS (and lightkey_cues.py for --cues) in one folder and run
+# sh install.sh there. Every file is checked against SHA256SUMS and nothing is fetched from the network.
 # From a clone, run ./install.sh. Safe to re-run: it upgrades the agent and keeps your config.
 set -eu
 
@@ -10,26 +13,43 @@ REPO=huntrw6/lightkey-api
 APP="$HOME/Library/Application Support/LightkeyAPI"
 PLIST="$HOME/Library/LaunchAgents/io.github.lightkey-api.plist"
 LABEL=io.github.lightkey-api
-PY=/usr/bin/python3
+PY=${LIGHTKEY_PY:-/usr/bin/python3}      # LIGHTKEY_PY, LIGHTKEY_ROUTE and LIGHTKEY_UNAME exist so the tests can stub the Mac
+ROUTE=${LIGHTKEY_ROUTE:-/sbin/route}
 ALLOW=""
+ALLOW_FOR=""
 CUES=no
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --allow) [ $# -ge 2 ] || { echo "--allow needs an interface name, for example en0"; exit 1; }; ALLOW="$2"; shift 2 ;;
+    --allow-for) [ $# -ge 2 ] || { echo "--allow-for needs the IP address of the computer that will use the API"; exit 1; }; ALLOW_FOR="$2"; shift 2 ;;
     --cues) CUES=yes; shift ;;
-    -h|--help) sed -n '2,5p' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) sed -n '2,9p' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
-[ "$(uname)" = Darwin ] || { echo "This installs on macOS, on the computer that runs Lightkey."; exit 1; }
+# --allow-for: the interface that routes to that computer. Both --allow and --allow-for may be given.
+ALLOW_LIST="$ALLOW"
+if [ -n "$ALLOW_FOR" ]; then
+  IFACE=$("$ROUTE" -n get "$ALLOW_FOR" 2>/dev/null | awk '$1 == "interface:" {print $2; exit}')
+  [ -n "$IFACE" ] || { echo "Could not find a network interface that reaches $ALLOW_FOR. Check the address, or use --allow <interface> (for example en0)."; exit 1; }
+  echo "Allowing network interface $IFACE (it reaches $ALLOW_FOR)."
+  ALLOW_LIST="$ALLOW_LIST $IFACE"
+fi
+
+sha256() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
+
+[ "${LIGHTKEY_UNAME:-$(uname)}" = Darwin ] || { echo "This installs on macOS, on the computer that runs Lightkey."; exit 1; }
 $PY -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null || {
   echo "Need Python 3.9 or newer at /usr/bin/python3. Run: xcode-select --install"; exit 1; }
 
 mkdir -p "$APP" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 
-# 1. Get the agent: from this folder if it is a clone, otherwise from the latest release (checked against its checksum).
+# 1. Get the agent. Three ways, never mixed:
+#    - the files sit next to this script with a SHA256SUMS file: offline. Every file is checked, nothing is downloaded.
+#    - the files sit next to this script without one (a git clone): copied as they are.
+#    - otherwise (curl | sh): the latest release, each file checked against its checksum.
 #    The cue-name reader is optional. It stays if it is already installed, and --cues adds it.
 FILES="lightkey_api.py"
 if [ "$CUES" = yes ] || [ -f "$APP/lightkey_cues.py" ]; then FILES="$FILES lightkey_cues.py"; fi
@@ -37,7 +57,23 @@ HERE=""
 case "$0" in */install.sh|install.sh) HERE=$(cd "$(dirname "$0")" && pwd) ;; esac
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-if [ -n "$HERE" ] && [ -f "$HERE/lightkey_api.py" ]; then
+if [ -n "$HERE" ] && [ -f "$HERE/lightkey_api.py" ] && [ -f "$HERE/SHA256SUMS" ]; then
+  echo "Installing from the files next to install.sh. Nothing is downloaded."
+  for f in $FILES; do
+    [ -f "$HERE/$f" ] || { echo "$f is missing next to install.sh. Nothing was installed."; exit 1; }
+  done
+  for f in lightkey_api.py lightkey_cues.py install.sh uninstall.sh; do
+    [ -f "$HERE/$f" ] || continue
+    WANT=$(awk -v n="$f" '$2 == n || $2 == "*" n {print $1}' "$HERE/SHA256SUMS")
+    GOT=$(sha256 "$HERE/$f")
+    if [ -z "$WANT" ] || [ "$WANT" != "$GOT" ]; then
+      # a file the install does not use may be absent from the list; one that it uses must match
+      case " $FILES install.sh " in *" $f "*) echo "Checksum for $f does not match SHA256SUMS. Nothing was installed."; exit 1 ;; esac
+      [ -z "$WANT" ] || { echo "Checksum for $f does not match SHA256SUMS. Nothing was installed."; exit 1; }
+    fi
+  done
+  for f in $FILES; do cp "$HERE/$f" "$TMP/$f"; done
+elif [ -n "$HERE" ] && [ -f "$HERE/lightkey_api.py" ]; then
   for f in $FILES; do cp "$HERE/$f" "$TMP/$f"; done
 else
   BASE="https://github.com/$REPO/releases/latest/download"
@@ -45,24 +81,25 @@ else
   for f in $FILES; do
     curl -fsSL "$BASE/$f" -o "$TMP/$f" || { echo "Download failed. Check the internet connection."; exit 1; }
     WANT=$(awk -v n="$f" '$2 == n {print $1}' "$TMP/SHA256SUMS")
-    GOT=$(shasum -a 256 "$TMP/$f" | awk '{print $1}')
+    GOT=$(sha256 "$TMP/$f")
     [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { echo "Checksum for $f does not match. Nothing was installed."; exit 1; }
   done
 fi
 for f in $FILES; do cp "$TMP/$f" "$APP/$f.new" && mv "$APP/$f.new" "$APP/$f"; done
 
-# 2. Config: keep an existing one; --allow adds the interface.
+# 2. Config: keep an existing one; --allow and --allow-for add the interface.
 [ -f "$APP/config.json" ] || echo '{}' > "$APP/config.json"
-if [ -n "$ALLOW" ]; then
-  $PY - "$APP/config.json" "$ALLOW" <<'PYEOF'
+if [ -n "$ALLOW_LIST" ]; then
+  $PY - "$APP/config.json" $ALLOW_LIST <<'PYEOF'
 import json, sys
-path, name = sys.argv[1], sys.argv[2]
+path = sys.argv[1]
 try:
     cfg = json.load(open(path))
 except ValueError:
     cfg = {}
-if name not in cfg.setdefault("allow_interfaces", []):
-    cfg["allow_interfaces"].append(name)
+for name in sys.argv[2:]:
+    if name not in cfg.setdefault("allow_interfaces", []):
+        cfg["allow_interfaces"].append(name)
 json.dump(cfg, open(path, "w"), indent=2)
 PYEOF
 fi
@@ -84,6 +121,9 @@ cat > "$PLIST" <<EOF
 EOF
 plutil -lint "$PLIST" >/dev/null
 UIDN=$(id -u)
+echo
+echo "macOS may ask to let python3 read your Documents and Downloads folders. Click Allow. It is only used to find your Lightkey project."
+rm -f "$APP/tcc_primed"        # the agent asks again after an install or upgrade, while someone is at the Mac
 launchctl bootout "gui/$UIDN/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$UIDN" "$PLIST"
 
@@ -104,12 +144,32 @@ for _ in 1 2 3 4 5 6 7 8; do
 done
 VER=$($PY "$APP/lightkey_api.py" --version)
 
+# 6. Wait up to 20 seconds for the answer to the folder question (the agent reports it in /health).
+FOLDERS=unknown
+if [ "$UP" = yes ]; then
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    FOLDERS=$(curl -fsS -m 2 http://127.0.0.1:8770/health 2>/dev/null | $PY -c '
+import json, sys
+try:
+    f = json.load(sys.stdin)["watch"]["folders"]
+    print(" ".join("%s %s" % (k, f[k]) for k in ("Documents", "Downloads")))
+except Exception:
+    print("unknown")' 2>/dev/null || echo unknown)
+    case "$FOLDERS" in *unknown*) sleep 1 ;; *) break ;; esac
+  done
+fi
+
 echo
 echo "lightkey-api $VER installed. Running: $UP"
 echo "  $FIX"
+case "$FOLDERS" in
+  *denied*) echo "  folders: $FOLDERS. Open System Settings > Privacy & Security > Files and Folders and allow python3." ;;
+  *unknown*) echo "  folders: no answer yet. Click Allow if macOS is asking." ;;
+  *) echo "  folders: $FOLDERS" ;;
+esac
 echo "  Try: curl http://127.0.0.1:8770/fixtures/state"
-if [ -z "$ALLOW" ] && ! grep -q allow_interfaces "$APP/config.json"; then
+if [ -z "$ALLOW_LIST" ] && ! grep -q allow_interfaces "$APP/config.json"; then
   echo "  Other computers get 'forbidden' until you allow a network interface. Run the installer again with"
-  echo "  --allow <interface>. Your interfaces: $(ifconfig -l | tr ' ' '\n' | grep '^en' | while read -r i; do ifconfig "$i" | grep -q 'inet ' && printf '%s ' "$i"; done)"
+  echo "  --allow <interface> (or --allow-for <ip of that computer>). Your interfaces: $(ifconfig -l | tr ' ' '\n' | grep '^en' | while read -r i; do ifconfig "$i" | grep -q 'inet ' && printf '%s ' "$i"; done)"
 fi
 [ "$UP" = yes ] || { echo "  It did not answer. See ~/Library/Logs/lightkey-api.log"; exit 1; }

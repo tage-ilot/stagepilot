@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.6] - 2026-11-07
+
+Release candidate 6 (pre-release; the in-app updater does not offer it). Everything in rc.5 applies. This candidate sets up and follows the Lighting computer: the Lighting section can install the Lightkey helper for you, shows which Lightkey project is open, warns when a song was captured under another project, and can re-read the fixtures. It bundles helper 0.5.0, which notices a changed project by itself and asks macOS once for Documents and Downloads access. Update the helper on the Lighting Mac to 0.5.0 (the new box in the Lighting section does it); a 0.4.x helper keeps working but cannot re-read fixtures. It also replaces the manual Location setting with a weekly automatic city lookup.
+
 ### Added
 
 - **The Lighting section shows the Lightkey project.** `Project: Show.lightkeyproj · 66 fixtures` sits under the connection pill (`Project not reported yet` until the helper says). StagePilot also reads the helper's `GET /health` on connect and about every 30 s for its version, fixture map and project-watch state; a helper that reports no version is older than 0.5.0 and gets a `Helper update available` line (capture and replay keep working as before).
@@ -9,6 +13,10 @@
 - **A capture remembers its project** (`capture.project`, optional). When a song was captured under another project than the one open now, the song's lighting timeline and the strip say `Captured with X. Lightkey has Y open.` It is a notice only: replay is never held, skipped or stopped. Older captures have no project and never warn.
 - **A project change during a recording discards it** (`Not saved: the Lightkey project or its fixtures changed during the recording (X -> Y). It captures again next time.`) instead of saving a mix of two fixture maps. A hello sent again with the same map id is not a change.
 - **Set up the Lighting computer from the Lighting section.** While no Lighting computer is connected, the Lightkey strip shows a box with one copy-ready command (`curl -fsS http://<this computer>:<port>/lightkey-helper/<token>/install.sh | sh`). Pasted into Terminal on the Lighting Mac it installs the Lightkey helper from StagePilot itself (no internet, GitHub or SSH), checks every file against checksums, and the strip turns to Connected by itself. A connected helper older than the bundled one gets the same box as **Update the helper**. The command is LAN only, expires after 30 minutes, serves at most 30 requests per token and is never reachable through Remote access. The helper files (v0.4.3 for now) are compiled into the app (`scripts/vendor-lightkey-helper.mjs <tag>` refreshes them; re-vendor with the tested release before shipping). New routes: `POST`/`DELETE /api/v1/lights/lightkey/helper-install`.
+
+### Changed
+
+- **Location is automatic.** The Location setting and "Detect my location" are gone. Once a week the app asks db-ip.com for the city of its internet address (only the city is kept and reported; the address itself is never stored or sent). It runs in the background, never delays a check-in, and a failure keeps the old value. Set `STAGEPILOT_DISABLE_IP_LOOKUP=1` to turn it off. The control-plane admin override still wins. Details in `docs/configuration.md` and `docs/remote-control-plane.md`.
 
 ### Compatibility
 
