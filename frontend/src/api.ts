@@ -378,6 +378,23 @@ export const saveLightkeySettings = (settings: { api_url?: string; replay?: bool
 /** Asks the Lightkey helper to read the open project's fixtures again. Always answers 200 with {ok, message, ...}. */
 export const readLightkeyFixtures = () =>
   requestJson<LightkeyReadFixtures>("/api/v1/lights/lightkey/read-fixtures", { method: "POST" });
+/** "Search again": look for the Lighting computer now (only while nothing is connected). */
+export const searchLightkeyAgain = () =>
+  requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/discovery/scan", { method: "POST" });
+/** "Use this one" / "Use <ip>": switch to a Lighting computer the last search found. 422 when the address was not found. */
+export const switchToLightkeyComputer = (address: string) =>
+  requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/discovery/use", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+/** "Keep waiting": stop offering that address until StagePilot restarts or the chosen address changes. */
+export const keepWaitingForLightkey = (address: string) =>
+  requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/discovery/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
 /** Opens (or extends) the 30-minute setup session and answers the command to paste on the Lighting Mac. `address` is this computer's address when StagePilot could not find it itself (409). */
 export const startLightkeyHelperInstall = (address?: string) =>
   requestJson<LightkeyHelperInstall>("/api/v1/lights/lightkey/helper-install", {

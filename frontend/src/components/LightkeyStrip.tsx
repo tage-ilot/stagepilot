@@ -3,12 +3,16 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   getLightkeyStatus,
   readLightkeyFixtures,
+  keepWaitingForLightkey,
   releaseLightkeyLights,
   saveLightkeySettings,
+  searchLightkeyAgain,
   setLightkeyRecording,
+  switchToLightkeyComputer,
 } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeyStatus } from "../types";
+import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
 import { LightkeyInstallBox } from "./LightkeyInstallBox";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
@@ -204,7 +208,9 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const setHost = connection ? connection.onHost : setOwnHost;
   const shownApiPort = apiPort ?? saved.port;
   // A saved API address on another machine is kept (and used) until the person accepts the OSC host; it is never rewritten silently.
-  const otherHost = apiHostMismatch(status.api_url, savedOscHost);
+  // In Automatic the address in use is the computer the search found; "Capture is from X; Replay sends to Y" says that instead.
+  const automatic = status.discovery !== undefined && status.discovery.chosen === undefined;
+  const otherHost = automatic ? null : apiHostMismatch(status.api_url, savedOscHost);
   const hostError = connection && !connection.attempted && !tried ? null : oscHostError(host);
   const apiError = tried || apiPort !== null ? apiPortError(shownApiPort) : null;
   const udpError = connection && connection.attempted ? oscPortError(connection.oscPort) : null;
@@ -360,6 +366,14 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
         </p>
       )}
+
+      <LightkeyDiscoveryNotice
+        busy={busy}
+        discovery={status.discovery}
+        onKeepWaiting={(address) => void run(() => keepWaitingForLightkey(address))}
+        onSearchAgain={() => void run(() => searchLightkeyAgain())}
+        onUse={(address) => void run(() => switchToLightkeyComputer(address))}
+      />
 
       <LightkeyInstallBox status={status} />
 
