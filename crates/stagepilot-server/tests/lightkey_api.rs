@@ -343,6 +343,7 @@ async fn old_settings_without_a_lightkey_block_load_with_replay_on() {
             mode: stagepilot_core::config::LightkeyMode::Auto,
             detail: stagepilot_core::config::LightkeyDetail::Normal,
             audio_device: None,
+            found_url: String::new(),
         }
     );
     // And a whole saved settings file from before the feature loads the same way.

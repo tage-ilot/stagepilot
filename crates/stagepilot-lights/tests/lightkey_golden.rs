@@ -71,6 +71,7 @@ fn replay_defaults_on_and_old_settings_load_with_replay_on() {
             mode: LightkeyMode::Auto,
             detail: LightkeyDetail::Normal,
             audio_device: None,
+            found_url: String::new(),
         }
     );
     // A partial block keeps the other field's default.
