@@ -245,6 +245,16 @@ impl LightsPlugin {
                 FixtureEvent::StreamReset => inner.operator_stream_reset(),
             }
         }));
+        // The Lighting card says Connected only while capture (the helper link) is up as well as the replay
+        // address, so it follows the link. The link calls this on its polling task, outside its locks.
+        let status_weak = weak.clone();
+        link_options.link_changed = Some(Arc::new(move || {
+            if let Some(inner) = status_weak.upgrade() {
+                if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                    runtime.spawn(async move { inner.refresh_osc_status().await });
+                }
+            }
+        }));
         let captures_weak = weak.clone();
         link_options.captures = Some(Arc::new(move |key: &str| match captures_weak.upgrade() {
             Some(inner) => {
@@ -1570,22 +1580,10 @@ impl Inner {
             .await
             .map_err(|_| OutputError::internal("OSC send task failed."))??;
         let now = Utc::now();
-        let first_send = {
+        {
             let mut st = self.st();
             st.last_cue_at = Some(now);
             st.last_activity_at = Some(now);
-            st.connection_status == ConnectionStatus::Ready
-        };
-        if first_send {
-            let target = {
-                let st = self.st();
-                format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
-            };
-            self.set_connection(
-                ConnectionStatus::Connected,
-                &format!("Sent {address} to {target}."),
-            )
-            .await;
         }
         Ok(())
     }
@@ -1649,24 +1647,11 @@ impl Inner {
                     st.last_error = None;
                     st.last_activity_at = Some(Utc::now());
                 }
-                // UDP has no handshake: "ready" means the socket opened, not that anything listens.
-                // It stays "ready" until a cue has actually gone out through it.
-                let sent_before = self.st().last_cue_at.is_some();
-                if sent_before {
-                    self.set_connection(
-                        ConnectionStatus::Connected,
-                        &format!("OSC output to {target} reopened. UDP does not confirm delivery."),
-                    )
-                    .await;
-                } else {
-                    self.set_connection(
-                        ConnectionStatus::Ready,
-                        &format!(
-                            "OSC ready for {target}. Nothing sent yet; UDP does not confirm delivery."
-                        ),
-                    )
-                    .await;
-                }
+                // UDP has no handshake, so the output opening proves nothing about delivery. The card says
+                // "Ready" while only the replay address is available, and "Connected" once capture (the
+                // helper link) is up too.
+                let (status, detail) = osc_connection(self.capture_connected(), &target);
+                self.set_connection(status, &detail).await;
                 true
             }
             Err(error) => {
@@ -1680,6 +1665,34 @@ impl Inner {
                 false
             }
         }
+    }
+
+    /// The helper link is up, so capture (and the fixture stream replay needs) is available.
+    fn capture_connected(&self) -> bool {
+        self.lightkey
+            .get()
+            .is_some_and(|link| link.status().link == crate::lightkey::LightkeyLink::Connected)
+    }
+
+    /// Re-judge the Lighting card after the helper link changed. Only moves between Ready and Connected while
+    /// the OSC output is open; an error or a closed output keeps its own status.
+    async fn refresh_osc_status(self: &Arc<Self>) {
+        let target = {
+            let st = self.st();
+            let open = st.settings.enabled
+                && st.settings.method == LightingMethod::Osc
+                && st.osc_output.as_ref().is_some_and(|o| !o.closed())
+                && matches!(
+                    st.connection_status,
+                    ConnectionStatus::Ready | ConnectionStatus::Connected
+                );
+            if !open {
+                return;
+            }
+            format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
+        };
+        let (status, detail) = osc_connection(self.capture_connected(), &target);
+        self.set_connection(status, &detail).await;
     }
 
     async fn connect(self: Arc<Self>) -> bool {
@@ -1906,6 +1919,22 @@ impl Inner {
                 },
             ))
             .await;
+    }
+}
+
+/// What the Lighting card says while the OSC output is open: Connected when capture is up as well as the
+/// replay address, Ready when only the replay address is available.
+fn osc_connection(capture_connected: bool, target: &str) -> (ConnectionStatus, String) {
+    if capture_connected {
+        (
+            ConnectionStatus::Connected,
+            format!("Capture and replay connected. Replay sends to {target}."),
+        )
+    } else {
+        (
+            ConnectionStatus::Ready,
+            format!("Replay ready for {target}. Capture is not connected yet."),
+        )
     }
 }
 

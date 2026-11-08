@@ -188,7 +188,7 @@ describe("dashboard integration truthfulness", () => {
       lights: null,
     });
     expect(views.lights.status).toBe("ready");
-    expect(views.lights.detail).toBe("Ready, delivery not confirmed");
+    expect(views.lights.detail).toBe("Ready, capture not connected yet");
   });
 
   it("treats a connected OAuth account with a selected service type as configured", () => {

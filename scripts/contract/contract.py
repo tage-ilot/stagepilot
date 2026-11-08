@@ -94,6 +94,9 @@ APPROVED_DIVERGENCES = [
      "m5: after a cue was sent, a reopened OSC output reports connected"),
     (r"^(outputs: )?(mock saw the startup probe|mock log before the settings flows|ProPresenter calls for the settings save)\.mock_requests",
      "m2: the ProPresenter probe also reads GET /v1/timers/current for the timer state"),
+    (r"(lights\.detail|body\.detail|body\.message): 'OSC (ready for|output to) [^']*' != 'Replay ready for [^']*Capture is not connected yet\.'$",
+     "rc.8: the Lighting card says Ready while only the replay address is available and the helper "
+     "(capture) is not connected; it says Connected once both are"),
     (r"^(outputs: )?propresenter settings, an unknown Look is refused after saving\.response\.body\.propresenter\.(look_found|look_id): ",
      "m3: an unknown ProPresenter look is refused and not saved"),
     (r"\.message: type str != NoneType \('Capture cleared\.' vs None\)$",
@@ -101,6 +104,9 @@ APPROVED_DIVERGENCES = [
     (r"^(pco|outputs: )[^.]*\.response\.body\.(state\.)?recent_events",
      "rc.4 C2: a connection.changed event replaces the previous one of the same source and "
      "kind in recent_events, so the repeated connection entries of the recording collapse"),
+    (r"^lightkey: [^.]*\.response\.body\.state\.recent_events",
+     "rc.8: the Lighting card changes from Ready to Connected when the Lightkey helper link comes up, "
+     "which adds one lights connection.changed entry to recent_events"),
 ]
 _APPROVED = [(re.compile(pattern), reason) for pattern, reason in APPROVED_DIVERGENCES]
 

@@ -516,6 +516,7 @@ struct Inner {
     armed_store: Arc<dyn ArmedStore>,
     looks_sink: Option<LooksSink>,
     fixture_tap: Option<FixtureTap>,
+    link_changed: Option<LinkChanged>,
     loudness_sink: Option<LoudnessSink>,
     captures: Option<CaptureLookup>,
     audio: Option<Arc<AudioHub>>,
@@ -540,6 +541,10 @@ pub enum FixtureEvent<'a> {
 
 pub type FixtureTap = Arc<dyn Fn(FixtureEvent<'_>) + Send + Sync>;
 
+/// Told when the link to the helper changes (Connected, Unreachable, ...). It runs on the polling task,
+/// outside every lock, and must not block.
+pub type LinkChanged = Arc<dyn Fn() + Send + Sync>;
+
 /// Everything `LightkeyLink::new` needs besides the bus and the settings.
 pub struct LinkOptions {
     /// Remembers the Record switch.
@@ -548,6 +553,8 @@ pub struct LinkOptions {
     pub looks_sink: Option<LooksSink>,
     /// Told about every relay change and stream restart (the plugin judges operator input).
     pub fixture_tap: Option<FixtureTap>,
+    /// Told when the link to the helper changes (the Lighting card shows Connected only while it is up).
+    pub link_changed: Option<LinkChanged>,
     /// Where a recording's loudness goes. `None` saves none.
     pub loudness_sink: Option<LoudnessSink>,
     /// What each song's stored capture is (Auto decides from it). `None`: no song is captured.
@@ -566,6 +573,7 @@ impl Default for LinkOptions {
             armed_store: Arc::new(MemoryArmedStore::new()),
             looks_sink: None,
             fixture_tap: None,
+            link_changed: None,
             loudness_sink: None,
             captures: None,
             audio: None,
@@ -594,6 +602,7 @@ impl LightkeyLink {
                 armed_store: options.armed_store,
                 looks_sink: options.looks_sink,
                 fixture_tap: options.fixture_tap,
+                link_changed: options.link_changed,
                 loudness_sink: options.loudness_sink,
                 captures: options.captures,
                 audio: options
@@ -1137,16 +1146,25 @@ impl Inner {
 
     // ------------------------------------------------------------ polling
     fn set_link(&self, link: Link, detail: Option<&str>) {
-        let mut st = self.st();
-        if st.link != link {
-            tracing::info!(link = ?link, "lightkey_link_changed");
+        let changed = {
+            let mut st = self.st();
+            let changed = st.link != link;
+            if changed {
+                tracing::info!(link = ?link, "lightkey_link_changed");
+            }
+            if link != Link::Connected {
+                // Read the helper's health again as soon as the link is back.
+                st.health_at = None;
+            }
+            st.link = link;
+            st.detail = detail.map(str::to_string);
+            changed
+        };
+        if changed {
+            if let Some(told) = &self.link_changed {
+                told();
+            }
         }
-        if link != Link::Connected {
-            // Read the helper's health again as soon as the link is back.
-            st.health_at = None;
-        }
-        st.link = link;
-        st.detail = detail.map(str::to_string);
     }
 
     fn is_stopped(&self) -> bool {

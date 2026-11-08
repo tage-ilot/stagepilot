@@ -782,27 +782,127 @@ async fn an_aborted_pulse_still_sends_its_note_off() {
 
 // ---- m5 / m12: honest status and read-only port list ---------------------------------------------
 
+/// A fake Lightkey helper that can be switched up and down.
+struct SwitchableHelper(Arc<std::sync::atomic::AtomicBool>);
+
+#[async_trait::async_trait]
+impl stagepilot_lights::lightkey_link::LightkeyHttp for SwitchableHelper {
+    async fn get_json(
+        &self,
+        url: &str,
+        _query: &[(&str, String)],
+    ) -> Result<serde_json::Value, stagepilot_lights::lightkey_link::HttpFailure> {
+        use stagepilot_lights::lightkey_link::HttpFailure;
+        if !self.0.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(HttpFailure::Other("the helper is down".into()));
+        }
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+            * 1000.0;
+        if url.ends_with("/time") {
+            Ok(serde_json::json!({ "t": now_ms }))
+        } else if url.ends_with("/log") {
+            Ok(serde_json::json!({
+                "events": [],
+                "state": { "online": true, "active": [], "seq": 1, "server_time": now_ms },
+            }))
+        } else {
+            Err(HttpFailure::Status(404))
+        }
+    }
+}
+
+fn rig_with_helper(settings: LightsSettings, helper_up: Arc<std::sync::atomic::AtomicBool>) -> Rig {
+    let bus = EventBus::new();
+    let midi = FakeOutputBackend::new(&["StagePilot to Lightkey"]);
+    let osc = Arc::new(FakeOscBackend::default());
+    let mut options = LightsOptions::new({
+        let midi = midi.clone();
+        Arc::new(move || Ok(midi.clone() as Arc<dyn MidiOutputBackend>))
+    });
+    options.osc_backend_factory = {
+        let osc = osc.clone();
+        Arc::new(move || osc.clone() as Arc<dyn OscBackend>)
+    };
+    options.lightkey.http_factory = Arc::new(move || {
+        Arc::new(SwitchableHelper(helper_up.clone()))
+            as Arc<dyn stagepilot_lights::lightkey_link::LightkeyHttp>
+    });
+    let plugin = LightsPlugin::new(bus.clone(), settings, options).unwrap();
+    Rig {
+        bus,
+        plugin,
+        midi,
+        osc,
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
-async fn osc_is_ready_not_connected_until_the_first_cue_is_sent() {
-    let r = rig(settings(
-        LightingMethod::Osc,
-        vec![],
-        vec![osc_cue(0.0, "/live/go", vec![], "Go")],
-    ));
+async fn osc_is_only_ready_while_the_replay_address_is_there_but_capture_is_not() {
+    let up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let r = rig_with_helper(
+        settings(
+            LightingMethod::Osc,
+            vec![],
+            vec![osc_cue(0.0, "/live/go", vec![], "Go")],
+        ),
+        up,
+    );
     r.plugin.start().await.unwrap();
     let before = r.plugin.snapshot(false).await;
     assert_eq!(before.connection_status, ConnectionStatus::Ready);
     assert_eq!(before.last_cue_at, None);
-    assert!(before.detail.unwrap().contains("Nothing sent yet"));
+    assert!(before
+        .detail
+        .unwrap()
+        .contains("Capture is not connected yet"));
+    // A cue going out proves nothing about capture: the card stays Ready.
     publish_song_start(&r.bus, 300).await;
     wait_for("the cue", || !r.osc.sent().is_empty()).await;
+    let after = r.plugin.snapshot(false).await;
+    assert!(after.last_cue_at.is_some());
+    assert_eq!(after.connection_status, ConnectionStatus::Ready);
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn osc_is_connected_when_capture_and_replay_are_both_up_and_follows_the_helper() {
+    use std::sync::atomic::Ordering;
+    let up = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let r = rig_with_helper(
+        settings(
+            LightingMethod::Osc,
+            vec![],
+            vec![osc_cue(0.0, "/live/go", vec![], "Go")],
+        ),
+        up.clone(),
+    );
+    r.plugin.start().await.unwrap();
+    // Nothing has been sent, yet capture and replay are both available.
     wait_for("connected", || {
         futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Connected
     })
     .await;
-    let after = r.plugin.snapshot(false).await;
-    assert!(after.last_cue_at.is_some());
-    assert!(after.detail.unwrap().contains("/live/go"));
+    let connected = r.plugin.snapshot(false).await;
+    assert_eq!(connected.last_cue_at, None);
+    assert!(connected
+        .detail
+        .unwrap()
+        .contains("Capture and replay connected"));
+    // The helper goes away: only the replay address is left.
+    up.store(false, Ordering::SeqCst);
+    wait_for("back to ready", || {
+        futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Ready
+    })
+    .await;
+    // And back.
+    up.store(true, Ordering::SeqCst);
+    wait_for("connected again", || {
+        futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Connected
+    })
+    .await;
     r.plugin.stop().await.unwrap();
 }
 

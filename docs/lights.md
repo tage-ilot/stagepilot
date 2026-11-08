@@ -100,6 +100,11 @@ small read-only agent that runs on the Lightkey Mac. Install it there first (its
 README covers the one-time macOS permission click). A recording holds fixture
 data only: **cues are neither recorded nor replayed**.
 
+The **Lighting card** on the dashboard follows both halves. It says **Connected** while the Lightkey helper is
+connected (capture) and the OSC address is open (replay). It says **Ready** while only the replay address is
+available and the helper is not connected yet; sending a cue does not change that, because UDP never confirms
+delivery. It goes back to Ready if the helper drops, and to Connected again when it returns.
+
 The strip has these controls:
 
 - **Address and Connect.** Defaults to the Lighting OSC host on port 8770

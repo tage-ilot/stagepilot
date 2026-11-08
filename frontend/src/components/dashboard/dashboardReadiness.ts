@@ -41,7 +41,7 @@ const statusDetail = (status: ConnectionStatus, detail: string | null | undefine
   if (status === "connecting") return "Connecting";
   if (status === "error") return "Connection failed";
   if (status === "connected") return "Connected";
-  if (status === "ready") return "Ready, delivery not confirmed";
+  if (status === "ready") return "Ready, capture not connected yet";
   return "Disconnected";
 };
 
@@ -204,7 +204,7 @@ export function buildConnectionCardViews({
           status: state.lights_status,
           detail: statusDetail(
             state.lights_status,
-            lights?.detail ?? (state.lights_status === "ready" ? "Ready, delivery not confirmed" : lightingMethod === "osc" ? "OSC not sent yet" : lightOutput ? `Waiting for ${lightOutput}` : "No Lighting output selected"),
+            lights?.detail ?? (state.lights_status === "ready" ? "Ready, capture not connected yet" : lightingMethod === "osc" ? "OSC not sent yet" : lightOutput ? `Waiting for ${lightOutput}` : "No Lighting output selected"),
           ),
           configured: lightingMethod === "osc" || Boolean(lightOutput),
           mode: "real",

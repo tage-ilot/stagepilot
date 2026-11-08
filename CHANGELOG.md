@@ -6,6 +6,10 @@
 
 Release candidate 8 (pre-release; the in-app updater does not offer it). Everything in rc.7 applies. Found on the real rig by setting up the Lighting Mac from scratch with the Lighting section's command.
 
+### Changed
+
+- **The Lighting card says Connected when capture and replay are both live.** It used to say Ready until the first cue was sent, even with everything up. It now reads **Connected** while the Lightkey helper is connected (capture) and the OSC address is open (replay), and **Ready** only while the replay address is available but the helper is not connected yet. Sending a cue no longer changes the word. It goes back to Ready if the helper drops, and to Connected when it returns.
+
 ### Fixed
 
 - **A Lighting Mac set up without cue names now shows as Connected.** StagePilot checked the helper through its cue-name feed (`/log`), which only exists when the optional cue module is installed. A helper installed the way the Lighting section installs it has no such feed, so StagePilot reported "Cannot reach the Lightkey API" even though the helper was running, and the setup box never finished. When the feed is missing, StagePilot now reads the helper's `/health` instead: Connected when the helper is up, "Lightkey is not running" when Lightkey is closed. Cue names still appear when the cue module is installed.
