@@ -213,6 +213,17 @@ fn final_values_intact(map: &SongLightingCueMap, changes: &Changes, duration: f6
 #[test]
 fn song_one_saves_at_full_fidelity_under_the_new_caps() {
     let (baseline, changes, duration) = song_one();
+    // `BIG_SONGS_DUMP=/some/folder cargo test ...` keeps the replica as a raw recording for
+    // `cargo run --example refit_recording`
+    if let Ok(folder) = std::env::var("BIG_SONGS_DUMP") {
+        let path = lightkey_recording::save(
+            std::path::Path::new(&folder),
+            &RawRecording::new("song-one-replica", duration, &baseline, &changes),
+            chrono::Utc::now(),
+        )
+        .unwrap();
+        println!("raw recording: {}", path.display());
+    }
     let fitted = run(&baseline, &changes, duration, &Caps::default());
     assert_eq!(fitted.stage, Stage::Exact, "the new caps hold song 1 as recorded");
     assert_eq!(fitted.fits, 1);
@@ -520,3 +531,107 @@ fn an_unwritable_folder_does_not_stop_the_raw_recording_from_being_reported() {
         .unwrap_err();
     assert!(error.contains("cannot"), "{error}");
 }
+
+// ------------------------------------------------------------------ replay at the caps
+
+/// A song at the per-song caps as the replay sees it: 50,000 rows with 12 messages each over 330
+/// addresses (66 fixtures x 5 properties), a third of them ramps, and 1,000 effects of 250 steps.
+fn song_at_the_caps() -> (Vec<stagepilot_core::config::OscLightingCue>, Vec<stagepilot_core::config::LightingEffect>) {
+    use stagepilot_core::config::*;
+    use uuid::Uuid;
+    let props = ["dimmer", "pan", "tilt", "zoom", "iris"];
+    let per_row = MAX_OSC_MESSAGES_PER_SONG / MAX_OSC_ROWS_PER_SONG;
+    let rows = (0..MAX_OSC_ROWS_PER_SONG)
+        .map(|r| OscLightingCue {
+            id: Uuid::new_v4(),
+            at_seconds: r as f64 * 0.024,
+            address: "/stagepilot/look".into(),
+            args: vec![],
+            label: format!("Look - {per_row} fixtures"),
+            color: None,
+            messages: (0..per_row)
+                .map(|i| {
+                    // each row touches 12 different addresses; a given address recurs every
+                    // 27.5 rows on average
+                    let fixture = (r * per_row + i) % 66;
+                    let prop = props[((r * per_row + i) / 66) % props.len()];
+                    OscMessage {
+                        address: format!("/fixture/Moving Head {fixture}/overrides/{prop}"),
+                        args: vec![OscArgument::Float(((r * 31 + i * 17) % 1000) as f64 / 1000.0)],
+                    }
+                })
+                .collect(),
+            source: OscCueSource::Captured,
+            edited: false,
+            fade_seconds: if r % 3 == 0 { 0.3 } else { 0.0 },
+        })
+        .collect();
+    let steps_each = MAX_EFFECT_CYCLE_STEPS_PER_SONG / MAX_EFFECTS_PER_SONG;
+    let effects = (0..MAX_EFFECTS_PER_SONG)
+        .map(|e| LightingEffect {
+            id: Uuid::new_v4(),
+            label: format!("Loop {e}"),
+            // sixteen back-to-back windows per fixture, each in the song's first 1,200 s
+            start_seconds: (e / 66) as f64 * 75.0,
+            end_seconds: (e / 66) as f64 * 75.0 + 70.0,
+            period_seconds: 5.0,
+            members: vec![EffectMember {
+                fixture: format!("Moving Head {}", e % 66),
+                offset_seconds: 0.0,
+            }],
+            cycle: (0..steps_each)
+                .map(|s| EffectStep {
+                    at_seconds: s as f64 * 5.0 / steps_each as f64,
+                    property: "color".into(),
+                    value: vec![(s % 10) as f64 / 10.0, 0.5, 0.25],
+                    fade_seconds: 0.01,
+                })
+                .collect(),
+            source: OscCueSource::Captured,
+            edited: false,
+        })
+        .collect();
+    (rows, effects)
+}
+
+#[test]
+fn the_replay_engine_builds_and_ticks_inside_budget_at_the_caps() {
+    use stagepilot_lights::lightkey_replay::ReplayEngine;
+    let (rows, effects) = song_at_the_caps();
+    let started = Instant::now();
+    let mut engine = ReplayEngine::new(&rows, &effects);
+    let build = started.elapsed();
+    // 20 minutes at the ordinary 50 ms tick; the first 2,000 ticks and the last 2,000 are timed
+    // separately so a cost that grows with the song position would show
+    let mut time = |from: f64| {
+        let started = Instant::now();
+        let mut sent = 0usize;
+        for k in 0..2_000 {
+            let p = from + f64::from(k) * 0.05;
+            sent += engine.tick(p, p, &|_| false).messages.len();
+        }
+        (started.elapsed(), sent)
+    };
+    let (early, sent_early) = time(0.0);
+    let (late, sent_late) = time(1_000.0);
+    println!(
+        "replay at the caps: build {build:?}; per tick {:?} early ({sent_early} sent), {:?} late ({sent_late} sent)",
+        early / 2_000,
+        late / 2_000
+    );
+    // the same song once nothing is left to play: only the scan of every address remains
+    let started = Instant::now();
+    for k in 0..2_000 {
+        let p = 1_500.0 + f64::from(k) * 0.05;
+        engine.tick(p, p, &|_| false);
+    }
+    let idle = started.elapsed() / 2_000;
+    println!("replay at the caps: idle tick {idle:?}");
+    assert!(idle < std::time::Duration::from_millis(5), "idle tick {idle:?}");
+    assert!(build.as_secs() < 60, "build took {build:?}");
+    // Every one of the 330 addresses is moving in this song, so a tick sends about 25 messages:
+    // 2 to 3 ms on an optimised build. Generous for a slow runner; flat from start to end.
+    assert!(early / 2_000 < std::time::Duration::from_millis(20), "tick {:?}", early / 2_000);
+    assert!(late / 2_000 < std::time::Duration::from_millis(20), "tick {:?}", late / 2_000);
+}
+

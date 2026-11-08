@@ -132,7 +132,9 @@ The strip has these controls:
   end is folded into the final row at the song's length (a fade-out is kept), an oversize change never discards the capture, and moving the
   playhead during a recording does not discard it (see Auto mode). Messages: `Recording <song>.`,
   `Saved N looks (and M loops) to <song>'s timeline.` (`... (fitted loosely: tolerance x2 ...)`
-  when the song was too large for the caps and was fitted at a looser tolerance),
+  when the song was too large for the caps and was fitted at a looser tolerance; `... The song
+  was very busy, so it was simplified: kept N of M changes.` when it had to be thinned or
+  trimmed, see "A song is never lost for size"),
   followed by `Incomplete capture: X of Y seconds recorded; it captures again next time.` when
   more than 10 s of the song were missing, or `(N s of the song were not captured)` after the
   save message of a complete capture that has gaps.
@@ -297,13 +299,57 @@ Acceptance: outside effects the largest error is at most the tolerance; overall 
 percentile is at most twice the tolerance. Over the two real takes (below) both hold; inside an
 effect up to 2 % of the moments can be further off (the report prints the maximum).
 
-**Caps.** `fade_seconds` 0 to 600 s (a captured ramp is at most 60 s). Per song: 1,000
-rows and 15,000 messages as before, **200 effects** (a busy rig has a handful per group, a
-song changing its loops many times stays under it), 256 members per effect, 1,024 cycle
-steps per effect and **20,000 cycle steps** per song, a period of 0.1 to 600 s, at most 8
-numbers per step. A song that would still pass a cap is fitted again at twice the tolerance,
-up to six times (`Saved 120 looks and 4 loops to <song>'s timeline (fitted loosely:
-tolerance x2, the song was very large).`); the capture is never dropped for size.
+**Caps.** `fade_seconds` 0 to 600 s (a captured ramp is at most 60 s). Per song: **50,000
+rows and 600,000 messages** (256 messages per row, a longer row is split), **1,000 effects**,
+256 members per effect, 4,096 cycle steps per effect and **250,000 cycle steps** per song, a
+period of 0.1 to 600 s, at most 8 numbers per step. (Before 2.43.0-rc.10 the caps were 1,000
+rows, 15,000 messages, 200 effects and 20,000 steps; a busy 5-minute song on a 66-fixture rig
+is about 11,000 rows as recorded.) A song that would still pass a cap is never dropped, see
+the next section.
+
+### A song is never lost for size
+
+When a recording ends, its raw changes are first written to `lightkey-recordings/` next to
+`settings.json` (`<song key>-<UTC time>.json`, the newest 5 files and at most 300 MB; a
+folder that cannot be written is logged and the save goes on), then fitted. If the fit is
+over a cap it goes down this ladder and stops at the first stage that fits (at most 13 full
+fits; a fit budget of 30 s sends a slower song straight to the last stage):
+
+1. **Exact** (tolerance x1): the normal case. `Saved N looks to <song>'s timeline.`
+2. **Looser tolerance** x2, x4, ... x32: only ramps get fewer. The smallest result is kept and a
+   looser fit that is not smaller is never taken. Stops when two doublings in a row gain less
+   than 5 %. `... (fitted loosely: tolerance x4, the song was very large).`
+3. **Thinning**, T = 0.1, 0.25, 0.5, 1, 2, 4, 8 s: per address, changes closer than T collapse
+   to the last value in each T-window. The song's final value of every address stays.
+4. **Trim**, the guarantee: whole units (a step with the ramps that follow it, so a ramp is never
+   left half removed) with the smallest effect (size of the change times the time until the next
+   change) are dropped, busiest addresses first, until the song is inside the caps; then loops
+   with the least effect. A song is only ever dropped by a real storage failure.
+
+Stages 3 and 4 say so: `Saved N looks to <song>'s timeline. The song was very busy, so it was
+simplified: kept N of M changes.` (M is what the exact fit needed). The saved capture records
+it in `capture.simplified` (`stage`, `tolerance_scale`, `thin_seconds`, `trimmed`,
+`kept_changes`, `recorded_changes`; absent on a normal capture and on files from before; an
+older build ignores the key and writes it back). The log line `lightkey_looks_saved` carries
+`stage`, `scale`, `thin_seconds`, `trimmed`, `raw_changes`, `fits` and `fit_ms`. If the
+timeline already holds other rows that leave less room than the caps, the capture is trimmed
+further and saved again. A storage failure reads `Could not save the looks to the timeline. The
+raw recording is kept in <folder>.`
+
+**Loops at a looser tolerance.** The distance a value must move to count as a loop stays at the
+base tolerance: it used to scale with the fit, so at x8 "6 tolerances" was more than the whole
+0..1 range, no loop was found and the song grew (2,916 rows at x4, 13,483 at x8). Loop
+matching itself uses at most x4.
+
+**Analysing a bad song offline.** `cargo run --release -p stagepilot-lights --example
+refit_recording -- <file> [--old-caps] [--no-budget]` loads one raw recording and prints every
+fit of the ladder (stage, scale, thinning, rows, messages, loops, steps, milliseconds) and where
+the song ends up.
+
+**While recording.** The recorder holds at most 1,000,000 changes of one song (about 170 MB).
+Past that it thins what it holds (per address, per window, last value wins; the window starts at
+20 ms and doubles) and carries on with that window: a 20-minute song with 200 addresses
+changing every 20 ms ends as about a million changes, never a crash or unbounded memory.
 
 Real takes (two songs of 255 s and 290 s, 109,353 and 50,800 raw samples; the take
 files are not in the repository). All numbers come from the report tool:
@@ -501,8 +547,8 @@ with **409** ("This song's lights changed since you opened them"), so an edit ma
 a stale list cannot overwrite a recording that finished meanwhile. A request without
 `revision` is accepted as before. The manual save and the Lighting settings save take
 the same lock as the recording, capture, undo and Simplify saves, so none of them can
-lose another's rows. The cue-map route accepts bodies up to 8 MB (a song at the
-per-song caps is about 3 MB). A look message may carry at most 8 arguments, and a
+lose another's rows. The cue-map route accepts bodies up to 120 MB (a song's rows at
+the per-song caps are about 65 MB). A look message may carry at most 8 arguments, and a
 text argument at most 256 characters.
 
 Look rows store the placeholder address `/stagepilot/look` and send their `messages`.

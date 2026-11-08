@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A recorded song is never thrown away for size.** On 2026-11-08 a 336 s, 66-fixture song needed about 11,400 rows and was discarded ("the song has too many rows") with its recording. The caps are now 50,000 rows, 600,000 messages, 1,000 effects and 250,000 loop steps (were 1,000 / 15,000 / 200 / 20,000), and a song that still does not fit goes down a ladder that always ends with a saved capture: exact fit, looser tolerance (x2 to x32, smallest kept), thinning of steps closer than 0.1 to 8 s, and a trim of the least important changes. The status says what happened (`The song was very busy, so it was simplified: kept N of M changes.`) and the capture records it (`capture.simplified`, optional; an older build ignores it). Loop detection no longer disappears at a looser tolerance (it made the song bigger: 2,916 rows at x4, 13,483 at x8).
+- **The raw recording of every finished song is kept** in `lightkey-recordings/` next to `settings.json` (newest 5, at most 300 MB), so a song that fails can be fitted again offline with `cargo run --example refit_recording`. A real storage failure now says where it is.
+- **Recording a very long or very busy song cannot grow without bound**: past 1,000,000 held changes the recorder thins what it holds instead of stopping.
+- Saving and loading a song at the new caps: the settings file is written streamed and one line per timeline row (85 MB, was 216 MB for the same song), loading no longer copies the whole file three times (5.3 s to 2.4 s for a song at the caps), and a replay effect no longer scans its whole cycle on every tick or copies its cycle for every member.
+
+### Changed
+
+- The cue-map `PUT` accepts bodies up to 120 MB (was 8 MB) so a song at the caps can be saved from the page.
+- Dev and test builds optimise the `stagepilot-lights` crate (`opt-level = 2`); the song fit takes minutes unoptimised.
+
 ## [2.43.0-rc.9] - 2026-11-08
 
 Release candidate 9 (pre-release; the in-app updater does not offer it). Everything in rc.8 applies. Adds the automatic search for the Lighting computer (Lightkey only).

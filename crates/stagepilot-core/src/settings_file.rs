@@ -18,6 +18,7 @@ use crate::settings::{
     PersistentSettings, SettingsFileError, SettingsStore, BACKUP_SUFFIX, SETTINGS_SCHEMA_VERSION,
 };
 use serde_json::Value;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -199,7 +200,7 @@ fn strip_unknown(
     extras: &mut Vec<(Vec<Value>, Value)>,
 ) -> Result<(PersistentSettings, Option<crate::settings::Migration>), String> {
     for _ in 0..10_000 {
-        match PersistentSettings::from_value(payload.clone()) {
+        match PersistentSettings::from_value_ref(payload) {
             Ok(parsed) => return Ok(parsed),
             Err(errors) => {
                 let mut removed = false;
@@ -277,6 +278,109 @@ fn ignored_keys(
         }
         _ => {}
     }
+}
+
+/// Pretty printing down to a nesting depth, compact below it. Depth 1 is the file, 2 a section
+/// (`lights`), 3 its `cue_maps`, 4 one song, 5 its `osc_cues`: so every row of a song's timeline
+/// (depth 6) is one compact line, and the settings stay readable everywhere else.
+struct RowsOnOneLine<'a> {
+    pretty: serde_json::ser::PrettyFormatter<'a>,
+    compact: serde_json::ser::CompactFormatter,
+    depth: usize,
+}
+
+const PRETTY_DEPTH: usize = 5;
+
+impl RowsOnOneLine<'_> {
+    fn new() -> Self {
+        Self {
+            pretty: serde_json::ser::PrettyFormatter::new(),
+            compact: serde_json::ser::CompactFormatter,
+            depth: 0,
+        }
+    }
+
+    fn is_pretty(&self) -> bool {
+        self.depth <= PRETTY_DEPTH
+    }
+}
+
+macro_rules! by_depth {
+    ($($name:ident),+) => {$(
+        fn $name<W: ?Sized + Write>(&mut self, writer: &mut W) -> std::io::Result<()> {
+            if self.is_pretty() {
+                self.pretty.$name(writer)
+            } else {
+                self.compact.$name(writer)
+            }
+        }
+    )+};
+}
+
+impl serde_json::ser::Formatter for RowsOnOneLine<'_> {
+    fn begin_array<W: ?Sized + Write>(&mut self, writer: &mut W) -> std::io::Result<()> {
+        self.depth += 1;
+        if self.is_pretty() {
+            self.pretty.begin_array(writer)
+        } else {
+            self.compact.begin_array(writer)
+        }
+    }
+
+    fn end_array<W: ?Sized + Write>(&mut self, writer: &mut W) -> std::io::Result<()> {
+        let result = if self.is_pretty() {
+            self.pretty.end_array(writer)
+        } else {
+            self.compact.end_array(writer)
+        };
+        self.depth -= 1;
+        result
+    }
+
+    fn begin_object<W: ?Sized + Write>(&mut self, writer: &mut W) -> std::io::Result<()> {
+        self.depth += 1;
+        if self.is_pretty() {
+            self.pretty.begin_object(writer)
+        } else {
+            self.compact.begin_object(writer)
+        }
+    }
+
+    fn end_object<W: ?Sized + Write>(&mut self, writer: &mut W) -> std::io::Result<()> {
+        let result = if self.is_pretty() {
+            self.pretty.end_object(writer)
+        } else {
+            self.compact.end_object(writer)
+        };
+        self.depth -= 1;
+        result
+    }
+
+    fn begin_array_value<W: ?Sized + Write>(
+        &mut self,
+        writer: &mut W,
+        first: bool,
+    ) -> std::io::Result<()> {
+        if self.is_pretty() {
+            self.pretty.begin_array_value(writer, first)
+        } else {
+            self.compact.begin_array_value(writer, first)
+        }
+    }
+
+    fn begin_object_key<W: ?Sized + Write>(
+        &mut self,
+        writer: &mut W,
+        first: bool,
+    ) -> std::io::Result<()> {
+        if self.is_pretty() {
+            self.pretty.begin_object_key(writer, first)
+        } else {
+            self.compact.begin_object_key(writer, first)
+        }
+    }
+
+    by_depth!(end_array_value, begin_object_value, end_object_value);
 }
 
 fn put_path(root: &mut Value, path: &[Value], value: &Value) {
@@ -422,9 +526,20 @@ impl SettingsStore for SettingsFileStore {
                 .write(true)
                 .create_new(true)
                 .open(&temporary)?;
-            let mut text = serde_json::to_string_pretty(&value).map_err(std::io::Error::other)?;
-            text.push('\n');
-            file.write_all(text.as_bytes())?;
+            // Streamed (no 200 MB string) and pretty down to the rows of a song's timeline; a row
+            // is one line. A song at the caps is 85 MB this way instead of 216 MB.
+            let mut writer = std::io::BufWriter::with_capacity(1 << 20, &mut file);
+            {
+                use serde::Serialize;
+                let mut serializer = serde_json::Serializer::with_formatter(
+                    &mut writer,
+                    RowsOnOneLine::new(),
+                );
+                value.serialize(&mut serializer).map_err(std::io::Error::other)?;
+            }
+            writer.write_all(b"\n")?;
+            writer.flush()?;
+            drop(writer);
             file.flush()?;
             file.sync_all()?;
             drop(file);

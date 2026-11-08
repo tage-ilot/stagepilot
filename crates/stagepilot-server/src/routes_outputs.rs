@@ -37,8 +37,12 @@ const MIDI_BUSY: &str = "Stop the timer before changing the MIDI input.";
 const MIDI_DISABLED: &str = "The MIDI Playback plugin is disabled.";
 const PP_DISABLED: &str = "The ProPresenter plugin is disabled.";
 
-/// Largest cue-map PUT body: a song at the per-song caps plus its look rows.
-const CUE_MAP_BODY_LIMIT: usize = 8 * 1024 * 1024;
+/// Largest cue-map PUT body: a song at the per-song caps. A look row is about 400 bytes of JSON
+/// and a message about 130 (measured: 600,000 messages and 50,000 rows are 65 MB compact);
+/// 160 bytes a message and 4 MB of slack leave room for a pretty-printed or longer-named song.
+const CUE_MAP_BODY_LIMIT: usize = stagepilot_core::config::MAX_OSC_ROWS_PER_SONG * 400
+    + stagepilot_core::config::MAX_OSC_MESSAGES_PER_SONG * 160
+    + 4 * 1024 * 1024;
 
 pub fn routes() -> Router<Rt> {
     Router::new()
@@ -59,7 +63,7 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights/settings", post(lights_settings))
         .route(
             "/api/v1/lights/cue-map",
-            // A full 15,000-message song is close to axum's 2 MB default (K-01).
+            // A song at the caps is over 60 MB; axum's default is 2 MB (K-01).
             put(lights_cue_map).layer(DefaultBodyLimit::max(CUE_MAP_BODY_LIMIT)),
         )
         .route("/api/v1/lights/pads", put(lights_pads))

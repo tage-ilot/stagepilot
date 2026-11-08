@@ -79,7 +79,7 @@ pub fn property_class(address: &str, dim: usize) -> &'static str {
 }
 
 /// Largest error allowed for this address, `scale` times the base tolerance (a recording that
-/// would not fit the caps is retried at twice the tolerance).
+/// would not fit the caps is fitted again at a looser tolerance, see `crate::lightkey_fit`).
 pub fn tolerance_for(address: &str, scale: f64) -> f64 {
     scale
         * if is_angle(address) {
@@ -92,7 +92,8 @@ pub fn tolerance_for(address: &str, scale: f64) -> f64 {
 /// Settings of one fit.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SmoothParams {
-    /// Multiplies both tolerances (1.0 normally; doubled when a song is too large to save).
+    /// Multiplies both tolerances (1.0 normally; larger when a song is too large to save as
+    /// recorded, see `crate::lightkey_fit`).
     pub tolerance_scale: f64,
     /// Look for repeating effects (always on in the app; tests turn it off to test ramps).
     pub detect_effects: bool,
@@ -361,7 +362,10 @@ pub fn polyline(
 
 fn round4(x: f64) -> f64 {
     let r = (x * 10_000.0).round_ties_even() / 10_000.0;
-    if r == 0.0 {
+    if !r.is_finite() {
+        // 1e305 * 10,000 is infinity: keep the value, a row must never hold a non-finite number
+        x
+    } else if r == 0.0 {
         0.0
     } else {
         r
