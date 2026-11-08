@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.9] - 2026-11-08
+
+Release candidate 9 (pre-release; the in-app updater does not offer it). Everything in rc.8 applies. Adds the automatic search for the Lighting computer (Lightkey only).
+
 ### Added
 
 - **StagePilot finds the Lighting computer by itself.** While nothing is connected (and only then: never while the link is up, never with Lighting off or set to MIDI), StagePilot looks for the Lightkey helper on this computer and on the private networks it can reach, then connects. The first look is about 5 s after start or after a setting change, then every 60 s, and at once on **Search again**. It asks each address one question (`GET /health`, 600 ms, at most 64 at a time, nothing else sent, private addresses only: `127.0.0.1`, the networks this computer is attached to, and the /24 around the saved Lighting address, the saved Replay host and the last found computer, at most 1,100 addresses). It works with helpers already installed (0.4.x and 0.5.0). With an Automatic address (none typed) exactly one found computer is connected to and remembered (`Found a Lighting computer at <ip> and connected.`); several are listed to choose from; with a typed address that is down, a found computer is only offered (`Use <ip>` / `Keep waiting`), never switched to. A found computer fills the Replay host only when it is blank, otherwise `Capture is from <ip>; Replay sends to <host>.`. See "Finding the Lighting computer" in `docs/lights.md`. New: `lightkey.found_url` (optional, empty by default), `discovery` on `GET /api/v1/lights/lightkey`, and `POST /api/v1/lights/lightkey/discovery/{scan,use,dismiss}`.
