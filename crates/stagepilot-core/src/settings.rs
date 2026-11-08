@@ -726,6 +726,34 @@ fn apply_output_environment(runtime: &mut RuntimeSettings, environ: &BTreeMap<St
     }
 }
 
+/// Make one song's cue map safe to save: repair what can be repaired losslessly (logged as
+/// `lightkey_map_repaired`), then check it with the rules the settings loader uses. `Err` is a
+/// plain-language reason and the map must not be written.
+pub fn prepare_cue_map_for_save(map: &mut crate::config::SongLightingCueMap) -> Result<(), String> {
+    map.normalise();
+    let changes = map.repair_lossless();
+    if !changes.is_empty() {
+        tracing::warn!(
+            song = %map.song_title,
+            song_key = %map.song_key,
+            changes = %changes.join("; "),
+            "lightkey_map_repaired"
+        );
+    }
+    crate::config::check_cue_map(map).map_err(|reason| {
+        tracing::error!(
+            song = %map.song_title,
+            song_key = %map.song_key,
+            reason = %reason,
+            "lightkey_map_refused"
+        );
+        format!(
+            "The lighting data for {} is not valid ({reason}), so it was not saved and your settings were left as they were. Record the song again.",
+            map.song_title
+        )
+    })
+}
+
 // ---- stores -----------------------------------------------------------------------------------
 
 pub trait SettingsStore: Send + Sync {
@@ -739,6 +767,11 @@ pub trait SettingsStore: Send + Sync {
     /// Set when the saved settings are not in use (corrupt, or from a newer StagePilot).
     fn degraded(&self) -> Option<SettingsDegraded> {
         None
+    }
+    /// Plain-language notices from the last load that do not stop the settings from being used
+    /// (a song's lighting data that was damaged and set aside).
+    fn notices(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -1129,6 +1162,16 @@ impl SettingsService {
         self.store.degraded()
     }
 
+    /// Notices from the last load (`settings_notice` in the API), or `None`.
+    pub fn notice(&self) -> Option<String> {
+        let notices = self.store.notices();
+        if notices.is_empty() {
+            None
+        } else {
+            Some(notices.join(" "))
+        }
+    }
+
     pub fn warning(&self) -> Option<String> {
         self.lock().warning.clone()
     }
@@ -1281,6 +1324,19 @@ impl SettingsService {
         }
         if onboarding.general_completed {
             settings.onboarding = onboarding;
+        }
+        // No song's lighting data reaches the disk unless the loader would accept it: every map
+        // that differs from the one in use is repaired (losslessly) and checked with the loader's
+        // own rules. An invalid map is refused, never written (it would make the next start of
+        // the app throw the song away).
+        {
+            let current = self.lock();
+            for (key, map) in settings.lights.cue_maps.iter_mut() {
+                if current.persistent.lights.cue_maps.get(key) == Some(map) {
+                    continue;
+                }
+                prepare_cue_map_for_save(map).map_err(SettingsFileError)?;
+            }
         }
         self.store.save(&settings)?;
         let runtime = self.resolve(&settings);

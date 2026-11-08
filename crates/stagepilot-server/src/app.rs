@@ -321,6 +321,8 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
         // settings in use are defaults and the original is kept as settings.json.corrupt-*.
         "settings_degraded": degraded.is_some(),
         "settings_degraded_reason": degraded.map(|d| d.reason),
+        // A song's lighting data that was damaged and set aside at load; the rest loaded.
+        "settings_notice": rt.settings_service.notice(),
         "restart_required": restart_required,
     })
 }

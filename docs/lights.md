@@ -995,6 +995,27 @@ Captures, undo and cue-map saves are serialized on the backend, so a capture
 and a timer restart cannot overwrite each other's cues. The scheduler is
 unchanged: a cue added mid-song takes effect at the next timer start.
 
+### A damaged song never costs you the settings
+
+Every song's lighting data is checked with the same rules the settings file is checked with
+before it is saved, and again when the settings file is read.
+
+- **Saving.** A loop's phase offset is periodic, so one past the loop's length (for example
+  8.025 s in an 8.003 s loop) is the same phase as 0.022 s. That is repaired on the spot, nothing
+  is lost, and the log says `lightkey_map_repaired` with the song and what changed. Anything else
+  that is wrong is not repaired: the song is **not saved**, the message says which song and why,
+  your other settings are left as they were, and the raw recording is kept (see above) so the
+  song can be fitted again.
+- **Loading.** If the only problem in the settings file is inside one song's lighting data, the
+  same repair is tried first. If it cannot be repaired, only that song is taken out: its data is
+  copied to `settings.json.song-<song key>-<UTC time>.json` next to the settings file (the newest
+  5 are kept), the log says `settings_song_set_aside`, and everything else (Planning Center,
+  MIDI, ProPresenter, Playback, the other songs, the PIN) loads as usual. `GET /api/v1/settings`
+  then has `settings_notice`: `The lighting data for <song> was damaged and set aside; record it
+  again.` The next save does not bring the song back; arm Record and play the song once.
+- A problem anywhere else in the file still behaves as before: the whole file is kept as
+  `settings.json.corrupt-*` and StagePilot starts on the defaults (`settings_degraded`).
+
 ## Room loudness behind the timeline
 
 While Lightkey records a song, StagePilot can also measure how loud the room is and draw it as a faint

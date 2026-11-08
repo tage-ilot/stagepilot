@@ -11,6 +11,12 @@
 //!   original is copied to `settings.json.corrupt-<UTC timestamp>` (the last five are kept), an
 //!   ERROR `settings_corrupt` names the path, the app starts on defaults and reports
 //!   `settings_degraded`. A file from a newer schema is never overwritten.
+//! * **A damaged song does not take the settings with it.** When the only invalid values are
+//!   inside one song's lighting cue map (`lights.cue_maps.<key>...`), a lossless repair is tried
+//!   first (an effect offset past its period is the same phase inside it). A map that cannot be
+//!   repaired is copied to `settings.json.song-<key>-<UTC>.json` (the newest five are kept),
+//!   left out, and everything else loads normally; a notice says which song. Anything invalid
+//!   outside the cue maps is quarantined as above.
 //! * **Loading never writes.** A migrated file reaches the disk with the next save.
 //! * The first overwrite is still copied once to `settings.json.pre-rust.bak`.
 
@@ -44,7 +50,12 @@ struct Memory {
     /// Keys the typed settings do not know: `(path, value)`, written back on save.
     extras: Vec<(Vec<Value>, Value)>,
     degraded: Option<SettingsDegraded>,
+    /// Songs whose lighting data was set aside by the last load, in plain words.
+    notices: Vec<String>,
 }
+
+/// How many `settings.json.song-*` copies are kept.
+pub const SONG_ASIDE_KEEP: usize = 5;
 
 pub struct SettingsFileStore {
     pub path: PathBuf,
@@ -155,6 +166,65 @@ impl SettingsFileStore {
         Some(target)
     }
 
+    /// The `settings.json.song-*` copies next to the settings file, oldest first.
+    pub fn song_aside_files(&self) -> Vec<PathBuf> {
+        let prefix = self
+            .sibling(".song-")
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let dir = match self.path.parent() {
+            Some(d) if !d.as_os_str().is_empty() => d.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+        let mut files: Vec<(String, PathBuf)> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter_map(|p| {
+                let name = p.file_name()?.to_string_lossy().into_owned();
+                let rest = name.strip_prefix(&prefix)?;
+                // `<key>-<UTC stamp>.json`: order by the stamp, whatever the key.
+                let stamp = rest.strip_suffix(".json")?.rsplit('-').next()?.to_string();
+                Some((format!("{stamp}{name}"), p))
+            })
+            .collect();
+        files.sort();
+        files.into_iter().map(|(_, p)| p).collect()
+    }
+
+    /// Write one song's map to its own file next to the settings and keep the newest five.
+    fn write_song_aside(&self, key: &str, song: &Value) -> Option<PathBuf> {
+        let safe: String = key
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .take(64)
+            .collect();
+        let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ").to_string();
+        let mut target = self.sibling(&format!(".song-{safe}-{stamp}.json"));
+        while target.exists() {
+            let name = target.file_name()?.to_string_lossy().into_owned();
+            target = target.with_file_name(name.replace(".json", "x.json"));
+        }
+        let bytes = serde_json::to_vec_pretty(song).ok()?;
+        std::fs::write(&target, bytes).ok()?;
+        let files = self.song_aside_files();
+        for old in files
+            .iter()
+            .take(files.len().saturating_sub(SONG_ASIDE_KEEP))
+        {
+            let _ = std::fs::remove_file(old);
+        }
+        Some(target)
+    }
+
     /// Refuse the file: preserve it, log, remember, and tell the caller to use defaults.
     fn reject(&self, original: &[u8], reason: &str, newer: bool) -> SettingsFileError {
         let quarantine = self.quarantine(original);
@@ -195,10 +265,13 @@ impl SettingsFileStore {
 
 /// Remove the keys the typed settings reject (`extra_forbidden`), one validation round at a time.
 /// `None` means a different error: the file is invalid. Returns the settings and the migration.
+/// On `Err`: the reason, and the location of every error (for the song-level recovery).
+type Invalid = (String, Vec<Vec<Value>>);
+
 fn strip_unknown(
     payload: &mut Value,
     extras: &mut Vec<(Vec<Value>, Value)>,
-) -> Result<(PersistentSettings, Option<crate::settings::Migration>), String> {
+) -> Result<(PersistentSettings, Option<crate::settings::Migration>), Invalid> {
     for _ in 0..10_000 {
         match PersistentSettings::from_value_ref(payload) {
             Ok(parsed) => return Ok(parsed),
@@ -213,16 +286,83 @@ fn strip_unknown(
                 if !removed {
                     // Locations and error kinds only: the input values stay out of the log.
                     let first = errors.first();
-                    return Err(format!(
-                        "invalid value at {} ({})",
-                        first.map_or(String::new(), |e| dotted(&e.loc)),
-                        first.map_or("unknown", |e| e.kind.as_str())
+                    return Err((
+                        format!(
+                            "invalid value at {} ({})",
+                            first.map_or(String::new(), |e| dotted(&e.loc)),
+                            first.map_or("unknown", |e| e.kind.as_str())
+                        ),
+                        errors.iter().map(|e| e.loc.clone()).collect(),
                     ));
                 }
             }
         }
     }
-    Err("too many unknown keys".into())
+    Err(("too many unknown keys".into(), Vec::new()))
+}
+
+/// The song keys when EVERY error lies inside one song's cue map (`lights.cue_maps.<key>...`);
+/// `None` when any error is elsewhere (then the whole file is refused, as before).
+fn bad_songs(locs: &[Vec<Value>]) -> Option<Vec<String>> {
+    let mut keys: Vec<String> = Vec::new();
+    if locs.is_empty() {
+        return None;
+    }
+    for loc in locs {
+        match loc.as_slice() {
+            [Value::String(a), Value::String(b), Value::String(key), ..]
+                if a == "lights" && b == "cue_maps" =>
+            {
+                if !keys.contains(key) {
+                    keys.push(key.clone());
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(keys)
+}
+
+/// Repair the one thing that is repairable without losing anything, directly on the JSON of a
+/// song's map (so nothing else in it is rewritten): an effect member offset outside its period
+/// becomes the same phase inside it. Returns what changed.
+fn repair_song_json(song: &mut Value) -> Vec<String> {
+    use crate::config::{reduce_phase, round_millis};
+    let mut changes = Vec::new();
+    let Some(effects) = song.get_mut("effects").and_then(Value::as_array_mut) else {
+        return changes;
+    };
+    for (i, effect) in effects.iter_mut().enumerate() {
+        let Some(period) = effect.get("period_seconds").and_then(Value::as_f64) else {
+            continue;
+        };
+        let period = round_millis(period);
+        let Some(members) = effect.get_mut("members").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for member in members {
+            let Some(offset) = member.get("offset_seconds").and_then(Value::as_f64) else {
+                continue;
+            };
+            let Some(fixed) = reduce_phase(offset, period) else {
+                continue;
+            };
+            if fixed != offset {
+                let name = member
+                    .get("fixture")
+                    .and_then(Value::as_str)
+                    .unwrap_or("?")
+                    .to_string();
+                changes.push(format!(
+                    "effect {i}, {name}: offset {offset} s reduced to {fixed} s (same phase, period {period} s)"
+                ));
+                if let Some(slot) = member.get_mut("offset_seconds") {
+                    *slot = serde_json::json!(fixed);
+                }
+            }
+        }
+    }
+    changes
 }
 
 fn take_path(root: &mut Value, path: &[Value]) -> Option<Value> {
@@ -408,6 +548,10 @@ impl SettingsStore for SettingsFileStore {
         guard(&self.memory).degraded.clone()
     }
 
+    fn notices(&self) -> Vec<String> {
+        guard(&self.memory).notices.clone()
+    }
+
     fn load(&self) -> Result<Option<PersistentSettings>, SettingsFileError> {
         if !self.path.exists() {
             return Ok(None);
@@ -459,9 +603,73 @@ impl SettingsStore for SettingsFileStore {
             }
         }
         let mut extras = Vec::new();
-        let (settings, migration) = match strip_unknown(&mut payload, &mut extras) {
-            Ok(parsed) => parsed,
-            Err(reason) => return Err(self.reject(&bytes, &reason, false)),
+        let mut notices: Vec<String> = Vec::new();
+        let mut tried_repair: Vec<String> = Vec::new();
+        let (settings, migration) = loop {
+            match strip_unknown(&mut payload, &mut extras) {
+                Ok(parsed) => break parsed,
+                Err((reason, locs)) => {
+                    let Some(keys) = bad_songs(&locs) else {
+                        return Err(self.reject(&bytes, &reason, false));
+                    };
+                    // First the lossless repair of each song once; what still fails is set aside.
+                    let mut progressed = false;
+                    for key in keys {
+                        let Some(song) = payload.pointer_mut(&format!(
+                            "/lights/cue_maps/{}",
+                            key.replace('~', "~0").replace('/', "~1")
+                        )) else {
+                            continue;
+                        };
+                        if !tried_repair.contains(&key) {
+                            tried_repair.push(key.clone());
+                            let changes = repair_song_json(song);
+                            if !changes.is_empty() {
+                                tracing::warn!(
+                                    song_key = %key,
+                                    changes = %changes.join("; "),
+                                    "lightkey_map_repaired"
+                                );
+                                progressed = true;
+                                continue;
+                            }
+                        }
+                        let title = song
+                            .get("song_title")
+                            .and_then(Value::as_str)
+                            .filter(|t| !t.trim().is_empty())
+                            .unwrap_or(&key)
+                            .to_string();
+                        let Some(copy) = self.write_song_aside(&key, song) else {
+                            // Cannot keep a copy, so cannot drop it: refuse the file as before.
+                            return Err(self.reject(&bytes, &reason, false));
+                        };
+                        if let Some(Value::Object(maps)) = payload.pointer_mut("/lights/cue_maps") {
+                            maps.remove(&key);
+                        }
+                        // Unknown keys remembered inside the dropped song must not come back.
+                        extras.retain(|(path, _)| {
+                            !matches!(path.as_slice(),
+                                [Value::String(a), Value::String(b), Value::String(k), ..]
+                                if a == "lights" && b == "cue_maps" && *k == key)
+                        });
+                        tracing::error!(
+                            path = %self.path.display(),
+                            song_key = %key,
+                            reason = %reason,
+                            copy = %copy.display(),
+                            "settings_song_set_aside"
+                        );
+                        notices.push(format!(
+                            "The lighting data for {title} was damaged and set aside; record it again."
+                        ));
+                        progressed = true;
+                    }
+                    if !progressed {
+                        return Err(self.reject(&bytes, &reason, false));
+                    }
+                }
+            }
         };
         // Fields the model ignores without complaint are preserved too.
         ignored_keys(
@@ -491,6 +699,7 @@ impl SettingsStore for SettingsFileStore {
         let mut memory = guard(&self.memory);
         memory.extras = extras;
         memory.degraded = None;
+        memory.notices = notices;
         Ok(Some(settings))
     }
 

@@ -1440,6 +1440,142 @@ impl Default for LightsSettings {
     }
 }
 
+impl SongLightingCueMap {
+    /// Trim, round and sort one song's map exactly as saving the Lighting settings does.
+    pub fn normalise(&mut self) {
+        let map = self;
+        map.song_key = map.song_key.trim().to_string();
+        map.song_title = map.song_title.trim().to_string();
+        for cue in &mut map.cues {
+            cue.at_seconds = round_tenths(cue.at_seconds);
+            cue.label = cue.label.trim().to_string();
+        }
+        for cue in &mut map.osc_cues {
+            // Fitted (captured) rows and fades keep millisecond times; hand-made instant
+            // rows stay on the 0.1 s grid.
+            cue.at_seconds = if cue.fade_seconds > 0.0 || cue.source == OscCueSource::Captured {
+                round_millis(cue.at_seconds)
+            } else {
+                round_tenths(cue.at_seconds)
+            };
+            if cue.fade_seconds.is_finite() {
+                cue.fade_seconds = round_millis(cue.fade_seconds);
+            }
+            cue.address = cue.address.trim().to_string();
+            cue.label = cue.label.trim().to_string();
+            for message in &mut cue.messages {
+                message.address = message.address.trim().to_string();
+            }
+        }
+        map.cues.sort_by(|a, b| {
+            a.at_seconds
+                .total_cmp(&b.at_seconds)
+                .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
+        });
+        // Rows at the same time: an instant change before a ramp (a ramp starts from the
+        // value the instant change set), then by id.
+        map.osc_cues.sort_by(|a, b| {
+            a.at_seconds
+                .total_cmp(&b.at_seconds)
+                .then_with(|| a.fade_seconds.total_cmp(&b.fade_seconds))
+                .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
+        });
+        for effect in &mut map.effects {
+            effect.label = effect.label.trim().to_string();
+            effect.start_seconds = round_millis(effect.start_seconds);
+            effect.end_seconds = round_millis(effect.end_seconds);
+            effect.period_seconds = round_millis(effect.period_seconds);
+            for member in &mut effect.members {
+                member.fixture = member.fixture.trim().to_string();
+                member.offset_seconds = round_millis(member.offset_seconds);
+            }
+            for step in &mut effect.cycle {
+                step.property = step.property.trim().to_string();
+                step.at_seconds = round_millis(step.at_seconds);
+                step.fade_seconds = round_millis(step.fade_seconds);
+            }
+        }
+        map.effects.sort_by(|a, b| {
+            a.start_seconds
+                .total_cmp(&b.start_seconds)
+                .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
+        });
+    }
+
+    /// Repair what can be repaired without losing anything and return what changed, in plain
+    /// words (empty when nothing changed). A phase offset is periodic, so an offset past the
+    /// period (or below zero) is the same phase as the offset reduced into `0..=period`. Nothing
+    /// else is touched: every other rule violation is left for the validation to report.
+    pub fn repair_lossless(&mut self) -> Vec<String> {
+        let mut changes = Vec::new();
+        for (i, effect) in self.effects.iter_mut().enumerate() {
+            let period = round_millis(effect.period_seconds);
+            for member in &mut effect.members {
+                if let Some(fixed) = reduce_phase(member.offset_seconds, period) {
+                    if fixed != member.offset_seconds {
+                        changes.push(format!(
+                            "effect {i}, {}: offset {} s reduced to {} s (same phase, period {} s)",
+                            member.fixture, member.offset_seconds, fixed, period
+                        ));
+                        member.offset_seconds = fixed;
+                    }
+                }
+            }
+        }
+        changes
+    }
+}
+
+/// An effect member's phase offset reduced into `0..=period` (same phase), rounded to
+/// milliseconds and never above the rounded period. `None` when the numbers cannot be reduced
+/// (not finite, or a period outside the allowed range): that is not a lossless repair.
+pub fn reduce_phase(offset: f64, period: f64) -> Option<f64> {
+    if !offset.is_finite() || !period.is_finite() {
+        return None;
+    }
+    let period = round_millis(period);
+    if !(MIN_EFFECT_PERIOD_SECONDS..=MAX_EFFECT_PERIOD_SECONDS).contains(&period) {
+        return None;
+    }
+    if (0.0..=period).contains(&offset) {
+        return Some(offset);
+    }
+    let reduced = round_millis(offset.rem_euclid(period)).clamp(0.0, period);
+    // `-0.0` and friends: a plain zero.
+    Some(if reduced == 0.0 { 0.0 } else { reduced })
+}
+
+/// Check one song's map with the rules the settings loader uses (after the same normalising).
+/// `Err` carries a plain-language reason.
+pub fn check_cue_map(map: &SongLightingCueMap) -> Result<(), String> {
+    let mut map = map.clone();
+    map.normalise();
+    let mut errors = Vec::new();
+    validate_cue_map(&map.song_key.clone(), &map, &[json!("lights")], &mut errors);
+    match errors.first() {
+        None => Ok(()),
+        Some(first) => Err(format!(
+            "{} (at {}{})",
+            first.msg,
+            first
+                .loc
+                .iter()
+                .skip(3)
+                .map(|p| match p {
+                    Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join("."),
+            if errors.len() > 1 {
+                format!("; {} more problems", errors.len() - 1)
+            } else {
+                String::new()
+            }
+        )),
+    }
+}
+
 impl LightsSettings {
     /// Apply the field normalisers (trimming, tenths rounding, cue ordering) of the Python
     /// validators. Called after deserialisation, before `validate`.
@@ -1464,62 +1600,7 @@ impl LightsSettings {
             }
         }
         for map in self.cue_maps.values_mut() {
-            map.song_key = map.song_key.trim().to_string();
-            map.song_title = map.song_title.trim().to_string();
-            for cue in &mut map.cues {
-                cue.at_seconds = round_tenths(cue.at_seconds);
-                cue.label = cue.label.trim().to_string();
-            }
-            for cue in &mut map.osc_cues {
-                // Fitted (captured) rows and fades keep millisecond times; hand-made instant
-                // rows stay on the 0.1 s grid.
-                cue.at_seconds = if cue.fade_seconds > 0.0 || cue.source == OscCueSource::Captured {
-                    round_millis(cue.at_seconds)
-                } else {
-                    round_tenths(cue.at_seconds)
-                };
-                if cue.fade_seconds.is_finite() {
-                    cue.fade_seconds = round_millis(cue.fade_seconds);
-                }
-                cue.address = cue.address.trim().to_string();
-                cue.label = cue.label.trim().to_string();
-                for message in &mut cue.messages {
-                    message.address = message.address.trim().to_string();
-                }
-            }
-            map.cues.sort_by(|a, b| {
-                a.at_seconds
-                    .total_cmp(&b.at_seconds)
-                    .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
-            });
-            // Rows at the same time: an instant change before a ramp (a ramp starts from the
-            // value the instant change set), then by id.
-            map.osc_cues.sort_by(|a, b| {
-                a.at_seconds
-                    .total_cmp(&b.at_seconds)
-                    .then_with(|| a.fade_seconds.total_cmp(&b.fade_seconds))
-                    .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
-            });
-            for effect in &mut map.effects {
-                effect.label = effect.label.trim().to_string();
-                effect.start_seconds = round_millis(effect.start_seconds);
-                effect.end_seconds = round_millis(effect.end_seconds);
-                effect.period_seconds = round_millis(effect.period_seconds);
-                for member in &mut effect.members {
-                    member.fixture = member.fixture.trim().to_string();
-                    member.offset_seconds = round_millis(member.offset_seconds);
-                }
-                for step in &mut effect.cycle {
-                    step.property = step.property.trim().to_string();
-                    step.at_seconds = round_millis(step.at_seconds);
-                    step.fade_seconds = round_millis(step.fade_seconds);
-                }
-            }
-            map.effects.sort_by(|a, b| {
-                a.start_seconds
-                    .total_cmp(&b.start_seconds)
-                    .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
-            });
+            map.normalise();
         }
     }
 
@@ -1606,160 +1687,7 @@ impl LightsSettings {
         }
         let pad_ids: std::collections::BTreeSet<_> = self.pads.iter().map(|p| p.id).collect();
         for (key, map) in &self.cue_maps {
-            if key != &map.song_key {
-                value_error(
-                    errors,
-                    path,
-                    "Every lighting cue-map key must match its song key.",
-                    json!(key),
-                );
-            }
-            let mp = {
-                let mut p = path_with(path, "cue_maps");
-                p.push(json!(key));
-                p
-            };
-            check_len(errors, &mp, "song_key", &map.song_key, 1, 256);
-            check_len(errors, &mp, "song_title", &map.song_title, 1, 500);
-            for cue in &map.cues {
-                check_range(
-                    errors,
-                    &mp,
-                    "at_seconds",
-                    cue.at_seconds,
-                    Some(0.0),
-                    Some(86_399.0),
-                    None,
-                );
-                check_range(errors, &mp, "note", cue.note, Some(0.0), Some(127.0), None);
-                check_range(
-                    errors,
-                    &mp,
-                    "velocity",
-                    cue.velocity,
-                    Some(1.0),
-                    Some(127.0),
-                    None,
-                );
-            }
-            for cue in &map.osc_cues {
-                check_range(
-                    errors,
-                    &mp,
-                    "at_seconds",
-                    cue.at_seconds,
-                    Some(0.0),
-                    Some(86_399.0),
-                    None,
-                );
-                // A look row's own address is not sent, so it is only checked for a plain row.
-                if cue.messages.is_empty() {
-                    if let Err(m) = validate_osc_address(&cue.address) {
-                        value_error(errors, &mp, m, json!(cue.address));
-                    }
-                }
-                check_range(
-                    errors,
-                    &mp,
-                    "fade_seconds",
-                    cue.fade_seconds,
-                    Some(0.0),
-                    Some(MAX_FADE_SECONDS),
-                    None,
-                );
-                if cue.messages.len() > MAX_OSC_MESSAGES_PER_ROW {
-                    too_long(
-                        errors,
-                        &mp,
-                        "messages",
-                        cue.messages.len(),
-                        MAX_OSC_MESSAGES_PER_ROW,
-                    );
-                }
-                for message in &cue.messages {
-                    if let Err(m) = validate_osc_message_address(&message.address) {
-                        value_error(errors, &mp, m, json!(message.address));
-                    }
-                    if message.args.len() > MAX_OSC_ARGS_PER_MESSAGE {
-                        too_long(
-                            errors,
-                            &mp,
-                            "args",
-                            message.args.len(),
-                            MAX_OSC_ARGS_PER_MESSAGE,
-                        );
-                    }
-                    for arg in &message.args {
-                        if let OscArgument::String(text) = arg {
-                            let n = text.chars().count();
-                            if n > MAX_OSC_STRING_CHARS {
-                                too_long(errors, &mp, "args", n, MAX_OSC_STRING_CHARS);
-                            }
-                        }
-                    }
-                }
-            }
-            if map.osc_cues.len() > MAX_OSC_ROWS_PER_SONG {
-                too_long(
-                    errors,
-                    &mp,
-                    "osc_cues",
-                    map.osc_cues.len(),
-                    MAX_OSC_ROWS_PER_SONG,
-                );
-            }
-            let message_total: usize = map.osc_cues.iter().map(|c| c.messages.len()).sum();
-            if message_total > MAX_OSC_MESSAGES_PER_SONG {
-                too_long(
-                    errors,
-                    &mp,
-                    "messages",
-                    message_total,
-                    MAX_OSC_MESSAGES_PER_SONG,
-                );
-            }
-            validate_effects(&map.effects, errors, &mp);
-            if let Some(loudness) = &map.loudness {
-                check_range(
-                    errors,
-                    &mp,
-                    "step_seconds",
-                    loudness.step_seconds,
-                    Some(0.05),
-                    Some(10.0),
-                    None,
-                );
-                check_range(
-                    errors,
-                    &mp,
-                    "takes",
-                    loudness.takes,
-                    Some(1.0),
-                    Some(f64::from(MAX_LOUDNESS_TAKES)),
-                    None,
-                );
-                if loudness.values.len() > MAX_LOUDNESS_VALUES {
-                    too_long(
-                        errors,
-                        &mp,
-                        "values",
-                        loudness.values.len(),
-                        MAX_LOUDNESS_VALUES,
-                    );
-                }
-            }
-            let ids =
-                |v: Vec<Uuid>| v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len();
-            if !ids(map.cues.iter().map(|c| c.id).collect())
-                || !ids(map.osc_cues.iter().map(|c| c.id).collect())
-            {
-                value_error(
-                    errors,
-                    &mp,
-                    "Every lighting cue must have a unique ID.",
-                    Value::Null,
-                );
-            }
+            validate_cue_map(key, map, path, errors);
         }
         if pad_ids.len() != self.pads.len() {
             value_error(
@@ -1769,6 +1697,164 @@ impl LightsSettings {
                 Value::Null,
             );
         }
+    }
+}
+
+/// The rules for one song's cue map, shared by the settings loader and by every writer (a map
+/// is checked with exactly these rules before it is saved). `path` is the Lighting section.
+pub fn validate_cue_map(key: &str, map: &SongLightingCueMap, path: &[Value], errors: &mut Errors) {
+    if key != map.song_key {
+        value_error(
+            errors,
+            path,
+            "Every lighting cue-map key must match its song key.",
+            json!(key),
+        );
+    }
+    let mp = {
+        let mut p = path_with(path, "cue_maps");
+        p.push(json!(key));
+        p
+    };
+    check_len(errors, &mp, "song_key", &map.song_key, 1, 256);
+    check_len(errors, &mp, "song_title", &map.song_title, 1, 500);
+    for cue in &map.cues {
+        check_range(
+            errors,
+            &mp,
+            "at_seconds",
+            cue.at_seconds,
+            Some(0.0),
+            Some(86_399.0),
+            None,
+        );
+        check_range(errors, &mp, "note", cue.note, Some(0.0), Some(127.0), None);
+        check_range(
+            errors,
+            &mp,
+            "velocity",
+            cue.velocity,
+            Some(1.0),
+            Some(127.0),
+            None,
+        );
+    }
+    for cue in &map.osc_cues {
+        check_range(
+            errors,
+            &mp,
+            "at_seconds",
+            cue.at_seconds,
+            Some(0.0),
+            Some(86_399.0),
+            None,
+        );
+        // A look row's own address is not sent, so it is only checked for a plain row.
+        if cue.messages.is_empty() {
+            if let Err(m) = validate_osc_address(&cue.address) {
+                value_error(errors, &mp, m, json!(cue.address));
+            }
+        }
+        check_range(
+            errors,
+            &mp,
+            "fade_seconds",
+            cue.fade_seconds,
+            Some(0.0),
+            Some(MAX_FADE_SECONDS),
+            None,
+        );
+        if cue.messages.len() > MAX_OSC_MESSAGES_PER_ROW {
+            too_long(
+                errors,
+                &mp,
+                "messages",
+                cue.messages.len(),
+                MAX_OSC_MESSAGES_PER_ROW,
+            );
+        }
+        for message in &cue.messages {
+            if let Err(m) = validate_osc_message_address(&message.address) {
+                value_error(errors, &mp, m, json!(message.address));
+            }
+            if message.args.len() > MAX_OSC_ARGS_PER_MESSAGE {
+                too_long(
+                    errors,
+                    &mp,
+                    "args",
+                    message.args.len(),
+                    MAX_OSC_ARGS_PER_MESSAGE,
+                );
+            }
+            for arg in &message.args {
+                if let OscArgument::String(text) = arg {
+                    let n = text.chars().count();
+                    if n > MAX_OSC_STRING_CHARS {
+                        too_long(errors, &mp, "args", n, MAX_OSC_STRING_CHARS);
+                    }
+                }
+            }
+        }
+    }
+    if map.osc_cues.len() > MAX_OSC_ROWS_PER_SONG {
+        too_long(
+            errors,
+            &mp,
+            "osc_cues",
+            map.osc_cues.len(),
+            MAX_OSC_ROWS_PER_SONG,
+        );
+    }
+    let message_total: usize = map.osc_cues.iter().map(|c| c.messages.len()).sum();
+    if message_total > MAX_OSC_MESSAGES_PER_SONG {
+        too_long(
+            errors,
+            &mp,
+            "messages",
+            message_total,
+            MAX_OSC_MESSAGES_PER_SONG,
+        );
+    }
+    validate_effects(&map.effects, errors, &mp);
+    if let Some(loudness) = &map.loudness {
+        check_range(
+            errors,
+            &mp,
+            "step_seconds",
+            loudness.step_seconds,
+            Some(0.05),
+            Some(10.0),
+            None,
+        );
+        check_range(
+            errors,
+            &mp,
+            "takes",
+            loudness.takes,
+            Some(1.0),
+            Some(f64::from(MAX_LOUDNESS_TAKES)),
+            None,
+        );
+        if loudness.values.len() > MAX_LOUDNESS_VALUES {
+            too_long(
+                errors,
+                &mp,
+                "values",
+                loudness.values.len(),
+                MAX_LOUDNESS_VALUES,
+            );
+        }
+    }
+    let ids = |v: Vec<Uuid>| v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len();
+    if !ids(map.cues.iter().map(|c| c.id).collect())
+        || !ids(map.osc_cues.iter().map(|c| c.id).collect())
+    {
+        value_error(
+            errors,
+            &mp,
+            "Every lighting cue must have a unique ID.",
+            Value::Null,
+        );
     }
 }
 

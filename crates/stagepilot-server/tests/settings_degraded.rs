@@ -100,3 +100,39 @@ async fn a_newer_file_is_reported_and_a_save_cannot_overwrite_it() {
     assert_ne!(code, StatusCode::OK, "{body}");
     assert_eq!(std::fs::read(&path).unwrap(), newer);
 }
+
+#[tokio::test]
+async fn a_damaged_song_is_set_aside_with_a_notice_and_the_rest_of_the_file_is_used() {
+    let file = json!({
+        "schema_version": 2,
+        "server_port": 9123,
+        "lights": {"cue_maps": {
+            "k1": {"song_key": "k1", "song_title": "Ever Be", "cues": [], "osc_cues": [],
+                   "effects": [{
+                       "id": "4494ef73-3063-433a-8fcd-529861a0a2b7", "label": "Loop",
+                       "start_seconds": 1.0, "end_seconds": 50.0, "period_seconds": 8.0,
+                       "members": [{"fixture": "Z1", "offset_seconds": 1.0}],
+                       "cycle": [{"at_seconds": 99.0, "fade_seconds": 0.0,
+                                  "property": "panAngle", "value": [1.0]}],
+                       "source": "captured"
+                   }]},
+            "k2": {"song_key": "k2", "song_title": "Fine", "cues": [], "osc_cues": []}
+        }}
+    });
+    let (router, path, dir) = app(file.to_string().as_bytes()).await;
+    let (_, body) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(body["settings_degraded"], false);
+    assert_eq!(body["settings"]["server_port"], 9123);
+    assert_eq!(
+        body["settings_notice"],
+        "The lighting data for Ever Be was damaged and set aside; record it again."
+    );
+    assert!(body["settings"]["lights"]["cue_maps"].get("k1").is_none());
+    assert!(body["settings"]["lights"]["cue_maps"].get("k2").is_some());
+    assert!(std::fs::read_dir(dir.path()).unwrap().any(|e| e
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with("settings.json.song-k1-")));
+    assert!(path.exists());
+}

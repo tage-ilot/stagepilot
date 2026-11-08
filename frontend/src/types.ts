@@ -575,6 +575,8 @@ export interface SettingsResponse {
   settings: PersistentSettings;
   planning_center_secret_saved: boolean;
   warning: string | null;
+  /** Set when a song's lighting data was damaged and set aside at load; the rest loaded. */
+  settings_notice?: string | null;
   restart_required: boolean;
 }
 

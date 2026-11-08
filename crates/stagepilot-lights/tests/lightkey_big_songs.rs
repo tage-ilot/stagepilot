@@ -750,3 +750,208 @@ fn the_song_one_replica_replays_with_a_cheap_tick() {
     );
     assert!(tick < std::time::Duration::from_millis(20), "tick {tick:?}");
 }
+
+// ---- F-G: a saved map must always pass the rules the settings loader applies -------------------
+//
+// On 2026-11-08 the iMac saved an effect whose member offset (8.025 s) was past its period
+// (8.003 s). The settings validator refused it at the next start and the whole file was lost. Every
+// capture built by the full pipeline (recorder -> fit -> save) is checked here with the loader's
+// own rules.
+
+/// The rules the settings loader applies to this one song (after the loader's own normalising).
+fn loader_errors(map: &SongLightingCueMap) -> Vec<String> {
+    use serde_json::json;
+    let mut lights = stagepilot_core::config::LightsSettings::default();
+    lights.cue_maps.insert(map.song_key.clone(), map.clone());
+    lights.normalise();
+    let mut errors = Vec::new();
+    lights.validate(&[json!("lights")], &mut errors);
+    errors
+        .iter()
+        .map(|e| {
+            format!(
+                "{}: {}",
+                e.loc
+                    .iter()
+                    .map(|p| p.as_str().map_or_else(|| p.to_string(), str::to_string))
+                    .collect::<Vec<_>>()
+                    .join("."),
+                e.msg
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn member_offsets_are_always_inside_the_period_after_rounding() {
+    use stagepilot_lights::lightkey_effects::member_offset;
+    let mut rng = Rng(0xD1B5_4A32_192E_D03B);
+    let mut checked = 0u32;
+    for _ in 0..200_000 {
+        // periods from the minimum up to a long loop, with and without millisecond digits
+        let period = match (rng.next() * 4.0) as u32 {
+            0 => 0.1 + rng.next() * 2.0,
+            1 => 0.1 + rng.next() * 60.0,
+            2 => ((0.1 + rng.next() * 30.0) * 1000.0).round() / 1000.0,
+            _ => 8.003 + (rng.next() - 0.5) * 1e-6,
+        };
+        // lags below, at and above the period; sums of several members' lags; negatives
+        let offset = match (rng.next() * 4.0) as u32 {
+            0 => rng.next() * period,
+            1 => rng.next() * 3.0 * period,
+            2 => period + rng.next() * 0.05,
+            _ => (rng.next() - 0.5) * 4.0 * period,
+        };
+        let stored = member_offset(offset, period);
+        let stored_period = (period * 1000.0).round() / 1000.0;
+        assert!(
+            (0.0..=stored_period).contains(&stored),
+            "offset {offset} period {period} -> {stored} (stored period {stored_period})"
+        );
+        // the same phase (to the millisecond), unless it landed on a whole period
+        let diff = (offset - stored).rem_euclid(period);
+        assert!(
+            diff < 0.0011 || period - diff < 0.0011,
+            "offset {offset} period {period} -> {stored}: phase moved by {diff}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 200_000);
+    // the exact value from the iMac
+    assert_eq!(member_offset(8.025, 8.003), 0.022);
+    assert_eq!(member_offset(8.003, 8.003), 0.0);
+    assert_eq!(member_offset(f64::NAN, 8.003), 0.0);
+}
+
+fn pan_tilt_song(
+    fixtures: usize,
+    period: f64,
+    duration: f64,
+    rng: &mut Rng,
+    spread: f64,
+) -> (Vec<FixtureCommand>, Changes) {
+    pan_tilt_song_at(fixtures, period, duration, |n| {
+        // `spread` of 1.0 is one period, but the first fixture is the reference
+        if n == 0 {
+            0.0
+        } else {
+            rng.next() * spread * period
+        }
+    })
+}
+
+/// Like [`pan_tilt_song`] with each fixture's phase offset chosen by `offset_of(index)`.
+fn pan_tilt_song_at(
+    fixtures: usize,
+    period: f64,
+    duration: f64,
+    mut offset_of: impl FnMut(usize) -> f64,
+) -> (Vec<FixtureCommand>, Changes) {
+    let mut changes: Changes = Vec::new();
+    let mut baseline = Vec::new();
+    for n in 0..fixtures {
+        let f = format!("M{n}");
+        baseline.push(FixtureCommand::new(
+            format!("/fixture/{f}/overrides/panAngle"),
+            vec![FixtureArg::Float(0.0)],
+        ));
+        let offset = offset_of(n);
+        let mut t = 0.0;
+        while t < duration {
+            let p = ((t - offset) / period).rem_euclid(1.0);
+            let tri = if p < 0.5 { 2.0 * p } else { 2.0 - 2.0 * p };
+            changes.push((
+                t,
+                FixtureCommand::new(
+                    format!("/fixture/{f}/overrides/panAngle"),
+                    vec![FixtureArg::Float(-60.0 + 120.0 * tri)],
+                ),
+            ));
+            changes.push((
+                t,
+                FixtureCommand::new(
+                    format!("/fixture/{f}/overrides/tiltAngle"),
+                    vec![FixtureArg::Float(
+                        30.0 * ((t - offset) * std::f64::consts::TAU / period).sin(),
+                    )],
+                ),
+            ));
+            t += 0.025;
+        }
+    }
+    by_time(&mut changes);
+    (baseline, changes)
+}
+
+#[test]
+fn every_capture_the_pipeline_builds_passes_the_loaders_rules() {
+    let _one_at_a_time = heavy();
+    let mut maps: Vec<(String, SongLightingCueMap)> = Vec::new();
+
+    // the busy synthetic song of this file (steps, a 16-fixture chase, noisy dimmers, ramps)
+    let (baseline, changes, duration) = song_one();
+    maps.push((
+        "song one".into(),
+        saves(&run(&baseline, &changes, duration, &Caps::default())),
+    ));
+
+    // rotating pan/tilt on many fixtures with phase offsets, odd periods, offsets up to and past
+    // one period apart
+    let mut rng = Rng(0x5DEE_CE66_D1CE_4E5B);
+    for (fixtures, period, spread) in [
+        (4usize, 8.003, 1.0),
+        (4, 8.003, 2.9),
+        (12, 5.123, 1.0),
+        (24, 2.0, 1.0),
+        (8, 1.7, 3.0),
+        (6, 4.977, 1.0),
+        (3, 0.9, 1.0),
+    ] {
+        let (baseline, changes) = pan_tilt_song(fixtures, period, 120.0, &mut rng, spread);
+        maps.push((
+            format!("{fixtures} fixtures, {period} s, spread {spread}"),
+            saves(&run(&baseline, &changes, 120.0, &Caps::default())),
+        ));
+    }
+
+    // members a hair under one whole period behind the first (the lag search and the refined
+    // period meet here: the iMac's 8.025 s offset in an 8.003 s loop)
+    for (period, behind) in [(8.003, [0.003, 0.01, 0.03]), (5.0, [0.001, 0.02, 0.05])] {
+        let (baseline, changes) = pan_tilt_song_at(4, period, 120.0, |n| {
+            if n == 0 {
+                0.0
+            } else {
+                period - behind[n - 1]
+            }
+        });
+        maps.push((
+            format!("near-period offsets, {period} s"),
+            saves(&run(&baseline, &changes, 120.0, &Caps::default())),
+        ));
+    }
+
+    let mut effects = 0usize;
+    let mut offsets = 0usize;
+    for (name, map) in &maps {
+        let errors = loader_errors(map);
+        assert!(errors.is_empty(), "{name}: {errors:?}");
+        for effect in &map.effects {
+            effects += 1;
+            for member in &effect.members {
+                offsets += 1;
+                assert!(
+                    (0.0..=effect.period_seconds).contains(&member.offset_seconds),
+                    "{name}: {} offset {} period {}",
+                    member.fixture,
+                    member.offset_seconds,
+                    effect.period_seconds
+                );
+            }
+        }
+    }
+    println!(
+        "{} maps, {effects} effects, {offsets} member offsets, all valid",
+        maps.len()
+    );
+    assert!(effects >= 1, "the loop-heavy songs must produce effects");
+}
