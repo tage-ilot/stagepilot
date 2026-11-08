@@ -1703,7 +1703,7 @@ impl LightsSettings {
 /// The rules for one song's cue map, shared by the settings loader and by every writer (a map
 /// is checked with exactly these rules before it is saved). `path` is the Lighting section.
 pub fn validate_cue_map(key: &str, map: &SongLightingCueMap, path: &[Value], errors: &mut Errors) {
-    if key != &map.song_key {
+    if key != map.song_key {
         value_error(
             errors,
             path,
