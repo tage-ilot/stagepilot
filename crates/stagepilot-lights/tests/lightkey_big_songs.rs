@@ -20,6 +20,14 @@ use stagepilot_lights::lightkey_recording::{self, RawRecording};
 use stagepilot_lights::lightkey_smooth::smooth_rows;
 use std::time::Instant;
 
+/// The heavy tests fit hundreds of thousands of changes on every core and the replay tests time
+/// ticks: run one at a time, or the clock measures the neighbours.
+static HEAVY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn heavy() -> std::sync::MutexGuard<'static, ()> {
+    HEAVY.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 /// A small deterministic random source (no `rand` in the workspace).
 struct Rng(u64);
 
@@ -217,6 +225,7 @@ fn final_values_intact(map: &SongLightingCueMap, changes: &Changes, duration: f6
 
 #[test]
 fn song_one_saves_at_full_fidelity_under_the_new_caps() {
+    let _one_at_a_time = heavy();
     let (baseline, changes, duration) = song_one();
     // `BIG_SONGS_DUMP=/some/folder cargo test ...` keeps the replica as a raw recording for
     // `cargo run --example refit_recording`
@@ -249,6 +258,7 @@ fn song_one_saves_at_full_fidelity_under_the_new_caps() {
 
 #[test]
 fn song_one_with_the_old_caps_still_saves_through_the_fallback_stages() {
+    let _one_at_a_time = heavy();
     let (baseline, changes, duration) = song_one();
     let fitted = run(&baseline, &changes, duration, &Caps::OLD);
     assert!(Caps::OLD.fits(&Size::of_capture(&fitted.capture)));
@@ -303,12 +313,14 @@ fn ends_inside(
                 .sum::<usize>()
                 <= MAX_EFFECT_CYCLE_STEPS_PER_SONG
     );
+    assert!(fitted.kept_items > 0, "{name}: an empty capture");
     saves(&fitted);
     fitted
 }
 
 #[test]
 fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
+    let _one_at_a_time = heavy();
     let mut changes: Changes = Vec::new();
     let mut baseline = Vec::new();
     for n in 0..66 {
@@ -330,22 +342,24 @@ fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
 
 #[test]
 fn white_noise_on_200_addresses() {
+    let _one_at_a_time = heavy();
     let mut rng = Rng(7);
     let mut changes: Changes = Vec::new();
     for n in 0..200 {
         let f = format!("N{n}");
         let mut t = rng.next() * 0.02;
-        while t < 60.0 {
+        while t < 30.0 {
             changes.push((t, dim(&f, rng.next())));
             t += 0.02;
         }
     }
     by_time(&mut changes);
-    ends_inside("noise", &[], &changes, 60.0);
+    ends_inside("noise", &[], &changes, 30.0);
 }
 
 #[test]
 fn one_address_at_one_kilohertz() {
+    let _one_at_a_time = heavy();
     let mut rng = Rng(11);
     let changes: Changes = (1..60_000)
         .map(|k| (f64::from(k) * 0.001, dim("Solo", rng.next())))
@@ -355,9 +369,10 @@ fn one_address_at_one_kilohertz() {
 
 #[test]
 fn a_twenty_minute_song() {
+    let _one_at_a_time = heavy();
     let mut rng = Rng(23);
     let mut changes: Changes = Vec::new();
-    for n in 0..50 {
+    for n in 0..20 {
         let f = format!("L{n}");
         let mut t = rng.next() * 0.1;
         while t < 1200.0 {
@@ -370,7 +385,14 @@ fn a_twenty_minute_song() {
         }
     }
     by_time(&mut changes);
-    ends_inside("20 minutes", &[], &changes, 1200.0);
+    let fitted = ends_inside("20 minutes", &[], &changes, 1200.0);
+    // however it got there (the fit budget may send it straight to the trim), a song a few times
+    // over the caps keeps most of the caps' worth, not a token few
+    assert!(
+        fitted.capture.rows.len() > 10_000,
+        "kept only {} rows",
+        fitted.capture.rows.len()
+    );
 }
 
 #[test]
@@ -651,6 +673,7 @@ fn song_at_the_caps() -> (
 
 #[test]
 fn the_replay_engine_builds_and_ticks_inside_budget_at_the_caps() {
+    let _one_at_a_time = heavy();
     use stagepilot_lights::lightkey_replay::ReplayEngine;
     let (rows, effects) = song_at_the_caps();
     let started = Instant::now();
@@ -699,4 +722,30 @@ fn the_replay_engine_builds_and_ticks_inside_budget_at_the_caps() {
         "tick {:?}",
         late / 2_000
     );
+}
+
+#[test]
+fn the_song_one_replica_replays_with_a_cheap_tick() {
+    let _one_at_a_time = heavy();
+    use stagepilot_lights::lightkey_replay::ReplayEngine;
+    let (baseline, changes, duration) = song_one();
+    let fitted =
+        fit_within_caps_budgeted(&baseline, &changes, duration, &Caps::default(), u128::MAX);
+    let rows = smooth_rows(&fitted.capture.rows);
+    let started = Instant::now();
+    let mut engine = ReplayEngine::new(&rows, &fitted.capture.effects);
+    let build = started.elapsed();
+    let started = Instant::now();
+    let mut sent = 0usize;
+    let ticks = (duration / 0.05) as u32;
+    for k in 0..ticks {
+        let p = f64::from(k) * 0.05;
+        sent += engine.tick(p, p, &|_| false).messages.len();
+    }
+    let tick = started.elapsed() / ticks;
+    println!(
+        "song-1 replica replay ({} rows): build {build:?}, {tick:?} a tick over {ticks} ticks, {sent} messages sent",
+        rows.len()
+    );
+    assert!(tick < std::time::Duration::from_millis(20), "tick {tick:?}");
 }

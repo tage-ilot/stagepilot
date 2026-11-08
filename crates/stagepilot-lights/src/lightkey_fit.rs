@@ -379,11 +379,19 @@ pub fn thin_changes(changes: &[(f64, FixtureCommand)], seconds: f64) -> Vec<(f64
 
 // ------------------------------------------------------------------------------------- trim
 
-/// One step of an address and the ramps that follow it until the next step: dropped as a whole,
-/// so a ramp is never left half removed (nor starting from a value that is no longer there).
-struct Unit {
+/// Most items of one chain of ramps that are dropped together.
+const CHUNK_ITEMS: usize = 8;
+
+/// A step of an address with the ramps that follow it (at most [`CHUNK_ITEMS`] items), or the
+/// next run of ramps of a long chain. A chunk is dropped as a whole, so a ramp is never left half
+/// removed. A chunk that continues a ramp (it starts with a ramp, not a step) whose
+/// predecessor is dropped would start from a value that is no longer there: it gets an anchor,
+/// a step to the value the dropped part ended on.
+struct Chunk {
     items: Vec<(usize, usize)>,
     importance: f64,
+    /// Time and value of the anchor this chunk needs when the chunk before it is dropped.
+    anchor: Option<(f64, Vec<FixtureArg>)>,
 }
 
 fn distance(address: &str, a: &[FixtureArg], b: &[FixtureArg]) -> f64 {
@@ -502,18 +510,21 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             ));
         }
     }
-    let mut addresses: Vec<(&str, Vec<Unit>)> = Vec::new();
+    let mut addresses: Vec<(&str, Vec<Chunk>)> = Vec::new();
     for (address, mut items) in by_address {
         items.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
         let value = |item: &(f64, f64, usize, usize)| &out.rows[item.2].messages[item.3].v;
-        // units: a step starts one, ramps join the unit before them
+        // chunks: a step starts one, a long chain of ramps is cut every CHUNK_ITEMS items
         let mut starts: Vec<usize> = Vec::new();
+        let mut length = 0;
         for (i, item) in items.iter().enumerate() {
-            if i == 0 || item.1 <= 0.0 {
+            if i == 0 || item.1 <= 0.0 || length >= CHUNK_ITEMS {
                 starts.push(i);
+                length = 0;
             }
+            length += 1;
         }
-        let mut units: Vec<Unit> = Vec::with_capacity(starts.len());
+        let mut chunks: Vec<Chunk> = Vec::with_capacity(starts.len());
         for (u, &first) in starts.iter().enumerate() {
             let last = starts.get(u + 1).copied().unwrap_or(items.len());
             let slice = &items[first..last];
@@ -531,25 +542,32 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             };
             let next_at = starts.get(u + 1).map_or(song_end, |&n| items[n].0);
             let dt = (next_at - items[first].0).max(1e-3);
-            units.push(Unit {
+            chunks.push(Chunk {
                 items: slice.iter().map(|item| (item.2, item.3)).collect(),
                 importance: size * dt,
+                anchor: (u > 0 && items[first].1 > 0.0)
+                    .then(|| (items[first].0, value(&items[first - 1]).clone())),
             });
         }
-        addresses.push((address, units));
+        addresses.push((address, chunks));
     }
-    // the busiest address first; a stable order keeps the result the same from run to run
+    // a stable order keeps the result the same from run to run
     addresses.sort_by(|a, b| a.0.cmp(b.0));
 
     let mut removed: HashSet<(usize, usize)> = HashSet::new();
-    // per address: unit indexes by importance, least first, last unit (the final value) excluded
+    // per address: chunks dropped, and the chunk indexes by importance (least first), the last
+    // chunk (the final value) excluded
+    let mut dropped: Vec<Vec<bool>> = addresses
+        .iter()
+        .map(|(_, chunks)| vec![false; chunks.len()])
+        .collect();
     let mut order: Vec<Vec<usize>> = Vec::with_capacity(addresses.len());
     let mut alive: Vec<usize> = Vec::with_capacity(addresses.len());
-    for (_, units) in &addresses {
-        let mut idx: Vec<usize> = (0..units.len().saturating_sub(1)).collect();
-        idx.sort_by(|a, b| units[*a].importance.total_cmp(&units[*b].importance));
+    for (_, chunks) in &addresses {
+        let mut idx: Vec<usize> = (0..chunks.len().saturating_sub(1)).collect();
+        idx.sort_by(|a, b| chunks[*a].importance.total_cmp(&chunks[*b].importance));
         order.push(idx);
-        alive.push(units.len());
+        alive.push(chunks.len());
     }
     let mut cursor = vec![0usize; addresses.len()];
     let mut heap: BinaryHeap<(usize, std::cmp::Reverse<usize>)> = BinaryHeap::new();
@@ -558,32 +576,58 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             heap.push((*count, std::cmp::Reverse(a)));
         }
     }
-
-    let current = |rows: &[SmoothLook], removed: &HashSet<(usize, usize)>| -> Size {
-        let mut size = Size::default();
-        for (r, row) in rows.iter().enumerate() {
-            let n = (0..row.messages.len())
-                .filter(|m| !removed.contains(&(r, *m)))
-                .count();
-            size.rows += n.div_ceil(MAX_OSC_MESSAGES_PER_ROW);
-            size.messages += n;
+    // anchors in force: kept chunks that continue a ramp whose predecessor is dropped
+    let mut anchors = 0usize;
+    let drop_chunk = |a: usize,
+                      c: usize,
+                      dropped: &mut Vec<Vec<bool>>,
+                      removed: &mut HashSet<(usize, usize)>,
+                      anchors: &mut usize| {
+        let chunks = &addresses[a].1;
+        for item in &chunks[c].items {
+            removed.insert(*item);
         }
-        size
+        dropped[a][c] = true;
+        // this chunk needed an anchor before (its predecessor was dropped, it was kept): no more
+        if chunks[c].anchor.is_some() && c > 0 && dropped[a][c - 1] {
+            *anchors -= 1;
+        }
+        // the next chunk now starts from a value that is gone
+        if chunks.get(c + 1).is_some_and(|n| n.anchor.is_some()) && !dropped[a][c + 1] {
+            *anchors += 1;
+        }
     };
+
+    let current =
+        |rows: &[SmoothLook], removed: &HashSet<(usize, usize)>, anchors: usize| -> Size {
+            let mut size = Size {
+                rows: anchors,
+                messages: anchors,
+                ..Size::default()
+            };
+            for (r, row) in rows.iter().enumerate() {
+                let n = (0..row.messages.len())
+                    .filter(|m| !removed.contains(&(r, *m)))
+                    .count();
+                size.rows += n.div_ceil(MAX_OSC_MESSAGES_PER_ROW);
+                size.messages += n;
+            }
+            size
+        };
     let fits = |s: &Size| s.rows <= caps.rows && s.messages <= caps.messages;
-    let mut now = current(&out.rows, &removed);
+    let mut now = current(&out.rows, &removed, anchors);
     let mut batch = 1usize;
     while !fits(&now) {
-        let Some(&(_, std::cmp::Reverse(_))) = heap.peek() else {
+        if heap.peek().is_none() {
             break;
-        };
-        // how many units to take this round: enough for the excess, doubling when rows are
-        // slow to empty
-        let avg = (now.messages as f64 / alive.iter().sum::<usize>().max(1) as f64).max(1.0);
+        }
+        // how many chunks to take this round: enough for the excess, and more when rows are
+        // slow to empty (a row goes when all its messages have)
+        let total_alive = alive.iter().sum::<usize>().max(1);
+        let avg = (now.messages as f64 / total_alive as f64).max(1.0);
         let by_messages = (now.messages.saturating_sub(caps.messages) as f64 / avg).ceil() as usize;
         let by_rows = if now.rows > caps.rows {
-            ((1.0 - caps.rows as f64 / now.rows as f64) * 1.1 * alive.iter().sum::<usize>() as f64)
-                .ceil() as usize
+            ((1.0 - caps.rows as f64 / now.rows as f64) * 1.03 * total_alive as f64).ceil() as usize
         } else {
             0
         };
@@ -596,11 +640,9 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             if count != alive[a] {
                 continue;
             }
-            let unit = order[a][cursor[a]];
+            let chunk = order[a][cursor[a]];
             cursor[a] += 1;
-            for item in &addresses[a].1[unit].items {
-                removed.insert(*item);
-            }
+            drop_chunk(a, chunk, &mut dropped, &mut removed, &mut anchors);
             alive[a] -= 1;
             taken += 1;
             if cursor[a] < order[a].len() {
@@ -608,28 +650,43 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             }
         }
         batch = (batch * 2).min(usize::MAX / 4);
-        now = current(&out.rows, &removed);
+        now = current(&out.rows, &removed, anchors);
     }
     if !fits(&now) {
-        // Every address is down to its final value and the song is still over the caps: only
-        // then do final values go, the least important first.
+        // Every address is down to its final chunk and the song is still over the caps (more
+        // addresses than rows fit): only then do final values go, the least important first.
         let mut lasts: Vec<(f64, usize)> = addresses
             .iter()
             .enumerate()
-            .filter_map(|(a, (_, units))| units.last().map(|u| (u.importance, a)))
+            .filter_map(|(a, (_, chunks))| chunks.last().map(|c| (c.importance, a)))
             .collect();
         lasts.sort_by(|x, y| x.0.total_cmp(&y.0));
-        for chunk in lasts.chunks(256) {
-            for &(_, a) in chunk {
-                if let Some(unit) = addresses[a].1.last() {
-                    for item in &unit.items {
-                        removed.insert(*item);
-                    }
+        for part in lasts.chunks(256) {
+            for &(_, a) in part {
+                let c = addresses[a].1.len() - 1;
+                if !dropped[a][c] {
+                    drop_chunk(a, c, &mut dropped, &mut removed, &mut anchors);
                 }
             }
-            now = current(&out.rows, &removed);
+            now = current(&out.rows, &removed, anchors);
             if fits(&now) {
                 break;
+            }
+        }
+    }
+    // the anchors: a step to the value a dropped part ended on, where the chunk after it continues
+    // a ramp
+    let mut anchor_rows: Vec<SmoothLook> = Vec::new();
+    for (a, (address, chunks)) in addresses.iter().enumerate() {
+        for (c, chunk) in chunks.iter().enumerate() {
+            if let (false, true, Some((at, value))) =
+                (dropped[a][c], c > 0 && dropped[a][c - 1], &chunk.anchor)
+            {
+                anchor_rows.push(SmoothLook {
+                    at_seconds: *at,
+                    fade_seconds: 0.0,
+                    messages: vec![FixtureCommand::new(*address, value.clone())],
+                });
             }
         }
     }
@@ -642,6 +699,12 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
         });
     }
     out.rows.retain(|row| !row.messages.is_empty());
+    out.rows.extend(anchor_rows);
+    out.rows.sort_by(|a, b| {
+        a.at_seconds
+            .total_cmp(&b.at_seconds)
+            .then(a.fade_seconds.total_cmp(&b.fade_seconds))
+    });
 }
 
 #[cfg(test)]
@@ -772,5 +835,94 @@ mod tests {
             .rows
             .iter()
             .any(|r| r.at_seconds == 49.0 && r.messages[0].a.contains("/A/")));
+    }
+
+    #[test]
+    fn trim_keeps_most_of_a_song_that_is_only_a_few_times_over() {
+        // 100 addresses with 2,000 steps each, one message per row: 200,000 rows against 50,000
+        let mut rows = Vec::new();
+        for i in 0..2000 {
+            for a in 0..100 {
+                rows.push(SmoothLook {
+                    at_seconds: f64::from(i) * 0.5 + f64::from(a) * 0.001,
+                    fade_seconds: 0.0,
+                    messages: vec![dim(&format!("F{a}"), f64::from((i * 7 + a) % 10) / 10.0)],
+                });
+            }
+        }
+        let capture = SmoothCapture {
+            rows,
+            ..SmoothCapture::default()
+        };
+        let caps = Caps::default();
+        let (trimmed, removed) = trim_to_caps(&capture, &caps);
+        let size = Size::of_capture(&trimmed);
+        assert!(caps.fits(&size));
+        assert!(size.rows > 40_000, "kept only {} rows", size.rows);
+        assert_eq!(removed, 200_000 - size.messages);
+    }
+
+    #[test]
+    fn a_long_ramp_chain_is_cut_without_any_ramp_starting_from_a_stale_value() {
+        // one address: a step to 0 then 200 contiguous 1 s ramps up and down, and a fixed neighbour
+        let value = |i: usize| ((i * 37) % 11) as f64 / 10.0;
+        let mut rows = vec![SmoothLook {
+            at_seconds: 0.0,
+            fade_seconds: 0.0,
+            messages: vec![dim("A", 0.0)],
+        }];
+        for i in 1..=200usize {
+            rows.push(SmoothLook {
+                at_seconds: (i - 1) as f64,
+                fade_seconds: 1.0,
+                messages: vec![dim("A", value(i))],
+            });
+        }
+        let capture = SmoothCapture {
+            rows,
+            ..SmoothCapture::default()
+        };
+        let caps = Caps {
+            rows: 40,
+            messages: 40,
+            effects: 0,
+            cycle_steps: 0,
+        };
+        let (trimmed, removed) = trim_to_caps(&capture, &caps);
+        assert!(removed > 100);
+        assert!(caps.fits(&Size::of_capture(&trimmed)));
+        let rows = smooth_rows_for_test(&trimmed);
+        let timeline = crate::lightkey_curve::Timeline::new(&rows, &[]);
+        let truth = |t: f64| -> f64 {
+            // the recorded chain: vertex i at time i
+            let i = t.floor() as usize;
+            let (a, b) = (if i == 0 { 0.0 } else { value(i) }, value((i + 1).min(200)));
+            a + (b - a) * (t - t.floor())
+        };
+        for row in trimmed.rows.iter().filter(|r| r.fade_seconds > 0.0) {
+            // just before a kept ramp starts, the value is the true value at its start
+            let have = timeline.value_at("/fixture/A/overrides/dimmer", row.at_seconds);
+            let Some(have) = have else { continue };
+            let FixtureArg::Float(have) = have[0].clone() else {
+                panic!()
+            };
+            assert!(
+                (have - truth(row.at_seconds)).abs() < 1e-6,
+                "a ramp at {} s starts from {have}, the song had {}",
+                row.at_seconds,
+                truth(row.at_seconds)
+            );
+        }
+        // the final value is kept
+        let end = timeline
+            .value_at("/fixture/A/overrides/dimmer", 500.0)
+            .unwrap();
+        assert_eq!(end, vec![FixtureArg::Float(value(200))]);
+    }
+
+    fn smooth_rows_for_test(
+        capture: &SmoothCapture,
+    ) -> Vec<stagepilot_core::config::OscLightingCue> {
+        lightkey_smooth::smooth_rows(&capture.rows)
     }
 }
