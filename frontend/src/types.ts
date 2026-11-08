@@ -307,6 +307,11 @@ export interface CaptureStatus {
   project?: string;
   /** Set when a very busy recording was simplified to fit the per-song limits. Absent on a normal capture and on older files. */
   simplified?: CaptureSimplified;
+  /**
+   * How many lights the capture's starting look holds (the state of the whole rig when the recording began, so the replay recreates the
+   * picture whatever presets are on). 0: the state could not be read. Absent on a capture made before it was saved: its house lights are missing.
+   */
+  start_lights?: number;
 }
 
 /** How a too-busy recording was simplified (mirrors the generated `CaptureSimplified`). */

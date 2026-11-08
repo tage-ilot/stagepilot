@@ -15,7 +15,7 @@ import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeyStatus } fro
 import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
 import { LightkeyInstallBox } from "./LightkeyInstallBox";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
-import { captureLabelText, formatCount, simplifiedNote, type CaptureLabel } from "./lightingLooks";
+import { captureLabelText, formatCount, simplifiedNote, startLookNote, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
@@ -47,16 +47,16 @@ export function lightkeyHeadline(status: LightkeyStatus, looks?: SongLooks): str
 }
 
 /** What the selected song holds: captured look rows, and whether any were changed by hand. */
-export interface SongLooks { count: number; /** Set when a very busy recording was simplified to fit: shown as a short note beside the count. */ simplified?: { kept_changes: number; recorded_changes: number } | null; /** Repeating loops saved with the song. */ loops?: number; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
+export interface SongLooks { count: number; /** Set when a very busy recording was simplified to fit: shown as a short note beside the count. */ simplified?: { kept_changes: number; recorded_changes: number } | null; /** Repeating loops saved with the song. */ loops?: number; /** The capture's `start_lights`: lights in its starting look, 0 when it could not be read, absent for a capture from before it existed. */ startLights?: number | null; edited: boolean; /** What the song's rows say about capturing (shown in its header). */ label?: CaptureLabel }
 
 /** "552 captured items (546 ramps/steps, 6 loops)": the rows (ramps and steps) and the loops a recording saved. */
 export const capturedItemsText = (rows: number, loops: number): string =>
   `${formatCount(rows + loops)} captured item${rows + loops === 1 ? "" : "s"} (${formatCount(rows)} ramps/steps, ${formatCount(loops)} loop${loops === 1 ? "" : "s"})`;
 
-/** The capture line plus, when the recording was simplified, the one-sentence note. */
+/** The capture line plus, when the recording was simplified, the one-sentence note, and the starting-look sentence. */
 const withSimplified = (text: string, looks?: SongLooks): string => {
-  const note = simplifiedNote(looks?.simplified);
-  return note ? `${endSentence(text)} ${note}` : text;
+  const notes = [simplifiedNote(looks?.simplified), startLookNote(looks?.startLights, Boolean(looks && (looks.count > 0 || (looks.loops ?? 0) > 0)))].filter((n): n is string => Boolean(n));
+  return notes.length ? `${endSentence(text)} ${notes.join(" ")}` : text;
 };
 
 export const capturedLooksText = (count: number, label?: CaptureLabel, loops = 0): string =>

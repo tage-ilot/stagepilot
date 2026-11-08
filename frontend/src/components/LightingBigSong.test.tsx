@@ -6,7 +6,7 @@ import type { ApplicationState, LightsStatusResponse, OscLightingCue, SettingsRe
 import { LightingSetupPanel } from "./LightingSetupPanel";
 import { LightingTimeline } from "./LightingTimeline";
 import { capturedItemsText, lightkeyHeadline } from "./LightkeyStrip";
-import { formatCount, simplifiedNote } from "./lightingLooks";
+import { formatCount, simplifiedNote, startLookNote } from "./lightingLooks";
 import type { TimelineMarker } from "./lightingTimelineMath";
 
 vi.mock("../api", async (original) => ({
@@ -148,5 +148,42 @@ describe("the simplified note and the numbers", () => {
     mountPanel(bigRows(12_000), capture);
     expect(await screen.findByText(/12,000 captured items \(12,000 ramps\/steps, 0 loops\) on this song\. Simplified: 6,200 of 11,400 changes kept\./)).toBeInTheDocument();
     expect(screen.getByText(/12,000 cues on 1 of 1 song/)).toBeInTheDocument();
+  });
+});
+
+describe("the starting look on the capture line", () => {
+  const status = { mode: "manual", link: "connected" } as never;
+
+  it("says how many lights the starting look holds, with thousands separators", () => {
+    expect(startLookNote(66, true)).toBe("Starting look of 66 lights saved.");
+    expect(startLookNote(1, true)).toBe("Starting look of 1 light saved.");
+    expect(startLookNote(12_000, true)).toBe("Starting look of 12,000 lights saved.");
+    expect(lightkeyHeadline(status, { count: 40, edited: false, startLights: 66 }))
+      .toContain("40 captured items (40 ramps/steps, 0 loops) on this song. Starting look of 66 lights saved.");
+  });
+
+  it("tells the operator an older capture has no house lights and how to fix it", () => {
+    const text = "Recorded before the starting lights were saved. Record this song again to include the house lights.";
+    expect(startLookNote(null, true)).toBe(text);
+    expect(lightkeyHeadline(status, { count: 40, edited: false, startLights: null })).toContain(`on this song. ${text}`);
+  });
+
+  it("says plainly when the starting look could not be read, and nothing when nothing is captured or unknown", () => {
+    expect(startLookNote(0, true)).toBe("The starting look of the other lights could not be read.");
+    expect(startLookNote(null, false)).toBeNull();
+    expect(startLookNote(66, false)).toBeNull();
+    expect(startLookNote(undefined, true)).toBeNull();
+    expect(lightkeyHeadline(status, { count: 40, edited: false })).not.toMatch(/starting|Starting/);
+  });
+
+  it("shows the sentence on the Lighting card for a new capture and for an old one", async () => {
+    const base = { complete: true, coverage_seconds: 300, recorded_at: "2026-11-08T00:00:00Z" };
+    mountPanel(bigRows(40), { ...base, start_lights: 66 });
+    expect(await screen.findByText(/40 captured items .* on this song\. Starting look of 66 lights saved\./)).toBeInTheDocument();
+  });
+
+  it("shows the old-capture notice on the Lighting card", async () => {
+    mountPanel(bigRows(40), { complete: true, coverage_seconds: 300, recorded_at: "2026-11-08T00:00:00Z" });
+    expect(await screen.findByText(/Recorded before the starting lights were saved\. Record this song again to include the house lights\./)).toBeInTheDocument();
   });
 });
