@@ -9,7 +9,9 @@ use stagepilot_core::config::{
     MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
 };
 use stagepilot_lights::lightkey_curve::Timeline;
-use stagepilot_lights::lightkey_fit::{fit_within_caps, fit_within_caps_budgeted, Caps, Fitted, Size, Stage};
+use stagepilot_lights::lightkey_fit::{
+    fit_within_caps, fit_within_caps_budgeted, Caps, Fitted, Size, Stage,
+};
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand, FixtureState};
 use stagepilot_lights::lightkey_looks::{
     save_capture_with_effects, within_caps, CaptureSave, LookRecorder,
@@ -81,7 +83,10 @@ fn song_one() -> (Vec<FixtureCommand>, Changes, f64) {
         }
         let mut t = rng.next() * 0.5;
         while t < duration {
-            changes.push((t, option(&f, &format!("Gobo {}", (rng.next() * 12.0) as u32))));
+            changes.push((
+                t,
+                option(&f, &format!("Gobo {}", (rng.next() * 12.0) as u32)),
+            ));
             t += 0.25 + rng.next() * 0.5;
         }
     }
@@ -225,7 +230,11 @@ fn song_one_saves_at_full_fidelity_under_the_new_caps() {
         println!("raw recording: {}", path.display());
     }
     let fitted = run(&baseline, &changes, duration, &Caps::default());
-    assert_eq!(fitted.stage, Stage::Exact, "the new caps hold song 1 as recorded");
+    assert_eq!(
+        fitted.stage,
+        Stage::Exact,
+        "the new caps hold song 1 as recorded"
+    );
     assert_eq!(fitted.fits, 1);
     assert!(
         fitted.capture.rows.len() > 10_000,
@@ -235,11 +244,7 @@ fn song_one_saves_at_full_fidelity_under_the_new_caps() {
     let map = saves(&fitted);
     final_values_intact(&map, &changes, duration, "gobo");
     final_values_intact(&map, &changes, duration, "color");
-    assert!(
-        fitted.fit_ms < 120_000,
-        "fit took {} ms",
-        fitted.fit_ms
-    );
+    assert!(fitted.fit_ms < 120_000, "fit took {} ms", fitted.fit_ms);
 }
 
 #[test]
@@ -258,7 +263,12 @@ fn song_one_with_the_old_caps_still_saves_through_the_fallback_stages() {
     assert!(fitted.fit_ms < 300_000, "fit took {} ms", fitted.fit_ms);
 }
 
-fn ends_inside(name: &str, baseline: &[FixtureCommand], changes: &Changes, duration: f64) -> Fitted {
+fn ends_inside(
+    name: &str,
+    baseline: &[FixtureCommand],
+    changes: &Changes,
+    duration: f64,
+) -> Fitted {
     println!("{name}");
     let caps = Caps::default();
     // the real budget: a slow song goes to the trim instead of fitting again and again
@@ -269,12 +279,20 @@ fn ends_inside(name: &str, baseline: &[FixtureCommand], changes: &Changes, durat
         &caps,
         stagepilot_lights::lightkey_fit::FIT_BUDGET_MS,
     );
-    assert!(caps.fits(&Size::of_capture(&fitted.capture)), "{name}: over the caps");
+    assert!(
+        caps.fits(&Size::of_capture(&fitted.capture)),
+        "{name}: over the caps"
+    );
     assert!(fitted.fits <= 13);
     assert!(fitted.fit_ms < 300_000, "{name}: {} ms", fitted.fit_ms);
     assert!(
         fitted.capture.rows.len() <= MAX_OSC_ROWS_PER_SONG
-            && fitted.capture.rows.iter().map(|r| r.messages.len()).sum::<usize>()
+            && fitted
+                .capture
+                .rows
+                .iter()
+                .map(|r| r.messages.len())
+                .sum::<usize>()
                 <= MAX_OSC_MESSAGES_PER_SONG
             && fitted.capture.effects.len() <= MAX_EFFECTS_PER_SONG
             && fitted
@@ -344,7 +362,10 @@ fn a_twenty_minute_song() {
         let mut t = rng.next() * 0.1;
         while t < 1200.0 {
             changes.push((t, dim(&f, rng.next())));
-            changes.push((t + 0.003, option(&f, &format!("v{}", (rng.next() * 9.0) as u32))));
+            changes.push((
+                t + 0.003,
+                option(&f, &format!("v{}", (rng.next() * 9.0) as u32)),
+            ));
             t += 0.5;
         }
     }
@@ -356,9 +377,16 @@ fn a_twenty_minute_song() {
 fn nan_infinity_and_huge_values_cannot_stop_a_save() {
     // through the recorder: a value that cannot be sent is dropped, the rest is kept
     let mut recorder = LookRecorder::new(&FixtureState::new());
-    for (k, v) in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e300, -1e300, 0.5]
-        .into_iter()
-        .enumerate()
+    for (k, v) in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        1e300,
+        -1e300,
+        0.5,
+    ]
+    .into_iter()
+    .enumerate()
     {
         recorder.observe(1.0 + k as f64, &[dim("A", v)]);
     }
@@ -367,7 +395,10 @@ fn nan_infinity_and_huge_values_cannot_stop_a_save() {
     let fitted = ends_inside("huge", &baseline, &changes, 10.0);
     for row in &fitted.capture.rows {
         for m in &row.messages {
-            assert!(m.v.iter().all(|a| !matches!(a, FixtureArg::Float(f) if !f.is_finite())));
+            assert!(m
+                .v
+                .iter()
+                .all(|a| !matches!(a, FixtureArg::Float(f) if !f.is_finite())));
         }
     }
     // straight into the fit (a recording from an older build): no panic, still a capture
@@ -387,7 +418,10 @@ fn one_change_only_and_no_change_at_all() {
     assert_eq!(fitted.stage, Stage::Exact);
     assert_eq!(fitted.capture.rows.len(), 1);
     let none = fit_within_caps(&[], &[], 10.0, &Caps::default());
-    assert_eq!(none.exact_items, 0, "nothing recorded: the link says so and saves nothing");
+    assert_eq!(
+        none.exact_items, 0,
+        "nothing recorded: the link says so and saves nothing"
+    );
 }
 
 #[test]
@@ -426,7 +460,10 @@ fn a_looser_tolerance_never_gives_more_items_than_a_tighter_one() {
         }
         previous = Some((scale, size.items() + size.rows));
     }
-    assert!(with_loops >= 3, "the chase must be found as loops at several tolerances");
+    assert!(
+        with_loops >= 3,
+        "the chase must be found as loops at several tolerances"
+    );
 }
 
 #[test]
@@ -476,8 +513,14 @@ fn the_redate_mark_survives_thinning() {
     assert!(moved > 0 && moved <= recorder.len());
     let (_, changes) = recorder.raw();
     // the early A changes did not move, the B ones did
-    assert!(changes.iter().filter(|c| c.1.a.contains("/A/")).all(|c| c.0 < 1.0));
-    assert!(changes.iter().filter(|c| c.1.a.contains("/B/")).all(|c| c.0 >= 9.0));
+    assert!(changes
+        .iter()
+        .filter(|c| c.1.a.contains("/A/"))
+        .all(|c| c.0 < 1.0));
+    assert!(changes
+        .iter()
+        .filter(|c| c.1.a.contains("/B/"))
+        .all(|c| c.0 >= 9.0));
 }
 
 #[test]
@@ -498,7 +541,10 @@ fn the_raw_recording_is_written_pruned_and_refits_to_the_same_counts() {
     let caps = Caps::OLD;
     let first = fit_within_caps(&baseline, &changes, 60.0, &caps);
     let again = fit_within_caps(&b2, &c2, 60.0, &caps);
-    assert_eq!(Size::of_capture(&first.capture), Size::of_capture(&again.capture));
+    assert_eq!(
+        Size::of_capture(&first.capture),
+        Size::of_capture(&again.capture)
+    );
     assert_eq!(first.stage, again.stage);
     assert_eq!(first.scale, again.scale);
     assert_eq!(first.thin_seconds, again.thin_seconds);
@@ -527,8 +573,12 @@ fn an_unwritable_folder_does_not_stop_the_raw_recording_from_being_reported() {
     let blocker = dir.path().join("a-file");
     std::fs::write(&blocker, b"x").unwrap();
     let recording = RawRecording::new("s", 1.0, &[], &[(0.5, dim("A", 1.0))]);
-    let error = lightkey_recording::save(&blocker.join("lightkey-recordings"), &recording, chrono::Utc::now())
-        .unwrap_err();
+    let error = lightkey_recording::save(
+        &blocker.join("lightkey-recordings"),
+        &recording,
+        chrono::Utc::now(),
+    )
+    .unwrap_err();
     assert!(error.contains("cannot"), "{error}");
 }
 
@@ -536,7 +586,10 @@ fn an_unwritable_folder_does_not_stop_the_raw_recording_from_being_reported() {
 
 /// A song at the per-song caps as the replay sees it: 50,000 rows with 12 messages each over 330
 /// addresses (66 fixtures x 5 properties), a third of them ramps, and 1,000 effects of 250 steps.
-fn song_at_the_caps() -> (Vec<stagepilot_core::config::OscLightingCue>, Vec<stagepilot_core::config::LightingEffect>) {
+fn song_at_the_caps() -> (
+    Vec<stagepilot_core::config::OscLightingCue>,
+    Vec<stagepilot_core::config::LightingEffect>,
+) {
     use stagepilot_core::config::*;
     use uuid::Uuid;
     let props = ["dimmer", "pan", "tilt", "zoom", "iris"];
@@ -557,7 +610,9 @@ fn song_at_the_caps() -> (Vec<stagepilot_core::config::OscLightingCue>, Vec<stag
                     let prop = props[((r * per_row + i) / 66) % props.len()];
                     OscMessage {
                         address: format!("/fixture/Moving Head {fixture}/overrides/{prop}"),
-                        args: vec![OscArgument::Float(((r * 31 + i * 17) % 1000) as f64 / 1000.0)],
+                        args: vec![OscArgument::Float(
+                            ((r * 31 + i * 17) % 1000) as f64 / 1000.0,
+                        )],
                     }
                 })
                 .collect(),
@@ -627,11 +682,21 @@ fn the_replay_engine_builds_and_ticks_inside_budget_at_the_caps() {
     }
     let idle = started.elapsed() / 2_000;
     println!("replay at the caps: idle tick {idle:?}");
-    assert!(idle < std::time::Duration::from_millis(5), "idle tick {idle:?}");
+    assert!(
+        idle < std::time::Duration::from_millis(5),
+        "idle tick {idle:?}"
+    );
     assert!(build.as_secs() < 60, "build took {build:?}");
     // Every one of the 330 addresses is moving in this song, so a tick sends about 25 messages:
     // 2 to 3 ms on an optimised build. Generous for a slow runner; flat from start to end.
-    assert!(early / 2_000 < std::time::Duration::from_millis(20), "tick {:?}", early / 2_000);
-    assert!(late / 2_000 < std::time::Duration::from_millis(20), "tick {:?}", late / 2_000);
+    assert!(
+        early / 2_000 < std::time::Duration::from_millis(20),
+        "tick {:?}",
+        early / 2_000
+    );
+    assert!(
+        late / 2_000 < std::time::Duration::from_millis(20),
+        "tick {:?}",
+        late / 2_000
+    );
 }
-

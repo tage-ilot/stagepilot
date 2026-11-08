@@ -417,19 +417,23 @@ async fn a_cue_map_at_the_caps_is_accepted_and_the_state_stays_small() {
             .collect()
     };
     let (router, rt) = app(osc_lights()).await;
+    let request = json!({
+        "song_key": "big", "song_title": "Big", "method": "osc",
+        "osc_cues": rows(false)
+    });
+    println!(
+        "body of a song at the caps: {} bytes",
+        request.to_string().len()
+    );
     let started = std::time::Instant::now();
-    let (code, body) = call(
-        &router,
-        "PUT",
-        "/api/v1/lights/cue-map",
-        Some(json!({
-            "song_key": "big", "song_title": "Big", "method": "osc",
-            "osc_cues": rows(false)
-        })),
-    )
-    .await;
+    let (code, body) = call(&router, "PUT", "/api/v1/lights/cue-map", Some(request)).await;
     println!("PUT of a song at the caps: {:?}", started.elapsed());
-    assert_eq!(code, StatusCode::OK, "{}", body.to_string().chars().take(300).collect::<String>());
+    assert_eq!(
+        code,
+        StatusCode::OK,
+        "{}",
+        body.to_string().chars().take(300).collect::<String>()
+    );
     let (code, state) = call(&router, "GET", "/api/v1/state", None).await;
     assert_eq!(code, StatusCode::OK);
     let bytes = state.to_string().len();

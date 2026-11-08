@@ -20,11 +20,11 @@ use crate::lightkey::{
 use crate::lightkey_auto::{
     decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
 };
+use crate::lightkey_fit::{fit_within_caps, trim_to_caps, Caps, Fitted, Stage};
 use crate::lightkey_fixtures::{FixtureCommand, FixtureState};
 use crate::lightkey_looks::LookRecorder;
-use crate::lightkey_relay::{relay_target, RelayClient};
-use crate::lightkey_fit::{fit_within_caps, trim_to_caps, Caps, Fitted, Stage};
 use crate::lightkey_recording::{self, RawRecording};
+use crate::lightkey_relay::{relay_target, RelayClient};
 use crate::lightkey_smooth::smooth_rows;
 use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
@@ -32,8 +32,8 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    CaptureSimplified, CaptureStatus, LightingEffect, LightkeyMode, LightkeySettings, OscLightingCue, SongLoudness,
-    DEFAULT_LIGHTKEY_RELAY_PORT,
+    CaptureSimplified, CaptureStatus, LightingEffect, LightkeyMode, LightkeySettings,
+    OscLightingCue, SongLoudness, DEFAULT_LIGHTKEY_RELAY_PORT,
 };
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
@@ -1923,7 +1923,9 @@ impl Inner {
         // The raw recording goes to disk before anything is fitted, so a song that cannot be
         // saved can still be looked at. A failure here never stops the save.
         let folder = self.recordings_dir.clone();
-        let kept_in = self.keep_raw_recording(&session.key, duration, &baseline, &changes).await;
+        let kept_in = self
+            .keep_raw_recording(&session.key, duration, &baseline, &changes)
+            .await;
         let caps = self.caps;
         let fitted = tokio::task::spawn_blocking(move || {
             fit_within_caps(&baseline, &changes, duration, &caps)
@@ -1992,7 +1994,8 @@ impl Inner {
                         song_title: title.clone(),
                         looks: u32::try_from(count + loops).unwrap_or(u32::MAX),
                     });
-                    let text = saved_message(count, loops, &title, fitted.scale, simplified.as_ref());
+                    let text =
+                        saved_message(count, loops, &title, fitted.scale, simplified.as_ref());
                     let missing = duration - covered;
                     return self.say(if !complete {
                         format!(
@@ -2044,7 +2047,8 @@ impl Inner {
         let recording = RawRecording::new(key, duration, baseline, changes);
         let now = DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0).unwrap_or_default();
         let key = key.to_string();
-        let job = tokio::task::spawn_blocking(move || lightkey_recording::save(&dir, &recording, now));
+        let job =
+            tokio::task::spawn_blocking(move || lightkey_recording::save(&dir, &recording, now));
         match job.await {
             Ok(Ok(path)) => Some(path),
             Ok(Err(error)) => {

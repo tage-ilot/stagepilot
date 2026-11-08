@@ -452,10 +452,7 @@ impl LookRecorder {
                         kept.push(change);
                     }
                     None => {
-                        slots.insert(
-                            change.command.a.clone(),
-                            (window, kept.len(), change.piece),
-                        );
+                        slots.insert(change.command.a.clone(), (window, kept.len(), change.piece));
                         kept.push(change);
                     }
                 }

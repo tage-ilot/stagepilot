@@ -33,7 +33,10 @@ pub fn song_at_the_caps() -> SongLightingCueMap {
         })
         .collect();
     let steps_each = MAX_EFFECT_CYCLE_STEPS_PER_SONG / MAX_EFFECTS_PER_SONG;
-    assert_eq!(steps_each * MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG);
+    assert_eq!(
+        steps_each * MAX_EFFECTS_PER_SONG,
+        MAX_EFFECT_CYCLE_STEPS_PER_SONG
+    );
     let effects: Vec<LightingEffect> = (0..MAX_EFFECTS_PER_SONG)
         .map(|e| LightingEffect {
             id: Uuid::new_v4(),
@@ -145,7 +148,10 @@ fn a_song_at_the_caps_saves_and_loads_inside_the_budget() {
     let started = Instant::now();
     let runtime = fresh.load();
     let load = started.elapsed();
-    assert_eq!(runtime.lights.cue_maps["big"].osc_cues.len(), MAX_OSC_ROWS_PER_SONG);
+    assert_eq!(
+        runtime.lights.cue_maps["big"].osc_cues.len(),
+        MAX_OSC_ROWS_PER_SONG
+    );
     assert_eq!(
         runtime.lights.cue_maps["big"].effects.len(),
         MAX_EFFECTS_PER_SONG

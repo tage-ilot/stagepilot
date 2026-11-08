@@ -78,12 +78,7 @@ impl RawRecording {
     /// The baseline and the changes, as the fit takes them.
     #[allow(clippy::type_complexity)]
     pub fn into_parts(self) -> (Vec<FixtureCommand>, Vec<(f64, FixtureCommand)>) {
-        let name = |i: u32| {
-            self.addresses
-                .get(i as usize)
-                .cloned()
-                .unwrap_or_default()
-        };
+        let name = |i: u32| self.addresses.get(i as usize).cloned().unwrap_or_default();
         let baseline = self
             .baseline
             .iter()
@@ -192,7 +187,8 @@ fn save_limited(
 
 /// Read a file written by [`save`].
 pub fn load(path: &Path) -> Result<RawRecording, String> {
-    let file = std::fs::File::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    let file =
+        std::fs::File::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
     let recording: RawRecording = serde_json::from_reader(std::io::BufReader::new(file))
         .map_err(|e| format!("{} is not a recording: {e}", path.display()))?;
     if recording.version != VERSION {
@@ -220,8 +216,13 @@ pub fn prune(dir: &Path, keep: usize, max_bytes: u64, protect: Option<&Path>) ->
         })
         .filter_map(|e| {
             let meta = e.metadata().ok()?;
-            meta.is_file()
-                .then(|| (meta.modified().unwrap_or(std::time::UNIX_EPOCH), e.path(), meta.len()))
+            meta.is_file().then(|| {
+                (
+                    meta.modified().unwrap_or(std::time::UNIX_EPOCH),
+                    e.path(),
+                    meta.len(),
+                )
+            })
         })
         .collect();
     // newest first; the name breaks a tie (the time is in it)
@@ -287,15 +288,12 @@ mod tests {
         let recording = sample(5);
         let t0 = chrono::Utc::now();
         for i in 0..8 {
-            let path = save(
-                dir.path(),
-                &recording,
-                t0 + chrono::Duration::seconds(i),
+            let path = save(dir.path(), &recording, t0 + chrono::Duration::seconds(i)).unwrap();
+            let file = std::fs::File::options().write(true).open(&path).unwrap();
+            file.set_modified(
+                std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000 + i as u64),
             )
             .unwrap();
-            let file = std::fs::File::options().write(true).open(&path).unwrap();
-            file.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000 + i as u64))
-                .unwrap();
         }
         let names: Vec<_> = std::fs::read_dir(dir.path())
             .unwrap()

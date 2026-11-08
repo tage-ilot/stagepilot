@@ -1030,7 +1030,7 @@ mod notice {
                     coverage_seconds: 100.0,
                     recorded_at: "2026-11-02T00:00:00Z".into(),
                     project: captured.map(str::to_string),
-simplified: None,
+                    simplified: None,
                 }),
                 effects: vec![],
             },

@@ -156,6 +156,9 @@ struct EffectStepN {
     value: Vec<f64>,
 }
 
+/// A cycle shared by every member of an effect: property, steps, instants.
+type SharedCycle<'a> = (&'a str, Arc<Vec<EffectStepN>>, Arc<Vec<f64>>);
+
 /// One effect's cycle for one property of one fixture.
 #[derive(Debug, Clone)]
 struct EffectCurve {
@@ -280,7 +283,7 @@ impl Timeline {
             for steps in by_property.values_mut() {
                 steps.sort_by(|a, b| a.at.total_cmp(&b.at));
             }
-            let shared: Vec<(&str, Arc<Vec<EffectStepN>>, Arc<Vec<f64>>)> = by_property
+            let shared: Vec<SharedCycle> = by_property
                 .iter()
                 .map(|(property, steps)| {
                     let instants = steps

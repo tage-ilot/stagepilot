@@ -350,10 +350,7 @@ pub fn fit_within_caps_budgeted(
 /// `seconds`-window (windows start at 0; changes at or before 0 are the start state and form
 /// their own window). The final value of every address stays. The result keeps the order in which
 /// each address first appears.
-pub fn thin_changes(
-    changes: &[(f64, FixtureCommand)],
-    seconds: f64,
-) -> Vec<(f64, FixtureCommand)> {
+pub fn thin_changes(changes: &[(f64, FixtureCommand)], seconds: f64) -> Vec<(f64, FixtureCommand)> {
     if !(seconds.is_finite() && seconds > 0.0) {
         return changes.to_vec();
     }
@@ -405,8 +402,19 @@ fn distance(address: &str, a: &[FixtureArg], b: &[FixtureArg]) -> f64 {
 
 fn effect_importance(effect: &LightingEffect) -> f64 {
     let mut spread = 0.0f64;
-    for k in 0..effect.cycle.iter().map(|s| s.value.len()).max().unwrap_or(0) {
-        let values: Vec<f64> = effect.cycle.iter().filter_map(|s| s.value.get(k)).copied().collect();
+    for k in 0..effect
+        .cycle
+        .iter()
+        .map(|s| s.value.len())
+        .max()
+        .unwrap_or(0)
+    {
+        let values: Vec<f64> = effect
+            .cycle
+            .iter()
+            .filter_map(|s| s.value.get(k))
+            .copied()
+            .collect();
         let (lo, hi) = values
             .iter()
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
@@ -486,10 +494,12 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
     for (r, row) in out.rows.iter().enumerate() {
         song_end = song_end.max(row.at_seconds + row.fade_seconds);
         for (m, message) in row.messages.iter().enumerate() {
-            by_address
-                .entry(message.a.as_str())
-                .or_default()
-                .push((row.at_seconds, row.fade_seconds, r, m));
+            by_address.entry(message.a.as_str()).or_default().push((
+                row.at_seconds,
+                row.fade_seconds,
+                r,
+                m,
+            ));
         }
     }
     let mut addresses: Vec<(&str, Vec<Unit>)> = Vec::new();
@@ -572,8 +582,7 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
         let avg = (now.messages as f64 / alive.iter().sum::<usize>().max(1) as f64).max(1.0);
         let by_messages = (now.messages.saturating_sub(caps.messages) as f64 / avg).ceil() as usize;
         let by_rows = if now.rows > caps.rows {
-            ((1.0 - caps.rows as f64 / now.rows as f64) * 1.1
-                * alive.iter().sum::<usize>() as f64)
+            ((1.0 - caps.rows as f64 / now.rows as f64) * 1.1 * alive.iter().sum::<usize>() as f64)
                 .ceil() as usize
         } else {
             0
@@ -624,15 +633,13 @@ fn trim_rows(out: &mut SmoothCapture, caps: &Caps) {
             }
         }
     }
-    let mut r = 0;
-    for row in &mut out.rows {
+    for (r, row) in out.rows.iter_mut().enumerate() {
         let mut m = 0;
         row.messages.retain(|_| {
             let keep = !removed.contains(&(r, m));
             m += 1;
             keep
         });
-        r += 1;
     }
     out.rows.retain(|row| !row.messages.is_empty());
 }
@@ -681,7 +688,10 @@ mod tests {
         let mut changes = Vec::new();
         for i in 0..800 {
             for f in ["A", "B", "C"] {
-                changes.push((f64::from(i) * 0.05 + 0.01, option(f, &format!("v{}", i % 7))));
+                changes.push((
+                    f64::from(i) * 0.05 + 0.01,
+                    option(f, &format!("v{}", i % 7)),
+                ));
             }
         }
         let caps = Caps {

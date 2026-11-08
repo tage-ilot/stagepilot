@@ -839,7 +839,7 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
     let saved = rig.saved.lock().unwrap().remove(0);
     assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
-        let message = rig.link.status().message.unwrap_or_default();
+    let message = rig.link.status().message.unwrap_or_default();
     assert!(*rig.attempts.lock().unwrap() >= 1);
     assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
@@ -867,10 +867,20 @@ async fn record_a_short_song(rig: &Rig) {
 async fn a_finished_song_leaves_its_raw_recording_in_the_folder() {
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("lightkey-recordings");
-    let rig = Rig::build(vec![dim("P1", 0.0)], usize::MAX, usize::MAX, Some(folder.clone()), false).await;
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(folder.clone()),
+        false,
+    )
+    .await;
     record_a_short_song(&rig).await;
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
-    let files: Vec<_> = std::fs::read_dir(&folder).unwrap().map(|e| e.unwrap().path()).collect();
+    let files: Vec<_> = std::fs::read_dir(&folder)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
     assert_eq!(files.len(), 1, "{files:?}");
     let recording = stagepilot_lights::lightkey_recording::load(&files[0]).unwrap();
     assert!(recording.changes.len() >= 5);
@@ -884,7 +894,14 @@ async fn an_unwritable_recordings_folder_does_not_stop_the_save() {
     let dir = tempfile::tempdir().unwrap();
     let blocker = dir.path().join("a-file");
     std::fs::write(&blocker, b"x").unwrap();
-    let rig = Rig::build(vec![dim("P1", 0.0)], usize::MAX, usize::MAX, Some(blocker.join("lightkey-recordings")), false).await;
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(blocker.join("lightkey-recordings")),
+        false,
+    )
+    .await;
     record_a_short_song(&rig).await;
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
     let message = rig.link.status().message.unwrap_or_default();
@@ -898,10 +915,22 @@ async fn an_unwritable_recordings_folder_does_not_stop_the_save() {
 async fn a_storage_failure_says_where_the_raw_recording_is_kept() {
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("lightkey-recordings");
-    let rig = Rig::build(vec![dim("P1", 0.0)], usize::MAX, usize::MAX, Some(folder.clone()), true).await;
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(folder.clone()),
+        true,
+    )
+    .await;
     record_a_short_song(&rig).await;
     wait_for(
-        || rig.link.status().message.is_some_and(|m| m.starts_with("Could not save")),
+        || {
+            rig.link
+                .status()
+                .message
+                .is_some_and(|m| m.starts_with("Could not save"))
+        },
         5.0,
     )
     .await;
@@ -938,11 +967,17 @@ async fn a_timeline_with_less_room_than_the_caps_still_gets_the_capture_trimmed(
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
     let saved = rig.saved.lock().unwrap().remove(0);
     assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
-    assert!(*rig.attempts.lock().unwrap() >= 2, "the first try was refused");
+    assert!(
+        *rig.attempts.lock().unwrap() >= 2,
+        "the first try was refused"
+    );
     let message = rig.link.status().message.unwrap_or_default();
     assert!(message.starts_with("Saved "), "message: {message}");
     assert!(message.contains("simplified"), "message: {message}");
-    assert_eq!(saved.status.simplified.as_ref().map(|s| s.stage.as_str()), Some("trimmed"));
+    assert_eq!(
+        saved.status.simplified.as_ref().map(|s| s.stage.as_str()),
+        Some("trimmed")
+    );
     rig.link.stop().await;
 }
 

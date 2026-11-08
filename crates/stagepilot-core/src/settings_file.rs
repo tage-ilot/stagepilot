@@ -531,11 +531,11 @@ impl SettingsStore for SettingsFileStore {
             let mut writer = std::io::BufWriter::with_capacity(1 << 20, &mut file);
             {
                 use serde::Serialize;
-                let mut serializer = serde_json::Serializer::with_formatter(
-                    &mut writer,
-                    RowsOnOneLine::new(),
-                );
-                value.serialize(&mut serializer).map_err(std::io::Error::other)?;
+                let mut serializer =
+                    serde_json::Serializer::with_formatter(&mut writer, RowsOnOneLine::new());
+                value
+                    .serialize(&mut serializer)
+                    .map_err(std::io::Error::other)?;
             }
             writer.write_all(b"\n")?;
             writer.flush()?;
