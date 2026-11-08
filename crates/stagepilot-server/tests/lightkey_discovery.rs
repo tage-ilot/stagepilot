@@ -422,6 +422,10 @@ async fn automatic_and_several_found_connects_to_none_until_one_is_chosen() {
     .await;
     assert_eq!(s["api_url"], "http://10.30.0.212:8770");
     assert_eq!(state(&s), "connected");
+    assert_eq!(
+        s["discovery"]["message"],
+        "Found a Lighting computer at 10.30.0.212 and connected."
+    );
     let lights = saved(&rig).await;
     assert_eq!(lights["lightkey"]["found_url"], "http://10.30.0.212:8770");
     assert_eq!(
@@ -462,6 +466,10 @@ async fn a_down_chosen_address_is_offered_a_found_computer_and_nothing_switches_
     assert_eq!(code, StatusCode::OK, "{used}");
     let s = until(&rig, "the new address", |s| s["link"] == "connected").await;
     assert_eq!(s["api_url"], "http://10.30.0.211:8770");
+    assert!(
+        s["discovery"].get("message").is_none() && s["discovery"].get("note").is_none(),
+        "a chosen address that is connected says nothing: {s}"
+    );
     let lights = saved(&rig).await;
     assert_eq!(lights["lightkey"]["api_url"], "http://10.30.0.211:8770");
     assert_eq!(lights["lightkey"]["found_url"], "http://10.30.0.211:8770");

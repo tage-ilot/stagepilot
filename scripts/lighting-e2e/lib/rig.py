@@ -50,7 +50,7 @@ def load_takes(path=None):
 
 class Rig:
     def __init__(self, workdir: Path, binary: Path | None = None, backend_port=18900, skew=3.25,
-                 echo=True, echo_delay=0.02, relay_latency=0.005):
+                 echo=True, echo_delay=0.02, relay_latency=0.005, extra_env=None):
         self.workdir = Path(workdir)
         self.binary = Path(binary or REPO / "target/release/stagepilot-server")
         self.backend_port = backend_port
@@ -58,6 +58,7 @@ class Rig:
         self.lk = FakeLightkey()
         self.pb = FakePlayback(18981)
         self.backend: Backend | None = None
+        self.extra_env = extra_env
         self.echo, self.echo_delay, self.relay_latency = echo, echo_delay, relay_latency
         self.echoed = 0
         self.pbmap = dict(PB_ID)
@@ -76,7 +77,7 @@ class Rig:
         await self.lk.start()
         await self.pb.start()
         self.lk.on_packet = self._echo
-        self.backend = Backend(self.binary, self.workdir / "backend", self.backend_port, self._settings())
+        self.backend = Backend(self.binary, self.workdir / "backend", self.backend_port, self._settings(), extra_env=self.extra_env)
         self.backend.start()
         if configure:
             self.configure()

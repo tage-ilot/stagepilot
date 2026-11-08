@@ -78,7 +78,8 @@ impl Default for OutputBackends {
             }),
             lightkey_armed: None,
             audio_input: stagepilot_lights::audio::default_input(),
-            lightkey_discovery: stagepilot_lights::lightkey_discovery::DiscoveryOptions::real(),
+            lightkey_discovery:
+                stagepilot_lights::lightkey_discovery::DiscoveryOptions::from_environment(),
         }
     }
 }

@@ -272,6 +272,71 @@ class FakeLightkey:
         return len(self.packets)
 
 
+class FakeHelper:
+    """A `lightkey-api` helper on its own loopback address (127.0.0.N:8770), for the search for the
+    Lighting computer. `kind`: healthy (a 0.5.0 helper, or 0.4.x with `version = None`), refusing
+    (403 `{"error": "not available on this interface"}`), page (200 HTML, not a helper) or slow
+    (healthy after 3 s, which the 600 ms probe never waits for). `hits` counts every request."""
+
+    def __init__(self, ip, kind="healthy", port=8770, version="0.5.0", lightkey=True):
+        self.ip, self.kind, self.port, self.version, self.lightkey = ip, kind, port, version, lightkey
+        self.hits: list[tuple[float, str]] = []
+        self._http = None
+
+    async def start(self):
+        owner = self
+
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                return
+
+            def _send(self, code, body, ctype="application/json"):
+                data = body if isinstance(body, bytes) else json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                try:
+                    self.wfile.write(data)
+                except OSError:
+                    pass
+
+            def do_GET(self):
+                path = urlparse(self.path).path
+                owner.hits.append((time.time(), path))
+                if owner.kind == "refusing":
+                    return self._send(403, {"error": "not available on this interface"})
+                if owner.kind == "page":
+                    return self._send(200, b"<html><body>It works!</body></html>", "text/html")
+                if owner.kind == "slow":
+                    time.sleep(3)
+                if path == "/health":
+                    doc = {"ok": True, "lightkey": owner.lightkey, "error": None, "dmx_age_ms": 20, "reads": 1}
+                    if owner.version is not None:
+                        doc.update({"version": owner.version, "fixture_map": {"project": "FakeProject", "count": 0, "read_at": 1, "map": 1}})
+                    return self._send(200, doc)
+                if path == "/time":
+                    return self._send(200, {"t": time.time() * 1000.0})
+                if path == "/log":
+                    return self._send(200, {"events": [], "state": {"online": owner.lightkey, "active": [], "seq": 1, "server_time": time.time() * 1000.0}})
+                return self._send(404, {})
+
+        self._http = ThreadingHTTPServer((self.ip, self.port), H)
+        self._http.daemon_threads = True
+        threading.Thread(target=self._http.serve_forever, daemon=True).start()
+
+    async def stop(self):
+        if self._http:
+            self._http.shutdown()
+            self._http.server_close()
+            self._http = None
+
+    def probes(self) -> int:
+        return len(self.hits)
+
+
 class FakePlayback:
     """A Playback WebSocket (`pr-protocol`): a heartbeat ten times a second with the song id and
     position, which is all StagePilot needs to start, pause, resume, seek and stop a song."""

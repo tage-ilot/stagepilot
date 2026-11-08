@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **StagePilot finds the Lighting computer by itself.** While nothing is connected (and only then: never while the link is up, never with Lighting off or set to MIDI), StagePilot looks for the Lightkey helper on this computer and on the private networks it can reach, then connects. The first look is about 5 s after start or after a setting change, then every 60 s, and at once on **Search again**. It asks each address one question (`GET /health`, 600 ms, at most 64 at a time, nothing else sent, private addresses only: `127.0.0.1`, the networks this computer is attached to, and the /24 around the saved Lighting address, the saved Replay host and the last found computer, at most 1,100 addresses). It works with helpers already installed (0.4.x and 0.5.0). With an Automatic address (none typed) exactly one found computer is connected to and remembered (`Found a Lighting computer at <ip> and connected.`); several are listed to choose from; with a typed address that is down, a found computer is only offered (`Use <ip>` / `Keep waiting`), never switched to. A found computer fills the Replay host only when it is blank, otherwise `Capture is from <ip>; Replay sends to <host>.`. See "Finding the Lighting computer" in `docs/lights.md`. New: `lightkey.found_url` (optional, empty by default), `discovery` on `GET /api/v1/lights/lightkey`, and `POST /api/v1/lights/lightkey/discovery/{scan,use,dismiss}`.
+
+### Downgrade note
+
+- `lightkey.found_url` is a new optional key in the saved Lighting settings. An rc.7 or rc.8 build ignores it (its Lightkey settings do not reject unknown keys) and drops it the next time it saves settings; Automatic then goes back to the Replay host on port 8770, so after a downgrade type the Lighting address once.
+
 ## [2.43.0-rc.8] - 2026-11-07
 
 Release candidate 8 (pre-release; the in-app updater does not offer it). Everything in rc.7 applies. Found on the real rig by setting up the Lighting Mac from scratch with the Lighting section's command.

@@ -694,14 +694,176 @@ async def stage_project(rig, takes, out):
     return res
 
 
+async def stage_discovery(rig, takes, out):
+    """Finding the Lighting computer by itself, at the real timing (first look about 5 s after a
+    change, then every 60 s, never while connected). Own rig; the backend is started with
+    STAGEPILOT_LIGHTKEY_DISCOVERY=loopback:... so it can only ever ask 127.x addresses, where the
+    fake helpers sit: 127.0.0.1 is the rig's own fake Lightkey helper (port 8770), 127.0.0.2 a healthy
+    helper that can be started, 127.0.0.3 refuses (403), 127.0.0.4 is a web page, 127.0.0.7 is slow."""
+    from lib.fakes import FakeHelper
+
+    checks = {}
+
+    def check(name, ok, detail=None):
+        checks[name] = {"ok": bool(ok), "detail": detail}
+        log("PASS" if ok else "FAIL", name, "" if ok else json.dumps(detail, default=str)[:400])
+
+    b = rig.backend
+    api = "/api/v1/lights/lightkey"
+    disc = lambda: rig.lk_status().get("discovery") or {}  # noqa: E731
+    refusing, page, slow = FakeHelper("127.0.0.3", "refusing"), FakeHelper("127.0.0.4", "page"), FakeHelper("127.0.0.7", "slow")
+    second = FakeHelper("127.0.0.2", "healthy", lightkey=False)
+    others = [second, refusing, page, slow]
+    for h in (refusing, page, slow):
+        await h.start()
+    # the helper that is connected is polled by the link itself; only the others measure the search
+    probes = lambda: sum(h.probes() for h in (refusing, page, slow))  # noqa: E731
+    saved_lights = lambda: rig.settings()["lights"]  # noqa: E731
+
+    def reset_saved(**lightkey):
+        """Stop the backend, change what it saved (found_url forgotten unless given), start it."""
+        b.stop()
+        doc = json.loads(b.settings_path.read_text())
+        block = doc.setdefault("lights", {}).setdefault("lightkey", {})
+        block.pop("found_url", None)
+        block.update(lightkey)
+        b.settings_path.write_text(json.dumps(doc, indent=1))
+        b.start()
+
+    def configure(api_url=""):
+        b.post("/api/v1/lights/settings", {"enabled": True, "method": "osc", "osc_host": "127.0.0.5", "osc_port": rig.lk.osc_port})
+        b.put(api + "/settings", {"api_url": api_url, "replay": True, "mode": "auto"})
+
+    async def state_is(name, timeout=45, what=None):
+        return await rig.wait(lambda: (lambda d: d if d.get("state") == name else None)(disc()), timeout, 0.25, what or f"state {name}")
+
+    # ---- 1. Automatic, one helper on this computer: found and connected by itself
+    log("--- 1. automatic, one found")
+    t0 = time.time()
+    configure("")
+    d = await rig.wait(lambda: (lambda s: s["discovery"] if (s.get("discovery") or {}).get("message") else None)(rig.lk_status()), 45, 0.25, "found and connected")
+    took = time.time() - t0
+    check("found_after_the_settle_not_before", 4.0 <= took <= 25.0, round(took, 1))
+    check("found_message", d["message"] == "Found a Lighting computer at 127.0.0.1 and connected.", d.get("message"))
+    check("replay_differs_note", d.get("note") == "Capture is from 127.0.0.1; Replay sends to 127.0.0.5.", d.get("note"))
+    await rig.wait_link(30)
+    lights = saved_lights()
+    check("found_url_saved", lights["lightkey"].get("found_url") == "http://127.0.0.1:8770" and lights["lightkey"].get("api_url") == "" and lights["osc_host"] == "127.0.0.5", lights["lightkey"])
+    st = rig.lk_status()
+    check("connected_state", st["discovery"]["state"] == "connected" and st["link"] == "connected", st["discovery"])
+    base = probes()
+    check("refusing_and_page_and_slow_were_asked", refusing.probes() > 0 and page.probes() > 0 and slow.probes() > 0, [h.probes() for h in (refusing, page, slow)])
+    await asyncio.sleep(65)
+    check("no_search_while_connected_for_a_full_cycle", probes() == base, [base, probes()])
+
+    # ---- 2. Automatic, two helpers: connect to none, the operator chooses
+    log("--- 2. automatic, several found")
+    await second.start()
+    reset_saved()
+    d = await state_is("choose", 45, "the list")
+    rows = [(f["address"], f["lightkey_running"]) for f in d["found"]]
+    check("choose_rows", rows == [("127.0.0.1", True), ("127.0.0.2", False)], d["found"])
+    check("choose_details", d["found"][0].get("version") == "0.5.0" and d["found"][0].get("project") == "FakeProject", d["found"][0])
+    check("choose_names_the_refusing_helper", d["refusing"] == ["127.0.0.3"], d["refusing"])
+    await asyncio.sleep(12)
+    st = rig.lk_status()
+    check("choose_connects_to_none", st["link"] != "connected" and "found_url" not in saved_lights()["lightkey"], {"link": st["link"], "saved": saved_lights()["lightkey"]})
+    r = b.post(api + "/discovery/use", {"address": "127.0.0.2"})
+    check("use_accepted", r["accepted"] is True, r)
+    st = await rig.wait(lambda: (lambda s: s if s["link"] == "lightkey_closed" else None)(rig.lk_status()), 30, 0.25, "the chosen helper")
+    check("use_connects_and_saves", st["api_url"] == "http://127.0.0.2:8770" and saved_lights()["lightkey"].get("found_url") == "http://127.0.0.2:8770", st["api_url"])
+    try:
+        b.post(api + "/discovery/use", {"address": "127.0.0.9"})
+        refused = None
+    except RuntimeError as e:
+        refused = str(e)
+    check("use_of_an_unfound_address_is_422", refused is not None and "422" in refused, refused)
+
+    # a restart tries the last one first: connected before the 5 s settle is over
+    before = probes()
+    b.stop()
+    b.start()
+    t1 = time.time()
+    st = await rig.wait(lambda: (lambda s: s if s["link"] == "lightkey_closed" else None)(rig.lk_status()), 20, 0.1, "reconnect after restart")
+    check("restart_tries_the_last_found_first", time.time() - t1 < 4.5 and st["api_url"] == "http://127.0.0.2:8770", round(time.time() - t1, 1))
+    await asyncio.sleep(3)
+    check("restart_no_search_needed", probes() == before, [before, probes()])
+    await second.stop()
+
+    # ---- 3. Chosen address is down: offer, never switch; Keep waiting; Use
+    log("--- 3. chosen address down")
+    reset_saved()
+    configure("127.0.0.5:8770")
+    d = await state_is("offer", 45, "the offer")
+    check("offer_names_both", d.get("chosen") == "127.0.0.5" and [f["address"] for f in d["found"]] == ["127.0.0.1"] and isinstance(d.get("chosen_down_for_s"), int), d)
+    await asyncio.sleep(12)
+    st = rig.lk_status()
+    check("offer_changes_nothing", st["link"] != "connected" and st["api_url"] == "http://127.0.0.5:8770" and saved_lights()["lightkey"]["api_url"] == "http://127.0.0.5:8770", [st["link"], st["api_url"]])
+    b.post(api + "/discovery/dismiss", {"address": "127.0.0.1"})
+    d = await state_is("none", 10, "silenced")
+    first_scan = d.get("last_scan_at")
+    d2 = await rig.wait(lambda: (lambda x: x if x.get("last_scan_at") and x.get("last_scan_at") != first_scan else None)(disc()), 90, 0.5, "the next scan")
+    check("keep_waiting_stays_silent_across_scans", d2["state"] == "none" and not d2["found"], d2)
+    configure("127.0.0.6:8770")
+    d = await state_is("offer", 45, "the offer again after the chosen address changed")
+    check("offer_again_for_a_new_chosen_address", d.get("chosen") == "127.0.0.6", d.get("chosen"))
+    r = b.post(api + "/discovery/use", {"address": "127.0.0.1"})
+    await rig.wait_link(30)
+    lights = saved_lights()
+    check("use_saves_the_chosen_address", lights["lightkey"]["api_url"] == "http://127.0.0.1:8770" and lights["lightkey"].get("found_url") == "http://127.0.0.1:8770" and lights["osc_host"] == "127.0.0.5", lights["lightkey"])
+
+    # ---- 4. Nothing found: an ordinary state, the refusing helper named, Search again, every 60 s
+    log("--- 4. nothing found")
+    rig.lk.api_down = True
+    reset_saved(api_url="")
+    d = await state_is("none", 60, "none found")
+    check("none_names_the_refusing_helper_only", d["refusing"] == ["127.0.0.3"] and not d["found"] and "message" not in d, d)
+    a = d["last_scan_at"]
+    await asyncio.sleep(1.1)
+    r = b.post(api + "/discovery/scan")
+    d = await rig.wait(lambda: (lambda x: x if x.get("last_scan_at") and x["last_scan_at"] != a else None)(disc()), 10, 0.25, "Search again")
+    check("search_again_looks_at_once", r["accepted"] is True, r["message"])
+    mark = time.time()
+    last = d["last_scan_at"]
+    d = await rig.wait(lambda: (lambda x: x if x.get("last_scan_at") and x["last_scan_at"] != last else None)(disc()), 90, 0.5, "the next scan")
+    gap = time.time() - mark
+    check("scans_repeat_every_60_s", 50.0 <= gap <= 70.0, round(gap, 1))
+    rig.lk.api_down = False
+
+    # ---- 5. Lighting off, and MIDI: never a search
+    log("--- 5. off and MIDI")
+    # the helper is back; Search again finds it at once
+    r = b.post(api + "/discovery/scan")
+    await rig.wait_link(30)
+    check("search_again_finds_a_helper_that_came_back", r["accepted"] is True and disc().get("state") == "connected", disc())
+    b.post("/api/v1/lights/settings", {"enabled": False, "method": "osc", "osc_host": "127.0.0.5", "osc_port": rig.lk.osc_port})
+    rig.lk.api_down = True
+    base = probes()
+    await asyncio.sleep(12)
+    check("lighting_off_never_searches", disc().get("state") == "off" and probes() == base, [disc().get("state"), base, probes()])
+    r = b.post(api + "/discovery/scan")
+    check("search_again_refused_when_off", r["accepted"] is False, r)
+
+    res = {"checks": checks, "log": grab_log(rig)}
+    save(out, "discovery", res)
+    failed = [k for k, v in checks.items() if not v["ok"]]
+    log(f"discovery stage: {len(checks) - len(failed)} of {len(checks)} checks passed")
+    if failed:
+        raise AssertionError("discovery stage failed: " + ", ".join(failed))
+    for h in (refusing, page, slow):
+        await h.stop()
+    return res
+
+
 # ------------------------------------------------------------------ main
 async def amain(args):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    takes = load_takes(args.takes)
     stages = args.stages.split(",")
+    # the discovery stage needs no take file; every other stage does
+    takes = load_takes(args.takes) if set(stages) - {"discovery"} else {}
     # one rig for capture..soak (cue maps persist in its temp settings); a fresh one for auto
-    main_stages = [s for s in stages if s not in ("auto", "project")]
+    main_stages = [s for s in stages if s not in ("auto", "project", "discovery")]
     if main_stages:
         rig = Rig(out / "rig-main", Path(args.binary) if args.binary else None, backend_port=args.port)
         await rig.up()
@@ -729,6 +891,17 @@ async def amain(args):
             await stage_project(rig, takes, out)
         finally:
             await rig.down()
+    if "discovery" in stages:
+        await asyncio.sleep(5)
+        targets = "loopback:127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.6,127.0.0.7"
+        rig = Rig(out / "rig-discovery", Path(args.binary) if args.binary else None, backend_port=args.port,
+                  extra_env={"STAGEPILOT_LIGHTKEY_DISCOVERY": targets})
+        await rig.up(configure=False)
+        try:
+            log("=== stage discovery")
+            await stage_discovery(rig, takes, out)
+        finally:
+            await rig.down()
 
 
 def main():
@@ -737,7 +910,7 @@ def main():
     ap.add_argument("--takes", default=None)
     ap.add_argument("--binary", default=None)
     ap.add_argument("--port", type=int, default=18900)
-    ap.add_argument("--stages", default="capture,replay,control,soak,stop,auto,project")
+    ap.add_argument("--stages", default="capture,replay,control,soak,stop,auto,project,discovery")
     asyncio.run(amain(ap.parse_args()))
 
 

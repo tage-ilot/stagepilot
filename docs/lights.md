@@ -662,6 +662,66 @@ start a session, then in Terminal on the Lighting Mac run
 command the box shows; add `-s -- --purge` after `sh` to delete the helper's settings too). It stops the helper's
 LaunchAgent and removes the helper; Cancel the session afterwards.
 
+### Finding the Lighting computer
+
+While nothing is connected, StagePilot looks for the Lighting computer by itself, so a Lighting Mac on the same
+computer or on a network this computer can reach connects without typing its address. It needs nothing new on the
+Lighting Mac: a helper already installed (0.4.x or 0.5.0) is found as it is.
+
+**Automatic or chosen.** The address is **chosen** when `lightkey.api_url` is set (you typed an address and pressed
+Connect). It is **Automatic** when that is blank. In Automatic the address in use is the last Lighting computer the
+search connected to (`lightkey.found_url`, empty until one is found), else the Replay host on port 8770 as before. A
+restart therefore tries the last one first. A chosen address is never edited by the search: if it answers, nothing is
+searched and nothing is said.
+
+**When it searches.** Only while nothing is connected, and only with Lighting on and set to OSC (never for MIDI, never
+with Lighting off). The first search starts about 5 s after StagePilot starts or after a setting changes (so the saved
+address gets its chance first), then every 60 s while still not connected, and at once when you press **Search again**.
+It stops the moment the link connects and never runs twice at the same time. A Lighting computer that answers but has
+Lightkey closed counts as reachable: nothing is searched.
+
+**What is asked, and what never is.** One question per address: `GET /health`, once, 600 ms in total, at most 64 at a
+time, no redirects, the answer read up to 64 KB and nothing else ever sent. Only these addresses, and only private ones
+(10.x.x.x, 172.16-31.x.x, 192.168.x.x), are asked, at most 1,100 per search:
+
+1. `127.0.0.1` (the helper on this very computer);
+2. the saved Lighting address, the saved Replay host and the last found computer, and the /24 around each (this is what
+   finds a Lighting Mac on a routed network: StagePilot on 10.20.0.x, the Lighting Mac on 10.30.0.211 behind a router);
+3. every network this computer is directly attached to (each up, non-loopback interface with its real prefix; a network
+   larger than /22 is cut to the /24 around this computer's address), without this computer's own addresses.
+
+Public addresses, link-local (169.254.x.x) and other loopback addresses are never contacted. The port is the one of the
+saved Lighting address, else 8770. An answer counts as a **Lighting computer** when it is HTTP 200 JSON with `ok: true`
+and a true/false `lightkey` (Lightkey running); anything else is ignored. HTTP 403 with
+`{"error": "not available on this interface"}` is a computer that is there but **refusing** StagePilot's network.
+
+**What you see** (in the Lightkey strip; nothing here is an error colour, and the setup box stays under it):
+
+| Situation | Text and buttons |
+|---|---|
+| Looking | `Looking for a Lighting computer on this network…` |
+| Automatic, exactly one found | connects by itself and saves it: `Found a Lighting computer at <ip> and connected.` |
+| Automatic, several found | connects to none: `Found <n> Lighting computers. Choose one:`, a row each `<ip> (Lightkey running)` or `<ip> (Lightkey not running)`, button `Use this one` |
+| Chosen address down, another found | nothing switches: `<chosen> isn't answering. A Lighting computer answered at <ip>. Use it?` with `Use <ip>` and `Keep waiting` |
+| Nothing found | `No Lighting computer found on this network.` and `Search again` |
+| A refusing computer was seen | `A Lighting computer at <ip> is refusing StagePilot. Run the setup command on it again.` |
+| Chosen address connected | nothing |
+
+`Keep waiting` silences the offer for that address until StagePilot restarts or the chosen address changes. `Use <ip>`
+saves it as the chosen address. **Replay host:** a found computer fills the Replay host only if it is blank; if it is
+set and differs, the strip adds `Capture is from <ip>; Replay sends to <host>.` and changes nothing. The search never
+edits a chosen address or a set Replay host by itself.
+
+**API.** `GET /api/v1/lights/lightkey` gains `discovery`: `{state: off|searching|connected|choose|offer|none, found:
+[{address, version?, lightkey_running, project?}], refusing: [address], chosen?, chosen_down_for_s?, last_scan_at?,
+message?, note?}`. `POST /api/v1/lights/lightkey/discovery/scan` is Search again (accepted only while nothing is
+connected); `POST .../discovery/use` `{address}` switches to a computer the last search found (any other address is a
+plain 422); `POST .../discovery/dismiss` `{address}` is Keep waiting. None of them is on a remote-tunnel allow-list.
+
+**Test hook.** The environment variable `STAGEPILOT_LIGHTKEY_DISCOVERY` can only narrow the search: `off` turns it off,
+`loopback:127.0.0.2,127.0.0.3` asks only those loopback addresses (anything else in the list is dropped). The
+end-to-end harness (`scripts/lighting-e2e`, stage `discovery`) uses it so that it never probes a real network.
+
 ### The Lightkey project, Read fixtures and the helper version
 
 The Lighting section shows which Lightkey project the helper is reading, under the state pill:

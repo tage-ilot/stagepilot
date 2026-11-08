@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use stagepilot_core::config::{clean_lightkey_api_url, LightsSettings, DEFAULT_LIGHTKEY_API_PORT};
+use stagepilot_core::config::{LightsSettings, DEFAULT_LIGHTKEY_API_PORT};
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::net::Ipv4Addr;
@@ -51,6 +51,8 @@ pub const SETTLE: Duration = Duration::from_secs(5);
 pub const SCAN_EVERY: Duration = Duration::from_secs(60);
 /// How long "Found a Lighting computer at ... and connected." stays on screen.
 pub const MESSAGE_SECONDS: u64 = 300;
+/// The most silenced offers kept.
+const MAX_DISMISSED: usize = 64;
 /// The engine looks at the link this often.
 const TICK: Duration = Duration::from_millis(250);
 
@@ -800,6 +802,42 @@ impl DiscoveryOptions {
             ..Self::default()
         }
     }
+
+    /// [`real`](Self::real), unless the environment variable `STAGEPILOT_LIGHTKEY_DISCOVERY`
+    /// narrows it (a test hook for the end-to-end harness, which must never probe a real network):
+    /// `off` turns the search off; `loopback:127.0.0.2,127.0.0.3` asks only those loopback
+    /// addresses. The variable can only narrow the search: anything in the list that is not a
+    /// `127.x.x.x` address is dropped, and an empty list turns the search off.
+    pub fn from_environment() -> Self {
+        Self::from_setting(
+            std::env::var("STAGEPILOT_LIGHTKEY_DISCOVERY")
+                .ok()
+                .as_deref(),
+        )
+    }
+
+    pub fn from_setting(setting: Option<&str>) -> Self {
+        let Some(setting) = setting.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Self::real();
+        };
+        if let Some(list) = setting.strip_prefix("loopback:") {
+            let addresses: Vec<Ipv4Addr> = list
+                .split(',')
+                .filter_map(|a| a.trim().parse::<Ipv4Addr>().ok())
+                .filter(Ipv4Addr::is_loopback)
+                .collect();
+            if addresses.is_empty() {
+                return Self::default();
+            }
+            let targets: TargetsFn = Arc::new(move |_| addresses.clone());
+            return Self {
+                targets: Some(targets),
+                ..Self::real()
+            };
+        }
+        // `off`, or anything this build does not understand: never search by surprise.
+        Self::default()
+    }
 }
 
 /// The default list of targets for the inputs.
@@ -976,9 +1014,11 @@ impl Discovery {
     /// "Keep waiting": silence the offer of `address` until StagePilot restarts or the chosen
     /// address changes.
     pub fn dismiss(&self, address: &str) {
-        lock(&self.core.state)
-            .dismissed
-            .insert(address.trim().to_string());
+        let mut st = lock(&self.core.state);
+        // Bounded: the set only ever needs the few computers a search can find.
+        if st.dismissed.len() < MAX_DISMISSED {
+            st.dismissed.insert(address.trim().to_string());
+        }
     }
 
     /// "Use <ip>" / "Use this one": the address must be one the last search found.
@@ -1012,7 +1052,18 @@ impl Discovery {
         let mut st = lock(&self.core.state);
         st.last = None;
         st.dismissed.clear();
-        st.message = Some((message.clone(), applied.note.clone(), Instant::now()));
+        // An Automatic pick reads like an automatic connection. A confirmed offer becomes the
+        // chosen address, and a chosen address that is connected says nothing.
+        st.message = (target == ChangeTarget::Found).then(|| {
+            (
+                format!(
+                    "Found a Lighting computer at {} and connected.",
+                    found.address()
+                ),
+                applied.note.clone(),
+                Instant::now(),
+            )
+        });
         st.key = Some(host.inputs().key());
         st.due = Some(Instant::now() + self.core.options.settle);
         Ok((message, applied.note))
@@ -1156,11 +1207,6 @@ async fn run_scan(core: &Arc<Core>, host: &Arc<dyn DiscoveryHost>, started: &Hos
 /// Used by tests: an `AtomicBool`-backed `keep_going`.
 pub fn flag_keep_going(flag: Arc<AtomicBool>) -> Arc<dyn Fn() -> bool + Send + Sync> {
     Arc::new(move || flag.load(Ordering::SeqCst))
-}
-
-/// A saved found address that cannot be read (hand-edited file) is dropped when settings load.
-pub fn clean_found_url(value: &str) -> String {
-    clean_lightkey_api_url(value).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -1316,6 +1362,32 @@ mod tests {
         assert_eq!(targets[0], ip("127.0.0.1"));
         // The /24 around the saved address is inside the cap even though the networks overflow it.
         assert!(targets.contains(&ip("10.30.0.254")));
+    }
+
+    #[test]
+    fn the_test_hook_can_only_narrow_the_search() {
+        assert!(DiscoveryOptions::from_setting(None).enabled);
+        assert!(DiscoveryOptions::from_setting(None).targets.is_none());
+        assert!(!DiscoveryOptions::from_setting(Some("off")).enabled);
+        assert!(!DiscoveryOptions::from_setting(Some("everything")).enabled);
+        assert!(!DiscoveryOptions::from_setting(Some("loopback:")).enabled);
+        assert!(!DiscoveryOptions::from_setting(Some("loopback:8.8.8.8,10.0.0.1")).enabled);
+        let hook = DiscoveryOptions::from_setting(Some(
+            "loopback: 127.0.0.2, 8.8.8.8 ,127.0.0.3,nonsense",
+        ));
+        assert!(hook.enabled);
+        let inputs = HostInputs {
+            active: true,
+            reach: Reach::Down,
+            api_url: String::new(),
+            found_url: String::new(),
+            osc_host: "10.0.0.5".into(),
+            effective_url: String::new(),
+        };
+        assert_eq!(
+            (hook.targets.unwrap())(&inputs),
+            vec![ip("127.0.0.2"), ip("127.0.0.3")]
+        );
     }
 
     #[test]

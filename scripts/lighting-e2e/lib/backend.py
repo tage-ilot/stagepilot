@@ -13,7 +13,7 @@ CLK = os.sysconf("SC_CLK_TCK")
 
 
 class Backend:
-    def __init__(self, binary: Path, workdir: Path, port: int, settings: dict, log_name="backend.log"):
+    def __init__(self, binary: Path, workdir: Path, port: int, settings: dict, log_name="backend.log", extra_env: dict | None = None):
         self.binary, self.dir, self.port = Path(binary), Path(workdir), port
         self.dir.mkdir(parents=True, exist_ok=True)
         assert port not in (18766, 8101, 8100), "never the preview's ports"
@@ -22,6 +22,7 @@ class Backend:
             self.settings_path.write_text(json.dumps(settings, indent=1))
         self.log_path = self.dir / log_name
         self.proc: subprocess.Popen | None = None
+        self.extra_env = dict(extra_env or {})
         self.base = f"http://127.0.0.1:{port}"
 
     def start(self):
@@ -33,6 +34,7 @@ class Backend:
             "HOME": str(self.dir / "home"), "XDG_CONFIG_HOME": str(self.dir / "home" / ".config"),
             "RUST_LOG": "info",
         })
+        env.update(self.extra_env)
         (self.dir / "home").mkdir(exist_ok=True)
         self.log = open(self.log_path, "ab")
         self.proc = subprocess.Popen([str(self.binary)], env=env, stdout=self.log, stderr=subprocess.STDOUT)
