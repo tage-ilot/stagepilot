@@ -188,3 +188,36 @@ fn a_capture_project_is_optional_additive_and_round_trips() {
         Some("Show.lightkeyproj")
     );
 }
+
+#[test]
+fn a_capture_simplified_note_is_optional_additive_and_round_trips() {
+    use stagepilot_core::config::{CaptureSimplified, CaptureStatus};
+    // a capture saved before this field existed loads with no note and saves back without one
+    let old: CaptureStatus = serde_json::from_value(serde_json::json!({
+        "complete": true, "coverage_seconds": 100.0, "recorded_at": "2026-11-02T00:00:00Z",
+        "project": "Show.lightkeyproj"
+    }))
+    .unwrap();
+    assert_eq!(old.simplified, None);
+    assert!(serde_json::to_value(&old)
+        .unwrap()
+        .get("simplified")
+        .is_none());
+    let with = CaptureStatus {
+        simplified: Some(CaptureSimplified {
+            stage: "thinned".into(),
+            tolerance_scale: 1.0,
+            thin_seconds: 0.5,
+            trimmed: 0,
+            kept_changes: 700,
+            recorded_changes: 11_000,
+        }),
+        ..old
+    };
+    let value = serde_json::to_value(&with).unwrap();
+    assert_eq!(value["simplified"]["stage"], "thinned");
+    // the keys of the note an older build would not know are all inside `simplified`
+    assert_eq!(value["project"], "Show.lightkeyproj");
+    let back: CaptureStatus = serde_json::from_value(value).unwrap();
+    assert_eq!(back, with);
+}

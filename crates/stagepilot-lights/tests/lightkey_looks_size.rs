@@ -178,17 +178,17 @@ fn within_the_caps(looks: &[Look]) -> bool {
 
 /// A denser rig than any take seen so far: 150k commands over 300 s on 200 addresses. The size
 /// targets (<= 400 rows, <= 6,000 messages at Normal) are for the rig-shaped takes above; here the
-/// requirement is the caps: the capture is kept, at twice the spacing when it has to be, and the
-/// spacing used is the one the status message reports.
+/// requirement is the caps: the capture is kept (it needed twice the spacing under the old
+/// 15,000-message cap and fits as recorded under the new one).
 #[test]
-fn a_much_denser_song_still_saves_under_the_caps_at_twice_the_spacing() {
+fn a_much_denser_song_fits_the_caps_at_fine_spacing() {
     use stagepilot_core::config::{MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG};
     use stagepilot_lights::lightkey_looks::look_rows;
     let changes = synthetic(200, 150_000, 300.0, 23);
     assert!(changes.len() >= 135_000, "{} commands", changes.len());
     println!("--- reports (rows / messages after merge) ---");
     report("dense", &changes, 300.0);
-    let mut interval = 0.25; // Fine: 15,246 messages, over the 15,000 cap
+    let mut interval = 0.25; // Fine: 15,246 messages, over the old 15,000 cap, inside the new one
     let mut tries = 0;
     let saved = loop {
         let looks = merge(thin(&[], &changes, 300.0, interval));
@@ -203,8 +203,8 @@ fn a_much_denser_song_still_saves_under_the_caps_at_twice_the_spacing() {
     println!("dense: saved at {interval} s after {tries} retries: {rows} rows / {messages} messages (caps {MAX_OSC_ROWS_PER_SONG} / {MAX_OSC_MESSAGES_PER_SONG})");
     assert_eq!(
         (tries, interval),
-        (1, 0.5),
-        "Fine is refused once, Normal fits"
+        (0, 0.25),
+        "Fine fits the caps of 600,000 messages at once (it was refused at 15,000)"
     );
     assert!(rows > 0 && rows <= MAX_OSC_ROWS_PER_SONG);
     assert!(messages <= MAX_OSC_MESSAGES_PER_SONG);

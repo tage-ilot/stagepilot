@@ -93,6 +93,97 @@ impl RawRecording {
     }
 }
 
+/// Something [`save`] can write: a [`RawRecording`] or a [`RawRecordingView`].
+pub trait Recorded: Serialize {
+    fn song_key(&self) -> &str;
+}
+
+impl Recorded for RawRecording {
+    fn song_key(&self) -> &str {
+        &self.song_key
+    }
+}
+
+/// The same file written straight from the recorder's changes, without a second copy of them
+/// (a song can hold a million).
+pub struct RawRecordingView<'a> {
+    song_key: &'a str,
+    duration_seconds: f64,
+    addresses: Vec<&'a str>,
+    index: HashMap<&'a str, u32>,
+    baseline: &'a [FixtureCommand],
+    changes: &'a [(f64, FixtureCommand)],
+}
+
+impl<'a> RawRecordingView<'a> {
+    pub fn new(
+        song_key: &'a str,
+        duration_seconds: f64,
+        baseline: &'a [FixtureCommand],
+        changes: &'a [(f64, FixtureCommand)],
+    ) -> Self {
+        let mut addresses: Vec<&str> = Vec::new();
+        let mut index: HashMap<&str, u32> = HashMap::new();
+        for command in baseline.iter().chain(changes.iter().map(|(_, c)| c)) {
+            index.entry(&command.a).or_insert_with(|| {
+                addresses.push(&command.a);
+                u32::try_from(addresses.len() - 1).unwrap_or(u32::MAX)
+            });
+        }
+        Self {
+            song_key,
+            duration_seconds,
+            addresses,
+            index,
+            baseline,
+            changes,
+        }
+    }
+}
+
+impl Recorded for RawRecordingView<'_> {
+    fn song_key(&self) -> &str {
+        self.song_key
+    }
+}
+
+impl Serialize for RawRecordingView<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        struct Baseline<'x>(&'x RawRecordingView<'x>);
+        impl Serialize for Baseline<'_> {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_seq(
+                    self.0
+                        .baseline
+                        .iter()
+                        .map(|c| (self.0.index[c.a.as_str()], &c.v)),
+                )
+            }
+        }
+        struct Changes<'x>(&'x RawRecordingView<'x>);
+        impl Serialize for Changes<'_> {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_seq(
+                    self.0
+                        .changes
+                        .iter()
+                        .filter(|(at, _)| at.is_finite())
+                        .map(|(at, c)| (*at, self.0.index[c.a.as_str()], &c.v)),
+                )
+            }
+        }
+        let mut file = serializer.serialize_struct("RawRecording", 6)?;
+        file.serialize_field("version", &VERSION)?;
+        file.serialize_field("song_key", self.song_key)?;
+        file.serialize_field("duration_seconds", &self.duration_seconds)?;
+        file.serialize_field("addresses", &self.addresses)?;
+        file.serialize_field("baseline", &Baseline(self))?;
+        file.serialize_field("changes", &Changes(self))?;
+        file.end()
+    }
+}
+
 /// Counts the bytes written and refuses to pass a limit.
 struct Limited<W: Write> {
     inner: W,
@@ -137,24 +228,24 @@ fn safe_key(key: &str) -> String {
 
 /// Write the recording into `dir` (created if missing) and prune the folder. `now` is the UTC
 /// time in the name. Returns the file.
-pub fn save(
+pub fn save<T: Recorded>(
     dir: &Path,
-    recording: &RawRecording,
+    recording: &T,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<PathBuf, String> {
     save_limited(dir, recording, now, MAX_FILE_BYTES)
 }
 
-fn save_limited(
+fn save_limited<T: Recorded>(
     dir: &Path,
-    recording: &RawRecording,
+    recording: &T,
     now: chrono::DateTime<chrono::Utc>,
     limit: u64,
 ) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     let stem = format!(
         "{}-{}",
-        safe_key(&recording.song_key),
+        safe_key(recording.song_key()),
         now.format("%Y%m%dT%H%M%SZ")
     );
     let mut path = dir.join(format!("{stem}.json"));
@@ -326,6 +417,17 @@ mod tests {
         std::fs::write(&blocker, b"x").unwrap();
         // the folder would have to be created inside a file
         assert!(save(&blocker.join("inside"), &sample(3), chrono::Utc::now()).is_err());
+    }
+
+    #[test]
+    fn a_view_writes_the_same_file_as_a_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let copy = sample(40);
+        let (baseline, changes) = copy.clone().into_parts();
+        let view = RawRecordingView::new("song-1", 30.0, &baseline, &changes);
+        let a = save(dir.path(), &copy, chrono::Utc::now()).unwrap();
+        let b = save(dir.path(), &view, chrono::Utc::now()).unwrap();
+        assert_eq!(std::fs::read(a).unwrap(), std::fs::read(b).unwrap());
     }
 
     #[test]

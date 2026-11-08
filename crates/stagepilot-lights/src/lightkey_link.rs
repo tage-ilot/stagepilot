@@ -23,7 +23,7 @@ use crate::lightkey_auto::{
 use crate::lightkey_fit::{fit_within_caps, trim_to_caps, Caps, Fitted, Stage};
 use crate::lightkey_fixtures::{FixtureCommand, FixtureState};
 use crate::lightkey_looks::LookRecorder;
-use crate::lightkey_recording::{self, RawRecording};
+use crate::lightkey_recording::{self, RawRecordingView};
 use crate::lightkey_relay::{relay_target, RelayClient};
 use crate::lightkey_smooth::smooth_rows;
 use crate::loudness::LoudnessRecorder;
@@ -1920,6 +1920,7 @@ impl Inner {
         let (baseline, changes) = recorder.raw();
         drop(recorder);
         let raw_changes = changes.len();
+        let (baseline, changes) = (Arc::new(baseline), Arc::new(changes));
         // The raw recording goes to disk before anything is fitted, so a song that cannot be
         // saved can still be looked at. A failure here never stops the save.
         let folder = self.recordings_dir.clone();
@@ -2040,15 +2041,19 @@ impl Inner {
         &self,
         key: &str,
         duration: f64,
-        baseline: &[FixtureCommand],
-        changes: &[(f64, FixtureCommand)],
+        baseline: &Arc<Vec<FixtureCommand>>,
+        changes: &Arc<Vec<(f64, FixtureCommand)>>,
     ) -> Option<PathBuf> {
         let dir = self.recordings_dir.clone()?;
-        let recording = RawRecording::new(key, duration, baseline, changes);
         let now = DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0).unwrap_or_default();
-        let key = key.to_string();
-        let job =
-            tokio::task::spawn_blocking(move || lightkey_recording::save(&dir, &recording, now));
+        let (key, shared) = (key.to_string(), (baseline.clone(), changes.clone()));
+        let job = {
+            let key = key.clone();
+            tokio::task::spawn_blocking(move || {
+                let view = RawRecordingView::new(&key, duration, &shared.0, &shared.1);
+                lightkey_recording::save(&dir, &view, now)
+            })
+        };
         match job.await {
             Ok(Ok(path)) => Some(path),
             Ok(Err(error)) => {
