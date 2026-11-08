@@ -145,6 +145,12 @@ async fn authorise(
     if (mutation || websocket) && origins != [ing.public_origin.as_bytes()] {
         return Err(denial(403, "Remote same-origin request required."));
     }
+    // The Lighting computer's installer is LAN only, whoever is logged in remotely.
+    if path == crate::helper_install::PREFIX
+        || path.starts_with(&format!("{}/", crate::helper_install::PREFIX))
+    {
+        return Err(denial(404, "Not Found"));
+    }
     if websocket && path != "/ws" {
         return Err(denial(403, "Remote WebSocket path is not permitted."));
     }

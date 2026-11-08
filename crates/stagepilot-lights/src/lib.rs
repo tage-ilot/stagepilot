@@ -13,6 +13,7 @@ pub mod lightkey_auto;
 pub mod lightkey_curve;
 pub mod lightkey_effects;
 pub mod lightkey_fixtures;
+pub mod lightkey_helper_assets;
 pub mod lightkey_link;
 pub mod lightkey_looks;
 pub mod lightkey_operator;

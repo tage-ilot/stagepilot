@@ -587,4 +587,23 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: "Read fixtures" }));
     expect(await screen.findByTestId("lightkey-read-result")).toBeInTheDocument();
   });
+
+  it("shows the setup box while the Lighting computer is not connected, and not once it is", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "No answer." }));
+    const { unmount } = render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByRole("button", { name: "Set up the Lighting computer" })).toBeInTheDocument();
+    unmount();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: helper() }));
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByTestId("lightkey-strip");
+    await screen.findByTestId("lightkey-project");
+    expect(screen.queryByTestId("lightkey-install")).not.toBeInTheDocument();
+  });
+
+  it("offers the Update variant for a connected helper older than the bundled one", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByRole("button", { name: "Update the helper" })).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-helper-update")).toBeInTheDocument();
+  });
 });

@@ -417,6 +417,18 @@ export interface LightkeyReadFixtures {
   code?: string;
 }
 
+/** POST /api/v1/lights/lightkey/helper-install: the one command that sets up the Lighting computer. */
+export interface LightkeyHelperInstall {
+  command: string;
+  url: string;
+  /** ISO time the command stops working (30 minutes after it was made or last extended). */
+  expires_at: string;
+  lan_ip: string;
+  port: number;
+  /** The helper version StagePilot carries and installs. */
+  bundled_version: string;
+}
+
 export interface LightkeyStatus {
   api_url: string;
   link: LightkeyLink;

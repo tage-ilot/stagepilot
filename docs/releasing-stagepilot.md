@@ -55,6 +55,11 @@ either secret is absent. The private key is never passed to frontend code.
    desktop and frontend packages (`node scripts/set-release-version.mjs X.Y.Z` does it all;
    the Rust crates take the version from `tauri.conf.json` at build time).
 2. Update `CHANGELOG.md`.
+   Before a release, re-vendor the Lightkey helper with the **tested** helper release
+   (`node scripts/vendor-lightkey-helper.mjs vX.Y.Z`; it verifies every file against the release's
+   `SHA256SUMS` and rewrites `crates/stagepilot-lights/assets/lightkey-helper/`). The Lighting
+   section's install box serves exactly those files, so the vendored version is the helper version
+   every Lighting Mac set up from this build gets. Commit the changed files.
 3. Run:
 
    ```powershell

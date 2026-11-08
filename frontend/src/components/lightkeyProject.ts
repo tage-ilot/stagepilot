@@ -22,3 +22,9 @@ export function projectMismatchText(captured: string | null | undefined, current
 
 /** The helper reports a version older than 0.5.0 (a helper that reports none counts as older). */
 export const helperIsOutdated = (status: LightkeyStatus): boolean => status.helper?.outdated === true;
+
+/** The countdown as `m:ss`. */
+export function countdownText(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}

@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeyStatus } from "../types";
+import { LightkeyInstallBox } from "./LightkeyInstallBox";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
@@ -359,6 +360,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
         </p>
       )}
+
+      <LightkeyInstallBox status={status} />
 
       {!status.recording && status.replay === false && (
         <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">

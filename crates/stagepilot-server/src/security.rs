@@ -229,6 +229,12 @@ pub async fn log_server_errors(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
     let response = next.run(request).await;
     if response.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        // The installer path carries a one-time token: never log it.
+        let path = if path.starts_with("/lightkey-helper") {
+            "/lightkey-helper/...".to_string()
+        } else {
+            path
+        };
         tracing::warn!(%method, %path, "http_500");
     }
     response

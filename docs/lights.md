@@ -614,6 +614,46 @@ Fixtures already yielded to the operator are not cleared. **While a song is
 playing the release is momentary**: the running timeline picks a fixture up again at
 that fixture's next look row. To keep the lights released, pause or stop first.
 
+### Setting up the Lighting computer
+
+While there is no connected Lighting computer, the Lightkey strip shows **Set up the Lighting computer**. It installs the
+`lightkey-api` helper on the Lighting Mac from StagePilot itself: the Mac needs no internet, no GitHub and no SSH. A
+connected helper older than the one StagePilot carries gets the same box as **Update the helper**.
+
+1. On the Lighting Mac, turn on sACN output in Lightkey and open your project.
+2. In StagePilot press **Set up the Lighting computer**, then **Copy**, open Terminal on the Lighting Mac and paste.
+3. Wait in StagePilot. The strip changes to `Connected` by itself and the command stops working.
+
+**What the command does.** `curl -fsS http://<this computer>:<port>/lightkey-helper/<token>/install.sh | sh` fetches a
+short generated `sh` script. It downloads the five bundled helper files (`install.sh`, `lightkey_api.py`,
+`lightkey_cues.py`, `uninstall.sh`, `SHA256SUMS`) from the same address into a temporary folder, checks each against
+checksums written inside the script (and against `SHA256SUMS`), and stops with a message if any file differs. It then
+runs the helper's own installer there with `--allow-for <this computer's address>`, so the helper accepts requests from
+the network that reaches StagePilot, prints `Done. Go back to StagePilot.` and removes the temporary folder.
+
+**What it needs.** `curl`, `sh` and Python 3 on the Lighting Mac. Python comes with Apple's command-line tools; if
+Terminal says it is missing, run `xcode-select --install` first. macOS may ask to let `python3` read your Documents and
+Downloads folders so the helper can find your Lightkey project: click Allow.
+
+**LAN only, and it expires.** Each press creates a setup session: a random 128-bit token held in memory only (never
+written to disk or logs), valid for 30 minutes (pressing again extends it), ended when the helper connects or when you
+press Cancel. Only addresses on a private network (192.168.x.x, 10.x.x.x, 172.16-31.x.x, link-local, loopback) can fetch
+anything; a token serves at most 30 requests; an unknown or expired token answers `404` with no body. The files are
+never served through Remote access. With LAN access on in StagePilot the files are served on the normal port;
+otherwise StagePilot opens a temporary listener bound to the one address of this computer that routes to the Lighting
+host (not every address), on a random port, and closes it when the session ends. If StagePilot cannot find that
+address (`Could not find this computer's address on the Lighting network`) the box asks you to type it.
+
+**The helper that is carried.** The helper files are compiled into StagePilot
+(`crates/stagepilot-lights/assets/lightkey-helper/`, refreshed with `node scripts/vendor-lightkey-helper.mjs <tag>`),
+so the installer always matches the StagePilot that offers it.
+
+**Removing it.** The helper's `uninstall.sh` is one of the five served files. Press **Set up the Lighting computer** to
+start a session, then in Terminal on the Lighting Mac run
+`curl -fsS http://<this computer>:<port>/lightkey-helper/<token>/files/uninstall.sh | sh` (the address is in the
+command the box shows; add `-s -- --purge` after `sh` to delete the helper's settings too). It stops the helper's
+LaunchAgent and removes the helper; Cancel the session afterwards.
+
 ### The Lightkey project, Read fixtures and the helper version
 
 The Lighting section shows which Lightkey project the helper is reading, under the state pill:
