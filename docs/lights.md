@@ -430,7 +430,8 @@ does by over a tolerance (up to 41x); with the blend all 150 seams are continuou
 **Operator take-over.** The engine's sends go through the same path as a row's, so the echo
 rule of "The operator always wins, per fixture" sees every interpolated value: the same
 fixture and property with the same value (within 2 %, or 1 degree) within about 200 ms is
-the replay's own echo, however fast the property moves. A fixture the operator touched stops
+the replay's own echo, however fast the property moves (a value on the way between the
+previous and the latest sent value counts too, see below). A fixture the operator touched stops
 being driven (its addresses are skipped, nothing is cleared). After 30 seconds without an
 operator change the engine forgets what it last sent to that fixture and its next tick sends
 the **interpolated value for that moment**, then carries on with the ramp or effect. While
@@ -586,7 +587,14 @@ Lightkey's own controls beat the replay. While the replay holds a fixture, a DMX
 change on it that is **not** the echo of something the replay just sent is taken
 as the operator's. An echo is the same fixture and property with the same value
 (within 2 %, or 1 degree for angles) within about 200 ms, so an operator change on
-a property that moves all the time is still caught. Wheel and option properties
+a property that moves all the time is still caught. **A value on the path counts as
+the echo too:** a sweep faster than the 50 ms tick (135 degrees in 0.15 s) reaches the
+DMX as values between the replay's sends, because Lightkey and the 40 Hz DMX frames pass through
+them. So a DMX value between the value the replay sent before and the one it sent in the
+last 200 ms (with the same tolerance on both ends) is the replay's own. A move to any value
+outside that stretch, and any change more than 200 ms after the last send, is still the
+operator's; the cost is that for 200 ms after a replay step an operator value inside the
+step is not noticed (a held fader keeps moving and is caught by the next change). Wheel and option properties
 (gobo, wheel, slot, prism, macro) and non-numeric values match with any value,
 because wheel slots are approximate. Only properties the replay has itself sent to
 that fixture are judged: a pan, colour or effect that Lightkey's own running cues

@@ -75,6 +75,10 @@ struct Sent {
     at: Instant,
     /// The value, when the send had exactly one numeric argument.
     value: Option<f64>,
+    /// The value the replay had sent to this address before this one (however long ago), when
+    /// that was a single number too. A DMX value between the two is on the way Lightkey took
+    /// from the old value to the new one.
+    from: Option<f64>,
 }
 
 fn osc_number(args: &[OscArgument]) -> Option<f64> {
@@ -97,6 +101,8 @@ pub struct OperatorTracker {
     recent: HashMap<String, Vec<Sent>>,
     /// Lower-cased addresses the replay has sent, per normalised fixture name (O-02).
     sent_properties: HashMap<String, HashSet<String>>,
+    /// Lower-cased address -> the last single number the replay sent there.
+    last_value: HashMap<String, f64>,
     /// Fixture -> time of the operator's latest change on it.
     yielded: BTreeMap<String, Instant>,
     ignore_until: Option<Instant>,
@@ -122,17 +128,27 @@ impl OperatorTracker {
                 .or_default()
                 .insert(key.clone());
         }
+        let value = osc_number(args);
+        let from = match value {
+            Some(v) => self.last_value.insert(key.clone(), v),
+            None => self.last_value.remove(&key),
+        };
         let sends = self.recent.entry(key).or_default();
         sends.retain(|s| now.saturating_duration_since(s.at) <= ECHO_WINDOW);
         sends.push(Sent {
             at: now,
-            value: osc_number(args),
+            value,
+            from,
         });
     }
 
     /// The replay no longer holds this fixture: forget which properties it had sent.
     pub fn forget_sent(&mut self, fixture: &str) {
-        self.sent_properties.remove(&normalise_fixture(fixture));
+        if let Some(properties) = self.sent_properties.remove(&normalise_fixture(fixture)) {
+            for property in properties {
+                self.last_value.remove(&property);
+            }
+        }
     }
 
     fn is_echo(&self, command: &FixtureCommand, now: Instant) -> bool {
@@ -145,7 +161,14 @@ impl OperatorTracker {
             .filter(|s| now.saturating_duration_since(s.at) <= ECHO_WINDOW)
             .any(|s| match (s.value, seen) {
                 (Some(sent), Some(seen)) if !is_wheel_like(&command.a) => {
-                    (sent - seen).abs() <= tolerance(&command.a)
+                    let tol = tolerance(&command.a);
+                    // The value itself, or any value on the way from the one sent before it
+                    // (Lightkey passes through those when a fast move is smoothed, and a
+                    // sweep faster than the 50 ms tick shows values the replay never sent).
+                    (sent - seen).abs() <= tol
+                        || s.from.is_some_and(|from| {
+                            seen >= from.min(sent) - tol && seen <= from.max(sent) + tol
+                        })
                 }
                 _ => true,
             })
@@ -304,6 +327,77 @@ mod tests {
             Verdict::default()
         );
         assert_eq!(h.len(), 1);
+    }
+
+    const PAN: &str = "/fixture/MH3/overrides/panAngle";
+
+    #[test]
+    fn a_fast_sweep_of_135_degrees_in_0_15_s_on_a_held_fixture_does_not_yield() {
+        // The replay holds the head at 112 degrees and sweeps it to -23 in three sends 50 ms
+        // apart; Lightkey (and the 40 Hz DMX frames) pass through values it never sent.
+        let t0 = Instant::now();
+        let mut t = OperatorTracker::new();
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(112.4), t0);
+        t.note_send(PAN, &f(70.0), t0 + ms(1000));
+        t.note_send(PAN, &f(26.0), t0 + ms(1050));
+        t.note_send(PAN, &f(-23.5), t0 + ms(1100));
+        for (after, seen) in [
+            (1030, 90.0),
+            (1055, 70.4),
+            (1075, 38.3),
+            (1100, 11.1),
+            (1125, -6.2),
+            (1150, -23.5),
+        ] {
+            let v = t.observe(&mut h, &[cmd(PAN, seen)], false, t0 + ms(after));
+            assert_eq!(v, Verdict::default(), "{seen} at +{after} ms");
+        }
+        assert_eq!(h.len(), 1, "still held");
+    }
+
+    #[test]
+    fn a_value_outside_the_path_of_the_sweep_is_still_the_operator() {
+        // Same sweep; the operator turns the pan to 160, which is not between 112.4 and 70.
+        let t0 = Instant::now();
+        let mut t = OperatorTracker::new();
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(112.4), t0);
+        t.note_send(PAN, &f(70.0), t0 + ms(1000));
+        let v = t.observe(&mut h, &[cmd(PAN, 160.0)], false, t0 + ms(1040));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+        assert!(h.is_empty());
+    }
+
+    #[test]
+    fn a_real_operator_move_during_a_replay_yields_the_fixture() {
+        // The head is held at 40 degrees, the replay keeps sending the same value every 50 ms;
+        // the operator moves it to 100 and nothing the replay sent is near that.
+        let t0 = Instant::now();
+        let mut t = OperatorTracker::new();
+        let mut h = held(&["MH3"]);
+        for i in 0..20 {
+            t.note_send(PAN, &f(40.0), t0 + ms(i * 50));
+        }
+        let v = t.observe(&mut h, &[cmd(PAN, 100.0)], false, t0 + ms(990));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+        assert!(t.is_yielded("MH3"));
+    }
+
+    #[test]
+    fn the_path_rule_does_not_reach_back_past_the_echo_window() {
+        // A step from 0.1 to 0.9: 0.5 is on the path for 200 ms, the operator's afterwards.
+        let t0 = Instant::now();
+        let mut t = OperatorTracker::new();
+        let mut h = held(&["A"]);
+        t.note_send(DIM, &f(0.1), t0);
+        t.note_send(DIM, &f(0.9), t0 + ms(1000));
+        assert_eq!(
+            t.observe(&mut h, &[cmd(DIM, 0.5)], false, t0 + ms(1100)),
+            Verdict::default()
+        );
+        let v = t.observe(&mut h, &[cmd(DIM, 0.5)], false, t0 + ms(1400));
+        assert_eq!(v.newly_yielded, vec!["A".to_string()]);
     }
 
     #[test]
