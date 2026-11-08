@@ -335,6 +335,9 @@ fn looks_sink(
                     return Err(LooksError::TooLarge)
                 }
             };
+            let mut map = map;
+            stagepilot_core::settings::prepare_cue_map_for_save(&mut map)
+                .map_err(LooksError::Failed)?;
             lights.cue_maps.insert(looks.song_key.clone(), map);
             lights.normalise();
             let merged = lights.cue_maps.get(&looks.song_key).cloned();
@@ -404,6 +407,8 @@ fn loudness_sink(
                 map.loudness.as_ref(),
                 take.loudness,
             ));
+            stagepilot_core::settings::prepare_cue_map_for_save(&mut map)
+                .map_err(LooksError::Failed)?;
             lights.cue_maps.insert(take.song_key.clone(), map);
             lights.normalise();
             let merged = lights.cue_maps.get(&take.song_key).cloned();

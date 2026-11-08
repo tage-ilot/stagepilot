@@ -592,7 +592,7 @@ fn build_effect(
             .iter()
             .map(|(l, o)| EffectMember {
                 fixture: l.fixture.clone(),
-                offset_seconds: round3(*o),
+                offset_seconds: member_offset(*o, period),
             })
             .collect(),
         cycle,
@@ -600,6 +600,24 @@ fn build_effect(
         edited: false,
     };
     Some((effect, steps))
+}
+
+/// A member's phase offset as stored: reduced into one period (the same phase), rounded to
+/// milliseconds, and never above the stored (rounded) period. The lag search runs against the
+/// seed's period, but the cluster's period is refined afterwards and the offsets of a cluster can
+/// sum past it, so an offset is not in range until it is reduced here (a saved effect with an
+/// offset above its period makes the whole settings file fail validation).
+pub fn member_offset(offset: f64, period: f64) -> f64 {
+    let stored_period = round3(period);
+    if !offset.is_finite() || period.is_nan() || period <= 0.0 {
+        return 0.0;
+    }
+    let reduced = round3(offset.rem_euclid(period)).clamp(0.0, stored_period.max(0.0));
+    if reduced == 0.0 {
+        0.0
+    } else {
+        reduced
+    }
 }
 
 fn round3(x: f64) -> f64 {

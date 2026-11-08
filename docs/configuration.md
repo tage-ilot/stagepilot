@@ -16,7 +16,10 @@ The active configuration order, from lowest to highest priority, is:
 
 The settings file is versioned, validated on read, and atomically replaced on
 write. A corrupt or invalid file is left untouched and StagePilot starts from
-safe defaults with a warning. `STAGEPILOT_SETTINGS_PATH` may point development
+safe defaults with a warning. The exception is a song's lighting data: if only that is
+invalid it is repaired when it can be repaired losslessly, otherwise only that song is set aside
+(`settings.json.song-<key>-<UTC>.json`) and the rest loads; see "A damaged song never costs you the
+settings" in `docs/lights.md`. `STAGEPILOT_SETTINGS_PATH` may point development
 and test processes at a different file.
 
 The most recently loaded Planning Center service is cached separately at
