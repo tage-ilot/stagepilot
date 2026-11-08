@@ -32,6 +32,7 @@ rosc = "0.11.4"
 tracing = "0.1.41"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
+if-addrs = "0.15"
 
 [dev-dependencies]
 axum = "0.8.9"

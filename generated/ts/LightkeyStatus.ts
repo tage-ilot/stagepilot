@@ -3,6 +3,7 @@ import type { FixtureStatus } from "./FixtureStatus";
 import type { LightkeyAuto } from "./LightkeyAuto";
 import type { LightkeyCaptured } from "./LightkeyCaptured";
 import type { LightkeyDetail } from "./LightkeyDetail";
+import type { LightkeyDiscovery } from "./LightkeyDiscovery";
 import type { LightkeyHelper } from "./LightkeyHelper";
 import type { LightkeyLink } from "./LightkeyLink";
 import type { LightkeyMode } from "./LightkeyMode";
@@ -54,4 +55,8 @@ helper?: LightkeyHelper,
  * The current song was captured under another project than the one open now. Never
  * changes what replay does.
  */
-project_mismatch?: LightkeyProjectMismatch, };
+project_mismatch?: LightkeyProjectMismatch, 
+/**
+ * The search for the Lighting computer (`crate::lightkey_discovery`). Set by the plugin.
+ */
+discovery?: LightkeyDiscovery, };

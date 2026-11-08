@@ -61,6 +61,9 @@ pub struct OutputBackends {
     /// The audio input that measures room loudness while recording (cpal in the desktop app, a
     /// "not available" stand-in in headless builds, a fake in tests).
     pub audio_input: Arc<dyn stagepilot_lights::audio::AudioInput>,
+    /// The search for the Lighting computer. On for the real app; tests, the demo and the contract
+    /// profiles leave it off so nothing ever probes a network by accident.
+    pub lightkey_discovery: stagepilot_lights::lightkey_discovery::DiscoveryOptions,
 }
 
 impl Default for OutputBackends {
@@ -75,6 +78,8 @@ impl Default for OutputBackends {
             }),
             lightkey_armed: None,
             audio_input: stagepilot_lights::audio::default_input(),
+            lightkey_discovery:
+                stagepilot_lights::lightkey_discovery::DiscoveryOptions::from_environment(),
         }
     }
 }
@@ -92,6 +97,7 @@ impl OutputBackends {
             audio_input: Arc::new(stagepilot_lights::audio::UnavailableInput(
                 stagepilot_lights::audio::UNAVAILABLE_TEXT.into(),
             )),
+            lightkey_discovery: stagepilot_lights::lightkey_discovery::DiscoveryOptions::default(),
             ..Self::default()
         }
     }
@@ -343,6 +349,29 @@ fn looks_sink(
     })
 }
 
+/// The search's way to save a Lighting computer it found (or the operator confirmed): change the
+/// saved Lighting settings through the same lock and write as every other Lighting save, and hand
+/// the result back so the running plugin follows.
+fn discovery_persist(
+    cue_lock: Arc<tokio::sync::Mutex<()>>,
+    settings_service: Arc<SettingsService>,
+) -> stagepilot_lights::lightkey_discovery::DiscoveryPersist {
+    use stagepilot_lights::lightkey_discovery::{apply_change, Change};
+    Arc::new(move |change: Change| {
+        let (cue_lock, settings_service) = (cue_lock.clone(), settings_service.clone());
+        Box::pin(async move {
+            let _guard = cue_lock.lock().await;
+            let mut lights = settings_service.effective_runtime_settings().lights;
+            let applied = apply_change(&mut lights, &change);
+            lights.normalise();
+            settings_service
+                .persist_lights(lights.clone())
+                .map_err(|error| error.0)?;
+            Ok((lights, applied))
+        })
+    })
+}
+
 /// The Lightkey link's way to save a recording's loudness: average it into the song's envelope and
 /// save the cue map through the same lock as every other cue-map write.
 fn loudness_sink(
@@ -442,6 +471,13 @@ impl Outputs {
         );
         lights_options.lightkey.loudness_sink = Some(loudness.clone());
         lights_options.lightkey.audio = Some(backends.audio_input.clone());
+        lights_options.discovery = backends.lightkey_discovery.clone();
+        if lights_options.discovery.persist.is_none() {
+            lights_options.discovery.persist = Some(discovery_persist(
+                cue_lock.clone(),
+                settings_service.clone(),
+            ));
+        }
         let sink = looks_sink(cue_lock.clone(), settings_service, plugin_cell.clone());
         lights_options.lightkey.looks_sink = Some(sink.clone());
         let lights = Arc::new(LightsPlugin::new(

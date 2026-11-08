@@ -208,6 +208,10 @@ pub struct LightkeyStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub project_mismatch: Option<LightkeyProjectMismatch>,
+    /// The search for the Lighting computer (`crate::lightkey_discovery`). Set by the plugin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub discovery: Option<crate::lightkey_discovery::LightkeyDiscovery>,
 }
 
 impl LightkeyStatus {
@@ -246,17 +250,23 @@ pub struct LightkeySimplifyResponse {
 
 // ------------------------------------------------------------------ pure logic
 
-/// `effective_api_url`: the saved address, else the OSC host on the default API port.
+/// `effective_api_url`: the saved (chosen) address; in Automatic (blank) the computer the search
+/// last connected to, else the OSC host on the default API port.
 pub fn effective_api_url(settings: &LightkeySettings, osc_host: &str) -> String {
     if settings.api_url.is_empty() {
+        if !settings.found_url.is_empty() {
+            return with_default_port(&settings.found_url);
+        }
         return format!("http://{osc_host}:{DEFAULT_LIGHTKEY_API_PORT}");
     }
-    let text = &settings.api_url;
-    let host_part = text
-        .split_once("://")
-        .map_or(text.as_str(), |(_, rest)| rest);
+    with_default_port(&settings.api_url)
+}
+
+/// A saved address, with the default API port added when it names none.
+fn with_default_port(text: &str) -> String {
+    let host_part = text.split_once("://").map_or(text, |(_, rest)| rest);
     if host_part.contains(':') {
-        text.clone()
+        text.to_string()
     } else {
         format!("{text}:{DEFAULT_LIGHTKEY_API_PORT}")
     }

@@ -429,6 +429,35 @@ export interface LightkeyHelperInstall {
   bundled_version: string;
 }
 
+/** off: not looking · searching · connected: a Lighting computer answers · choose: several found (Automatic) · offer: a chosen address is down and another answered · none: nothing found. */
+export type DiscoveryState = "off" | "searching" | "connected" | "choose" | "offer" | "none";
+
+/** One Lighting computer a search found. `address` is the IP (with :port only when the port is not the usual one). */
+export interface FoundLighting {
+  address: string;
+  /** The helper's version; absent on a helper older than 0.5.0. */
+  version?: string;
+  lightkey_running: boolean;
+  project?: string;
+}
+
+/** The search for the Lighting computer (it runs only while nothing is connected). */
+export interface LightkeyDiscovery {
+  state: DiscoveryState;
+  /** choose: every computer found. offer: the ones not silenced; the first is offered. */
+  found: FoundLighting[];
+  /** Computers that answered "not available on this interface". */
+  refusing: string[];
+  /** The address the operator typed; absent in Automatic. */
+  chosen?: string;
+  chosen_down_for_s?: number;
+  last_scan_at?: string;
+  /** "Found a Lighting computer at <ip> and connected." while it is news. */
+  message?: string;
+  /** "Capture is from <ip>; Replay sends to <host>." when the two differ. */
+  note?: string;
+}
+
 export interface LightkeyStatus {
   api_url: string;
   link: LightkeyLink;
@@ -462,6 +491,8 @@ export interface LightkeyStatus {
   helper?: LightkeyHelper;
   /** Set when the current song was captured under another project than the open one. */
   project_mismatch?: LightkeyProjectMismatch;
+  /** Finding the Lighting computer by itself; absent on an older backend. */
+  discovery?: LightkeyDiscovery;
 }
 
 export interface LightkeyActionResponse {

@@ -30,4 +30,11 @@ detail?: LightkeyDetail,
  * Name of the audio input that measures loudness while recording. Unset means the system
  * default input; a name that is no longer present falls back to the default.
  */
-audio_device?: string, };
+audio_device?: string, 
+/**
+ * The Lighting computer the automatic search last connected to (`http://host:port`). Used
+ * only while `api_url` is blank: the address in use is this one, else the OSC host on port
+ * 8770. Left out of the saved file while empty, so an older file saves back unchanged (an
+ * rc.7/rc.8 build reads a file that has it as an unknown key and drops it).
+ */
+found_url?: string, };

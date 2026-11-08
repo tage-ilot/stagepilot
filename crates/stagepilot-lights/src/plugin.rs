@@ -1,4 +1,8 @@
+use crate::lightkey::LightkeyLink as LightkeyLinkState;
 use crate::lightkey::LightkeyStatus;
+use crate::lightkey_discovery::{
+    apply_change, Applied, Change, Discovery, DiscoveryHost, DiscoveryOptions, HostInputs, Reach,
+};
 use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
 use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
 use crate::lightkey_operator::OperatorTracker;
@@ -60,6 +64,8 @@ pub struct LightsOptions {
     pub monitor_interval: Duration,
     /// Record-switch store, timeline sink, HTTP client and clock of the Lightkey link.
     pub lightkey: LinkOptions,
+    /// The search for the Lighting computer. Off unless the server turns it on.
+    pub discovery: DiscoveryOptions,
 }
 
 impl LightsOptions {
@@ -69,6 +75,7 @@ impl LightsOptions {
             osc_backend_factory: Arc::new(|| Arc::new(UdpOscBackend)),
             monitor_interval: Duration::from_secs(2),
             lightkey: LinkOptions::default(),
+            discovery: DiscoveryOptions::default(),
         }
     }
 }
@@ -158,6 +165,8 @@ struct Inner {
     next_send: Mutex<Option<tokio::time::Instant>>,
     /// Set once in `LightsPlugin::new` (the link needs a handle back to this struct).
     lightkey: std::sync::OnceLock<LightkeyLink>,
+    /// The search for the Lighting computer; it runs only while the link is down.
+    discovery: Discovery,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -178,6 +187,34 @@ fn public_osc(error: &OutputError, fallback: &str) -> String {
         error.message.clone()
     } else {
         fallback.to_string()
+    }
+}
+
+/// The search's view of the plugin (a weak handle: the search must not keep it alive).
+struct DiscoveryBridge {
+    inner: std::sync::Weak<Inner>,
+}
+
+#[async_trait]
+impl DiscoveryHost for DiscoveryBridge {
+    fn inputs(&self) -> HostInputs {
+        match self.inner.upgrade() {
+            Some(inner) => inner.discovery_inputs(),
+            None => HostInputs::from_settings(
+                false,
+                false,
+                Reach::Pending,
+                "",
+                &LightkeySettings::default(),
+            ),
+        }
+    }
+
+    async fn apply(&self, change: Change) -> Result<Applied, String> {
+        match self.inner.upgrade() {
+            Some(inner) => inner.apply_discovery(change).await,
+            None => Err("StagePilot is shutting down.".into()),
+        }
     }
 }
 
@@ -231,6 +268,7 @@ impl LightsPlugin {
             engine_wake: tokio::sync::Notify::new(),
             next_send: Mutex::new(None),
             lightkey: std::sync::OnceLock::new(),
+            discovery: Discovery::new(options.discovery),
         });
         let weak = Arc::downgrade(&inner);
         let tap_weak = weak.clone();
@@ -289,6 +327,7 @@ impl LightsPlugin {
 
     pub async fn lightkey_status(&self) -> LightkeyStatus {
         let mut status = self.link().status();
+        status.discovery = Some(self.inner.discovery.status(&self.inner.discovery_inputs()));
         let st = lock(&self.inner.state);
         let some = |n: usize| (n > 0).then(|| u32::try_from(n).unwrap_or(u32::MAX));
         status.holding_fixtures = some(st.held_fixtures.len());
@@ -305,6 +344,37 @@ impl LightsPlugin {
             }
         }
         status
+    }
+
+    /// "Search again": look for the Lighting computer now. `(false, why)` when nothing may be
+    /// searched (Lighting off, or a computer is connected).
+    pub fn lightkey_discovery_scan(&self) -> (bool, String) {
+        match self
+            .inner
+            .discovery
+            .scan_now(&self.inner.discovery_inputs())
+        {
+            Ok(message) => (true, message),
+            Err(why) => (false, why),
+        }
+    }
+
+    /// "Use this one" / "Use <ip>": switch to a computer the last search found. `Err` is the
+    /// plain reason (not one of the found computers).
+    pub async fn lightkey_discovery_use(&self, address: &str) -> Result<String, String> {
+        let bridge = DiscoveryBridge {
+            inner: Arc::downgrade(&self.inner),
+        };
+        let (message, note) = self.inner.discovery.use_address(&bridge, address).await?;
+        Ok(match note {
+            Some(note) => format!("{message} {note}"),
+            None => message,
+        })
+    }
+
+    /// "Keep waiting": stop offering `address` until StagePilot restarts or the chosen address changes.
+    pub fn lightkey_discovery_dismiss(&self, address: &str) {
+        self.inner.discovery.dismiss(address);
     }
 
     /// "Read fixtures": ask the helper to re-read the open Lightkey project.
@@ -490,6 +560,9 @@ impl Inner {
         if let Some(link) = self.lightkey.get() {
             link.start().await;
         }
+        self.discovery.start(Arc::new(DiscoveryBridge {
+            inner: Arc::downgrade(&self),
+        }));
         if self.st().settings.enabled {
             self.clone().connect().await;
         } else {
@@ -517,6 +590,7 @@ impl Inner {
         self.cancel_timeline().await;
         // Shutdown gives the held fixtures back while the output is still open.
         self.release_all().await;
+        self.discovery.stop();
         if let Some(link) = self.lightkey.get() {
             link.stop().await;
         }
@@ -635,6 +709,46 @@ impl Inner {
             last_osc_cue: st.last_osc_cue.clone(),
             last_cue_at: st.last_cue_at,
         }
+    }
+
+    /// What the search needs to know right now.
+    fn discovery_inputs(&self) -> HostInputs {
+        let reach = match self.lightkey.get().map(LightkeyLink::link_state) {
+            Some(LightkeyLinkState::Connected | LightkeyLinkState::LightkeyClosed) => Reach::Up,
+            Some(LightkeyLinkState::Unreachable) => Reach::Down,
+            Some(LightkeyLinkState::Off) | None => Reach::Pending,
+        };
+        let st = self.st();
+        HostInputs::from_settings(
+            st.settings.enabled,
+            st.settings.method == LightingMethod::Osc,
+            reach,
+            &st.settings.osc_host,
+            &st.settings.lightkey,
+        )
+    }
+
+    /// Save a found computer (the search, or the operator pressing Use) and let the link and the
+    /// OSC output follow.
+    async fn apply_discovery(self: Arc<Self>, change: Change) -> Result<Applied, String> {
+        let (updated, applied) = match self.discovery.persist() {
+            Some(persist) => persist(change).await?,
+            None => {
+                let mut settings = self.st().settings.clone();
+                let applied = apply_change(&mut settings, &change);
+                (settings, applied)
+            }
+        };
+        let replay_host_changed = self.st().settings.osc_host != updated.osc_host;
+        if replay_host_changed {
+            self.clone().reconfigure(updated).await;
+        } else {
+            self.st().settings.lightkey = updated.lightkey;
+            if let Some(link) = self.lightkey.get() {
+                link.settings_changed();
+            }
+        }
+        Ok(applied)
     }
 
     async fn reconfigure(self: Arc<Self>, settings: LightsSettings) -> LightingOutcome {

@@ -66,6 +66,10 @@ RUST_EXTENSIONS = {
     # Lightkey Auto | Replay | Record (#293): what Auto decides for the current/next song. Present
     # only in Auto mode, on the Lightkey status and on the `lightkey` object of the Lighting settings.
     "auto": {"capturing", "reason", "song"},
+    # Finding the Lighting computer by itself: the search's state on the Lightkey status. The
+    # contract profiles run with the search off, so this is {state: "off", found: [], refusing: []}.
+    # Rust-only, like `auto`: the recorded Python app has no such key.
+    "discovery": {"state", "found", "refusing"},
 }
 # Rust-only scalar additions to a response body (same rule as above: only with this type).
 # `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);
