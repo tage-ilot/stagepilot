@@ -993,6 +993,7 @@ fn complete() -> stagepilot_core::config::CaptureStatus {
         coverage_seconds: 100.0,
         recorded_at: "2026-11-02T00:00:00Z".into(),
         project: None,
+        simplified: None,
     }
 }
 

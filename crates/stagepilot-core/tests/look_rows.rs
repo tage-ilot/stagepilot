@@ -121,9 +121,13 @@ fn look_message_addresses_follow_the_address_rules() {
 }
 
 #[test]
-fn caps_are_named_and_sized_for_a_400_row_6k_message_song() {
-    const { assert!(MAX_OSC_ROWS_PER_SONG >= 400 * 2) };
-    const { assert!(MAX_OSC_MESSAGES_PER_SONG >= 6_000 * 2) };
+fn caps_are_sized_for_a_very_busy_song() {
+    // 2026-11-08: a 336 s, 66-fixture song needed about 11,500 rows at full fidelity.
+    const { assert!(MAX_OSC_ROWS_PER_SONG >= 50_000) };
+    const { assert!(MAX_OSC_MESSAGES_PER_SONG >= 600_000) };
+    const { assert!(MAX_EFFECTS_PER_SONG >= 1_000) };
+    const { assert!(MAX_EFFECT_CYCLE_STEPS >= 4_096) };
+    const { assert!(MAX_EFFECT_CYCLE_STEPS_PER_SONG >= 250_000) };
     const { assert!(MAX_OSC_MESSAGES_PER_ROW >= 106) };
 }
 

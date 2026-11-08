@@ -145,6 +145,7 @@ fn a_cue_map_capture_status_is_optional_and_round_trips() {
             coverage_seconds: 12.5,
             recorded_at: "2026-11-02T00:00:00Z".into(),
             project: None,
+            simplified: None,
         }),
         ..old
     };

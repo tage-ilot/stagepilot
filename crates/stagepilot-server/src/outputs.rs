@@ -464,6 +464,11 @@ impl Outputs {
                     path.with_file_name("lightkey-record-armed"),
                 ));
         }
+        // The raw recording of every finished song is kept next to the settings file.
+        if let Some(path) = settings_service.settings_path() {
+            lights_options.lightkey.recordings_dir =
+                Some(path.with_file_name(stagepilot_lights::lightkey_recording::FOLDER));
+        }
         let loudness = loudness_sink(
             cue_lock.clone(),
             settings_service.clone(),

@@ -326,6 +326,12 @@ impl Rig {
     /// A rig whose timeline refuses a song of more than `limit` rows (`LooksError::TooLarge`),
     /// as the real one does past its caps. Every attempt is counted in `attempts`.
     async fn with_row_limit(initial: Vec<FixtureCommand>, limit: usize) -> Self {
+        Self::with_limits(initial, limit, limit).await
+    }
+
+    /// A rig whose link fits inside `caps_rows` rows while the timeline refuses more than
+    /// `limit` (rows already in the song's timeline take room the link cannot see).
+    async fn with_limits(initial: Vec<FixtureCommand>, limit: usize, caps_rows: usize) -> Self {
         let relay = FakeRelay::start(initial).await;
         let active: Active = Arc::new(Mutex::new(vec!["Warm".into()]));
         let http_port = serve_http(active).await;
@@ -367,6 +373,10 @@ impl Rig {
             LinkOptions {
                 looks_sink: Some(sink),
                 relay_port: relay.port,
+                caps: stagepilot_lights::lightkey_fit::Caps {
+                    rows: caps_rows,
+                    ..stagepilot_lights::lightkey_fit::Caps::default()
+                },
                 ..LinkOptions::default()
             },
         );
@@ -788,7 +798,7 @@ async fn a_recording_past_the_song_end_with_a_huge_change_still_saves() {
     rig.link.stop().await;
 }
 
-/// A song too large for the caps is fitted again at twice the tolerance, not dropped, and the
+/// A song too large for the caps is fitted again at a looser tolerance, not dropped, and the
 /// status message says so. (The Detail setting no longer changes the result.)
 #[tokio::test(flavor = "multi_thread")]
 async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says_so() {
@@ -811,13 +821,38 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
     let saved = rig.saved.lock().unwrap().remove(0);
     assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
-    assert!(
-        *rig.attempts.lock().unwrap() >= 2,
-        "the first try was refused"
-    );
-    let message = rig.link.status().message.unwrap_or_default();
+        let message = rig.link.status().message.unwrap_or_default();
+    assert!(*rig.attempts.lock().unwrap() >= 1);
     assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
+    rig.link.stop().await;
+}
+
+/// The timeline has less room than the link knew of (manual rows are already in the song): the
+/// capture is trimmed further and saved, never dropped, and the status says it was simplified.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_timeline_with_less_room_than_the_caps_still_gets_the_capture_trimmed() {
+    let rig = Rig::with_limits(vec![dim("P1", 0.0)], 5, usize::MAX).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(2.0).await;
+    for k in 0..30u32 {
+        let at = 1.9 - f64::from(k) * 0.06;
+        rig.relay
+            .change(vec![dim("P1", 0.1 + f64::from(k % 2) * 0.5)], at, 0)
+            .await;
+    }
+    pause(0.2).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
+    assert!(*rig.attempts.lock().unwrap() >= 2, "the first try was refused");
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(message.starts_with("Saved "), "message: {message}");
+    assert!(message.contains("simplified"), "message: {message}");
+    assert_eq!(saved.status.simplified.as_ref().map(|s| s.stage.as_str()), Some("trimmed"));
     rig.link.stop().await;
 }
 
