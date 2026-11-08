@@ -33,6 +33,12 @@ dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
 
+# The fit of a recorded song (ramps, loops, the fallback ladder) is number crunching over hundreds
+# of thousands of samples; unoptimised it takes minutes in a test. Only this crate is optimised in
+# dev and test builds; debug assertions stay on.
+[profile.dev.package.stagepilot-lights]
+opt-level = 2
+
 [profile.release]
 opt-level = 3
 lto = "thin"

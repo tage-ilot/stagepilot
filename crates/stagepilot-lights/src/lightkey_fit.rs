@@ -232,8 +232,20 @@ pub fn fit_within_caps(
     duration: f64,
     caps: &Caps,
 ) -> Fitted {
+    fit_within_caps_budgeted(baseline, changes, duration, caps, FIT_BUDGET_MS)
+}
+
+/// [`fit_within_caps`] with its own time budget: no new fit starts once `budget_ms` has passed
+/// (tests that need the whole ladder pass `u128::MAX`).
+pub fn fit_within_caps_budgeted(
+    baseline: &[FixtureCommand],
+    changes: &[(f64, FixtureCommand)],
+    duration: f64,
+    caps: &Caps,
+    budget_ms: u128,
+) -> Fitted {
     let started = Instant::now();
-    let over_budget = || started.elapsed().as_millis() > FIT_BUDGET_MS;
+    let over_budget = || started.elapsed().as_millis() > budget_ms;
     let mut attempts = Vec::new();
     let mut best = attempt(
         baseline,
