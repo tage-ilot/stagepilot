@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A fast move of the lights' own replay is no longer taken for the operator.** On the real rig a replay of "Elohim" swept the four moving heads (pan 112 to -23 degrees in 0.15 s); the DMX showed positions between the replay's sends, StagePilot read them as someone moving the lights, dropped the four heads (\"4 yielded to the operator\") and, because the take-back needs 30 quiet seconds, left them frozen across a jump of the song. A value that lies between the previous value the replay sent and the one it sent last (within about 200 ms of that send) now counts as the replay's own. A real fader or override move to any other value still makes the operator win. See \"The operator always wins, per fixture\" in `docs/lights.md`. `cargo run --release -p stagepilot-lights --example false_yield_report -- settings.json ring.json` reproduces it offline from a recorded DMX log.
+
 ## [2.43.0-rc.9] - 2026-11-08
 
 Release candidate 9 (pre-release; the in-app updater does not offer it). Everything in rc.8 applies. Adds the automatic search for the Lighting computer (Lightkey only).

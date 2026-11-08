@@ -21,6 +21,7 @@ pub mod lightkey_operator;
 pub mod lightkey_relay;
 pub mod lightkey_replay;
 pub mod lightkey_smooth;
+pub mod lightkey_yield_check;
 pub mod loudness;
 pub mod models;
 pub mod plugin;
