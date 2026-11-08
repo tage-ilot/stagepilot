@@ -592,17 +592,91 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
         saved.rows[2].messages[0].address,
         "/fixture/P1/overrides/color"
     );
-    // P2 never moved: it stays with Lightkey's cues
-    assert!(saved
-        .rows
+    // P2 never moved but is lit: it is in the starting look and nowhere else, and the capture
+    // says it holds the starting look of both lights
+    assert!(saved.rows[0]
+        .messages
+        .iter()
+        .any(|m| m.address == "/fixture/P2/overrides/dimmer"));
+    assert!(saved.rows[1..]
         .iter()
         .all(|r| r.messages.iter().all(|m| !m.address.contains("/P2/"))));
-    assert_eq!(saved.rows[0].label, "Look - 1 fixture");
+    assert_eq!(saved.rows[0].label, "Look - 2 fixtures");
+    assert_eq!(saved.status.start_lights, Some(2));
     assert_eq!(
         rig.link.status().message.as_deref(),
         Some("Saved 3 looks to Holy Forever's timeline.")
     );
     assert_eq!(rig.link.status().captured.unwrap().looks, 3);
+    rig.link.stop().await;
+}
+
+/// The relay's state of a fixture that never moves is the song's starting look: a lit house light
+/// is stored in full, a dark one only as what keeps it dark.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_starting_look_holds_lights_that_never_change_and_the_status_counts_them() {
+    let rig = Rig::new(vec![
+        dim("P1", 0.0),
+        dim("H1", 0.7),
+        color("H1", 1.0, 0.8, 0.6),
+        dim("H2", 0.0),
+        color("H2", 0.0, 0.0, 0.0),
+        dim("H3", 0.0),
+    ])
+    .await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.5).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(1.8).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert_eq!(saved.status.start_lights, Some(4));
+    let first: Vec<&str> = saved.rows[0]
+        .messages
+        .iter()
+        .map(|m| m.address.as_str())
+        .collect();
+    assert!(first.contains(&"/fixture/H1/overrides/dimmer"));
+    assert!(first.contains(&"/fixture/H1/overrides/color"), "{first:?}");
+    // H2 and H3 are dark: the dimmer that keeps them dark, not the colour
+    assert!(first.contains(&"/fixture/H2/overrides/dimmer"));
+    assert!(!first.contains(&"/fixture/H2/overrides/color"), "{first:?}");
+    assert!(first.contains(&"/fixture/H3/overrides/dimmer"));
+    assert!(first.contains(&"/fixture/P1/overrides/dimmer"));
+    assert_eq!(saved.rows[0].at_seconds, 0.0);
+    let text = rig.link.status().message.unwrap();
+    assert!(text.starts_with("Saved "), "{text}");
+    assert!(!text.contains("could not be read"), "{text}");
+    rig.link.stop().await;
+}
+
+/// A relay with nothing to read at the start: the capture is saved as today, without a starting
+/// look, and the status says so in plain words.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_start_state_that_cannot_be_read_saves_the_capture_and_says_so() {
+    let rig = Rig::new(vec![]).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(0.5).await;
+    rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
+    pause(0.4).await;
+    rig.relay.change(vec![dim("P1", 0.2)], 0.0, 0).await;
+    pause(1.2).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert_eq!(saved.status.start_lights, Some(0));
+    assert!(!saved.rows.is_empty(), "the capture is not discarded");
+    let text = rig.link.status().message.unwrap();
+    assert!(
+        text.starts_with("Saved ")
+            && text.contains("The starting look of the other lights could not be read."),
+        "{text}"
+    );
     rig.link.stop().await;
 }
 

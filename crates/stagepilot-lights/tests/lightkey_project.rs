@@ -1031,6 +1031,7 @@ mod notice {
                     recorded_at: "2026-11-02T00:00:00Z".into(),
                     project: captured.map(str::to_string),
                     simplified: None,
+                    start_lights: None,
                 }),
                 effects: vec![],
             },

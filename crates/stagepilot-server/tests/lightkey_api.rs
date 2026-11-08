@@ -1065,6 +1065,7 @@ fn complete() -> stagepilot_core::config::CaptureStatus {
         recorded_at: "2026-11-02T00:00:00Z".into(),
         project: None,
         simplified: None,
+        start_lights: None,
     }
 }
 

@@ -146,6 +146,7 @@ fn a_cue_map_capture_status_is_optional_and_round_trips() {
             recorded_at: "2026-11-02T00:00:00Z".into(),
             project: None,
             simplified: None,
+            start_lights: None,
         }),
         ..old
     };
@@ -220,4 +221,53 @@ fn a_capture_simplified_note_is_optional_additive_and_round_trips() {
     assert_eq!(value["project"], "Show.lightkeyproj");
     let back: CaptureStatus = serde_json::from_value(value).unwrap();
     assert_eq!(back, with);
+}
+
+#[test]
+fn a_capture_start_lights_is_optional_additive_and_round_trips() {
+    use stagepilot_core::config::{CaptureStatus, LightsSettings};
+    // a capture saved before the starting look existed loads with none and saves back without it
+    let old: CaptureStatus = serde_json::from_value(serde_json::json!({
+        "complete": true, "coverage_seconds": 100.0, "recorded_at": "2026-11-02T00:00:00Z"
+    }))
+    .unwrap();
+    assert_eq!(old.start_lights, None);
+    assert!(serde_json::to_value(&old)
+        .unwrap()
+        .get("start_lights")
+        .is_none());
+    // with a count it is stored under "start_lights" and survives a round trip, 0 included
+    for n in [66u32, 0] {
+        let with = CaptureStatus {
+            start_lights: Some(n),
+            ..old.clone()
+        };
+        let value = serde_json::to_value(&with).unwrap();
+        assert_eq!(value["start_lights"], n);
+        let back: CaptureStatus = serde_json::from_value(value).unwrap();
+        assert_eq!(back, with);
+    }
+    // a whole settings file with and without the field loads
+    let file = |capture: serde_json::Value| {
+        let mut lights = serde_json::json!({"enabled": false});
+        lights["cue_maps"] =
+            serde_json::json!({"s": {"song_key": "s", "song_title": "S", "capture": capture}});
+        serde_json::from_value::<LightsSettings>(lights).unwrap()
+    };
+    let without =
+        file(serde_json::json!({"complete": true, "coverage_seconds": 1.0, "recorded_at": "x"}));
+    assert_eq!(
+        without.cue_maps["s"].capture.as_ref().unwrap().start_lights,
+        None
+    );
+    let with = file(
+        serde_json::json!({"complete": true, "coverage_seconds": 1.0, "recorded_at": "x", "start_lights": 66}),
+    );
+    assert_eq!(
+        with.cue_maps["s"].capture.as_ref().unwrap().start_lights,
+        Some(66)
+    );
+    let again: LightsSettings =
+        serde_json::from_value(serde_json::to_value(&with).unwrap()).unwrap();
+    assert_eq!(again.cue_maps["s"], with.cue_maps["s"]);
 }

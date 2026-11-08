@@ -43,6 +43,19 @@ export const markEdited = (cue: OscLightingCue): OscLightingCue => (isCaptured(c
 /** A count for people: 1,000 and up gets thousands separators (a small count stays as it is). */
 export const formatCount = (value: number): string => (Math.abs(value) >= 1_000 ? Math.round(value).toLocaleString("en-US") : String(value));
 
+/**
+ * The sentence about a song's starting look (the state of every light when the recording began): how many lights it holds,
+ * or, for a capture made before the starting lights were saved, how to fix that. Null when there is nothing captured.
+ * `startLights` is the capture's `start_lights`: a number, 0 when the state could not be read, null on an older capture
+ * (undefined: the caller does not know, so nothing is said).
+ */
+export const startLookNote = (startLights: number | null | undefined, hasCaptured: boolean): string | null => {
+  if (!hasCaptured || startLights === undefined) return null;
+  if (startLights === null) return "Recorded before the starting lights were saved. Record this song again to include the house lights.";
+  if (startLights === 0) return "The starting look of the other lights could not be read.";
+  return `Starting look of ${formatCount(startLights)} light${startLights === 1 ? "" : "s"} saved.`;
+};
+
 /** The one plain sentence beside the capture count when a busy recording had to be simplified, or null. */
 export const simplifiedNote = (simplified: { kept_changes: number; recorded_changes: number } | null | undefined): string | null =>
   simplified ? `Simplified: ${formatCount(simplified.kept_changes)} of ${formatCount(simplified.recorded_changes)} changes kept.` : null;

@@ -450,6 +450,7 @@ export function LightingSetupPanel({
     loops: effects.length,
     edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited),
     simplified: savedCueMap?.capture?.simplified ?? null,
+    startLights: savedCueMap?.capture?.start_lights ?? null,
   }), [savedCueMap, oscCues, effects.length]);
   const rowIndex = useMemo(() => new RowValueIndex(oscCues), [oscCues]);
   // Warn only: replay is never held or skipped for this.

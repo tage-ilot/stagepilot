@@ -193,6 +193,60 @@ hand stay. Captured rows are labelled `Look - N fixtures` and have no colour.
 An old `lightkey-takes.json` is **ignored**: it is not read, rewritten or deleted
 (delete it by hand once you have re-recorded).
 
+### The starting look: every light, saved with every song
+
+A recording only sees fixture **changes**. A house or front light that the operator sets with a
+Lightkey preset before the song and that does not change during it never produced a sample, so
+it was not in the song and the replay could not recreate the picture (on 2026-11-08 the saved
+songs Elohim and Ever Be touched 35 and 32 of the 66 fixtures; the other 31-34, the house and
+front lights, were whatever the presets happened to be).
+
+**The rule.** When a recording pass begins, StagePilot takes the relay's current state of
+**every** fixture and stores it as the song's **starting look** at song position 0, as the
+first `Look - N fixtures` row of the song (the same row and message form as any captured row,
+so the timeline, editing and replay treat it like a first look). Fixtures that change later keep
+this value as their first value. Which properties are stored is decided from the property
+names, with no fixture names anywhere:
+
+| Class | Property names (compared without case) |
+| --- | --- |
+| level | contains `dimmer`, `intensity`, `fog` or `haze` |
+| colour | `color`/`colour`, anything containing `white`, `amber`, `uv`, `lime`, `red`, `green`, `blue`, `cyan`, `magenta`, `yellow`, `indigo` |
+| position | starts with `pan`, `tilt`, `zoom` or `focus` |
+| wheel | starts with `gobo`, `prism`, `frost`, `iris`, `wheel`, or `color` plus digits (colour wheels), without `rotation`, `mode` or `angle`; stored only when **in use** (not 0, `false`, empty, `open`, `none`, `off`) |
+
+Names containing `speed` and everything else (`lit`, `off`, `command`, programs, macros,
+built-in effects, strobe) are not part of a look. A fixture that **never changes in the song and
+is dark at the start** (every level is 0, or, with no level, every colour is black) keeps only
+what keeps it dark: its levels, or its colours when it has no level. Every other fixture is
+stored with all its appearance properties above.
+
+For the real 66-fixture rig (the 31 house/front lights static, 35 other fixtures changing every
+property once) the first look holds **154 values on all 66 fixtures**: 49 values from the 31
+static fixtures (15 of them dark and reduced to their dimmer or colour) and 105 from the 35 that
+change. If nothing changed in a song the whole rig would be 102 values. At the 200 packets a
+second budget (5 ms a packet) the first look of the 154-value pass leaves in **0.77 s** on the
+simulated clock of the tests (nothing is sent before song position 0); it is held to under 1 s
+by a test, and the dark-fixture rule above is what keeps it there. The capture line shows
+`Starting look of 66 lights saved.`; the capture records the count in the optional
+`capture.start_lights` (an older build ignores the key).
+
+The starting look counts toward the per-song caps like any other row. When the relay's state
+cannot be read (nothing was reported at the start) the capture is saved exactly as before and
+the status says `Saved N looks to <song>'s timeline. The starting look of the other lights could
+not be read.` (`capture.start_lights` is then 0). A capture is never blocked or discarded
+because of this. If the recorder begins late (the stream was not live at the start of the song)
+the starting look is taken when recording begins and stamped at that song position; the capture
+stays incomplete as before.
+
+**Songs captured before this change** have no starting look (`capture.start_lights` absent).
+With Record off they replay exactly as before and are never touched or re-recorded; the
+Lighting screen says `Recorded before the starting lights were saved. Record this song again to
+include the house lights.` Auto counts such a capture as it always did (a complete one replays):
+Auto with Record off never starts a recording on its own for this, so a show is never surprised.
+To include the house lights, arm **Record** (or pin it) and play the song: a complete pass
+replaces the old capture (a partial pass never replaces a complete one).
+
 ### Smooth capture: ramps and effects
 
 A recording is fitted, not thinned. Lightkey's DMX output arrives as samples 2 to 25 ms
@@ -615,7 +669,11 @@ dimmer sweeps over 255 s):
 
 Pausing, stopping, resetting the countdown or reaching the end of the song only
 cancels the changes still scheduled. StagePilot sends **no clear**: the fixtures
-keep the look they had, and Lightkey's own cues do not take over. Resuming at the
+keep the look they had, and Lightkey's own cues do not take over. This holds for **every**
+held fixture, including the house lights held only because of the song's starting look: at the
+end of the song the lights stay exactly as they are, so the operator can carry on from there
+in Lightkey. Nothing is handed back at the end of a song, on pause, stop or seek, and there is no
+timer that does. Resuming at the
 same place, or seeking, sets the fixtures to the song's state at the new position
 and carries on from there. Seeking **back** to before a fixture's first row gives
 that fixture back to Lightkey (the song has not touched it yet at that position)
@@ -645,7 +703,14 @@ A held fixture returns to Lightkey only when:
 Pause, stop, reset, seek, resume and the song's end never clear anything.
 
 Each release sends one `overrides/clear` per fixture, twice, paced at no more than
-200 packets a second. Fixtures that were never captured are never touched.
+200 packets a second. A fixture that is in no look of the song (a song captured before the
+starting look existed holds only the fixtures that changed) is never touched.
+
+**Because a new capture holds the whole rig, a Lightkey preset switched on a held fixture has
+no visible effect until the operator presses Release lights** (the replay's override sits on
+top of presets). A manual change to a fixture in Lightkey (a fader, an override) is noticed
+and wins, as described next. A new song releases the held fixtures it does not use, and a song
+with a starting look uses all of them.
 
 ### The operator always wins, per fixture
 
@@ -681,7 +746,9 @@ reconnect are never treated as operator input.
 **Limit.** Manual control changes (faders, overrides, a pad that moves a
 property) show up as DMX changes and are detected. A cue the operator activates on
 a fixture the replay is holding is probably invisible in DMX, because the replay's
-override sits on top of it. Use **Release lights** for that.
+override sits on top of it. Use **Release lights** for that. With a starting look that is every
+light of the rig: to change the house lights with a preset after a song, press **Release
+lights** first.
 
 **Release lights** (button in the Lightkey strip, `POST /api/v1/lights/lightkey/release`)
 sends the double `overrides/clear` to every fixture held right now **and** every

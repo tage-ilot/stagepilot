@@ -26,6 +26,7 @@ use crate::lightkey_looks::LookRecorder;
 use crate::lightkey_recording::{self, RawRecordingView};
 use crate::lightkey_relay::{relay_target, RelayClient};
 use crate::lightkey_smooth::smooth_rows;
+use crate::lightkey_start;
 use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -1916,9 +1917,16 @@ impl Inner {
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             project: session.project.clone(),
             simplified: None,
+            start_lights: None,
         };
-        let (baseline, changes) = recorder.raw();
+        let raw = recorder.raw_with_start();
         drop(recorder);
+        let (baseline, mut changes) = (raw.baseline, raw.changes);
+        // The relay's state of every fixture when recording began is the song's first look:
+        // fixtures that never change would otherwise leave no sample at all (the house lights).
+        let start = raw
+            .start
+            .map(|(at, snapshot)| lightkey_start::apply(&mut changes, at, &snapshot));
         let raw_changes = changes.len();
         let (baseline, changes) = (Arc::new(baseline), Arc::new(changes));
         // The raw recording goes to disk before anything is fitted, so a song that cannot be
@@ -1947,11 +1955,19 @@ impl Inner {
             ..status
         };
         let mut capture = fitted.capture.clone();
+        if let Some(applied) = &start {
+            // one "Look - N fixtures" row at the start instead of one per fixture
+            lightkey_start::merge_first_look(&mut capture.rows, applied.at);
+        }
         let mut trimmed = fitted.trimmed;
         let mut share = 1.0;
         for _ in 0..MAX_SINK_RETRIES {
             let rows = smooth_rows(&capture.rows);
             let (count, loops) = (rows.len(), capture.effects.len());
+            // 0: the relay's state could not be read, so the capture has no starting look.
+            let start_lights = start.as_ref().map_or(0, |applied| {
+                lightkey_start::lights_at_start(&capture.rows, applied.at)
+            });
             let simplified = if trimmed > fitted.trimmed {
                 // the timeline already holds other rows: this song was trimmed further
                 simplified_of(&Fitted {
@@ -1970,6 +1986,7 @@ impl Inner {
                 effects: capture.effects.clone(),
                 status: CaptureStatus {
                     simplified: simplified.clone(),
+                    start_lights: Some(u32::try_from(start_lights).unwrap_or(u32::MAX)),
                     ..status.clone()
                 },
             })
@@ -1987,6 +2004,7 @@ impl Inner {
                         thin_seconds = fitted.thin_seconds,
                         trimmed,
                         raw_changes,
+                        start_lights,
                         fits = fitted.fits,
                         fit_ms = u64::try_from(fitted.fit_ms).unwrap_or(u64::MAX),
                         "lightkey_looks_saved"
@@ -1995,8 +2013,11 @@ impl Inner {
                         song_title: title.clone(),
                         looks: u32::try_from(count + loops).unwrap_or(u32::MAX),
                     });
-                    let text =
+                    let mut text =
                         saved_message(count, loops, &title, fitted.scale, simplified.as_ref());
+                    if start_lights == 0 {
+                        text.push_str(" The starting look of the other lights could not be read.");
+                    }
                     let missing = duration - covered;
                     return self.say(if !complete {
                         format!(

@@ -1109,6 +1109,14 @@ pub struct CaptureStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<CaptureSimplified>")]
     pub simplified: Option<CaptureSimplified>,
+    /// How many lights the capture's starting look holds (the state of the whole rig when the
+    /// recording began, stored at the first look so the replay recreates the picture whatever
+    /// presets are on). `Some(0)`: the pass tried but the relay's state could not be read.
+    /// Absent: the capture was recorded before the starting look was saved (older files and
+    /// older builds), so its house lights are not in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<u32>")]
+    pub start_lights: Option<u32>,
 }
 
 /// How a too-busy recording was simplified so that it fits the per-song caps
@@ -1170,6 +1178,17 @@ impl SongLightingCueMap {
     /// Captured rows exist and a complete pass produced them.
     pub fn is_fully_captured(&self) -> bool {
         self.has_captured_rows() && self.capture.as_ref().is_some_and(|c| c.complete)
+    }
+
+    /// Captured rows recorded before the starting look was saved: they hold only the fixtures that
+    /// changed, so the house lights are missing. Replay is unchanged; the Lighting screen says
+    /// to record the song again.
+    pub fn recorded_before_start_look(&self) -> bool {
+        self.has_captured_rows()
+            && self
+                .capture
+                .as_ref()
+                .is_none_or(|c| c.start_lights.is_none())
     }
 
     pub fn capture_label(&self) -> CaptureLabel {
