@@ -153,3 +153,17 @@ describe("merge rules", () => {
     expect(mergeBlockReason([rampA], ["r1"])).toBeNull();
   });
 });
+
+describe("RowValueIndex gives the same answers as scanning every row", () => {
+  it("matches the plain scan on a mixed song, including rows at the same time and ramps", async () => {
+    const { RowValueIndex, rowSummary } = await import("./lightingSmooth");
+    const dim = (n: number) => `/fixture/MH${n}/overrides/dimmer`;
+    const row = (id: string, at: number, address: string, value: number, fade?: number) => ({
+      id, at_seconds: at, address: "", args: [], label: "", source: "captured" as const, ...(fade ? { fade_seconds: fade } : {}),
+      messages: [{ address, args: [{ type: "float" as const, value }] }],
+    });
+    const cues = Array.from({ length: 400 }, (_, index) => row(`r${index}`, Math.floor(index / 3) * 0.5, dim((index % 4) + 1), (index % 10) / 10, index % 7 === 0 ? 1.5 : undefined));
+    const index = new RowValueIndex(cues);
+    for (const cue of cues) expect(rowSummary(cue, index)).toEqual(rowSummary(cue, cues));
+  });
+});

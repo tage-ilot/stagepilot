@@ -40,9 +40,9 @@ import { Select } from "./ui/Select";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { EffectRow, LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } from "./LightingOscParts";
 import { Dialog } from "./ui/Dialog";
-import { fadeOf, isRamp, mergeBlockReason, rampDescription } from "./lightingSmooth";
+import { fadeOf, isRamp, mergeBlockReason, rampDescription, RowValueIndex } from "./lightingSmooth";
 import {
-  capturedCount, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows,
+  capturedCount, formatCount, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows, rowMessages,
   removeFixtureFromRows,
   captureLabelOf,
 } from "./lightingLooks";
@@ -360,7 +360,11 @@ export function LightingSetupPanel({
   const [page, setPage] = useState(0);
   useEffect(() => { setUndo(null); setSelectedIds([]); setPage(0); setFocusId(null); setPendingRemoveEffect(null); }, [selectedSongKey]);
   useEffect(() => {
-    setSelectedIds((ids) => (ids.every((id) => oscCues.some((cue) => cue.id === id)) ? ids : ids.filter((id) => oscCues.some((cue) => cue.id === id))));
+    setSelectedIds((ids) => {
+      if (!ids.length) return ids;
+      const present = new Set(oscCues.map((cue) => cue.id));
+      return ids.every((id) => present.has(id)) ? ids : ids.filter((id) => present.has(id));
+    });
   }, [oscCues]);
 
   const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false, options?: { removeEffectIds?: string[] }) => {
@@ -439,7 +443,15 @@ export function LightingSetupPanel({
     persistOscCues(undo.cues, true);
     setUndo(null);
   };
-  const looks = { label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }), count: capturedCount(oscCues), loops: effects.length, edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited) };
+  // The follow-along re-renders this panel ten times a second; anything that walks every row is kept until the rows change.
+  const looks = useMemo(() => ({
+    label: captureLabelOf(savedCueMap ? { ...savedCueMap, osc_cues: oscCues } : { osc_cues: oscCues }),
+    count: capturedCount(oscCues),
+    loops: effects.length,
+    edited: hasEditedCaptured(oscCues) || Boolean(savedCueMap?.captured_edited),
+    simplified: savedCueMap?.capture?.simplified ?? null,
+  }), [savedCueMap, oscCues, effects.length]);
+  const rowIndex = useMemo(() => new RowValueIndex(oscCues), [oscCues]);
   // Warn only: replay is never held or skipped for this.
   const projectNotice = projectMismatchText(savedCueMap?.capture?.project, openProject);
   const PAGE_SIZE = 40;
@@ -488,11 +500,11 @@ export function LightingSetupPanel({
     if (counts.looks + counts.handmade + (counts.loops ?? 0) === 0) return;
     setPendingClear(clearSongRequest(song.title, counts, () => saveEmpty(song, method, cueMaps?.[key]?.effects)));
   };
-  const songChips: SongChip[] = songs.map((song) => {
+  const songChips: SongChip[] = useMemo(() => songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
     return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
-  });
+  }), [songs, cueMaps, method]);
 
   const askClearLoudness = () => {
     if (!onClearLoudness || !selectedSongKey) return;
@@ -504,7 +516,11 @@ export function LightingSetupPanel({
   const typeFilter = useHiddenCueTypes();
   const keepRows = new Set([...selectedIds, ...(focusId ? [focusId] : [])]);
   const rowVisible = (id: string, type: CueTypeId) => !typeFilter.hidden.has(type) || keepRows.has(id);
-  const listedOsc = oscCues.filter((cue) => rowVisible(cue.id, classifyOscCue(cue)));
+  const keepKey = [...keepRows].join("|");
+  const listedOsc = useMemo(
+    () => oscCues.filter((cue) => rowVisible(cue.id, classifyOscCue(cue))),
+    [oscCues, typeFilter.hidden, keepKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const listedEffects = effects.filter((effect) => rowVisible(effect.id, "effect-loop"));
   const listedMidi = cues.filter((cue) => rowVisible(cue.id, classifyMidiCue(cue).type));
   const pageCount = Math.max(1, Math.ceil(listedOsc.length / PAGE_SIZE));
@@ -527,19 +543,20 @@ export function LightingSetupPanel({
   const activePads = pads.filter((pad) => pad.method === method).length;
   // The line under the title, shown open or closed: what is in here, so the closed card still tells the story.
   const timelineDetail = [
-    cueTotal === 0 ? "No cues yet" : `${cueTotal} cue${cueTotal === 1 ? "" : "s"} on ${songsWithCues} of ${songs.length} song${songs.length === 1 ? "" : "s"}`,
+    cueTotal === 0 ? "No cues yet" : `${formatCount(cueTotal)} cue${cueTotal === 1 ? "" : "s"} on ${songsWithCues} of ${songs.length} song${songs.length === 1 ? "" : "s"}`,
     `${activePads} pad${activePads === 1 ? "" : "s"}`,
     selectedSong && selectedSong.duration_seconds != null ? `${selectedSong.title} ${formatElapsed(selectedSong.duration_seconds)}` : null,
   ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
-  const timelineMarkers: TimelineMarker[] = method === "osc"
+  const timelineMarkers: TimelineMarker[] = useMemo(() => method === "osc"
     ? oscCues.filter((cue) => cue.address !== "" || isLook(cue)).map((cue) => {
       const type = classifyOscCue(cue);
       const label = isLook(cue) ? lookLabel(cue) : cue.label || cue.address;
       const ramp = isRamp(cue);
       return {
         id: cue.id, at: cue.at_seconds, label, color: cue.color ?? null, captured: isCaptured(cue), type, spokenLabel: typeSpokenLabel(type, label),
-        ...(ramp ? { fade: fadeOf(cue), description: rampDescription(cue, oscCues) } : {}),
+        ...(ramp ? { fade: fadeOf(cue), description: rampDescription(cue, rowIndex) } : {}),
+        weight: rowMessages(cue).length,
       };
     })
     : cues.map((cue) => {
@@ -550,7 +567,7 @@ export function LightingSetupPanel({
         label: noteDisplayMode === "music" ? `${midiNoteName(cue.note)} ${text}` : `${cue.note} ${text}`,
         spokenLabel: midiSpokenLabel(cue.note, text),
       };
-    });
+    }), [method, oscCues, cues, rowIndex, noteDisplayMode]);
   const savedLighting = settings?.settings.lights ?? lights;
   const savedMethod: LightingMethod = savedLighting?.method ?? "midi";
   const savedOutputName = savedLighting?.output_name ?? null;
@@ -943,7 +960,7 @@ export function LightingSetupPanel({
           ))}
           {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
             <LookRow
-              allRows={oscCues}
+              allRows={rowIndex}
               cue={cue}
               disabled={pendingOperation !== null}
               highlight={cue.id === focusId}

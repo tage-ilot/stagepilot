@@ -44,7 +44,41 @@ export interface TimelineMarker {
   fade?: number;
   /** Plain words for a ramp (fixtures, properties, from -> to, duration): the marker's tooltip and the detail line. */
   description?: string;
+  /** How much the row changes, as the number of messages it sends. Used only to decide which rows survive when the song is too dense to draw. */
+  weight?: number;
 }
+
+/** Above this many cues the timeline draws one bar per pixel column instead of every cue (the data is never changed). */
+export const DRAW_ALL_LIMIT = 1500;
+/** A row with at least this many messages (and at least 4x the song's typical row) is a large change and is always drawn. */
+export const LARGE_CHANGE_WEIGHT = 8;
+const LARGE_CHANGE_FACTOR = 4;
+
+/**
+ * Thins what is DRAWN when a song has more cues than the track has pixel columns: per column the heaviest row is kept (the
+ * earliest on a tie). Always kept, even when two share a column: the first and the last row, rows in `keep` (selected, dragged),
+ * hand-made rows (`captured === false`), and large changes. Returns the rows in time order; the input is not changed.
+ */
+export const decimateMarkers = <T extends { id: string; at: number; weight?: number; captured?: boolean }>(
+  markers: readonly T[], columns: number, songLength: number, keep: ReadonlySet<string> = new Set(),
+): T[] => {
+  const cols = Math.max(1, Math.floor(columns));
+  if (markers.length <= cols) return [...markers];
+  const sorted = [...markers].sort((a, b) => a.at - b.at);
+  const weights = sorted.map((marker) => marker.weight ?? 1).sort((a, b) => a - b);
+  const median = weights[weights.length >> 1] ?? 1;
+  const largeAt = Math.max(LARGE_CHANGE_WEIGHT, median * LARGE_CHANGE_FACTOR);
+  const best = new Map<number, T>();
+  const always = new Set<T>([sorted[0]!, sorted[sorted.length - 1]!]);
+  for (const marker of sorted) {
+    if (keep.has(marker.id) || marker.captured === false || (marker.weight ?? 1) >= largeAt) { always.add(marker); continue; }
+    const column = songLength > 0 ? Math.min(cols - 1, Math.max(0, Math.floor((marker.at / songLength) * cols))) : 0;
+    const current = best.get(column);
+    if (!current || (marker.weight ?? 1) > (current.weight ?? 1)) best.set(column, marker);
+  }
+  const chosen = new Set<T>([...always, ...best.values()]);
+  return sorted.filter((marker) => chosen.has(marker));
+};
 
 /** Ruler tick spacing in seconds for a song of this length. */
 export const rulerStep = (songLength: number): number => {
@@ -133,6 +167,7 @@ export const placeMarkerLabels = (
   }
   // Labels start 8 px to the right of the marker line (see the component), so the line's x is the start of the claim.
   const sorted = [...markers].sort((left, right) => left.at - right.at || left.id.localeCompare(right.id));
+  const atById = new Map(sorted.map((marker) => [marker.id, marker.at]));
   const rowEnds: number[] = Array.from({ length: maxRows }, () => Number.NEGATIVE_INFINITY);
   const lastOnRow: (string | null)[] = Array.from({ length: maxRows }, () => null);
   for (const marker of sorted) {
@@ -145,7 +180,7 @@ export const placeMarkerLabels = (
       const earlier = lastOnRow[row];
       const earlierPlacement = earlier ? placements.get(earlier) : undefined;
       if (earlier && earlierPlacement) {
-        const earlierX = (sorted.find((item) => item.id === earlier)!.at / songLength) * trackWidth;
+        const earlierX = ((atById.get(earlier) ?? marker.at) / songLength) * trackWidth;
         placements.set(earlier, { row: earlierPlacement.row, width: Math.max(0, Math.min(earlierPlacement.width, x - earlierX - 4)) });
       }
     }

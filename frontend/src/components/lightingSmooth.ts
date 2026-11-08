@@ -121,8 +121,50 @@ export const formatArgs = (args: { type: string; value: number | string | boolea
 
 export interface RampLine { fixture: string; property: string; from: string | null; to: string; ramps: boolean }
 
+interface IndexedValue { id: string; at: number; ramp: boolean; text: string }
+
+/**
+ * The rows' messages grouped by address and sorted by time, built once per list of rows. It answers "what value did this address
+ * have before this row" in O(log n) instead of scanning every row (a 50,000-row song would otherwise cost billions of steps).
+ */
+export class RowValueIndex {
+  private readonly byAddress = new Map<string, IndexedValue[]>();
+  constructor(cues: OscLightingCue[]) {
+    for (const cue of cues) {
+      const ramp = isRamp(cue);
+      for (const message of rowMessages(cue)) {
+        const list = this.byAddress.get(message.address) ?? [];
+        list.push({ id: cue.id, at: cue.at_seconds, ramp, text: formatArgs(message.args) });
+        this.byAddress.set(message.address, list);
+      }
+    }
+    // A stable sort keeps the original order inside one time, so the last one in a tie is the one that applied last.
+    for (const list of this.byAddress.values()) list.sort((a, b) => a.at - b.at);
+  }
+
+  /** The value text an address had just before `cue` (same rules as a full scan), or null. */
+  valueBefore(cue: OscLightingCue, address: string): string | null {
+    const list = this.byAddress.get(address);
+    if (!list) return null;
+    // First entry that starts after this row; everything the rules can accept is before it.
+    let low = 0;
+    let high = list.length;
+    while (low < high) { const mid = (low + high) >> 1; if (list[mid]!.at > cue.at_seconds) high = mid; else low = mid + 1; }
+    const ramp = isRamp(cue);
+    for (let index = low - 1; index >= 0; index--) {
+      const other = list[index]!;
+      if (other.id === cue.id) continue;
+      // Rows at the same time apply instant first, then ramps.
+      if (other.at === cue.at_seconds && (other.ramp || !ramp)) continue;
+      return other.text;
+    }
+    return null;
+  }
+}
+
 /** The value an address had just before `cue`: the end value of the latest earlier row that sets it, or null when none does. */
-const valueBefore = (cues: OscLightingCue[], cue: OscLightingCue, address: string): string | null => {
+const valueBefore = (cues: OscLightingCue[] | RowValueIndex, cue: OscLightingCue, address: string): string | null => {
+  if (cues instanceof RowValueIndex) return cues.valueBefore(cue, address);
   let found: { at: number; text: string } | null = null;
   for (const other of cues) {
     if (other.id === cue.id) continue;
@@ -136,7 +178,7 @@ const valueBefore = (cues: OscLightingCue[], cue: OscLightingCue, address: strin
 };
 
 /** What a row does, one line per message: the fixture, the property, from -> to. Numeric messages of a ramp are the ones that move. */
-export const rowSummary = (cue: OscLightingCue, cues: OscLightingCue[]): RampLine[] =>
+export const rowSummary = (cue: OscLightingCue, cues: OscLightingCue[] | RowValueIndex): RampLine[] =>
   rowMessages(cue).map((message) => {
     const property = /\/overrides\/(.+)$/.exec(message.address)?.[1] ?? message.address;
     const numeric = message.args.length > 0 && message.args.every((arg) => typeof arg.value === "number");
@@ -150,7 +192,7 @@ export const rowSummary = (cue: OscLightingCue, cues: OscLightingCue[]): RampLin
   });
 
 /** Plain-words summary of a ramp for a tooltip and the detail strip. */
-export const rampDescription = (cue: OscLightingCue, cues: OscLightingCue[]): string => {
+export const rampDescription = (cue: OscLightingCue, cues: OscLightingCue[] | RowValueIndex): string => {
   const lines = rowSummary(cue, cues);
   const fixtures = [...new Set(lines.map((line) => line.fixture))];
   const shownFixtures = fixtures.length > 3 ? `${fixtures.slice(0, 3).join(", ")} and ${fixtures.length - 3} more` : fixtures.join(", ");
@@ -192,7 +234,8 @@ const sameFade = (a: OscLightingCue, b: OscLightingCue) => Math.abs(fadeOf(a) - 
  * Loops are not rows: they cannot be picked, and a merge never changes them.
  */
 export const mergeBlockReason = (cues: OscLightingCue[], ids: string[]): string | null => {
-  const chosen = cues.filter((cue) => ids.includes(cue.id));
+  const wanted = new Set(ids);
+  const chosen = cues.filter((cue) => wanted.has(cue.id));
   if (chosen.length < 2) return null;
   const ramps = chosen.filter(isRamp);
   if (ramps.length === 0) return null;

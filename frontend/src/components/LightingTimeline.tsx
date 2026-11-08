@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
 import type { LightingEffect, SongLoudness } from "../types";
 import { barClassFor } from "./cueTypeBars";
 import { CueTypeLegend } from "./CueTypeParts";
 import { useHiddenCueTypes } from "./useHiddenCueTypes";
 import { CUE_TYPES, describeTypeCounts, dominantType, glyphFor, typeSpokenLabel, type CueTypeId } from "./lightingCueTypes";
-import { clusterMarkers } from "./lightingLooks";
+import { clusterMarkers, formatCount } from "./lightingLooks";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
+  DRAW_ALL_LIMIT,
+  decimateMarkers,
   markerType,
     nudgeCueTime,
   padColorClasses,
@@ -31,6 +33,8 @@ const ZOOMS = [0, 6, 12, 24, 60, 120] as const; // pixels per second; 0 = fit th
 const CLUSTER_GAP_PX = 14; // markers closer than this on screen become one cluster
 const LONG_PRESS_MS = 500;
 const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of squeezing
+const UNMEASURED_TRACK_PX = 1000; // the width assumed for thinning before the track has been measured
+const MAX_DRAW_COLUMNS = 2400; // never draw more than this many bars, however far the track is zoomed
 const EFFECT_LANE_PX = 24; // one line of loops under the track (44 on touch, set in the class)
 
 /**
@@ -100,7 +104,13 @@ export function LightingTimeline({
   const clearPress = () => { if (pressTimer.current !== null) { window.clearTimeout(pressTimer.current); pressTimer.current = null; } pressStart.current = null; };
 
   // A song with no known length still gets a usable bar: the last cue plus a minute.
-  const length = songLength ?? Math.max(60, ...markers.map((marker) => marker.at + 60), ...effects.map((effect) => effect.end_seconds + 60));
+  const length = useMemo(() => {
+    if (songLength !== null) return songLength;
+    let last = 0;
+    for (const marker of markers) if (marker.at > last) last = marker.at;
+    for (const effect of effects) if (effect.end_seconds > last) last = effect.end_seconds;
+    return Math.max(60, last + 60);
+  }, [songLength, markers, effects]);
   const zoom = ZOOMS[zoomIndex]!;
   // A ramp has to end inside the song, so it can only be moved as far as its own length allows.
   const keepRampInside = (marker: TimelineMarker | undefined, at: number) => (marker && (marker.fade ?? 0) > 0 ? clampCueTime(clampRampStart(at, marker.fade!, length), length) : at);
@@ -146,8 +156,19 @@ export function LightingTimeline({
   }, [effects, selectedEffectId]);
 
   // A hidden type is only hidden from view: the picked, selected and dragged markers always stay.
-  const visibleMarkers = markers.filter((marker) => !hidden.has(markerType(marker)) || marker.id === selectedId || marker.id === drag?.id || picked.has(marker.id));
-  const presentTypes = new Set<CueTypeId>([...markers.map(markerType), ...(effects.length ? ["effect-loop" as const] : [])]);
+  // Everything below walks every cue, so it is kept until the cues, the filter or the selection really change (the playhead
+  // re-renders this component ten times a second while a song runs).
+  const dragId = drag?.id ?? null;
+  const visibleMarkers = useMemo(
+    () => markers.filter((marker) => !hidden.has(markerType(marker)) || marker.id === selectedId || marker.id === dragId || picked.has(marker.id)),
+    [markers, hidden, selectedId, dragId, selectedIds], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const presentTypes = useMemo(() => {
+    const types = new Set<CueTypeId>();
+    for (const marker of markers) types.add(markerType(marker));
+    if (effects.length) types.add("effect-loop");
+    return types;
+  }, [markers, effects.length]);
   const visibleEffects = effects.filter((effect) => !hidden.has("effect-loop") || effect.id === selectedEffectId);
   const effectLanes = assignEffectLanes(visibleEffects);
   const laneCount = visibleEffects.length ? Math.max(...effectLanes.values()) + 1 : 0;
@@ -201,13 +222,26 @@ export function LightingTimeline({
   };
 
   const pxPerSecond = trackWidth > 0 ? trackWidth / length : 0;
-  const keepSingle = new Set([...(selectedId ? [selectedId] : []), ...(drag ? [drag.id] : []), ...selectedIds]);
-  const items = pxPerSecond > 0 ? clusterMarkers(visibleMarkers, pxPerSecond, CLUSTER_GAP_PX, keepSingle) : visibleMarkers.map((marker) => ({ kind: "single" as const, marker }));
+  // A big selection (a drag across a dense song) is shown by its count; only a small one keeps its bars out of the thinning.
+  const keepSingle = useMemo(
+    () => new Set([...(selectedId ? [selectedId] : []), ...(dragId ? [dragId] : []), ...(selectedIds.length <= 200 ? selectedIds : [])]),
+    [selectedId, dragId, selectedIds],
+  );
+  const dense = visibleMarkers.length > DRAW_ALL_LIMIT;
+  const drawWidth = trackWidth > 0 ? trackWidth : UNMEASURED_TRACK_PX;
+  const drawnMarkers = useMemo(
+    () => (dense ? decimateMarkers(visibleMarkers, Math.min(MAX_DRAW_COLUMNS, Math.ceil(drawWidth)), length, keepSingle) : visibleMarkers),
+    [dense, visibleMarkers, drawWidth, length, keepSingle],
+  );
+  const clusterPx = pxPerSecond > 0 ? pxPerSecond : dense ? drawWidth / length : 0;
+  const items = useMemo(
+    () => (clusterPx > 0 ? clusterMarkers(drawnMarkers, clusterPx, CLUSTER_GAP_PX, keepSingle) : drawnMarkers.map((marker) => ({ kind: "single" as const, marker }))),
+    [drawnMarkers, clusterPx, keepSingle],
+  );
   // Labels stack per single marker, and a cluster pill takes a slot like a short label, so Auto height follows what is really drawn.
-  const placeInputs = items.map((item) => item.kind === "cluster"
+  const labelPlacements = useMemo(() => placeMarkerLabels(items.map((item) => item.kind === "cluster"
     ? { id: item.id, label: "####", at: item.at }
-    : { id: item.marker.id, label: item.marker.label, at: item.marker.at });
-  const labelPlacements = placeMarkerLabels(placeInputs, trackWidth, length, labelRowsFor(heightMode));
+    : { id: item.marker.id, label: item.marker.label, at: item.marker.at }), trackWidth, length, labelRowsFor(heightMode)), [items, trackWidth, length, heightMode]);
   const rowsUsed = Math.max(1, ...[...labelPlacements.values()].map((placement) => placement.row + 1));
   const trackHeight = heightFor(heightMode, rowsUsed);
   const labelZone = rowsUsed * LABEL_ROW_PX + 4; // the waveform and playhead start under this
@@ -439,6 +473,11 @@ export function LightingTimeline({
           <Button onClick={() => setPicked([])} variant="secondary">Clear selection</Button>
           {mergeBlockedReason && <span className="min-w-0 basis-full text-type-body-sm text-ink-muted" data-testid="lighting-merge-blocked" id="lighting-merge-blocked">{mergeBlockedReason}</span>}
         </div>
+      )}
+      {dense && drawnMarkers.length < visibleMarkers.length && (
+        <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="lighting-timeline-thinned">
+          Drawing {formatCount(drawnMarkers.length)} of {formatCount(visibleMarkers.length)} cues so the timeline stays quick. Every cue is still saved and listed below; zoom in to see more of them.
+        </p>
       )}
       {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
       {selected && (

@@ -343,10 +343,28 @@ base tolerance: it used to scale with the fit, so at x8 "6 tolerances" was more 
 0..1 range, no loop was found and the song grew (2,916 rows at x4, 13,483 at x8). Loop
 matching itself uses at most x4.
 
+**What "simplified" means.** The song was busier than a song can be stored, so StagePilot kept
+the changes that matter most and left out the smallest ones. Everything the song does is still
+there (the same looks, ramps and loops, the same final value of every light); only some small,
+quick changes between them are gone, so replay is a little less fine-grained. A capture that
+fits as recorded is not simplified and shows no note. In the Lighting card the capture line
+says so beside the count, for example `552 captured items (546 ramps/steps, 6 loops) on this
+song. Simplified: 6,200 of 11,400 changes kept.` (`kept_changes` of `recorded_changes`). To get
+every change back, record the song again with fewer moving lights, or refit the raw recording
+(below) on a computer with the source.
+
+**Where the raw recordings are.** `lightkey-recordings/` next to `settings.json` on the
+StagePilot computer: one `<song key>-<UTC time>.json` per finished recording, the newest 5
+files and at most 300 MB in all (older ones are deleted when a new one is written). Copy the file
+you want before you record more songs.
+
 **Analysing a bad song offline.** `cargo run --release -p stagepilot-lights --example
 refit_recording -- <file> [--old-caps] [--no-budget]` loads one raw recording and prints every
 fit of the ladder (stage, scale, thinning, rows, messages, loops, steps, milliseconds) and where
-the song ends up.
+the song ends up. Operator: copy the newest file from `lightkey-recordings/` to a computer with
+the StagePilot source and run it there; it only reads the file and changes nothing. Developer:
+`--old-caps` replays the ladder with the old limits to compare, `--no-budget` ignores the 30 s
+fit budget so a slow song's real result can be seen.
 
 **While recording.** The recorder holds at most 1,000,000 changes of one song (about 170 MB).
 Past that it thins what it holds (per address, per window, last value wins; the window starts at
@@ -885,6 +903,16 @@ it and press the left or right arrow to move it 0.1 s (Shift: 1 s). Click or
 press Enter to open the small editor to set an exact time or delete the cue.
 Markers for the method that is not on screen are not drawn; those cues stay
 saved. On narrow widths the bar scrolls sideways, and **Zoom** changes its scale.
+
+**Big songs.** A song may hold up to 50,000 rows. The cue list shows 40 rows a page and the
+timeline draws at most one bar per pixel column (a song with more than 1,500 cues is thinned
+for DRAWING only: per column the row that changes the most is drawn; the first and last rows,
+hand-made rows, rows you have picked and any row with a large change are always drawn). When
+thinning is on the timeline says so (`Drawing N of M cues ...`); nothing is removed from the
+song and saving, editing, undo and merge work on every row. Counts of 1,000 or more are written
+with thousands separators (`12,000 captured items`). Work that walks every row (the timeline bars, the
+counts, the ramp descriptions) is redone only when the rows change, not on every tick of the
+follow-along. Measured numbers are in the pull request that added this.
 
 ### Saving and restarts
 
