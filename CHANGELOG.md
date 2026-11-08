@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.8] - 2026-11-07
+
+Release candidate 8 (pre-release; the in-app updater does not offer it). Everything in rc.7 applies. Found on the real rig by setting up the Lighting Mac from scratch with the Lighting section's command.
+
+### Fixed
+
+- **A Lighting Mac set up without cue names now shows as Connected.** StagePilot checked the helper through its cue-name feed (`/log`), which only exists when the optional cue module is installed. A helper installed the way the Lighting section installs it has no such feed, so StagePilot reported "Cannot reach the Lightkey API" even though the helper was running, and the setup box never finished. When the feed is missing, StagePilot now reads the helper's `/health` instead: Connected when the helper is up, "Lightkey is not running" when Lightkey is closed. Cue names still appear when the cue module is installed.
+
 ## [2.43.0-rc.7] - 2026-11-07
 
 Release candidate 7 (pre-release; the in-app updater does not offer it). Everything in rc.6 applies. Found on the real rig: a brand-new Lighting Mac set up from the Lighting section did not connect when it reaches StagePilot through a different network than the one StagePilot talks to it on.

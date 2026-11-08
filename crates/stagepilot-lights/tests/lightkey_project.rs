@@ -299,6 +299,8 @@ type Active = Arc<Mutex<Vec<String>>>;
 
 /// What the fake helper answers to `GET /health` and `POST /fixtures/refresh`.
 struct Helper {
+    /// A helper installed without the cue-name module has no `/log` (404).
+    no_log: Mutex<bool>,
     health: Mutex<(u16, serde_json::Value)>,
     refresh: Mutex<(u16, serde_json::Value)>,
     refreshes: Mutex<usize>,
@@ -339,6 +341,13 @@ async fn serve_http(active: Active, helper: Arc<Helper>) -> u16 {
         State(h): State<(Active, Arc<Helper>)>,
         Query(_q): Query<BTreeMap<String, String>>,
     ) -> Response {
+        if *h.1.no_log.lock().unwrap() {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                axum::Json(json!({"error": "not found"})),
+            )
+                .into_response();
+        }
         axum::Json(json!({
             "events": [],
             "state": {
@@ -404,6 +413,7 @@ impl Rig {
         let relay = FakeRelay::start(initial).await;
         let active: Active = Arc::new(Mutex::new(vec!["Warm".into()]));
         let helper = Arc::new(Helper {
+            no_log: Mutex::new(false),
             health: Mutex::new((200, health_0_5_0())),
             refresh: Mutex::new((200, json!({}))),
             refreshes: Mutex::new(0),
@@ -642,6 +652,28 @@ async fn changed_fixtures_with_the_same_name_and_count_say_so_plainly() {
         rig.link.status().message.as_deref(),
         Some("Not saved: the fixtures in the Lightkey project changed during the recording (Show, 3 fixtures). It captures again next time.")
     );
+    rig.link.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_helper_without_the_cue_feed_still_connects_through_health() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    *rig.helper.no_log.lock().unwrap() = true;
+    rig.link.start().await;
+    wait_for(|| rig.link.status().link == Link::Connected, 3.0).await;
+    let status = rig.link.status();
+    assert_eq!(status.link, Link::Connected, "{:?}", status.detail);
+    assert_eq!(
+        status.active_count,
+        Some(0),
+        "no cue names without the cue feed"
+    );
+    // Lightkey closed on the helper's Mac is still said plainly.
+    let mut closed = health_0_5_0();
+    closed["lightkey"] = json!(false);
+    *rig.helper.health.lock().unwrap() = (200, closed);
+    wait_for(|| rig.link.status().link == Link::LightkeyClosed, 4.0).await;
+    assert_eq!(rig.link.status().link, Link::LightkeyClosed);
     rig.link.stop().await;
 }
 
@@ -962,6 +994,7 @@ mod notice {
     ) -> (stagepilot_lights::lightkey::LightkeyStatus, Vec<String>) {
         let relay = FakeRelay::start(vec![dim("P1", 0.0)]).await;
         let helper = Arc::new(Helper {
+            no_log: Mutex::new(false),
             health: Mutex::new((200, health_0_5_0())),
             refresh: Mutex::new((200, json!({}))),
             refreshes: Mutex::new(0),

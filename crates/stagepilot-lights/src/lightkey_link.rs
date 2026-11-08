@@ -1346,9 +1346,20 @@ impl Inner {
         if refresh {
             self.measure_offset(http, &base).await?;
         }
-        let body = http
+        let body = match http
             .get_json(&format!("{base}/log"), &[("since", since.to_string())])
-            .await?;
+            .await
+        {
+            Ok(body) => body,
+            // `/log` is the optional cue-name feed (the helper's `lightkey_cues.py`). A helper installed without
+            // it answers 404 there, and still answers `/health`, which has everything this link needs: that the
+            // helper is alive and whether Lightkey is running.
+            Err(HttpFailure::Status(404)) => {
+                let health = http.get_json(&format!("{base}/health"), &[]).await?;
+                return self.apply_health_only(&health);
+            }
+            Err(other) => return Err(other),
+        };
         let Some(body) = body.as_object() else {
             return Err(HttpFailure::Other("the log is not an object".into()));
         };
@@ -1434,6 +1445,33 @@ impl Inner {
         }
         self.st().active = Some(active_now);
         self.set_link(Link::Connected, None);
+        Ok(())
+    }
+
+    /// The link state from `GET /health` alone, for a helper without the cue-name feed.
+    fn apply_health_only(&self, health: &Value) -> Result<(), HttpFailure> {
+        let Some(health) = health.as_object() else {
+            return Err(HttpFailure::Other(
+                "the health answer is not an object".into(),
+            ));
+        };
+        if !py_truthy(health.get("ok")) {
+            return Err(HttpFailure::Other("the helper says it is not ok".into()));
+        }
+        {
+            let mut st = self.st();
+            st.seq = 0;
+            st.active = if py_truthy(health.get("lightkey")) {
+                Some(Default::default())
+            } else {
+                None
+            };
+        }
+        if py_truthy(health.get("lightkey")) {
+            self.set_link(Link::Connected, None);
+        } else {
+            self.set_link(Link::LightkeyClosed, Some("Lightkey is not running."));
+        }
         Ok(())
     }
 
