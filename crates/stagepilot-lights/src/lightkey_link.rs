@@ -695,6 +695,11 @@ impl LightkeyLink {
     }
 
     // ------------------------------------------------------------ status
+    /// Where the link to the helper stands right now (cheap; the search reads it often).
+    pub fn link_state(&self) -> Link {
+        lock(&self.inner.state).link
+    }
+
     pub fn status(&self) -> LightkeyStatus {
         self.inner.status()
     }
@@ -1003,6 +1008,7 @@ impl Inner {
                 .then(|| st.health.clone())
                 .flatten(),
             project_mismatch: None,
+            discovery: None,
         }
     }
 

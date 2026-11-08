@@ -11,6 +11,7 @@ pub mod audio_cpal;
 pub mod lightkey;
 pub mod lightkey_auto;
 pub mod lightkey_curve;
+pub mod lightkey_discovery;
 pub mod lightkey_effects;
 pub mod lightkey_fixtures;
 pub mod lightkey_helper_assets;

@@ -1210,6 +1210,13 @@ pub struct LightkeySettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub audio_device: Option<String>,
+    /// The Lighting computer the automatic search last connected to (`http://host:port`). Used
+    /// only while `api_url` is blank: the address in use is this one, else the OSC host on port
+    /// 8770. Left out of the saved file while empty, so an older file saves back unchanged (an
+    /// rc.7/rc.8 build reads a file that has it as an unknown key and drops it).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[ts(optional, as = "Option<String>")]
+    pub found_url: String,
 }
 
 impl Default for LightkeySettings {
@@ -1220,6 +1227,7 @@ impl Default for LightkeySettings {
             mode: LightkeyMode::default(),
             detail: LightkeyDetail::default(),
             audio_device: None,
+            found_url: String::new(),
         }
     }
 }
@@ -1394,6 +1402,10 @@ impl LightsSettings {
         if let Ok(clean) = clean_lightkey_api_url(&self.lightkey.api_url) {
             self.lightkey.api_url = clean;
         }
+        // The found address is written by the search, never typed: one that cannot be read
+        // (a hand-edited file) is dropped rather than refusing the whole Lighting block.
+        self.lightkey.found_url =
+            clean_lightkey_api_url(&self.lightkey.found_url).unwrap_or_default();
         for pad in &mut self.pads {
             pad.label = pad.label.trim().to_string();
             pad.address = pad.address.as_ref().map(|a| a.trim().to_string());

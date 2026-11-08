@@ -79,6 +79,18 @@ pub fn routes() -> Router<Rt> {
             "/api/v1/lights/lightkey/read-fixtures",
             post(lightkey_read_fixtures),
         )
+        .route(
+            "/api/v1/lights/lightkey/discovery/scan",
+            post(lightkey_discovery_scan),
+        )
+        .route(
+            "/api/v1/lights/lightkey/discovery/use",
+            post(lightkey_discovery_use),
+        )
+        .route(
+            "/api/v1/lights/lightkey/discovery/dismiss",
+            post(lightkey_discovery_dismiss),
+        )
         .route("/api/v1/lights/lightkey/audio", get(lightkey_audio))
         .route(
             "/api/v1/lights/lightkey/audio/meter",
@@ -1545,6 +1557,8 @@ async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
             Some(name) => Some(name.trim().to_string()).filter(|name| !name.is_empty()),
             None => current.lightkey.audio_device.clone(),
         },
+        // Written by the search only; a settings save keeps it.
+        found_url: current.lightkey.found_url.clone(),
     };
     if let Some(response) = lightkey_validation_error(&api_url, &candidate) {
         return response;
@@ -1727,6 +1741,59 @@ async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
         message,
         lightkey: status,
     }))
+}
+
+// ---- Finding the Lighting computer -------------------------------------------------------------
+
+/// The `address` of a discovery request body: a required, non-blank string.
+fn discovery_address(raw: &Bytes) -> Result<String, Json> {
+    let object = object_body(raw)?;
+    match object.get("address") {
+        None => Err(unprocessable(vec![
+            json!({"type": "missing", "loc": body_loc("address"),
+            "msg": "Field required", "input": Value::Object(object.clone())}),
+        ])),
+        Some(Value::String(text)) if !text.trim().is_empty() && text.len() <= 300 => {
+            Ok(text.trim().to_string())
+        }
+        Some(other) => Err(unprocessable(vec![plain_error(
+            "string_type",
+            "address",
+            "Input should be a non-empty string",
+            other,
+        )])),
+    }
+}
+
+/// `POST /api/v1/lights/lightkey/discovery/scan` ("Search again"): look for the Lighting computer
+/// now. Takes no body. Accepted only while nothing is connected.
+async fn lightkey_discovery_scan(State(rt): State<Rt>) -> Json {
+    let (accepted, message) = rt.outputs.lights.lightkey_discovery_scan();
+    lightkey_response(&rt, accepted, message).await
+}
+
+/// `POST /api/v1/lights/lightkey/discovery/use` `{address}`: switch to a Lighting computer the
+/// last search found (`Use this one`, `Use <ip>`). Any other address is a plain 422.
+async fn lightkey_discovery_use(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let address = match discovery_address(&raw) {
+        Ok(address) => address,
+        Err(response) => return response,
+    };
+    match rt.outputs.lights.lightkey_discovery_use(&address).await {
+        Ok(message) => lightkey_response(&rt, true, message).await,
+        Err(message) => http_error(422, &message),
+    }
+}
+
+/// `POST /api/v1/lights/lightkey/discovery/dismiss` `{address}` (`Keep waiting`): stop offering
+/// that address until StagePilot restarts or the chosen address changes.
+async fn lightkey_discovery_dismiss(State(rt): State<Rt>, raw: Bytes) -> Json {
+    let address = match discovery_address(&raw) {
+        Ok(address) => address,
+        Err(response) => return response,
+    };
+    rt.outputs.lights.lightkey_discovery_dismiss(&address);
+    lightkey_response(&rt, true, "Still waiting for the chosen address.".into()).await
 }
 
 // ---- Loudness ----------------------------------------------------------------------------------
