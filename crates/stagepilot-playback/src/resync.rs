@@ -6,7 +6,15 @@
 //! heartbeat, a dropped message, a clamped seek): the timer, ProPresenter and the lights would
 //! otherwise stay on the wrong position for the rest of the song, because the heartbeat that
 //! confirms "playing" was never compared with the position.
+//!
+//! It must NOT act on a disagreement Playback itself caused while playing: a section loop or a
+//! section jump moves Playback's position (the real 25-minute capture loops a 22 s section
+//! 24 times), and those stay monitor-only. So a playing -> playing position jump (or a
+//! section event) suspends the net for that song until a start, resume, seek, snapshot or
+//! song change event re-arms it. The original fault (paused -> jump -> play) is never a
+//! playing -> playing jump, so it is still corrected.
 
+use crate::normalizer::{EventType, PlaybackEvent};
 use chrono::{DateTime, Utc};
 use stagepilot_core::state::{TimerState, TimerStatus};
 
@@ -31,12 +39,45 @@ pub fn timer_position(timer: &TimerState, now: DateTime<Utc>) -> Option<f64> {
 #[derive(Debug, Default, Clone)]
 pub struct DriftWatch {
     in_a_row: u32,
+    /// The song Playback moved by itself (loop or jump) while playing; the net is off for it.
+    jumped_song: Option<i64>,
 }
 
 impl DriftWatch {
     /// Forget the count (not playing, a different song, nothing to compare with).
     pub fn reset(&mut self) {
         self.in_a_row = 0;
+    }
+
+    /// Learn from the events of one message batch, in order. A position jump or section
+    /// event of a playing song suspends the net for that song; a start, resume, seek,
+    /// snapshot or song change re-arms it.
+    pub fn note_events(&mut self, events: &[PlaybackEvent]) {
+        for e in events {
+            match e.kind {
+                EventType::PositionJump | EventType::SectionJump | EventType::SectionLoop => {
+                    if let Some(song) = e.song_id {
+                        self.jumped_song = Some(song);
+                    }
+                    self.in_a_row = 0;
+                }
+                EventType::SongStarted
+                | EventType::SongResumed
+                | EventType::Seek
+                | EventType::StateSnapshot
+                | EventType::SongSelected
+                | EventType::SongChanged => {
+                    self.jumped_song = None;
+                    self.in_a_row = 0;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// True while Playback's own loop or jump has the net off for `song_id`.
+    pub fn is_suspended_for(&self, song_id: i64) -> bool {
+        self.jumped_song == Some(song_id)
     }
 
     /// Feed one heartbeat of a playing song. True when StagePilot should re-sync to
@@ -82,6 +123,61 @@ mod tests {
         assert!(!w.check(52.0, 92.0));
         assert!(w.check(53.0, 93.0));
         assert!(!w.check(54.0, 94.0)); // starts counting again after a re-sync
+    }
+
+    fn ev(kind: EventType, song: i64) -> PlaybackEvent {
+        PlaybackEvent {
+            kind,
+            timestamp: 0.0,
+            song_id: Some(song),
+            position: Some(0.0),
+            previous_song_id: None,
+            continues_playing: false,
+            playing: None,
+            pad: None,
+            setlist_version: None,
+            previous_version: None,
+            section_id: None,
+            active: None,
+            reason: None,
+            message_kind: None,
+            provisional: false,
+        }
+    }
+
+    #[test]
+    fn a_playback_jump_suspends_the_net_until_a_seek_resume_or_start() {
+        for rearm in [
+            EventType::Seek,
+            EventType::SongResumed,
+            EventType::SongStarted,
+            EventType::SongChanged,
+        ] {
+            let mut w = DriftWatch::default();
+            w.note_events(&[ev(EventType::PositionJump, 7)]);
+            assert!(w.is_suspended_for(7));
+            assert!(!w.is_suspended_for(8));
+            w.note_events(&[ev(EventType::SongPaused, 7)]);
+            assert!(w.is_suspended_for(7), "a pause alone does not re-arm");
+            w.note_events(&[ev(rearm, 7)]);
+            assert!(!w.is_suspended_for(7), "{rearm:?} re-arms");
+        }
+        let mut w = DriftWatch::default();
+        w.note_events(&[ev(EventType::SectionLoop, 7)]);
+        assert!(w.is_suspended_for(7));
+    }
+
+    #[test]
+    fn after_a_loop_pause_seek_play_is_corrected_again() {
+        let mut w = DriftWatch::default();
+        w.note_events(&[ev(EventType::PositionJump, 7)]);
+        assert!(w.is_suspended_for(7));
+        w.note_events(&[ev(EventType::SongPaused, 7)]);
+        w.note_events(&[ev(EventType::Seek, 7)]);
+        w.note_events(&[ev(EventType::SongResumed, 7)]);
+        assert!(!w.is_suspended_for(7));
+        assert!(!w.check(114.6, 233.9));
+        assert!(w.check(115.6, 234.9));
     }
 
     #[test]

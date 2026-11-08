@@ -1290,6 +1290,7 @@ impl Inner {
             let snapshot = self.store.snapshot();
             let plan_id = snapshot.plan.as_ref().map(|p| p.id.clone());
             s.mapper.note_plan(plan_id.as_deref());
+            s.drift.note_events(events);
             let mut observations = s.mapper.observe(hb, events, setlist);
             if let Some(resync) = self.position_resync(&mut s, hb, !events.is_empty(), &snapshot) {
                 observations.push(resync);
@@ -1355,7 +1356,9 @@ impl Inner {
             && s.queue.is_empty()
             && !s.mapper.stale
             && !s.mapper.discovery
-            && s.mapper.song_is_current(h.song_id, state);
+            && s.mapper.song_is_current(h.song_id, state)
+            // Section loops and jumps are monitor-only: Playback moved itself, not a fault.
+            && !s.drift.is_suspended_for(h.song_id);
         let Some(app) = timer.filter(|_| comparable) else {
             s.drift.reset();
             return None;

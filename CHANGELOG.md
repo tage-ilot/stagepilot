@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **Pause, jump, play now follows the jump.** When you paused Playback, jumped to another place in the song and pressed play straight away, StagePilot started the countdown from the place where you paused, not the place you jumped to. The countdown, the ProPresenter timer and the lights then ran minutes off for the rest of the song (found on the rig: 119 s ahead of the music). The resume now uses the jump position, however fast play follows the jump. As a safety net, if Playback keeps reporting a position more than 3 s from where StagePilot's timer is, for two reports in a row while the song is playing, StagePilot moves the timer to Playback's position and logs `playback_position_resync` with both positions. Normal drift under a second never triggers it.
+- **Pause, jump, play now follows the jump.** When you paused Playback, jumped to another place in the song and pressed play straight away, StagePilot started the countdown from the place where you paused, not the place you jumped to. The countdown, the ProPresenter timer and the lights then ran minutes off for the rest of the song (found on the rig: 119 s ahead of the music). The resume now uses the jump position, however fast play follows the jump. As a safety net, if Playback keeps reporting a position more than 3 s from where StagePilot's timer is, for two reports in a row while the song is playing, StagePilot moves the timer to Playback's position and logs `playback_position_resync` with both positions. Normal drift under a second never triggers it, and neither does a section loop or section jump in Playback: those stay monitor-only and never move the timer (the net is switched off for that song until the next start, resume, seek or song change).
 
 ## [2.43.0-rc.9] - 2026-11-08
 
