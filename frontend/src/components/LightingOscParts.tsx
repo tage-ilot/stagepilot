@@ -20,7 +20,7 @@ import { StatusDot } from "./ui/StatusDot";
 import type { Tone } from "./ui/types";
 import { CONTROL_40, CUE_ADDRESS_HELP } from "./liveLink";
 import { clampCueTime } from "./lightingTimelineMath";
-import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary } from "./lightingSmooth";
+import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary, type RowValueIndex } from "./lightingSmooth";
 import { EffectDetail } from "./LightingEffectDetail";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
@@ -369,7 +369,7 @@ export function LookRow({
 }: {
   cue: OscLightingCue;
   /** Every row of the song, so a ramp can say what value it starts from. */
-  allRows?: OscLightingCue[];
+  allRows?: OscLightingCue[] | RowValueIndex;
   disabled: boolean;
   songDuration: number | null;
   selected: boolean;

@@ -40,6 +40,13 @@ export const isCaptured = (cue: OscLightingCue): boolean => cue.source === "capt
 /** A change to a captured row counts as a hand edit; manual rows are returned as they are. */
 export const markEdited = (cue: OscLightingCue): OscLightingCue => (isCaptured(cue) ? { ...cue, edited: true } : cue);
 
+/** A count for people: 1,000 and up gets thousands separators (a small count stays as it is). */
+export const formatCount = (value: number): string => (Math.abs(value) >= 1_000 ? Math.round(value).toLocaleString("en-US") : String(value));
+
+/** The one plain sentence beside the capture count when a busy recording had to be simplified, or null. */
+export const simplifiedNote = (simplified: { kept_changes: number; recorded_changes: number } | null | undefined): string | null =>
+  simplified ? `Simplified: ${formatCount(simplified.kept_changes)} of ${formatCount(simplified.recorded_changes)} changes kept.` : null;
+
 export const capturedCount = (cues: OscLightingCue[]): number => cues.filter(isCaptured).length;
 export const hasEditedCaptured = (cues: OscLightingCue[]): boolean => cues.some((cue) => isCaptured(cue) && cue.edited);
 
@@ -71,7 +78,8 @@ export interface MergeResult {
 
 /** Merges the chosen rows into one at the earliest time; per address the latest value wins. */
 export const mergeRows = (cues: OscLightingCue[], ids: string[]): MergeResult | null => {
-  const chosen = cues.filter((cue) => ids.includes(cue.id)).sort((a, b) => a.at_seconds - b.at_seconds);
+  const wanted = new Set(ids);
+  const chosen = cues.filter((cue) => wanted.has(cue.id)).sort((a, b) => a.at_seconds - b.at_seconds);
   if (chosen.length < 2) return null;
   const latest = new Map<string, OscMessage>();
   const changed = new Set<string>();

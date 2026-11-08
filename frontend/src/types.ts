@@ -305,6 +305,20 @@ export interface CaptureStatus {
   recorded_at: string;
   /** The Lightkey project (base name) open when the recording began. Absent on older captures: they never warn. */
   project?: string;
+  /** Set when a very busy recording was simplified to fit the per-song limits. Absent on a normal capture and on older files. */
+  simplified?: CaptureSimplified;
+}
+
+/** How a too-busy recording was simplified (mirrors the generated `CaptureSimplified`). */
+export interface CaptureSimplified {
+  /** `loosened`, `thinned` or `trimmed`. */
+  stage: string;
+  tolerance_scale: number;
+  thin_seconds: number;
+  trimmed: number;
+  /** Recorded changes the saved capture still reproduces, and how many were recorded. */
+  kept_changes: number;
+  recorded_changes: number;
 }
 
 /** A saved, reusable cue on the cue board. Global; the payload belongs to one method. */

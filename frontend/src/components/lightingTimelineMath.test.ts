@@ -4,6 +4,9 @@ import type { LightingPad } from "../types";
 import { formatElapsed, parseElapsed } from "./lightingOsc";
 import {
   clampCueTime,
+  decimateMarkers,
+  DRAW_ALL_LIMIT,
+  LARGE_CHANGE_WEIGHT,
   describePad,
   elapsedSince,
   movePad,
@@ -169,5 +172,47 @@ describe("marker label placement", () => {
   it("is safe before the track has been measured", () => {
     const placed = placeMarkerLabels([m("a", "One", 8)], 0, 281);
     expect(placed.get("a")).toEqual({ row: 0, width: markerLabelWidth("One") });
+  });
+});
+
+describe("decimateMarkers (drawing only)", () => {
+  const dense = (count: number, length = 1200) => Array.from({ length: count }, (_, index) => ({ id: `r${index}`, at: (index / count) * length, weight: 3, captured: true }));
+
+  it("draws at most one item per pixel column for a dense song", () => {
+    const rows = dense(50_000);
+    const drawn = decimateMarkers(rows, 1000, 1200);
+    // one per column, plus the first and the last row (they may share a column with another)
+    expect(drawn.length).toBeLessThanOrEqual(1000 + 2);
+    const columns = new Map<number, number>();
+    for (const row of drawn) { const column = Math.min(999, Math.floor((row.at / 1200) * 1000)); columns.set(column, (columns.get(column) ?? 0) + 1); }
+    expect(Math.max(...columns.values())).toBeLessThanOrEqual(2);
+    expect(drawn.length).toBeGreaterThan(900); // and it still draws across the whole track
+  });
+
+  it("never drops the first row, the last row, or a row that changes a lot", () => {
+    const rows = dense(50_000);
+    rows[12_345] = { ...rows[12_345]!, weight: 60 }; // a big change among small ones
+    rows[40_000] = { ...rows[40_000]!, weight: LARGE_CHANGE_WEIGHT };
+    rows[25_000] = { ...rows[25_000]!, captured: false }; // made by hand
+    const ids = new Set(decimateMarkers(rows, 300, 1200).map((row) => row.id));
+    for (const id of ["r0", "r49999", "r12345", "r25000"]) expect(ids.has(id)).toBe(true);
+    expect(ids.has("r40000")).toBe(true);
+  });
+
+  it("keeps the heaviest row of each column, rows asked to keep, and leaves the input untouched", () => {
+    const rows = dense(5_000);
+    rows[2_501] = { ...rows[2_501]!, weight: 5 };
+    const before = JSON.stringify(rows);
+    const drawn = decimateMarkers(rows, 100, 1200, new Set(["r7"]));
+    expect(drawn.some((row) => row.id === "r2501")).toBe(true);
+    expect(drawn.some((row) => row.id === "r7")).toBe(true);
+    expect(JSON.stringify(rows)).toBe(before);
+    expect(drawn.map((row) => row.at)).toEqual([...drawn.map((row) => row.at)].sort((a, b) => a - b));
+  });
+
+  it("returns every row when there are no more rows than columns", () => {
+    const rows = dense(80);
+    expect(decimateMarkers(rows, 100, 1200)).toHaveLength(80);
+    expect(DRAW_ALL_LIMIT).toBeGreaterThan(1000);
   });
 });
