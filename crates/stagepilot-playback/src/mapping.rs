@@ -663,9 +663,13 @@ impl Mapper {
 
     /// True only for a valid order whose mapped song is StagePilot's current song.
     fn current_song_is(&self, event: &PlaybackEvent, state: &ApplicationState) -> bool {
-        let Some(song_id) = event.song_id else {
-            return false;
-        };
+        event
+            .song_id
+            .is_some_and(|song_id| self.song_is_current(song_id, state))
+    }
+
+    /// Does this Playback song drive StagePilot's current song (valid order, mapped, current)?
+    pub fn song_is_current(&self, song_id: i64, state: &ApplicationState) -> bool {
         if self.learning_active() {
             return self.heartbeat.is_some()
                 && self.position_of(song_id).is_some_and(|k| {
@@ -677,6 +681,16 @@ impl Mapper {
             return false;
         }
         state.current_song.is_some() && state.current_song_index == self.plan_index(song_id, state)
+    }
+
+    /// A position re-sync (the heartbeat disagreed with the timer for a while) wrapped so it
+    /// goes through the same checks as a real seek and is dropped if the order changes.
+    pub fn resync_observation(&self, event: PlaybackEvent) -> Observation {
+        Observation {
+            event,
+            discovery: self.discovery,
+            generation: self.generation,
+        }
     }
 
     /// Decide what `observation` means right now (Python `PlaybackMapper.dispatch`).

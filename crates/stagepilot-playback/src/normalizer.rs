@@ -97,6 +97,13 @@ pub struct PlaybackEvent {
 }
 
 impl PlaybackEvent {
+    /// A seek that StagePilot itself derived: a heartbeat showed the song is somewhere other
+    /// than where the timer has it (see `resync`). It travels the same path as a real seek.
+    pub fn resync(timestamp: f64, song_id: i64, position: f64) -> Self {
+        PlaybackEvent::new(EventType::Seek, timestamp, Some(song_id))
+            .pos(position)
+            .why("resync")
+    }
     fn new(kind: EventType, timestamp: f64, song_id: Option<i64>) -> Self {
         PlaybackEvent {
             kind,
@@ -246,7 +253,20 @@ pub struct Normalizer {
     return_timestamp: f64,
     command_timestamp: f64,
     heartbeat_timestamp: f64,
+    /// The newest `waveformSeek` (receive time, position). A paused player's heartbeat carrying
+    /// the new position can trail the seek, and a play pressed in between must not use the
+    /// old position.
+    seek: Option<(f64, f64)>,
 }
+
+/// A heartbeat that arrives this soon after a seek and still shows another position is taken to
+/// have been in flight before the seek (seconds).
+const SEEK_GRACE: f64 = 3.0;
+/// With no heartbeat at all since a seek, how long the seek position stays usable (seconds).
+const SEEK_UNCONFIRMED_MAX: f64 = 30.0;
+
+/// `waveformSeek(86400)` means "to the end": the player clamps it, so it is not a position.
+const SEEK_TO_END: f64 = 86_400.0;
 
 const IGNORED: &[&str] = &[
     "transportNextSong",
@@ -283,6 +303,7 @@ impl Normalizer {
             return_timestamp: f64::NEG_INFINITY,
             command_timestamp: f64::NEG_INFINITY,
             heartbeat_timestamp: 0.0,
+            seek: None,
         }
     }
 
@@ -332,6 +353,7 @@ impl Normalizer {
                     return vec![];
                 };
                 self.selected = Some((selected, ts));
+                self.seek = None;
                 let armed = self.armed;
                 self.armed = true;
                 let mut events =
@@ -386,6 +408,7 @@ impl Normalizer {
                 };
                 self.command_timestamp = ts;
                 self.armed = position < 2.0;
+                self.seek = Some((ts, position));
                 vec![PlaybackEvent::new(EventType::Seek, ts, song).pos(position)]
             }
             "waveformDoubleTap" | "waveformLoop" => {
@@ -469,7 +492,30 @@ impl Normalizer {
         if self.pending.last().and_then(|e| e.reason.as_deref()) == Some("return-to-start") {
             return (Some(hb.song_id), 0.0);
         }
+        if let Some(position) = self.unconfirmed_seek(ts, hb) {
+            return (Some(hb.song_id), position);
+        }
         (Some(hb.song_id), hb.position)
+    }
+
+    /// The position of a seek made while the player is not playing that no heartbeat has
+    /// confirmed yet. The last heartbeat then still shows the position from before the jump;
+    /// it is only used for a play that follows the seek. Dropped once a later heartbeat agrees
+    /// with it, and after [`SEEK_GRACE`] seconds in case the player never took it.
+    fn unconfirmed_seek(&self, ts: f64, hb: Heartbeat) -> Option<f64> {
+        let (at, position) = self.seek?;
+        if self.playing_now()
+            || ts - at > SEEK_UNCONFIRMED_MAX
+            || (hb.position - position).abs() <= 1.0
+            || position >= SEEK_TO_END
+        {
+            return None; // Nothing to correct: the heartbeat already shows (about) this.
+        }
+        if at >= self.heartbeat_timestamp {
+            return Some(position); // No heartbeat has arrived since the seek.
+        }
+        // Heartbeats that agreed with the seek already retired it, so this one is older news.
+        (ts - at < SEEK_GRACE).then_some(position)
     }
 
     fn playing_now(&self) -> bool {
@@ -555,6 +601,11 @@ impl Normalizer {
 
     fn on_heartbeat(&mut self, current: Heartbeat, ts: f64) -> Vec<PlaybackEvent> {
         let previous = self.heartbeat.replace(current);
+        if let Some((_, position)) = self.seek {
+            if current.playing || (current.position - position).abs() <= 1.0 {
+                self.seek = None; // The player has taken the seek (or moved on).
+            }
+        }
         self.heartbeat_serial += 1;
         let previous_ts = std::mem::replace(&mut self.heartbeat_timestamp, ts);
         let Some(previous) = previous else {
@@ -579,6 +630,7 @@ impl Normalizer {
                 .selected
                 .is_some_and(|(s, at)| s == current.song_id && ts - at < 5.0);
             self.selected = None;
+            self.seek = None;
             if selected && previous.playing && !current.playing {
                 events.push(
                     PlaybackEvent::new(EventType::SongStopped, ts, Some(previous.song_id))
