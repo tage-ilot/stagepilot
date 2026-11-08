@@ -9,6 +9,7 @@ Release candidate 8 (pre-release; the in-app updater does not offer it). Everyth
 ### Changed
 
 - **The Lighting card says Connected when capture and replay are both live.** It used to say Ready until the first cue was sent, even with everything up. It now reads **Connected** while the Lightkey helper is connected (capture) and the OSC address is open (replay), and **Ready** only while the replay address is available but the helper is not connected yet. Sending a cue no longer changes the word. It goes back to Ready if the helper drops, and to Connected when it returns.
+- **The setup command is labelled.** The Lighting section's install box now introduces the command with "Capture Script for Lighting Computer (beta, only for Lightkey):", so it is clear the capture helper works with Lightkey only.
 
 ### Fixed
 

@@ -132,7 +132,10 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
             <li>On the Lighting Mac, turn on sACN output in Lightkey and open your project.</li>
             <li>
               Open Terminal there and paste this command.
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <p className="mt-1.5 font-medium text-ink" data-testid="lightkey-install-label">
+                Capture Script for Lighting Computer (beta, only for Lightkey):
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-[1_1_20rem] select-all break-all rounded-ds-lg border border-edge bg-surface-panel-strong px-2.5 py-1.5 font-mono text-[0.8125rem] text-ink" data-testid="lightkey-install-command" tabIndex={0}>
                   {session.command}
                 </code>

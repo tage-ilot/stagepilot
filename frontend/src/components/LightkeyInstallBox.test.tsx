@@ -76,6 +76,7 @@ describe("LightkeyInstallBox", () => {
     expect(steps[0]).toHaveTextContent("turn on sACN output in Lightkey and open your project");
     expect(steps[1]).toHaveTextContent("Open Terminal there and paste this command");
     expect(steps[2]).toHaveTextContent("Wait here. It connects by itself.");
+    expect(screen.getByTestId("lightkey-install-label")).toHaveTextContent("Capture Script for Lighting Computer (beta, only for Lightkey):");
     expect(screen.getByTestId("lightkey-install-command")).toHaveTextContent(made().command);
     expect(screen.getByTestId("lightkey-install-command").tagName).toBe("CODE");
     expect(screen.getByTestId("lightkey-install-waiting")).toHaveTextContent(/Waiting for the helper… The command works for (30:00|29:5\d) more/);
