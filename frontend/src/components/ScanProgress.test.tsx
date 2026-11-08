@@ -28,7 +28,9 @@ describe("continuous song scan progress", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuemin", "0");
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "100");
     expect(screen.queryByText(/Checking song|step \d/)).not.toBeInTheDocument();
-  }, 15000);
+    // 12,000 frames with assertions on each: about 10 s of CPU, which the macOS Intel runners stretch past 15 s.
+    // The limit is there to catch a hang, not to time the loop.
+  }, 90000);
   it("does not keep requesting animation frames while idle (an idle loop keeps the page rendering at 60 Hz for nothing)", () => {
     const requests = vi.fn((fn: FrameRequestCallback) => setTimeout(() => fn(Date.now()), 16));
     vi.stubGlobal("requestAnimationFrame", requests);

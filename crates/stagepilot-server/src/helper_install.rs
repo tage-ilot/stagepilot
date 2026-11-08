@@ -881,7 +881,9 @@ mod tests {
         let info = begin(&svc);
         assert_eq!(svc.access(Some(PEER), "nope"), Err(Denied::NotFound));
         assert_eq!(svc.access(Some(PEER), ""), Err(Denied::NotFound));
-        let almost = format!("{}0", &info.token[..31]);
+        // One character off. (Not always a "0": the random token itself ends in "0" one time in sixteen.)
+        let last = if info.token.ends_with('0') { '1' } else { '0' };
+        let almost = format!("{}{last}", &info.token[..31]);
         assert_eq!(svc.access(Some(PEER), &almost), Err(Denied::NotFound));
         let public = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
         // Source first: a stranger cannot tell a good token from a bad one.
