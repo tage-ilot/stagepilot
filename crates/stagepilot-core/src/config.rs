@@ -908,26 +908,29 @@ impl OscCueSource {
 
 /// Most messages one look row may hold (a rig has about 106 fixture addresses; headroom).
 pub const MAX_OSC_MESSAGES_PER_ROW: usize = 256;
-/// Most OSC rows one song may hold (sized for about 400 rows, with headroom).
-pub const MAX_OSC_ROWS_PER_SONG: usize = 1_000;
+/// Most OSC rows one song may hold. A busy 5-minute song on a 66-fixture rig is about 12,000
+/// rows at full fidelity (2026-11-08), so the cap leaves room for songs several times busier.
+/// A recording that still does not fit is simplified (see `stagepilot_lights::lightkey_fit`),
+/// never dropped.
+pub const MAX_OSC_ROWS_PER_SONG: usize = 50_000;
 /// Most arguments one look message may carry, and the longest text argument (M-01).
 pub const MAX_OSC_ARGS_PER_MESSAGE: usize = 8;
 pub const MAX_OSC_STRING_CHARS: usize = 256;
-/// Most look messages one song may hold in total (sized for about 6,000, with headroom).
-pub const MAX_OSC_MESSAGES_PER_SONG: usize = 15_000;
+/// Most look messages one song may hold in total.
+pub const MAX_OSC_MESSAGES_PER_SONG: usize = 600_000;
 /// Longest a row (or an effect step) may take to reach its value. A captured ramp is at most
 /// 60 s; hand-made fades may be longer.
 pub const MAX_FADE_SECONDS: f64 = 600.0;
-/// Most effects (detected loops) one song may hold. A busy rig has a handful per group; 200
-/// leaves room for every group changing its loop several times in a song.
-pub const MAX_EFFECTS_PER_SONG: usize = 200;
+/// Most effects (detected loops) one song may hold. A busy rig has a handful per group; 1,000
+/// leaves room for every group changing its loop many times in a song.
+pub const MAX_EFFECTS_PER_SONG: usize = 1_000;
 /// Most fixtures one effect may drive (a rig has about 106 addresses; same bound as a look row).
 pub const MAX_EFFECT_MEMBERS: usize = 256;
 /// Most cycle steps one effect may hold (a loop of 60 s fitted at 25 ms would be 2,400 raw
 /// points; the fit keeps tens).
-pub const MAX_EFFECT_CYCLE_STEPS: usize = 1_024;
+pub const MAX_EFFECT_CYCLE_STEPS: usize = 4_096;
 /// Most cycle steps in all effects of one song.
-pub const MAX_EFFECT_CYCLE_STEPS_PER_SONG: usize = 20_000;
+pub const MAX_EFFECT_CYCLE_STEPS_PER_SONG: usize = 250_000;
 /// Longest period of an effect, seconds; the shortest is `MIN_EFFECT_PERIOD_SECONDS`.
 pub const MAX_EFFECT_PERIOD_SECONDS: f64 = 600.0;
 pub const MIN_EFFECT_PERIOD_SECONDS: f64 = 0.1;
@@ -1101,6 +1104,31 @@ pub struct CaptureStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<String>")]
     pub project: Option<String>,
+    /// Set when the song was too busy to keep as recorded and was simplified to fit. Absent on
+    /// a normal capture and on older files (an older build ignores the key).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<CaptureSimplified>")]
+    pub simplified: Option<CaptureSimplified>,
+}
+
+/// How a too-busy recording was simplified so that it fits the per-song caps
+/// (`CaptureStatus::simplified`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CaptureSimplified {
+    /// `loosened` (ramps fitted at a looser tolerance), `thinned` (steps closer than
+    /// `thin_seconds` merged) or `trimmed` (the least important changes dropped).
+    pub stage: String,
+    /// Tolerance multiplier of the fit (1 = exact).
+    pub tolerance_scale: f64,
+    /// Steps closer than this many seconds were merged (0 = not thinned).
+    pub thin_seconds: f64,
+    /// Changes dropped by the last-resort trim (0 = none).
+    #[serde(default)]
+    pub trimmed: u32,
+    /// Recorded changes the saved capture still reproduces, and how many were recorded.
+    pub kept_changes: u32,
+    pub recorded_changes: u32,
 }
 
 /// What a song's cue map says about capturing (the chip on the songs strip).

@@ -50,6 +50,8 @@ const TEMPLATE_STEP: f64 = 0.025;
 const ACCEPT_SHARE: f64 = 0.98;
 const MAX_STEP_SHARE: f64 = 0.6;
 const MIN_CYCLES: f64 = 3.0;
+/// Largest tolerance multiplier loop detection uses (see [`detect`]).
+pub const MAX_EFFECT_SCALE: f64 = 4.0;
 /// Loops of different addresses whose periods differ by less than this share a cluster; the
 /// period is then refined on the cluster as a whole.
 const PERIOD_SLACK: f64 = 0.02;
@@ -179,6 +181,11 @@ fn longest_window(score: &[i32]) -> Option<(usize, usize)> {
 /// Search one address for loops.
 fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> AddressSearch {
     let tol = tolerance_for(&series.address, scale);
+    // How far a value must move to be worth a loop is a property of the show, not of how loosely
+    // the song is being fitted: it stays at the base tolerance. Scaled with `tol`, "moves by 6
+    // tolerances" passed the whole 0..1 range at x8 (6 * 0.24), so a looser fit found no loops
+    // at all and the song grew from 2,916 rows (19 loops, x4) to 13,483 (1 loop, x8).
+    let move_tol = tolerance_for(&series.address, 1.0);
     let n = grid_len(end);
     let dim = series.dim;
     if series.len() < MIN_SAMPLES {
@@ -189,7 +196,7 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
     }
     let x = series.grid(DT, n);
     let ext = Extent::new(&x, dim, n);
-    if ext.range(0, n - 1) < 6.0 * tol {
+    if ext.range(0, n - 1) < 6.0 * move_tol {
         return AddressSearch {
             candidates: vec![],
             reason: Some("moves less than 6 tolerances: plain ramps".into()),
@@ -213,7 +220,7 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
                 for c in 0..dim {
                     diff = diff.max((x[i * dim + c] - x[(i - k) * dim + c]).abs());
                 }
-                if diff <= 2.0 * tol && ext.range(i - k, i) >= 4.0 * tol {
+                if diff <= 2.0 * tol && ext.range(i - k, i) >= 4.0 * move_tol {
                     score[i - k] = 1;
                 }
             }
@@ -263,7 +270,7 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
         for m in masked.iter_mut().take(w_end + 1).skip(w_start) {
             *m = true;
         }
-        if ext.range(w_start, w_end) < 6.0 * tol {
+        if ext.range(w_start, w_end) < 6.0 * move_tol {
             continue;
         }
         let (t0, t1) = (w_start as f64 * DT, w_end as f64 * DT);
@@ -804,6 +811,9 @@ fn plain_segments(
 /// Find the effects of a recording. `series` are the numeric addresses, `end` the last sample
 /// time, `scale` the tolerance multiplier.
 pub fn detect(series: &[&Series], end: f64, scale: f64) -> Detected {
+    // Past this a "repeat" is any two values (x32 allows an error of 96 % of the range): loops
+    // would be found everywhere and mean nothing. Ramps still loosen further.
+    let scale = scale.clamp(f64::MIN_POSITIVE, MAX_EFFECT_SCALE);
     let mut out = Detected::default();
     if end < MIN_PERIOD * MIN_CYCLES || series.is_empty() {
         return out;

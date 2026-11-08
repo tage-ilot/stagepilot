@@ -269,6 +269,18 @@ impl PersistentSettings {
     /// `migrate_v1` (before-validator): drop `release_channel`; a `schema_version` of exactly
     /// integer 1 moves an untouched install to Playback and becomes 2. Returns the migrated value
     /// and a description when a version migration happened.
+    /// Whether [`Self::migrate_v1`] would change this value (it only ever touches these).
+    fn needs_migration(value: &Value) -> bool {
+        let Value::Object(map) = value else {
+            return false;
+        };
+        map.contains_key("release_channel")
+            || map
+                .get("schema_version")
+                .is_some_and(|v| v.as_i64() == Some(1) && v.is_i64() || v.as_u64() == Some(1))
+            || matches!(map.get("lights"), Some(Value::Object(l)) if !l.contains_key("method") && !l.is_empty())
+    }
+
     pub fn migrate_v1(value: Value) -> (Value, Option<Migration>) {
         let Value::Object(mut map) = value else {
             return (value, None);
@@ -322,19 +334,31 @@ impl PersistentSettings {
     /// Validate a JSON value exactly like `PersistentSettings.model_validate`. The error list
     /// uses pydantic's shape (`type`, `loc`, `msg`, `input`).
     pub fn from_value(value: Value) -> Result<(Self, Option<Migration>), Errors> {
-        let original = value.clone();
+        Self::from_value_ref(&value)
+    }
+
+    /// [`Self::from_value`] on a borrowed value. Nothing is copied unless the file needs a
+    /// migration (a settings file with a song at the caps is over 100 MB: three copies of it
+    /// were most of the load time).
+    pub fn from_value_ref(value: &Value) -> Result<(Self, Option<Migration>), Errors> {
         if !value.is_object() {
             return Err(vec![Detail {
                 kind: "model_type".into(),
                 loc: vec![],
                 msg: "Input should be a valid dictionary or instance of PersistentSettings".into(),
-                input: value,
+                input: value.clone(),
                 ctx: Some(json!({"class_name": "PersistentSettings"})),
             }]);
         }
-        let (migrated, migration) = Self::migrate_v1(value);
-        let mut parsed: Self = serde_path_to_error::deserialize(migrated.clone())
-            .map_err(|e| vec![map_serde_error(&e, &migrated, &original)])?;
+        let (migrated, migration): (std::borrow::Cow<'_, Value>, _) =
+            if Self::needs_migration(value) {
+                let (migrated, migration) = Self::migrate_v1(value.clone());
+                (std::borrow::Cow::Owned(migrated), migration)
+            } else {
+                (std::borrow::Cow::Borrowed(value), None)
+            };
+        let mut parsed: Self = serde_path_to_error::deserialize(&*migrated)
+            .map_err(|e| vec![map_serde_error(&e, &migrated, value)])?;
         // schema_version is a Literal[2]
         if parsed.schema_version != SETTINGS_SCHEMA_VERSION {
             return Err(vec![Detail {
@@ -1244,12 +1268,19 @@ impl SettingsService {
 
     pub fn save(&self, settings: PersistentSettings) -> Result<(), SettingsFileError> {
         let mut settings = settings;
-        let current = self.snapshot();
+        // Only what is carried over is copied (a whole snapshot is a copy of every song's rows).
+        let (pin_hash, onboarding) = {
+            let s = self.lock();
+            (
+                s.persistent.web_dashboard_pin_hash.clone(),
+                s.persistent.onboarding.clone(),
+            )
+        };
         if settings.web_dashboard_pin_hash.is_none() {
-            settings.web_dashboard_pin_hash = current.web_dashboard_pin_hash.clone();
+            settings.web_dashboard_pin_hash = pin_hash;
         }
-        if current.onboarding.general_completed {
-            settings.onboarding = current.onboarding.clone();
+        if onboarding.general_completed {
+            settings.onboarding = onboarding;
         }
         self.store.save(&settings)?;
         let runtime = self.resolve(&settings);

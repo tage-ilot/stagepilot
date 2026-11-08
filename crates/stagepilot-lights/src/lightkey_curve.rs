@@ -39,6 +39,7 @@
 use crate::lightkey_fixtures::FixtureArg;
 use stagepilot_core::config::{LightingEffect, OscArgument, OscLightingCue};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// How long an effect takes to take over from the rows at its start, and to give back to them at
 /// its end, in playback (seconds).
@@ -155,6 +156,9 @@ struct EffectStepN {
     value: Vec<f64>,
 }
 
+/// A cycle shared by every member of an effect: property, steps, instants.
+type SharedCycle<'a> = (&'a str, Arc<Vec<EffectStepN>>, Arc<Vec<f64>>);
+
 /// One effect's cycle for one property of one fixture.
 #[derive(Debug, Clone)]
 struct EffectCurve {
@@ -162,7 +166,11 @@ struct EffectCurve {
     end: f64,
     period: f64,
     offset: f64,
-    steps: Vec<EffectStepN>,
+    /// Shared by every member of the effect (an effect of 256 fixtures and 4,096 steps would
+    /// otherwise be a million copies).
+    steps: Arc<Vec<EffectStepN>>,
+    /// The cycle times of the steps without a fade, sorted: the instants a replay must not miss.
+    instants: Arc<Vec<f64>>,
 }
 
 impl EffectCurve {
@@ -172,8 +180,12 @@ impl EffectCurve {
         let cycle = ((at - origin) / self.period).floor();
         let mut best: Option<f64> = None;
         for k in [cycle, cycle + 1.0] {
-            for step in self.steps.iter().filter(|s| s.fade <= 0.0) {
-                let t = origin + k * self.period + step.at;
+            // the first instant of this cycle after `at` (the list is sorted: a search, not a
+            // scan of every step on every tick)
+            let base = origin + k * self.period;
+            let i = self.instants.partition_point(|s| base + s <= at);
+            if let Some(s) = self.instants.get(i) {
+                let t = base + s;
                 if t > at && t < self.end && best.is_none_or(|b| t < b) {
                     best = Some(t);
                 }
@@ -271,8 +283,19 @@ impl Timeline {
             for steps in by_property.values_mut() {
                 steps.sort_by(|a, b| a.at.total_cmp(&b.at));
             }
+            let shared: Vec<SharedCycle> = by_property
+                .iter()
+                .map(|(property, steps)| {
+                    let instants = steps
+                        .iter()
+                        .filter(|s| s.fade <= 0.0)
+                        .map(|s| s.at)
+                        .collect();
+                    (*property, Arc::new(steps.clone()), Arc::new(instants))
+                })
+                .collect();
             for member in &effect.members {
-                for (property, steps) in &by_property {
+                for (property, steps, instants) in &shared {
                     timeline
                         .effects
                         .entry(format!(
@@ -286,6 +309,7 @@ impl Timeline {
                             period: effect.period_seconds,
                             offset: member.offset_seconds,
                             steps: steps.clone(),
+                            instants: instants.clone(),
                         });
                 }
             }

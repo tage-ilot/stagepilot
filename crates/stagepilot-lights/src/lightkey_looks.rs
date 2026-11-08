@@ -265,9 +265,16 @@ pub fn state_at(looks: &[Look], at: f64) -> HashMap<String, Vec<FixtureArg>> {
     state
 }
 
-/// Most changes one recording holds before it stops adding (about 8 hours of a busy rig); a
-/// recording that long is thinned like any other, it is never thrown away.
-pub const MAX_RECORDED_CHANGES: usize = 3_000_000;
+/// Most changes one recording holds at once (about 170 bytes each, so roughly 170 MB). When a
+/// song reaches it the recorder thins what it holds (per address, changes closer than a window
+/// collapse to the last value) and goes on with that window, doubling it again if it fills
+/// again; it never stops recording and never grows without bound. A 20-minute song with 200
+/// addresses changing every 20 ms (12 million changes) ends as about a million.
+pub const MAX_RECORDED_CHANGES: usize = 1_000_000;
+/// The first thinning window while recording, seconds.
+const FIRST_THIN_SECONDS: f64 = 0.02;
+/// The recorder thins until it holds at most this share of its limit.
+const THIN_TARGET: f64 = 0.6;
 
 /// One recorded stretch of the song: it starts with a snapshot of every fixture property and
 /// holds the changes seen until it ends (a link drop, a pause, a seek, the end of the pass).
@@ -346,12 +353,40 @@ pub struct LookRecorder {
     open: Option<usize>,
     /// In the order recorded.
     observed: Vec<Change>,
+    /// Most changes held (see [`MAX_RECORDED_CHANGES`]).
+    max_changes: usize,
+    /// Changes of one address closer than this collapse while recording (0: none do yet).
+    thin: f64,
+    /// Per address, the newest kept change: (window, index into `observed`, piece). Only used
+    /// while `thin` is set.
+    slots: HashMap<String, (i64, usize, usize)>,
+    /// Where the changes dated with the current clock estimate begin (see [`Self::set_mark`]).
+    mark: usize,
+    thinned_times: u32,
+}
+
+fn window_of(at: f64, seconds: f64) -> i64 {
+    if at <= 0.0 {
+        -1
+    } else {
+        (at / seconds).floor() as i64
+    }
 }
 
 impl LookRecorder {
     /// `baseline` is the fixture state when the song started; the first stretch opens at 0.
     pub fn new(baseline: &FixtureState) -> Self {
+        Self::with_limit(baseline, MAX_RECORDED_CHANGES)
+    }
+
+    /// A recorder that holds at most `max_changes` (thinning when it fills; tests use small ones).
+    pub fn with_limit(baseline: &FixtureState, max_changes: usize) -> Self {
         Self {
+            max_changes: max_changes.max(16),
+            thin: 0.0,
+            slots: HashMap::new(),
+            mark: 0,
+            thinned_times: 0,
             baseline: baseline.clone(),
             current: baseline.clone(),
             pieces: vec![Piece {
@@ -367,6 +402,76 @@ impl LookRecorder {
     /// How many changes are held.
     pub fn len(&self) -> usize {
         self.observed.len()
+    }
+
+    /// The window (seconds) changes of one address collapse in while recording; 0 until the
+    /// recorder first had to thin.
+    pub fn thin_seconds(&self) -> f64 {
+        self.thin
+    }
+
+    /// How many times the recorder thinned what it held.
+    pub fn thinned_times(&self) -> u32 {
+        self.thinned_times
+    }
+
+    /// Remember where the changes dated with the current clock estimate begin.
+    pub fn set_mark(&mut self) {
+        self.mark = self.observed.len();
+    }
+
+    /// [`Self::shift_from`] the mark. Returns how many moved.
+    pub fn shift_since_mark(&mut self, shift: f64) -> usize {
+        self.shift_from(self.mark, shift)
+    }
+
+    /// Collapse what is held to the last value per address per window, widening the window until
+    /// at most [`THIN_TARGET`] of the limit is held.
+    fn thin_held(&mut self) {
+        let target = (self.max_changes as f64 * THIN_TARGET) as usize;
+        let mut thin = if self.thin > 0.0 {
+            self.thin * 2.0
+        } else {
+            FIRST_THIN_SECONDS
+        };
+        loop {
+            let mut slots: HashMap<String, (i64, usize, usize)> = HashMap::new();
+            let mut kept: Vec<Change> = Vec::with_capacity(self.observed.len() / 2);
+            let mut mark = None;
+            for (i, change) in std::mem::take(&mut self.observed).into_iter().enumerate() {
+                if i == self.mark {
+                    mark = Some(kept.len());
+                }
+                let window = window_of(change.at, thin);
+                match slots.get_mut(&change.command.a) {
+                    Some((w, position, piece)) if *w == window && *piece == change.piece => {
+                        kept[*position] = change;
+                    }
+                    Some(entry) => {
+                        *entry = (window, kept.len(), change.piece);
+                        kept.push(change);
+                    }
+                    None => {
+                        slots.insert(change.command.a.clone(), (window, kept.len(), change.piece));
+                        kept.push(change);
+                    }
+                }
+            }
+            self.mark = mark.unwrap_or(kept.len());
+            self.observed = kept;
+            self.slots = slots;
+            self.thin = thin;
+            if self.observed.len() <= target || thin >= 3600.0 {
+                break;
+            }
+            thin *= 2.0;
+        }
+        self.thinned_times += 1;
+        tracing::warn!(
+            held = self.observed.len(),
+            thin_seconds = self.thin,
+            "lightkey_recording_thinned"
+        );
     }
 
     pub fn is_empty(&self) -> bool {
@@ -419,16 +524,48 @@ impl LookRecorder {
         };
         let mut kept = 0;
         for command in commands.iter().filter(|c| is_replayable(c)) {
-            if self.observed.len() >= MAX_RECORDED_CHANGES {
-                break;
+            if !self.current.apply(command) {
+                continue;
             }
-            if self.current.apply(command) {
-                self.observed.push(Change {
-                    at: position,
-                    command: command.clone(),
-                    piece,
-                });
-                kept += 1;
+            kept += 1;
+            let window = window_of(position, self.thin.max(f64::MIN_POSITIVE));
+            if self.thin > 0.0 {
+                // once thinning, a change in the window of the address's newest kept one
+                // replaces it (the last value of the window wins)
+                if let Some(&(w, i, p)) = self.slots.get(&command.a) {
+                    if w == window && p == piece && i < self.observed.len() {
+                        self.observed[i].at = position;
+                        self.observed[i].command = command.clone();
+                        continue;
+                    }
+                }
+            }
+            if self.observed.len() >= self.max_changes {
+                self.thin_held();
+                // the thinned recorder may now take this change into an existing slot
+                let window = window_of(position, self.thin);
+                if let Some(&(w, i, p)) = self.slots.get(&command.a) {
+                    if w == window && p == piece && i < self.observed.len() {
+                        self.observed[i].at = position;
+                        self.observed[i].command = command.clone();
+                        continue;
+                    }
+                }
+            }
+            self.observed.push(Change {
+                at: position,
+                command: command.clone(),
+                piece,
+            });
+            if self.thin > 0.0 {
+                self.slots.insert(
+                    command.a.clone(),
+                    (
+                        window_of(position, self.thin),
+                        self.observed.len() - 1,
+                        piece,
+                    ),
+                );
             }
         }
         kept

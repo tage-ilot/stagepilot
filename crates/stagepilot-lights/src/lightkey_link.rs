@@ -20,18 +20,20 @@ use crate::lightkey::{
 use crate::lightkey_auto::{
     decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
 };
+use crate::lightkey_fit::{fit_within_caps, trim_to_caps, Caps, Fitted, Stage};
 use crate::lightkey_fixtures::{FixtureCommand, FixtureState};
 use crate::lightkey_looks::LookRecorder;
+use crate::lightkey_recording::{self, RawRecordingView};
 use crate::lightkey_relay::{relay_target, RelayClient};
-use crate::lightkey_smooth::{smooth_rows, SmoothParams};
+use crate::lightkey_smooth::smooth_rows;
 use crate::loudness::LoudnessRecorder;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::config::{
-    CaptureStatus, LightingEffect, LightkeyMode, LightkeySettings, OscLightingCue, SongLoudness,
-    DEFAULT_LIGHTKEY_RELAY_PORT,
+    CaptureSimplified, CaptureStatus, LightingEffect, LightkeyMode, LightkeySettings,
+    OscLightingCue, SongLoudness, DEFAULT_LIGHTKEY_RELAY_PORT,
 };
 use stagepilot_core::events::{EventPayload, EventType, StagePilotEvent, TimerPayload};
 use stagepilot_core::state::Song;
@@ -292,8 +294,8 @@ pub struct SongLooks {
 /// Why the looks could not be saved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LooksError {
-    /// The song's timeline would pass the row, message, effect or step caps: the link fits it
-    /// again with twice the tolerance.
+    /// The song's timeline (with the rows already in it) would pass the row, message, effect or
+    /// step caps: the link trims the capture further and saves again.
     TooLarge,
     /// The song already has a capture that is at least as good (a complete capture is never
     /// replaced by a partial one); nothing was changed.
@@ -346,9 +348,6 @@ struct Session {
     played: Coverage,
     /// Where the timer's current run began.
     played_from: Option<f64>,
-    /// Index of the first recorded change dated with the clock offset now in force; a better
-    /// offset re-dates the changes from here on (see `LightkeyLink::redate`).
-    offset_mark: usize,
     /// The Lightkey project (base name) open when this recording began, as the relay hello
     /// said; `None` when it had not said. Saved with the capture.
     project: Option<String>,
@@ -372,7 +371,6 @@ impl Session {
             recorded_from: None,
             played: Coverage::new(),
             played_from: Some(0.0),
-            offset_mark: 0,
             project: None,
             discarded: None,
         }
@@ -523,6 +521,8 @@ struct Inner {
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
     relay_port: u16,
+    caps: Caps,
+    recordings_dir: Option<PathBuf>,
     relay: RelayClient,
     state: Mutex<State>,
     wake: Notify,
@@ -565,6 +565,12 @@ pub struct LinkOptions {
     pub clock: Arc<dyn Clock>,
     /// UDP port of the `lightkey-api` relay (21700 unless the agent was configured otherwise).
     pub relay_port: u16,
+    /// The per-song limits a finished recording is fitted inside (the timeline's own by default;
+    /// tests use tiny ones).
+    pub caps: Caps,
+    /// Where the raw recording of every finished song is kept (see `crate::lightkey_recording`).
+    /// `None` keeps none.
+    pub recordings_dir: Option<PathBuf>,
 }
 
 impl Default for LinkOptions {
@@ -580,6 +586,8 @@ impl Default for LinkOptions {
             http_factory: Arc::new(|| Arc::new(ReqwestLightkeyHttp::new())),
             clock: Arc::new(SystemClock::default()),
             relay_port: DEFAULT_LIGHTKEY_RELAY_PORT,
+            caps: Caps::default(),
+            recordings_dir: None,
         }
     }
 }
@@ -611,6 +619,8 @@ impl LightkeyLink {
                 http_factory: options.http_factory,
                 clock: options.clock,
                 relay_port: options.relay_port,
+                caps: options.caps,
+                recordings_dir: options.recordings_dir,
                 relay: RelayClient::new(),
                 state: Mutex::new(State {
                     captured: None,
@@ -1302,11 +1312,11 @@ impl Inner {
         let mut st = self.st();
         for session in st.session.iter_mut() {
             if let Some(recorder) = session.fixtures.as_mut() {
-                let moved = recorder.shift_from(session.offset_mark, shift);
+                let moved = recorder.shift_since_mark(shift);
                 if moved > 0 {
                     tracing::warn!(moved, shift, "lightkey_capture_redated");
                 }
-                session.offset_mark = recorder.len();
+                recorder.set_mark();
             }
         }
     }
@@ -1905,43 +1915,88 @@ impl Inner {
                 .unwrap_or_default()
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             project: session.project.clone(),
+            simplified: None,
         };
-        let recorder = Arc::new(recorder);
-        let mut scale = 1.0;
-        // A song that would pass the timeline caps is fitted again at twice the tolerance,
-        // never dropped.
-        for _ in 0..MAX_COARSER_TRIES {
-            let fitter = recorder.clone();
-            let params = SmoothParams {
-                tolerance_scale: scale,
-                ..SmoothParams::default()
+        let (baseline, changes) = recorder.raw();
+        drop(recorder);
+        let raw_changes = changes.len();
+        let (baseline, changes) = (Arc::new(baseline), Arc::new(changes));
+        // The raw recording goes to disk before anything is fitted, so a song that cannot be
+        // saved can still be looked at. A failure here never stops the save.
+        let folder = self.recordings_dir.clone();
+        let kept_in = self
+            .keep_raw_recording(&session.key, duration, &baseline, &changes)
+            .await;
+        let caps = self.caps;
+        let fitted = tokio::task::spawn_blocking(move || {
+            fit_within_caps(&baseline, &changes, duration, &caps)
+        })
+        .await;
+        let Ok(fitted) = fitted else {
+            tracing::error!(song = %session.key, "lightkey_fit_failed");
+            return self.say(failure_text(kept_in.as_ref().and(folder.as_ref())));
+        };
+        if fitted.exact_items == 0 {
+            return self.say(format!(
+                "Not saved: no fixture changes were recorded for {title}."
+            ));
+        }
+        let simplified = simplified_of(&fitted);
+        let status = CaptureStatus {
+            simplified: simplified.clone(),
+            ..status
+        };
+        let mut capture = fitted.capture.clone();
+        let mut trimmed = fitted.trimmed;
+        let mut share = 1.0;
+        for _ in 0..MAX_SINK_RETRIES {
+            let rows = smooth_rows(&capture.rows);
+            let (count, loops) = (rows.len(), capture.effects.len());
+            let simplified = if trimmed > fitted.trimmed {
+                // the timeline already holds other rows: this song was trimmed further
+                simplified_of(&Fitted {
+                    trimmed,
+                    stage: Stage::Trimmed,
+                    kept_items: crate::lightkey_fit::Size::of_capture(&capture).items(),
+                    ..fitted.clone()
+                })
+            } else {
+                simplified.clone()
             };
-            let fitted = tokio::task::spawn_blocking(move || fitter.smooth(duration, &params))
-                .await
-                .unwrap_or_default();
-            let rows = smooth_rows(&fitted.rows);
-            if rows.is_empty() && fitted.effects.is_empty() {
-                return self.say(format!(
-                    "Not saved: no fixture changes were recorded for {title}."
-                ));
-            }
-            let (count, loops) = (rows.len(), fitted.effects.len());
             let saved = sink(SongLooks {
                 song_key: session.key.clone(),
                 song_title: title.clone(),
                 rows,
-                effects: fitted.effects,
-                status: status.clone(),
+                effects: capture.effects.clone(),
+                status: CaptureStatus {
+                    simplified: simplified.clone(),
+                    ..status.clone()
+                },
             })
             .await;
             match saved {
                 Ok(()) => {
-                    tracing::info!(song = %session.key, rows = count, effects = loops, complete, reason, "lightkey_looks_saved");
+                    tracing::info!(
+                        song = %session.key,
+                        rows = count,
+                        effects = loops,
+                        complete,
+                        reason,
+                        stage = fitted.stage.as_str(),
+                        scale = fitted.scale,
+                        thin_seconds = fitted.thin_seconds,
+                        trimmed,
+                        raw_changes,
+                        fits = fitted.fits,
+                        fit_ms = u64::try_from(fitted.fit_ms).unwrap_or(u64::MAX),
+                        "lightkey_looks_saved"
+                    );
                     self.st().captured = Some(LightkeyCaptured {
                         song_title: title.clone(),
                         looks: u32::try_from(count + loops).unwrap_or(u32::MAX),
                     });
-                    let text = saved_message(count, loops, &title, scale);
+                    let text =
+                        saved_message(count, loops, &title, fitted.scale, simplified.as_ref());
                     let missing = duration - covered;
                     return self.say(if !complete {
                         format!(
@@ -1962,37 +2017,105 @@ impl Inner {
                     ));
                 }
                 Err(LooksError::TooLarge) => {
-                    tracing::warn!(song = %session.key, rows = count, effects = loops, scale, "lightkey_looks_too_large");
-                    scale *= 2.0;
+                    // Manual rows already in the song's timeline take part of the room: trim
+                    // this capture further (a quarter less each time) and save again.
+                    tracing::warn!(song = %session.key, rows = count, effects = loops, share, "lightkey_looks_too_large");
+                    share *= 0.75;
+                    let aim = caps.below(&crate::lightkey_fit::Size::of_capture(&capture), 0.75);
+                    let (smaller, removed) = trim_to_caps(&capture, &aim);
+                    capture = smaller;
+                    trimmed += removed;
                 }
                 Err(LooksError::Failed(error)) => {
                     tracing::error!(song = %session.key, error = %error, "lightkey_looks_save_failed");
-                    return self.say("Could not save the looks to the timeline.");
+                    return self.say(failure_text(kept_in.as_ref().and(folder.as_ref())));
                 }
             }
         }
-        self.say("Could not save the looks to the timeline: the song has too many rows.")
+        self.say(failure_text(kept_in.as_ref().and(folder.as_ref())))
+    }
+
+    /// Writes the raw recording next to the settings file (off the runtime's threads). `Some`
+    /// is where; a failure is logged and is `None`.
+    async fn keep_raw_recording(
+        &self,
+        key: &str,
+        duration: f64,
+        baseline: &Arc<Vec<FixtureCommand>>,
+        changes: &Arc<Vec<(f64, FixtureCommand)>>,
+    ) -> Option<PathBuf> {
+        let dir = self.recordings_dir.clone()?;
+        let now = DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0).unwrap_or_default();
+        let (key, shared) = (key.to_string(), (baseline.clone(), changes.clone()));
+        let job = {
+            let key = key.clone();
+            tokio::task::spawn_blocking(move || {
+                let view = RawRecordingView::new(&key, duration, &shared.0, &shared.1);
+                lightkey_recording::save(&dir, &view, now)
+            })
+        };
+        match job.await {
+            Ok(Ok(path)) => Some(path),
+            Ok(Err(error)) => {
+                tracing::warn!(song = %key, error = %error, "lightkey_raw_recording_not_kept");
+                None
+            }
+            Err(_) => None,
+        }
     }
 }
 
-/// "Saved N looks to X's timeline." (and "M loops" when effects were found) and, when the song
-/// was too large for the caps and was fitted at a looser tolerance, how much looser.
-fn saved_message(count: usize, loops: usize, title: &str, scale: f64) -> String {
+/// How a capture that did not fit as recorded was simplified (`None`: it fit).
+fn simplified_of(fitted: &Fitted) -> Option<CaptureSimplified> {
+    (fitted.stage != Stage::Exact).then(|| CaptureSimplified {
+        stage: fitted.stage.as_str().to_string(),
+        tolerance_scale: fitted.scale,
+        thin_seconds: fitted.thin_seconds,
+        trimmed: u32::try_from(fitted.trimmed).unwrap_or(u32::MAX),
+        kept_changes: u32::try_from(fitted.kept_items).unwrap_or(u32::MAX),
+        recorded_changes: u32::try_from(fitted.exact_items).unwrap_or(u32::MAX),
+    })
+}
+
+/// What the operator reads when the timeline could not be written (a real storage failure).
+fn failure_text(folder: Option<&PathBuf>) -> String {
+    match folder {
+        Some(folder) => format!(
+            "Could not save the looks to the timeline. The raw recording is kept in {}.",
+            folder.display()
+        ),
+        None => "Could not save the looks to the timeline.".to_string(),
+    }
+}
+
+/// How often the capture is trimmed further when the song's timeline has no room for it.
+const MAX_SINK_RETRIES: usize = 8;
+
+/// "Saved N looks to X's timeline." (and "M loops" when effects were found). When the song was
+/// too busy to keep as recorded it says how: fitted at a looser tolerance, or simplified (thinned
+/// or trimmed) with how many of the changes were kept.
+fn saved_message(
+    count: usize,
+    loops: usize,
+    title: &str,
+    scale: f64,
+    simplified: Option<&CaptureSimplified>,
+) -> String {
     let plural = |n: usize, word: &str| format!("{n} {word}{}", if n == 1 { "" } else { "s" });
     let what = if loops == 0 {
         plural(count, "look")
     } else {
         format!("{} and {}", plural(count, "look"), plural(loops, "loop"))
     };
-    if scale > 1.0 {
-        format!("Saved {what} to {title}'s timeline (fitted loosely: tolerance x{scale}, the song was very large).")
-    } else {
-        format!("Saved {what} to {title}'s timeline.")
+    match simplified {
+        Some(s) if s.stage == "thinned" || s.stage == "trimmed" => format!(
+            "Saved {what} to {title}'s timeline. The song was very busy, so it was simplified: kept {} of {} changes.",
+            s.kept_changes, s.recorded_changes
+        ),
+        _ if scale > 1.0 => format!("Saved {what} to {title}'s timeline (fitted loosely: tolerance x{scale}, the song was very large)."),
+        _ => format!("Saved {what} to {title}'s timeline."),
     }
 }
-
-/// How many times a recording too large for the timeline is fitted again at twice the tolerance.
-const MAX_COARSER_TRIES: usize = 6;
 
 // ------------------------------------------------------- Python-flavoured JSON coercions
 // The agent's JSON is read the way the Python link reads it (`int()`, `float()`, `bool()`,

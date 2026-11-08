@@ -326,6 +326,25 @@ impl Rig {
     /// A rig whose timeline refuses a song of more than `limit` rows (`LooksError::TooLarge`),
     /// as the real one does past its caps. Every attempt is counted in `attempts`.
     async fn with_row_limit(initial: Vec<FixtureCommand>, limit: usize) -> Self {
+        Self::with_limits(initial, limit, limit).await
+    }
+
+    /// A rig whose link fits inside `caps_rows` rows while the timeline refuses more than
+    /// `limit` (rows already in the song's timeline take room the link cannot see).
+    async fn with_limits(initial: Vec<FixtureCommand>, limit: usize, caps_rows: usize) -> Self {
+        Self::build(initial, limit, caps_rows, None, false).await
+    }
+
+    /// The general rig: the timeline refuses more than `limit` rows (or, with `fail`, fails every
+    /// save as a full disk would), the link fits inside `caps_rows` rows and keeps raw
+    /// recordings in `recordings_dir`.
+    async fn build(
+        initial: Vec<FixtureCommand>,
+        limit: usize,
+        caps_rows: usize,
+        recordings_dir: Option<std::path::PathBuf>,
+        fail: bool,
+    ) -> Self {
         let relay = FakeRelay::start(initial).await;
         let active: Active = Arc::new(Mutex::new(vec!["Warm".into()]));
         let http_port = serve_http(active).await;
@@ -354,7 +373,11 @@ impl Rig {
                 sink_saved.lock().unwrap().push(looks);
             }
             Box::pin(async move {
-                if refused {
+                if fail {
+                    Err(stagepilot_lights::lightkey_link::LooksError::Failed(
+                        "disk full".into(),
+                    ))
+                } else if refused {
                     Err(stagepilot_lights::lightkey_link::LooksError::TooLarge)
                 } else {
                     Ok(())
@@ -367,6 +390,11 @@ impl Rig {
             LinkOptions {
                 looks_sink: Some(sink),
                 relay_port: relay.port,
+                caps: stagepilot_lights::lightkey_fit::Caps {
+                    rows: caps_rows,
+                    ..stagepilot_lights::lightkey_fit::Caps::default()
+                },
+                recordings_dir,
                 ..LinkOptions::default()
             },
         );
@@ -788,7 +816,7 @@ async fn a_recording_past_the_song_end_with_a_huge_change_still_saves() {
     rig.link.stop().await;
 }
 
-/// A song too large for the caps is fitted again at twice the tolerance, not dropped, and the
+/// A song too large for the caps is fitted again at a looser tolerance, not dropped, and the
 /// status message says so. (The Detail setting no longer changes the result.)
 #[tokio::test(flavor = "multi_thread")]
 async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says_so() {
@@ -811,13 +839,145 @@ async fn a_song_too_large_for_the_caps_is_fitted_at_twice_the_tolerance_and_says
     wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
     let saved = rig.saved.lock().unwrap().remove(0);
     assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(*rig.attempts.lock().unwrap() >= 1);
+    assert!(message.contains("fitted loosely"), "message: {message}");
+    assert!(message.starts_with("Saved "), "message: {message}");
+    rig.link.stop().await;
+}
+
+/// One short recording: a ramp and a step, delivered with the song time they happened at.
+async fn record_a_short_song(rig: &Rig) {
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(2.0).await;
+    for k in 0..10u32 {
+        let at = 1.9 - f64::from(k) * 0.06;
+        rig.relay
+            .change(vec![dim("P1", 0.1 + f64::from(k % 2) * 0.5)], at, 0)
+            .await;
+    }
+    pause(0.2).await;
+    rig.song_stop(&song(2), 2.0).await;
+}
+
+/// The raw recording of every finished song is kept next to the settings, before the fit.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_finished_song_leaves_its_raw_recording_in_the_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("lightkey-recordings");
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(folder.clone()),
+        false,
+    )
+    .await;
+    record_a_short_song(&rig).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
+    let files: Vec<_> = std::fs::read_dir(&folder)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 1, "{files:?}");
+    let recording = stagepilot_lights::lightkey_recording::load(&files[0]).unwrap();
+    assert!(recording.changes.len() >= 5);
+    assert_eq!(recording.duration_seconds, 2.0);
+    rig.link.stop().await;
+}
+
+/// A folder that cannot be written (here: under a file) never stops the save.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unwritable_recordings_folder_does_not_stop_the_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = dir.path().join("a-file");
+    std::fs::write(&blocker, b"x").unwrap();
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(blocker.join("lightkey-recordings")),
+        false,
+    )
+    .await;
+    record_a_short_song(&rig).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(message.starts_with("Saved "), "message: {message}");
+    rig.link.stop().await;
+}
+
+/// A real storage failure is the only way a song is lost, and the operator is told where the
+/// raw recording is.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_storage_failure_says_where_the_raw_recording_is_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("lightkey-recordings");
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(folder.clone()),
+        true,
+    )
+    .await;
+    record_a_short_song(&rig).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .message
+                .is_some_and(|m| m.starts_with("Could not save"))
+        },
+        5.0,
+    )
+    .await;
+    let message = rig.link.status().message.unwrap_or_default();
+    assert_eq!(
+        message,
+        format!(
+            "Could not save the looks to the timeline. The raw recording is kept in {}.",
+            folder.display()
+        )
+    );
+    assert!(!message.contains("too many rows"));
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 1);
+    rig.link.stop().await;
+}
+
+/// The timeline has less room than the link knew of (manual rows are already in the song): the
+/// capture is trimmed further and saved, never dropped, and the status says it was simplified.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_timeline_with_less_room_than_the_caps_still_gets_the_capture_trimmed() {
+    let rig = Rig::with_limits(vec![dim("P1", 0.0)], 5, usize::MAX).await;
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(2.0).await;
+    for k in 0..30u32 {
+        let at = 1.9 - f64::from(k) * 0.06;
+        rig.relay
+            .change(vec![dim("P1", 0.1 + f64::from(k % 2) * 0.5)], at, 0)
+            .await;
+    }
+    pause(0.2).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 5.0).await;
+    let saved = rig.saved.lock().unwrap().remove(0);
+    assert!(saved.rows.len() <= 5, "{} rows", saved.rows.len());
     assert!(
         *rig.attempts.lock().unwrap() >= 2,
         "the first try was refused"
     );
     let message = rig.link.status().message.unwrap_or_default();
-    assert!(message.contains("fitted loosely"), "message: {message}");
     assert!(message.starts_with("Saved "), "message: {message}");
+    assert!(message.contains("simplified"), "message: {message}");
+    assert_eq!(
+        saved.status.simplified.as_ref().map(|s| s.stage.as_str()),
+        Some("trimmed")
+    );
     rig.link.stop().await;
 }
 

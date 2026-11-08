@@ -382,6 +382,77 @@ async fn the_four_lightkey_routes_validate_their_bodies_like_fastapi() {
 
 // ------------------------------------------------------------------------------ look rows
 
+/// A song at the per-song caps (50,000 rows, 600,000 messages) goes through the cue-map PUT, one
+/// message over is refused with 422, and the state the page and the socket carry stays small (it
+/// never holds a cue map).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cue_map_at_the_caps_is_accepted_and_the_state_stays_small() {
+    use stagepilot_core::config::{MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG};
+    let per_row = MAX_OSC_MESSAGES_PER_SONG / MAX_OSC_ROWS_PER_SONG;
+    let rows = |extra: bool| -> Vec<Value> {
+        (0..MAX_OSC_ROWS_PER_SONG)
+            .map(|r| {
+                let mut messages: Vec<Value> = (0..per_row)
+                    .map(|i| {
+                        json!({
+                            "address": format!("/fixture/Moving Head {}/overrides/dimmer", (r + i) % 66),
+                            "args": [{"type": "float", "value": ((r * 7 + i) % 1000) as f64 / 1000.0}]
+                        })
+                    })
+                    .collect();
+                if extra && r == 0 {
+                    messages.push(json!({"address": "/a", "args": []}));
+                }
+                json!({
+                    "id": format!("00000000-0000-4000-8000-{r:012}"),
+                    "at_seconds": (r % 20_000) as f64 * 0.01,
+                    "address": "",
+                    "args": [],
+                    "label": format!("Look - {per_row} fixtures"),
+                    "color": null,
+                    "messages": messages,
+                    "source": "captured"
+                })
+            })
+            .collect()
+    };
+    let (router, rt) = app(osc_lights()).await;
+    let request = json!({
+        "song_key": "big", "song_title": "Big", "method": "osc",
+        "osc_cues": rows(false)
+    });
+    println!(
+        "body of a song at the caps: {} bytes",
+        request.to_string().len()
+    );
+    let started = std::time::Instant::now();
+    let (code, body) = call(&router, "PUT", "/api/v1/lights/cue-map", Some(request)).await;
+    println!("PUT of a song at the caps: {:?}", started.elapsed());
+    assert_eq!(
+        code,
+        StatusCode::OK,
+        "{}",
+        body.to_string().chars().take(300).collect::<String>()
+    );
+    let (code, state) = call(&router, "GET", "/api/v1/state", None).await;
+    assert_eq!(code, StatusCode::OK);
+    let bytes = state.to_string().len();
+    println!("state payload with a song at the caps saved: {bytes} bytes");
+    assert!(bytes < 200_000, "the state carries {bytes} bytes");
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(json!({
+            "song_key": "big", "song_title": "Big", "method": "osc",
+            "osc_cues": rows(true)
+        })),
+    )
+    .await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 #[tokio::test]
 async fn a_look_row_round_trips_through_the_cue_map_api_and_the_saved_settings() {
     let (router, rt) = app(osc_lights()).await;
@@ -592,11 +663,11 @@ async fn a_finished_recording_replaces_only_the_captured_rows_of_that_song() {
 }
 
 #[tokio::test]
-async fn a_recording_past_the_timeline_caps_asks_for_a_coarser_detail() {
+async fn a_recording_past_the_timeline_caps_is_refused_for_the_link_to_trim() {
     use stagepilot_lights::lightkey_link::{LooksError, SongLooks};
     let (_router, rt) = app(osc_lights()).await;
-    let rows: Vec<_> = (0..=1_000)
-        .map(|i| captured_row(f64::from(i), "/fixture/P1/overrides/dimmer", 0.5))
+    let rows: Vec<_> = (0..=stagepilot_core::config::MAX_OSC_ROWS_PER_SONG)
+        .map(|i| captured_row(i as f64 * 0.01, "/fixture/P1/overrides/dimmer", 0.5))
         .collect();
     let result = (rt.outputs.looks_sink)(SongLooks {
         song_key: "big".into(),
@@ -993,6 +1064,7 @@ fn complete() -> stagepilot_core::config::CaptureStatus {
         coverage_seconds: 100.0,
         recorded_at: "2026-11-02T00:00:00Z".into(),
         project: None,
+        simplified: None,
     }
 }
 
