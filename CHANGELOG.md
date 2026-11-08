@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The Lighting section shows the Lightkey project.** `Project: Show.lightkeyproj · 66 fixtures` sits under the connection pill (`Project not reported yet` until the helper says). StagePilot also reads the helper's `GET /health` on connect and about every 30 s for its version, fixture map and project-watch state; a helper that reports no version is older than 0.5.0 and gets a `Helper update available` line (capture and replay keep working as before).
+- **Read fixtures** button in the Lightkey strip (`POST /api/v1/lights/lightkey/read-fixtures`, which calls the helper's `POST /fixtures/refresh`): re-reads the open project when fixtures were added to it, and shows `Read 66 fixtures from Show.lightkeyproj`, `No change: 66 fixtures` or the helper's plain-language reason. Disabled when not connected, and for a helper older than 0.5.0 (`Update the helper to use this.`).
+- **A capture remembers its project** (`capture.project`, optional). When a song was captured under another project than the one open now, the song's lighting timeline and the strip say `Captured with X. Lightkey has Y open.` It is a notice only: replay is never held, skipped or stopped. Older captures have no project and never warn.
+- **A project change during a recording discards it** (`Not saved: the Lightkey project or its fixtures changed during the recording (X -> Y). It captures again next time.`) instead of saving a mix of two fixture maps. A hello sent again with the same map id is not a change.
+
+### Compatibility
+
+- Downgrading to rc.5 or earlier: a capture saved by this build carries an extra `project` key. No setting on that path rejects unknown keys, so the older build loads it and ignores it, and drops it the next time it saves that song. Nothing else changes in the saved data.
+
 ## [2.43.0-rc.5] - 2026-11-06
 
 Release candidate 5 (pre-release; the in-app updater does not offer it). Everything in rc.4 applies. This candidate fixes one problem found while testing rc.4 on the rig: saving a setting from a StagePilot window that was already open could put an old copy of the lighting data back and erase Lightkey captures. Refresh or restart an open StagePilot window before saving settings if it is still running rc.4 or older.

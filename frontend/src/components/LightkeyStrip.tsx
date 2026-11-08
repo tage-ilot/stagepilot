@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import {
   getLightkeyStatus,
+  readLightkeyFixtures,
   releaseLightkeyLights,
   saveLightkeySettings,
   setLightkeyRecording,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyStatus } from "../types";
+import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeyStatus } from "../types";
+import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
@@ -111,8 +113,10 @@ const smallBox = "!w-[5.25rem] text-center tabular-nums";
  * Captures the fixtures' colour and levels from the lightkey-api agent and holds them with overrides on replay.
  * `connection` is the panel's shared host/port draft; on its own (tests, other screens) the strip keeps a host of its own.
  */
-export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer }: {
+export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer, onStatus }: {
   lightingEnabled: boolean;
+  /** Told every time the status is read (the panel shows the project notice on the song's timeline). */
+  onStatus?: (status: LightkeyStatus) => void;
   looks?: SongLooks;
   /** The selected song's loudness: whether it has any, and how to clear it. */
   loudness?: { present: boolean; onClear?: () => void; disabled?: boolean };
@@ -128,6 +132,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const [apiPort, setApiPort] = useState<string | null>(null); // null = untouched, show the saved one
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [readResult, setReadResult] = useState<LightkeyReadFixtures | null>(null);
   const alive = useRef(true);
 
   const load = useCallback(async () => {
@@ -145,6 +151,23 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
     const timer = window.setInterval(() => void load(), POLL_MS);
     return () => { alive.current = false; window.clearInterval(timer); };
   }, [load, lightingEnabled]);
+
+  useEffect(() => { if (status) onStatus?.(status); }, [status, onStatus]);
+
+  const readFixtures = async () => {
+    if (reading) return;
+    setReading(true);
+    setReadResult(null);
+    try {
+      const result = await readLightkeyFixtures();
+      if (alive.current) setReadResult(result);
+      await load();
+    } catch (cause) {
+      if (alive.current) setReadResult({ ok: false, message: describeError(cause, "Read fixtures did not work.") });
+    } finally {
+      if (alive.current) setReading(false);
+    }
+  };
 
   const run = async (action: () => Promise<LightkeyActionResponse>) => {
     if (busy) return;
@@ -241,6 +264,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const holding = lightkeyHolding(status);
   const shownMode = status.recording || status.mode === "record" ? "record" : (status.mode ?? "replay");
   const enterToConnect = (event: { key: string }) => { if (event.key === "Enter") void connect(); };
+  const outdated = helperIsOutdated(status);
+  const readBlocked = outdated ? UPDATE_HELPER_TIP : !connected ? "Connect to Lightkey first." : undefined;
   const releasable = Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) > 0;
   const stateText = (
     <p aria-live="polite" className="min-w-0 flex-[1_1_16rem] text-[0.78125rem] text-ink-muted" data-testid="lightkey-headline">
@@ -309,6 +334,9 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           />
         </div>
       </div>
+      {status.link !== "off" && (
+        <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
+      )}
       {(hostError || udpError || apiError) && (
         <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</p>
       )}
@@ -319,6 +347,17 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           </p>
           <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
         </div>
+      )}
+
+      {status.project_mismatch && (
+        <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-project-mismatch" role="status">
+          {status.project_mismatch.message}
+        </p>
+      )}
+      {outdated && (
+        <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-helper-update" role="status">
+          Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
+        </p>
       )}
 
       {!status.recording && status.replay === false && (
@@ -335,18 +374,37 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       <LiveLinkTools
         footer={footer}
         release={(
-          <Button
-            className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-            disabled={busy || !releasable}
-            onClick={() => void run(() => releaseLightkeyLights())}
-            variant="secondary"
-          >
-            Release lights
-          </Button>
+          <>
+            <Button
+              className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+              disabled={busy || !releasable}
+              onClick={() => void run(() => releaseLightkeyLights())}
+              variant="secondary"
+            >
+              Release lights
+            </Button>
+            {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
+            <span data-testid="lightkey-read-fixtures-wrap" title={readBlocked}>
+              <Button
+                className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+                disabled={busy || reading || Boolean(readBlocked)}
+                loading={reading}
+                loadingLabel={"Reading\u2026"}
+                onClick={() => void readFixtures()}
+                variant="secondary"
+              >
+                Read fixtures
+              </Button>
+            </span>
+          </>
         )}
         stateText={stateText}
         testCue={testCue}
       />
+
+      {readResult && (
+        <p className={`mt-2 text-type-body-sm ${readResult.ok ? "text-ink-muted" : "text-danger-text"}`} data-testid="lightkey-read-result" role="status">{readResult.message}</p>
+      )}
 
       {status.recording && (
         <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />

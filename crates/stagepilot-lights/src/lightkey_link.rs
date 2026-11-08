@@ -13,8 +13,9 @@
 
 use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
-    effective_api_url, recording_is_worth_keeping, LightkeyAuto, LightkeyCaptured,
-    LightkeyLink as Link, LightkeyStatus,
+    clean_project, effective_api_url, fixtures_word, helper_is_outdated,
+    recording_is_worth_keeping, LightkeyAuto, LightkeyCaptured, LightkeyHelper,
+    LightkeyLink as Link, LightkeyReadFixtures, LightkeyStatus,
 };
 use crate::lightkey_auto::{
     decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
@@ -54,6 +55,10 @@ const SONG_END_GRACE_SECONDS: f64 = 5.0;
 const SHUTDOWN_SAVE_WAIT: Duration = Duration::from_secs(3);
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
+/// How often the helper's `GET /health` is read (and at once on every connect).
+pub const HEALTH_SECONDS: f64 = 30.0;
+/// `POST /fixtures/refresh` re-parses a Lightkey project, which can take a moment.
+pub const REFRESH_TIMEOUT_SECONDS: f64 = 20.0;
 pub const RETRY_SECONDS: f64 = 2.0;
 pub const OFFSET_SAMPLES: usize = 7;
 pub const OFFSET_REFRESH_SECONDS: f64 = 120.0;
@@ -111,7 +116,18 @@ pub enum HttpFailure {
 #[async_trait]
 pub trait LightkeyHttp: Send + Sync {
     async fn get_json(&self, url: &str, query: &[(&str, String)]) -> Result<Value, HttpFailure>;
+
+    /// POST with an empty body. Unlike `get_json` a non-2xx answer is not an error: the helper
+    /// explains itself in the body (`POST /fixtures/refresh` answers 403, 409 and 422 with a
+    /// code). Only a connection failure or a timeout is `Err`. The default is for fakes that
+    /// have no POST.
+    async fn post_json(&self, _url: &str) -> Result<PostAnswer, HttpFailure> {
+        Err(HttpFailure::Other("POST is not supported here".into()))
+    }
 }
+
+/// The answer to a POST: the HTTP status and the parsed JSON body, whatever the status.
+pub type PostAnswer = (u16, Value);
 
 pub type HttpFactory = Arc<dyn Fn() -> Arc<dyn LightkeyHttp> + Send + Sync>;
 
@@ -172,6 +188,28 @@ impl LightkeyHttp for ReqwestLightkeyHttp {
             }
         })?;
         serde_json::from_slice(&bytes).map_err(|e| HttpFailure::Other(e.to_string()))
+    }
+
+    async fn post_json(&self, url: &str) -> Result<PostAnswer, HttpFailure> {
+        let failed = |e: reqwest::Error| {
+            if e.is_timeout() {
+                HttpFailure::Timeout
+            } else {
+                HttpFailure::Other(e.to_string())
+            }
+        };
+        let response = self
+            .http
+            .post(url)
+            .timeout(Duration::from_secs_f64(REFRESH_TIMEOUT_SECONDS))
+            .send()
+            .await
+            .map_err(failed)?;
+        let status = response.status().as_u16();
+        let bytes = response.bytes().await.map_err(failed)?;
+        // A body that is not JSON (an old helper's plain 404 page) is just "no details".
+        let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        Ok((status, body))
     }
 }
 
@@ -311,6 +349,12 @@ struct Session {
     /// Index of the first recorded change dated with the clock offset now in force; a better
     /// offset re-dates the changes from here on (see `LightkeyLink::redate`).
     offset_mark: usize,
+    /// The Lightkey project (base name) open when this recording began, as the relay hello
+    /// said; `None` when it had not said. Saved with the capture.
+    project: Option<String>,
+    /// Set when the project or its fixture map changed mid-recording: the recording is thrown
+    /// away, with this sentence as the reason.
+    discarded: Option<String>,
 }
 
 impl Session {
@@ -329,6 +373,8 @@ impl Session {
             played: Coverage::new(),
             played_from: Some(0.0),
             offset_mark: 0,
+            project: None,
+            discarded: None,
         }
     }
 
@@ -429,6 +475,39 @@ struct State {
     pending_song: Option<Song>,
     availability: Availability,
     decision: Option<SongDecision>,
+    /// The project and fixture map the relay hello reported last, kept across relay sessions so
+    /// a change while the link was down is still noticed.
+    hello: Option<KnownHello>,
+    /// What the helper's `/health` said at `health_at` (monotonic seconds).
+    health: Option<LightkeyHelper>,
+    health_at: Option<f64>,
+}
+
+/// The parts of a `/relay/hello` that say which fixtures the helper decodes with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct KnownHello {
+    project: Option<String>,
+    fixtures: i64,
+    map: i64,
+}
+
+impl KnownHello {
+    /// "Show.lightkeyproj", or the project with its fixture count when only the fixtures changed.
+    fn label(&self, with_count: bool) -> String {
+        let name = self.project.as_deref().unwrap_or("an unnamed project");
+        if with_count {
+            let count = u32::try_from(self.fixtures.max(0)).unwrap_or(u32::MAX);
+            format!("{name}, {}", fixtures_word(count))
+        } else {
+            name.to_string()
+        }
+    }
+
+    /// A project name that changed, or a fixture map that was replaced under the same name.
+    fn differs_from(&self, earlier: &Self) -> bool {
+        self.map != earlier.map
+            || matches!((&self.project, &earlier.project), (Some(a), Some(b)) if a != b)
+    }
 }
 
 struct Inner {
@@ -543,6 +622,9 @@ impl LightkeyLink {
                     pending_song: None,
                     availability: Availability::default(),
                     decision: None,
+                    hello: None,
+                    health: None,
+                    health_at: None,
                 }),
                 wake: Notify::new(),
             }),
@@ -566,6 +648,8 @@ impl LightkeyLink {
             st.active = None;
             st.seq = 0;
             st.offset_at = 0.0;
+            st.health = None;
+            st.health_at = None;
         }
         self.inner.relay.reset();
         self.inner.wake.notify_one();
@@ -604,6 +688,21 @@ impl LightkeyLink {
     // ------------------------------------------------------------ status
     pub fn status(&self) -> LightkeyStatus {
         self.inner.status()
+    }
+
+    /// The key of the song that is current: the one last started or selected, else the one
+    /// being recorded.
+    pub fn current_song_key(&self) -> Option<String> {
+        let st = lock(&self.inner.state);
+        st.pending_song
+            .as_ref()
+            .or(st.session.as_ref().map(|s| &s.song))
+            .map(song_key)
+    }
+
+    /// "Read fixtures": ask the helper to re-read the open Lightkey project now.
+    pub async fn read_fixtures(&self) -> LightkeyReadFixtures {
+        self.inner.clone().read_fixtures().await
     }
 
     // ------------------------------------------------------------ actions
@@ -669,6 +768,7 @@ impl Inner {
     /// timer runs and the lighting connection is live. A drop of any length just leaves a gap;
     /// when the connection is back, a new stretch starts with a snapshot of every property.
     fn tick(&self) {
+        self.check_hello();
         let link = self.st().link;
         let available = self.available_now(link);
         let now = self.clock.mono();
@@ -687,6 +787,51 @@ impl Inner {
                 (_, false) => session.close_stretch(position),
                 _ => {}
             }
+        }
+    }
+
+    /// Compare the relay's latest hello with the one before it. A replaced fixture map (a new
+    /// map id) or another project name while a recording runs throws that recording away: it
+    /// would mix two fixture maps. A repeated hello (same map id, same name) is nothing.
+    fn check_hello(&self) {
+        let Some(hello) = self.relay.hello() else {
+            return;
+        };
+        let now = KnownHello {
+            project: clean_project(Some(&hello.project)),
+            fixtures: hello.fixtures,
+            map: hello.map,
+        };
+        let notice = {
+            let mut st = self.st();
+            if st.hello.as_ref() == Some(&now) {
+                return;
+            }
+            let Some(before) = st.hello.replace(now.clone()) else {
+                return;
+            };
+            if !now.differs_from(&before) {
+                return;
+            }
+            let counts = before.project == now.project;
+            let text = format!(
+                "Not saved: the Lightkey project or its fixtures changed during the recording ({} -> {}). It captures again next time.",
+                before.label(counts),
+                now.label(counts)
+            );
+            tracing::warn!(old = %before.label(true), new = %now.label(true), "lightkey_project_changed");
+            match st.session.as_mut() {
+                Some(session) if session.fixtures.is_some() && session.discarded.is_none() => {
+                    session.fixtures = None;
+                    session.recorded_from = None;
+                    session.discarded = Some(text.clone());
+                    Some(text)
+                }
+                _ => None,
+            }
+        };
+        if let Some(text) = notice {
+            self.say(text);
         }
     }
 
@@ -828,6 +973,20 @@ impl Inner {
             holding_fixtures: None,
             known_fixtures: None,
             yielded_fixtures: None,
+            project: self
+                .relay
+                .hello()
+                .and_then(|hello| clean_project(Some(&hello.project)))
+                .or_else(|| {
+                    // The helper's own answer, while the link is up and the relay is silent.
+                    (st.link == Link::Connected)
+                        .then(|| st.health.as_ref().and_then(|h| h.project.clone()))
+                        .flatten()
+                }),
+            helper: (st.link == Link::Connected)
+                .then(|| st.health.clone())
+                .flatten(),
+            project_mismatch: None,
         }
     }
 
@@ -975,6 +1134,10 @@ impl Inner {
         if st.link != link {
             tracing::info!(link = ?link, "lightkey_link_changed");
         }
+        if link != Link::Connected {
+            // Read the helper's health again as soon as the link is back.
+            st.health_at = None;
+        }
         st.link = link;
         st.detail = detail.map(str::to_string);
     }
@@ -994,6 +1157,8 @@ impl Inner {
             } else if let Err(failure) = self.poll_once(http.as_ref()).await {
                 self.on_unreachable(&failure);
                 delay = RETRY_SECONDS;
+            } else {
+                self.poll_health(http.as_ref()).await;
             }
             self.tick();
             self.finish_if_song_over().await;
@@ -1002,6 +1167,55 @@ impl Inner {
                 () = tokio::time::sleep(Duration::from_secs_f64(delay)) => {}
             }
         }
+    }
+
+    /// Read the helper's `GET /health` on connect and then about every `HEALTH_SECONDS`. It
+    /// never changes the link: an old helper without the new keys just reports no version.
+    async fn poll_health(&self, http: &dyn LightkeyHttp) {
+        let base = {
+            let (_enabled, _osc, osc_host, settings) = (self.settings)();
+            let st = self.st();
+            let now = self.clock.mono();
+            let due = st.link == Link::Connected
+                && st.health_at.is_none_or(|at| now - at >= HEALTH_SECONDS);
+            if !due {
+                return;
+            }
+            effective_api_url(&settings, &osc_host)
+        };
+        let answer = http.get_json(&format!("{base}/health"), &[]).await;
+        let mut st = self.st();
+        st.health_at = Some(self.clock.mono());
+        match answer {
+            Ok(body) => st.health = Some(parse_health(&body)),
+            // No /health page at all (every real helper has one, 0.4.x included): nothing is
+            // known about the helper, so nothing is claimed about its version.
+            Err(HttpFailure::Status(404 | 405)) => st.health = None,
+            // Keep what was known; ask again next time.
+            Err(_) => {}
+        }
+    }
+
+    async fn read_fixtures(self: Arc<Self>) -> LightkeyReadFixtures {
+        let (enabled, _osc, osc_host, settings) = (self.settings)();
+        if !enabled {
+            return refresh_failure("lighting_off", "Turn Lighting on first.");
+        }
+        let base = effective_api_url(&settings, &osc_host);
+        let http = (self.http_factory)();
+        let result = match http.post_json(&format!("{base}/fixtures/refresh")).await {
+            Ok((status, body)) => interpret_refresh(status, &body),
+            Err(HttpFailure::Timeout) => {
+                refresh_failure("unreachable", "The Lightkey API did not answer.")
+            }
+            Err(_) => refresh_failure("unreachable", "Cannot reach the Lightkey API."),
+        };
+        if result.ok {
+            // Show the new fixture map without waiting for the next health read.
+            self.st().health_at = None;
+            self.wake.notify_one();
+        }
+        result
     }
 
     /// Keep a session with the Lightkey API relay while Lighting is on and set to OSC.
@@ -1311,6 +1525,7 @@ impl Inner {
                 // A pinned Record needs the API linked; Auto already counted the grace period.
                 if !pinned || st.link == Link::Connected {
                     let mut session = Session::new(song.clone(), started_at);
+                    session.project = st.hello.as_ref().and_then(|hello| hello.project.clone());
                     if self.relay.is_live() || !pinned {
                         let state = self.relay.state();
                         let mut recorder = LookRecorder::new(&state);
@@ -1577,6 +1792,10 @@ impl Inner {
 
     async fn finish_looks(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
         self.tick();
+        if let Some(text) = session.discarded.take() {
+            tracing::info!(song = %session.key, reason, "lightkey_recording_discarded");
+            return self.say(text);
+        }
         let duration = f64::from(session.song.duration_seconds.unwrap_or(0));
         if session.running {
             let now = session.position_at(self.clock.wall());
@@ -1616,6 +1835,7 @@ impl Inner {
             recorded_at: DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0)
                 .unwrap_or_default()
                 .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            project: session.project.clone(),
         };
         let recorder = Arc::new(recorder);
         let mut scale = 1.0;
@@ -1708,6 +1928,92 @@ const MAX_COARSER_TRIES: usize = 6;
 // ------------------------------------------------------- Python-flavoured JSON coercions
 // The agent's JSON is read the way the Python link reads it (`int()`, `float()`, `bool()`,
 // `str()`); anything Python would raise on is an `HttpFailure::Other`.
+
+/// The helper's `GET /health` as the strip reports it. Anything missing is just absent: a 0.4.x
+/// helper sends none of the new keys, which makes it "older than 0.5.0".
+fn parse_health(body: &Value) -> LightkeyHelper {
+    let text = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+    };
+    let version = text(body.get("version"));
+    let map = body.get("fixture_map").filter(|m| m.is_object());
+    let watch = body.get("watch").filter(|w| w.is_object());
+    LightkeyHelper {
+        outdated: helper_is_outdated(version.as_deref()),
+        version,
+        project: clean_project(text(map.and_then(|m| m.get("project"))).as_deref()),
+        fixtures: map
+            .and_then(|m| m.get("count"))
+            .and_then(Value::as_u64)
+            .map(|n| u32::try_from(n).unwrap_or(u32::MAX)),
+        map: map.and_then(|m| m.get("map")).and_then(Value::as_i64),
+        watch_state: text(watch.and_then(|w| w.get("state"))),
+        watch_detail: text(watch.and_then(|w| w.get("detail"))),
+    }
+}
+
+fn refresh_failure(code: &str, message: &str) -> LightkeyReadFixtures {
+    LightkeyReadFixtures {
+        ok: false,
+        message: message.into(),
+        project: None,
+        count: None,
+        changed: None,
+        code: Some(code.into()),
+    }
+}
+
+/// The helper's answer to `POST /fixtures/refresh` in words (see CONTRACT.md): 200 with
+/// `changed`, or 403/409/422 with a `code` and a plain-language `error` that is passed through.
+/// A helper without the endpoint answers 404 or 405.
+pub fn interpret_refresh(status: u16, body: &Value) -> LightkeyReadFixtures {
+    let flag = body.get("ok").and_then(Value::as_bool);
+    if (200..300).contains(&status) && flag != Some(false) {
+        let project = clean_project(body.get("project").and_then(Value::as_str));
+        let count = body
+            .get("count")
+            .and_then(Value::as_u64)
+            .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
+        let changed = body.get("changed").and_then(Value::as_bool).unwrap_or(true);
+        let message = if !changed {
+            format!("No change: {}", fixtures_word(count))
+        } else if let Some(name) = &project {
+            format!("Read {} from {name}", fixtures_word(count))
+        } else {
+            format!("Read {}", fixtures_word(count))
+        };
+        return LightkeyReadFixtures {
+            ok: true,
+            message,
+            project,
+            count: Some(count),
+            changed: Some(changed),
+            code: None,
+        };
+    }
+    if status == 404 || status == 405 {
+        return refresh_failure("old_helper", "Update the helper to use this.");
+    }
+    let code = body
+        .get("code")
+        .and_then(Value::as_str)
+        .filter(|c| !c.is_empty())
+        .unwrap_or("failed");
+    let message = body
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map_or_else(
+            || format!("The Lightkey helper could not read the fixtures (HTTP {status})."),
+            str::to_string,
+        );
+    refresh_failure(code, &message)
+}
 
 fn py_int(value: &Value) -> Result<i64, HttpFailure> {
     let bad = || HttpFailure::Other(format!("not an integer: {value}"));

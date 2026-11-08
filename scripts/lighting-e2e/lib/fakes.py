@@ -32,6 +32,9 @@ class FakeRelay(asyncio.DatagramProtocol):
         self.subs: dict[tuple, dict] = {}
         self.transport = None
         self.muted = False
+        self.project = "FakeProject"  # what /relay/hello says (CONTRACT.md: base name, no path)
+        self.map = 1  # the fixture map id the hello ends with
+        self.fixture_count = None  # None: count the fixtures in the state
         self.sent_packets = 0
         self.rx_log: list[tuple[float, str]] = []  # (mono, address) of what StagePilot sent us
         self._task = None
@@ -65,7 +68,24 @@ class FakeRelay(asyncio.DatagramProtocol):
         self.sent_packets += 1
 
     def _hello(self):
-        return osc.message("/relay/hello", [RELAY_VERSION, self.stream, "FakeProject", len(self.fixtures()), 1])
+        count = len(self.fixtures()) if self.fixture_count is None else self.fixture_count
+        return osc.message("/relay/hello", [RELAY_VERSION, self.stream, self.project, count, self.map])
+
+    def say_hello(self):
+        """Send a hello to every subscriber now (the helper re-sends one every 2 s anyway). With
+        the same project and map it is a repeat; with another it is a project or map change."""
+        for sub in self.subs.values():
+            self._send(sub, "hello", [self._hello()])
+
+    def change_project(self, project=None, map_id=None, fixture_count=None):
+        """The helper's watcher re-mapped the fixtures: a new project name and/or map id."""
+        if project is not None:
+            self.project = project
+        if map_id is not None:
+            self.map = map_id
+        if fixture_count is not None:
+            self.fixture_count = fixture_count
+        self.say_hello()
 
     def fixtures(self):
         return {a.split("/")[2] for a in self.state if a.count("/") >= 3}
@@ -169,6 +189,14 @@ class FakeLightkey:
         self.on_packet = None
         self.api_down = False
         self.online = True
+        # the helper 0.5.0 surface (CONTRACT.md): GET /health version, fixture_map, watch and
+        # POST /fixtures/refresh. version None = a 0.4.x helper: no such keys, refresh is a 404.
+        self.version: str | None = "0.5.0"
+        self.fixture_map: dict | None = {"project": "FakeProject", "count": 0, "read_at": int(time.time() * 1000), "map": 1}
+        self.watch: dict = {"enabled": True, "interval_s": 180, "last_check_at": int(time.time() * 1000),
+                            "open_project": "FakeProject", "state": "ok", "folder": None, "detail": None}
+        self.refresh_response: tuple[int, dict] = (200, {"ok": True, "project": "FakeProject", "count": 0, "map": 1, "changed": False})
+        self.refresh_calls = 0
         self._transport = None
         self._http = None
 
@@ -197,8 +225,32 @@ class FakeLightkey:
                         "online": owner.online, "active": [], "seq": 1,
                         "server_time": (time.time() + owner.skew) * 1000.0}}).encode()
                     code = 200
+                elif url.path == "/health":
+                    doc = {"ok": True, "lightkey": owner.online, "error": None, "dmx_age_ms": 20, "reads": 1}
+                    if owner.version is not None:
+                        doc.update({"version": owner.version, "fixture_map": owner.fixture_map, "watch": owner.watch})
+                    body, code = json.dumps(doc).encode(), 200
                 else:
                     body, code = b"{}", 404
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):
+                url = urlparse(self.path)
+                n = int(self.headers.get("Content-Length") or 0)
+                if n:
+                    self.rfile.read(n)
+                if owner.api_down:
+                    code, doc = 503, {"error": "down"}
+                elif url.path == "/fixtures/refresh" and owner.version is not None:
+                    owner.refresh_calls += 1
+                    code, doc = owner.refresh_response
+                else:
+                    code, doc = 404, {}  # a 0.4.x helper has no such endpoint
+                body = json.dumps(doc).encode()
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))

@@ -9,7 +9,7 @@
 use crate::lightkey::{FixtureLink, FixtureStatus};
 use crate::lightkey_fixtures::{
     clock_sample, parse_packet, parse_pong, ClockEstimate, FixtureCommand, FixtureState, Joined,
-    PacketKind, StreamTracker, CLOCK_REDATE_THRESHOLD, RELAY_VERSION,
+    PacketKind, RelayHello, StreamTracker, CLOCK_REDATE_THRESHOLD, RELAY_VERSION,
 };
 use rosc::{encoder, OscMessage, OscPacket, OscType};
 use std::sync::{Arc, Mutex};
@@ -53,6 +53,8 @@ struct Shared {
     seen: bool,
     have_keyframe: bool,
     fixtures: u32,
+    /// The last hello of this session: the project, fixture count and map id.
+    hello: Option<RelayHello>,
     tracker: StreamTracker,
     clock: ClockEstimate,
     /// `agent_clock - our_clock`, seconds.
@@ -69,6 +71,7 @@ impl Shared {
             seen: false,
             have_keyframe: false,
             fixtures: 0,
+            hello: None,
             tracker: StreamTracker::new(),
             clock: ClockEstimate::new(),
             offset: None,
@@ -141,6 +144,12 @@ impl RelayClient {
     pub fn is_live(&self) -> bool {
         let s = lock(&self.shared);
         s.link == FixtureLink::Live && s.have_keyframe
+    }
+
+    /// The latest `/relay/hello` of this session (project, fixture count, map id); `None` until
+    /// one arrived and again after the session ended.
+    pub fn hello(&self) -> Option<RelayHello> {
+        lock(&self.shared).hello.clone()
     }
 
     /// `None` until the relay has answered once.
@@ -350,6 +359,7 @@ impl RelayClient {
                     return;
                 }
                 s.fixtures = u32::try_from(hello.fixtures.max(0)).unwrap_or(u32::MAX);
+                s.hello = Some(hello.clone());
                 if s.tracker.on_hello(hello) {
                     s.state = FixtureState::new();
                     s.have_keyframe = false;

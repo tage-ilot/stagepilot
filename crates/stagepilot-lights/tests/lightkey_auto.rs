@@ -47,6 +47,7 @@ fn status(complete: bool, coverage: f64) -> CaptureStatus {
         complete,
         coverage_seconds: coverage,
         recorded_at: "2026-11-02T00:00:00Z".into(),
+        project: None,
     }
 }
 

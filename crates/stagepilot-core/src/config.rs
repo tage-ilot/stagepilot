@@ -1095,6 +1095,12 @@ pub struct CaptureStatus {
     pub coverage_seconds: f64,
     /// When the pass was saved, RFC 3339 UTC.
     pub recorded_at: String,
+    /// The Lightkey project (base name) that was open when the recording began, as the helper
+    /// reported it. Absent on older captures and when the helper did not say; such a capture
+    /// never triggers the "different project" notice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<String>")]
+    pub project: Option<String>,
 }
 
 /// What a song's cue map says about capturing (the chip on the songs strip).

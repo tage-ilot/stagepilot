@@ -166,6 +166,15 @@ class Rig:
         await self.wait(lambda: (lambda s: s["link"] == "connected" and ((s.get("fixtures") or {}).get("link") in ("live", None)))(self.lk_status()),
                         timeout, what="link connected (+ relay live when reported)")
 
+    # ---------------------------------------------------------------- the open Lightkey project
+    def set_project(self, project, map_id, count=None):
+        """The helper's watcher re-mapped the fixtures (a project switch, or fixtures added): the
+        relay hello and the helper's /health both say so from now on."""
+        self.relay.change_project(project, map_id, count)
+        n = count if count is not None else len(self.relay.fixtures())
+        self.lk.fixture_map = {"project": project, "count": n, "read_at": int(time.time() * 1000), "map": map_id}
+        self.lk.watch = {**self.lk.watch, "open_project": project, "state": "changed", "last_check_at": int(time.time() * 1000)}
+
     # ---------------------------------------------------------------- the relay's state
     def set_relay_state(self, commands):
         """Bring the relay's fixture state to `commands` (only the differences are sent)."""
