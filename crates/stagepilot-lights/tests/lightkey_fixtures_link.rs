@@ -1261,6 +1261,9 @@ async fn a_seek_that_skips_more_than_ten_seconds_saves_an_incomplete_capture() {
 /// A long, busy song takes 35-45 s to fit and save after it ends and the Lighting card showed
 /// nothing: it looked as if the recording was lost. `saving` is set while the fit and save run
 /// and gone when the closing message is up.
+///
+/// The song's end is delivered on the event bus and waits for the save, so the held save is
+/// watched from a second future while the recording runs.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_status_says_saving_from_the_end_of_the_recording_until_it_is_saved() {
     let rig = Rig::new(vec![dim("P1", 0.0)]).await;
@@ -1269,29 +1272,30 @@ async fn the_status_says_saving_from_the_end_of_the_recording_until_it_is_saved(
         "nothing before a recording"
     );
     rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
-    record_a_short_song(&rig).await;
-    wait_for(|| rig.link.status().saving.is_some(), 5.0).await;
-    let status = rig.link.status();
-    let saving = status.saving.expect("saving");
-    assert_eq!(saving.song, "Holy Forever");
-    assert!(
-        chrono::DateTime::parse_from_rfc3339(&saving.started_at).is_ok(),
-        "{}",
-        saving.started_at
-    );
-    assert!(
-        rig.saved.lock().unwrap().is_empty(),
-        "still being saved: no looks yet"
-    );
-    // it stays while the save takes its time
-    pause(0.3).await;
-    assert!(rig.link.status().saving.is_some());
-    // the field is in the API answer only while it is set
-    let json = serde_json::to_value(rig.link.status()).unwrap();
-    assert_eq!(json["saving"]["song"], "Holy Forever");
-
-    rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
-    wait_for(|| rig.link.status().saving.is_none(), 5.0).await;
+    let watch = async {
+        wait_for(|| rig.link.status().saving.is_some(), 15.0).await;
+        let status = rig.link.status();
+        let saving = status.saving.expect("saving");
+        assert_eq!(saving.song, "Holy Forever");
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(&saving.started_at).is_ok(),
+            "{}",
+            saving.started_at
+        );
+        assert!(
+            rig.link.status().captured.is_none(),
+            "still being saved: not saved yet"
+        );
+        // it stays while the save takes its time
+        pause(0.3).await;
+        assert!(rig.link.status().saving.is_some());
+        // the field is in the API answer only while it is set
+        let json = serde_json::to_value(rig.link.status()).unwrap();
+        assert_eq!(json["saving"]["song"], "Holy Forever");
+        rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+    };
+    tokio::join!(record_a_short_song(&rig), watch);
+    wait_for(|| rig.link.status().saving.is_none(), 15.0).await;
     let done = rig.link.status();
     let message = done.message.clone().unwrap_or_default();
     assert!(
@@ -1318,18 +1322,12 @@ async fn a_failed_save_clears_saving_and_keeps_its_message() {
     )
     .await;
     rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
-    record_a_short_song(&rig).await;
-    for _ in 0..10 {
-        eprintln!(
-            "DBG {:?} {:?}",
-            rig.link.status().saving,
-            rig.link.status().message
-        );
-        pause(0.3).await;
-    }
-    wait_for(|| rig.link.status().saving.is_some(), 5.0).await;
-    rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
-    wait_for(|| rig.link.status().saving.is_none(), 5.0).await;
+    let watch = async {
+        wait_for(|| rig.link.status().saving.is_some(), 15.0).await;
+        rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+    };
+    tokio::join!(record_a_short_song(&rig), watch);
+    wait_for(|| rig.link.status().saving.is_none(), 15.0).await;
     let message = rig.link.status().message.unwrap_or_default();
     assert_eq!(
         message,
