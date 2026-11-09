@@ -761,7 +761,8 @@ sent, and any change that keeps coming more than 1.5 s after the last send (200 
 property that is not a head position, 500 ms after a first send) are the operator's, as before. Setting a pan by hand to
 -20 and then +20 on a head the plan holds at -90 takes the head on the first change and keeps
 it for 30 s after the last one.
- Only properties the replay has itself sent to
+
+Only properties the replay has itself sent to
 that fixture are judged: a pan, colour or effect that Lightkey's own running cues
 move is never taken for the operator. Fixture names compare without regard to case
 or `%20` encoding. StagePilot then stops
