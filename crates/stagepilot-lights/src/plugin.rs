@@ -6,7 +6,7 @@ use crate::lightkey_discovery::{
 use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
 use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
 use crate::lightkey_operator::OperatorTracker;
-use crate::lightkey_replay::{is_smooth, Kind, PacingQueue, ReplayEngine};
+use crate::lightkey_replay::{is_smooth, Kind, PacingQueue, ReplayEngine, ReplayLoad};
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -31,6 +31,9 @@ use uuid::Uuid;
 /// How many seconds before its time a row with fixture-override messages (a "look") leaves, so
 /// the fixtures have changed by the beat. Other rows (MIDI, `/live` cues) leave exactly on time.
 pub const LOOK_LEAD_SECONDS: f64 = 0.045;
+/// How long the last replay load counts as current: a replay that has not ticked for this long
+/// has nothing moving.
+const REPLAY_LOAD_FRESH: Duration = Duration::from_secs(3);
 /// Pause between the two rounds of `overrides/clear` a release sends per fixture.
 /// Pause before a failed timeline send is tried once more.
 const SEND_RETRY_DELAY: Duration = Duration::from_millis(100);
@@ -124,6 +127,8 @@ struct State {
     playback: Option<Playback>,
     /// The smooth replay engine of the running song (ramps and effects), when it has any.
     engine: Option<ReplayEngine>,
+    /// How well the engine serves the running song, as of the last tick (`None` = no tick yet).
+    replay_load: Option<(ReplayLoad, Instant)>,
 }
 
 /// Where a timeline starts and which rows it keeps (song seconds).
@@ -262,6 +267,7 @@ impl LightsPlugin {
                 watchers: HashMap::new(),
                 playback: None,
                 engine: None,
+                replay_load: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
             stop: tokio::sync::Notify::new(),
@@ -708,6 +714,11 @@ impl Inner {
             last_cue: st.last_cue.clone(),
             last_osc_cue: st.last_osc_cue.clone(),
             last_cue_at: st.last_cue_at,
+            // The load of the last tick; an engine that has not ticked for a while is idle.
+            replay_load: st
+                .replay_load
+                .filter(|(_, at)| at.elapsed() < REPLAY_LOAD_FRESH)
+                .map_or_else(ReplayLoad::default, |(load, _)| load),
         }
     }
 
@@ -1267,9 +1278,11 @@ impl Inner {
                     let Some(engine) = engine.as_mut() else {
                         return Ok(());
                     };
-                    engine.tick(now, start + now + LOOK_LEAD_SECONDS, &|address| {
+                    let tick = engine.tick(now, start + now + LOOK_LEAD_SECONDS, &|address| {
                         fixture_of(address).is_some_and(|name| operator.is_yielded(name))
-                    })
+                    });
+                    st.replay_load = Some((engine.load(), Instant::now()));
+                    tick
                 };
                 let tick_position = start + now + LOOK_LEAD_SECONDS;
                 for ((message, kind), position) in tick
@@ -1377,6 +1390,7 @@ impl Inner {
             let mut st = self.st();
             st.playback = None;
             st.engine = None;
+            st.replay_load = None;
             st.timeline.take()
         };
         if let Some(task) = task {

@@ -60,6 +60,10 @@ export const startLookNote = (startLights: number | null | undefined, hasCapture
 export const simplifiedNote = (simplified: { kept_changes: number; recorded_changes: number } | null | undefined): string | null =>
   simplified ? `Simplified: ${formatCount(simplified.kept_changes)} of ${formatCount(simplified.recorded_changes)} changes kept.` : null;
 
+/** The one plain line while a replay is very busy (the lights status' `replay_load`), or null. */
+export const replayBusyNote = (load: { busy: boolean } | null | undefined): string | null =>
+  load?.busy ? "This song is very busy: some lights update less often than recorded." : null;
+
 export const capturedCount = (cues: OscLightingCue[]): number => cues.filter(isCaptured).length;
 export const hasEditedCaptured = (cues: OscLightingCue[]): boolean => cues.some((cue) => isCaptured(cue) && cue.edited);
 

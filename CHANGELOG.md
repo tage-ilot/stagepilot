@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **On a very busy song the moving and chasing lights no longer stop; the show is simplified evenly instead.** StagePilot sends at most 200 packets a second to Lightkey. On the busiest saved song (7 loops, 36 chasing lights, 16 colour fades every 100 ms) the colour fades took all of it and the loops got nothing: they changed about 4 times in 30 s where the recording changed them 500 to 2,300 times. When a song asks for much more than that for more than 2 seconds, the loops now get at least 35% of the packets and the colour fades at most 65%, and every light is served in turn (on that song: every loop light 3.4 to 4 times a second, every colour fade about 4, where the loops had none). The Lighting panel says `This song is very busy: some lights update less often than recorded.` while that happens (new `replay_load` with `busy` and `served_percent` in the lights status). A song that fits (both Sunday songs) plays exactly as before. The 200 packets a second limit is **not** raised: whether Lightkey takes more is not known and needs the rig. See "A very busy song" in `docs/lights.md`.
+
 ## [2.43.0-rc.10] - 2026-11-08
 
 ### Added

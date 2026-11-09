@@ -486,6 +486,37 @@ largest change first. When effect values had to wait, the effect interval grows 
 125 ms (8 Hz) and shrinks back when the budget has room; ramps keep 20 Hz. Beyond that a
 busy second simply sends the biggest changes first.
 
+**A very busy song (shared budget).** The 200 a second is a fact of the replay (whether
+Lightkey takes more is not known and needs a rig; the limit has not been raised). When a song
+asks for more than that, the plain rule above lets the ramps (colour rows) have all of it and
+the loops get nothing: on the saved busy song (6,999 rows, 7 loops, 36 loop addresses; 20 s to
+80 s) it was 11,998 packets, 326 steps, 11,672 ramp and **0** loop values. So the engine
+watches how much each class (ramps, loops) gets of what it asks for (a due value counts as one
+request per 50 ms, or per effect interval for a loop). When a class gets less than a tenth of
+what it asks for **for more than 2 seconds**, the song is *very busy* and the budget is shared
+instead of ramps first:
+
+- **Effects get at least 35%, ramps at most 65%** while loops are waiting; a share one class
+  does not use goes to the other, and a song with only ramps (or only loops) may still use
+  everything. Steps (and the first look) still always go out first.
+- **Nobody is left out.** Inside the shared budget an address that has waited 100 ms goes
+  before the others, oldest first, and the biggest change still goes first among the ones that
+  have not. The turns come round in about a quarter of a second: on the saved busy song, over
+  55 s, every one of the 36 loop addresses was sent 3.4 to 4.0 times a second (it was 0) and
+  each of the 16 colour ramps 4.0 to 4.1 times a second (it was 12 to 13), 64% of the packets
+  went to the loops and 33% to the ramps.
+- **The song is simplified evenly** (every light updates less often than recorded) and
+  `GET /api/v1/lights` says so: `replay_load` is `{ "busy": bool, "served_percent": number }`.
+  `busy` is true from the moment the song has been very busy for more than 2 s until the load
+  has been back within reach (every class served at least 85%) for 4 s; `served_percent` is the
+  packets sent over the packets asked for in the last second or so (ramps and loops together),
+  rounded. The Lighting panel shows one line while it is busy: *This song is very busy: some
+  lights update less often than recorded.* It is `busy: false` (and 100) when nothing plays.
+- **A song that fits plays exactly as before.** The shared rule starts only after those 2
+  seconds. The two real Sunday songs (Ever Be, 11,075 packets in 320 s; Elohim, 14,822 in 450 s)
+  never reach it, and a test (`replay_budget`) replays both and compares every count and the
+  order of every packet with the engine before this change.
+
 **Pacing queue.** Between the ticks and the 5 ms spacing sits one priority queue: **steps
 leave first, then ramp values, then effect values, oldest first inside a class**. A ramp or
 effect value that is still waiting when a newer value for the same address is queued is
