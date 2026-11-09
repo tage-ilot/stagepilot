@@ -78,28 +78,6 @@ for (const [file, pattern, replacement] of replacements) {
   write(file, replaceOnce(content, pattern, replacement, file));
 }
 
-// README's download section advertises the current release from github.com/tage-ilot/stagepilot.
-let readme = read("README.md");
-readme = replaceOnce(
-  readme,
-  /^## Download StagePilot [^\r\n]+/m,
-  `## Download StagePilot ${version}`,
-  "README.md",
-);
-readme = readme.replace(
-  /https:\/\/github\.com\/(?:tage-ilot|huntrw6)\/stagepilot\/releases\/(?:tag|download)\/v\d+\.\d+\.\d+/g,
-  (url) => url.replace(/v\d+\.\d+\.\d+$/, `v${version}`),
-);
-readme = readme.replace(
-  /\[StagePilot v\d+\.\d+\.\d+ release\]/,
-  `[StagePilot v${version} release]`,
-);
-readme = readme.replace(
-  /StagePilot_\d+\.\d+\.\d+_/g,
-  `StagePilot_${version}_`,
-);
-write("README.md", readme);
-
 if (currentVersion === version) {
   console.log(`StagePilot is already version ${version}; verified and refreshed all version sources.`);
 } else {
