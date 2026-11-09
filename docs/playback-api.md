@@ -162,12 +162,25 @@ While Playback loads a setlist it keeps sending valid heartbeats (position, tran
 | `song.paused` outside discovery, valid order and current song | `stop_timer_at(position)`: stops and keeps the remaining time |
 | `song.paused`, otherwise (stale order, other song, no position) | `stop_timer`, even while stale |
 | `song.stopped` outside discovery | `stop_timer`, even while stale |
+| `song.resumed` of the song just selected in Playback (`song.selected`, no start or song change since), when that song is not StagePilot's current song, valid order (or learned order) | Handled as `song.started` at that position: `dispatch_song_position(N)` with the Playback position and clock, so the song becomes current and the countdown, ProPresenter timer and lights start from the jump position |
 | `song.resumed`, valid order, Playback song is StagePilot's current song | `resume_timer_at(position)`: countdown continues from the Playback position |
 | `seek`, same conditions, and not after a Playback section loop or jump (monitor-only) | `seek_timer(position)`: remaining time re-applied from the new position; keeps running if running, otherwise only the frozen value changes |
 | First heartbeat after a reconnect, playing, same conditions | `resume_timer_at(position)` (alignment); ignored when Playback is not playing |
-| `song.resumed`/`seek`/reconnect, stale order or a different song | Monitor only |
+| `song.resumed`/`seek`/reconnect, stale order or a different song (not just selected) | Monitor only |
 | Position safety net: a playing heartbeat more than 3 s from the running timer's position, twice in a row, same conditions | `seek_timer(heartbeat position)` (a `seek` event with reason `resync`) and a `playback_position_resync` log line with `app_position` and `playback_position` |
 | selected/changed/ended, section, jump, fade, pad and unknown | Monitor only |
+
+How a song is recognised. A play inside a song counts as `song.started` only below 2 s (the
+usual play from the top, or after a return to the start); further in it is `song.resumed`.
+StagePilot also treats a `song.resumed` as a start when it is the first play of the song that
+was selected last in Playback (`song.selected` for that song, nothing started or changed
+since) and that song is not StagePilot's current song: select a song, jump into it and press
+play, and StagePilot switches to that song and follows it from the jump position (it is not
+reset to 0). This is a deliberate difference from the Python app, which dropped that resume
+and kept the previous song; the Rust port had inherited the rule. A resume inside the current
+song, a resume of a song that was not just selected, auto-advance, navigation without play,
+pause and stop behave as before. A resume of a song that is not in the saved or learned order
+stays ignored; it is logged once per song as `playback_resume_ignored`.
 
 Pause, jump, play: a `transportPlay` shows the resume at once (provisional) and the
 heartbeat that confirms it arrives later. A `waveformSeek` made while the player is not
