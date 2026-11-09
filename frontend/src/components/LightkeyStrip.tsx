@@ -97,14 +97,23 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null, look
 export const savingText = (song: string): string => `Saving the recording of \u201C${song}\u201D\u2026`;
 export const SAVING_REASSURANCE = "A long, busy song can take up to a minute. The recording is not lost.";
 
-/** The "Saving the recording of X…" line: a pulsing dot in the Lighting colour (still when motion is reduced), then the words. */
+/**
+ * The "Saving the recording of X…" line. It sits on an opaque dark base (`surface-950`) with the Lighting tint
+ * laid over it, so its words and dot keep their contrast whatever lies behind the card. The dot stays solid at
+ * full strength; a soft ring beside it pulses (no ring, just the still dot, when motion is reduced).
+ */
 export function LightkeySavingLine({ saving }: { saving: LightkeySaving }) {
   return (
-    <div className="mt-2 flex items-start gap-2.5 rounded-ds-lg border border-integration-lighting-soft/40 bg-integration-lighting/10 px-3 py-2 text-type-body-sm" data-testid="lightkey-saving" role="status">
-      <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 animate-pulse rounded-ds-full bg-integration-lighting motion-reduce:animate-none" data-part="dot" />
-      <div className="min-w-0">
-        <p className="font-semibold text-ink [overflow-wrap:anywhere]" data-testid="lightkey-saving-text">{savingText(saving.song)}</p>
-        <p className="text-ink-muted">{SAVING_REASSURANCE}</p>
+    <div className="mt-3 rounded-ds-lg bg-surface-950" data-part="base">
+      <div className="flex items-start gap-2.5 rounded-ds-lg border border-integration-lighting-soft/60 bg-integration-lighting/10 px-3 py-2.5 text-type-body-sm" data-testid="lightkey-saving" role="status">
+        <span aria-hidden="true" className="relative mt-1.5 grid size-2 shrink-0 place-items-center" data-part="dot-wrap">
+          <span className="absolute size-4 animate-ping rounded-ds-full bg-integration-lighting/40 motion-reduce:hidden" data-part="pulse" />
+          <span className="relative size-2 rounded-ds-full bg-integration-lighting" data-part="dot" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-semibold text-ink [overflow-wrap:anywhere]" data-testid="lightkey-saving-text">{savingText(saving.song)}</p>
+          <p className="text-ink-body">{SAVING_REASSURANCE}</p>
+        </div>
       </div>
     </div>
   );

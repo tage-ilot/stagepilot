@@ -620,6 +620,34 @@ describe("LightkeyStrip: saving a recording that just ended (F-H5)", () => {
     expect(line).toHaveAttribute("role", "status");
   });
 
+  it("reads clearly: a solid dark base, light words, and a dot that stays at full strength", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ saving }));
+    render(<LightkeyStrip lightingEnabled />);
+    const line = await screen.findByTestId("lightkey-saving");
+    // an opaque base under the tint, so nothing behind the card can wash the words out
+    expect(line.parentElement?.className).toContain("bg-surface-950");
+    expect(line.className).toContain("bg-integration-lighting/10");
+    // the explanatory line is the body colour, not the dim muted one
+    const reassurance = screen.getByText("A long, busy song can take up to a minute. The recording is not lost.");
+    expect(reassurance.className).toContain("text-ink-body");
+    expect(reassurance.className).not.toContain("text-ink-muted");
+    // the dot itself never fades (a faded dot fell under 3:1); a ring beside it carries the pulse
+    const dot = line.querySelector('[data-part="dot"]');
+    expect(dot?.className).toContain("bg-integration-lighting");
+    expect(dot?.className).not.toContain("animate-");
+    expect(dot?.className).not.toMatch(/opacity|\/[0-9]+/);
+  });
+
+  it("keeps the pulse out of reduced-motion: the ring is hidden and the dot stays as a still dot", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ saving }));
+    render(<LightkeyStrip lightingEnabled />);
+    const line = await screen.findByTestId("lightkey-saving");
+    const ring = line.querySelector('[data-part="pulse"]');
+    expect(ring?.className).toContain("animate-ping");
+    expect(ring?.className).toContain("motion-reduce:hidden");
+    expect(line.querySelector('[data-part="dot"]')).not.toBeNull();
+  });
+
   it("is not there when nothing is being saved", async () => {
     render(<LightkeyStrip lightingEnabled />);
     await screen.findByText("Connected");

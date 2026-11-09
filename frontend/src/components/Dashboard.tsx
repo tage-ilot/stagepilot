@@ -931,7 +931,7 @@ export function Dashboard({
       </header>
 
 
-      {canConfigure && <SettingsNoticeBanner className="mb-5" settings={settings} where="main" />}
+      {canConfigure && <SettingsNoticeBanner settings={settings} where="main" />}
 
       {canConfigure && updater && (
         <UpdateDialog

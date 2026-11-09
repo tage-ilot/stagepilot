@@ -804,7 +804,7 @@ export function LightingSetupPanel({
       />
 
 
-      <SettingsNoticeBanner className="mt-4" settings={settings} where="lighting" />
+      <SettingsNoticeBanner settings={settings} where="lighting" />
 
       <PanelAlert className="mt-4 !py-1.5" dot error={error} message={message ? shortLightingMessage(message) : message} messageTone="info" neutral={Boolean(message && /^OSC /.test(message))} onRetry={!lights ? onRetryLoad : undefined} />
 

@@ -18,8 +18,11 @@ describe("SettingsNoticeBanner: a song that was set aside", () => {
     const banner = screen.getByTestId("settings-notice");
     expect(within(banner).getByText(NOTICE_LEAD)).toBeInTheDocument();
     expect(screen.getByTestId("settings-notice-text")).toHaveTextContent("The lighting data for Ever Be was damaged and set aside; record it again.");
-    // calm: a status, not an alert that interrupts
+    // calm: a status, not an alert that interrupts, and still the info tone (not the warning one)
     expect(banner).toHaveAttribute("role", "status");
+    expect(banner).toHaveAttribute("data-tone", "info");
+    expect(banner.className).toContain("border-info/30");
+    expect(within(banner).getByText(NOTICE_LEAD).className).toContain("text-info-text");
   });
 
   it("shows the same notice on the Lighting screen", () => {
@@ -63,6 +66,32 @@ describe("SettingsNoticeBanner: the whole file could not be read", () => {
     expect(banner).not.toHaveTextContent("not valid JSON");
   });
 
+  it("wears the warning tone: the warning colours, a heading in the warning text colour, and role alert", () => {
+    render(<SettingsNoticeBanner settings={degraded("not valid JSON")} where="main" />);
+    const banner = screen.getByTestId("settings-degraded");
+    expect(banner).toHaveAttribute("data-tone", "warning");
+    expect(banner).toHaveAttribute("role", "alert");
+    expect(banner.className).toContain("border-warning/30");
+    expect(banner.className).toContain("bg-warning/10");
+    expect(within(banner).getByText(DEGRADED_LEAD).className).toContain("text-warning-text");
+    expect(within(banner).getByText(DEGRADED_LEAD).className).not.toContain("text-info-text");
+  });
+
+  it("the 'newer StagePilot' notice is a warning too, with its heading still in plain words", () => {
+    render(<SettingsNoticeBanner settings={degraded("schema_version 3 is newer than 2")} where="main" />);
+    const banner = screen.getByTestId("settings-degraded");
+    expect(banner).toHaveAttribute("data-tone", "warning");
+    expect(banner).toHaveAttribute("role", "alert");
+    expect(within(banner).getByText(NEWER_LEAD).className).toContain("text-warning-text");
+  });
+
+  it("can be closed for the session, like the song notice", async () => {
+    render(<SettingsNoticeBanner settings={degraded("not valid JSON")} where="main" />);
+    await userEvent.setup().click(screen.getByRole("button", { name: `Got it: ${DEGRADED_LEAD}` }));
+    expect(screen.queryByTestId("settings-degraded")).not.toBeInTheDocument();
+    expect(window.sessionStorage.getItem("stagepilot.dismissed-settings-notices")).toContain("main|degraded:corrupt");
+  });
+
   it("says so differently when the file is from a newer StagePilot", () => {
     render(<SettingsNoticeBanner settings={degraded("schema_version 3 is newer than 2")} where="main" />);
     const banner = screen.getByTestId("settings-degraded");
@@ -81,6 +110,43 @@ describe("SettingsNoticeBanner: the whole file could not be read", () => {
     render(<SettingsNoticeBanner settings={{ ...degraded("not valid JSON"), settings_notice: setAside("Ever Be") }} where="main" />);
     const kinds = Array.from(document.querySelectorAll("[data-kind]")).map((node) => node.getAttribute("data-kind"));
     expect(kinds).toEqual(["degraded", "notice"]);
+  });
+});
+
+describe("SettingsNoticeBanner: spacing and readability", () => {
+  const both: SettingsResponse = { ...base, settings_degraded: true, settings_degraded_reason: "not valid JSON", settings_notice: setAside("Ever Be") };
+
+  it("on the main screen the gap between banners and the gap below the last one are the same step (20px)", () => {
+    render(<SettingsNoticeBanner settings={both} where="main" />);
+    const stack = screen.getByTestId("settings-notices-main");
+    expect(stack.className).toContain("flex-col");
+    expect(stack.className).toContain("gap-5");
+    expect(stack.className).toContain("mb-5");
+    expect(stack.className).not.toMatch(/space-y-/);
+  });
+
+  it("on the Lighting screen the same rule at the panel's 24px step, above and below", () => {
+    render(<SettingsNoticeBanner settings={withNotice(setAside("Ever Be"))} where="lighting" />);
+    const stack = screen.getByTestId("settings-notices-lighting");
+    expect(stack.className).toContain("gap-6");
+    expect(stack.className).toContain("my-6");
+  });
+
+  it("the stack adds no side margin or padding, so the banners keep the same left and right edges as the cards beside them", () => {
+    render(<SettingsNoticeBanner settings={both} where="main" />);
+    const stack = screen.getByTestId("settings-notices-main");
+    expect(stack.className).not.toMatch(/(^|\s)(m[xlr]|p[xlr])-/);
+    stack.querySelectorAll('[data-part="base"]').forEach((node) => expect(node.className).not.toMatch(/(^|\s)(m[xlr]|p[xlr])-/));
+  });
+
+  it("sits each banner on an opaque dark base, so the words do not depend on the photo behind", () => {
+    render(<SettingsNoticeBanner settings={both} where="main" />);
+    const bases = document.querySelectorAll('[data-part="base"]');
+    expect(bases).toHaveLength(2);
+    bases.forEach((node) => {
+      expect(node.className).toContain("bg-surface-950");
+      expect(node.querySelector("[data-kind]")).not.toBeNull();
+    });
   });
 });
 
