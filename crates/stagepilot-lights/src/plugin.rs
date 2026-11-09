@@ -39,6 +39,8 @@ const RELEASE_ROUND_GAP: Duration = Duration::from_millis(150);
 /// A fixture the operator took over goes back to the replay after this many seconds without a
 /// further operator change on it. Each new operator change restarts the count.
 pub const OPERATOR_TAKE_BACK_SECONDS: f64 = 30.0;
+/// A stop this close to the song's end (or later) is the song ending, not a pause inside it.
+const SONG_END_SLACK_SECONDS: f64 = 1.0;
 
 /// `ActionOutcome` for the lighting controller.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +126,18 @@ struct State {
     playback: Option<Playback>,
     /// The smooth replay engine of the running song (ramps and effects), when it has any.
     engine: Option<ReplayEngine>,
+    /// The song that is on now: from its start until it ends or the position is reset.
+    /// A pause or stop inside the song keeps it. A play that finds none (or a start from the top)
+    /// begins a new one and drops the yields of before (F-H3).
+    session: Option<SongOn>,
+}
+
+/// A song that is on (running, or paused inside).
+struct SongOn {
+    /// The saved-song key the song's looks are stored under.
+    key: String,
+    /// When the song runs out if it keeps playing; `None` while it is paused.
+    ends: Option<Instant>,
 }
 
 /// Where a timeline starts and which rows it keeps (song seconds).
@@ -262,6 +276,7 @@ impl LightsPlugin {
                 watchers: HashMap::new(),
                 playback: None,
                 engine: None,
+                session: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
             stop: tokio::sync::Notify::new(),
@@ -552,7 +567,7 @@ impl Inner {
         sub!(EventType::TimerResumed, on_timer_repositioned);
         sub!(EventType::TimerSeeked, on_timer_repositioned);
         sub!(EventType::TimerStopRequested, on_timer_stopped);
-        sub!(EventType::TimerResetRequested, on_timer_stopped);
+        sub!(EventType::TimerResetRequested, on_timer_reset);
         sub!(EventType::TimerStopped, on_timer_stopped);
         sub!(EventType::TimerFailed, on_timer_stopped);
         self.st().subscriptions.extend(subs);
@@ -1000,6 +1015,8 @@ impl Inner {
         }
         let now = Self::song_position_now(0.0, payload.started_at);
         let effects = self.active_effects(&song);
+        // A start from the top: what the operator did before it is not a take-over (F-H3).
+        self.begin_song(&song, f64::from(payload.duration_seconds), true);
         self.start_timeline(
             &song,
             active,
@@ -1011,6 +1028,7 @@ impl Inner {
                 remaining: f64::from(payload.duration_seconds),
             },
         );
+        self.end_song_if_not_replaying();
         // The release goes out after the timeline has started (S-01): releasing 100 unused
         // fixtures takes about a second and must not delay the new song's first look. It
         // reserves its packet slots one at a time, so rows interleave with it.
@@ -1050,6 +1068,9 @@ impl Inner {
         }
         let now = Self::song_position_now(position, payload.started_at);
         let effects = self.active_effects(&song);
+        // Resume inside the song that is on: the operator's touches (also those made while it
+        // was paused) stay as they are. Any other resume or seek starts a replay (F-H3).
+        self.begin_song(&song, f64::from(payload.duration_seconds), false);
         self.start_timeline(
             &song,
             active,
@@ -1061,12 +1082,71 @@ impl Inner {
                 remaining: f64::from(payload.duration_seconds),
             },
         );
+        self.end_song_if_not_replaying();
     }
 
     async fn on_timer_stopped(self: &Arc<Self>, _event: &StagePilotEvent) {
         // Pause, stop, reset and song end cancel what is still pending. Nothing is cleared:
         // fixtures the timeline holds keep their last look.
+        {
+            let mut st = self.st();
+            let ran_out = st
+                .playback
+                .as_ref()
+                .is_some_and(|p| p.now() >= p.end - SONG_END_SLACK_SECONDS);
+            if ran_out {
+                st.session = None; // the song ended
+            } else if let Some(session) = st.session.as_mut() {
+                session.ends = None; // paused inside the song
+            }
+        }
         self.cancel_timeline().await;
+    }
+
+    /// The position was reset: the next play is a start from the top.
+    async fn on_timer_reset(self: &Arc<Self>, event: &StagePilotEvent) {
+        self.on_timer_stopped(event).await;
+        self.st().session = None;
+    }
+
+    /// A song's replay is about to start. A start from the top, a song that is not the one on,
+    /// or a resume/seek when no song is on (it ended, or none ever played) starts a new
+    /// session: every yield older than now is dropped, so the first look goes to the whole rig
+    /// and what the operator touched before it does not win (F-H3). Until then a touch is
+    /// recorded as always; nothing is released at a song's end. A resume or seek inside the
+    /// song that is on keeps the yields (the 30 s rule and the hand-back stay as they are).
+    fn begin_song(&self, song: &Song, remaining: f64, from_top: bool) {
+        let key = song
+            .source_song_id
+            .clone()
+            .unwrap_or_else(|| song.id.clone());
+        let now = Instant::now();
+        let ends = Some(now + Duration::from_secs_f64(remaining.max(0.0)));
+        let mut st = self.st();
+        let continuing = !from_top
+            && st
+                .session
+                .as_ref()
+                .is_some_and(|s| s.key == key && s.ends.is_none_or(|e| now < e));
+        if continuing {
+            if let Some(session) = st.session.as_mut() {
+                session.ends = ends;
+            }
+            return;
+        }
+        st.operator.begin_song();
+        for (_, handle) in st.watchers.drain() {
+            handle.abort();
+        }
+        st.session = Some(SongOn { key, ends });
+    }
+
+    /// The timeline did not start (nothing to play): no song is replaying.
+    fn end_song_if_not_replaying(&self) {
+        let mut st = self.st();
+        if st.playback.is_none() {
+            st.session = None;
+        }
     }
 
     fn start_timeline(
