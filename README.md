@@ -13,11 +13,11 @@ the logo only when a newer signed release is available. There is one release cha
 
 ## Download StagePilot 2.42.0
 
-Download the installer for your computer from the [StagePilot v2.42.0-rc.1 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.42.0-rc.5-rc.4-rc.3-rc.2-rc.1):
+Download the installer for your computer from the [StagePilot v2.42.0 release](https://github.com/tage-ilot/stagepilot/releases/tag/v2.42.0):
 
-- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0-rc.5-rc.4-rc.3-rc.2-rc.1/StagePilot_2.42.0-rc.1_x64-setup.exe)
-- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0-rc.5-rc.4-rc.3-rc.2-rc.1/StagePilot_2.42.0-rc.1_x64.dmg)
-- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0-rc.5-rc.4-rc.3-rc.2-rc.1/StagePilot_2.42.0-rc.1_aarch64.dmg)
+- [Windows x64 installer](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0/StagePilot_2.42.0_x64-setup.exe)
+- [Intel Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0/StagePilot_2.42.0_x64.dmg)
+- [Apple Silicon Mac DMG](https://github.com/tage-ilot/stagepilot/releases/download/v2.42.0/StagePilot_2.42.0_aarch64.dmg)
 
 On **Windows**, run the installer and open StagePilot from the Start menu.
 
@@ -53,7 +53,7 @@ All normal setup happens inside StagePilot; command-line variables are not requi
 
 1. Open **Backend** and set the timezone, log level, and local server port under Advanced. Choose how StagePilot is reached under **Connection Access** (see below).
 2. Open **Services**, choose **Sign in with Planning Center** (or use **Manual API Connection** with a Personal Access Token), test the connection, and choose a service type from the discovered list.
-3. Open **MIDI / Playback**. The default connection method is **Playback API**: scan the network for Playback and connect, and StagePilot stays connected automatically. To use MIDI cues instead, choose **MIDI** and set the input, channel, cue note, action velocities, and debounce time.
+3. Open **Playback**. The default connection method is **Playback API**: pick your Playback computer (or enter its address) and connect, and StagePilot stays connected automatically. To use MIDI cues instead, choose **MIDI** and set the input, channel, cue note, action velocities, and debounce time.
 4. Open **Presentation**, enter ProPresenter's host and API port, select the song timer and optional Look (the default is **Current Look**), then test the connection.
 5. Open **Lighting** to choose MIDI or OSC, select the output, and add elapsed-time lighting cues when lighting automation is needed.
 
@@ -122,7 +122,7 @@ Velocities 100–127 are reserved for the existing action cues:
 | 105 | Stop timer |
 
 The note, channel, and action velocities can be changed in MIDI Configuration.
-Manual Controls are unchanged. **Reset Position** remains available there and
+Manual Controls are unchanged. **Reset position** remains available there and
 returns both StagePilot and the configured ProPresenter timer to `0:00`.
 
 ## Planning Center access
@@ -141,8 +141,8 @@ If something fails:
 
 1. Open the affected connection card and run its connection test.
 2. Review **Recent Event Stream** for the specific operation that failed.
-3. Set the backend log level to `DEBUG`, restart StagePilot, and reproduce the issue once.
-4. Attach `stagepilot-backend.log` to a [GitHub issue](https://github.com/tage-ilot/stagepilot/issues).
+3. In **Backend**, select **Copy Log** (or **Send all logs to developer**). To get more detail first, set the log level to `DEBUG`, restart StagePilot, and reproduce the issue once.
+4. Attach the log to a [GitHub issue](https://github.com/tage-ilot/stagepilot/issues).
 
 On macOS, the native **Help** menu searches the StagePilot documentation that
 was bundled with the installed application. Enter a connection, setup, MIDI,
