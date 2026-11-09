@@ -150,6 +150,22 @@ impl FixtureState {
         self.latest.get(address)
     }
 
+    /// The single number the state holds for `address` (case and %-encoding aside), if any.
+    pub fn number(&self, address: &str) -> Option<f64> {
+        let single = |c: &FixtureCommand| match c.v.as_slice() {
+            [FixtureArg::Float(x)] => Some(*x),
+            _ => None,
+        };
+        if let Some(c) = self.latest.get(address) {
+            return single(c);
+        }
+        let wanted = crate::lightkey_operator::normalise_fixture(address);
+        self.latest
+            .iter()
+            .find(|(a, _)| crate::lightkey_operator::normalise_fixture(a) == wanted)
+            .and_then(|(_, c)| single(c))
+    }
+
     /// Set one command. Returns true when it differs from what was there.
     pub fn apply(&mut self, command: &FixtureCommand) -> bool {
         match self.latest.get(&command.a) {

@@ -4,7 +4,7 @@
 //! go to it as relay events. Used by the `false_yield_report` example and the regression test.
 
 use crate::lightkey_fixtures::{fixture_of, FixtureCommand};
-use crate::lightkey_operator::{normalise_fixture, OperatorTracker, ECHO_WINDOW};
+use crate::lightkey_operator::{normalise_fixture, EchoRules, OperatorTracker, ECHO_WINDOW};
 use crate::lightkey_replay::{simulate, ReplayEngine};
 use crate::plugin::LOOK_LEAD_SECONDS;
 use stagepilot_core::config::{LightingEffect, OscArgument, OscLightingCue};
@@ -81,6 +81,9 @@ pub struct Report {
     pub relay_events: usize,
     pub held: BTreeSet<String>,
     pub flags: Vec<Flag>,
+    /// Fixtures the operator already had that the operator touched again: (fixture, wall
+    /// seconds after the harness's start time).
+    pub restarts: Vec<(String, f64)>,
 }
 
 impl Report {
@@ -125,23 +128,45 @@ pub fn run(
         }
     }
 
-    enum Item<'a> {
-        Send(&'a Sent),
-        Relay(&'a FixtureCommand),
-    }
     let settle = t.settle_s * 1000.0;
-    let mut items: Vec<(f64, Item)> = report
-        .sent
-        .iter()
-        .map(|s| (s.wall_ms, Item::Send(s)))
-        .collect();
+    let mut events: Vec<(f64, &FixtureCommand)> = Vec::new();
     for (ms, cmd) in relay {
         let inside = (*ms >= t.start_ms + settle && *ms <= t.start_ms + t.pause1_s * 1000.0)
             || (*ms >= t.resume_ms + settle && *ms <= t.resume_ms + t.pass2_judge_s * 1000.0);
         if inside {
-            items.push((ms + t.relay_lag_ms, Item::Relay(cmd)));
+            events.push((ms + t.relay_lag_ms, cmd));
         }
     }
+    let base = Instant::now();
+    let at = |ms: f64| base + Duration::from_secs_f64(((ms - t.start_ms) / 1000.0 + 10.0).max(0.0));
+    judge(
+        &mut report,
+        events,
+        OperatorTracker::new(),
+        t.start_ms,
+        t.resume_ms,
+        &at,
+    );
+    report
+}
+
+/// Feed the sends in `report` and the relay `events` (wall time in ms, already delayed by the
+/// relay lag) to `tracker` in time order and note every fixture it yields.
+fn judge(
+    report: &mut Report,
+    events: Vec<(f64, &FixtureCommand)>,
+    mut tracker: OperatorTracker,
+    start_ms: f64,
+    resume_ms: f64,
+    at: &dyn Fn(f64) -> Instant,
+) {
+    enum Item<'a> {
+        Send(&'a Sent),
+        Relay(&'a FixtureCommand),
+    }
+    let sent = std::mem::take(&mut report.sent);
+    let mut items: Vec<(f64, Item)> = sent.iter().map(|s| (s.wall_ms, Item::Send(s))).collect();
+    items.extend(events.into_iter().map(|(ms, cmd)| (ms, Item::Relay(cmd))));
     // A send at the same millisecond goes first.
     items.sort_by(|x, y| {
         x.0.partial_cmp(&y.0)
@@ -149,10 +174,9 @@ pub fn run(
             .then_with(|| matches!(y.1, Item::Send(_)).cmp(&matches!(x.1, Item::Send(_))))
     });
 
-    let base = Instant::now();
-    let at = |ms: f64| base + Duration::from_secs_f64(((ms - t.start_ms) / 1000.0 + 10.0).max(0.0));
-    let mut tracker = OperatorTracker::new();
     let mut held: BTreeSet<String> = BTreeSet::new();
+    let mut flags = Vec::new();
+    let mut restarts = Vec::new();
     for (ms, item) in &items {
         match item {
             Item::Send(s) => {
@@ -165,20 +189,22 @@ pub fn run(
             Item::Relay(cmd) => {
                 report.relay_events += 1;
                 let verdict = tracker.observe(&mut held, std::slice::from_ref(cmd), false, at(*ms));
+                for fixture in verdict.restarted {
+                    restarts.push((fixture, (ms - start_ms) / 1000.0));
+                }
                 for fixture in verdict.newly_yielded {
                     let norm = normalise_fixture(&cmd.a);
-                    let sends = report
-                        .sent
+                    let sends = sent
                         .iter()
                         .rev()
                         .filter(|s| normalise_fixture(&s.address) == norm && s.wall_ms <= *ms)
                         .take(4)
                         .map(|s| (s.wall_ms - ms, s.args.clone()))
                         .collect();
-                    report.flags.push(Flag {
+                    flags.push(Flag {
                         fixture,
-                        wall_s: (ms - t.start_ms) / 1000.0,
-                        second_pass: *ms >= t.resume_ms,
+                        wall_s: (ms - start_ms) / 1000.0,
+                        second_pass: *ms >= resume_ms,
                         command: (*cmd).clone(),
                         sends,
                     });
@@ -186,6 +212,66 @@ pub fn run(
             }
         }
     }
+    report.flags = flags;
+    report.restarts = restarts;
+    report.sent = sent;
+}
+
+/// One start of a replay, for songs whose ring covers only the seconds around the start: the
+/// engine begins at song position `from_s` (a play, a seek, or the take-back of a fixture)
+/// and every relay event in the ring is judged against what it sent.
+#[derive(Debug, Clone)]
+pub struct StartCase {
+    /// Song position the engine starts at.
+    pub from_s: f64,
+    /// How long it runs, song seconds.
+    pub length_s: f64,
+    /// Wall time (epoch ms) of the engine's first tick.
+    pub engine_wall_ms: f64,
+    /// Delay of a relay event after its DMX time stamp.
+    pub relay_lag_ms: f64,
+    /// The relay's state before the first send: (address, value) the ring does not show.
+    pub baseline: Vec<(String, f64)>,
+    /// Which echo rules the tracker uses.
+    pub rules: EchoRules,
+}
+
+/// Replay `rows`/`effects` from `case.from_s` and judge every event of `relay` (wall time in
+/// epoch ms, DMX time stamp) against the sends. Events before the first send of a property only
+/// teach the tracker where the fixture is.
+pub fn run_start(
+    rows: &[OscLightingCue],
+    effects: &[LightingEffect],
+    relay: &[(f64, FixtureCommand)],
+    case: &StartCase,
+) -> Report {
+    let mut report = Report::default();
+    let mut engine = ReplayEngine::new(rows, effects);
+    let to = case.from_s + case.length_s;
+    for p in simulate(&mut engine, case.from_s, to, LOOK_LEAD_SECONDS, &|_, _| {
+        false
+    }) {
+        if p.message.address.starts_with("/fixture/") {
+            report.pass_packets[0] += 1;
+            report.sent.push(Sent {
+                wall_ms: case.engine_wall_ms + (p.at - case.from_s) * 1000.0,
+                address: p.message.address,
+                args: p.message.args,
+            });
+        }
+    }
+    let events: Vec<(f64, &FixtureCommand)> = relay
+        .iter()
+        .map(|(ms, cmd)| (ms + case.relay_lag_ms, cmd))
+        .collect();
+    let base = Instant::now();
+    let origin = case.engine_wall_ms;
+    let at = |ms: f64| base + Duration::from_secs_f64(((ms - origin) / 1000.0 + 10.0).max(0.0));
+    let mut tracker = OperatorTracker::with_rules(case.rules);
+    for (address, value) in &case.baseline {
+        tracker.seed_observed(address, *value);
+    }
+    judge(&mut report, events, tracker, origin, f64::INFINITY, &at);
     report
 }
 

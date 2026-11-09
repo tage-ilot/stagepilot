@@ -561,3 +561,73 @@ async fn a_fixture_the_operator_takes_mid_burst_is_skipped_and_the_rest_still_go
         .fold(0.0, f64::max);
     assert!(widest < 0.0075, "a gap of {widest} s inside the burst");
 }
+
+// ------------------------------------------------- F-H2: the first look and a hand-set head
+
+fn pan(name: &str) -> String {
+    format!("/fixture/{name}/overrides/panAngle")
+}
+
+/// Z1's pan is held at -90 for the whole song; A has a ramp so the song is replayed smoothly.
+fn held_head_song() -> Vec<OscLightingCue> {
+    vec![
+        look(0.0, 0.0, vec![msg(&dim("A"), 0.0), msg(&pan("Z1"), -90.0)]),
+        look(0.5, 60.0, vec![msg(&dim("A"), 1.0)]),
+    ]
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_old_position_reported_after_the_first_look_is_not_the_operator() {
+    let mut r = rig(settings(held_head_song(), vec![])).await;
+    // (the relay stream's hold-off of 3 s after it starts has passed)
+    run_for(5.0).await;
+    // Before the song the relay shows the head at 40 degrees.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("Z1"), 40.0)], false);
+    r.start().await;
+    r.run_with_echo(0.2).await;
+    assert!(!r.of(&pan("Z1")).is_empty(), "the first look went out");
+    // The relay still reports the old position once, 300 ms after the first send.
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("Z1"), 40.0)], false);
+    r.run_with_echo(3.0).await;
+    assert_eq!(
+        r.plugin.lightkey_status().await.yielded_fixtures,
+        None,
+        "a stale frame is not the operator"
+    );
+    assert!(r.of(&dim("A")).len() > 3, "still replaying");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_hand_set_pan_of_minus_20_then_plus_20_still_takes_the_head() {
+    let mut r = rig(settings(held_head_song(), vec![])).await;
+    run_for(5.0).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("Z1"), 40.0)], false);
+    r.start().await;
+    r.run_with_echo(20.0).await;
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("Z1"), -20.0)], false);
+    assert_eq!(
+        r.plugin.lightkey_status().await.yielded_fixtures,
+        Some(1),
+        "taken at once"
+    );
+    let sent = r.of(&pan("Z1")).len();
+    r.run_with_echo(1.2).await;
+    r.plugin
+        .lightkey_fixture_changes(vec![dmx(&pan("Z1"), 19.99)], false);
+    // 29 s after the last hand-set value the head is still the operator's
+    r.run_with_echo(OPERATOR_TAKE_BACK_SECONDS - 1.0).await;
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, Some(1));
+    assert_eq!(r.of(&pan("Z1")).len(), sent, "nothing sent to the head");
+    // and handed back after the 30 s
+    r.run_with_echo(2.0).await;
+    assert_eq!(r.plugin.lightkey_status().await.yielded_fixtures, None);
+    let back = r.of(&pan("Z1"));
+    assert!(back.len() > sent, "the head is driven again");
+    assert_eq!(back.last().unwrap().1, -90.0);
+    assert_eq!(r.clears(), 0);
+}

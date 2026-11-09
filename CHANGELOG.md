@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The moving heads no longer freeze for 30 seconds after a song starts.** On the 2026-11-08 rig test (nobody touched anything) some lights were counted as taken by the operator at the start of a replay and then ignored for 30 s: Elohim from the start lost MH1, MH3 and MH4 until +29.6 s, Ever Be from 175 s lost Z2, and Ever Be from the top lost the heads for about 30 s after the first look (MH1-MH4 matched the plan in only 3 to 11 of 24 samples between 8 and 20 s). Three causes, three rules (see \"The operator always wins, per fixture\" in `docs/lights.md`): the relay reports the *old* position once more right after the first send (the first value a property is sent has no earlier sent value, so the relay's last value is now its baseline and a change equal to it within 500 ms is the echo); a head that has to travel more than 5 % of its range takes up to a second and settles with a small overshoot (for 1.5 s after such a send a value in the stretch old to new, widened by the overshoot, is the echo); and an 8-bit pan moves in steps of 2.47 degrees, wider than the 1 degree allowed (angles now match within 0.5 % of the range). A real hand-set move still takes the light on the first change (tested with Z1 pan -20 then +20) and gives it back after 30 quiet seconds. The offline check `lightkey_yield_check::run_start` replays the helper's log around a song start against the engine; the tests replay the three real logs and show that the rc.10 rules yield the lights and the new rules yield none.
+
 ## [2.43.0-rc.10] - 2026-11-08
 
 ### Added
