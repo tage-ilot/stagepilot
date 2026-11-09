@@ -347,6 +347,17 @@ impl Runtime {
         if let Some(plugin) = self.pco.plugin() {
             let _serialised = self.reconcile.lock().await;
             plugin.reconfigure(effective).await;
+            // The plugin may have failed to start while the keychain was silent (and failed its
+            // one startup retry): the manager then still reports that error and the event
+            // subscriptions were dropped, so /health stays "degraded" although Planning Center
+            // is connected. A normal start brings both back.
+            if self
+                .plugins
+                .restart_if_failed(stagepilot_pco::plugin::PLUGIN_NAME)
+                .await
+            {
+                tracing::info!("planning_center_restarted_after_keychain");
+            }
         }
     }
 

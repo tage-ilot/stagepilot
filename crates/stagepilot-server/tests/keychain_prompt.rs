@@ -351,6 +351,80 @@ async fn a_refused_keychain_says_so_and_recovers_when_it_answers() {
     app.shut_down().await;
 }
 
+/// What `/api/v1/health` says about Planning Center and about the whole app.
+async fn pco_health(app: &App) -> (String, String) {
+    let (_, body) = app.get("/api/v1/health").await.unwrap_or((0, Value::Null));
+    let plugin = body["plugins"]
+        .as_array()
+        .and_then(|all| all.iter().find(|p| p["name"] == "planning_center"))
+        .and_then(|p| p["status"].as_str())
+        .unwrap_or("missing")
+        .to_string();
+    (
+        plugin,
+        body["status"].as_str().unwrap_or("missing").to_string(),
+    )
+}
+
+/// F-H5 R3 (seen on the iMac after the rc.10 install): the keychain prompt is answered, Planning
+/// Center connects and loads the service, but the plugin kept the "error" it got at startup and
+/// `/health` kept saying "degraded". Error, then recovered, then connected, then status ok.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn once_the_keychain_answers_the_plugin_status_and_health_are_ok_again() {
+    let keychain = FakeKeychain::new(Mode::Error, Some(token_blob()));
+    let app = app(&keychain, ConnectionMethod::Oauth).await;
+    let (plugin, health) = pco_health(&app).await;
+    assert_eq!(plugin, "error", "the start failed behind the keychain");
+    assert_eq!(health, "degraded");
+    assert!(app.runtime.keychain_degraded());
+
+    // The one startup retry (`startup_activation`, 1 s after start) has come and gone, still
+    // failing: the prompt is answered by a person, later than that.
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    assert_eq!(pco_health(&app).await.0, "error");
+    keychain.set_mode(Mode::Answer);
+    app.until(
+        "Planning Center connects after the keychain answers",
+        pco_connected,
+    )
+    .await;
+    app.until("the keychain wait is over", |a| {
+        !a.runtime.keychain_degraded()
+    })
+    .await;
+
+    let end = Instant::now() + Duration::from_secs(15);
+    let (mut plugin, _) = pco_health(&app).await;
+    while plugin != "running" && Instant::now() < end {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        (plugin, _) = pco_health(&app).await;
+    }
+    assert_eq!(
+        plugin, "running",
+        "the plugin status stayed at its startup error"
+    );
+    // /health no longer lists a plugin in error (the fake plan is empty, so the app itself
+    // may still wait for a service plan: that is a different cause).
+    let (_, body) = app.get("/api/v1/health").await.expect("health");
+    let not_running: Vec<_> = body["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["status"] != "running")
+        .collect();
+    assert!(not_running.is_empty(), "{not_running:?}");
+    // and it stays that way (no later flip back)
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(pco_health(&app).await.0, "running");
+    // The plugin's own words agree: the connection card is connected and carries no error.
+    let (_, status) = app
+        .get("/api/v1/planning-center/status")
+        .await
+        .expect("status");
+    assert_eq!(status["connection_status"], "connected", "{status}");
+    app.shut_down().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_keychain_that_answers_after_three_seconds_connects_without_a_restart() {
     let keychain = FakeKeychain::new(Mode::Slow, Some(token_blob()));

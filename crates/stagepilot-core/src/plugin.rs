@@ -262,6 +262,32 @@ impl PluginManager {
         }
     }
 
+    /// Start the named plugin again if its start failed (`Error`), and only that one. Used when the
+    /// cause of the failure has gone away by itself (the keychain prompt was answered), so the
+    /// plugin's status and its event subscriptions are rebuilt by a normal start instead of being
+    /// left at the startup error. `true`: it was failed, so a start was tried (its outcome is the
+    /// plugin's status as usual).
+    pub async fn restart_if_failed(&self, name: &str) -> bool {
+        let _guard = self.inner.lifecycle.lock().await;
+        let Some(plugin) = self.get(name) else {
+            return false;
+        };
+        if !self
+            .managed(name)
+            .is_some_and(|h| h.status == PluginStatus::Error)
+        {
+            return false;
+        }
+        self.stop_plugin(&plugin).await;
+        if self
+            .managed(name)
+            .is_some_and(|h| h.status == PluginStatus::Stopped)
+        {
+            self.start_plugin(&plugin).await;
+        }
+        true
+    }
+
     /// Start supervision of one plugin: while the plugin is registered and not running, retry its
     /// start with exponential backoff (`initial_backoff` doubling up to `max_backoff`). Other
     /// plugins are never touched. Stopped by `remove` / `stop_all`.
