@@ -76,7 +76,9 @@ runs Playback, ProPresenter, MIDI and lights while the dialog is open, even on a
 Only the feature that needs the answer shows it. Planning Center reads \"Waiting for keychain
 access\" (or \"Keychain access was refused or failed\" after **Deny**), tries again every 30 s and
 when you sign in or save again, and connects on its own as soon as you click **Always Allow**; no
-restart is needed. A refused or unanswered microphone only leaves out loudness (the Lighting strip
+restart is needed: when the keychain answers, the Planning Center plugin is started again (if its
+first start had failed), so `/api/v1/health` and `plugins.planning_center.status` go back to ok
+instead of keeping the startup error. A refused or unanswered microphone only leaves out loudness (the Lighting strip
 says so); lights still record. Stored secrets are never deleted because a prompt failed.
 
 Other native calls that could wait, and why they cannot hold anything up: the audio input list and

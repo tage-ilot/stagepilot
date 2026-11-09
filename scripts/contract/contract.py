@@ -70,6 +70,9 @@ RUST_EXTENSIONS = {
     # contract profiles run with the search off, so this is {state: "off", found: [], refusing: []}.
     # Rust-only, like `auto`: the recorded Python app has no such key.
     "discovery": {"state", "found", "refusing"},
+    # A finished recording being fitted and saved (F-H5): on the Lightkey status only while it
+    # lasts. Rust-only; the contract profiles never hold a save open, so it is normally absent.
+    "saving": {"song", "started_at"},
 }
 # Rust-only scalar additions to a response body (same rule as above: only with this type).
 # `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);

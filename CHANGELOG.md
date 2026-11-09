@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **StagePilot now says on screen when a song's lighting data was set aside.** If a song's lighting recording is damaged when StagePilot starts, only that song is taken out and the rest loads (rc.10), but nothing on screen said so. A calm banner now reads `The lighting data for <song> was damaged and set aside; record it again.` on the main screen and at the top of the Lighting screen, with the song name and a **Got it** button that closes it for the rest of the session (it comes back with the next start, and a different song is a new notice). If the whole settings file could not be used, a second banner says StagePilot started with its default settings (a separate one when the file is from a newer StagePilot). Nothing is shown when there is nothing to say. See \"A damaged song never costs you the settings\" in `docs/lights.md`.
+- **The Lighting card says it is saving a long recording.** A busy 20-minute song takes 35-45 s to fit after it ends and the card showed nothing, so it looked as if the recording was lost. From the moment the recording ends until the looks are fitted and saved the card now reads `Saving the recording of \u201c<song>\u201d\u2026` with a pulsing dot, then the usual `Saved N looks...` message (or `Not saved...` / `Could not save...` as before). New `saving` field on the Lightkey status (`{song, started_at}`, left out when nothing is being saved; a Rust-only extension in the contract).
+
+### Fixed
+
+- **Planning Center no longer stays in error after the keychain prompt is answered.** When the prompt was answered after the first second of the app's life, Planning Center connected and loaded the service plan, but the plugin kept the error from its failed start: `/api/v1/health` stayed `degraded` and `plugins.planning_center.status` stayed `error` (and the plugin's reload and plan-choice requests stayed unsubscribed). When the keychain recovers, the plugin is now started again through the normal plugin start (only that plugin, only if it is still marked failed), so its status goes back to `running`. Seen on the iMac after the rc.10 install.
+
 ## [2.43.0-rc.10] - 2026-11-08
 
 ### Added

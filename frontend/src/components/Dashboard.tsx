@@ -52,6 +52,7 @@ import {
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
+import { SettingsNoticeBanner } from "./SettingsNoticeBanner";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
@@ -929,6 +930,8 @@ export function Dashboard({
         />
       </header>
 
+
+      {canConfigure && <SettingsNoticeBanner className="mb-5" settings={settings} where="main" />}
 
       {canConfigure && updater && (
         <UpdateDialog

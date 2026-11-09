@@ -24,6 +24,17 @@ pub struct LightkeyCaptured {
     pub looks: u32,
 }
 
+/// A finished recording that is being fitted and saved (`LightkeyStatus.saving`). A long, busy song
+/// takes 35-45 s after it ends; this is how the Lighting card tells the operator it is not lost.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeySaving {
+    /// The song's title.
+    pub song: String,
+    /// When the fit started (UTC, RFC 3339).
+    pub started_at: String,
+}
+
 /// `LightkeyStatus.link`: off = Lighting disabled; connected = API answered and Lightkey is
 /// running; lightkey_closed = API answered, Lightkey is not running; unreachable = no answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -178,6 +189,11 @@ pub struct LightkeyStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub captured: Option<LightkeyCaptured>,
+    /// The recording that is being fitted and saved right now, left out the rest of the time. Set
+    /// when the fit starts, cleared when it ends or fails (the message then says which).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub saving: Option<LightkeySaving>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fixtures: Option<FixtureStatus>,

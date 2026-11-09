@@ -15,7 +15,7 @@ use crate::audio::{AudioHub, AudioInput, SharedRecorder};
 use crate::lightkey::{
     clean_project, effective_api_url, fixtures_word, helper_is_outdated,
     recording_is_worth_keeping, LightkeyAuto, LightkeyCaptured, LightkeyHelper,
-    LightkeyLink as Link, LightkeyReadFixtures, LightkeyStatus,
+    LightkeyLink as Link, LightkeyReadFixtures, LightkeySaving, LightkeyStatus,
 };
 use crate::lightkey_auto::{
     decide, judge, Action, Availability, Coverage, Decision, PassVerdict, Reason, SongCapture,
@@ -440,6 +440,24 @@ fn song_key(song: &Song) -> String {
         .unwrap_or_else(|| song.id.clone())
 }
 
+/// Marks a recording as "being saved" for as long as it lives. Dropping it (every way out of the
+/// save, including an early `return` and a panic) clears the mark, so the Lighting card can never
+/// be left saying "Saving..." for good.
+struct SavingGuard {
+    inner: Arc<Inner>,
+    mark: LightkeySaving,
+}
+
+impl Drop for SavingGuard {
+    fn drop(&mut self) {
+        let mut st = lock(&self.inner.state);
+        // Another song may have started its own save since: only this one's mark is removed.
+        if st.saving.as_ref() == Some(&self.mark) {
+            st.saving = None;
+        }
+    }
+}
+
 /// How long a status message stays up if nothing changes.
 pub const MESSAGE_SECONDS: f64 = 10.0;
 
@@ -456,6 +474,8 @@ struct Message {
 
 struct State {
     captured: Option<LightkeyCaptured>,
+    /// The recording being fitted and saved (see `SavingGuard`).
+    saving: Option<LightkeySaving>,
     subscriptions: Vec<Subscription>,
     poll_task: Option<JoinHandle<()>>,
     relay_task: Option<JoinHandle<()>>,
@@ -625,6 +645,7 @@ impl LightkeyLink {
                 relay: RelayClient::new(),
                 state: Mutex::new(State {
                     captured: None,
+                    saving: None,
                     subscriptions: Vec::new(),
                     poll_task: None,
                     relay_task: None,
@@ -997,6 +1018,7 @@ impl Inner {
             message,
             detail_level: settings.detail,
             captured: st.captured.clone(),
+            saving: st.saving.clone(),
             fixtures: self.relay.status(
                 st.session
                     .as_ref()
@@ -1870,6 +1892,21 @@ impl Inner {
         })
     }
 
+    /// `status().saving` says this song is being saved until the returned guard is dropped.
+    fn mark_saving(self: &Arc<Self>, title: &str) -> SavingGuard {
+        let mark = LightkeySaving {
+            song: title.to_string(),
+            started_at: DateTime::<Utc>::from_timestamp(self.clock.wall() as i64, 0)
+                .unwrap_or_default()
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        };
+        self.st().saving = Some(mark.clone());
+        SavingGuard {
+            inner: self.clone(),
+            mark,
+        }
+    }
+
     async fn finish_looks(self: &Arc<Self>, mut session: Session, reason: &str) -> String {
         self.tick();
         if let Some(text) = session.discarded.take() {
@@ -1909,6 +1946,9 @@ impl Inner {
         let Some(sink) = self.looks_sink.clone() else {
             return self.say("Could not save the looks to the timeline.");
         };
+        // From here the recording is being fitted and saved (35-45 s for a long, busy song). The
+        // guard clears the mark on every way out, after the closing message is said.
+        let _saving = self.mark_saving(&title);
         let status = CaptureStatus {
             complete,
             coverage_seconds: covered,

@@ -11,7 +11,7 @@ import {
   switchToLightkeyComputer,
 } from "../api";
 import { describeError } from "../errorText";
-import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeyStatus } from "../types";
+import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeySaving, LightkeyStatus } from "../types";
 import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
 import { LightkeyInstallBox } from "./LightkeyInstallBox";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
@@ -91,6 +91,23 @@ export function lightkeyLines(status: LightkeyStatus, error: string | null, look
     lines.push(line);
   }
   return lines;
+}
+
+/** What the Lighting card says from the moment a recording ends until its looks are fitted and saved. */
+export const savingText = (song: string): string => `Saving the recording of \u201C${song}\u201D\u2026`;
+export const SAVING_REASSURANCE = "A long, busy song can take up to a minute. The recording is not lost.";
+
+/** The "Saving the recording of X…" line: a pulsing dot in the Lighting colour (still when motion is reduced), then the words. */
+export function LightkeySavingLine({ saving }: { saving: LightkeySaving }) {
+  return (
+    <div className="mt-2 flex items-start gap-2.5 rounded-ds-lg border border-integration-lighting-soft/40 bg-integration-lighting/10 px-3 py-2 text-type-body-sm" data-testid="lightkey-saving" role="status">
+      <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 animate-pulse rounded-ds-full bg-integration-lighting motion-reduce:animate-none" data-part="dot" />
+      <div className="min-w-0">
+        <p className="font-semibold text-ink [overflow-wrap:anywhere]" data-testid="lightkey-saving-text">{savingText(saving.song)}</p>
+        <p className="text-ink-muted">{SAVING_REASSURANCE}</p>
+      </div>
+    </div>
+  );
 }
 
 /** "Holding 5 fixtures \u00B7 2 yielded to the operator" or "" when there is nothing to say. */
@@ -424,6 +441,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
         stateText={stateText}
         testCue={testCue}
       />
+
+      {status.saving && <LightkeySavingLine saving={status.saving} />}
 
       {readResult && (
         <p className={`mt-2 text-type-body-sm ${readResult.ok ? "text-ink-muted" : "text-danger-text"}`} data-testid="lightkey-read-result" role="status">{readResult.message}</p>

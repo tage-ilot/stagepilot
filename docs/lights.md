@@ -247,6 +247,19 @@ Auto with Record off never starts a recording on its own for this, so a show is 
 To include the house lights, arm **Record** (or pin it) and play the song: a complete pass
 replaces the old capture (a partial pass never replaces a complete one).
 
+### Saving a long recording shows on screen
+
+A busy song takes a while to fit after it ends (about 9 s for the 336 s, 66-fixture rig song;
+35-45 s for a busy 20-minute one). The Lightkey status (`GET /api/v1/lights/lightkey`) carries
+`saving: {song, started_at}` (UTC, RFC 3339) from the moment the fit starts until the save ends,
+left out the rest of the time. The Lighting card shows `Saving the recording of "<song>"...` with
+a pulsing dot (still when the system asks for reduced motion) and "A long, busy song can take up
+to a minute. The recording is not lost." When it ends the field is gone and the closing message
+is already up: `Saved N looks to <song>'s timeline.` on success, and on failure the same
+`Could not save the looks to the timeline. ...` as before. A recording that is thrown away before
+any fit (`Not saved: no fixture changes were recorded for <song>.`, too short, discarded) never
+says "Saving". The mark is cleared by a guard, so it cannot be left on after an early return.
+
 ### Smooth capture: ramps and effects
 
 A recording is fitted, not thinned. Lightkey's DMX output arrives as samples 2 to 25 ms
@@ -1015,6 +1028,14 @@ before it is saved, and again when the settings file is read.
   again.` The next save does not bring the song back; arm Record and play the song once.
 - A problem anywhere else in the file still behaves as before: the whole file is kept as
   `settings.json.corrupt-*` and StagePilot starts on the defaults (`settings_degraded`).
+- **On screen.** The operator is told. A calm banner (the info colour, not an alarm) reads the
+  `settings_notice` sentence, with the song name, on the main screen and at the top of the
+  Lighting screen; **Got it** closes it for the session (kept in the browser's session storage,
+  per screen, never saved; the next start shows it again, and a different song is a new
+  notice). When the whole file could not be used (`settings_degraded`) the main screen shows
+  one more banner: `StagePilot could not read its saved settings` (defaults are in use), or
+  `These settings are from a newer StagePilot` (the saved file is left alone). No banner is
+  drawn when `settings_notice` is null and `settings_degraded` is false.
 
 ## Room loudness behind the timeline
 

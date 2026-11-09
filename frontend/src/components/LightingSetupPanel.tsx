@@ -55,6 +55,7 @@ import type { CueTypeId } from "./lightingCueTypes";
 import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpokenLabel } from "./lightingCueTypes";
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
+import { SettingsNoticeBanner } from "./SettingsNoticeBanner";
 import { SongsStrip, type SongChip } from "./SongsStrip";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40, shortLightingMessage } from "./liveLink";
@@ -802,6 +803,8 @@ export function LightingSetupPanel({
         />}
       />
 
+
+      <SettingsNoticeBanner className="mt-4" settings={settings} where="lighting" />
 
       <PanelAlert className="mt-4 !py-1.5" dot error={error} message={message ? shortLightingMessage(message) : message} messageTone="info" neutral={Boolean(message && /^OSC /.test(message))} onRetry={!lights ? onRetryLoad : undefined} />
 

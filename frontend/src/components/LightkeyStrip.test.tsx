@@ -607,3 +607,55 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
     expect(screen.getByTestId("lightkey-helper-update")).toBeInTheDocument();
   });
 });
+
+describe("LightkeyStrip: saving a recording that just ended (F-H5)", () => {
+  const saving = { song: "Ever Be", started_at: "2026-11-08T19:30:00Z" };
+
+  it("says it is saving, with the song, from the moment the recording ends", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ saving }));
+    render(<LightkeyStrip lightingEnabled />);
+    const line = await screen.findByTestId("lightkey-saving");
+    expect(line).toHaveTextContent("Saving the recording of \u201CEver Be\u201D\u2026");
+    expect(line).toHaveTextContent("The recording is not lost.");
+    expect(line).toHaveAttribute("role", "status");
+  });
+
+  it("is not there when nothing is being saved", async () => {
+    render(<LightkeyStrip lightingEnabled />);
+    await screen.findByText("Connected");
+    expect(screen.queryByTestId("lightkey-saving")).not.toBeInTheDocument();
+  });
+
+  it("keeps a very long song name whole and wrapping", async () => {
+    const long = `Ever Be ${"(Reprise, Extended Live Version) ".repeat(10)}`.trim();
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ saving: { ...saving, song: long } }));
+    render(<LightkeyStrip lightingEnabled />);
+    const text = await screen.findByTestId("lightkey-saving-text");
+    expect(text.textContent).toContain(long);
+    expect(text.className).toContain("[overflow-wrap:anywhere]");
+  });
+
+  it("gives way to the existing 'Saved N looks' message when the fit is done", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.getLightkeyStatus)
+        .mockResolvedValueOnce(status({ saving }))
+        .mockResolvedValue(status({ message: "Saved 14 looks to Ever Be's timeline.", captured: { song_title: "Ever Be", looks: 14 } }));
+      render(<LightkeyStrip lightingEnabled />);
+      expect(await screen.findByTestId("lightkey-saving")).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(3200);
+      await waitFor(() => expect(screen.queryByTestId("lightkey-saving")).not.toBeInTheDocument());
+      expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Saved 14 looks to Ever Be's timeline.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a save that failed shows its own message once saving is over", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ message: "Not saved: no fixture changes were recorded for Ever Be." }));
+    render(<LightkeyStrip lightingEnabled />);
+    expect(await screen.findByTestId("lightkey-headline")).toHaveTextContent("Not saved: no fixture changes were recorded for Ever Be.");
+    expect(screen.queryByTestId("lightkey-saving")).not.toBeInTheDocument();
+  });
+});
+
