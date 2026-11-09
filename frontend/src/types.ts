@@ -565,7 +565,7 @@ export interface LightsStatusResponse {
   last_cue: LightingCue | null;
   last_osc_cue?: OscLightingCue | null;
   last_cue_at: string | null;
-  /** Older backends omit it. */
+  /** Older backends, and a status while nothing is being replayed, omit it. */
   replay_load?: ReplayLoad;
 }
 

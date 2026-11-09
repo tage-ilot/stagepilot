@@ -9,6 +9,6 @@ import type { ReplayLoad } from "./ReplayLoad";
 export type LightsStatusResponse = { enabled: boolean, method: LightingMethod, osc_host: string, osc_port: number, output_name: string | null, channel: number, pulse_ms: number, connection_status: ConnectionStatus, detail: string | null, outputs: Array<LightingOutputResponse>, last_cue: LightingCue | null, last_osc_cue: OscLightingCue | null, last_cue_at: string | null, 
 /**
  * How well the replay keeps up with the song (`busy` = a very busy song, some lights update
- * less often than recorded). Idle and not busy when nothing is being replayed.
+ * less often than recorded). Left out while nothing is being replayed.
  */
-replay_load: ReplayLoad, };
+replay_load?: ReplayLoad, };

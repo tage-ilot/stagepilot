@@ -511,7 +511,7 @@ instead of ramps first:
   has been back within reach (every class served at least 85%) for 4 s; `served_percent` is the
   packets sent over the packets asked for in the last second or so (ramps and loops together),
   rounded. The Lighting panel shows one line while it is busy: *This song is very busy: some
-  lights update less often than recorded.* It is `busy: false` (and 100) when nothing plays.
+  lights update less often than recorded.* The field is left out while nothing is being replayed.
 - **A song that fits plays exactly as before.** The shared rule starts only after those 2
   seconds. The two real Sunday songs (Ever Be, 11,075 packets in 320 s; Elohim, 14,822 in 450 s)
   never reach it, and a test (`replay_budget`) replays both and compares every count and the

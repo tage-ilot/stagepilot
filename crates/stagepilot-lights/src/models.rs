@@ -36,9 +36,10 @@ pub struct LightsStatusResponse {
     pub last_osc_cue: Option<OscLightingCue>,
     pub last_cue_at: Option<DateTime<Utc>>,
     /// How well the replay keeps up with the song (`busy` = a very busy song, some lights update
-    /// less often than recorded). Idle and not busy when nothing is being replayed.
-    #[serde(default)]
-    pub replay_load: ReplayLoad,
+    /// less often than recorded). Left out while nothing is being replayed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub replay_load: Option<ReplayLoad>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

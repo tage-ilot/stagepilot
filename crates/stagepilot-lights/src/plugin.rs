@@ -718,7 +718,7 @@ impl Inner {
             replay_load: st
                 .replay_load
                 .filter(|(_, at)| at.elapsed() < REPLAY_LOAD_FRESH)
-                .map_or_else(ReplayLoad::default, |(load, _)| load),
+                .map(|(load, _)| load),
         }
     }
 

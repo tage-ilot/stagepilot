@@ -446,7 +446,7 @@ async fn status_after(
     rows: Vec<OscLightingCue>,
     effects: Vec<LightingEffect>,
     seconds: f64,
-) -> (ReplayLoad, usize) {
+) -> (Option<ReplayLoad>, usize) {
     let mut cue_maps = BTreeMap::new();
     cue_maps.insert(
         "s".to_string(),
@@ -519,6 +519,7 @@ async fn status_after(
 async fn the_lights_status_says_busy_only_while_a_busy_song_plays() {
     let busy = busy_song(16, 32, 30.0);
     let (load, sent) = status_after(busy.rows, busy.effects, 10.0).await;
+    let load = load.expect("a replay that is running reports its load");
     println!("busy song through the plugin: {sent} packets in 10 s, {load:?}");
     assert!(load.busy, "{load:?}");
     assert!(load.served_percent < 100);
@@ -527,10 +528,11 @@ async fn the_lights_status_says_busy_only_while_a_busy_song_plays() {
 
     let light = busy_song(2, 4, 30.0);
     let (load, _) = status_after(light.rows, light.effects, 10.0).await;
+    let load = load.expect("a replay that is running reports its load");
     assert!(!load.busy, "{load:?}");
+    assert!(load.served_percent >= 90, "{load:?}");
 
-    // nothing playing: nothing to say
+    // nothing playing: nothing to say (the field is left out of the status)
     let (load, _) = status_after(vec![], vec![], 1.0).await;
-    assert!(!load.busy);
-    assert_eq!(load.served_percent, 100);
+    assert_eq!(load, None);
 }
