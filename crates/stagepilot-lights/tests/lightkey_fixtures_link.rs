@@ -1319,7 +1319,14 @@ async fn a_failed_save_clears_saving_and_keeps_its_message() {
     .await;
     rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
     record_a_short_song(&rig).await;
-    for _ in 0..10 { eprintln!("DBG {:?} {:?}", rig.link.status().saving, rig.link.status().message); pause(0.3).await; }
+    for _ in 0..10 {
+        eprintln!(
+            "DBG {:?} {:?}",
+            rig.link.status().saving,
+            rig.link.status().message
+        );
+        pause(0.3).await;
+    }
     wait_for(|| rig.link.status().saving.is_some(), 5.0).await;
     rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
     wait_for(|| rig.link.status().saving.is_none(), 5.0).await;
