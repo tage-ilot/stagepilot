@@ -778,12 +778,13 @@ describe("Dashboard Planning Center plan states", () => {
       // Reconnecting is normal for a while: still "Ready".
       await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS / 2); });
       expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
-      // Through the retries and still down: the pill says so, and the list names it as optional.
+      // Through the retries and still down: the pill says so, and the list names it (as an error row, no "Optional" tag).
       await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS); });
       const pill = screen.getByRole("button", { name: /^Remote access offline$/ });
       expect(pill).toHaveClass("border-danger-edge");
       expect(screen.queryByRole("button", { name: /^Ready$/ })).not.toBeInTheDocument();
       expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("Remote access offline");
+      expect(screen.getByRole("tooltip", { hidden: true })).not.toHaveTextContent(/optional/i);
       // It comes back: back to Ready.
       get.mockResolvedValue(remote("connected"));
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -1405,14 +1406,14 @@ describe("Dashboard widget layout", () => {
       expect(rowFor("Settings are from a newer StagePilot")).toHaveAttribute("title", expect.stringContaining("Open the newer StagePilot"));
     });
 
-    it("one set-aside song: the ready pill shows the warning words in the alarm colours, the row is optional", () => {
+    it("one set-aside song: the ready pill shows the warning words in the alarm colours, the row is a plain error row", () => {
       renderDashboard(loadedServiceState, readyBase(damaged(["k1", "Ever Be"])));
       const pill = screen.getByRole("button", { name: /^Record Ever Be again$/ });
       expect(pill).toHaveClass("border-danger-edge", "text-danger-pill");
       expect(pill).toHaveAttribute("title", "The lighting data for Ever Be was damaged and set aside; record it again.");
       const row = rowFor("Record Ever Be again");
       expect(row).toHaveTextContent("!");
-      expect(row).toHaveTextContent("Optional");
+      expect(row).not.toHaveTextContent(/optional/i);
       expect(row).toHaveAttribute("title", "The lighting data for Ever Be was damaged and set aside; record it again.");
     });
 
@@ -1421,6 +1422,7 @@ describe("Dashboard widget layout", () => {
       expect(screen.getByTestId("header-chip")).toHaveTextContent("Error: Saved settings could not be read");
       expect(rowFor("Saved settings could not be read")).toBeDefined();
       expect(rowFor("Record Ever Be again")).toBeDefined();
+      expect(screen.getByRole("tooltip", { hidden: true })).not.toHaveTextContent(/optional/i);
     });
 
     it("two songs: the first leads and the list shows both", () => {

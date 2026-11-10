@@ -910,11 +910,6 @@ export function Dashboard({
                     <span className={check.status === "connected" ? "text-success-text" : check.status === "error" ? "text-danger-text" : "text-ink-muted"}>
                       {check.label}
                     </span>
-                    {!check.required && (
-                      <span className="ml-auto text-type-micro font-bold uppercase tracking-wider text-ink-muted">
-                        Optional
-                      </span>
-                    )}
                   </li>
                 ))}
               </ul>
