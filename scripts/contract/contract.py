@@ -84,6 +84,9 @@ RUST_SCALAR_EXTENSIONS = {
     "settings_degraded_reason": (str, type(None)),
     # A song's lighting data was damaged and set aside at load; everything else loaded (F-G).
     "settings_notice": (str, type(None)),
+    # The same songs as a list of {song_key, song_title}, so the header status pill can stop listing
+    # one once it is recorded again (F-H7). Empty in the contract profiles.
+    "settings_set_aside": (list,),
     # Fixtures the saved looks can override: Release lights clears them even after a restart.
     "known_fixtures": (int,),
     # Lightkey capture/replay mode ("auto" | "replay" | "record") of #293; the Python app only had

@@ -580,12 +580,19 @@ export interface LightsOperationResponse {
   lights: LightsStatusResponse;
 }
 
+export interface SettingsSetAsideSong {
+  song_key: string;
+  song_title: string;
+}
+
 export interface SettingsResponse {
   settings: PersistentSettings;
   planning_center_secret_saved: boolean;
   warning: string | null;
   /** Set when a song's lighting data was damaged and set aside at load; the rest loaded. */
   settings_notice?: string | null;
+  /** The same songs as a list (the header status pill shows one row each until the song has lighting data again). */
+  settings_set_aside?: SettingsSetAsideSong[];
   /** True for the whole run when the saved settings file could not be used and the defaults are in use. */
   settings_degraded?: boolean;
   /** Short, value-free reason for `settings_degraded` ("not valid JSON", "schema_version 3 is newer than 2"). */

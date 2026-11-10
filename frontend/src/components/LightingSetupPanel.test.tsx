@@ -13,7 +13,6 @@ import type {
   Song,
 } from "../types";
 import { LightingSetupPanel } from "./LightingSetupPanel";
-import { resetDismissedSettingsNotices } from "./settingsNotices";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -182,22 +181,6 @@ describe("LightingSetupPanel", () => {
     const labels = Array.from(region.querySelectorAll<HTMLInputElement>('input[aria-label="Cue label"]'));
     expect(labels).toHaveLength(40);
     expect(labels[0]).toHaveValue(label);
-  });
-
-  it("shows the song notice on the Lighting screen, and not the settings-file notice (F-H5)", () => {
-    resetDismissedSettingsNotices();
-    const notice = "The lighting data for Ever Be was damaged and set aside; record it again.";
-    const damaged = { ...settings, settings_notice: notice, settings_degraded: true, settings_degraded_reason: "not valid JSON" };
-    const { unmount } = render(
-      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={damaged} state={state} />,
-    );
-    expect(screen.getByTestId("settings-notice-text")).toHaveTextContent(notice);
-    expect(screen.queryByTestId("settings-degraded")).not.toBeInTheDocument();
-    unmount();
-    render(
-      <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
-    );
-    expect(screen.queryByTestId("settings-notices-lighting")).not.toBeInTheDocument();
   });
 
   it("labels the cue fields Elapsed time and Cue label", () => {

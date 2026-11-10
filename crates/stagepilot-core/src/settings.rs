@@ -773,6 +773,10 @@ pub trait SettingsStore: Send + Sync {
     fn notices(&self) -> Vec<String> {
         Vec::new()
     }
+    /// The songs behind `notices`, as `(song key, song title)`.
+    fn set_aside(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 pub fn default_settings_path(environ: &BTreeMap<String, String>) -> PathBuf {
@@ -1170,6 +1174,11 @@ impl SettingsService {
         } else {
             Some(notices.join(" "))
         }
+    }
+
+    /// The songs set aside by the last load, as `(song key, song title)` (`settings_set_aside` in the API).
+    pub fn set_aside(&self) -> Vec<(String, String)> {
+        self.store.set_aside()
     }
 
     pub fn warning(&self) -> Option<String> {

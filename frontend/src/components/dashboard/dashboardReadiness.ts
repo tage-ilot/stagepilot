@@ -6,6 +6,7 @@ import type {
   PlanningCenterStatusResponse,
   ProPresenterStatusResponse,
   SettingsResponse,
+  SongLightingCueMap,
   PlaybackStatusResponse,
 } from "../../types";
 import { connectionWord } from "../ui/statusWord";
@@ -35,6 +36,55 @@ type DashboardIntegrationViews = {
   propresenter: ConnectionCardView;
   lights: ConnectionCardView;
 };
+
+/**
+ * What the saved settings file did at start, as readiness rows (decided 2026-11-10: system problems live in the header pill and
+ * its list, never in a banner). Both are listed only while they are a problem.
+ *  - `settings_degraded`: the whole file could not be used, so everything is on defaults. Blocking, red, and it leads the list:
+ *    it is the likely cause of other rows being off.
+ *  - `settings_set_aside`: a song whose lighting data was damaged and set aside. An optional warning, one row per song, that
+ *    clears by itself once the song has lighting data again (`lights.cue_maps[song_key]`), without a restart.
+ */
+export const SETTINGS_UNREADABLE_LABEL = "Saved settings could not be read";
+export const SETTINGS_NEWER_LABEL = "Settings are from a newer StagePilot";
+
+export function settingsDegradedCheck(settings: SettingsResponse | null | undefined): ReadinessCheck | null {
+  if (!settings?.settings_degraded) return null;
+  const newer = /newer/i.test(settings.settings_degraded_reason ?? "");
+  return {
+    id: "settings-degraded",
+    label: newer ? SETTINGS_NEWER_LABEL : SETTINGS_UNREADABLE_LABEL,
+    passed: false,
+    required: true,
+    severity: "blocking",
+    status: "error",
+    detail: newer
+      ? "StagePilot is using its default settings and will not change the saved file. Open the newer StagePilot to see your settings again."
+      : "It started with the default settings, so Planning Center, Lighting and the other saved settings are not loaded.",
+  };
+}
+
+/** A set-aside song is solved once it has lighting data again: a recording, or cues someone entered. */
+const hasLightingAgain = (map: SongLightingCueMap | undefined) =>
+  Boolean(map && (map.capture || map.cues?.length || map.osc_cues?.length || map.effects?.length));
+
+export function settingsSetAsideChecks(settings: SettingsResponse | null | undefined): ReadinessCheck[] {
+  const seen = new Set<string>();
+  return (settings?.settings_set_aside ?? []).flatMap((entry) => {
+    if (seen.has(entry.song_key) || hasLightingAgain(settings?.settings.lights?.cue_maps?.[entry.song_key])) return [];
+    seen.add(entry.song_key);
+    const title = entry.song_title?.trim() || entry.song_key;
+    return [{
+      id: `set-aside:${entry.song_key}`,
+      label: `Record ${title} again`,
+      passed: false,
+      required: false,
+      severity: "warning" as const,
+      status: "error" as const,
+      detail: `The lighting data for ${title} was damaged and set aside; record it again.`,
+    }];
+  });
+}
 
 const statusDetail = (status: ConnectionStatus, detail: string | null | undefined) => {
   if (detail) return detail;
@@ -256,7 +306,9 @@ export function buildReadinessChecks({
     && plan!.songs.every((song) => Boolean(song.duration_seconds));
   // The entry names the saved connection method: "Playback API connected" or "Playback MIDI disconnected".
   const playbackLabel = settings?.settings.integration_modes.midi_source === "playback_api" ? "Playback API" : "Playback MIDI";
+  const settingsProblem = settingsDegradedCheck(settings);
   const checks: ReadinessCheck[] = [
+    ...(settingsProblem ? [settingsProblem] : []),
     {
       id: "planning-center",
       label: views.planningCenter.status === "connected"
@@ -347,6 +399,7 @@ export function buildReadinessChecks({
     status: "error",
     detail: "Remote Access is turned on but cannot be reached. StagePilot keeps retrying; this computer is unaffected.",
   });
+  checks.push(...settingsSetAsideChecks(settings));
   return checks;
 }
 

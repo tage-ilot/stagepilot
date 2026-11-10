@@ -127,6 +127,10 @@ async fn a_damaged_song_is_set_aside_with_a_notice_and_the_rest_of_the_file_is_u
         body["settings_notice"],
         "The lighting data for Ever Be was damaged and set aside; record it again."
     );
+    assert_eq!(
+        body["settings_set_aside"],
+        json!([{"song_key": "k1", "song_title": "Ever Be"}])
+    );
     assert!(body["settings"]["lights"]["cue_maps"].get("k1").is_none());
     assert!(body["settings"]["lights"]["cue_maps"].get("k2").is_some());
     assert!(std::fs::read_dir(dir.path()).unwrap().any(|e| e

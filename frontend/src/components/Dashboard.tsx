@@ -52,7 +52,6 @@ import {
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
-import { SettingsNoticeBanner } from "./SettingsNoticeBanner";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
@@ -778,7 +777,7 @@ export function Dashboard({
   });
   const ready = readinessPassed(checks);
   const systemError = readinessHasError(checks);
-  // Ready, but something optional is down (today only Remote Access): same alarm colours, its own words.
+  // Ready, but something optional is wrong (Remote Access offline, a song to record again): same alarm colours, its own words.
   const warning = ready ? readinessWarnings(checks)[0] : undefined;
   const pinnedError = latestActiveError(state);
   const activeErrorEventId = pinnedError?.event_id;
@@ -930,8 +929,6 @@ export function Dashboard({
         />
       </header>
 
-
-      {canConfigure && <SettingsNoticeBanner settings={settings} where="main" />}
 
       {canConfigure && updater && (
         <UpdateDialog

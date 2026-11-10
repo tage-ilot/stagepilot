@@ -428,4 +428,81 @@ describe("dashboard integration truthfulness", () => {
     });
   });
 
+  describe("Settings problems (F-H7)", () => {
+    const freshSettings = settings({ service_source: "demo", midi_source: "simulated", timer_output: "simulated" });
+    const build = (patch: Partial<SettingsResponse>, extra: { stateOnly?: boolean; remoteOffline?: boolean } = {}) => {
+      const withPatch = { ...freshSettings, ...patch };
+      const views = buildConnectionCardViews({ state: state(), settings: withPatch, midi: emptyMidi, propresenter: null, lights: null });
+      return buildReadinessChecks({ state: state(), settings: withPatch, propresenter: null, live: true, views, ...extra });
+    };
+    const withCaptureFor = (key: string): SettingsResponse["settings"] => ({
+      ...freshSettings.settings,
+      lights: { ...freshSettings.settings.lights, cue_maps: { [key]: { song_key: key, song_title: key, cues: [], capture: { complete: true, coverage_seconds: 100, recorded_at: "2026-11-10T09:00:00Z" } } } },
+    });
+    const ids = (checks: ReturnType<typeof build>) => checks.map((check) => check.id);
+
+    it("lists nothing unless there is a problem", () => {
+      for (const patch of [{}, { settings_degraded: false, settings_set_aside: [], settings_notice: null }, { settings_notice: "old text only" }] as Partial<SettingsResponse>[]) {
+        expect(ids(build(patch)).filter((id) => id.startsWith("settings") || id.startsWith("set-aside"))).toEqual([]);
+      }
+    });
+
+    it("an unreadable file is a required, blocking error that turns the pill red and leads", () => {
+      const checks = build({ settings_degraded: true, settings_degraded_reason: "not valid JSON" });
+      expect(checks[0]).toMatchObject({
+        id: "settings-degraded", label: "Saved settings could not be read", required: true, severity: "blocking", status: "error", passed: false,
+        detail: "It started with the default settings, so Planning Center, Lighting and the other saved settings are not loaded.",
+      });
+      expect(readinessErrorCauses(checks)[0]).toBe(checks[0]);
+      expect(readinessPassed(checks)).toBe(false);
+    });
+
+    it("a newer file has its own label and sentence", () => {
+      const item = build({ settings_degraded: true, settings_degraded_reason: "schema_version 3 is newer than 2" })[0]!;
+      expect(item).toMatchObject({ label: "Settings are from a newer StagePilot", severity: "blocking", required: true, status: "error" });
+      expect(item.detail).toContain("will not change the saved file");
+    });
+
+    it("a set-aside song is an optional warning, one row per song, in the order the server gave", () => {
+      const checks = build({ settings_set_aside: [{ song_key: "a", song_title: "Ever Be" }, { song_key: "b", song_title: "Elohim" }] });
+      const rows = checks.filter((check) => check.id.startsWith("set-aside:"));
+      expect(rows.map((row) => row.label)).toEqual(["Record Ever Be again", "Record Elohim again"]);
+      for (const row of rows) expect(row).toMatchObject({ required: false, severity: "warning", status: "error", passed: false });
+      expect(rows[0]!.detail).toBe("The lighting data for Ever Be was damaged and set aside; record it again.");
+      expect(readinessWarnings(checks)).toEqual(expect.arrayContaining(rows));
+      expect(readinessErrorCauses(checks)).toEqual([]);
+      expect(readinessPassed(checks)).toBe(readinessPassed(build({})));
+    });
+
+    it("a song with no title falls back to its key, and a repeated key is listed once", () => {
+      const checks = build({ settings_set_aside: [{ song_key: "k9", song_title: "  " }, { song_key: "k9", song_title: "x" }] });
+      expect(checks.filter((check) => check.id.startsWith("set-aside:")).map((row) => row.label)).toEqual(["Record k9 again"]);
+    });
+
+    it("a song drops out as soon as the saved data holds its lighting again", () => {
+      const aside = [{ song_key: "a", song_title: "Ever Be" }, { song_key: "b", song_title: "Elohim" }];
+      const recorded = { settings: withCaptureFor("a"), settings_set_aside: aside };
+      expect(build(recorded).filter((check) => check.id.startsWith("set-aside:")).map((row) => row.label)).toEqual(["Record Elohim again"]);
+      const typedCues = { settings: { ...freshSettings.settings, lights: { ...freshSettings.settings.lights, cue_maps: { b: { song_key: "b", song_title: "Elohim", cues: [{ id: "c", at_seconds: 1, label: "x", note: 1, velocity: 1 }] } } } }, settings_set_aside: aside } as unknown as Partial<SettingsResponse>;
+      expect(build(typedCues).filter((check) => check.id.startsWith("set-aside:")).map((row) => row.label)).toEqual(["Record Ever Be again"]);
+      // An empty map is no data: the song still needs recording.
+      const empty = { settings: { ...freshSettings.settings, lights: { ...freshSettings.settings.lights, cue_maps: { a: { song_key: "a", song_title: "Ever Be", cues: [] } } } }, settings_set_aside: aside };
+      expect(build(empty).filter((check) => check.id.startsWith("set-aside:"))).toHaveLength(2);
+    });
+
+    it("precedence: the settings error leads the error causes; a song warning never turns the system red; the first warning leads", () => {
+      const both = build({ settings_degraded: true, settings_set_aside: [{ song_key: "a", song_title: "Ever Be" }] });
+      expect(readinessErrorCauses(both).map((check) => check.id)).toEqual(["settings-degraded"]);
+      expect(readinessWarnings(both).map((check) => check.id)).toEqual(["set-aside:a"]);
+      // With Remote access also down, remote (listed first as before) leads the warnings and every song still has its row.
+      const many = build({ settings_set_aside: [{ song_key: "a", song_title: "Ever Be" }, { song_key: "b", song_title: "Elohim" }] }, { remoteOffline: true });
+      expect(readinessWarnings(many).map((check) => check.id)).toEqual(["remote-access", "set-aside:a", "set-aside:b"]);
+    });
+
+    it("is not added to the live-status view Viewers get", () => {
+      const checks = build({ settings_degraded: true, settings_set_aside: [{ song_key: "a", song_title: "Ever Be" }] }, { stateOnly: true });
+      expect(ids(checks).some((id) => id.startsWith("settings") || id.startsWith("set-aside"))).toBe(false);
+    });
+  });
+
 });

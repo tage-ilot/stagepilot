@@ -52,6 +52,8 @@ struct Memory {
     degraded: Option<SettingsDegraded>,
     /// Songs whose lighting data was set aside by the last load, in plain words.
     notices: Vec<String>,
+    /// The same songs as `(song key, song title)`, so the screen can stop mentioning one once it is recorded again.
+    set_aside: Vec<(String, String)>,
 }
 
 /// How many `settings.json.song-*` copies are kept.
@@ -552,6 +554,10 @@ impl SettingsStore for SettingsFileStore {
         guard(&self.memory).notices.clone()
     }
 
+    fn set_aside(&self) -> Vec<(String, String)> {
+        guard(&self.memory).set_aside.clone()
+    }
+
     fn load(&self) -> Result<Option<PersistentSettings>, SettingsFileError> {
         if !self.path.exists() {
             return Ok(None);
@@ -604,6 +610,7 @@ impl SettingsStore for SettingsFileStore {
         }
         let mut extras = Vec::new();
         let mut notices: Vec<String> = Vec::new();
+        let mut set_aside: Vec<(String, String)> = Vec::new();
         let mut tried_repair: Vec<String> = Vec::new();
         let (settings, migration) = loop {
             match strip_unknown(&mut payload, &mut extras) {
@@ -663,6 +670,7 @@ impl SettingsStore for SettingsFileStore {
                         notices.push(format!(
                             "The lighting data for {title} was damaged and set aside; record it again."
                         ));
+                        set_aside.push((key.clone(), title));
                         progressed = true;
                     }
                     if !progressed {
@@ -700,6 +708,7 @@ impl SettingsStore for SettingsFileStore {
         memory.extras = extras;
         memory.degraded = None;
         memory.notices = notices;
+        memory.set_aside = set_aside;
         Ok(Some(settings))
     }
 

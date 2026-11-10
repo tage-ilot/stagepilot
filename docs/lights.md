@@ -1028,14 +1028,19 @@ before it is saved, and again when the settings file is read.
   again.` The next save does not bring the song back; arm Record and play the song once.
 - A problem anywhere else in the file still behaves as before: the whole file is kept as
   `settings.json.corrupt-*` and StagePilot starts on the defaults (`settings_degraded`).
-- **On screen.** The operator is told. A calm banner (the info colour, not an alarm) reads the
-  `settings_notice` sentence, with the song name, on the main screen and at the top of the
-  Lighting screen; **Got it** closes it for the session (kept in the browser's session storage,
-  per screen, never saved; the next start shows it again, and a different song is a new
-  notice). When the whole file could not be used (`settings_degraded`) the main screen shows
-  one more banner: `StagePilot could not read its saved settings` (defaults are in use), or
-  `These settings are from a newer StagePilot` (the saved file is left alone). No banner is
-  drawn when `settings_notice` is null and `settings_degraded` is false.
+- **On screen.** The operator is told in the header status pill, like every other problem (no
+  banner, no pop-up, nothing to close). A song set aside is a row in the pill's list (hover or
+  focus the pill): `Record <song> again`, marked `!` and `Optional`, with the full sentence as its
+  detail. When the system is otherwise ready the pill itself reads that label in the alarm colours
+  (with several songs the first leads and the list shows all). When the whole file could not be
+  used (`settings_degraded`) the list has a required row `Saved settings could not be read`
+  (defaults are in use), or `Settings are from a newer StagePilot` (the saved file is left
+  alone), and the pill reads `Error: ` and that label. `GET /api/v1/settings` also carries
+  `settings_set_aside: [{song_key, song_title}]` next to `settings_notice` (kept as before): the
+  dashboard drops a song's row as soon as that song has lighting data again (a recording, or
+  cues), so recording the song clears the warning without a restart. Nothing is listed when
+  `settings_set_aside` is empty and `settings_degraded` is false. Only the full dashboard shows
+  these rows; the read-only Live status view does not.
 
 ## Room loudness behind the timeline
 

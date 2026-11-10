@@ -323,6 +323,10 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
         "settings_degraded_reason": degraded.map(|d| d.reason),
         // A song's lighting data that was damaged and set aside at load; the rest loaded.
         "settings_notice": rt.settings_service.notice(),
+        // The same songs as a list, so the screen can drop one once it is recorded again.
+        "settings_set_aside": rt.settings_service.set_aside().into_iter()
+            .map(|(song_key, song_title)| json!({"song_key": song_key, "song_title": song_title}))
+            .collect::<Vec<_>>(),
         "restart_required": restart_required,
     })
 }
