@@ -566,8 +566,8 @@ describe("dashboard integration truthfulness", () => {
     it("stays out of the list while the plan is going and returns when the plan is over (F-S2)", () => {
       const base = planState();
       const plan = { ...base.plan!, service_times: ["09:00", "10:00"], songs: base.plan!.songs.slice(0, 1).map((song) => ({ ...song, duration_seconds: 300 })) };
-      const going: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: null };
-      const over: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000 };
+      const going: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: null, lastActiveMs: SERVICE + 5 * 60_000 };
+      const over: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000, lastActiveMs: SERVICE + 10 * 60_000 };
       const buildAt = (minutesAfterFirst: number, planRun: PlanRunMemory | null) => {
         const appState = planState({ plan });
         const playback = playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-11-14T20:00:00Z" });
@@ -584,7 +584,7 @@ describe("dashboard integration truthfulness", () => {
       const base = planState();
       const song = { ...base.plan!.songs[0]!, duration_seconds: 300 };
       const plan = { ...base.plan!, service_times: ["09:00", "10:00"], songs: [song] };
-      const run = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000 };
+      const run = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000, lastActiveMs: SERVICE + 10 * 60_000 };
       const appState = planState({ plan, playing_song: song, playing_song_index: 0, timer: { status: "running", duration_seconds: 300, started_at: new Date(SERVICE + 5 * 60_000).toISOString(), position_seconds: 0, last_error: null } });
       const playback = playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-11-14T20:00:00Z" });
       const views = buildConnectionCardViews({ state: appState, settings: production, midi: emptyMidi, playback, propresenter: null, lights: null });

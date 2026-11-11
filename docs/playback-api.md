@@ -84,16 +84,32 @@ source and is not playing or scanning; a Planning Center plan is loaded; the nex
 `service_times`, read on the plan's date in the saved time zone) is less than 60 minutes away; the last completed
 scan (`captured_at` of the Playback status) is older than the start of that hour; and **the plan is not going**.
 
-The reminder stays quiet while the loaded plan is going: from a service's start time (or from the first song starting,
-if that is earlier, so a run-through before the service counts too) until the plan's last song has ended, including the
-time between songs. The dashboard reads the end from the last song's own countdown: the song is the plan's last one, it
-has a length, and its countdown has reached 0:00 (or the timer stopped with nothing left). A song paused part-way is not
-the end. When the app cannot tell (the last song has no length) it uses an estimate: the service start plus the sum of
-the song lengths plus 30 minutes. In every case the plan stops counting as going 3 hours after the service start or the
-first song, so the reminder can never stay hidden for good. After the plan is over the rule is the plain one again: a
-later service of the same plan that is still ahead, with Playback not scanned since the hour before it began, brings the
-reminder back (that is the moment to scan between two services). A run-through that finishes before the service does
-not hide it afterwards either: it returns until a scan completes.
+The reminder stays quiet while the loaded plan is going. Two different things count, and a sound check is not the
+service:
+
+- **A service in progress.** From a service's start time until the plan's last song has ended, including the time
+  between songs (a sermon between two songs stays quiet). A run of songs that was still playing when the start passed
+  counts as part of the service from the start on, so there is no gap.
+- **A run-through that is not part of a service in progress** (a sound check or rehearsal whose songs stopped before the
+  next service start, before the first service or between two services). It counts as going only while a song is
+  playing and for **5 minutes** after the last song activity (the timer stopped, or the countdown reached 0:00). After
+  5 minutes with no song the run is over and the reminder returns if it is due and no scan has completed since; a song
+  played later starts a new run. A run-through that plays the plan's last song to its end is over as soon as that song
+  has ended (no 5-minute wait). So one or two songs at 40 minutes before the service hide the reminder only while they
+  play and for 5 minutes after, not for the rest of the hour.
+
+The dashboard reads the end of a service from the last song's own countdown: the song is the plan's last one, it has a
+length, and its countdown has reached 0:00 (or the timer stopped with nothing left). A song paused part-way is not the
+end. When the app cannot tell (the last song has no length, or no song has played since the service began) it uses an
+estimate: the service start plus the sum of the song lengths plus 30 minutes. In every case a service stops counting as
+going 3 hours after its start (or after the first song of the run that was playing at the start), so the reminder can
+never stay hidden for good. If the operator skips the last song of a real service the end is never seen and the service
+is counted as going until that 3-hour limit. After the plan is over the rule is the plain one again: a later service of
+the same plan that is still ahead, with Playback not scanned since the hour before it began, brings the reminder back
+(that is the moment to scan between two services).
+
+What the dashboard remembers (while the page is open, from the state it already receives; no API change): when the
+first song of the run was started, when the last song ended, and the time of the last song activity.
 
 Any number of services work the same way. The start times are sorted and repeated times count once; the reminder is
 always about the next start that has not happened yet, whether the services are an hour apart, closer than that, or

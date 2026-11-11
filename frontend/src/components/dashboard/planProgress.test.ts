@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { observePlanRun, type PlanRunMemory, type PlanRunObservation } from "./planProgress";
+import { observePlanRun, PLAN_IDLE_MS, type PlanRunMemory, type PlanRunObservation } from "./planProgress";
 
 const MIN = 60_000;
 const BASE = Date.parse("2026-11-15T18:00:00Z");
@@ -16,16 +16,17 @@ const stopped = (remaining: number): PlanRunObservation["timer"] => ({ status: "
 
 describe("what the dashboard remembers of the plan being played (F-S2)", () => {
   it("knows nothing before a song is started, and nothing without a plan", () => {
-    expect(observePlanRun(null, obs(BASE))).toEqual({ planId: "p1", firstSongMs: null, endedMs: null });
+    expect(observePlanRun(null, obs(BASE))).toEqual({ planId: "p1", firstSongMs: null, endedMs: null, lastActiveMs: null });
     expect(observePlanRun(null, obs(BASE, { planId: null }))).toBeNull();
-    expect(observePlanRun({ planId: "p1", firstSongMs: BASE, endedMs: null }, obs(BASE, { planId: undefined }))).toBeNull();
+    expect(observePlanRun({ planId: "p1", firstSongMs: BASE, endedMs: null, lastActiveMs: BASE }, obs(BASE, { planId: undefined }))).toBeNull();
   });
 
   it("remembers the first song's start and keeps it as later songs start", () => {
     let memory = observePlanRun(null, obs(BASE + MIN, { playingIndex: 0, timer: running(BASE + MIN) }));
-    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + MIN, endedMs: null });
+    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + MIN, endedMs: null, lastActiveMs: BASE + MIN });
+    memory = observePlanRun(memory, obs(BASE + 5 * MIN, { playingIndex: 0, timer: running(BASE + MIN) }));
     memory = observePlanRun(memory, obs(BASE + 8 * MIN, { playingIndex: 1, timer: running(BASE + 7 * MIN) }));
-    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + MIN, endedMs: null });
+    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + MIN, endedMs: null, lastActiveMs: BASE + 8 * MIN });
   });
 
   it("a resumed song counts from where the song began (position), not from the resume", () => {
@@ -49,7 +50,7 @@ describe("what the dashboard remembers of the plan being played (F-S2)", () => {
 
   it("a last song stopped at 0 seconds remaining is over; stopped part-way, or a song that is not the last, is not", () => {
     const first = observePlanRun(null, obs(BASE, { playingIndex: 2, timer: stopped(0) }));
-    expect(first).toEqual({ planId: "p1", firstSongMs: BASE, endedMs: BASE });
+    expect(first).toEqual({ planId: "p1", firstSongMs: BASE, endedMs: BASE, lastActiveMs: BASE });
     expect(observePlanRun(null, obs(BASE, { playingIndex: 2, timer: stopped(90) }))?.endedMs).toBeNull();
     expect(observePlanRun(null, obs(BASE, { playingIndex: 1, timer: stopped(0) }))?.endedMs).toBeNull();
   });
@@ -66,11 +67,51 @@ describe("what the dashboard remembers of the plan being played (F-S2)", () => {
     const same = observePlanRun(memory, obs(BASE + 10 * MIN, { playingIndex: 2, timer: stopped(0) }));
     expect(same).toBe(memory); // nothing changed: the same object, so no re-render
     memory = observePlanRun(memory, obs(BASE + 62 * MIN, { playingIndex: 0, timer: running(BASE + 60 * MIN) }));
-    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + 60 * MIN, endedMs: BASE });
+    expect(memory).toEqual({ planId: "p1", firstSongMs: BASE + 60 * MIN, endedMs: BASE, lastActiveMs: BASE + 62 * MIN });
   });
 
   it("another plan starts from nothing", () => {
-    const old: PlanRunMemory = { planId: "p1", firstSongMs: BASE, endedMs: BASE + 10 * MIN };
-    expect(observePlanRun(old, obs(BASE + 5 * MIN, { planId: "p2" }))).toEqual({ planId: "p2", firstSongMs: null, endedMs: null });
+    const old: PlanRunMemory = { planId: "p1", firstSongMs: BASE, endedMs: BASE + 10 * MIN, lastActiveMs: BASE + 10 * MIN };
+    expect(observePlanRun(old, obs(BASE + 5 * MIN, { planId: "p2" }))).toEqual({ planId: "p2", firstSongMs: null, endedMs: null, lastActiveMs: null });
+  });
+});
+
+describe("the last song activity (F-S3)", () => {
+  it("follows a running countdown up to its 0:00 and stays there when the song stops or runs on", () => {
+    const start = BASE;
+    let memory = observePlanRun(null, obs(start + 30_000, { playingIndex: 0, timer: running(start) }));
+    expect(memory?.lastActiveMs).toBe(start + 30_000);
+    memory = observePlanRun(memory, obs(start + 4 * MIN, { playingIndex: 0, timer: running(start) }));
+    expect(memory?.lastActiveMs).toBe(start + 4 * MIN);
+    // The song is paused part-way: the last time it was seen running is kept.
+    memory = observePlanRun(memory, obs(start + 6 * MIN, { playingIndex: 0, timer: stopped(60) }));
+    expect(memory?.lastActiveMs).toBe(start + 4 * MIN);
+    // A countdown that runs on past 0:00 (Presentation timer) counts as activity only until 0:00.
+    const long = observePlanRun(memory, obs(start + 20 * MIN, { playingIndex: 0, timer: running(start + 10 * MIN) }));
+    expect(long?.lastActiveMs).toBe(start + 15 * MIN);
+    const overrun = observePlanRun(null, obs(start + 30 * MIN, { playingIndex: 0, timer: running(start) }));
+    expect(overrun?.lastActiveMs).toBe(start + 5 * MIN);
+  });
+
+  it("a song stopped at 0:00 that was never seen running is dated when first seen, and not moved by later looks", () => {
+    const first = observePlanRun(null, obs(BASE, { playingIndex: 0, timer: stopped(0) }));
+    expect(first?.lastActiveMs).toBe(BASE);
+    expect(observePlanRun(first, obs(BASE + 20 * MIN, { playingIndex: 0, timer: stopped(0) }))).toBe(first);
+  });
+
+  it("a countdown that starts more than 5 minutes after the last activity begins a new run; a shorter gap does not", () => {
+    const first = observePlanRun(null, obs(BASE + 4 * MIN, { playingIndex: 0, timer: running(BASE) })); // active until 04:00
+    const soon = observePlanRun(first, obs(BASE + 8 * MIN, { playingIndex: 1, timer: running(BASE + 7 * MIN) }));
+    expect(soon?.firstSongMs).toBe(BASE); // 3 minutes of talk: the same run
+    const late = observePlanRun(first, obs(BASE + 11 * MIN, { playingIndex: 1, timer: running(BASE + 10 * MIN) }));
+    expect(late?.firstSongMs).toBe(BASE + 10 * MIN); // 6 minutes of quiet: a new run
+    expect(PLAN_IDLE_MS).toBe(5 * MIN);
+  });
+
+  it("one song that kept playing while the page was asleep is the same run", () => {
+    const first = observePlanRun(null, obs(BASE + MIN, { playingIndex: 0, timer: running(BASE) }));
+    const later = observePlanRun(first, obs(BASE + 4 * MIN, { playingIndex: 0, timer: running(BASE) }));
+    expect(later?.firstSongMs).toBe(BASE);
+    expect(later?.lastActiveMs).toBe(BASE + 4 * MIN);
   });
 });

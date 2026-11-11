@@ -1517,6 +1517,48 @@ describe("Dashboard widget layout", () => {
       });
     });
 
+    describe("a sound check before the service does not hide the reminder (F-S3)", () => {
+      // One service at 09:00 (16:00Z), two 5-minute songs. The team plays song 1 as a sound check at 08:20 (15:20Z), 40 minutes before.
+      const songs = [0, 1].map((n) => ({ ...loadedPlan.songs[0]!, id: `item-${n + 1}`, title: `Song ${n + 1}`, duration_seconds: 300, order: n + 1 }));
+      const plan: ServicePlan = { ...loadedPlan, songs, service_times: ["09:00"] };
+      const timerState = (timer: ApplicationState["timer"]) => applicationState(loadedServiceState, { plan, plugins: {}, playing_song_index: 0, playing_song: songs[0]!, current_song_index: 0, current_song: songs[0]!, up_next_song: songs[1]!, timer });
+      const running = { status: "running" as const, duration_seconds: 300, started_at: "2026-07-13T15:20:00Z", position_seconds: 0, last_error: null };
+      const stopped = { status: "stopped" as const, duration_seconds: 300, started_at: null, position_seconds: 300, remaining_seconds: 0, last_error: null };
+
+      it("is Ready while the sound check plays and for 5 minutes after, shows the reminder at 6 minutes (the last song was never played), and is gone at the service start", () => {
+        at("2026-07-13T15:20:05Z");
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller(), state: timerState(running) });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(4 * 60_000 + 50_000); }); // 08:24:55, the song is nearly over
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(10_000); }); // 08:25:05, the song ended and its timer stopped
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: timerState(stopped) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(3 * 60_000); }); // 3 minutes after
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(3 * 60_000); }); // 08:31, 6 minutes after the song
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        expect(screen.getByTestId("header-chip")).toHaveAttribute("title", expect.stringContaining("starts in 29 minutes"));
+        expect(rowFor("Scan Playback again")).toBeDefined();
+        act(() => { vi.advanceTimersByTime(28 * 60_000); }); // 08:59, still there
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        act(() => { vi.advanceTimersByTime(90_000); }); // the service has started
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+
+      it("a scan after the sound check clears the reminder", () => {
+        at("2026-07-13T15:20:05Z");
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller(), state: timerState(running) });
+        act(() => { vi.advanceTimersByTime(10 * 60_000); });
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: timerState(stopped) }));
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller({ captured_at: "2026-07-13T15:31:00Z" }), state: timerState(stopped) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+    });
+
     it("the read-only Live status view shows nothing new", () => {
       at("2026-07-13T15:30:00Z");
       renderDashboard(loadedServiceState, {

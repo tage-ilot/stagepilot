@@ -293,22 +293,23 @@ describe("the hard cap and the time estimate", () => {
     expect(shown(s, T(13, 0))).toBe(true); // 3 hours after the 10:00 start (the first song came later)
   });
 
-  it("the cap runs from the first song when that came before the service", () => {
-    const stuck: Play[] = [{ index: 0, startMs: T(9, 0), seconds: 300, pausedAfterSeconds: 60 }];
-    const s = simulate(["10:00", "12:30"], stuck);
-    expect(shown(s, T(11, 59))).toBe(false); // 12:30's window opens at 11:30; the plan counts as going until 12:00
-    expect(shown(s, T(12, 0))).toBe(true);
+  it("the cap runs from the first song when that run was still going at the service start", () => {
+    // A run that began at 09:00 and was still playing at the 10:00 start is part of the service; no end is ever seen.
+    const run: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9), endedMs: null, lastActiveMs: T(10, 0) };
+    const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
+    expect(planGoing(T(11, 59), [T(10)], songs, run)).toBe(true);
+    expect(planGoing(T(12, 0), [T(10)], songs, run)).toBe(false);
   });
 
   it("planGoing: never more than 3 hours after the start, whatever the memory says", () => {
-    const run: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(10, 5), endedMs: null };
+    const run: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(10, 5), endedMs: null, lastActiveMs: T(10, 5) };
     const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
     expect(planGoing(T(12, 59), [T(10)], songs, run)).toBe(true);
     expect(planGoing(T(13, 0), [T(10)], songs, run)).toBe(false);
     expect(planGoing(T(13, 0) - 1, [T(10)], songs, run)).toBe(true);
     expect(PLAN_GOING_CAP_MS).toBe(3 * 60 * MIN);
-    // A run-through at 09:00 with the service at 10:00: the first song came first.
-    const early: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9), endedMs: null };
+    // A run that began at 09:00 and was still going at the 10:00 start: the first song came first.
+    const early: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9), endedMs: null, lastActiveMs: T(10, 0) };
     expect(planGoing(T(11, 59), [T(10)], songs, early)).toBe(true);
     expect(planGoing(T(12, 0), [T(10)], songs, early)).toBe(false);
   });
@@ -344,7 +345,7 @@ describe("the hard cap and the time estimate", () => {
     const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
     expect(planGoing(T(10, 49), [T(9), T(10)], songs, null)).toBe(true); // 10:00 + 20 + 30 = 10:50
     expect(planGoing(T(10, 50), [T(9), T(10)], songs, null)).toBe(false);
-    const finished: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9, 5), endedMs: T(9, 28) };
+    const finished: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9, 5), endedMs: T(9, 28), lastActiveMs: T(9, 28) };
     expect(planGoing(T(9, 40), [T(9), T(10)], songs, finished)).toBe(false); // the run covers the 09:00 service
     expect(planGoing(T(10, 5), [T(9), T(10)], songs, finished)).toBe(true); // the 10:00 service has begun and nothing has played yet
   });
@@ -352,7 +353,7 @@ describe("the hard cap and the time estimate", () => {
 
 describe("other situations", () => {
   it("memory of another plan says nothing about this one", () => {
-    const stale: PlanRunMemory = { planId: "other-plan", firstSongMs: T(9, 30), endedMs: null };
+    const stale: PlanRunMemory = { planId: "other-plan", firstSongMs: T(9, 30), endedMs: null, lastActiveMs: T(9, 40) };
     const plan = { id: PLAN_ID, date: "2026-11-15", service_times: ["10:00"], songs: FOUR_SONGS.map((duration_seconds) => ({ duration_seconds })) };
     const playback = playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: null });
     expect(scanReminderDue({ now: T(9, 40), plan, timeZone: LA, playback, run: stale })).not.toBeNull();
@@ -384,7 +385,214 @@ describe("other situations", () => {
       now: T(10, 13), planId: PLAN_ID, durations: FOUR_SONGS, playingIndex: 2,
       timer: { status: "running", started_at: iso(T(10, 12)), position_seconds: 0, remaining_seconds: undefined },
     });
-    expect(memory).toEqual({ planId: PLAN_ID, firstSongMs: T(10, 12), endedMs: null });
+    expect(memory).toEqual({ planId: PLAN_ID, firstSongMs: T(10, 12), endedMs: null, lastActiveMs: T(10, 13) });
     expect(planGoing(T(10, 14), [T(10)], FOUR_SONGS.map((duration_seconds) => ({ duration_seconds })), memory)).toBe(true);
+  });
+});
+
+/**
+ * F-S3: a sound check (one or two songs, never the last) before the service is not the service. The run-through counts as
+ * "going" only while a song plays and for 5 minutes after its last activity; a service in progress stays quiet as before.
+ * The tracker is fed every 30 seconds, so the end of a song is seen up to 30 seconds late: times are asked just inside and
+ * just outside the 5 minutes.
+ */
+const play = (index: number, startMs: number, seconds = 300): Play => ({ index, startMs, seconds, style: "stops" });
+const SEC = 1_000;
+
+describe("a sound check before the service (F-S3)", () => {
+  // Service 10:00. Sound check at T-40: song 1 09:20-09:25, song 2 09:26-09:31. The last song (4) is never played.
+  const soundCheck = (): Play[] => [play(0, T(9, 20)), play(1, T(9, 26))];
+
+  it("is hidden while songs 1 and 2 play and for 5 minutes after, back at 5 minutes, stays until a scan, gone at the start", () => {
+    const s = simulate(["10:00"], soundCheck());
+    expect(shown(s, T(9, 19))).toBe(true); // the hour window opened at 09:00
+    for (const [h, m, sec] of [[9, 20, 0], [9, 22, 0], [9, 25, 30], [9, 27, 0], [9, 30, 30], [9, 31, 0]]) expect(shown(s, T(h!, m!) + sec! * SEC), `${h}:${m}:${sec}`).toBe(false);
+    expect(shown(s, T(9, 35) + 0)).toBe(false); // 4 minutes after the song ended
+    expect(shown(s, T(9, 35, ) + 20 * SEC)).toBe(false);
+    expect(shown(s, T(9, 36) + 5 * SEC)).toBe(true); // 5 minutes after the last song activity: back
+    for (const [h, m] of [[9, 40], [9, 50], [9, 59]]) expect(shown(s, T(h!, m!)), `${h}:${m}`).toBe(true);
+    expect(shown(s, T(9, 59) + 59 * SEC)).toBe(true);
+    expect(s.run()).toMatchObject({ firstSongMs: T(9, 20), endedMs: null }); // the last song never ended
+    expect(shown(s, T(10, 0))).toBe(false); // the service start: the service logic takes over
+    expect(shown(s, T(10, 20))).toBe(false); // nothing played yet, the service has begun
+    expect(shown(s, T(10, 49))).toBe(false);
+  });
+
+  it("stays until a scan completes, and the scan clears it for good", () => {
+    const s = simulate(["10:00"], soundCheck());
+    expect(shown(s, T(9, 45))).toBe(true);
+    expect(shown(s, T(9, 46), T(9, 45) + 30 * SEC)).toBe(false);
+    expect(shown(s, T(9, 59), T(9, 45) + 30 * SEC)).toBe(false);
+  });
+
+  it("the service after the sound check is quiet from its start through the last song, between songs and in a long gap", () => {
+    // Sound check 09:20-09:31; service 10:00 with songs 10:05, 10:11, a 14-minute sermon, 10:40, 10:46 (ends 10:51).
+    const service = [play(0, T(10, 5)), play(1, T(10, 11)), play(2, T(10, 40)), play(3, T(10, 46))];
+    const s = simulate(["10:00"], [...soundCheck(), ...service]);
+    expect(shown(s, T(9, 50))).toBe(true);
+    for (const [h, m] of [[10, 0], [10, 3], [10, 7], [10, 10], [10, 14], [10, 20], [10, 30], [10, 39], [10, 42], [10, 45], [10, 50], [10, 52], [11, 30]]) expect(shown(s, T(h!, m!), null), `${h}:${m}`).toBe(false);
+    expect(s.run()?.endedMs).toBe(T(10, 51));
+  });
+
+  it("with a second service at 12:00 the sound check changes nothing: quiet 10:00 to the end, back from 11:00", () => {
+    const service = [play(0, T(10, 5)), play(1, T(10, 11)), play(2, T(10, 17)), play(3, T(10, 23))];
+    const s = simulate(["10:00", "12:00"], [...soundCheck(), ...service]);
+    expect(shown(s, T(9, 50))).toBe(true);
+    expect(shown(s, T(10, 10))).toBe(false);
+    expect(shown(s, T(10, 40))).toBe(false);
+    expect(shown(s, T(11, 0))).toBe(true);
+    expect(shown(s, T(12, 0))).toBe(false);
+  });
+
+  it("a single song at T-50 is hidden while it plays and for 5 minutes after", () => {
+    const s = simulate(["10:00"], [play(0, T(9, 10))]);
+    expect(shown(s, T(9, 9))).toBe(true);
+    expect(shown(s, T(9, 12))).toBe(false);
+    expect(shown(s, T(9, 15) + 30 * SEC)).toBe(false); // just after the song
+    expect(shown(s, T(9, 19))).toBe(false);
+    expect(shown(s, T(9, 21))).toBe(true);
+    expect(shown(s, T(9, 40))).toBe(true);
+    expect(shown(s, T(10, 0))).toBe(false);
+  });
+
+  it("two sound-check songs 3 minutes apart: no flicker (the gap is under 5 minutes)", () => {
+    // Song 1 09:20-09:25, a 3-minute talk, song 2 09:28-09:33.
+    const s = simulate(["10:00"], [play(0, T(9, 20)), play(1, T(9, 28))]);
+    for (let at = T(9, 20); at <= T(9, 37); at += 30 * SEC) expect(shown(s, at), iso(at)).toBe(false);
+    expect(shown(s, T(9, 38) + 30 * SEC)).toBe(true); // 5 minutes after song 2
+  });
+
+  it("two sound-check songs 9 minutes apart: the reminder shows in the gap and is quiet again while song 2 plays", () => {
+    // Song 1 09:20-09:25, a 9-minute talk, song 2 09:34-09:39.
+    const s = simulate(["10:00"], [play(0, T(9, 20)), play(1, T(9, 34))]);
+    expect(shown(s, T(9, 25) + 30 * SEC)).toBe(false);
+    expect(shown(s, T(9, 29))).toBe(false);
+    expect(shown(s, T(9, 31))).toBe(true); // 6 minutes after song 1: back
+    expect(shown(s, T(9, 33) + 30 * SEC)).toBe(true);
+    expect(shown(s, T(9, 34) + 30 * SEC)).toBe(false); // song 2 plays
+    expect(shown(s, T(9, 38))).toBe(false);
+    expect(shown(s, T(9, 43))).toBe(false); // still inside the 5 minutes after song 2
+    expect(shown(s, T(9, 46))).toBe(true);
+    expect(shown(s, T(9, 46), T(9, 45))).toBe(false); // a scan after the sound check clears it
+  });
+
+  it("a song that is started again after a long quiet is a new run", () => {
+    const s = simulate(["10:00"], [play(0, T(9, 20)), play(0, T(9, 45))]);
+    expect(shown(s, T(9, 40))).toBe(true);
+    expect(shown(s, T(9, 47))).toBe(false);
+    expect(s.run()?.firstSongMs).toBe(T(9, 45));
+    expect(shown(s, T(9, 55) + 30 * SEC)).toBe(true);
+  });
+
+  it("a paused song is not the end of a service, but a paused sound check ends after 5 minutes", () => {
+    const s = simulate(["10:00"], [{ index: 0, startMs: T(9, 20), seconds: 300, pausedAfterSeconds: 120 }]);
+    expect(shown(s, T(9, 21))).toBe(false);
+    expect(shown(s, T(9, 25))).toBe(false); // paused at 09:22, five minutes not yet over
+    expect(shown(s, T(9, 28))).toBe(true);
+  });
+
+  it("a full run-through (all songs) at T-40 ending at T-10: the reminder is back as soon as the last song has ended, no 5-minute wait", () => {
+    // Four 7-minute songs back to back from 09:20; the last one ends at 09:49:30.
+    const lengths = [420, 420, 420, 420];
+    const plays = lengths.map((seconds, index) => play(index, T(9, 20) + index * 7.5 * MIN, seconds)); // 30 s of talk between songs
+    const s = simulate(["10:00"], plays, lengths);
+    expect(shown(s, T(9, 19))).toBe(true);
+    expect(shown(s, T(9, 24))).toBe(false);
+    expect(shown(s, T(9, 27) + 15 * SEC)).toBe(false); // between songs 1 and 2
+    expect(shown(s, T(9, 49) + 15 * SEC)).toBe(false); // the last song is still playing
+    expect(shown(s, T(9, 49) + 40 * SEC)).toBe(true); // it ended at 09:49:30: back at once
+    expect(s.run()).toMatchObject({ endedMs: T(9, 49) + 30 * SEC });
+    expect(shown(s, T(9, 55))).toBe(true);
+    expect(shown(s, T(9, 56), T(9, 55))).toBe(false);
+    expect(shown(s, T(10, 0))).toBe(false);
+  });
+
+  it("a sound check that is still playing when the service starts is part of the service from the start (no gap)", () => {
+    // Song 1 09:56-10:01, song 2 10:02-10:07; the service start passes during song 1.
+    const s = simulate(["10:00"], [play(0, T(9, 56)), play(1, T(10, 2))]);
+    expect(shown(s, T(9, 55))).toBe(true);
+    for (const at of [T(9, 58), T(9, 59, ) + 50 * SEC, T(10, 0), T(10, 0) + 20 * SEC, T(10, 1) + 30 * SEC, T(10, 5), T(10, 8), T(10, 30), T(11, 0)]) expect(shown(s, at), iso(at)).toBe(false);
+  });
+
+  it("a sound check that stopped just before the start leaves no gap either: the service has begun", () => {
+    const s = simulate(["10:00"], [play(0, T(9, 52))]); // ends 09:57
+    expect(shown(s, T(9, 58))).toBe(false);
+    expect(shown(s, T(10, 0))).toBe(false);
+    expect(shown(s, T(10, 20))).toBe(false);
+  });
+
+  it("a run-through between two services: hidden while it plays and 5 minutes after, back until a scan, gone at the second start", () => {
+    // Services 10:00 and 12:00. The first service runs normally; at 11:10 (T-50) songs 1 and 2 are played again.
+    const first = [play(0, T(10, 5)), play(1, T(10, 11)), play(2, T(10, 17)), play(3, T(10, 23))];
+    const between = [play(0, T(11, 10)), play(1, T(11, 16))];
+    const s = simulate(["10:00", "12:00"], [...first, ...between]);
+    expect(shown(s, T(10, 40))).toBe(false); // first service over, 12:00 not yet in the hour
+    expect(shown(s, T(11, 5))).toBe(true); // 12:00's hour
+    expect(shown(s, T(11, 12))).toBe(false);
+    expect(shown(s, T(11, 20) + 30 * SEC)).toBe(false);
+    expect(shown(s, T(11, 25))).toBe(false);
+    expect(shown(s, T(11, 27))).toBe(true);
+    expect(shown(s, T(11, 50))).toBe(true);
+    expect(shown(s, T(11, 50), T(11, 40))).toBe(false); // a scan clears it
+    expect(shown(s, T(12, 0))).toBe(false);
+    expect(shown(s, T(12, 30))).toBe(false);
+  });
+
+  it("a run-through between two services that is still playing at the second start becomes the second service", () => {
+    const first = [play(0, T(10, 5)), play(1, T(10, 11)), play(2, T(10, 17)), play(3, T(10, 23))];
+    const s = simulate(["10:00", "12:00"], [...first, play(0, T(11, 58)), play(1, T(12, 4)), play(2, T(12, 10)), play(3, T(12, 16))]);
+    expect(shown(s, T(11, 55))).toBe(true);
+    for (const [h, m] of [[11, 59], [12, 0], [12, 3], [12, 8], [12, 15], [12, 20]]) expect(shown(s, T(h!, m!)), `${h}:${m}`).toBe(false);
+    expect(shown(s, T(13, 0))).toBe(false);
+  });
+
+  it("the hard cap still applies to a service that never reaches its last song", () => {
+    // Service 10:00 with songs 1-2 only (the last song is skipped), a third service far ahead at 13:30.
+    const s = simulate(["10:00", "13:30"], [play(0, T(10, 5)), play(1, T(10, 11))]);
+    expect(shown(s, T(12, 40))).toBe(false); // the service is still counted as going; 13:30's hour opened at 12:30
+    expect(shown(s, T(12, 59))).toBe(false);
+    expect(shown(s, T(13, 0))).toBe(true); // 3 hours after the start
+  });
+
+  it("planGoing: the 5 minutes, exactly, for a run-through; the cap still holds", () => {
+    const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
+    const run: PlanRunMemory = { planId: PLAN_ID, firstSongMs: T(9, 20), endedMs: null, lastActiveMs: T(9, 31) };
+    expect(planGoing(T(9, 31), [T(10)], songs, run)).toBe(true);
+    expect(planGoing(T(9, 36) - 1, [T(10)], songs, run)).toBe(true);
+    expect(planGoing(T(9, 36), [T(10)], songs, run)).toBe(false);
+    expect(planGoing(T(9, 50), [T(10)], songs, run)).toBe(false);
+    expect(planGoing(T(10, 0), [T(10)], songs, run)).toBe(true); // the service began, nothing played since the sound check
+    expect(planGoing(T(10, 49), [T(10)], songs, run)).toBe(true);
+    expect(planGoing(T(10, 50), [T(10)], songs, run)).toBe(false);
+  });
+
+  it("a page opened in the middle of a sound check: hidden while it plays and 5 minutes after, not for hours", () => {
+    let memory = observePlanRun(null, {
+      now: T(9, 23), planId: PLAN_ID, durations: FOUR_SONGS, playingIndex: 1,
+      timer: { status: "running", started_at: iso(T(9, 22)), position_seconds: 0 },
+    });
+    const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
+    expect(planGoing(T(9, 24), [T(10)], songs, memory)).toBe(true);
+    // The tracker keeps watching: song 2 ends at 09:27.
+    for (let at = T(9, 23) + 30 * SEC; at <= T(9, 40); at += 30 * SEC) {
+      const idle = at > T(9, 27);
+      memory = observePlanRun(memory, {
+        now: at, planId: PLAN_ID, durations: FOUR_SONGS, playingIndex: 1,
+        timer: idle ? { status: "stopped", started_at: null, position_seconds: 300, remaining_seconds: 0 } : { status: "running", started_at: iso(T(9, 22)), position_seconds: 0 },
+      });
+    }
+    expect(memory?.lastActiveMs).toBe(T(9, 27));
+    expect(planGoing(T(9, 31), [T(10)], songs, memory)).toBe(true);
+    expect(planGoing(T(9, 33), [T(10)], songs, memory)).toBe(false);
+  });
+
+  it("a page opened after a sound check, with a stale song index and a stopped timer, hides the reminder for 5 minutes only", () => {
+    const memory = observePlanRun(null, {
+      now: T(9, 30), planId: PLAN_ID, durations: FOUR_SONGS, playingIndex: 1,
+      timer: { status: "stopped", started_at: null, position_seconds: 100, remaining_seconds: 200 },
+    });
+    const songs = FOUR_SONGS.map((duration_seconds) => ({ duration_seconds }));
+    expect(planGoing(T(9, 33), [T(10)], songs, memory)).toBe(true);
+    expect(planGoing(T(9, 35), [T(10)], songs, memory)).toBe(false);
   });
 });

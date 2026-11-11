@@ -1,7 +1,7 @@
 import type { PlaybackStatusResponse, ServicePlan, Song } from "../../types";
 import { playbackOrderNotice } from "../playbackStatus";
 import type { ReadinessCheck } from "./dashboardReadiness";
-import type { PlanRunMemory } from "./planProgress";
+import { PLAN_IDLE_MS, type PlanRunMemory } from "./planProgress";
 
 /**
  * "Scan Playback again": a reminder, in the header status pill, that Playback should be scanned in the hour before the service
@@ -12,8 +12,8 @@ import type { PlanRunMemory } from "./planProgress";
  *  - Playback is the active source (enabled, connected, Playback API), is not playing, and is not in the middle of a scan;
  *  - a service plan is loaded and its service times are known. A time is "HH:MM" on `plan.date` in the saved time zone, the
  *    same zone Planning Center's times were read in (so daylight-saving changes are handled by the zone, not by arithmetic);
- *  - the plan is not going (see `planGoing`: from a service's start, or from the first song of a run-through, until the last
- *    song has ended);
+ *  - the plan is not going (see `planGoing`: a service in progress, from its start until the last song has ended; or a
+ *    run-through such as a sound check, only while a song plays and for 5 minutes after);
  *  - the service is the NEXT one that has not started, however many there are (one, two, three; unsorted or repeated times
  *    are sorted and de-duplicated);
  *  - now is within the 60 minutes before that start (the start itself is already too late);
@@ -97,16 +97,20 @@ export type ScanPlan = Pick<ServicePlan, "date" | "service_times"> & {
 };
 
 /**
- * Is the loaded plan going right now? From a service's start time (or from the first song of a run-through, if that came
- * first) until the plan's last song has ended. `run` is what the dashboard saw of the songs (planProgress.ts).
+ * Is the loaded plan going right now? Two different things count (F-S3; owner: "while the loaded service plan is currently
+ * going", a sound check is not the service). `run` is what the dashboard saw of the songs (planProgress.ts).
  *
- *  - A run is in progress (a song was started and the last song has not ended since): the plan is going, between songs too.
- *    The end is the last song's own countdown reaching 0:00 (`run.endedMs`). When the last song has no length the app cannot
- *    tell, so the time estimate is used: the start plus the sum of the song lengths plus 30 minutes.
- *  - No song has been started for the latest service start that no finished run covers (the service began, or songs are not
- *    being tracked): the same time estimate.
- *  - The hard cap: never more than 3 hours after the service start or the first song, whichever came first.
- * A service that a finished run began after (the run-through ended before the start does not cover it) is over.
+ * (a) A SERVICE IN PROGRESS: a service start has passed (that no finished run covers) and a run was still playing when it
+ *     passed, or began after it; or no song has been started yet (a service that has begun is going, by estimate). From
+ *     that start until the plan's last song has ended, between songs included (a sermon between two songs stays quiet). The
+ *     end is the last song's own countdown (`run.endedMs`); when the last song has no length the estimate is the start plus
+ *     the song lengths plus 30 minutes. Never more than 3 hours after the service start or the first song of that run.
+ * (b) A RUN-THROUGH that is not part of a service in progress (a sound check or a rehearsal: its songs stopped, or went
+ *     quiet, before the next service start): going only while a song plays and for 5 minutes after the last song activity
+ *     (`run.lastActiveMs`: a countdown last running, or reaching 0:00). Then the run is over and the reminder returns if it is
+ *     due; a later song starts a new run. A run-through that plays the LAST song to its end is over at once (`run.endedMs`).
+ * A run that began before a service start and is still playing when the start passes becomes part of (a) from the start on.
+ * There is no gap in quietness at the start either way: a run that stopped just before it is covered by the estimate.
  */
 export function planGoing(now: number, starts: readonly number[], songs: ScanPlan["songs"], run: PlanRunMemory | null | undefined): boolean {
   const durations = (songs ?? []).map((song) => Math.max(0, song.duration_seconds ?? 0));
@@ -118,10 +122,18 @@ export function planGoing(now: number, starts: readonly number[], songs: ScanPla
   const first = run?.firstSongMs ?? null;
   const active = first !== null && (ended === null || ended < first);
   if (active) {
-    const anchor = Math.min(first, open[0] ?? first);
-    if (now >= anchor + PLAN_GOING_CAP_MS) return false;
-    return lastLength > 0 ? true : now < anchor + totalMs + PLAN_GOING_SLACK_MS;
+    const lastSeen = Math.max(first, run?.lastActiveMs ?? first);
+    // The starts this run was still playing at, or began after: it is part of those services (a sound check that stopped before the start is not).
+    const covered = open.filter((start) => start <= lastSeen);
+    if (covered.length) {
+      const anchor = Math.min(first, covered[0]!);
+      if (now >= anchor + PLAN_GOING_CAP_MS) return false;
+      return lastLength > 0 ? true : now < anchor + totalMs + PLAN_GOING_SLACK_MS;
+    }
+    // (b) a run-through: going while a song plays and for 5 minutes after the last song activity.
+    if (now < lastSeen + PLAN_IDLE_MS && now < first + PLAN_GOING_CAP_MS) return true;
   }
+  // No song of a service started yet (or the songs are not being tracked): the service began, so the estimate applies.
   const latest = open[open.length - 1];
   if (latest === undefined) return false;
   return now < latest + PLAN_GOING_CAP_MS && now < latest + totalMs + PLAN_GOING_SLACK_MS;
