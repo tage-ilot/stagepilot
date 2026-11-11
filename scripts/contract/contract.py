@@ -71,6 +71,15 @@ RUST_EXTENSIONS = {
     # Rust-only, like `auto`: the recorded Python app has no such key.
     "discovery": {"state", "found", "refusing"},
 }
+# Rust-only behaviour. These change what the server does, not the shape of a response, so the
+# replay cannot show them: the recorded transcripts never send the event sequence, and every
+# step count stays what it is without them. Listed here so nobody mistakes them for a port bug.
+RUST_BEHAVIOUR_DIFFERENCES = {
+    # F-H4: Playback `song.selected` -> `seek` -> `song.resumed` of a song other than StagePilot's
+    # current song starts that song at the resume position (the Python app, and the Rust port
+    # until rc.10, dropped the resume because a play only counts as a start below 2 s).
+    "play_new_song_midway": "song.resumed of the just-selected, not-current song is a song.started at that position",
+}
 # Rust-only scalar additions to a response body (same rule as above: only with this type).
 # `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);
 # `settings_degraded` / `settings_degraded_reason` say the saved settings file was damaged or newer

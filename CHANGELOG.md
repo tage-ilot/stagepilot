@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Jumping into the middle of a newly selected song and pressing play now switches StagePilot to that song. In Playback, selecting a song that is not StagePilot's current song, jumping into it and pressing play sent `song.selected`, `seek`, `song.resumed` (rig test of 2026-11-08: song 30049080 at 232.8 s); a play only counted as a song start below 2 s, and a resume of a song other than the current one was dropped, so StagePilot stayed on the previous song, its timer stood still, the lights did not replay the new song and its position was not followed. That resume is now handled as the song being started at that position (current song, countdown, ProPresenter timer and lights from the jump position, not from 0). A deliberate difference from the Python app. Resumes inside the current song, auto-advance, navigation without play, pause, stop and section loops are unchanged. See "How a song is recognised" in `docs/playback-api.md`.
+
 ## [2.43.0-rc.10] - 2026-11-08
 
 ### Added

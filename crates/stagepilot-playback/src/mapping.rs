@@ -17,6 +17,9 @@ pub struct Observation {
     pub event: PlaybackEvent,
     pub discovery: bool,
     pub generation: u64,
+    /// A `song.resumed` of the song Playback selected last, with no start since: the operator
+    /// picked a song, jumped into it and pressed play (see [`Mapper::decide`]).
+    pub follows_select: bool,
 }
 
 /// What an observation asks StagePilot to do.
@@ -115,6 +118,10 @@ pub struct Mapper {
     /// Latest playing heartbeat position per Playback song id (its length at the natural end).
     last_position: BTreeMap<i64, f64>,
     learn_note: Option<String>,
+    /// The song of the latest `song.selected` that has not been played yet.
+    selected_song: Option<i64>,
+    /// Songs whose resume was ignored and already logged (cleared with the order).
+    ignored_resume_logged: BTreeSet<i64>,
 }
 
 impl Default for Mapper {
@@ -139,6 +146,8 @@ impl Default for Mapper {
             learn_setlist: None,
             last_position: BTreeMap::new(),
             learn_note: None,
+            selected_song: None,
+            ignored_resume_logged: BTreeSet::new(),
         }
     }
 }
@@ -166,6 +175,8 @@ impl Mapper {
         self.setlist_id = setlist_id;
         self.stale = true; // A fresh authoritative heartbeat must validate the result.
         self.heartbeat = None;
+        self.selected_song = None;
+        self.ignored_resume_logged.clear();
         self.generation += 1;
         self.invalidated = false;
         Ok(())
@@ -193,6 +204,7 @@ impl Mapper {
     pub fn discard_pending(&mut self) {
         self.generation += 1;
         self.heartbeat = None;
+        self.selected_song = None;
     }
 
     pub fn revision(&self) -> u64 {
@@ -247,12 +259,34 @@ impl Mapper {
         }
         events
             .iter()
-            .map(|event| Observation {
-                event: event.clone(),
-                discovery: self.discovery,
-                generation: self.generation,
+            .map(|event| {
+                let follows_select = self.note_selection(event);
+                Observation {
+                    event: event.clone(),
+                    discovery: self.discovery,
+                    generation: self.generation,
+                    follows_select,
+                }
             })
             .collect()
+    }
+
+    /// Track which song the operator selected and has not played yet. Returns true for a
+    /// `song.resumed` of exactly that song (a play after a jump into a newly selected song).
+    fn note_selection(&mut self, event: &PlaybackEvent) -> bool {
+        match event.kind {
+            EventType::SongSelected => self.selected_song = event.song_id,
+            EventType::SongStarted | EventType::SongChanged | EventType::SongEnded => {
+                self.selected_song = None;
+            }
+            EventType::SongResumed => {
+                let follows = event.song_id.is_some() && event.song_id == self.selected_song;
+                self.selected_song = None;
+                return follows;
+            }
+            _ => {}
+        }
+        false
     }
 
     fn invalidate(&mut self) {
@@ -631,13 +665,49 @@ impl Mapper {
         if observation.discovery || self.discovery || observation.generation != self.generation {
             return Decision::default();
         }
-        if self.learning_active() {
-            return self.plan_learned(observation, state);
+        let promoted = self.promote_resume(observation, state);
+        let observation = promoted.as_ref().unwrap_or(observation);
+        let decision = if self.learning_active() {
+            self.plan_learned(observation, state)
+        } else {
+            Decision {
+                plan: self.plan(observation, state),
+                restore_up_next: None,
+            }
+        };
+        if promoted.is_some() && decision.plan.is_none() {
+            if let Some(song_id) = observation.event.song_id {
+                // Once per song: the resume of a song StagePilot cannot place stays ignored.
+                if self.ignored_resume_logged.insert(song_id) {
+                    tracing::info!(
+                        song_id,
+                        "playback_resume_ignored: the song is not in the plan pairing"
+                    );
+                }
+            }
         }
-        Decision {
-            plan: self.plan(observation, state),
-            restore_up_next: None,
+        decision
+    }
+
+    /// Rust-only rule (a deliberate difference from the Python app): a play inside a song that
+    /// was just selected in Playback, after a jump, arrives as `song.resumed` because the
+    /// position is past the first two seconds. When that song is not StagePilot's current
+    /// song the operator is starting it, so it is handled as `song.started` at that position.
+    fn promote_resume(
+        &self,
+        observation: &Observation,
+        state: &ApplicationState,
+    ) -> Option<Observation> {
+        let event = &observation.event;
+        if !observation.follows_select
+            || event.kind != EventType::SongResumed
+            || self.current_song_is(event, state)
+        {
+            return None;
         }
+        let mut promoted = observation.clone();
+        promoted.event.kind = EventType::SongStarted;
+        Some(promoted)
     }
 
     /// The plan song this Playback song drives, honouring the saved skips.
@@ -690,6 +760,7 @@ impl Mapper {
             event,
             discovery: self.discovery,
             generation: self.generation,
+            follows_select: false,
         }
     }
 
@@ -801,6 +872,27 @@ mod tests {
     fn plan_of(m: &mut Mapper, e: PlaybackEvent, s: &ApplicationState) -> Option<Plan> {
         let o = m.observe(None, &[e], None).remove(0);
         m.plan(&o, s)
+    }
+
+    #[test]
+    fn an_ignored_resume_after_a_selection_is_logged_once_per_song() {
+        let mut m = Mapper::new();
+        m.install_order(&[900, 17, 42], 8, None).unwrap();
+        m.observe(Some(hb(900, 8)), &[], None);
+        for _ in 0..3 {
+            let seen = m.observe(
+                None,
+                &[
+                    ev(EventType::SongSelected, Some(555)),
+                    ev(EventType::SongResumed, Some(555)),
+                ],
+                None,
+            );
+            for o in &seen {
+                assert_eq!(m.decide(o, &state(Some(0))).plan, None);
+            }
+        }
+        assert_eq!(m.ignored_resume_logged.len(), 1);
     }
 
     #[test]
