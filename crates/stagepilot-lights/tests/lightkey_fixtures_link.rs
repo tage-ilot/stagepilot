@@ -7,7 +7,7 @@ use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rosc::{encoder, OscBundle, OscMessage, OscPacket, OscTime, OscType};
 use serde_json::json;
 use stagepilot_core::bus::EventBus;
@@ -17,7 +17,7 @@ use stagepilot_core::state::Song;
 use stagepilot_lights::lightkey::{FixtureLink, LightkeyLink as Link};
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand};
 use stagepilot_lights::lightkey_link::{
-    LightkeyLink, LinkOptions, LinkSettings, LooksSink, SongLooks,
+    Clock, LightkeyLink, LinkOptions, LinkSettings, LooksSink, SongLooks, SystemClock,
 };
 
 use std::collections::BTreeMap;
@@ -30,9 +30,52 @@ use tokio::net::UdpSocket;
 const OFFSET: f64 = 5.0;
 const NTP: u64 = 2_208_988_800;
 
-fn wall() -> f64 {
-    let now = Utc::now();
-    now.timestamp() as f64 + f64::from(now.timestamp_subsec_micros()) / 1e6
+/// A clock the test moves by hand: `wall` stands still until `advance` is called, `mono` is real
+/// time (the relay's timeouts and the poll loops still need it to run). The link, the fake
+/// relay and the fake HTTP agent all read the same one, so every time the link stamps is a time
+/// the test chose, whatever the speed of the machine (a take with a drop and a seek counted its
+/// seconds against two clocks read at different moments: see `take_with_a_drop_and_a_seek`).
+struct StepClock {
+    base: f64,
+    elapsed: Mutex<f64>,
+    started: Instant,
+}
+
+impl StepClock {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            base: SystemClock::default().wall().floor(),
+            elapsed: Mutex::new(0.0),
+            started: Instant::now(),
+        })
+    }
+
+    fn advance(&self, seconds: f64) {
+        *self.elapsed.lock().unwrap() += seconds;
+    }
+
+    /// Seconds since the clock was made, on the wall that stands still between `advance`s.
+    fn now(&self) -> f64 {
+        *self.elapsed.lock().unwrap()
+    }
+}
+
+impl Clock for StepClock {
+    fn wall(&self) -> f64 {
+        self.base + *self.elapsed.lock().unwrap()
+    }
+    fn mono(&self) -> f64 {
+        self.started.elapsed().as_secs_f64()
+    }
+}
+
+/// A Unix-seconds reading as the timestamp a timer event carries.
+fn datetime_seconds(at: DateTime<Utc>) -> f64 {
+    at.timestamp() as f64 + f64::from(at.timestamp_subsec_micros()) / 1e6
+}
+
+fn datetime(wall: f64) -> DateTime<Utc> {
+    DateTime::from_timestamp_micros((wall * 1e6).round() as i64).expect("a representable time")
 }
 
 // ------------------------------------------------------------------------------ fake relay
@@ -49,6 +92,8 @@ struct FakeRelay {
     /// While true the relay process is "frozen" (SIGSTOP): datagrams queue up unread, and are
     /// answered and stamped with the time they are finally processed after it thaws.
     frozen: Arc<Mutex<bool>>,
+    /// The relay's clock is this one plus `OFFSET`.
+    clock: Arc<dyn Clock>,
 }
 
 fn packet(time: f64, head: [OscType; 4], messages: Vec<OscMessage>) -> Vec<u8> {
@@ -85,7 +130,7 @@ fn to_message(c: &FixtureCommand) -> OscMessage {
 }
 
 impl FakeRelay {
-    async fn start(initial: Vec<FixtureCommand>) -> Self {
+    async fn start(initial: Vec<FixtureCommand>, clock: Arc<dyn Clock>) -> Self {
         let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let port = socket.local_addr().unwrap().port();
         let me = Self {
@@ -97,6 +142,7 @@ impl FakeRelay {
             state: Arc::new(Mutex::new(initial)),
             answer_pings: Arc::new(Mutex::new(true)),
             frozen: Arc::new(Mutex::new(false)),
+            clock: clock.clone(),
         };
         let frozen = me.frozen.clone();
         let (sub, seq, log, state, answer) = (
@@ -107,6 +153,7 @@ impl FakeRelay {
             me.answer_pings.clone(),
         );
         tokio::spawn(async move {
+            let wall = move || clock.wall();
             let mut buf = vec![0u8; 2048];
             while let Ok((n, from)) = socket.recv_from(&mut buf).await {
                 let Ok((_, OscPacket::Message(m))) = rosc::decoder::decode_udp(&buf[..n]) else {
@@ -234,7 +281,7 @@ impl FakeRelay {
             *s
         };
         let bytes = packet(
-            wall() + OFFSET - ago,
+            self.clock.wall() + OFFSET - ago,
             [
                 OscType::Int(seq as i32),
                 OscType::String("event".into()),
@@ -260,12 +307,12 @@ impl FakeRelay {
 
 type Active = Arc<Mutex<Vec<String>>>;
 
-async fn serve_http(active: Active) -> u16 {
-    async fn time() -> Response {
-        axum::Json(json!({"t": (wall() + OFFSET) * 1000.0})).into_response()
+async fn serve_http(active: Active, clock: Arc<dyn Clock>) -> u16 {
+    async fn time(State((_, clock)): State<(Active, Arc<dyn Clock>)>) -> Response {
+        axum::Json(json!({"t": (clock.wall() + OFFSET) * 1000.0})).into_response()
     }
     async fn log(
-        State(active): State<Active>,
+        State((active, clock)): State<(Active, Arc<dyn Clock>)>,
         Query(_q): Query<BTreeMap<String, String>>,
     ) -> Response {
         axum::Json(json!({
@@ -274,7 +321,7 @@ async fn serve_http(active: Active) -> u16 {
                 "online": true,
                 "active": *active.lock().unwrap(),
                 "seq": 1,
-                "server_time": (wall() + OFFSET) * 1000.0,
+                "server_time": (clock.wall() + OFFSET) * 1000.0,
             },
         }))
         .into_response()
@@ -282,7 +329,7 @@ async fn serve_http(active: Active) -> u16 {
     let app = Router::new()
         .route("/time", get(time))
         .route("/log", get(log))
-        .with_state(active);
+        .with_state((active, clock));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
@@ -302,6 +349,8 @@ struct Rig {
     link: LightkeyLink,
     /// While true the timeline's save does not answer (a slow fit and save, F-H5).
     hold: Arc<std::sync::atomic::AtomicBool>,
+    /// The clock the link, the fake relay and the fake HTTP agent all read.
+    clock: Arc<dyn Clock>,
 }
 
 fn cmd(a: &str, v: Vec<FixtureArg>) -> FixtureCommand {
@@ -337,6 +386,11 @@ impl Rig {
         Self::build(initial, limit, caps_rows, None, false).await
     }
 
+    /// A rig whose link, relay and HTTP agent read `clock` instead of the system clock.
+    async fn with_clock(initial: Vec<FixtureCommand>, clock: Arc<dyn Clock>) -> Self {
+        Self::build_with_clock(initial, usize::MAX, usize::MAX, None, false, clock).await
+    }
+
     /// The general rig: the timeline refuses more than `limit` rows (or, with `fail`, fails every
     /// save as a full disk would), the link fits inside `caps_rows` rows and keeps raw
     /// recordings in `recordings_dir`.
@@ -347,9 +401,28 @@ impl Rig {
         recordings_dir: Option<std::path::PathBuf>,
         fail: bool,
     ) -> Self {
-        let relay = FakeRelay::start(initial).await;
+        Self::build_with_clock(
+            initial,
+            limit,
+            caps_rows,
+            recordings_dir,
+            fail,
+            Arc::new(SystemClock::default()),
+        )
+        .await
+    }
+
+    async fn build_with_clock(
+        initial: Vec<FixtureCommand>,
+        limit: usize,
+        caps_rows: usize,
+        recordings_dir: Option<std::path::PathBuf>,
+        fail: bool,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        let relay = FakeRelay::start(initial, clock.clone()).await;
         let active: Active = Arc::new(Mutex::new(vec!["Warm".into()]));
-        let http_port = serve_http(active).await;
+        let http_port = serve_http(active, clock.clone()).await;
         let settings = Arc::new(Mutex::new((
             true,
             true,
@@ -403,6 +476,7 @@ impl Rig {
                     ..stagepilot_lights::lightkey_fit::Caps::default()
                 },
                 recordings_dir,
+                clock: clock.clone(),
                 ..LinkOptions::default()
             },
         );
@@ -414,6 +488,7 @@ impl Rig {
             settings,
             link,
             hold,
+            clock,
         }
     }
 
@@ -432,7 +507,9 @@ impl Rig {
         .await;
     }
 
-    async fn song_start(&self, song: &Song) {
+    /// Starts `song` now (on the rig's clock) and returns the moment its second 0 was stamped.
+    async fn song_start(&self, song: &Song) -> DateTime<Utc> {
+        let started_at = datetime(self.clock.wall());
         self.bus
             .publish(new_event(
                 EventType::SongStarted,
@@ -452,11 +529,19 @@ impl Rig {
                 EventPayload::Timer(TimerPayload {
                     duration_seconds: song.duration_seconds.unwrap_or(0),
                     song: Some(song.clone()),
-                    started_at: Some(Utc::now()),
+                    started_at: Some(started_at),
                     ..TimerPayload::default()
                 }),
             ))
             .await;
+        started_at
+    }
+
+    /// Makes the link read its connection now, at the clock's present time, instead of at its next
+    /// poll (every 0.25 s of real time): the recorded stretch opens or closes at the second the
+    /// test is at. Asking again for the decision of a song already started changes nothing else.
+    fn settle(&self, song: &Song, started_at: DateTime<Utc>) {
+        self.link.decide_for_start(song, Some(started_at));
     }
 
     async fn song_stop(&self, song: &Song, position: f64) {
@@ -1077,8 +1162,9 @@ async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_
         rig.link.set_recording(true).await,
         "Recording starts with the next song."
     );
-    let t0 = Instant::now();
-    rig.song_start(&song(30)).await;
+    let started = rig.song_start(&song(30)).await;
+    // song seconds, read on the clock the link reads, from the moment the song was stamped
+    let song_second = || rig.clock.wall() - datetime_seconds(started);
     pause(0.5).await;
     // the relay session restarts (a new burst) while the relay process is frozen
     *rig.relay.frozen.lock().unwrap() = true;
@@ -1100,11 +1186,11 @@ async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_
     )
     .await;
     pause(0.3).await;
-    let first = t0.elapsed().as_secs_f64();
+    let first = song_second();
     rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
     // the clock is asked again soon after a poor answer; the second change comes after that
     pause(4.0).await;
-    let second = t0.elapsed().as_secs_f64();
+    let second = song_second();
     rig.relay.change(vec![dim("P2", 1.0)], 0.0, 0).await;
     pause(0.5).await;
     // a stop at the song's end finishes the pass
@@ -1137,27 +1223,76 @@ async fn a_frozen_relay_during_the_clock_burst_does_not_leave_a_wrong_offset_in_
     rig.link.stop().await;
 }
 
-/// One take with a link drop and a seek forward. Returns the saved looks, the seconds the link
-/// was down (measured), the song position the seek left and the song second it jumped to.
-async fn take_with_a_drop_and_a_seek(
-    duration: u32,
-    skip: f64,
-) -> (SongLooks, f64, f64, f64, f64, Vec<String>) {
-    let rig = Rig::new(vec![dim("P1", 0.0), dim("P2", 0.0)]).await;
+/// What one take with a link drop and a seek left behind, and the song seconds the test put it
+/// through. Every second here is a time on the rig's `StepClock`, the one the link stamps with.
+struct Take {
+    saved: SongLooks,
+    message: String,
+    /// The song second the stream was dropped at.
+    dropped: f64,
+    /// The song second the stream was back, with a snapshot of every property.
+    reopened: f64,
+    /// The song second the seek left.
+    left: f64,
+    /// The song second the seek jumped to.
+    target: f64,
+}
+
+impl Take {
+    /// The seconds the link was recording: from the start to the drop, from the reconnection to
+    /// the seek, and from the seek's target to the song's end.
+    fn recorded(&self, duration: u32) -> f64 {
+        self.dropped + (self.left - self.reopened) + (f64::from(duration) - self.target)
+    }
+}
+
+/// One take with a link drop and a seek forward, on a clock that moves only when the test moves
+/// it. The song second of every step (the drop, the reconnection, the seek) is chosen here and is
+/// the second the link stamps: how fast the machine runs changes how long the test waits for
+/// the link to answer, never the seconds it records. (It used to read the real clock around real
+/// sleeps and compare the result with what the link counted from its own polls, which fall
+/// at other moments: on a slow runner they came apart by more than the allowed second.)
+async fn take_with_a_drop_and_a_seek(duration: u32, skip: f64) -> Take {
+    // far above any real wait: these only fail a hang, not a slow machine
+    const WAIT: f64 = 60.0;
+    let clock = StepClock::new();
+    let rig = Rig::with_clock(vec![dim("P1", 0.0), dim("P2", 0.0)], clock.clone()).await;
     rig.connect().await;
     rig.link.set_recording(true).await;
-    let t0 = Instant::now();
     let s = song(duration);
-    rig.song_start(&s).await;
-    pause(0.4).await;
+    let started = rig.song_start(&s).await;
+    rig.settle(&s, started);
+    // the relay sends single-precision floats
+    let is = |name: &str, x: f64| {
+        rig.link
+            .fixture_value(&format!("/fixture/{name}/overrides/dimmer"))
+            .is_some_and(|v| (v - x).abs() < 0.001)
+    };
+    // song second 0.4: P1 moves
+    clock.advance(0.4);
     rig.relay.change(vec![dim("P1", 0.3)], 0.0, 0).await;
-    pause(0.4).await;
-    // the stream drops; P1 moves while nobody is listening
-    let off = t0.elapsed().as_secs_f64();
+    wait_for(|| is("P1", 0.3), WAIT).await;
+    // song second 0.8: the stream drops; P1 moves while nobody is listening
+    clock.advance(0.4);
+    let dropped = clock.now();
     rig.settings.lock().unwrap().1 = false;
-    pause(1.5).await;
+    rig.settle(&s, started);
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .fixtures
+                .is_none_or(|s| s.link != FixtureLink::Live)
+        },
+        WAIT,
+    )
+    .await;
+    // song second 2.3: the stream is back
+    clock.advance(1.5);
     rig.relay.change(vec![dim("P1", 0.6)], 0.0, 0).await;
     rig.settings.lock().unwrap().1 = true;
+    // the new keyframe carries P1 = 0.6: the link is live again and has read it
+    wait_for(|| is("P1", 0.6), WAIT).await;
     wait_for(
         || {
             rig.link
@@ -1165,13 +1300,14 @@ async fn take_with_a_drop_and_a_seek(
                 .fixtures
                 .is_some_and(|s| s.link == FixtureLink::Live)
         },
-        5.0,
+        WAIT,
     )
     .await;
-    pause(0.8).await;
-    let live = t0.elapsed().as_secs_f64();
-    // the operator seeks forward `skip` seconds, the song keeps running
-    let left = t0.elapsed().as_secs_f64();
+    let reopened = clock.now();
+    rig.settle(&s, started);
+    // song second 3.1: the operator seeks forward `skip` seconds, the song keeps running
+    clock.advance(0.8);
+    let left = clock.now();
     let target = left + skip;
     rig.bus
         .publish(new_event(
@@ -1182,21 +1318,29 @@ async fn take_with_a_drop_and_a_seek(
                 song: Some(s.clone()),
                 position_seconds: Some(target),
                 running: true,
-                started_at: Some(Utc::now()),
+                started_at: Some(datetime(clock.wall())),
                 ..TimerPayload::default()
             }),
         ))
         .await;
-    pause(0.5).await;
+    clock.advance(0.5);
     rig.relay.change(vec![dim("P2", 0.9)], 0.0, 0).await;
-    pause(0.5).await;
+    wait_for(|| is("P2", 0.9), WAIT).await;
+    clock.advance(0.5);
     rig.song_stop(&s, f64::from(duration)).await;
-    wait_for(|| !rig.saved.lock().unwrap().is_empty(), 3.0).await;
+    wait_for(|| !rig.saved.lock().unwrap().is_empty(), WAIT).await;
     assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
     let saved = rig.saved.lock().unwrap().remove(0);
     let message = rig.link.status().message.unwrap_or_default();
     rig.link.stop().await;
-    (saved, live - off, left, target, live, vec![message])
+    Take {
+        saved,
+        message,
+        dropped,
+        reopened,
+        left,
+        target,
+    }
 }
 
 fn dimmer_rows(saved: &SongLooks, fixture: &str, value: f64) -> Vec<f64> {
@@ -1219,41 +1363,51 @@ fn dimmer_rows(saved: &SongLooks, fixture: &str, value: f64) -> Vec<f64> {
 /// the seconds recorded in total.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_take_with_a_drop_and_a_seek_is_saved_once_complete_with_the_gaps_counted() {
-    let (saved, down, left, target, live, message) = take_with_a_drop_and_a_seek(12, 3.0).await;
-    let expected = (left - down) + (12.0 - target);
+    let take = take_with_a_drop_and_a_seek(12, 3.0).await;
+    let Take {
+        saved,
+        message,
+        reopened,
+        target,
+        ..
+    } = &take;
+    // the link counts exactly the stretches it recorded: 0.8 + 0.8 + 5.9 song seconds
+    let expected = take.recorded(12);
     assert!(
-        (saved.status.coverage_seconds - expected).abs() < 1.0,
-        "recorded {} s, expected about {expected} (down {down}, left {left}, target {target})",
-        saved.status.coverage_seconds
+        (saved.status.coverage_seconds - expected).abs() < 0.01,
+        "recorded {} s, expected {expected} (dropped at {}, back at {reopened}, left at {}, target {target})",
+        saved.status.coverage_seconds,
+        take.dropped,
+        take.left
     );
     assert!(saved.status.complete, "{:?} {message:?}", saved.status);
     assert!(
-        message[0].contains("s of the song were not captured"),
+        message.contains("s of the song were not captured"),
         "{message:?}"
     );
-    // P1 moved to 0.6 while the stream was down: the stretch after the drop starts with it
-    let at = dimmer_rows(&saved, "P1", 0.6);
+    // P1 moved to 0.6 while the stream was down: the stretch after the drop starts with it, at
+    // the second the stream was back
+    let at = dimmer_rows(saved, "P1", 0.6);
     assert!(
-        at.iter()
-            .any(|t| (*t - live).abs() < 1.5 && *t > live - 1.5),
-        "no row of P1 = 0.6 near the reconnection at {live}: {at:?} {:?}",
+        at.iter().any(|t| (*t - reopened).abs() < 0.01),
+        "no row of P1 = 0.6 at the reconnection at {reopened}: {at:?} {:?}",
         saved.rows
     );
     // the change made after the seek is at the new position, not before it
-    let after = dimmer_rows(&saved, "P2", 0.9);
+    let after = dimmer_rows(saved, "P2", 0.9);
     assert!(
-        after.iter().any(|t| *t >= target - 0.2),
+        after.iter().any(|t| *t >= target - 0.01),
         "{after:?} target {target}"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_seek_that_skips_more_than_ten_seconds_saves_an_incomplete_capture() {
-    let (saved, _, _, _, _, message) = take_with_a_drop_and_a_seek(30, 18.0).await;
+    let Take { saved, message, .. } = take_with_a_drop_and_a_seek(30, 18.0).await;
     assert!(!saved.status.complete, "{:?}", saved.status);
     assert!(saved.status.coverage_seconds < 20.0);
-    assert!(message[0].contains("Incomplete capture"), "{message:?}");
-    assert!(message[0].contains("seconds recorded"), "{message:?}");
+    assert!(message.contains("Incomplete capture"), "{message:?}");
+    assert!(message.contains("seconds recorded"), "{message:?}");
 }
 
 // ------------------------------------------------------------------ F-H5: "Saving the recording of X..."
