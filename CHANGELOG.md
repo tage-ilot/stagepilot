@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Opening StagePilot on another device during a song no longer stops the lights.** Every dashboard page load saved the ProPresenter, Lighting and Planning Center settings again, and Lighting treated that as a change: it ended the song's lights, reconnected Lightkey and never resumed (rc.11 iMac test: the replay ended 27.5 s into a song when a second page was opened and stayed off for the remaining 47 s). Now saving settings that are already running changes nothing: no reconnect, no Connecting flicker, no re-sync of the lights, no ProPresenter Look triggered again, no Planning Center reload. "The same" covers every setting that changes behaviour (see \"Saving Lighting settings while a song plays\" in `docs/lights.md`). The dashboard also skips services whose status is already connected. A real change in the middle of a song is still applied; the lights replay of that song now starts again at the second it had reached instead of staying off until the next song.
+
 ## [2.43.0-rc.11] - 2026-11-10
 
 ### Changed
