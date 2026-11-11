@@ -8,6 +8,7 @@ import type { LightkeyHelper } from "./LightkeyHelper";
 import type { LightkeyLink } from "./LightkeyLink";
 import type { LightkeyMode } from "./LightkeyMode";
 import type { LightkeyProjectMismatch } from "./LightkeyProjectMismatch";
+import type { LightkeySaving } from "./LightkeySaving";
 
 /**
  * What the StagePilot Lightkey strip shows (`LightkeyStatus`).
@@ -28,7 +29,12 @@ detail_level?: LightkeyDetail,
 /**
  * The song most recently saved to the timeline, left out until one has been.
  */
-captured?: LightkeyCaptured, fixtures?: FixtureStatus, 
+captured?: LightkeyCaptured, 
+/**
+ * The recording that is being fitted and saved right now, left out the rest of the time. Set
+ * when the fit starts, cleared when it ends or fails (the message then says which).
+ */
+saving?: LightkeySaving, fixtures?: FixtureStatus, 
 /**
  * Fixtures the replay holds with overrides, left out when none.
  */

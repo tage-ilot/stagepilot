@@ -300,6 +300,8 @@ struct Rig {
     attempts: Arc<Mutex<usize>>,
     settings: Arc<Mutex<LinkSettings>>,
     link: LightkeyLink,
+    /// While true the timeline's save does not answer (a slow fit and save, F-H5).
+    hold: Arc<std::sync::atomic::AtomicBool>,
 }
 
 fn cmd(a: &str, v: Vec<FixtureArg>) -> FixtureCommand {
@@ -366,13 +368,19 @@ impl Rig {
         let sink_saved = saved.clone();
         let attempts = Arc::new(Mutex::new(0usize));
         let sink_attempts = attempts.clone();
+        let hold = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let sink_hold = hold.clone();
         let sink: LooksSink = Arc::new(move |looks| {
             *sink_attempts.lock().unwrap() += 1;
             let refused = looks.rows.len() > limit;
             if !refused {
                 sink_saved.lock().unwrap().push(looks);
             }
+            let hold = sink_hold.clone();
             Box::pin(async move {
+                while hold.load(std::sync::atomic::Ordering::SeqCst) {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
                 if fail {
                     Err(stagepilot_lights::lightkey_link::LooksError::Failed(
                         "disk full".into(),
@@ -405,6 +413,7 @@ impl Rig {
             attempts,
             settings,
             link,
+            hold,
         }
     }
 
@@ -1245,4 +1254,116 @@ async fn a_seek_that_skips_more_than_ten_seconds_saves_an_incomplete_capture() {
     assert!(saved.status.coverage_seconds < 20.0);
     assert!(message[0].contains("Incomplete capture"), "{message:?}");
     assert!(message[0].contains("seconds recorded"), "{message:?}");
+}
+
+// ------------------------------------------------------------------ F-H5: "Saving the recording of X..."
+
+/// A long, busy song takes 35-45 s to fit and save after it ends and the Lighting card showed
+/// nothing: it looked as if the recording was lost. `saving` is set while the fit and save run
+/// and gone when the closing message is up.
+///
+/// The song's end is delivered on the event bus and waits for the save, so the held save is
+/// watched from a second future while the recording runs.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_status_says_saving_from_the_end_of_the_recording_until_it_is_saved() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    assert!(
+        rig.link.status().saving.is_none(),
+        "nothing before a recording"
+    );
+    rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    let watch = async {
+        wait_for(|| rig.link.status().saving.is_some(), 15.0).await;
+        let status = rig.link.status();
+        let saving = status.saving.expect("saving");
+        assert_eq!(saving.song, "Holy Forever");
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(&saving.started_at).is_ok(),
+            "{}",
+            saving.started_at
+        );
+        assert!(
+            rig.link.status().captured.is_none(),
+            "still being saved: not saved yet"
+        );
+        // it stays while the save takes its time
+        pause(0.3).await;
+        assert!(rig.link.status().saving.is_some());
+        // the field is in the API answer only while it is set
+        let json = serde_json::to_value(rig.link.status()).unwrap();
+        assert_eq!(json["saving"]["song"], "Holy Forever");
+        rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+    };
+    tokio::join!(record_a_short_song(&rig), watch);
+    wait_for(|| rig.link.status().saving.is_none(), 15.0).await;
+    let done = rig.link.status();
+    let message = done.message.clone().unwrap_or_default();
+    assert!(
+        message.starts_with("Saved "),
+        "the closing message is already up when saving clears: {message}"
+    );
+    assert!(done.captured.is_some());
+    let json = serde_json::to_value(&done).unwrap();
+    assert!(json.get("saving").is_none(), "left out when not saving");
+    rig.link.stop().await;
+}
+
+/// A save that fails clears `saving` too, and the "Could not save" message stays as it was.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_save_clears_saving_and_keeps_its_message() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("lightkey-recordings");
+    let rig = Rig::build(
+        vec![dim("P1", 0.0)],
+        usize::MAX,
+        usize::MAX,
+        Some(folder.clone()),
+        true,
+    )
+    .await;
+    rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    let watch = async {
+        wait_for(|| rig.link.status().saving.is_some(), 15.0).await;
+        rig.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+    };
+    tokio::join!(record_a_short_song(&rig), watch);
+    wait_for(|| rig.link.status().saving.is_none(), 15.0).await;
+    let message = rig.link.status().message.unwrap_or_default();
+    assert_eq!(
+        message,
+        format!(
+            "Could not save the looks to the timeline. The raw recording is kept in {}.",
+            folder.display()
+        )
+    );
+    rig.link.stop().await;
+}
+
+/// A recording that is thrown away before any fit (nothing changed) never says "saving", and the
+/// "Not saved" message is the same as before.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recording_with_no_changes_never_says_saving() {
+    let rig = Rig::new(vec![dim("P1", 0.0)]).await;
+    rig.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    rig.connect().await;
+    rig.link.set_recording(true).await;
+    rig.song_start(&song(2)).await;
+    pause(2.0).await;
+    rig.song_stop(&song(2), 2.0).await;
+    wait_for(
+        || {
+            rig.link
+                .status()
+                .message
+                .is_some_and(|m| m.starts_with("Not saved"))
+        },
+        5.0,
+    )
+    .await;
+    assert!(rig.link.status().saving.is_none());
+    assert_eq!(
+        rig.link.status().message.as_deref(),
+        Some("Not saved: no fixture changes were recorded for Holy Forever.")
+    );
+    rig.link.stop().await;
 }

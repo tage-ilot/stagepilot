@@ -16,6 +16,7 @@ import { playbackStatus } from "../test/playbackFixtures";
 import * as api from "../api";
 import { REMOTE_OFFLINE_GRACE_MS } from "../hooks/useRemoteOffline";
 import { Dashboard } from "./Dashboard";
+import { resetDismissedSettingsNotices } from "./settingsNotices";
 
 const loadedPlan: ServicePlan = {
   id: "previous-plan",
@@ -1321,6 +1322,26 @@ describe("Dashboard widget layout", () => {
     expect(screen.getByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
+  });
+
+  it("tells the operator about a song whose lighting data was set aside, once, and not when there is none (F-H5)", async () => {
+    resetDismissedSettingsNotices();
+    const notice = "The lighting data for Ever Be was damaged and set aside; record it again.";
+    const { unmount } = renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_notice: notice } });
+    expect(screen.getByTestId("settings-notice-text")).toHaveTextContent(notice);
+    await userEvent.setup().click(screen.getByRole("button", { name: /Got it/ }));
+    expect(screen.queryByTestId("settings-notice")).not.toBeInTheDocument();
+    unmount();
+
+    resetDismissedSettingsNotices();
+    renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_notice: null, settings_degraded: false } });
+    expect(screen.queryByTestId("settings-notices-main")).not.toBeInTheDocument();
+  });
+
+  it("tells the operator when the saved settings could not be used (F-H5)", () => {
+    resetDismissedSettingsNotices();
+    renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_degraded: true, settings_degraded_reason: "not valid JSON" } });
+    expect(screen.getByTestId("settings-degraded")).toHaveTextContent("default settings");
   });
 
   it("a configured Lighting output that disconnects is not part of the system check (it has its own card)", () => {

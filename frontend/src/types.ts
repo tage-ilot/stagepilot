@@ -285,6 +285,13 @@ export interface LightkeyCaptured {
   looks: number;
 }
 
+/** A finished recording that is being fitted and saved right now (35-45 s for a long, busy song). */
+export interface LightkeySaving {
+  song: string;
+  /** When the fit started (UTC, RFC 3339). */
+  started_at: string;
+}
+
 export type LightkeyDetail = "fine" | "normal" | "coarse";
 
 /** Which songs capture and which replay: Auto decides per song; Replay and Record pin it for every song. */
@@ -495,6 +502,8 @@ export interface LightkeyStatus {
   message: string | null;
   /** The song most recently saved to the timeline; absent until one has been. */
   captured?: LightkeyCaptured;
+  /** The recording being fitted and saved right now; absent the rest of the time. */
+  saving?: LightkeySaving;
   /** Accepted and ignored by the backend since smooth capture; the UI neither shows nor sends it. */
   detail_level?: LightkeyDetail;
   fixtures?: LightkeyFixtureStatus;
@@ -586,6 +595,10 @@ export interface SettingsResponse {
   warning: string | null;
   /** Set when a song's lighting data was damaged and set aside at load; the rest loaded. */
   settings_notice?: string | null;
+  /** True for the whole run when the saved settings file could not be used and the defaults are in use. */
+  settings_degraded?: boolean;
+  /** Short, value-free reason for `settings_degraded` ("not valid JSON", "schema_version 3 is newer than 2"). */
+  settings_degraded_reason?: string | null;
   restart_required: boolean;
 }
 

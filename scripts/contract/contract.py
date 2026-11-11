@@ -70,6 +70,9 @@ RUST_EXTENSIONS = {
     # contract profiles run with the search off, so this is {state: "off", found: [], refusing: []}.
     # Rust-only, like `auto`: the recorded Python app has no such key.
     "discovery": {"state", "found", "refusing"},
+    # A finished recording being fitted and saved (F-H5): on the Lightkey status only while it
+    # lasts. Rust-only; the contract profiles never hold a save open, so it is normally absent.
+    "saving": {"song", "started_at"},
 }
 # Rust-only behaviour. These change what the server does, not the shape of a response, so the
 # replay cannot show them: the recorded transcripts never send the event sequence, and every

@@ -230,6 +230,41 @@ async fn restart_failed_retries_a_plugin_whose_first_start_failed() {
     assert_eq!(status_of(&manager, "flaky").await, PluginStatus::Running);
 }
 
+/// F-H5 R3: a plugin that failed to start because something outside it was missing (the keychain
+/// answer) goes back to `Running` when asked to start again, and nothing else is touched.
+#[tokio::test]
+async fn restart_if_failed_brings_back_one_failed_plugin_and_nothing_else() {
+    let manager = PluginManager::with_config(EventBus::new(), fast());
+    let waiting = Fake::with("waiting", vec![Err("Waiting for keychain access".into())]);
+    let other = Fake::with(
+        "other",
+        vec![Err("still broken".into()), Err("still broken".into())],
+    );
+    let fine = Fake::ok("fine");
+    manager.register(waiting.clone()).unwrap();
+    manager.register(other.clone()).unwrap();
+    manager.register(fine.clone()).unwrap();
+    manager.start_all().await;
+    assert_eq!(status_of(&manager, "waiting").await, PluginStatus::Error);
+    assert_eq!(status_of(&manager, "other").await, PluginStatus::Error);
+
+    assert!(manager.restart_if_failed("waiting").await);
+    assert_eq!(status_of(&manager, "waiting").await, PluginStatus::Running);
+    let health = manager.health().await;
+    let waiting_health = health.iter().find(|h| h.name == "waiting").unwrap();
+    assert_eq!(waiting_health.last_error, None, "the old error is gone");
+    // the others were not restarted
+    assert_eq!(status_of(&manager, "other").await, PluginStatus::Error);
+    assert_eq!(other.starts.load(Ordering::SeqCst), 1);
+    assert_eq!(fine.starts.load(Ordering::SeqCst), 1);
+    assert_eq!(fine.stops.load(Ordering::SeqCst), 0);
+    // a running plugin and an unknown name are left alone
+    assert!(!manager.restart_if_failed("waiting").await);
+    assert!(!manager.restart_if_failed("fine").await);
+    assert!(!manager.restart_if_failed("nobody").await);
+    assert_eq!(waiting.starts.load(Ordering::SeqCst), 2);
+}
+
 #[tokio::test]
 async fn a_hung_or_panicking_plugin_is_contained_and_reported() {
     let manager = PluginManager::with_config(EventBus::new(), fast());
