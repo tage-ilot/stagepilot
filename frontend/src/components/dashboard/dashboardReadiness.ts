@@ -11,7 +11,9 @@ import type {
 } from "../../types";
 import { connectionWord } from "../ui/statusWord";
 import { playbackConnectionDetail, playbackOrderMode, playbackOrderModeText, playbackOrderNotice } from "../playbackStatus";
+import { songClock } from "../../lib/songClock";
 import { scanReminderCheck } from "./scanReminder";
+import type { PlanRunMemory } from "./planProgress";
 
 export type ConnectionCardView = {
   status: ConnectionStatus;
@@ -273,6 +275,7 @@ export function buildReadinessChecks({
   remoteOffline = false,
   playback = null,
   now = Date.now(),
+  planRun = null,
 }: {
   state: ApplicationState;
   stateOnly?: boolean;
@@ -284,6 +287,8 @@ export function buildReadinessChecks({
   playback?: PlaybackStatusResponse | null;
   /** The dashboard's clock in ms, which the reminder's hour window is counted on. Tests pass a fake one. */
   now?: number;
+  /** What the dashboard saw of the songs being played, so the reminder stays quiet while the plan is going (planProgress.ts). */
+  planRun?: PlanRunMemory | null;
   /** Remote Access is turned on but has stayed unreachable through its retries (see useRemoteOffline). */
   remoteOffline?: boolean;
 }): ReadinessCheck[] {
@@ -402,7 +407,9 @@ export function buildReadinessChecks({
     plan: servicePlanReady ? plan : null,
     timeZone: settings?.settings.timezone,
     playback,
-    songRunning: state.timer.status === "running",
+    // A countdown that has run out is not a song playing: the presentation timer counts on past 0:00 and never stops by itself.
+    songRunning: state.timer.status === "running" && songClock(state.timer, state.playing_song ?? state.current_song, now).remaining > 0,
+    run: planRun,
   });
   if (scanReminder) checks.push(scanReminder);
   // Listed only when it is a problem. Not required: an offline tunnel must not stop a service from starting.

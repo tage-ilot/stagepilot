@@ -167,16 +167,19 @@ describe("several service times on the plan's day", () => {
     expect(run(second - 45 * MIN, new Date(second - 50 * MIN).toISOString())).toBeNull();
   });
 
-  it("services less than an hour apart share the first one's reminder", () => {
+  it("services less than an hour apart each have their own window; while the plan goes nothing is listed (F-S2)", () => {
     const close = { date: "2026-11-15", service_times: ["09:00", "09:30", "11:00"] };
     const check = (now: number) => scanReminderDue({ now, plan: close, timeZone: LA, playback: playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: null }) });
     expect(check(START - 30 * MIN)).toMatchObject({ startMs: START });
-    expect(check(START + 10 * MIN)).toBeNull(); // 09:30 gets none, 11:00 is still an hour and 50 minutes away
+    expect(check(START + 10 * MIN)).toBeNull(); // the plan is going (no song lengths: start + 30 minutes); 11:00 is still far away
+    expect(check(START + 31 * MIN)).toBeNull(); // the plan is over; 11:00 is an hour and 29 minutes away
     expect(check(at("2026-11-15T19:00:00Z") - 59 * MIN)).toMatchObject({ startMs: at("2026-11-15T19:00:00Z") });
     const learned = playbackStatus({ discovery: "done", order_mode: "learned", captured_at: null });
-    const pair = (second: string) => scanReminderDue({ now: START + 5 * MIN, plan: { date: "2026-11-15", service_times: ["09:00", second] }, timeZone: LA, playback: learned });
-    expect(pair("09:59")).toBeNull(); // 59 minutes apart: one scan serves both
-    expect(pair("10:00")).toMatchObject({ startMs: START + 60 * MIN }); // exactly an hour apart: the second has its own window
+    const pair = (now: number, second: string) => scanReminderDue({ now, plan: { date: "2026-11-15", service_times: ["09:00", second] }, timeZone: LA, playback: learned });
+    expect(pair(START + 5 * MIN, "09:59")).toBeNull(); // the first service is going
+    expect(pair(START + 5 * MIN, "10:00")).toBeNull();
+    expect(pair(START + 35 * MIN, "09:59")).toMatchObject({ startMs: START + 59 * MIN }); // the first is over, the second is 24 minutes away
+    expect(pair(START + 35 * MIN, "10:00")).toMatchObject({ startMs: START + 60 * MIN });
   });
 });
 

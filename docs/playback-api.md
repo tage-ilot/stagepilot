@@ -81,10 +81,27 @@ scan Playback again **within the hour before the service**. Nothing starts a sca
 Planning Center by itself. To remind the operator the dashboard's header status pill lists **Scan Playback again**
 (a warning row; the pill reads it when nothing else is wrong) when all of this is true: Playback is the connected
 source and is not playing or scanning; a Planning Center plan is loaded; the next service start on it (its
-`service_times`, read on the plan's date in the saved time zone) is less than 60 minutes away; and the last completed
-scan (`captured_at` of the Playback status) is older than the start of that hour. Services less than an hour apart share
-one reminder. The row goes away by itself when a scan completes, when the service start time passes, or when a song
-plays. A scan that is out of date for another reason (the setlist or the plan changed) keeps its own notice, and this row
+`service_times`, read on the plan's date in the saved time zone) is less than 60 minutes away; the last completed
+scan (`captured_at` of the Playback status) is older than the start of that hour; and **the plan is not going**.
+
+The reminder stays quiet while the loaded plan is going: from a service's start time (or from the first song starting,
+if that is earlier, so a run-through before the service counts too) until the plan's last song has ended, including the
+time between songs. The dashboard reads the end from the last song's own countdown: the song is the plan's last one, it
+has a length, and its countdown has reached 0:00 (or the timer stopped with nothing left). A song paused part-way is not
+the end. When the app cannot tell (the last song has no length) it uses an estimate: the service start plus the sum of
+the song lengths plus 30 minutes. In every case the plan stops counting as going 3 hours after the service start or the
+first song, so the reminder can never stay hidden for good. After the plan is over the rule is the plain one again: a
+later service of the same plan that is still ahead, with Playback not scanned since the hour before it began, brings the
+reminder back (that is the moment to scan between two services). A run-through that finishes before the service does
+not hide it afterwards either: it returns until a scan completes.
+
+Any number of services work the same way. The start times are sorted and repeated times count once; the reminder is
+always about the next start that has not happened yet, whether the services are an hour apart, closer than that, or
+overlap the song time (a start that passes while the plan is going simply needs no reminder). One service a Sunday: the
+reminder shows in the hour before it, is quiet from the start to the last song, and is not shown again.
+
+The row goes away by itself when a scan completes, when the service start time passes, or when the plan starts going.
+A scan that is out of date for another reason (the setlist or the plan changed) keeps its own notice, and this row
 is not added next to it. It is worked out in the dashboard from the status it already has; the API did not change.
 
 ### Learned order (provisional, before a scan)

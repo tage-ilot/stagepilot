@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { playbackStatus } from "../../test/playbackFixtures";
+import type { PlanRunMemory } from "./planProgress";
 import type {
   ApplicationState,
   MidiInputsResponse,
@@ -560,6 +561,36 @@ describe("dashboard integration truthfulness", () => {
       expect(reminder(build(30))).toBeDefined();
       expect(reminder(build(30, { playback: playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: new Date(SERVICE - 40 * 60_000).toISOString() }) }))).toBeUndefined();
       expect(reminder(build(30, { stateOnly: true }))).toBeUndefined();
+    });
+
+    it("stays out of the list while the plan is going and returns when the plan is over (F-S2)", () => {
+      const base = planState();
+      const plan = { ...base.plan!, service_times: ["09:00", "10:00"], songs: base.plan!.songs.slice(0, 1).map((song) => ({ ...song, duration_seconds: 300 })) };
+      const going: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: null };
+      const over: PlanRunMemory = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000 };
+      const buildAt = (minutesAfterFirst: number, planRun: PlanRunMemory | null) => {
+        const appState = planState({ plan });
+        const playback = playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-11-14T20:00:00Z" });
+        const views = buildConnectionCardViews({ state: appState, settings: production, midi: emptyMidi, playback, propresenter: null, lights: null });
+        return buildReadinessChecks({ state: appState, settings: production, propresenter: null, live: true, views, playback, now: SERVICE + minutesAfterFirst * 60_000, planRun });
+      };
+      expect(reminder(buildAt(8, going))).toBeUndefined(); // 09:08, the only song is playing or between songs
+      expect(reminder(buildAt(12, over))).toMatchObject({ id: "scan-playback" }); // 09:12, the plan is over, 10:00 is 48 minutes away
+      expect(reminder(buildAt(12, over))?.detail).toContain("starts in 48 minutes");
+      expect(reminder(buildAt(60, over))).toBeUndefined(); // 10:00: the second service starts
+    });
+
+    it("a countdown that has run out is not a song playing (the presentation timer counts on past 0:00)", () => {
+      const base = planState();
+      const song = { ...base.plan!.songs[0]!, duration_seconds: 300 };
+      const plan = { ...base.plan!, service_times: ["09:00", "10:00"], songs: [song] };
+      const run = { planId: plan.id, firstSongMs: SERVICE + 5 * 60_000, endedMs: SERVICE + 10 * 60_000 };
+      const appState = planState({ plan, playing_song: song, playing_song_index: 0, timer: { status: "running", duration_seconds: 300, started_at: new Date(SERVICE + 5 * 60_000).toISOString(), position_seconds: 0, last_error: null } });
+      const playback = playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-11-14T20:00:00Z" });
+      const views = buildConnectionCardViews({ state: appState, settings: production, midi: emptyMidi, playback, propresenter: null, lights: null });
+      const at = (minutes: number) => buildReadinessChecks({ state: appState, settings: production, propresenter: null, live: true, views, playback, now: SERVICE + minutes * 60_000, planRun: run }).find((check) => check.id === "scan-playback");
+      expect(at(8)).toBeUndefined(); // still counting down
+      expect(at(12)).toBeDefined(); // ran out, the timer still says running
     });
 
     it("comes before the other warnings, so it leads the pill when everything required is fine", () => {
