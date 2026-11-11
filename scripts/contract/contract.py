@@ -82,6 +82,10 @@ RUST_BEHAVIOUR_DIFFERENCES = {
     # current song starts that song at the resume position (the Python app, and the Rust port
     # until rc.10, dropped the resume because a play only counts as a start below 2 s).
     "play_new_song_midway": "song.resumed of the just-selected, not-current song is a song.started at that position",
+    # F-P2: the song scan runs in its own task, so a client that goes away does not leave it
+    # "running"; `POST /api/v1/playback-api/discover-song-order/cancel` is a Rust-only route. A
+    # client that waits sees the same responses as before, so no recorded step changes.
+    "scan_survives_closed_request": "discover-song-order keeps running when the request is dropped; /cancel is Rust-only",
 }
 # Rust-only scalar additions to a response body (same rule as above: only with this type).
 # `pin_is_default` tells the UI that the dashboard PIN was never changed (m13);

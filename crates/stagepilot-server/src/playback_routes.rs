@@ -43,6 +43,10 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/playback-api/settings", put(settings))
         .route("/api/v1/playback-api/discover-song-order", post(discover))
         .route(
+            "/api/v1/playback-api/discover-song-order/cancel",
+            post(cancel_discover),
+        )
+        .route(
             "/api/v1/playback-api/planning-center-lengths/categories",
             get(length_categories),
         )
@@ -952,6 +956,14 @@ async fn discover(State(rt): State<Rt>, body: Bytes) -> Json {
         Ok(()) => ok(status_json(&rt)),
         Err(error) => failure(error, 409),
     }
+}
+
+/// Rust-only: stop a running song scan. It walks the song back to the start and the original
+/// selection, saves nothing and ends as "failed" with a "cancelled" message. Harmless when no
+/// scan is running.
+async fn cancel_discover(State(rt): State<Rt>) -> Json {
+    rt.playback.cancel_discovery();
+    ok(status_json(&rt))
 }
 
 /// `preview_error`: how a length-service failure is told to the operator.

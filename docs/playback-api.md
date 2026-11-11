@@ -66,6 +66,7 @@ them to plan titles. A scan is the only way to get the exact order and measured
 lengths: run Discover Song Order while Playback is stopped, after confirming
 that the complete Playback setlist order matches the StagePilot plan order.
 Number N is the discovered list index plus one (the existing MIDI position path).
+A scan finishes (or cleans up after itself) even if the browser that started it goes away.
 
 In the Playback panel the scan is the **Scan Playback Songs** button in the header row of the **Song order** section
 (its confirmation dialog is titled "Scan Playback Songs?", and the activity list marks events as "while scanning
@@ -265,8 +266,16 @@ widget, with MIDI in the initially collapsed "Alternate connection: MIDI setting
   409 with plain-language detail. This request remains open until discovery ends;
   poll `/status` concurrently to show progress and prevent duplicate clicks. A
   completed or safely failed run returns 200 with `discovery: done|failed`; inspect
-  `last_error` rather than treating every 200 as discovery success. HTTP disconnect
-  or application shutdown may cancel it; the status records failed/no result saved.
+  `last_error` rather than treating every 200 as discovery success. The scan runs in
+  its own task, not in the request: a client that disconnects (a reload, a closed tab,
+  a locked phone, a flaky tunnel) does not stop it, and it still returns the song to
+  the start and the original selection and ends as `done` or `failed`. Application
+  shutdown, or a hard stop of the task, ends it as `failed` (no result saved) rather
+  than leaving it `running`.
+- `POST /discover-song-order/cancel` (a Rust-only extension): asks a running scan to
+  stop. It returns the status at once; the scan walks back to the original selection,
+  saves nothing and ends as `failed` ("Song order discovery cancelled…"). Harmless when
+  no scan runs.
 
 Status fields:
 
