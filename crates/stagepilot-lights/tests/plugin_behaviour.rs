@@ -815,6 +815,15 @@ impl stagepilot_lights::lightkey_link::LightkeyHttp for SwitchableHelper {
 }
 
 fn rig_with_helper(settings: LightsSettings, helper_up: Arc<std::sync::atomic::AtomicBool>) -> Rig {
+    rig_with_helper_and_hold(settings, helper_up, None)
+}
+
+/// `rig_with_helper` with its own hold time for the Test cue card text (`None` = the default).
+fn rig_with_helper_and_hold(
+    settings: LightsSettings,
+    helper_up: Arc<std::sync::atomic::AtomicBool>,
+    test_cue_hold: Option<Duration>,
+) -> Rig {
     let bus = EventBus::new();
     let midi = FakeOutputBackend::new(&["StagePilot to Lightkey"]);
     let osc = Arc::new(FakeOscBackend::default());
@@ -826,6 +835,9 @@ fn rig_with_helper(settings: LightsSettings, helper_up: Arc<std::sync::atomic::A
         let osc = osc.clone();
         Arc::new(move || osc.clone() as Arc<dyn OscBackend>)
     };
+    if let Some(hold) = test_cue_hold {
+        options.test_cue_hold = hold;
+    }
     options.lightkey.http_factory = Arc::new(move || {
         Arc::new(SwitchableHelper(helper_up.clone()))
             as Arc<dyn stagepilot_lights::lightkey_link::LightkeyHttp>
@@ -873,6 +885,93 @@ async fn osc_is_only_ready_while_the_replay_address_is_there_but_capture_is_not(
     };
     assert!(after.last_cue_at.is_some());
     assert_eq!(after.connection_status, ConnectionStatus::Ready);
+    r.plugin.stop().await.unwrap();
+}
+
+const SENT_TEXT: &str = "Sent /test/go to 127.0.0.1:9000.";
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_link_change_right_after_the_test_cue_does_not_redraw_the_card_until_the_hold_is_over() {
+    use std::sync::atomic::Ordering;
+    let hold = Duration::from_secs(2);
+    let up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let r = rig_with_helper_and_hold(
+        settings(LightingMethod::Osc, vec![], vec![]),
+        up.clone(),
+        Some(hold),
+    );
+    r.plugin.start().await.unwrap();
+    let before_cue = tokio::time::Instant::now();
+    assert!(r.plugin.test_osc_cue("/test/go", vec![]).await.accepted);
+    // The helper comes up now: the link changes, which wants the card to say that capture is up.
+    up.store(true, Ordering::SeqCst);
+    let deadline = before_cue + Duration::from_secs(30);
+    let final_detail = loop {
+        let snapshot = r.plugin.snapshot(false).await;
+        let detail = snapshot.detail.clone().unwrap_or_default();
+        let read_at = tokio::time::Instant::now();
+        if detail != SENT_TEXT {
+            // The card was redrawn at some time before this read; the hold started after
+            // `before_cue`, so this read cannot have come earlier than the end of the hold.
+            assert!(
+                read_at >= before_cue + hold,
+                "the card was redrawn inside the hold: {detail}"
+            );
+            break detail;
+        }
+        assert_eq!(snapshot.connection_status, ConnectionStatus::Connected);
+        assert!(read_at < deadline, "the card never followed the link");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    };
+    assert!(
+        final_detail.contains("Capture and replay connected"),
+        "after the hold the card follows the link: {final_detail}"
+    );
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_link_change_inside_the_hold_is_not_lost_when_the_hold_ends() {
+    use std::sync::atomic::Ordering;
+    // The helper is up, then goes away right after the test cue: the card must end on Ready.
+    let up = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let r = rig_with_helper_and_hold(
+        settings(LightingMethod::Osc, vec![], vec![]),
+        up.clone(),
+        Some(Duration::from_millis(300)),
+    );
+    r.plugin.start().await.unwrap();
+    wait_for("connected", || {
+        futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Connected
+    })
+    .await;
+    assert!(r.plugin.test_osc_cue("/test/go", vec![]).await.accepted);
+    up.store(false, Ordering::SeqCst);
+    wait_for("back to ready after the hold", || {
+        futures_block(r.plugin.snapshot(false)).connection_status == ConnectionStatus::Ready
+    })
+    .await;
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_no_hold_the_card_follows_the_link_at_once() {
+    use std::sync::atomic::Ordering;
+    let up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let r = rig_with_helper_and_hold(
+        settings(LightingMethod::Osc, vec![], vec![]),
+        up.clone(),
+        Some(Duration::ZERO),
+    );
+    r.plugin.start().await.unwrap();
+    assert!(r.plugin.test_osc_cue("/test/go", vec![]).await.accepted);
+    up.store(true, Ordering::SeqCst);
+    wait_for("the card follows the link", || {
+        futures_block(r.plugin.snapshot(false))
+            .detail
+            .is_some_and(|d| d.contains("Capture and replay connected"))
+    })
+    .await;
     r.plugin.stop().await.unwrap();
 }
 

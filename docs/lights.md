@@ -29,6 +29,9 @@ Each OSC cue has an elapsed time, a label, an OSC address (must start with `/`, 
 spaces) and optional typed arguments (whole number, decimal, text, true or false).
 The **Send test cue** control sends one address and its arguments using the saved
 settings.
+The card then reads `Sent <address> to <target>.` and keeps that text for 3 seconds
+even if the helper link changes meanwhile; a change that arrives inside those
+3 seconds is applied when they are over, so the card never keeps a stale state.
 
 ### Lightkey setup
 
