@@ -646,15 +646,20 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
         rig.link.set_recording(true).await,
         "Recording starts with the next song."
     );
-    rig.song_start(&song(2)).await;
+    let started = rig.song_start(&song(2)).await;
+    // song seconds on the clock the link reads: sleeps run long on a loaded machine, and the
+    // rows are stamped with the moment of each change, not with the length of the sleep
+    let song_second = || rig.clock.wall() - datetime_seconds(started);
     assert_eq!(
         rig.link.status().message.as_deref(),
         Some("Recording Holy Forever.")
     );
     assert!(rig.link.status().fixtures.unwrap().recording);
     pause(0.5).await;
+    let dimmer_at = song_second();
     rig.relay.change(vec![dim("P1", 1.0)], 0.0, 0).await;
     pause(0.6).await;
+    let colour_at = song_second();
     rig.relay
         .change(vec![color("P1", 1.0, 0.0, 0.0)], 0.0, 0)
         .await;
@@ -673,13 +678,20 @@ async fn records_fixture_changes_at_song_time_with_the_clock_offset_removed() {
             .iter()
             .any(|m| m.address == "/fixture/P1/overrides/dimmer")
     };
-    // the starting state at 0.0, then the dimmer at about 0.5 s and the colour at about 1 s on
-    // the 0.5 s grid; the Lightkey clock is 5 s ahead and song times still come out right
+    // the starting state at 0.0, then the dimmer and the colour at the song second each was sent,
+    // on the 0.5 s grid (half a step, plus a little for the time between the reading and the
+    // packet); the Lightkey clock is 5 s ahead and song times still come out right
     let times: Vec<f64> = saved.rows.iter().map(|r| r.at_seconds).collect();
     assert_eq!(times.len(), 3, "{times:?}");
     assert_eq!(times[0], 0.0);
-    assert!((times[1] - 0.5).abs() <= 0.2, "{times:?}");
-    assert!((times[2] - 1.0).abs() <= 0.3, "{times:?}");
+    assert!(
+        (times[1] - dimmer_at).abs() <= 0.3,
+        "{times:?} sent at {dimmer_at}"
+    );
+    assert!(
+        (times[2] - colour_at).abs() <= 0.3,
+        "{times:?} sent at {colour_at}"
+    );
     assert!(dimmer(&saved.rows[1]));
     assert_eq!(saved.rows[2].messages.len(), 1);
     assert_eq!(
