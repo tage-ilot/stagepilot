@@ -551,7 +551,8 @@ does by over a tolerance (up to 41x); with the blend all 150 seams are continuou
 rule of "The operator always wins, per fixture" sees every interpolated value: the same
 fixture and property with the same value (within 2 %, or 1 degree) within about 200 ms is
 the replay's own echo, however fast the property moves (a value on the way between the
-previous and the latest sent value counts too, see below). A fixture the operator touched stops
+previous and the latest sent value counts too, see below; heads and first sends have
+longer windows, see \"The first look of a song\" under \"The operator always wins, per fixture\"). A fixture the operator touched stops
 being driven (its addresses are skipped, nothing is cleared). After 30 seconds without an
 operator change the engine forgets what it last sent to that fixture and its next tick sends
 the **interpolated value for that moment**, then carries on with the ramp or effect. While
@@ -727,7 +728,41 @@ outside that stretch, and any change more than 200 ms after the last send, is st
 operator's; the cost is that for 200 ms after a replay step an operator value inside the
 step is not noticed (a held fader keeps moving and is caught by the next change). Wheel and option properties
 (gobo, wheel, slot, prism, macro) and non-numeric values match with any value,
-because wheel slots are approximate. Only properties the replay has itself sent to
+because wheel slots are approximate.
+
+**The first look of a song, a seek and a take-back.** The first value the replay sends to a
+property after a start, a resume, a seek or a take-back has no earlier sent value, and the
+head is still where it was. Four more echoes cover it, so the moving heads are not taken
+by the operator without anyone touching them (on the 2026-11-08 rig test the heads stayed
+frozen for 30 s after the song started):
+
+- **Baseline.** The value the relay last reported for the property (the fixture's state before
+  the send, learned from every change and from the relay's state) is the *previous* value of that
+  first send, so the path rule above works from the first send on. A take-back and a restart
+  of the replay forget the last sent values, so the next send is a first send again.
+- **Stale frame.** A change equal to that baseline (the old position), arriving within 500 ms
+  after the first send of a *different* value, is that old position being reported late, not the
+  operator. (Every first send also gets 500 ms, not 200 ms, for its echo: the first look is a
+  burst of up to 150 values that Lightkey works through for a while.)
+- **Glide.** For position properties (pan, tilt and the other `...Angle` properties, focus,
+  zoom) a send that moves the head by more than 5 % of the range (540 degrees for pan, 270
+  for tilt, 1.0 for focus and zoom) opens a glide window: for 1.5 s after it, a value inside
+  the stretch from the old value to the new one, widened by an overshoot margin of the
+  largest of 2 degrees (0.03 for focus and zoom), 3 % of the range and 10 % of the move, is the
+  echo. Each new send has its own window. After 1.5 s the normal rule applies again. For
+  every position property the path rule above looks back 500 ms, not 200 ms (a head reports
+  a position up to half a second after it was sent; a fast ramp is two degrees per frame).
+- **DMX resolution.** Two angles are the same value when they are within 1 degree or within
+  0.5 % of the range, whichever is more: the rig's 8-bit pan moves in steps of 2.47 degrees
+  and its tilt in steps of 1.06, so a sent value is reported one step away.
+
+What does not change: a value outside those stretches, any change on a property that was not
+sent, and any change that keeps coming more than 1.5 s after the last send (200 ms for a
+property that is not a head position, 500 ms after a first send) are the operator's, as before. Setting a pan by hand to
+-20 and then +20 on a head the plan holds at -90 takes the head on the first change and keeps
+it for 30 s after the last one.
+
+Only properties the replay has itself sent to
 that fixture are judged: a pan, colour or effect that Lightkey's own running cues
 move is never taken for the operator. Fixture names compare without regard to case
 or `%20` encoding. StagePilot then stops

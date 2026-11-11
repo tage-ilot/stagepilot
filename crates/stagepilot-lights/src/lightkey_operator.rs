@@ -8,6 +8,18 @@
 //! (and non-numeric values) match with any value, because wheel slots are approximate. Only
 //! properties the replay has itself sent to a fixture are judged: a fixture that Lightkey moves
 //! on its own (a running cue, an effect, a fade) never counts as the operator.
+//!
+//! Three more echoes cover the first look of a song, a seek and a take-back (F-H2):
+//! - **Baseline.** The first value sent to a property has no earlier sent value. The last value
+//!   the relay reported for it (the fixture's state before our send) stands in for it, so the
+//!   path rule below works from the first send on.
+//! - **Stale frame.** The relay can still report the old position for a moment after the first
+//!   send of a different value. A change equal to that baseline within [`FIRST_SEND_WINDOW`]
+//!   of the first send is the echo, not the operator.
+//! - **Glide.** A moving head that has to travel more than [`GLIDE_MIN_MOVE`] of its range
+//!   needs up to a second and settles with a small overshoot. For [`GLIDE_WINDOW`] after such
+//!   a send, a value inside the stretch from the old value to the new one, widened by the
+//!   overshoot margin, is the echo.
 
 use crate::lightkey_fixtures::{fixture_of, FixtureArg, FixtureCommand};
 use stagepilot_core::config::OscArgument;
@@ -18,11 +30,60 @@ use tokio::time::Instant;
 /// A relay change this soon after a replay send of the same fixture property is that send coming
 /// back, never the operator.
 pub const ECHO_WINDOW: Duration = Duration::from_millis(200);
+/// A change equal to the value a property had before the replay's first send of a different value
+/// is that old position being reported late, never the operator, for this long after the send.
+pub const FIRST_SEND_WINDOW: Duration = Duration::from_millis(500);
+/// A send that moves a head by more than [`GLIDE_MIN_MOVE`] of the property's range is echoed
+/// by values on the way (and the small overshoot) for this long.
+pub const GLIDE_WINDOW: Duration = Duration::from_millis(1500);
+/// Share of the range a send must move a position property to start a glide window.
+pub const GLIDE_MIN_MOVE: f64 = 0.05;
 /// After the relay stream was (re)started its state is unknown: changes are not judged for this
 /// long, so a reconnect can never make every fixture look operator-driven.
 pub const STREAM_HOLDOFF: Duration = Duration::from_secs(3);
-/// Remembered sends beyond this are pruned (older than the echo window first).
+/// Remembered sends beyond this are pruned (older than the glide window first).
 const MAX_RECENT: usize = 4096;
+/// Observed relay values beyond this are forgotten (a rig has about 2,000).
+const MAX_OBSERVED: usize = 50_000;
+
+/// Which echo rules are on. `current()` is the shipped behaviour; `rc10()` is the behaviour
+/// before F-H2 (path rule only), kept so the offline checks can show what the new rules change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EchoRules {
+    /// R1/R2: the relay's last value is the previous value of a first send, and a change equal
+    /// to it shortly after that send is the echo.
+    pub baseline: bool,
+    /// R3: the long glide window with the overshoot margin for position properties.
+    pub glide: bool,
+    /// Two values of an angle are the same within the DMX resolution: an 8-bit pan moves in
+    /// steps of 2.47 degrees, so a sent value is reported a step away, more than the 1 degree
+    /// the earlier rule allowed.
+    pub resolution: bool,
+}
+
+impl EchoRules {
+    pub const fn current() -> Self {
+        Self {
+            baseline: true,
+            glide: true,
+            resolution: true,
+        }
+    }
+
+    pub const fn rc10() -> Self {
+        Self {
+            baseline: false,
+            glide: false,
+            resolution: false,
+        }
+    }
+}
+
+impl Default for EchoRules {
+    fn default() -> Self {
+        Self::current()
+    }
+}
 
 /// What one batch of relay changes did to the fixtures.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -62,11 +123,37 @@ fn is_wheel_like(address: &str) -> bool {
         .any(|k| a.contains(k))
 }
 
-fn tolerance(address: &str) -> f64 {
+/// How far apart two values of a property can be and still be the same value. Angles: 1 degree,
+/// and with `resolution` at least half a percent of the travel (an 8-bit pan of 630 degrees
+/// moves in steps of 2.47 degrees, a tilt of 270 in steps of 1.06). Everything else 2 %.
+fn tolerance(address: &str, resolution: bool) -> f64 {
     if address.to_lowercase().ends_with("angle") {
-        1.0
+        match position_scale(address) {
+            Some((range, _)) if resolution => 1.0_f64.max(RESOLUTION_SHARE * range),
+            _ => 1.0,
+        }
     } else {
         0.02
+    }
+}
+
+/// Coarsest DMX step of an 8-bit channel as a share of its travel, rounded up.
+const RESOLUTION_SHARE: f64 = 0.005;
+
+/// Full travel of a moving-head position property, and the least overshoot margin, in the
+/// property's own unit. `None` for everything that is not a position (dimmer, colour, wheels).
+/// Pan and tilt are the usual 540 and 270 degrees; the zoom angle is a beam angle of a few
+/// tens of degrees; focus and a plain zoom are 0..1.
+fn position_scale(address: &str) -> Option<(f64, f64)> {
+    let a = address.to_lowercase();
+    let property = a.rsplit('/').next().unwrap_or(&a);
+    match property {
+        "panangle" => Some((540.0, 2.0)),
+        "tiltangle" => Some((270.0, 2.0)),
+        "zoomangle" => Some((90.0, 2.0)),
+        p if p.ends_with("angle") => Some((360.0, 2.0)),
+        "focus" | "zoom" => Some((1.0, 0.0)),
+        _ => None,
     }
 }
 
@@ -77,8 +164,17 @@ struct Sent {
     value: Option<f64>,
     /// The value the replay had sent to this address before this one (however long ago), when
     /// that was a single number too. A DMX value between the two is on the way Lightkey took
-    /// from the old value to the new one.
+    /// from the old value to the new one. For the first send it is the relay's last value.
     from: Option<f64>,
+    /// Nothing had been sent to this address before (replay start, seek, take-back): the first
+    /// look goes out as a burst and comes back late.
+    first: bool,
+    /// The relay's last value when this was the first send (nothing sent before) of a value
+    /// that differs from it: the old position, which may still be reported for a moment.
+    baseline: Option<f64>,
+    /// The stretch a glide covers (old value to new, widened by the overshoot margin), when
+    /// this send moved a position property by more than [`GLIDE_MIN_MOVE`] of its range.
+    glide: Option<(f64, f64)>,
 }
 
 fn osc_number(args: &[OscArgument]) -> Option<f64> {
@@ -103,9 +199,13 @@ pub struct OperatorTracker {
     sent_properties: HashMap<String, HashSet<String>>,
     /// Lower-cased address -> the last single number the replay sent there.
     last_value: HashMap<String, f64>,
+    /// Lower-cased address -> the last single number the relay reported there (the fixture's
+    /// state before the replay's first send, and the old position of a glide).
+    observed: HashMap<String, f64>,
     /// Fixture -> time of the operator's latest change on it.
     yielded: BTreeMap<String, Instant>,
     ignore_until: Option<Instant>,
+    rules: EchoRules,
 }
 
 impl OperatorTracker {
@@ -113,11 +213,38 @@ impl OperatorTracker {
         Self::default()
     }
 
+    /// A tracker with other echo rules (the offline checks compare with [`EchoRules::rc10`]).
+    pub fn with_rules(rules: EchoRules) -> Self {
+        Self {
+            rules,
+            ..Self::default()
+        }
+    }
+
+    /// The relay's value for `address`, learned from outside the change stream (the relay's
+    /// state at the first send): kept only where no change has been seen for it.
+    pub fn seed_observed(&mut self, address: &str, value: f64) {
+        if self.observed.len() < MAX_OBSERVED {
+            self.observed
+                .entry(normalise_fixture(address))
+                .or_insert(value);
+        }
+    }
+
+    /// True when a first send to `address` would have no baseline: nothing sent to it and no
+    /// relay value known.
+    pub fn needs_baseline(&self, address: &str) -> bool {
+        let key = normalise_fixture(address);
+        self.rules.baseline
+            && !self.last_value.contains_key(&key)
+            && !self.observed.contains_key(&key)
+    }
+
     /// Replay sent `address` with `args` now.
     pub fn note_send(&mut self, address: &str, args: &[OscArgument], now: Instant) {
         if self.recent.len() >= MAX_RECENT {
             self.recent.retain(|_, sends| {
-                sends.retain(|s| now.saturating_duration_since(s.at) <= ECHO_WINDOW);
+                sends.retain(|s| now.saturating_duration_since(s.at) <= GLIDE_WINDOW);
                 !sends.is_empty()
             });
         }
@@ -129,16 +256,44 @@ impl OperatorTracker {
                 .insert(key.clone());
         }
         let value = osc_number(args);
-        let from = match value {
+        let earlier = match value {
             Some(v) => self.last_value.insert(key.clone(), v),
             None => self.last_value.remove(&key),
         };
+        // The first value sent to a property (replay start, seek, take-back) has no earlier
+        // sent value: the relay's last value is where the fixture was.
+        let first = earlier.is_none() && self.rules.baseline;
+        let seen_before = if first {
+            value.and_then(|_| self.observed.get(&key).copied())
+        } else {
+            None
+        };
+        let from = earlier.or(seen_before);
+        let baseline = match (value, seen_before) {
+            (Some(v), Some(b)) if (v - b).abs() > tolerance(address, self.rules.resolution) => {
+                Some(b)
+            }
+            _ => None,
+        };
+        let glide = match (self.rules.glide, value, from, position_scale(address)) {
+            (true, Some(v), Some(f), Some((range, least)))
+                if (v - f).abs() > GLIDE_MIN_MOVE * range =>
+            {
+                let travel = (v - f).abs();
+                let margin = least.max(0.03 * range).max(0.1 * travel);
+                Some((v.min(f) - margin, v.max(f) + margin))
+            }
+            _ => None,
+        };
         let sends = self.recent.entry(key).or_default();
-        sends.retain(|s| now.saturating_duration_since(s.at) <= ECHO_WINDOW);
+        sends.retain(|s| now.saturating_duration_since(s.at) <= GLIDE_WINDOW);
         sends.push(Sent {
             at: now,
             value,
             from,
+            first,
+            baseline,
+            glide,
         });
     }
 
@@ -156,22 +311,42 @@ impl OperatorTracker {
             return false;
         };
         let seen = fixture_number(&command.v);
-        sends
-            .iter()
-            .filter(|s| now.saturating_duration_since(s.at) <= ECHO_WINDOW)
-            .any(|s| match (s.value, seen) {
-                (Some(sent), Some(seen)) if !is_wheel_like(&command.a) => {
-                    let tol = tolerance(&command.a);
+        let wheel = is_wheel_like(&command.a);
+        let tol = tolerance(&command.a, self.rules.resolution);
+        // A head is slower than a dimmer: it reports a position it was sent up to half a second
+        // later (it travels, or the plan sends nothing for a while on a slow ramp, and a fast
+        // ramp is 2 degrees per frame).
+        let slow = self.rules.glide && position_scale(&command.a).is_some();
+        sends.iter().any(|s| {
+            let age = now.saturating_duration_since(s.at);
+            // The first look of a song is a burst of up to 150 values: Lightkey works through
+            // it for a while, so its echoes come later than those of a steady stream.
+            let recent = age
+                <= if slow || s.first {
+                    FIRST_SEND_WINDOW
+                } else {
+                    ECHO_WINDOW
+                };
+            match (s.value, seen) {
+                (Some(sent), Some(seen)) if !wheel => {
                     // The value itself, or any value on the way from the one sent before it
                     // (Lightkey passes through those when a fast move is smoothed, and a
                     // sweep faster than the 50 ms tick shows values the replay never sent).
-                    (sent - seen).abs() <= tol
-                        || s.from.is_some_and(|from| {
-                            seen >= from.min(sent) - tol && seen <= from.max(sent) + tol
-                        })
+                    (recent
+                        && ((sent - seen).abs() <= tol
+                            || s.from.is_some_and(|from| {
+                                seen >= from.min(sent) - tol && seen <= from.max(sent) + tol
+                            })))
+                        // The old position, reported late after the first send.
+                        || (age <= FIRST_SEND_WINDOW
+                            && s.baseline.is_some_and(|b| (seen - b).abs() <= tol))
+                        // A long travel of a head, and its overshoot.
+                        || (age <= GLIDE_WINDOW
+                            && s.glide.is_some_and(|(lo, hi)| seen >= lo && seen <= hi))
                 }
-                _ => true,
-            })
+                _ => recent,
+            }
+        })
     }
 
     /// The tracked yielded name equal to `fixture` (case and %-encoding aside).
@@ -188,6 +363,19 @@ impl OperatorTracker {
         self.ignore_until = Some(now + STREAM_HOLDOFF);
     }
 
+    /// What the relay says now is where the fixture is: the baseline of the next first send.
+    /// Learned from every change, judged or not, whatever the replay is doing.
+    pub fn learn(&mut self, commands: &[FixtureCommand]) {
+        for command in commands {
+            if let Some(x) = fixture_number(&command.v) {
+                if self.observed.len() >= MAX_OBSERVED {
+                    self.observed.clear();
+                }
+                self.observed.insert(normalise_fixture(&command.a), x);
+            }
+        }
+    }
+
     /// Judge a batch of relay changes seen at `now`. `held` loses the fixtures the operator took.
     /// Keyframe-detected differences are never operator input.
     pub fn observe(
@@ -198,6 +386,7 @@ impl OperatorTracker {
         now: Instant,
     ) -> Verdict {
         let mut verdict = Verdict::default();
+        self.learn(commands);
         if keyframe || self.ignore_until.is_some_and(|until| now < until) {
             return verdict;
         }
@@ -254,10 +443,30 @@ impl OperatorTracker {
             .collect()
     }
 
-    /// Replay has the fixture again.
+    /// Replay has the fixture again. Its next send is a first send: what it last sent is not
+    /// where the operator left it, so the relay's last value becomes the baseline.
     pub fn take_back(&mut self, fixture: &str) -> bool {
-        self.yielded_key(fixture)
-            .is_some_and(|key| self.yielded.remove(&key).is_some())
+        let taken = self
+            .yielded_key(fixture)
+            .is_some_and(|key| self.yielded.remove(&key).is_some());
+        if taken {
+            self.forget_last_values(fixture);
+        }
+        taken
+    }
+
+    /// The fixture's next send of each property is a first send.
+    fn forget_last_values(&mut self, fixture: &str) {
+        if let Some(properties) = self.sent_properties.get(&normalise_fixture(fixture)) {
+            for property in properties {
+                self.last_value.remove(property);
+            }
+        }
+    }
+
+    /// A replay (re)starts, resumes or seeks: every send is a first send again.
+    pub fn restart_sends(&mut self) {
+        self.last_value.clear();
     }
 
     /// Forget every yielded fixture except those in `keep`.
@@ -512,5 +721,314 @@ mod tests {
         );
         assert!(t.take_back("A"));
         assert_eq!(t.yielded_count(), 0);
+    }
+
+    // ---- F-H2: the first look of a song, a seek and a take-back ---------------------------
+
+    const TILT: &str = "/fixture/MH1/overrides/tiltAngle";
+    const Z1_PAN: &str = "/fixture/Z1/overrides/panAngle";
+
+    fn tracker_for(rules: EchoRules, state: &[(&str, f64)]) -> OperatorTracker {
+        let mut t = OperatorTracker::with_rules(rules);
+        t.learn(
+            &state
+                .iter()
+                .map(|(a, x)| cmd(a, *x))
+                .collect::<Vec<FixtureCommand>>(),
+        );
+        t
+    }
+
+    #[test]
+    fn a_stale_frame_of_the_old_position_after_the_first_send_is_an_echo() {
+        // Elohim from 234 s: the head stood at tilt 90.529, the first look sends 75.706, and
+        // the relay still reports 90.529 once, 250 ms later.
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(TILT, 90.5294)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(75.7059), t0);
+        assert_eq!(
+            t.observe(&mut h, &[cmd(TILT, 90.5294)], false, t0 + ms(250)),
+            Verdict::default()
+        );
+        assert_eq!(
+            t.observe(&mut h, &[cmd(TILT, 75.7059)], false, t0 + ms(300)),
+            Verdict::default()
+        );
+        assert_eq!(h.len(), 1);
+        // (14.8 degrees is 5.5 % of the tilt range, so the glide window covers it for 1.5 s.)
+        let v = t.observe(&mut h, &[cmd(TILT, 90.5294)], false, t0 + ms(1600));
+        assert_eq!(v.newly_yielded, vec!["MH1".to_string()]);
+    }
+
+    #[test]
+    fn the_stale_frame_of_a_small_move_is_an_echo_for_half_a_second_only() {
+        // Ever Be from 175 s, Z2: tilt 90.0 reported once after a send of 68.0 ... as a small
+        // move the baseline rule alone: 500 ms.
+        let t0 = Instant::now();
+        let tilt = "/fixture/Z2/overrides/tiltAngle";
+        let mut t = tracker_for(EchoRules::current(), &[(tilt, 70.0)]);
+        let mut h = held(&["Z2"]);
+        t.note_send(tilt, &f(68.0), t0);
+        assert_eq!(
+            t.observe(&mut h, &[cmd(tilt, 70.0)], false, t0 + ms(450)),
+            Verdict::default()
+        );
+        let v = t.observe(&mut h, &[cmd(tilt, 70.0)], false, t0 + ms(550));
+        assert_eq!(v.newly_yielded, vec!["Z2".to_string()]);
+    }
+
+    #[test]
+    fn the_stale_frame_is_the_operator_without_the_new_rules() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::rc10(), &[(TILT, 90.5294)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(75.7059), t0);
+        let v = t.observe(&mut h, &[cmd(TILT, 90.5294)], false, t0 + ms(250));
+        assert_eq!(v.newly_yielded, vec!["MH1".to_string()]);
+    }
+
+    #[test]
+    fn a_value_that_is_not_the_old_position_after_the_first_send_is_still_the_operator() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(TILT, 90.5294)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(75.7059), t0);
+        // 120 is outside the stretch 75.7..90.5 (even widened) and is not the baseline
+        let v = t.observe(&mut h, &[cmd(TILT, 120.0)], false, t0 + ms(300));
+        assert_eq!(v.newly_yielded, vec!["MH1".to_string()]);
+    }
+
+    #[test]
+    fn nothing_known_about_the_fixture_gives_no_baseline() {
+        let t0 = Instant::now();
+        let mut t = OperatorTracker::new();
+        assert!(t.needs_baseline(TILT));
+        t.seed_observed(TILT, 90.0);
+        assert!(!t.needs_baseline(TILT));
+        t.seed_observed(TILT, 12.0); // a value from the change stream is not overwritten
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(75.0), t0);
+        assert_eq!(
+            t.observe(&mut h, &[cmd(TILT, 90.0)], false, t0 + ms(300)),
+            Verdict::default()
+        );
+        // a baseline equal to the value sent is no old position at all
+        let mut t = tracker_for(EchoRules::current(), &[(TILT, 75.0)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(75.0), t0);
+        let v = t.observe(&mut h, &[cmd(TILT, 60.0)], false, t0 + ms(300));
+        assert_eq!(v.newly_yielded, vec!["MH1".to_string()]);
+    }
+
+    #[test]
+    fn a_long_head_move_is_echoed_by_the_glide_and_its_overshoot_for_one_and_a_half_seconds() {
+        // The head stood at pan -250 and is sent to -170: 80 degrees, 15 % of 540.
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(PAN, -250.0)]);
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(-170.0), t0);
+        for (after, seen) in [
+            (300, -230.0),
+            (900, -171.7),  // arrived
+            (1000, -174.2), // settles back and forth
+            (1100, -165.0), // overshoot, inside the margin (16.2 degrees)
+            (1450, -200.0),
+        ] {
+            let v = t.observe(&mut h, &[cmd(PAN, seen)], false, t0 + ms(after));
+            assert_eq!(v, Verdict::default(), "{seen} at +{after} ms");
+        }
+        // beyond the overshoot margin
+        let v = t.observe(&mut h, &[cmd(PAN, -140.0)], false, t0 + ms(1000));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+    }
+
+    #[test]
+    fn after_one_and_a_half_seconds_the_normal_rule_applies_again() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(PAN, -250.0)]);
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(-170.0), t0);
+        let v = t.observe(&mut h, &[cmd(PAN, -200.0)], false, t0 + ms(1600));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+    }
+
+    #[test]
+    fn the_glide_window_restarts_with_each_new_send() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(PAN, -250.0)]);
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(-170.0), t0);
+        t.note_send(PAN, &f(-60.0), t0 + ms(1200)); // 110 degrees on
+                                                    // 1.3 s after the second send, 2.5 s after the first: -100 is on the way to -60
+        assert_eq!(
+            t.observe(&mut h, &[cmd(PAN, -100.0)], false, t0 + ms(2500)),
+            Verdict::default()
+        );
+        // ... and 1.6 s after it the rule is the normal one
+        let v = t.observe(&mut h, &[cmd(PAN, -100.0)], false, t0 + ms(2900));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+    }
+
+    #[test]
+    fn a_small_move_gets_no_glide_window() {
+        // 10 degrees is 1.9 % of the pan range: the path rule only, and for a head 500 ms.
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(PAN, -250.0)]);
+        let mut h = held(&["MH3"]);
+        t.note_send(PAN, &f(-240.0), t0);
+        assert_eq!(
+            t.observe(&mut h, &[cmd(PAN, -245.0)], false, t0 + ms(400)),
+            Verdict::default()
+        );
+        let v = t.observe(&mut h, &[cmd(PAN, -245.0)], false, t0 + ms(800));
+        assert_eq!(v.newly_yielded, vec!["MH3".to_string()]);
+    }
+
+    #[test]
+    fn the_glide_needs_a_position_property() {
+        // A dimmer that jumps 0 to 1 is not a head: 0.5 is the operator's after 200 ms.
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(DIM, 0.0)]);
+        let mut h = held(&["A"]);
+        t.note_send(DIM, &f(1.0), t0);
+        let v = t.observe(&mut h, &[cmd(DIM, 0.5)], false, t0 + ms(700));
+        assert_eq!(v.newly_yielded, vec!["A".to_string()]);
+    }
+
+    #[test]
+    fn focus_and_zoom_are_positions_too() {
+        let t0 = Instant::now();
+        let focus = "/fixture/MH1/overrides/focus";
+        let mut t = tracker_for(EchoRules::current(), &[(focus, 0.0)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(focus, &f(1.0), t0);
+        assert_eq!(
+            t.observe(&mut h, &[cmd(focus, 0.6)], false, t0 + ms(900)),
+            Verdict::default()
+        );
+    }
+
+    #[test]
+    fn an_8_bit_pan_step_is_the_same_value() {
+        // The rig's pan moves in steps of 2.47 degrees: a sent -155.83 is reported as -154.41.
+        let t0 = Instant::now();
+        let mut now = tracker_for(EchoRules::current(), &[]);
+        let mut old = tracker_for(EchoRules::rc10(), &[]);
+        let mut h = held(&["MH4"]);
+        let mut h2 = held(&["MH4"]);
+        for t in [&mut now, &mut old] {
+            t.note_send(PAN.replace("MH3", "MH4").as_str(), &f(-159.35), t0);
+            t.note_send(
+                PAN.replace("MH3", "MH4").as_str(),
+                &f(-155.83),
+                t0 + ms(300),
+            );
+        }
+        let pan4 = PAN.replace("MH3", "MH4");
+        assert_eq!(
+            now.observe(&mut h, &[cmd(&pan4, -154.41)], false, t0 + ms(330)),
+            Verdict::default()
+        );
+        let v = old.observe(&mut h2, &[cmd(&pan4, -154.41)], false, t0 + ms(330));
+        assert_eq!(v.newly_yielded, vec!["MH4".to_string()]);
+    }
+
+    #[test]
+    fn a_take_back_makes_the_next_send_a_first_send_from_where_the_operator_left_it() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(40.0), t0);
+        let v = t.observe(&mut h, &[cmd(TILT, 100.0)], false, t0 + ms(900));
+        assert_eq!(v.newly_yielded, vec!["MH1".to_string()]);
+        assert!(t.take_back("MH1"));
+        // the replay sends 40 again: the old last value (40) is forgotten, the relay says 100
+        let t1 = t0 + Duration::from_secs(31);
+        h.insert("MH1".into());
+        t.note_send(TILT, &f(40.0), t1);
+        // 100 reported late is the operator's old position, not a new operator
+        assert_eq!(
+            t.observe(&mut h, &[cmd(TILT, 100.0)], false, t1 + ms(300)),
+            Verdict::default()
+        );
+        // and so is a value on the way (60 degrees of travel: a glide)
+        assert_eq!(
+            t.observe(&mut h, &[cmd(TILT, 70.0)], false, t1 + ms(900)),
+            Verdict::default()
+        );
+    }
+
+    #[test]
+    fn a_restart_of_the_replay_forgets_the_last_sent_values() {
+        let t0 = Instant::now();
+        let mut t = tracker_for(EchoRules::current(), &[(TILT, 10.0)]);
+        let mut h = held(&["MH1"]);
+        t.note_send(TILT, &f(40.0), t0);
+        t.restart_sends();
+        t.learn(&[cmd(TILT, 95.0)]);
+        t.note_send(TILT, &f(40.0), t0 + Duration::from_secs(60));
+        assert_eq!(
+            t.observe(
+                &mut h,
+                &[cmd(TILT, 95.0)],
+                false,
+                t0 + Duration::from_secs(60) + ms(200)
+            ),
+            Verdict::default()
+        );
+    }
+
+    #[test]
+    fn events_off_the_path_after_the_window_are_the_operator_exactly_as_before() {
+        // R6: the head is sent to 40 and then keeps getting 40; an event at 100 is the operator's
+        // 1.6 s after the long move and 2 s into the quiet stretch, as in rc.10.
+        for rules in [EchoRules::current(), EchoRules::rc10()] {
+            let t0 = Instant::now();
+            let mut t = tracker_for(rules, &[(PAN, -250.0)]);
+            let mut h = held(&["MH3"]);
+            t.note_send(PAN, &f(-170.0), t0);
+            for i in 1..40 {
+                t.note_send(PAN, &f(-170.0), t0 + ms(i * 50));
+            }
+            let v = t.observe(&mut h, &[cmd(PAN, -100.0)], false, t0 + ms(2000));
+            assert_eq!(v.newly_yielded, vec!["MH3".to_string()], "{rules:?}");
+        }
+    }
+
+    #[test]
+    fn a_hand_set_pan_of_minus_20_then_plus_20_yields_at_once_and_is_handed_back_after_30_s() {
+        // Rig test 2026-11-08: Z1.panAngle -20.0 at +191.7 s and +19.99 at +192.9 s; the plan holds
+        // Z1 at -89.996 for the whole song.
+        let t0 = Instant::now();
+        let z1 = Z1_PAN;
+        let mut t = tracker_for(EchoRules::current(), &[(z1, -89.996)]);
+        let mut h = held(&["Z1"]);
+        t.note_send(z1, &f(-89.996), t0);
+        for i in 1..=3800 {
+            t.note_send(z1, &f(-89.996), t0 + ms(i * 50));
+        }
+        let first = t0 + ms(191_700);
+        let v = t.observe(&mut h, &[cmd(z1, -20.0)], false, first);
+        assert_eq!(
+            v.newly_yielded,
+            vec!["Z1".to_string()],
+            "at the first event"
+        );
+        assert!(h.is_empty());
+        let second = t0 + ms(192_900);
+        let v = t.observe(&mut h, &[cmd(z1, 19.99)], false, second);
+        assert_eq!(v.restarted, vec!["Z1".to_string()]);
+        let quiet = Duration::from_secs(30);
+        assert!(t
+            .due(quiet, second + Duration::from_millis(29_900))
+            .is_empty());
+        assert_eq!(
+            t.due(quiet, second + quiet),
+            vec!["Z1".to_string()],
+            "handed back 30 s after the last change"
+        );
+        assert!(t.take_back("Z1"));
+        assert!(!t.is_yielded("Z1"));
     }
 }

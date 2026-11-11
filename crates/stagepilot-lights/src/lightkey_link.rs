@@ -705,6 +705,12 @@ impl LightkeyLink {
         lock(&self.inner.state).replaying = song;
     }
 
+    /// The value the relay last reported for a fixture property (`/fixture/<name>/overrides/<p>`)
+    /// when it is a single number: where the fixture is before the replay's first send.
+    pub fn fixture_value(&self, address: &str) -> Option<f64> {
+        self.inner.relay.number(address)
+    }
+
     // ------------------------------------------------------------ status
     /// Where the link to the helper stands right now (cheap; the search reads it often).
     pub fn link_state(&self) -> Link {

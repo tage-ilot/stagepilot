@@ -135,6 +135,11 @@ impl RelayClient {
         lock(&self.shared).state.clone()
     }
 
+    /// The single number the relay's state holds for `address` (a fixture property), if any.
+    pub fn number(&self, address: &str) -> Option<f64> {
+        lock(&self.shared).state.number(address)
+    }
+
     /// True once a keyframe arrived and packets are still coming.
     /// `agent_clock - our_clock` as the relay clock pings measured it (None before any answer).
     pub fn clock_offset(&self) -> Option<f64> {

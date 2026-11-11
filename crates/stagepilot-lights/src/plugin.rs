@@ -1395,6 +1395,8 @@ impl Inner {
     }
 
     fn operator_changes(self: &Arc<Self>, commands: &[FixtureCommand], keyframe: bool) {
+        // Where the fixtures are is learned always: the first send of a replay needs it.
+        self.st().operator.learn(commands);
         if !self.replay_allowed() {
             return;
         }
@@ -1636,12 +1638,25 @@ impl Inner {
             if !self.replay_allowed() {
                 return Ok(());
             }
+            // The first send to a property has no earlier sent value: the relay's last value
+            // for it is where the fixture is.
+            let baseline =
+                if property != "clear" && self.st().operator.needs_baseline(&message.address) {
+                    self.lightkey
+                        .get()
+                        .and_then(|link| link.fixture_value(&message.address))
+                } else {
+                    None
+                };
             let mut st = self.st();
             if property == "clear" {
                 st.held_fixtures.remove(name);
             } else if st.operator.is_yielded(name) {
                 return Ok(()); // the operator has this fixture
             } else {
+                if let Some(value) = baseline {
+                    st.operator.seed_observed(&message.address, value);
+                }
                 st.held_fixtures.insert(name.to_string());
                 st.operator
                     .note_send(&message.address, &message.args, Instant::now());
