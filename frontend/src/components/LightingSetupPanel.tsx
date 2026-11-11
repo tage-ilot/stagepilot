@@ -42,7 +42,7 @@ import { EffectRow, LookRow, OscArgumentRows, OscConnectionFields, OscCueRow } f
 import { Dialog } from "./ui/Dialog";
 import { fadeOf, isRamp, mergeBlockReason, rampDescription, RowValueIndex } from "./lightingSmooth";
 import {
-  capturedCount, formatCount, hasEditedCaptured, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows, rowMessages,
+  capturedCount, formatCount, hasEditedCaptured, replayBusyNote, isCaptured, isDraftRow, isLook, lookLabel, markEdited, mergeRows, rowMessages,
   removeFixtureFromRows,
   captureLabelOf,
 } from "./lightingLooks";
@@ -716,9 +716,11 @@ export function LightingSetupPanel({
       : savedMethod === "osc" && lights?.connection_status === "ready"
         ? null
         : savedMethod === "osc" ? null : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check.";
+  const replayBusy = replayBusyNote(lights?.replay_load);
   const oscFooter = (
     <>
       {oscStatusLine && <p className={`mt-2 text-type-body-sm ${savedMethod === "osc" && lights?.connection_status === "error" ? "text-danger-text" : "text-ink-muted"}`} data-testid="osc-status">{oscStatusLine}</p>}
+      {replayBusy && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="replay-busy">{replayBusy}</p>}
       {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
     </>
   );

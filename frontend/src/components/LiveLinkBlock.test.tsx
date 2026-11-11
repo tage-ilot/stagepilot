@@ -286,6 +286,24 @@ describe("Lighting panel: each status fact once", () => {
     expect(screen.queryByTestId("osc-status")).toBeNull();
   });
 
+  it("says in one plain line that a song is very busy while the replay is busy, and nothing otherwise", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
+    const busy = mount({ replay_load: { busy: true, served_percent: 37 } });
+    await screen.findByLabelText("API port");
+    expect(screen.getByTestId("replay-busy")).toHaveTextContent("This song is very busy: some lights update less often than recorded.");
+    busy.unmount();
+    mount({ replay_load: { busy: false, served_percent: 100 } });
+    await screen.findByLabelText("API port");
+    expect(screen.queryByTestId("replay-busy")).toBeNull();
+  });
+
+  it("shows no busy line from an older backend that sends no replay_load", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
+    mount();
+    await screen.findByLabelText("API port");
+    expect(screen.queryByTestId("replay-busy")).toBeNull();
+  });
+
   it("keeps the warning look and the words when the state really is an error", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     mount({ connection_status: "error", detail: "OSC send failed: network unreachable." }, null);

@@ -22,6 +22,14 @@
 //!   caller's pacing spaces the packets). Ramps then effects spend what is left, the largest
 //!   change first. When effect sends had to wait, the effect interval grows towards
 //!   [`SLOW_TICK_SECONDS`] (8 Hz); it shrinks back when the budget has room.
+//! * **A very busy song** (see [`ReplayLoad`]): when for more than [`BUSY_AFTER_SECONDS`] a class
+//!   (ramps or effects) is starved (served below 10% of what it asks for), the budget is shared
+//!   fairly instead of ramps first: ramps may take at most [`RAMP_SHARE`] (65%) of the packets
+//!   while effects wait, so effects get at least [`EFFECT_SHARE`] (35%), and a share one class
+//!   does not use goes to the other. Inside a class the largest change still goes first, but an
+//!   address that has waited [`SERVE_AFTER_SECONDS`] goes before the others (oldest first), so
+//!   the addresses are served in turns of about a quarter of a second and none starves. A song
+//!   that is not starved never leaves the plain rule above and plays exactly as before.
 //! * An idle engine (nothing moving, no effect) asks for the next wake only at the next
 //!   boundary, or not at all.
 //!
@@ -69,8 +77,10 @@ use crate::lightkey_curve::Timeline;
 use crate::lightkey_fixtures::{fixture_of, FixtureArg};
 use crate::lightkey_operator::normalise_fixture;
 use crate::lightkey_smooth::{is_angle, property_class, tolerance_for};
+use serde::{Deserialize, Serialize};
 use stagepilot_core::config::{LightingEffect, OscLightingCue, OscMessage};
 use std::collections::{BTreeSet, HashMap};
+use ts_rs::TS;
 
 /// Total packets per second, matching the plugin's 5 ms spacing.
 pub const MAX_PACKETS_PER_SECOND: f64 = 200.0;
@@ -93,6 +103,28 @@ pub const STEP_BURST_MIN_MS: f64 = 40.0;
 /// (if there is one): a step burst takes at most 3 of 4 slots, so running ramps keep a quarter of
 /// the 200 packets a second (50 a second) instead of standing still for the burst.
 pub const RAMP_SHARE_EVERY: u32 = 4;
+/// The least share of the packets that effects (loops) get on a very busy song, 35%.
+pub const EFFECT_SHARE: f64 = 0.35;
+/// The most share ramps may take while effects wait on a very busy song, 65%.
+pub const RAMP_SHARE: f64 = 1.0 - EFFECT_SHARE;
+/// On a very busy song an address that has waited this long for its next packet goes before
+/// the ones that have not, oldest first. The turns come round in about a quarter of a second
+/// (the 200 packets a second divided by the addresses with something to say), so every address
+/// is served every 250 ms or a little later; none is left out.
+pub const SERVE_AFTER_SECONDS: f64 = 0.1;
+/// A class has to be starved for longer than this before the song counts as very busy (and the
+/// budget is shared by the fair rule).
+pub const BUSY_AFTER_SECONDS: f64 = 2.0;
+/// Time constant of the served/asked average, seconds.
+const LOAD_SECONDS: f64 = 1.0;
+/// A class is starved when it is served below this share of what it asked for ...
+const STARVED_BELOW: f64 = 0.10;
+/// ... and a very busy song is over when every class is served above this share again ...
+const RECOVER_ABOVE: f64 = 0.85;
+/// ... for this long, seconds.
+const RECOVER_AFTER_SECONDS: f64 = 4.0;
+/// Requests a class needs in the average before it can count as short.
+const MIN_LOAD_ASKED: f64 = 5.0;
 const BURST_PACKETS: f64 = 10.0;
 const DEBT_PACKETS: f64 = 200.0;
 const EPSILON: f64 = 1e-9;
@@ -141,6 +173,91 @@ pub enum Kind {
     Effect,
 }
 
+/// How well the engine serves what the song asks for (the lights status' `replay_load`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReplayLoad {
+    /// The song is very busy: for more than two seconds a class (ramps or loops) was starved,
+    /// served below a tenth of what it asked for, so some lights update less often than
+    /// recorded. Stays on until every class is served again.
+    pub busy: bool,
+    /// Packets sent over packets wanted (ramps and effects), a percentage from 0 to 100; 100
+    /// while nothing is asked.
+    pub served_percent: u8,
+}
+
+impl Default for ReplayLoad {
+    fn default() -> Self {
+        Self {
+            busy: false,
+            served_percent: 100,
+        }
+    }
+}
+
+/// Counts of what ramps (0) and effects (1) asked for and got, averaged over about a second,
+/// and whether the song is very busy.
+#[derive(Debug, Clone, Default)]
+struct LoadTracker {
+    asked: [f64; 2],
+    got: [f64; 2],
+    starved_since: Option<f64>,
+    recovered_since: Option<f64>,
+    busy: bool,
+}
+
+impl LoadTracker {
+    /// One tick: `elapsed` seconds since the tick before, `asked` and `got` requests of this tick
+    /// per class (see [`Slot::next_request`]).
+    fn update(&mut self, now: f64, elapsed: f64, asked: [usize; 2], got: [usize; 2]) {
+        let keep = (-elapsed / LOAD_SECONDS).exp();
+        for c in 0..2 {
+            self.asked[c] = self.asked[c] * keep + asked[c] as f64;
+            self.got[c] = self.got[c] * keep + got[c] as f64;
+        }
+        let asking = |c: usize| self.asked[c] >= MIN_LOAD_ASKED;
+        let starved = (0..2).any(|c| asking(c) && self.got[c] < STARVED_BELOW * self.asked[c]);
+        let recovered = (0..2).all(|c| !asking(c) || self.got[c] >= RECOVER_ABOVE * self.asked[c]);
+        if self.busy {
+            self.recovered_since = if recovered {
+                Some(self.recovered_since.unwrap_or(now))
+            } else {
+                None
+            };
+            if self
+                .recovered_since
+                .is_some_and(|since| now - since > RECOVER_AFTER_SECONDS)
+            {
+                self.busy = false;
+                self.recovered_since = None;
+                self.starved_since = None;
+            }
+        } else {
+            self.starved_since = if starved {
+                Some(self.starved_since.unwrap_or(now))
+            } else {
+                None
+            };
+            self.busy = self
+                .starved_since
+                .is_some_and(|since| now - since > BUSY_AFTER_SECONDS);
+        }
+    }
+
+    fn load(&self) -> ReplayLoad {
+        let asked = self.asked[0] + self.asked[1];
+        let served = if asked < 1e-6 {
+            100.0
+        } else {
+            (100.0 * (self.got[0] + self.got[1]) / asked).clamp(0.0, 100.0)
+        };
+        ReplayLoad {
+            busy: self.busy,
+            served_percent: served.round() as u8,
+        }
+    }
+}
+
 /// What one tick decided.
 #[derive(Debug, Clone)]
 pub struct Tick {
@@ -165,6 +282,14 @@ struct Slot {
     in_effect: bool,
     /// Its row's step was sent early: nothing else is sent for it before this song position.
     hold_until: Option<f64>,
+    /// Since when a running ramp or effect value of it has been due but not sent (monotonic
+    /// seconds); only the fair rule of a very busy song uses it.
+    due_since: Option<f64>,
+    /// A due ramp or effect value counts once as a request (for [`ReplayLoad`]) per this many
+    /// seconds, however many ticks it waits: it is "asked for" again at this time.
+    next_request: f64,
+    /// The class (0 ramp, 1 effect) of a request not yet answered by a packet.
+    open: Option<usize>,
 }
 
 /// Counters of one engine (see [`ReplayEngine::stats`]).
@@ -196,6 +321,9 @@ pub struct ReplayEngine {
     burst_end: f64,
     stats: EngineStats,
     ramps_waiting_since: Option<f64>,
+    load: LoadTracker,
+    /// Packets ramps may still take while effects wait (the fair rule of a very busy song).
+    ramp_allow: f64,
 }
 
 /// A value (slot, value, row time) sent ahead of its row.
@@ -251,6 +379,12 @@ fn with_half_step(address: &str, value: &[FixtureArg], step: f64) -> Vec<Fixture
 }
 
 impl ReplayEngine {
+    /// A due ramp or effect value that got no packet this tick: it keeps waiting since the
+    /// first time.
+    fn defer(slot: &mut Slot, now: f64) {
+        slot.due_since.get_or_insert(now);
+    }
+
     /// Prepare a song's rows and effects (usually its cue map's `osc_cues` and `effects`).
     pub fn new(rows: &[OscLightingCue], effects: &[LightingEffect]) -> Self {
         let timeline = Timeline::new(rows, effects);
@@ -263,6 +397,9 @@ impl ReplayEngine {
                 last: None,
                 in_effect: false,
                 hold_until: None,
+                due_since: None,
+                next_request: f64::NEG_INFINITY,
+                open: None,
             })
             .collect();
         Self {
@@ -278,7 +415,14 @@ impl ReplayEngine {
             burst_end: f64::NEG_INFINITY,
             stats: EngineStats::default(),
             ramps_waiting_since: None,
+            load: LoadTracker::default(),
+            ramp_allow: BURST_PACKETS * RAMP_SHARE,
         }
+    }
+
+    /// How well the song's ramps and effects are served right now (see [`ReplayLoad`]).
+    pub fn load(&self) -> ReplayLoad {
+        self.load.load()
     }
 
     /// Override how early a step burst may start, in milliseconds (0 turns the lead off). The
@@ -510,6 +654,15 @@ impl ReplayEngine {
         let elapsed = self.last_now.map_or(0.0, |l| (now - l).max(0.0));
         self.last_now = Some(now);
         self.tokens = (self.tokens + MAX_PACKETS_PER_SECOND * elapsed).min(BURST_PACKETS);
+        // A very busy song shares the budget fairly (see the module docs); any other song
+        // keeps the plain rule, ramps first.
+        let fair = self.load.busy;
+        self.ramp_allow = if fair {
+            (self.ramp_allow + MAX_PACKETS_PER_SECOND * RAMP_SHARE * elapsed)
+                .min(BURST_PACKETS * RAMP_SHARE)
+        } else {
+            BURST_PACKETS * RAMP_SHARE
+        };
         let effect_turn = self.next_effect.is_none_or(|t| now + EPSILON >= t);
         let previous_p = self.last_p.replace(p).unwrap_or(f64::NEG_INFINITY);
         if p < previous_p - EPSILON {
@@ -530,10 +683,14 @@ impl ReplayEngine {
             value: Vec<FixtureArg>,
             kind: Kind,
             weight: f64,
+            /// Seconds it has been due and not sent.
+            waited: f64,
         }
         let mut steps: Vec<Due> = Vec::new();
         let mut ramps: Vec<Due> = Vec::new();
         let mut effects: Vec<Due> = Vec::new();
+        let mut asked = [0usize; 2];
+        let mut got = [0usize; 2];
         let mut ramp_running = false;
         let mut effect_active = false;
 
@@ -542,6 +699,8 @@ impl ReplayEngine {
                 slot.last = None;
                 slot.in_effect = false;
                 slot.hold_until = None;
+                slot.due_since = None;
+                slot.open = None;
                 continue;
             }
             if slot.hold_until.is_some_and(|h| p + EPSILON < h) {
@@ -551,10 +710,17 @@ impl ReplayEngine {
             let in_effect = self.timeline.in_effect(&slot.address, p);
             effect_active |= in_effect;
             let instant = in_effect && self.timeline.instant_step_in(&slot.address, previous_p, p);
-            let waiting =
-                in_effect && slot.in_effect && slot.last.is_some() && !effect_turn && !instant;
+            // An effect value is looked at on the effect's turn only, except on a very busy
+            // song, where one that is still waiting for its packet stays in the running.
+            let waiting = in_effect
+                && slot.in_effect
+                && slot.last.is_some()
+                && !effect_turn
+                && !instant
+                && !(fair && slot.due_since.is_some());
             let Some(now_value) = self.timeline.playback_at(&slot.address, p) else {
                 slot.in_effect = in_effect;
+                slot.due_since = None;
                 continue;
             };
             let moving = in_effect || self.timeline.is_moving(&slot.address, p);
@@ -595,14 +761,30 @@ impl ReplayEngine {
                 _ => weight >= 1.0 - EPSILON,
             };
             slot.in_effect = in_effect;
+            if !due || kind == Kind::Step {
+                slot.due_since = None;
+            }
             if !due {
                 continue;
             }
+            if kind != Kind::Step && now + EPSILON >= slot.next_request {
+                let class = usize::from(kind == Kind::Effect);
+                asked[class] += 1;
+                slot.open = Some(class);
+                slot.next_request = now
+                    + if kind == Kind::Effect {
+                        self.effect_interval
+                    } else {
+                        FAST_TICK_SECONDS
+                    };
+            }
+            let waited = slot.due_since.map_or(0.0, |since| (now - since).max(0.0));
             let d = Due {
                 slot: i,
                 value: target,
                 kind,
                 weight,
+                waited,
             };
             match kind {
                 Kind::Step => steps.push(d),
@@ -623,6 +805,10 @@ impl ReplayEngine {
             kinds.push(d.kind);
             positions.push(p);
             slot.last = Some(d.value);
+            slot.due_since = None;
+            if let Some(class) = slot.open.take() {
+                got[class] += 1;
+            }
         };
         for d in steps {
             self.tokens = (self.tokens - 1.0).max(-DEBT_PACKETS);
@@ -637,25 +823,71 @@ impl ReplayEngine {
             let key = |d: &Due| d.weight * self.slots[d.slot].step / tolerance(d);
             key(b).total_cmp(&key(a))
         });
-        let mut deferred_ramps = 0usize;
-        for d in ramps {
-            if self.tokens >= 1.0 {
-                self.tokens -= 1.0;
-                take(self, d);
-            } else {
-                deferred_ramps += 1;
-            }
-        }
         effects.sort_by(by_weight);
+        let mut deferred_ramps = 0usize;
         let mut deferred_effects = 0usize;
-        for d in effects {
-            if self.tokens >= 1.0 {
-                self.tokens -= 1.0;
-                take(self, d);
-            } else {
-                deferred_effects += 1;
+        if fair {
+            // A very busy song. Ramps and effects share the budget (ramps at most 65% while
+            // effects wait, a share one class does not use goes to the other), and inside the
+            // order an address that has waited 250 ms goes first, oldest first, so none starves.
+            let effects_pending = !effects.is_empty();
+            if !effects_pending {
+                self.ramp_allow = BURST_PACKETS * RAMP_SHARE;
+            }
+            let (mut late, rest): (Vec<Due>, Vec<Due>) = ramps
+                .into_iter()
+                .chain(effects)
+                .partition(|d| d.waited >= SERVE_AFTER_SECONDS);
+            late.sort_by(|a, b| b.waited.total_cmp(&a.waited));
+            let mut held_back: Vec<Due> = Vec::new();
+            for d in late.into_iter().chain(rest) {
+                if self.tokens < 1.0 {
+                    Self::defer(&mut self.slots[d.slot], now);
+                    match d.kind {
+                        Kind::Ramp => deferred_ramps += 1,
+                        _ => deferred_effects += 1,
+                    }
+                } else if d.kind == Kind::Ramp && effects_pending && self.ramp_allow < 1.0 {
+                    held_back.push(d); // effects have this share
+                } else {
+                    self.tokens -= 1.0;
+                    if d.kind == Kind::Ramp {
+                        self.ramp_allow -= 1.0;
+                    }
+                    take(self, d);
+                }
+            }
+            // The effects that were waiting are served: what they did not use goes to ramps.
+            for d in held_back {
+                if self.tokens >= 1.0 {
+                    self.tokens -= 1.0;
+                    take(self, d);
+                } else {
+                    Self::defer(&mut self.slots[d.slot], now);
+                    deferred_ramps += 1;
+                }
+            }
+        } else {
+            for d in ramps {
+                if self.tokens >= 1.0 {
+                    self.tokens -= 1.0;
+                    take(self, d);
+                } else {
+                    Self::defer(&mut self.slots[d.slot], now);
+                    deferred_ramps += 1;
+                }
+            }
+            for d in effects {
+                if self.tokens >= 1.0 {
+                    self.tokens -= 1.0;
+                    take(self, d);
+                } else {
+                    Self::defer(&mut self.slots[d.slot], now);
+                    deferred_effects += 1;
+                }
             }
         }
+        self.load.update(now, elapsed, asked, got);
 
         // Step bursts whose time to start has come (or is near): after the steps of this tick,
         // which belong to earlier rows.
@@ -883,6 +1115,17 @@ pub struct SentPacket {
     pub reduced: bool,
 }
 
+/// How loaded the engine was during a simulation (see [`simulate_with_load`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LoadReport {
+    /// Seconds of the simulation in which the engine said the song is very busy.
+    pub busy_seconds: f64,
+    /// The lowest `served_percent` seen after any tick.
+    pub min_served_percent: u8,
+    /// The load after the last tick.
+    pub last: ReplayLoad,
+}
+
 /// Run the engine on a simulated clock from `from` to `to` (song seconds; the clock and the song
 /// position agree, the position being `lead` ahead): tick when the engine asks (on time, not
 /// after the queue has drained), send through a [`PacingQueue`] 5 ms apart like the plugin,
@@ -895,6 +1138,17 @@ pub fn simulate(
     lead: f64,
     yielded: &dyn Fn(f64, &str) -> bool,
 ) -> Vec<SentPacket> {
+    simulate_with_load(engine, from, to, lead, yielded).0
+}
+
+/// [`simulate`], and how loaded the engine said it was while it ran.
+pub fn simulate_with_load(
+    engine: &mut ReplayEngine,
+    from: f64,
+    to: f64,
+    lead: f64,
+    yielded: &dyn Fn(f64, &str) -> bool,
+) -> (Vec<SentPacket>, LoadReport) {
     // Send what the 5 ms spacing allows before `until` (all of it when `None`); everything
     // waiting was queued at or before `avail`.
     fn send_until(
@@ -930,6 +1184,11 @@ pub fn simulate(
     let mut out = Vec::new();
     let mut queue = PacingQueue::new();
     let mut now = from;
+    let mut report = LoadReport {
+        busy_seconds: 0.0,
+        min_served_percent: 100,
+        last: ReplayLoad::default(),
+    };
     while now < to {
         let tick = engine.tick(now, now + lead, &|a| yielded(now, a));
         for ((message, kind), position) in tick
@@ -942,12 +1201,17 @@ pub fn simulate(
             let early = (position - (now + lead)).abs() > EPSILON;
             queue.push_for(message, kind, now, reduced, early.then_some(position));
         }
+        report.last = engine.load();
+        report.min_served_percent = report.min_served_percent.min(report.last.served_percent);
         let Some(wake) = tick.wake_in else {
             break;
         };
+        if report.last.busy {
+            report.busy_seconds += wake.min(to - now);
+        }
         send_until(&mut queue, now, Some(now + wake), lead, yielded, &mut out);
         now += wake;
     }
     send_until(&mut queue, now, None, lead, yielded, &mut out);
-    out
+    (out, report)
 }

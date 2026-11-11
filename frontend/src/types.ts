@@ -543,6 +543,13 @@ export interface LightingOutput {
   connected: boolean;
 }
 
+/** How well the replay keeps up with the song: `busy` = a very busy song, some lights update less often than recorded. */
+export interface ReplayLoad {
+  busy: boolean;
+  /** Packets sent over packets wanted, 0 to 100. */
+  served_percent: number;
+}
+
 export interface LightsStatusResponse {
   enabled: boolean;
   /** Older backends omit the OSC fields; a missing method means MIDI. */
@@ -558,6 +565,8 @@ export interface LightsStatusResponse {
   last_cue: LightingCue | null;
   last_osc_cue?: OscLightingCue | null;
   last_cue_at: string | null;
+  /** Older backends, and a status while nothing is being replayed, omit it. */
+  replay_load?: ReplayLoad;
 }
 
 export type LightsSettingsInput = Pick<
