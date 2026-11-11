@@ -175,6 +175,18 @@ impl PcoPlugin {
         self.inner.request_regular_refresh(true).await;
     }
 
+    /// Is the plugin already running exactly these settings (credentials included) and
+    /// connected to Planning Center? Then applying them again would only flap the connection and
+    /// reload the plan.
+    pub fn is_running_with(&self, settings: &PcoSettings) -> bool {
+        let inner = &self.inner;
+        !inner.stopping.load(Ordering::SeqCst)
+            && lock(&inner.health).status == PluginStatus::Running
+            && lock(&inner.client).is_some()
+            && *lock(&inner.settings) == *settings
+            && inner.store.snapshot().planning_center_status == ConnectionStatus::Connected
+    }
+
     /// Apply restart-exempt settings changes to the already-running plugin: replace the settings
     /// and client in place, then re-run validation and a full plan refresh (what `start` does), so
     /// the connection status follows the new settings without a restart.
