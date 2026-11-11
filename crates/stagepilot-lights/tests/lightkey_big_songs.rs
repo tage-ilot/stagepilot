@@ -562,8 +562,11 @@ fn the_raw_recording_is_written_pruned_and_refits_to_the_same_counts() {
     assert_eq!(b2.len(), baseline.len());
     assert_eq!(c2.len(), changes.len());
     let caps = Caps::OLD;
-    let first = fit_within_caps(&baseline, &changes, 60.0, &caps);
-    let again = fit_within_caps(&b2, &c2, 60.0, &caps);
+    // No time limit: this test is about the same counts from the same recording, not about how
+    // fast the machine is. With the default 30 s limit a busy machine stops the ladder early
+    // and the two fits can end on different candidates.
+    let first = fit_within_caps_budgeted(&baseline, &changes, 60.0, &caps, u128::MAX);
+    let again = fit_within_caps_budgeted(&b2, &c2, 60.0, &caps, u128::MAX);
     assert_eq!(
         Size::of_capture(&first.capture),
         Size::of_capture(&again.capture)

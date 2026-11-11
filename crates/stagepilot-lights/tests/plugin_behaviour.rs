@@ -861,7 +861,16 @@ async fn osc_is_only_ready_while_the_replay_address_is_there_but_capture_is_not(
     // A cue going out proves nothing about capture: the card stays Ready.
     publish_song_start(&r.bus, 300).await;
     wait_for("the cue", || !r.osc.sent().is_empty()).await;
-    let after = r.plugin.snapshot(false).await;
+    // The fake records the send inside the plugin's blocking send; the plugin notes the cue time
+    // a moment after it returns. Wait for that note instead of assuming it is already there.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let after = loop {
+        let snapshot = r.plugin.snapshot(false).await;
+        if snapshot.last_cue_at.is_some() || tokio::time::Instant::now() >= deadline {
+            break snapshot;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    };
     assert!(after.last_cue_at.is_some());
     assert_eq!(after.connection_status, ConnectionStatus::Ready);
     r.plugin.stop().await.unwrap();
