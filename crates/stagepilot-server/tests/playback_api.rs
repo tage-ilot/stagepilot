@@ -473,6 +473,70 @@ async fn discovery_is_confirmed_by_the_server_and_refused_while_disconnected() {
 }
 
 #[tokio::test]
+async fn a_scan_finishes_when_the_browser_request_goes_away() {
+    // rc.11: a client that closed its connection mid-scan left the scan "running" for good, the
+    // song parked at its end, and every later scan refused. Dropping the request future is what
+    // hyper does when the client disconnects.
+    let r = rig().await;
+    let fake = FakePlayback::start().await;
+    three_songs(&fake);
+    r.connect(&fake).await;
+    let path = "/api/v1/playback-api/discover-song-order";
+    let gone = tokio::time::timeout(
+        Duration::from_millis(300),
+        r.call("POST", path, Some(json!({"confirm": true}))),
+    )
+    .await;
+    assert!(gone.is_err(), "the scan should still be running at 300 ms");
+    let status = r
+        .until("scan finished", |s| s["discovery"] != "running")
+        .await;
+    assert_eq!(status["discovery"], "done", "{status}");
+    assert_eq!(status["song_order"], json!([101, 102, 103]));
+    assert_eq!(status["song_lengths"].as_array().unwrap().len(), 3);
+    assert_eq!(fake.state.lock().unwrap().song, 102, "selection restored");
+    assert_eq!(
+        fake.state.lock().unwrap().position,
+        0.0,
+        "back at the start"
+    );
+    // Nothing is left refusing the next scan.
+    let (code, status) = r.call("POST", path, Some(json!({"confirm": true}))).await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(status["discovery"], "done", "{status}");
+}
+
+#[tokio::test]
+async fn the_cancel_route_stops_a_scan_and_is_harmless_when_idle() {
+    let r = rig().await;
+    let path = "/api/v1/playback-api/discover-song-order";
+    let (code, status) = r.call("POST", &format!("{path}/cancel"), None).await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(status["discovery"], "idle");
+
+    let fake = FakePlayback::start().await;
+    three_songs(&fake);
+    r.connect(&fake).await;
+    let gone = tokio::time::timeout(
+        Duration::from_millis(300),
+        r.call("POST", path, Some(json!({"confirm": true}))),
+    )
+    .await;
+    assert!(gone.is_err(), "the scan should still be running at 300 ms");
+    let (code, _) = r.call("POST", &format!("{path}/cancel"), None).await;
+    assert_eq!(code, StatusCode::OK);
+    let status = r.until("scan ended", |s| s["discovery"] != "running").await;
+    assert_eq!(status["discovery"], "failed", "{status}");
+    assert!(status["song_order"].as_array().unwrap().is_empty());
+    assert_eq!(fake.state.lock().unwrap().song, 102, "selection restored");
+    assert_eq!(
+        fake.state.lock().unwrap().position,
+        0.0,
+        "back at the start"
+    );
+}
+
+#[tokio::test]
 async fn discovery_over_http_saves_the_order_and_arrangement_follows() {
     // test_loopback_discovery_ends_restore_persist_and_suppress, then test_playback_arrangement's
     // HTTP half.

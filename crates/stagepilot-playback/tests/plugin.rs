@@ -491,6 +491,86 @@ async fn cancelled_discovery_reports_cancelled_and_saves_nothing() {
 }
 
 #[tokio::test]
+async fn discovery_finishes_when_the_caller_goes_away() {
+    // A closed HTTP request drops the handler future. The scan runs in a task the plugin owns,
+    // so it still walks to the end, saves order and lengths, and puts the song back.
+    let fake = FakePlayback::start().await;
+    songs(&fake);
+    let r = rig(&fake).await;
+    r.load_plan().await;
+    r.plugin.start().await.unwrap();
+    until("connected", || r.plugin.connection().connected).await;
+    let plugin = r.plugin.clone();
+    tokio::select! {
+        _ = plugin.discover_song_order() => panic!("the scan ended before the caller was dropped"),
+        _ = until("first measurement step", || {
+            let d = r.plugin.discovery_snapshot();
+            d.song >= 1 && d.progress >= 2
+        }) => {}
+    }
+    // The caller's future is gone here; the scan is still going.
+    assert_eq!(r.plugin.discovery_snapshot().state, DiscoveryState::Running);
+    until("scan finished", || {
+        r.plugin.discovery_snapshot().state != DiscoveryState::Running
+    })
+    .await;
+    let snap = r.plugin.discovery_snapshot();
+    assert_eq!(snap.state, DiscoveryState::Done, "{:?}", snap.error);
+    assert_eq!(snap.total, 3);
+    let saved = r.settings.snapshot().playback_api;
+    assert_eq!(saved.song_order, vec![101, 102, 103]);
+    assert_eq!(saved.song_lengths.len(), 3);
+    assert_eq!(fake.state.lock().unwrap().song, 102, "selection restored");
+    assert_eq!(
+        fake.state.lock().unwrap().position,
+        0.0,
+        "back at the start"
+    );
+    until("order valid", || !r.plugin.mapper_stale()).await;
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn aborted_discovery_task_ends_failed_and_a_new_scan_is_accepted() {
+    // Panic, abort or runtime shutdown: the state must never stay "running" for good.
+    let fake = FakePlayback::start().await;
+    songs(&fake);
+    let r = rig(&fake).await;
+    r.load_plan().await;
+    r.plugin.start().await.unwrap();
+    until("connected", || r.plugin.connection().connected).await;
+    let plugin = r.plugin.clone();
+    let task = tokio::spawn(async move { plugin.discover_song_order().await });
+    until("measuring", || {
+        let d = r.plugin.discovery_snapshot();
+        d.state == DiscoveryState::Running && d.song >= 1
+    })
+    .await;
+    r.plugin.abort_discovery_task();
+    assert_eq!(task.await.unwrap(), Ok(()));
+    let snap = r.plugin.discovery_snapshot();
+    assert_eq!(snap.state, DiscoveryState::Failed);
+    assert_eq!(
+        snap.error.as_deref(),
+        Some(
+            "Song order discovery stopped before it finished; no result saved. \
+             Check Playback selection."
+        )
+    );
+    assert!(r.settings.snapshot().playback_api.song_order.is_empty());
+
+    // Nothing is left blocking: the next scan is accepted and finishes.
+    r.plugin.discover_song_order().await.unwrap();
+    let snap = r.plugin.discovery_snapshot();
+    assert_eq!(snap.state, DiscoveryState::Done, "{:?}", snap.error);
+    assert_eq!(
+        r.settings.snapshot().playback_api.song_order,
+        vec![101, 102, 103]
+    );
+    r.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn settings_and_arrangement_are_refused_while_discovery_runs() {
     // plugin.py `save_settings` / `save_arrangement` / `reconfigure` guard.
     let fake = FakePlayback::start().await;

@@ -429,6 +429,7 @@ struct Shared {
     discovery_total: usize,
     discovery_error: Option<String>,
     discovery_cancel: CancelToken,
+    discovery_abort: Option<tokio::task::AbortHandle>,
 }
 
 struct Inner {
@@ -448,6 +449,36 @@ struct Inner {
     lengths_running: AtomicBool,
     progress: Arc<AtomicUsize>,
     song: Arc<AtomicUsize>,
+}
+
+/// Ends a discovery whatever happens to its task. If the task finished normally the state is
+/// already `Done` or `Failed` and only the mapper is released; if it panicked, was aborted or the
+/// runtime shut down, the state would otherwise stay `Running` for good and refuse every later
+/// scan, so it is set to `Failed` with a plain-language reason.
+struct DiscoveryGuard {
+    shared: Arc<Mutex<Shared>>,
+    /// Set under the state lock together with the final state, so a later scan that has
+    /// already started is never touched by this guard's drop.
+    finished: bool,
+}
+
+impl Drop for DiscoveryGuard {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+        let mut s = lock(&self.shared);
+        if s.discovery == DiscoveryState::Running {
+            s.discovery = DiscoveryState::Failed;
+            s.discovery_error = Some(
+                "Song order discovery stopped before it finished; no result saved. \
+                 Check Playback selection."
+                    .into(),
+            );
+        }
+        s.mapper.set_discovery(false);
+        s.discovery_abort = None;
+    }
 }
 
 /// The Playback input plugin. Cheap to clone; clones share one plugin.
@@ -524,6 +555,7 @@ impl PlaybackPlugin {
             discovery_total: 0,
             discovery_error: None,
             discovery_cancel: CancelToken::new(),
+            discovery_abort: None,
         }));
         let mut dispatcher = ArbitratedDispatcher::new(
             arbiter.clone(),
@@ -890,9 +922,13 @@ impl PlaybackPlugin {
     /// Walk the whole setlist and remember its order and lengths (Python `discover_song_order`).
     /// Pre-condition failures are `Err(Conflict)`; failures during the walk are recorded in
     /// [`discovery_snapshot`](Self::discovery_snapshot) and return `Ok`.
+    ///
+    /// The walk runs in a task owned by the plugin, not by the caller. A caller that stops
+    /// waiting (a closed HTTP request, a dropped future) does not stop the walk: it still
+    /// returns the song to the start, restores the selection and ends as `Done` or `Failed`.
     pub async fn discover_song_order(&self) -> Result<(), PlaybackError> {
         let inner = &self.inner;
-        let (client, cancel, original_version) = {
+        let (client, cancel, guard) = {
             let _life = inner.lifecycle.lock().await;
             if lock(&inner.shared).discovery == DiscoveryState::Running
                 || inner.lengths_running.load(Ordering::SeqCst)
@@ -901,7 +937,7 @@ impl PlaybackPlugin {
                     "Song order discovery or Planning Center update is already running.",
                 );
             }
-            let heartbeat = inner.check_discovery()?;
+            inner.check_discovery()?;
             let _dispatch = inner.dispatch_lock.lock().await;
             let cancel = CancelToken::new();
             let client = {
@@ -917,48 +953,34 @@ impl PlaybackPlugin {
                 s.discovery_cancel = cancel.clone();
                 s.client.clone()
             };
+            // From here on every exit path (done, failed, panic, abort, runtime shutdown)
+            // leaves the state out of `Running`.
+            let guard = DiscoveryGuard {
+                shared: inner.shared.clone(),
+                finished: false,
+            };
             inner.progress.store(0, Ordering::SeqCst);
             inner.song.store(0, Ordering::SeqCst);
-            (client, cancel, heartbeat.setlist_version)
+            (client, cancel, guard)
         };
-        let _run = inner.discovery_run.lock().await;
-        let started = Instant::now();
-        let result = match client {
-            Some(client) => {
-                let opts = DiscoveryOptions {
-                    step_timeout: inner.options.step_timeout,
-                    max_steps: inner.options.max_steps,
-                    measure: true,
-                    cancel,
-                    progress: Some(inner.progress.clone()),
-                    song: Some(inner.song.clone()),
-                };
-                discover_song_order(&*client, &opts).await
-            }
-            None => Err(DiscoveryError::Conflict(
-                "Playback is disconnected. Enable remote connections and connect first.".into(),
-            )),
+        let task = {
+            let inner = self.inner.clone();
+            tokio::spawn(async move { inner.run_discovery(client, cancel, guard).await })
         };
-        let _ = original_version;
-        let outcome = match result {
-            Ok(done) => inner.finish_discovery(done, started),
-            Err(DiscoveryError::Cancelled) => Err(
-                "Song order discovery cancelled; no result saved. Check Playback selection.".into(),
-            ),
-            Err(DiscoveryError::Conflict(m)) => {
-                Err(format!("{m} No result saved; check Playback selection."))
-            }
-        };
-        let mut s = lock(&inner.shared);
-        match outcome {
-            Ok(()) => s.discovery = DiscoveryState::Done,
-            Err(message) => {
-                s.discovery = DiscoveryState::Failed;
-                s.discovery_error = Some(message);
-            }
-        }
-        s.mapper.set_discovery(false);
+        lock(&inner.shared).discovery_abort = Some(task.abort_handle());
+        // A caller that goes away drops only this wait; the task carries on. A panic inside the
+        // task is already recorded as `Failed` by the guard.
+        let _ = task.await;
         Ok(())
+    }
+
+    /// Hard-stop the discovery task, as a runtime shutdown would: no walk back, no result. The
+    /// state still ends as `Failed` and the mapper is released. For tests of that path only.
+    #[doc(hidden)]
+    pub fn abort_discovery_task(&self) {
+        if let Some(abort) = lock(&self.inner.shared).discovery_abort.take() {
+            abort.abort();
+        }
     }
 
     /// Abort a running discovery (it restores the original selection on the way out).
@@ -1601,6 +1623,54 @@ impl Inner {
             return conflict("Playback has not supplied a valid setlist version.");
         }
         Ok(heartbeat)
+    }
+
+    /// The discovery walk, run as a detached task. The guard turns every way of ending (including
+    /// a panic or an abort) into a state that is not `Running`.
+    async fn run_discovery(
+        self: Arc<Self>,
+        client: Option<Arc<PlaybackClient>>,
+        cancel: CancelToken,
+        mut guard: DiscoveryGuard,
+    ) {
+        let _run = self.discovery_run.lock().await;
+        let started = Instant::now();
+        let result = match client {
+            Some(client) => {
+                let opts = DiscoveryOptions {
+                    step_timeout: self.options.step_timeout,
+                    max_steps: self.options.max_steps,
+                    measure: true,
+                    cancel,
+                    progress: Some(self.progress.clone()),
+                    song: Some(self.song.clone()),
+                };
+                discover_song_order(&*client, &opts).await
+            }
+            None => Err(DiscoveryError::Conflict(
+                "Playback is disconnected. Enable remote connections and connect first.".into(),
+            )),
+        };
+        let outcome = match result {
+            Ok(done) => self.finish_discovery(done, started),
+            Err(DiscoveryError::Cancelled) => Err(
+                "Song order discovery cancelled; no result saved. Check Playback selection.".into(),
+            ),
+            Err(DiscoveryError::Conflict(m)) => {
+                Err(format!("{m} No result saved; check Playback selection."))
+            }
+        };
+        let mut s = lock(&self.shared);
+        match outcome {
+            Ok(()) => s.discovery = DiscoveryState::Done,
+            Err(message) => {
+                s.discovery = DiscoveryState::Failed;
+                s.discovery_error = Some(message);
+            }
+        }
+        s.mapper.set_discovery(false);
+        s.discovery_abort = None;
+        guard.finished = true;
     }
 
     /// Persist a completed discovery and install it in the mapper.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reloading the page or losing the connection during a song scan no longer leaves the scan stuck on "running".** On the iMac (rc.11) a client that closed its request 10 s into **Scan Playback Songs** left the scan "running" with the same progress for good: every new scan was refused ("Song order discovery or Planning Center update is already running."), the Planning Center length update was blocked, Playback was left stopped at the end of song 1 and only quitting StagePilot cleared it. The scan now runs on its own, not inside the browser request, so it finishes whatever happens to the request: it returns the song to the start and the original selection and ends as done or failed. If it is ever stopped hard (a crash inside it, or the app shutting down) it ends as failed with a plain message, never "running". A scan that fails part-way now makes the same best-effort walk back to the original song that a cancelled one already did. New: `POST /api/v1/playback-api/discover-song-order/cancel` stops a running scan (a Rust-only extension). Also, **Release lights**, the Record switch and the Lighting and Lightkey settings saves now finish even if the page that sent them goes away, so a closed tab can no longer leave lights held or a save half applied. See \"Discover Song Order\" in `docs/playback-api.md`.
+
 ## [2.43.0-rc.11] - 2026-11-10
 
 ### Changed

@@ -7,8 +7,8 @@
 //! song while fresh heartbeats keep arriving (silence is NOT evidence of an end); revisiting a
 //! song is a wrap and aborts; 200 steps is the safety limit; the original selection is restored
 //! with `Previous` steps; any playing / disconnected / setlist-version change aborts with a
-//! [`DiscoveryError`] and no result. A cancelled run makes a bounded best-effort walk back to
-//! the original song and never selects or plays.
+//! [`DiscoveryError`] and no result. A cancelled or failed run makes a bounded best-effort walk back
+//! to the original song and never selects or plays.
 
 use crate::client::{Command, TransportPort};
 use crate::find::CancelToken;
@@ -167,10 +167,12 @@ pub async fn discover_song_order<P: TransportPort>(
     let mut order: Vec<i64> = Vec::new();
     let result = run(&mut walk, original, version, &mut order).await;
     match result {
-        Err(DiscoveryError::Cancelled) => {
-            // Bounded, best-effort walk back with Previous/Next; never select or play.
+        Err(error) => {
+            // A cancelled or failed walk makes the same bounded, best-effort walk back with
+            // Previous/Next; it never selects or plays. If the failure was a lost connection, a
+            // playing Playback or a changed setlist the first check refuses and nothing is sent.
             let _ = restore_after_cancel(&mut walk, original, version, &order).await;
-            Err(DiscoveryError::Cancelled)
+            Err(error)
         }
         other => other,
     }

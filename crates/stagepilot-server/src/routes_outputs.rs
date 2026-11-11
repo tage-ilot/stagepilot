@@ -33,6 +33,25 @@ use uuid::Uuid;
 
 type Rt = Arc<Runtime>;
 
+/// Run a handler's work to its end even when the client that asked for it goes away.
+///
+/// When a client disconnects, hyper drops the handler future at whatever `.await` it was on.
+/// For work that leaves lights held, or half-applied settings, behind that is not safe, so the
+/// work runs in its own task. The handler still waits for the result while the client is there;
+/// if the client is gone the wait is dropped and the task carries on to its end.
+async fn detached<F>(work: F) -> Json
+where
+    F: std::future::Future<Output = Json> + Send + 'static,
+{
+    match tokio::spawn(work).await {
+        Ok(response) => response,
+        Err(_) => http_error(
+            500,
+            "That change stopped unexpectedly. Check the Lighting status.",
+        ),
+    }
+}
+
 const MIDI_BUSY: &str = "Stop the timer before changing the MIDI input.";
 const MIDI_DISABLED: &str = "The MIDI Playback plugin is disabled.";
 const PP_DISABLED: &str = "The ProPresenter plugin is disabled.";
@@ -691,6 +710,10 @@ fn validate_lights_request(request: &LightsSettingsRequest) -> Result<(), Json> 
 }
 
 async fn lights_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
+    detached(lights_settings_work(rt, raw)).await
+}
+
+async fn lights_settings_work(rt: Rt, raw: Bytes) -> Json {
     let (request, _): (LightsSettingsRequest, Value) = match body(&raw) {
         Ok(parsed) => parsed,
         Err(response) => return response,
@@ -1519,6 +1542,10 @@ fn lightkey_validation_error(raw: &str, settings: &LightkeySettings) -> Option<J
 }
 
 async fn lightkey_settings(State(rt): State<Rt>, raw: Bytes) -> Json {
+    detached(lightkey_settings_work(rt, raw)).await
+}
+
+async fn lightkey_settings_work(rt: Rt, raw: Bytes) -> Json {
     let request = match object_body(&raw) {
         Ok(object) => match parse_lightkey_settings(&object) {
             Ok(request) => request,
@@ -1605,6 +1632,10 @@ fn object_body(raw: &Bytes) -> Result<serde_json::Map<String, Value>, Json> {
 
 /// "Release lights": give every fixture the replay holds back to Lightkey.
 async fn lightkey_release(State(rt): State<Rt>) -> Json {
+    detached(lightkey_release_work(rt)).await
+}
+
+async fn lightkey_release_work(rt: Rt) -> Json {
     let (accepted, message) = rt.outputs.lights.lightkey_release_lights().await;
     lightkey_response(&rt, accepted, message).await
 }
@@ -1722,6 +1753,10 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
 const SIMPLIFY_INTERVAL_SECONDS: f64 = 0.5;
 
 async fn lightkey_recording(State(rt): State<Rt>, raw: Bytes) -> Json {
+    detached(lightkey_recording_work(rt, raw)).await
+}
+
+async fn lightkey_recording_work(rt: Rt, raw: Bytes) -> Json {
     let object = match object_body(&raw) {
         Ok(object) => object,
         Err(response) => return response,
@@ -1903,4 +1938,40 @@ async fn lights_loudness_clear(State(rt): State<Rt>, raw: Bytes) -> Json {
 #[derive(serde::Deserialize)]
 struct LoudnessClearRequest {
     song_key: String,
+}
+
+#[cfg(test)]
+mod detached_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn detached_work_finishes_when_the_waiting_handler_is_dropped() {
+        let finished = Arc::new(AtomicBool::new(false));
+        let flag = finished.clone();
+        let handler = detached(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            flag.store(true, Ordering::SeqCst);
+            ok(json!({"done": true}))
+        });
+        // The client goes away after 20 ms: the handler future is dropped mid-wait.
+        assert!(tokio::time::timeout(Duration::from_millis(20), handler)
+            .await
+            .is_err());
+        assert!(!finished.load(Ordering::SeqCst));
+        for _ in 0..500 {
+            if finished.load(Ordering::SeqCst) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("the work was dropped with the handler");
+    }
+
+    #[tokio::test]
+    async fn detached_work_that_panics_answers_a_plain_error() {
+        let response = detached(async { panic!("boom") }).await;
+        assert_eq!(response.0.as_u16(), 500);
+    }
 }
