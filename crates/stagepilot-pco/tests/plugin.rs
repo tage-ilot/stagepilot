@@ -15,7 +15,7 @@ use stagepilot_core::state::{ApplicationState, ConnectionStatus, ServiceLoadStat
 use stagepilot_core::state_service::StateService;
 use stagepilot_core::store::StateStore;
 use stagepilot_pco::client::default_factory;
-use stagepilot_pco::models::PcoSettings;
+use stagepilot_pco::models::{PcoSettings, Secret};
 use stagepilot_pco::plugin::{PcoPlugin, TodayProvider, PLUGIN_NAME};
 use std::sync::{Arc, Mutex};
 use support::*;
@@ -231,4 +231,27 @@ async fn reconfigure_on_a_stopped_plugin_is_rejected() {
     let h = harness(&mock, settings());
     let outcome = h.plugin.reconfigure(settings()).await;
     assert!(!outcome.accepted);
+}
+
+#[tokio::test]
+async fn only_the_exact_running_settings_count_as_already_running() {
+    let mock = weekend_mock().await;
+    let h = harness(&mock, settings());
+    assert!(!h.plugin.is_running_with(&settings()), "not started yet");
+    h.plugin.start().await.unwrap();
+    assert!(h.plugin.is_running_with(&settings()));
+    let before = mock.requests().len();
+    // Asking does not talk to Planning Center.
+    assert!(h.plugin.is_running_with(&settings()));
+    assert_eq!(mock.requests().len(), before);
+    assert!(!h.plugin.is_running_with(&PcoSettings {
+        service_type_id: Some("7".into()),
+        ..settings()
+    }));
+    assert!(!h.plugin.is_running_with(&PcoSettings {
+        secret: Some(Secret::new("another-secret")),
+        ..settings()
+    }));
+    h.plugin.stop().await.unwrap();
+    assert!(!h.plugin.is_running_with(&settings()), "stopped");
 }

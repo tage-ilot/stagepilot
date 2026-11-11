@@ -834,3 +834,38 @@ async fn a_changed_connection_status_still_publishes_an_event() {
     assert!(events_of(&r, EventType::ConnectionChanged).len() >= 2);
     r.plugin.stop().await.unwrap();
 }
+
+// ---------------------------------------------- is_running_with (F-P1)
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_the_exact_running_settings_count_as_already_running() {
+    // One fake client only: a second connection would panic in the factory.
+    let r = rig_with(vec![Fake::new()], enabled());
+    assert!(!r.plugin.is_running_with(&enabled()), "not started yet");
+    r.plugin.start().await.unwrap();
+    assert!(r.plugin.is_running_with(&enabled()));
+    for change in [
+        |s: &mut ProPresenterSettings| s.host = "192.168.4.40".into(),
+        |s: &mut ProPresenterSettings| s.port = 1026,
+        |s: &mut ProPresenterSettings| s.timer_name = "Other".into(),
+        |s: &mut ProPresenterSettings| s.look_id = Some("look-worship".into()),
+        |s: &mut ProPresenterSettings| s.request_timeout_seconds = 9.0,
+        |s: &mut ProPresenterSettings| s.enabled = false,
+    ] {
+        let mut changed = enabled();
+        change(&mut changed);
+        assert!(!r.plugin.is_running_with(&changed), "{changed:?}");
+    }
+    r.plugin.stop().await.unwrap();
+    assert!(!r.plugin.is_running_with(&enabled()), "stopped");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_timer_is_not_already_running() {
+    let fake = Fake::new();
+    *lock(&fake.timers) = vec![timer("Different Timer", "timer-uuid", 0, true)];
+    let r = rig_with(vec![fake], enabled());
+    r.plugin.start().await.unwrap();
+    assert!(!r.plugin.is_running_with(&enabled()));
+    r.plugin.stop().await.unwrap();
+}

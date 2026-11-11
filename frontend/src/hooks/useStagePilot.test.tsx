@@ -835,7 +835,8 @@ describe("useStagePilot", () => {
     expect(result.current.planningCenterMessage ?? "").not.toMatch(/restart/i);
   });
 
-  it("reactivates every configured integration after dashboard startup", async () => {
+  /** A fully configured install; the live state reports `statuses` for the three services. */
+  async function renderConfigured(statuses: Partial<ApplicationState>) {
     const configured: SettingsResponse = {
       ...settings,
       planning_center_secret_saved: true,
@@ -909,8 +910,21 @@ describe("useStagePilot", () => {
       },
     });
 
-    const { result } = renderHook(() => useStagePilot());
-    await waitFor(() => expect(result.current.settings).toEqual(configured));
+    mockedGetState.mockResolvedValue({ ...applicationState(1), ...statuses });
+    const rendered = renderHook(() => useStagePilot());
+    await waitFor(() => expect(rendered.result.current.settings).toEqual(configured));
+    await waitFor(() => expect(rendered.result.current.state?.revision).toBe(1));
+    return { ...rendered, configured };
+  }
+
+  const allDown = {
+    propresenter_status: "disconnected",
+    lights_status: "disconnected",
+    planning_center_status: "disconnected",
+  } as const;
+
+  it("reactivates every configured integration after dashboard startup", async () => {
+    const { result, configured } = await renderConfigured(allDown);
 
     await act(async () => result.current.activateConfiguredServices());
 
@@ -935,6 +949,46 @@ describe("useStagePilot", () => {
       configured.settings.planning_center,
     );
   });
+
+  it("does not save a service that is already connected (a second page opened mid-song, F-P1)", async () => {
+    const { result } = await renderConfigured({
+      propresenter_status: "connected",
+      lights_status: "connected",
+      planning_center_status: "connected",
+    });
+
+    await act(async () => result.current.activateConfiguredServices());
+
+    expect(mockedUpdateProPresenterSettings).not.toHaveBeenCalled();
+    expect(mockedUpdateLightsSettings).not.toHaveBeenCalled();
+    expect(mockedUpdatePlanningCenterSettings).not.toHaveBeenCalled();
+  });
+
+  it("counts an OSC output that is Ready as running", async () => {
+    const { result } = await renderConfigured({ ...allDown, lights_status: "ready" });
+
+    await act(async () => result.current.activateConfiguredServices());
+
+    expect(mockedUpdateLightsSettings).not.toHaveBeenCalled();
+    expect(mockedUpdateProPresenterSettings).toHaveBeenCalledOnce();
+  });
+
+  it.each(["disconnected", "connecting", "error"] as const)(
+    "still saves the services that are %s while leaving the connected ones alone",
+    async (down) => {
+      const { result } = await renderConfigured({
+        propresenter_status: "connected",
+        lights_status: down,
+        planning_center_status: down,
+      });
+
+      await act(async () => result.current.activateConfiguredServices());
+
+      expect(mockedUpdateProPresenterSettings).not.toHaveBeenCalled();
+      expect(mockedUpdateLightsSettings).toHaveBeenCalledOnce();
+      expect(mockedUpdatePlanningCenterSettings).toHaveBeenCalledOnce();
+    },
+  );
 });
 
 const viewerAccess: DashboardAccess = {

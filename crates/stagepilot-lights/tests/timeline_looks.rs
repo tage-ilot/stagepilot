@@ -1147,8 +1147,8 @@ async fn a_changed_port_mid_song_reconnects_and_the_replay_carries_on_from_where
     assert!(outcome.accepted, "{}", outcome.message);
     assert_eq!(r.plugin.settings().osc_port, 9001);
     run_for(1.0).await; // the re-sync goes out paced
-    // The held fixtures were given back on the old rig, then the new output got the look the
-    // song is at (the 10 s row), not the first one.
+                        // The held fixtures were given back on the old rig, then the new output got the look the
+                        // song is at (the 10 s row), not the first one.
     let sent = r.sent();
     let resync = sent
         .iter()
@@ -1223,6 +1223,6 @@ async fn a_changed_helper_address_mid_song_is_a_real_change() {
     r.plugin.reconfigure(changed).await;
     assert_eq!(r.plugin.settings().lightkey.api_url, "http://127.0.0.1:10");
     run_for(1.0).await; // the re-sync goes out paced
-    // It went through the full path: the held fixtures were re-synced (the output was rebuilt).
+                        // It went through the full path: the held fixtures were re-synced (the output was rebuilt).
     assert!(count(&r, &dim("A")) >= 1, "{:?}", r.addresses());
 }

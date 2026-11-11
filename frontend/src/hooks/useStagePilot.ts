@@ -136,6 +136,10 @@ export function useStagePilot() {
   >(null);
 
   const reconnectAttempts = useRef(0);
+  // The latest live state, for `activateConfiguredServices` to read without being rebuilt (and
+  // so without restarting App's startup timer) on every state update.
+  const stateRef = useRef<ApplicationState | null>(null);
+  stateRef.current = state;
   const liveConnectionEstablished = useRef(false);
   const previousMidiStatus = useRef<ConnectionStatus | null>(null);
   const previousProPresenterStatus = useRef<ConnectionStatus | null>(null);
@@ -1067,9 +1071,18 @@ export function useStagePilot() {
 
     await refreshMidi();
 
+    // A service that is already up is left alone: this runs on every page load, also on a second
+    // device in the middle of a song, and saving again would reconnect it (F-P1). The backend
+    // runs the saved settings, so "connected" here means connected with them. A service that is
+    // down, still connecting or failed is activated as before.
+    const live = stateRef.current;
+    const running = (status: ConnectionStatus | undefined) =>
+      status === "connected" || status === "ready";
+
     if (
       saved.integration_modes.timer_output === "propresenter"
       && saved.propresenter.enabled
+      && !running(live?.propresenter_status)
     ) {
       await saveProPresenter({
         host: saved.propresenter.host,
@@ -1080,7 +1093,11 @@ export function useStagePilot() {
       });
     }
 
-    if (saved.lights.enabled && (saved.lights.method === "osc" || saved.lights.output_name)) {
+    if (
+      saved.lights.enabled
+      && (saved.lights.method === "osc" || saved.lights.output_name)
+      && !running(live?.lights_status)
+    ) {
       await saveLighting({
         enabled: true,
         method: saved.lights.method ?? "midi",
@@ -1101,6 +1118,7 @@ export function useStagePilot() {
       saved.integration_modes.service_source === "planning_center"
       && planningCenterAuthConfigured
       && saved.planning_center.service_type_id
+      && !running(live?.planning_center_status)
     ) {
       await savePlanningCenter(saved.planning_center, saved.timezone);
     }
