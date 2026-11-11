@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.12] - 2026-11-11
+
 ### Fixed
 
 - **The Lighting card keeps the result of the test cue instead of flipping straight back to Ready.** After a test cue the card says `Sent <address> to <target>.`; a change of the Lightkey helper link a few milliseconds later (the link's first status changes arrive just after start) redrew it as `Replay ready ... Capture is not connected yet.` and the test cue's result vanished. The card now keeps the `Sent ...` text for 3 seconds; a link change inside that time is applied when the 3 seconds are over, so the card still ends up showing the real state. This also stops the test `osc_test_cue_sends_and_reports_sent_not_connected` from failing on slow machines.
