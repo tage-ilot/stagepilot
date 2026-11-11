@@ -774,6 +774,8 @@ export function Dashboard({
     live,
     views: connectionViews,
     remoteOffline,
+    playback: playback?.status,
+    now: clockNow,
   });
   const ready = readinessPassed(checks);
   const systemError = readinessHasError(checks);

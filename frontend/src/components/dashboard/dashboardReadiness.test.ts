@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { playbackStatus } from "../../test/playbackFixtures";
 import type {
   ApplicationState,
   MidiInputsResponse,
@@ -502,6 +503,68 @@ describe("dashboard integration truthfulness", () => {
     it("is not added to the live-status view Viewers get", () => {
       const checks = build({ settings_degraded: true, settings_set_aside: [{ song_key: "a", song_title: "Ever Be" }] }, { stateOnly: true });
       expect(ids(checks).some((id) => id.startsWith("settings") || id.startsWith("set-aside"))).toBe(false);
+    });
+  });
+
+  describe("Scan Playback again (F-S1)", () => {
+    const production = settings({ service_source: "planning_center", midi_source: "playback_api", timer_output: "propresenter" });
+    const SERVICE = Date.parse("2026-11-15T17:00:00Z"); // 09:00 in Los Angeles
+    const planState = (overrides: Partial<ApplicationState> = {}) => {
+      const base = state();
+      return state({
+        plan: { ...base.plan!, date: "2026-11-15", service_times: ["09:00"] },
+        service_load: { ...base.service_load, target_date: "2026-11-15", status: "loaded", is_stale: false },
+        ...overrides,
+      });
+    };
+    const build = (minutesBefore: number, extra: { playback?: ReturnType<typeof playbackStatus> | null; state?: ApplicationState; stateOnly?: boolean; settings?: SettingsResponse; remoteOffline?: boolean } = {}) => {
+      const appState = extra.state ?? planState();
+      const config = extra.settings ?? production;
+      const playback = extra.playback === undefined ? playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-11-14T20:00:00Z" }) : extra.playback;
+      const views = buildConnectionCardViews({ state: appState, settings: config, midi: emptyMidi, playback, propresenter: null, lights: null, stateOnly: extra.stateOnly });
+      return buildReadinessChecks({
+        state: appState, settings: config, propresenter: null, live: true, views, playback, now: SERVICE - minutesBefore * 60_000,
+        stateOnly: extra.stateOnly, remoteOffline: extra.remoteOffline,
+      });
+    };
+    const reminder = (checks: ReturnType<typeof build>) => checks.find((check) => check.id === "scan-playback");
+
+    it("is listed in the hour before the service, as a warning that never blocks", () => {
+      const row = reminder(build(30))!;
+      expect(row).toMatchObject({ label: "Scan Playback again", required: false, severity: "warning", status: "error", passed: false });
+      expect(row.detail).toBe("The service starts in 30 minutes and Playback has not been scanned in the hour before it. Scan it so song order and lengths are right.");
+      expect(readinessWarnings(build(30))[0]).toEqual(row);
+      expect(readinessErrorCauses(build(30)).some((check) => check.id === "scan-playback")).toBe(false);
+      expect(readinessPassed(build(30))).toBe(readinessPassed(build(90)));
+    });
+
+    it("is not listed outside the window, after the start, or while a problem of its own is shown", () => {
+      expect(reminder(build(61))).toBeUndefined();
+      expect(reminder(build(-5))).toBeUndefined();
+      expect(reminder(build(30, { playback: null }))).toBeUndefined();
+      expect(reminder(build(30, { playback: playbackStatus({ connected: false, discovery: "done", captured_at: null }) }))).toBeUndefined();
+      expect(reminder(build(30, { state: planState({ timer: { status: "running", duration_seconds: 240, started_at: "2026-11-15T16:40:00Z", last_error: null } }) }))).toBeUndefined();
+    });
+
+    it("needs a loaded production plan: not the demo plan, not a stale or different-day load", () => {
+      const demo = settings({ service_source: "demo", midi_source: "playback_api", timer_output: "simulated" });
+      expect(reminder(build(30, { settings: demo }))).toBeUndefined();
+      const base = planState();
+      expect(reminder(build(30, { state: planState({ service_load: { ...base.service_load, is_stale: true } }) }))).toBeUndefined();
+      expect(reminder(build(30, { state: planState({ service_load: { ...base.service_load, target_date: "2026-11-22" } }) }))).toBeUndefined();
+      expect(reminder(build(30, { state: planState({ plan: null }) }))).toBeUndefined();
+      expect(reminder(build(30, { state: planState({ plan: { ...base.plan!, service_times: [] } }) }))).toBeUndefined();
+    });
+
+    it("goes away when a scan completes inside the window, and stays out of the live-status view", () => {
+      expect(reminder(build(30))).toBeDefined();
+      expect(reminder(build(30, { playback: playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: new Date(SERVICE - 40 * 60_000).toISOString() }) }))).toBeUndefined();
+      expect(reminder(build(30, { stateOnly: true }))).toBeUndefined();
+    });
+
+    it("comes before the other warnings, so it leads the pill when everything required is fine", () => {
+      const ids = readinessWarnings(build(30, { remoteOffline: true })).map((check) => check.id);
+      expect(ids).toEqual(["scan-playback", "remote-access"]);
     });
   });
 

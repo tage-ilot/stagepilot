@@ -74,6 +74,19 @@ Playback songs"). The section can be folded with its chevron; the choice is reme
 starts expanded. A folded section still shows a one-line summary ("Saved - 6 songs", "Learning - 2 of 6 placed",
 "No order yet") and the scan button.
 
+### Scan again in the hour before the service
+
+Timings are often changed at the last minute, and a fresh scan also corrects a song order StagePilot only learned, so
+scan Playback again **within the hour before the service**. Nothing starts a scan for you and a scan writes nothing to
+Planning Center by itself. To remind the operator the dashboard's header status pill lists **Scan Playback again**
+(a warning row; the pill reads it when nothing else is wrong) when all of this is true: Playback is the connected
+source and is not playing or scanning; a Planning Center plan is loaded; the next service start on it (its
+`service_times`, read on the plan's date in the saved time zone) is less than 60 minutes away; and the last completed
+scan (`captured_at` of the Playback status) is older than the start of that hour. Services less than an hour apart share
+one reminder. The row goes away by itself when a scan completes, when the service start time passes, or when a song
+plays. A scan that is out of date for another reason (the setlist or the plan changed) keeps its own notice, and this row
+is not added next to it. It is worked out in the dashboard from the status it already has; the API did not change.
+
 ### Learned order (provisional, before a scan)
 
 With **Learn the order as songs play** on (the default; `playback_api.learn_order`),

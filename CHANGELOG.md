@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The header now reminds you to scan Playback again when the service is less than an hour away and Playback has not been scanned since.** Operators scan right before the service because timings get changed at the last minute, and a fresh scan also corrects a song order StagePilot only learned. In the hour before the service start time, if the last scan is older than that hour, the status pill reads `Scan Playback again` (in the same red as the other warnings) and its list explains: `The service starts in 42 minutes and Playback has not been scanned in the hour before it. Scan it so song order and lengths are right.` It goes away by itself when a scan completes, when the service start time passes, or while a song plays; there is no pop-up, button or sound, and the read-only Live status view is unchanged. With several service times on the plan, each gets its own reminder (services less than an hour apart share one). Nothing is scanned automatically and nothing is written to Planning Center. See \"Scan again in the hour before the service\" in `docs/playback-api.md`.
+
 ### Fixed
 
 - **The Lighting card keeps the result of the test cue instead of flipping straight back to Ready.** After a test cue the card says `Sent <address> to <target>.`; a change of the Lightkey helper link a few milliseconds later (the link's first status changes arrive just after start) redrew it as `Replay ready ... Capture is not connected yet.` and the test cue's result vanished. The card now keeps the `Sent ...` text for 3 seconds; a link change inside that time is applied when the 3 seconds are over, so the card still ends up showing the real state. This also stops the test `osc_test_cue_sends_and_reports_sent_not_connected` from failing on slow machines.
