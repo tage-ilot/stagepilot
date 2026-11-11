@@ -131,6 +131,9 @@ struct State {
     engine: Option<ReplayEngine>,
     /// How well the engine serves the running song, as of the last tick (`None` = no tick yet).
     replay_load: Option<(ReplayLoad, Instant)>,
+    /// How many times the timeline has been cancelled. A pause, stop, seek, new song or settings
+    /// change each moves it, so a settings change can tell nothing else happened meanwhile.
+    cancels: u64,
     /// The song that is on now: from its start until it ends or the position is reset.
     /// A pause or stop inside the song keeps it. A play that finds none (or a start from the top)
     /// begins a new one and drops the yields of before (F-H3).
@@ -155,6 +158,8 @@ struct Window {
 
 /// Where the running song is: `position` seconds at `at`.
 struct Playback {
+    /// The song the timeline plays, so a settings change can start it again where it was.
+    song: Song,
     cues: Vec<AnyCue>,
     position: f64,
     at: Instant,
@@ -168,6 +173,16 @@ impl Playback {
                 .saturating_duration_since(self.at)
                 .as_secs_f64()
     }
+}
+
+/// Where a replay that a settings change interrupted was (see `reconfigure`).
+struct ResumePoint {
+    song: Song,
+    /// Seconds into the song at `at`.
+    position: f64,
+    at: Instant,
+    /// The song second the replay was due to end at.
+    end: f64,
 }
 
 struct Inner {
@@ -282,6 +297,7 @@ impl LightsPlugin {
                 playback: None,
                 engine: None,
                 replay_load: None,
+                cancels: 0,
                 session: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
@@ -777,8 +793,57 @@ impl Inner {
         Ok(applied)
     }
 
+    /// Does `new` ask for the output that is already up? Everything that changes where or how
+    /// cues are sent counts: Lighting on, the method, the MIDI output, channel and note length,
+    /// the OSC host and port, and the whole Lightkey block (the helper address, the Replay
+    /// switch, the mode, the audio input, the found computer). Only the song cue maps, the
+    /// pads and the revision numbers are left out, since they need no reconnect. The output
+    /// must also be open and healthy (Connected, or Ready for OSC).
+    fn already_running(&self, new: &LightsSettings) -> bool {
+        let st = self.st();
+        let old = &st.settings;
+        st.status == PluginStatus::Running
+            && !st.stopping
+            && old.enabled
+            && new.enabled
+            && old.method == new.method
+            && old.transport == new.transport
+            && old.output_name == new.output_name
+            && old.channel == new.channel
+            && old.pulse_ms == new.pulse_ms
+            && old.osc_host == new.osc_host
+            && old.osc_port == new.osc_port
+            && old.lightkey == new.lightkey
+            && matches!(
+                st.connection_status,
+                ConnectionStatus::Connected | ConnectionStatus::Ready
+            )
+            && match new.method {
+                LightingMethod::Osc => st.osc_output.as_ref().is_some_and(|o| !o.closed()),
+                LightingMethod::Midi => st.port.as_ref().is_some_and(|p| !p.closed()),
+            }
+    }
+
     async fn reconfigure(self: Arc<Self>, settings: LightsSettings) -> LightingOutcome {
-        self.cancel_timeline().await;
+        // Saving what is already running changes nothing: the replay keeps going, the output
+        // stays open and the Lightkey link is not reset. The song's cue maps follow the saved
+        // ones, as they do for any save; they only apply from the next start or seek.
+        if self.already_running(&settings) {
+            let detail = {
+                let mut st = self.st();
+                st.settings.cue_maps = settings.cue_maps;
+                st.settings.pads = settings.pads;
+                st.settings.cue_revisions = settings.cue_revisions;
+                st.detail.clone()
+            };
+            return LightingOutcome::new(
+                true,
+                detail.unwrap_or_else(|| "Lighting output ready.".into()),
+            );
+        }
+        // A real change ends the replay that was running; if the lights are still wanted
+        // afterwards, it starts again for the same song at the second it had reached.
+        let (resume, stamp) = self.cancel_timeline_keeping_place().await;
         // Lighting off, replay off, another method or another rig: give back what was held, on
         // the output it was held through, before that output is closed.
         let leaving = {
@@ -815,6 +880,11 @@ impl Inner {
             return LightingOutcome::new(true, "Lighting output disabled.");
         }
         let connected = self.clone().connect().await;
+        if connected {
+            if let Some(place) = resume {
+                self.resume_replay(place, stamp).await;
+            }
+        }
         let detail = self.st().detail.clone();
         LightingOutcome::new(
             connected,
@@ -826,6 +896,46 @@ impl Inner {
                 }
             }),
         )
+    }
+
+    /// Start the replay of the song a settings change interrupted again, at the second it has
+    /// reached now. Like a seek: the rows from there on are scheduled and each fixture is first
+    /// brought to its latest value at that second, from the song's current saved rows. Nothing
+    /// starts if anything else touched the timeline meanwhile (a pause, a stop, a seek, a new
+    /// song), if the lights no longer replay, or if the song is about to end.
+    async fn resume_replay(self: &Arc<Self>, place: ResumePoint, stamp: u64) {
+        let position = place.position
+            + Instant::now()
+                .saturating_duration_since(place.at)
+                .as_secs_f64();
+        let remaining = place.end - position;
+        if remaining <= SONG_END_SLACK_SECONDS || !self.replay_allowed() {
+            return;
+        }
+        let active = self.active_cues(&place.song);
+        if active.is_empty() || !self.output_ready() {
+            return;
+        }
+        {
+            let st = self.st();
+            if st.cancels != stamp || st.timeline.is_some() {
+                return;
+            }
+        }
+        let effects = self.active_effects(&place.song);
+        self.begin_song(&place.song, remaining, false);
+        self.start_timeline(
+            &place.song,
+            active,
+            effects,
+            Window {
+                now: position,
+                keep_from: position,
+                keep_to: place.end,
+                remaining,
+            },
+        );
+        self.end_song_if_not_replaying();
     }
 
     async fn test_osc_cue(
@@ -1217,6 +1327,7 @@ impl Inner {
         {
             let mut st = self.st();
             st.playback = Some(Playback {
+                song: song.clone(),
                 cues: cues_for_playback.clone(),
                 position: now,
                 at: Instant::now(),
@@ -1466,12 +1577,26 @@ impl Inner {
     }
 
     async fn cancel_timeline(&self) {
-        let task = {
+        self.cancel_timeline_keeping_place().await;
+    }
+
+    /// Cancel the timeline and say where it was: the song that was replaying, the second it had
+    /// reached and the second it ends at, and a stamp (`cancels`) that any later cancel moves on.
+    /// `None` when no replay was running (nothing to start again).
+    async fn cancel_timeline_keeping_place(&self) -> (Option<ResumePoint>, u64) {
+        let (task, place, stamp) = {
             let mut st = self.st();
-            st.playback = None;
+            let running = st.timeline.as_ref().is_some_and(|t| !t.is_finished());
+            let place = st.playback.take().filter(|_| running).map(|p| ResumePoint {
+                position: p.now(),
+                end: p.end,
+                at: Instant::now(),
+                song: p.song,
+            });
             st.engine = None;
             st.replay_load = None;
-            st.timeline.take()
+            st.cancels += 1;
+            (st.timeline.take(), place, st.cancels)
         };
         if let Some(task) = task {
             task.abort();
@@ -1480,6 +1605,7 @@ impl Inner {
         if let Some(link) = self.lightkey.get() {
             link.set_replaying(None);
         }
+        (place, stamp)
     }
 
     // ---- operator override ---------------------------------------------------------------------
