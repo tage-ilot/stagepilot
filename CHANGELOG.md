@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.11] - 2026-11-10
+
 ### Changed
 
 - **A preset you switch on just before a song no longer keeps the song's first look away from those lights.** StagePilot gave a light to the operator for 30 s whenever it changed in a way the replay had not caused, also when no song was playing. On the 2026-11-08 rig test `clear_all` pressed 16 s before play left 19 lights out of the first look of Ever Be: they did not follow the plan for the first 12 s and the moving heads not for 35 s. Now what is touched while no song is replaying (before the first look, after a song ended) is not a take-over: when a song starts from the top, or play is pressed on a song that is not on (a resume or seek), every older take-over is dropped and the first look goes to every light it covers. A touch during the song, also while it is paused, works as before (the light is yours for 30 s, then handed back; a touch of the last 30 s stays yours after a jump). Nothing is released at a song's end or on stop. A Lightkey preset on a held light still shows nothing until **Release lights**. This is a behaviour decision ("option A", the first look holds the whole rig). See \"The operator always wins, per fixture\" in `docs/lights.md`.
