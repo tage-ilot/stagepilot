@@ -464,6 +464,16 @@ impl OperatorTracker {
         }
     }
 
+    /// A song's replay starts from the top, or a resume/seek starts one that was not running
+    /// (F-H3): whatever the operator touched before it is not a take-over of this song. Every
+    /// yield is dropped (its fixture gets the first look like the others) and every send is a
+    /// first send again. Nothing is sent or released here. Returns the fixtures that were the
+    /// operator's.
+    pub fn begin_song(&mut self) -> Vec<String> {
+        self.restart_sends();
+        std::mem::take(&mut self.yielded).into_keys().collect()
+    }
+
     /// A replay (re)starts, resumes or seeks: every send is a first send again.
     pub fn restart_sends(&mut self) {
         self.last_value.clear();
@@ -1030,5 +1040,103 @@ mod tests {
         );
         assert!(t.take_back("Z1"));
         assert!(!t.is_yielded("Z1"));
+    }
+
+    // ---- F-H3: what is touched before a song starts is not a take-over of the song ---------
+
+    fn lights(n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("L{i:02}")).collect()
+    }
+    fn dimmer(name: &str) -> String {
+        format!("/fixture/{name}/overrides/dimmer")
+    }
+
+    /// The previous song's replay sent a dimmer to `n` lights and holds them.
+    fn after_a_song(n: usize, t0: Instant) -> (OperatorTracker, BTreeSet<String>) {
+        let mut t = OperatorTracker::new();
+        let mut h = BTreeSet::new();
+        for name in lights(n) {
+            t.note_send(&dimmer(&name), &f(0.0), t0);
+            h.insert(name);
+        }
+        (t, h)
+    }
+
+    #[test]
+    fn touches_16_seconds_before_the_start_do_not_hold_the_first_look_away() {
+        let t0 = Instant::now();
+        let start = t0 + Duration::from_secs(100);
+        let (mut t, mut h) = after_a_song(19, t0);
+        // the operator clears all 19 lights 16 s before play: today every one is theirs
+        let touch = start - Duration::from_secs(16);
+        let all: Vec<FixtureCommand> = lights(19).iter().map(|n| cmd(&dimmer(n), 0.7)).collect();
+        let v = t.observe(&mut h, &all, false, touch);
+        assert_eq!(v.newly_yielded.len(), 19);
+        assert_eq!(
+            t.yielded_count(),
+            19,
+            "before: 19 lights skipped by the first look"
+        );
+        // the song starts: nothing is the operator's, all 19 are in the first look
+        let cleared = t.begin_song();
+        assert_eq!(cleared.len(), 19);
+        assert_eq!(t.yielded_count(), 0, "after: none skipped");
+        assert!(lights(19).iter().all(|n| !t.is_yielded(n)));
+        // the first send to each is a first send (judged against where the operator left it)
+        for n in lights(19) {
+            assert!(
+                !t.needs_baseline(&dimmer(&n)),
+                "{n}: the relay value is known"
+            );
+        }
+    }
+
+    #[test]
+    fn a_touch_after_the_start_yields_as_before() {
+        let t0 = Instant::now();
+        let start = t0 + Duration::from_secs(100);
+        let (mut t, mut h) = after_a_song(3, t0);
+        t.observe(
+            &mut h,
+            &[cmd(&dimmer("L00"), 0.7)],
+            false,
+            start - Duration::from_secs(16),
+        );
+        t.begin_song();
+        // the first look goes out and is echoed
+        for n in lights(3) {
+            t.note_send(&dimmer(&n), &f(0.2), start);
+        }
+        let v = t.observe(
+            &mut h,
+            &[cmd(&dimmer("L01"), 0.9)],
+            false,
+            start + Duration::from_secs(5),
+        );
+        assert_eq!(v.newly_yielded, vec!["L01".to_string()]);
+        assert_eq!(t.yielded_count(), 1, "5 s into the song: yielded");
+        let quiet = Duration::from_secs(30);
+        assert_eq!(
+            t.due(quiet, start + Duration::from_secs(35)),
+            vec!["L01".to_string()]
+        );
+        assert!(t.due(quiet, start + Duration::from_secs(34)).is_empty());
+    }
+
+    #[test]
+    fn the_start_forgets_what_the_replay_sent_last_so_the_first_look_is_a_first_send() {
+        let t0 = Instant::now();
+        let (mut t, _h) = after_a_song(1, t0);
+        t.learn(&[cmd(&dimmer("L00"), 0.7)]);
+        t.begin_song();
+        t.note_send(&dimmer("L00"), &f(0.2), t0 + Duration::from_secs(60));
+        let sends = &t.recent[&normalise_fixture(&dimmer("L00"))];
+        let last = sends.last().unwrap();
+        assert!(last.first, "no earlier sent value: it is a first send");
+        assert_eq!(
+            last.baseline,
+            Some(0.7),
+            "judged against the operator's state"
+        );
     }
 }

@@ -801,6 +801,21 @@ sending to that fixture, sends **no clear** (the operator's change stays), and
 keeps replaying every other fixture. The strip shows "Holding N fixtures" and
 "M yielded to the operator".
 
+**Before a song starts.** What you touch while no song is replaying does not count as taking a
+light away from the next song. When a song starts from the top, or when you press play (a resume
+or a seek) on a song that is not on (nothing was playing, it ended, or it is another song), every
+light that was yours is the replay's again: the song's first look goes to **every** light it
+covers, and the first value of each is judged like any first send (against where the light stood,
+see the baseline above). So a Lightkey preset or a cue you switch off in the half minute before
+play no longer keeps the first look away from those lights; the look is sent over it, and a
+Lightkey preset on a held light shows nothing until **Release lights** (the starting look holds the
+whole rig). Nothing is released at the end of a song or on stop: the lights stay as they are, and a
+change made after the end is still shown as "yielded to the operator" until the next song starts
+and drops it. **During** the song nothing changes: a touch while it plays or is paused makes the
+light yours for 30 seconds after the last change, a pause, resume or seek inside the song keeps
+that, and only a light quiet for 30 seconds is handed back at the jump. (A stop within the last
+second of the song counts as its end; a reset of the position ends the song.)
+
 After 30 seconds with no further operator change on that fixture the replay takes
 it back: while the song runs, it sends the fixture's latest message at or before
 the current position and carries on with its later rows; while the song is paused
