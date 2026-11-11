@@ -555,15 +555,25 @@ pub async fn update_settings(State(rt): State<Rt>, body: Bytes) -> Response {
             return busy;
         }
     }
-    if let Err(message) = save_planning_center(&rt, public, secret, remove_secret).await {
-        return persistence_error(&message);
+    // The same public settings and no new or removed credential: nothing to write.
+    let unchanged = public == previous && !secret_changed;
+    if !unchanged {
+        if let Err(message) = save_planning_center(&rt, public, secret, remove_secret).await {
+            return persistence_error(&message);
+        }
     }
     let mut reconfigure_error: Option<String> = None;
     match rt.pco.plugin() {
         Some(plugin) => {
-            let outcome = plugin.reconfigure(rt.pco.effective()).await;
-            if !outcome.accepted {
-                reconfigure_error = Some(outcome.message);
+            // Already running exactly these settings and connected: applying them again would
+            // only flap the connection and reload the plan (the dashboard does this on every
+            // page load, F-P1).
+            let effective = rt.pco.effective();
+            if !(unchanged && plugin.is_running_with(&effective)) {
+                let outcome = plugin.reconfigure(effective).await;
+                if !outcome.accepted {
+                    reconfigure_error = Some(outcome.message);
+                }
             }
         }
         None if rt

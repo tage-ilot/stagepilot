@@ -129,6 +129,13 @@ APPROVED_DIVERGENCES = [
     (r"^(pco|outputs: )[^.]*\.response\.body\.(state\.)?recent_events",
      "rc.4 C2: a connection.changed event replaces the previous one of the same source and "
      "kind in recent_events, so the repeated connection entries of the recording collapse"),
+    (r"^lightkey: a Lighting save keeps the Lightkey block\.response\.body\.(lights\.detail|message): 'OSC output to [^']*' != 'Capture and replay connected\. Replay sends to [^']*\.'$",
+     "F-P1: saving Lighting settings that are already running leaves the Lightkey helper link up "
+     "(the recording reset it), so the card keeps saying Connected instead of Ready"),
+    (r"^pco mock saw the bearer service types\.mock_requests: length 8 != 2$",
+     "F-P1: saving Planning Center settings that are already running (the step before it posts the "
+     "saved OAuth settings unchanged) no longer reconnects and reloads the plan, so the mock sees "
+     "the one service-types call of the step and not the six requests of a reload"),
     (r"^lightkey: [^.]*\.response\.body\.state\.recent_events",
      "rc.8: the Lighting card changes from Ready to Connected when the Lightkey helper link comes up, "
      "which adds one lights connection.changed entry to recent_events"),

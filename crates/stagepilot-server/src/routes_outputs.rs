@@ -566,6 +566,13 @@ async fn propresenter_settings_body(rt: Rt, raw: Bytes) -> Json {
             ),
         };
     };
+    // The same settings as the saved ones and the running ones, with the output connected: there
+    // is nothing to apply. No reconnect, no Look triggered again (it would change the screen),
+    // nothing written. The dashboard does this on every page load (F-P1).
+    if updated == current && plugin.is_running_with(&updated) {
+        let snapshot = plugin.snapshot(false).await;
+        return finish_pp_settings(&rt, plugin, snapshot, None).await;
+    }
     let snapshot = plugin.reconfigure(updated.clone()).await;
     // Apply the Look before saving it: a Look ProPresenter does not know is reported but never
     // kept, so the previous Look stays saved.
@@ -777,8 +784,12 @@ async fn lights_settings_work(rt: Rt, raw: Bytes) -> Json {
     if !errors.is_empty() {
         return unprocessable(details(&errors, &[]));
     }
-    if let Err(response) = persist_lights(&rt, updated.clone()) {
-        return response;
+    // The same as what is saved: nothing to write. The plugin itself decides whether what is
+    // running already matches (and then touches nothing).
+    if updated != current {
+        if let Err(response) = persist_lights(&rt, updated.clone()) {
+            return response;
+        }
     }
     let outcome = rt.outputs.lights.reconfigure(updated).await;
     lights_operation(&rt, outcome.accepted, outcome.message).await

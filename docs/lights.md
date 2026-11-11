@@ -7,8 +7,9 @@ method with the **Connection method** switch at the top of the Lighting panel.
 
 Only the saved method fires. When OSC is saved, MIDI cues are disabled, and the
 other way round. Cues for the inactive method are kept and return when you switch
-back. Saving a method change cancels any running timeline; the new method starts
-at the next song start. StagePilot never sends both.
+back. Saving a method change stops the running timeline and, if the song still has
+lights to play on the new method, starts it again at the second the song has reached
+(see "Saving Lighting settings while a song plays"). StagePilot never sends both.
 
 A fresh install defaults to OSC. An install that already saved Lighting settings
 before OSC existed stays on MIDI, and its MIDI cue maps work unchanged.
@@ -759,6 +760,26 @@ no visible effect until the operator presses Release lights** (the replay's over
 top of presets). A manual change to a fixture in Lightkey (a fader, an override) is noticed
 and wins, as described next. A new song releases the held fixtures it does not use, and a song
 with a starting look uses all of them.
+
+### Saving Lighting settings while a song plays
+
+The dashboard saves every configured service again each time a page is opened (a
+phone, a tablet, the remote-access page), also in the middle of a song. That is
+harmless: when the Lighting settings are the ones already running and the output is
+open, nothing happens. The replay keeps going, the output stays open, the Lightkey
+link is not reset and no fixture is released or re-synced. "The same" means the same
+Lighting on/off, method, MIDI output, channel and note length, OSC host and port, and
+the whole Lightkey block (helper address, Replay, mode, audio input, found computer).
+Song cue maps, pads and their revisions are not compared; they are taken over without a
+restart and apply from the next start or seek. The dashboard itself no longer saves a
+service whose status already says it is connected or ready.
+
+A real change (any of the above, or an output that is not open) reconfigures as before:
+the timeline stops, the held fixtures are given back on the old output and the output is
+rebuilt. If the song was replaying and still has lights to play, the replay then starts
+again for the same song at the second it has reached, brought to the song's current look
+like a seek. It does not start again after a pause, stop, seek or new song made meanwhile,
+when Lighting or Replay is turned off, or in the last second of the song.
 
 ### The operator always wins, per fixture
 

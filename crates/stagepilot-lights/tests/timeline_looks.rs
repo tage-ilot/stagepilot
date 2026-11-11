@@ -1067,3 +1067,162 @@ async fn replay_off_gives_everything_back_and_forgets_the_operator() {
     assert_eq!(status.holding_fixtures, None);
     assert_eq!(r.clears().len(), 2);
 }
+
+// --------------------------------------------- saving settings mid-song (F-P1)
+
+/// The song the saving tests play: rows for A and B at 1, 10, 20, 40 and 60 s.
+fn saving_rig_settings() -> LightsSettings {
+    settings(vec![("s", two_fixture_song())])
+}
+
+/// When the first message to `address` after `since` (song seconds) went out.
+fn first_send_after(r: &Rig, address: &str, since: f64) -> Option<f64> {
+    r.sent()
+        .into_iter()
+        .find(|(t, a)| a == address && *t > since)
+        .map(|(t, _)| t)
+}
+
+#[tokio::test(start_paused = true)]
+async fn saving_the_settings_that_are_running_mid_song_leaves_the_replay_alone() {
+    let r = rig(saving_rig_settings()).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    let link_before = r.plugin.lightkey_status().await.link;
+    r.forget();
+    let outcome = r.plugin.reconfigure(saving_rig_settings()).await;
+    assert!(outcome.accepted, "{}", outcome.message);
+    // Nothing went out because of the save: no release, no re-sync.
+    assert!(r.sent().is_empty(), "the save sent {:?}", r.sent());
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(status.replaying_song.as_deref(), Some("s"));
+    assert_eq!(status.link, link_before, "the helper link was not reset");
+    // The song's clock was not touched: the 10 s row goes out at 10 s (a little early) and the
+    // 20 s row after it, with no extra sends in between.
+    run_for(6.0).await;
+    let at = first_send_after(&r, &dim("A"), 0.0).expect("the 10 s row");
+    assert!((9.0..10.0).contains(&at), "10 s row went out at {at}");
+    run_for(10.0).await;
+    assert_eq!(count(&r, &dim("A")), 2, "{:?}", r.addresses());
+    assert!(r.clears().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn saving_the_same_settings_still_takes_over_new_cue_maps_without_a_restart() {
+    let r = rig(saving_rig_settings()).await;
+    r.start("s").await;
+    run_for(5.0).await;
+    r.forget();
+    let mut more = saving_rig_settings();
+    more.cue_maps.insert(
+        "t".into(),
+        more.cue_maps
+            .get("s")
+            .cloned()
+            .map(|mut m| {
+                m.song_key = "t".into();
+                m
+            })
+            .unwrap(),
+    );
+    r.plugin.reconfigure(more).await;
+    run_for(1.0).await; // a restart would re-sync the fixtures about now
+    assert!(r.plugin.settings().cue_maps.contains_key("t"));
+    assert!(r.sent().is_empty(), "{:?}", r.sent());
+    assert_eq!(
+        r.plugin.lightkey_status().await.replaying_song.as_deref(),
+        Some("s")
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_changed_port_mid_song_reconnects_and_the_replay_carries_on_from_where_it_was() {
+    let r = rig(saving_rig_settings()).await;
+    r.start("s").await;
+    run_for(12.0).await; // the 10 s row is out; the 20 s row is next
+    r.forget();
+    let mut moved = saving_rig_settings();
+    moved.osc_port = 9001;
+    let outcome = r.plugin.reconfigure(moved).await;
+    assert!(outcome.accepted, "{}", outcome.message);
+    assert_eq!(r.plugin.settings().osc_port, 9001);
+    run_for(1.0).await; // the re-sync goes out paced
+                        // The held fixtures were given back on the old rig, then the new output got the look the
+                        // song is at (the 10 s row), not the first one.
+    let sent = r.sent();
+    let resync = sent
+        .iter()
+        .rposition(|(_, a)| *a == dim("A"))
+        .expect("A is brought to the song's current look");
+    assert!(
+        sent[..resync].iter().any(|(_, a)| *a == clear("A")),
+        "{sent:?}"
+    );
+    let status = r.plugin.lightkey_status().await;
+    assert_eq!(
+        status.replaying_song.as_deref(),
+        Some("s"),
+        "still replaying"
+    );
+    // And the clock went on: the 20 s row still goes out at 20 s.
+    r.forget();
+    run_for(9.0).await;
+    let at = first_send_after(&r, &dim("A"), 0.0).expect("the 20 s row");
+    assert!((19.0..20.0).contains(&at), "20 s row went out at {at}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_changed_setting_after_a_pause_does_not_start_the_replay_again() {
+    let r = rig(saving_rig_settings()).await;
+    r.start("s").await;
+    run_for(12.0).await;
+    r.at(EventType::TimerStopRequested, "s", 12.0, false).await;
+    r.forget();
+    let mut moved = saving_rig_settings();
+    moved.osc_port = 9001;
+    r.plugin.reconfigure(moved).await;
+    run_for(30.0).await;
+    assert_eq!(count(&r, &dim("A")), 0, "{:?}", r.addresses());
+    assert_eq!(r.plugin.lightkey_status().await.replaying_song, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn turning_lighting_or_replay_off_mid_song_does_not_resume_the_replay() {
+    for off in ["lighting", "replay"] {
+        let r = rig(saving_rig_settings()).await;
+        r.start("s").await;
+        run_for(12.0).await;
+        r.forget();
+        let mut changed = saving_rig_settings();
+        if off == "lighting" {
+            changed.enabled = false;
+        } else {
+            changed.lightkey.replay = false;
+        }
+        r.plugin.reconfigure(changed).await;
+        r.forget();
+        run_for(30.0).await;
+        assert!(r.sent().is_empty(), "{off}: {:?}", r.sent());
+        assert_eq!(
+            r.plugin.lightkey_status().await.replaying_song,
+            None,
+            "{off}"
+        );
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_changed_helper_address_mid_song_is_a_real_change() {
+    // Everything in the Lightkey block counts, not only the host and port.
+    let r = rig(saving_rig_settings()).await;
+    r.start("s").await;
+    run_for(12.0).await;
+    r.forget();
+    let mut changed = saving_rig_settings();
+    changed.lightkey.api_url = "http://127.0.0.1:10".into();
+    r.plugin.reconfigure(changed).await;
+    assert_eq!(r.plugin.settings().lightkey.api_url, "http://127.0.0.1:10");
+    run_for(1.0).await; // the re-sync goes out paced
+                        // It went through the full path: the held fixtures were re-synced (the output was rebuilt).
+    assert!(count(&r, &dim("A")) >= 1, "{:?}", r.addresses());
+}

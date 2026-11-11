@@ -124,6 +124,20 @@ impl ProPresenterPlugin {
         self.inner.snapshot()
     }
 
+    /// Is the plugin already running exactly these settings, connected, with its timer and Look
+    /// found? Every field counts (host, port, timer name, Look, timeout, the reconnect and
+    /// check intervals and enabled). Saving such settings has nothing to apply.
+    pub fn is_running_with(&self, settings: &ProPresenterSettings) -> bool {
+        let snapshot = self.inner.snapshot();
+        let st = self.inner.st();
+        !st.stopping
+            && st.client.is_some()
+            && st.settings == *settings
+            && snapshot.connection_status == ConnectionStatus::Connected
+            && snapshot.timer_found
+            && snapshot.look_found
+    }
+
     /// Apply validated settings for this backend session and reconnect immediately.
     pub async fn reconfigure(&self, settings: ProPresenterSettings) -> ProPresenterStatusResponse {
         {
