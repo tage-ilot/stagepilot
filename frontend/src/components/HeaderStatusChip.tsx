@@ -36,6 +36,10 @@ interface Measured {
   compact: boolean;
 }
 
+// The narrowest the status pill may be cut to before it steps aside: the width of the "Ready" pill. A longer status (an error
+// cause, a song to record again) is cut with "..." to the room it has instead of vanishing, because a problem must stay visible.
+const MIN_STATUS_W = 66;
+
 // The window width below which the page switches to its tighter padding (Tailwind `lg`).
 const COMPACT_QUERY = "(max-width: 1023.98px)";
 
@@ -99,19 +103,22 @@ export function HeaderStatusChip({ statusClass, statusLabel, notice, title, expa
   }, [statusLabel, shown?.message]);
 
   // avail of 0 means the slot has not been laid out (a test renderer, or a hidden tab): assume it fits.
-  const fits = m === null || m.avail === 0 || m.avail >= m.statusW;
+  const laidOut = m !== null && m.avail > 0;
+  const fits = !laidOut || m.avail >= m.statusW;
+  // The status pill shows (cut with "..." when its words are longer than the slot) unless even the shortest pill would not fit.
+  const showsStatus = !laidOut || m.avail >= Math.min(m.statusW, MIN_STATUS_W);
   // A message always shows, even when the slot is too small for the status pill: it then sits over the logo.
   const messageInChip = Boolean(notice);
   // The most room a message has: the slot while the window is wide, the whole header row (logo included) when it is not.
   const room = m === null ? 0 : fits && !m.compact ? m.avail : Math.max(m.rowW, m.avail);
-  const width = m === null ? undefined : messageInChip ? Math.min(m.noteW, room) : m.statusW;
+  const width = m === null ? undefined : messageInChip ? Math.min(m.noteW, room) : laidOut ? Math.min(m.statusW, m.avail) : m.statusW;
   const height = m === null ? undefined : messageInChip ? m.noteH : m.statusH;
   const noteTone = (shown ?? { tone: "info" as const }).tone;
 
   return (
     <div className="app-header-status relative -top-[3px] flex h-9 min-w-0 flex-1 items-center justify-end" ref={slotRef}>
       <div aria-atomic="true" aria-live="polite" className="sr-only" role="status">{notice?.message ?? ""}</div>
-      <div className="header-chip-wrap relative z-40 shrink-0" data-fits={fits ? "true" : "false"} data-notice={notice ? "true" : "false"} ref={wrapRef} {...wrapProps}>
+      <div className="header-chip-wrap relative z-40 shrink-0" data-fits={showsStatus ? "true" : "false"} data-notice={notice ? "true" : "false"} ref={wrapRef} {...wrapProps}>
         <button
           aria-describedby="system-readiness-popover"
           aria-expanded={expanded}

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 import type {
+  AccessCapabilities,
   ApplicationState,
   MidiInputsResponse,
   ServiceLoadState,
@@ -15,8 +16,8 @@ import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { playbackStatus } from "../test/playbackFixtures";
 import * as api from "../api";
 import { REMOTE_OFFLINE_GRACE_MS } from "../hooks/useRemoteOffline";
+import { LOCAL_CAPABILITIES } from "../access/accessState";
 import { Dashboard } from "./Dashboard";
-import { resetDismissedSettingsNotices } from "./settingsNotices";
 
 const loadedPlan: ServicePlan = {
   id: "previous-plan",
@@ -211,7 +212,13 @@ function applicationState(
   };
 }
 
-function renderDashboard(
+function renderDashboard(serviceLoad: ServiceLoadState, options: DashboardTestOptions = {}) {
+  return render(dashboardElement(serviceLoad, options));
+}
+
+type DashboardTestOptions = Parameters<typeof dashboardElement>[1];
+
+function dashboardElement(
   serviceLoad: ServiceLoadState,
   {
     actionMessage = null,
@@ -224,7 +231,9 @@ function renderDashboard(
     settings = productionSettings,
     updater,
     playback,
+    capabilities,
   }: {
+    capabilities?: AccessCapabilities;
     actionMessage?: string | null;
     error?: string | null;
     live?: boolean;
@@ -237,8 +246,9 @@ function renderDashboard(
     playback?: PlaybackController;
   } = {},
 ) {
-  return render(
+  return (
     <Dashboard
+      capabilities={capabilities}
       actionMessage={actionMessage}
       dispatch={dispatch}
       error={error}
@@ -259,7 +269,7 @@ function renderDashboard(
       state={state}
       updater={updater}
       playback={playback}
-    />,
+    />
   );
 }
 
@@ -620,6 +630,38 @@ describe("Dashboard Planning Center plan states", () => {
       expect(screen.getByTestId("header-chip")).toHaveTextContent("Check system");
     });
 
+    it("a status longer than its slot is cut with an ellipsis instead of vanishing; only a slot narrower than \"Ready\" hides it (F-H7)", async () => {
+      const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
+      const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
+      expect(css).toMatch(/\.header-chip-status \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/);
+
+      // jsdom has no layout: give the slot a width and the hidden measuring copy a (long) text width.
+      let slotWidth = 120;
+      const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("app-header-status") ? slotWidth : 900;
+      });
+      const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const width = this.classList.contains("header-chip-probe-status") ? 380 : 0;
+        return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 20, width, height: 20, toJSON: () => ({}) } as DOMRect;
+      });
+      try {
+        const { unmount } = renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { plugins: {} }), settings: { ...productionSettings, settings_degraded: true } });
+        const chip = screen.getByTestId("header-chip");
+        const wrap = chip.closest(".header-chip-wrap");
+        // 380px of words in a 120px slot: still drawn, exactly the slot wide (the stylesheet adds the "...").
+        await waitFor(() => expect(chip).toHaveStyle({ width: "120px" }));
+        expect(wrap).toHaveAttribute("data-fits", "true");
+        // A slot narrower than the smallest pill ("Ready", 66px): it steps aside as before.
+        slotWidth = 50;
+        unmount();
+        renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { plugins: {} }), settings: { ...productionSettings, settings_degraded: true } });
+        await waitFor(() => expect(screen.getByTestId("header-chip").closest(".header-chip-wrap")).toHaveAttribute("data-fits", "false"));
+      } finally {
+        client.mockRestore();
+        rect.mockRestore();
+      }
+    });
+
     it("steps aside, instead of shrinking to a dot, when the slot is too small; a message still shows (stylesheet rules)", async () => {
       const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
       const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
@@ -736,12 +778,13 @@ describe("Dashboard Planning Center plan states", () => {
       // Reconnecting is normal for a while: still "Ready".
       await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS / 2); });
       expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
-      // Through the retries and still down: the pill says so, and the list names it as optional.
+      // Through the retries and still down: the pill says so, and the list names it (as an error row, no "Optional" tag).
       await act(async () => { await vi.advanceTimersByTimeAsync(REMOTE_OFFLINE_GRACE_MS); });
       const pill = screen.getByRole("button", { name: /^Remote access offline$/ });
       expect(pill).toHaveClass("border-danger-edge");
       expect(screen.queryByRole("button", { name: /^Ready$/ })).not.toBeInTheDocument();
       expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("Remote access offline");
+      expect(screen.getByRole("tooltip", { hidden: true })).not.toHaveTextContent(/optional/i);
       // It comes back: back to Ready.
       get.mockResolvedValue(remote("connected"));
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -1324,24 +1367,115 @@ describe("Dashboard widget layout", () => {
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
   });
 
-  it("tells the operator about a song whose lighting data was set aside, once, and not when there is none (F-H5)", async () => {
-    resetDismissedSettingsNotices();
-    const notice = "The lighting data for Ever Be was damaged and set aside; record it again.";
-    const { unmount } = renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_notice: notice } });
-    expect(screen.getByTestId("settings-notice-text")).toHaveTextContent(notice);
-    await userEvent.setup().click(screen.getByRole("button", { name: /Got it/ }));
-    expect(screen.queryByTestId("settings-notice")).not.toBeInTheDocument();
-    unmount();
+  describe("settings problems in the header status pill (F-H7)", () => {
+    const readyState = () => applicationState(loadedServiceState, { plugins: {} });
+    const damaged = (...songs: Array<[string, string]>): SettingsResponse => ({
+      ...productionSettings,
+      settings_set_aside: songs.map(([song_key, song_title]) => ({ song_key, song_title })),
+      settings_notice: songs.map(([, title]) => `The lighting data for ${title} was damaged and set aside; record it again.`).join(" "),
+    });
+    const rows = () => within(screen.getByRole("tooltip", { hidden: true })).getAllByRole("listitem");
+    const rowFor = (label: string) => rows().find((row) => row.textContent?.includes(label));
+    // The remote-access test shows how Ready is reached: a plan, no demo plugins and a healthy backend.
+    const readyBase = (settings: SettingsResponse) => ({ state: readyState(), settings });
 
-    resetDismissedSettingsNotices();
-    renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_notice: null, settings_degraded: false } });
-    expect(screen.queryByTestId("settings-notices-main")).not.toBeInTheDocument();
-  });
+    it("shows nothing about settings while nothing is wrong, and no banner is ever drawn", () => {
+      renderDashboard(loadedServiceState, readyBase({ ...productionSettings, settings_degraded: false, settings_set_aside: [], settings_notice: null }));
+      expect(rows().some((row) => /settings|Record /.test(row.textContent ?? ""))).toBe(false);
+      expect(screen.queryByTestId("settings-notices-main")).not.toBeInTheDocument();
+    });
 
-  it("tells the operator when the saved settings could not be used (F-H5)", () => {
-    resetDismissedSettingsNotices();
-    renderDashboard(loadedServiceState, { settings: { ...productionSettings, settings_degraded: true, settings_degraded_reason: "not valid JSON" } });
-    expect(screen.getByTestId("settings-degraded")).toHaveTextContent("default settings");
+    it("unreadable settings: the pill is the error, the list row has the ! mark and the sentence", () => {
+      renderDashboard(loadedServiceState, readyBase({ ...productionSettings, settings_degraded: true, settings_degraded_reason: "not valid JSON" }));
+      const pill = screen.getByTestId("header-chip");
+      expect(screen.getByRole("button", { name: /^Error: Saved settings could not be read$/ })).toBe(pill);
+      expect(pill).toHaveClass("border-danger-edge", "text-danger-pill");
+      expect(pill).toHaveAttribute("title", expect.stringContaining("It started with the default settings, so Planning Center, Lighting and the other saved settings are not loaded."));
+      const row = rowFor("Saved settings could not be read");
+      expect(row).toBeDefined();
+      expect(row).toHaveTextContent("!");
+      expect(row).not.toHaveTextContent("Optional");
+      expect(row).toHaveAttribute("title", expect.stringContaining("default settings"));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Got it|Dismiss/ })).not.toBeInTheDocument();
+    });
+
+    it("a settings file from a newer StagePilot has its own words", () => {
+      renderDashboard(loadedServiceState, readyBase({ ...productionSettings, settings_degraded: true, settings_degraded_reason: "schema_version 3 is newer than 2" }));
+      expect(screen.getByRole("button", { name: /^Error: Settings are from a newer StagePilot$/ })).toHaveClass("border-danger-edge");
+      expect(rowFor("Settings are from a newer StagePilot")).toHaveAttribute("title", expect.stringContaining("Open the newer StagePilot"));
+    });
+
+    it("one set-aside song: the ready pill shows the warning words in the alarm colours, the row is a plain error row", () => {
+      renderDashboard(loadedServiceState, readyBase(damaged(["k1", "Ever Be"])));
+      const pill = screen.getByRole("button", { name: /^Record Ever Be again$/ });
+      expect(pill).toHaveClass("border-danger-edge", "text-danger-pill");
+      expect(pill).toHaveAttribute("title", "The lighting data for Ever Be was damaged and set aside; record it again.");
+      const row = rowFor("Record Ever Be again");
+      expect(row).toHaveTextContent("!");
+      expect(row).not.toHaveTextContent(/optional/i);
+      expect(row).toHaveAttribute("title", "The lighting data for Ever Be was damaged and set aside; record it again.");
+    });
+
+    it("both: the settings error leads and both rows are listed", () => {
+      renderDashboard(loadedServiceState, readyBase({ ...damaged(["k1", "Ever Be"]), settings_degraded: true, settings_degraded_reason: "not valid JSON" }));
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Error: Saved settings could not be read");
+      expect(rowFor("Saved settings could not be read")).toBeDefined();
+      expect(rowFor("Record Ever Be again")).toBeDefined();
+      expect(screen.getByRole("tooltip", { hidden: true })).not.toHaveTextContent(/optional/i);
+    });
+
+    it("two songs: the first leads and the list shows both", () => {
+      renderDashboard(loadedServiceState, readyBase(damaged(["k1", "Ever Be"], ["k2", "Elohim"])));
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Record Ever Be again");
+      expect(rowFor("Record Ever Be again")).toBeDefined();
+      expect(rowFor("Record Elohim again")).toBeDefined();
+    });
+
+    it("a very long song name stays one line in the pill (cut by the pill) and whole in the list and title", () => {
+      const title = "Great Are You Lord, Reign In Us, Holy Spirit Come, and Every Other Verse Of The Medley We Sing";
+      renderDashboard(loadedServiceState, readyBase(damaged(["k1", title])));
+      const pill = screen.getByTestId("header-chip");
+      expect(pill).toHaveTextContent(`Record ${title} again`);
+      expect(pill).toHaveAttribute("title", `The lighting data for ${title} was damaged and set aside; record it again.`);
+      expect(pill.querySelector(".header-chip-status")?.textContent).toBe(`Record ${title} again`);
+    });
+
+    it("the row and the pill warning are gone as soon as the song is recorded again, without a restart", () => {
+      const options = readyBase(damaged(["k1", "Ever Be"], ["k2", "Elohim"]));
+      const { rerender } = renderDashboard(loadedServiceState, options);
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Record Ever Be again");
+      const withCapture = (keys: string[]): SettingsResponse => ({
+        ...options.settings,
+        settings: {
+          ...options.settings.settings,
+          lights: {
+            ...options.settings.settings.lights,
+            cue_maps: Object.fromEntries(keys.map((key) => [key, {
+              song_key: key, song_title: key, cues: [], osc_cues: [],
+              capture: { complete: true, coverage_seconds: 200, recorded_at: "2026-11-10T09:00:00Z" },
+            }])),
+          },
+        },
+      });
+      // The server still lists both songs (it says what happened at start); only the saved data tells.
+      rerender(dashboardElement(loadedServiceState, { ...options, settings: withCapture(["k1"]) }));
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Record Elohim again");
+      expect(rowFor("Record Ever Be again")).toBeUndefined();
+      expect(rowFor("Record Elohim again")).toBeDefined();
+      rerender(dashboardElement(loadedServiceState, { ...options, settings: withCapture(["k1", "k2"]) }));
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toHaveClass("border-success-soft");
+      expect(rowFor("Record Elohim again")).toBeUndefined();
+    });
+
+    it("the read-only Live status view is unchanged: no settings rows, no warning", () => {
+      renderDashboard(loadedServiceState, {
+        ...readyBase({ ...damaged(["k1", "Ever Be"]), settings_degraded: true }),
+        capabilities: { ...LOCAL_CAPABILITIES, canConfigure: false },
+      });
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Live status");
+      expect(rows().some((row) => /settings|Record /.test(row.textContent ?? ""))).toBe(false);
+    });
   });
 
   it("a configured Lighting output that disconnects is not part of the system check (it has its own card)", () => {

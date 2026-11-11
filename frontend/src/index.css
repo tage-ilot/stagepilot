@@ -966,6 +966,12 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
+/* One line always: a status longer than the pill's room (a long song name in "Record ... again") is cut with "...". */
+.header-chip-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .header-chip[data-state="message"] .header-chip-status {
   opacity: 0;
   transform: translateY(-0.35rem);
