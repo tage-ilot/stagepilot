@@ -67,6 +67,9 @@ pub struct LightsOptions {
     pub midi_backend_factory: MidiOutputBackendFactory,
     pub osc_backend_factory: OscBackendFactory,
     pub monitor_interval: Duration,
+    /// How long a fresh `Sent <address> to <target>.` test-cue status is left alone by the link's
+    /// status refresh (see `Inner::refresh_osc_status`).
+    pub test_cue_hold: Duration,
     /// Record-switch store, timeline sink, HTTP client and clock of the Lightkey link.
     pub lightkey: LinkOptions,
     /// The search for the Lighting computer. Off unless the server turns it on.
@@ -79,11 +82,16 @@ impl LightsOptions {
             midi_backend_factory,
             osc_backend_factory: Arc::new(|| Arc::new(UdpOscBackend)),
             monitor_interval: Duration::from_secs(2),
+            test_cue_hold: TEST_CUE_HOLD,
             lightkey: LinkOptions::default(),
             discovery: DiscoveryOptions::default(),
         }
     }
 }
+
+/// How long the card keeps showing the result of the Test cue button before an unrelated change of
+/// the helper link may redraw it.
+const TEST_CUE_HOLD: Duration = Duration::from_secs(3);
 
 #[derive(Clone)]
 enum AnyCue {
@@ -135,6 +143,9 @@ struct State {
     /// A pause or stop inside the song keeps it. A play that finds none (or a start from the top)
     /// begins a new one and drops the yields of before (F-H3).
     session: Option<SongOn>,
+    /// The card text the last OSC test cue wrote and when. While the card still shows exactly that
+    /// text and it is younger than `test_cue_hold`, the helper-link refresh leaves it alone.
+    test_cue_status: Option<(Instant, String)>,
 }
 
 /// A song that is on (running, or paused inside).
@@ -175,6 +186,7 @@ struct Inner {
     midi_factory: MidiOutputBackendFactory,
     osc_factory: OscBackendFactory,
     monitor_interval: Duration,
+    test_cue_hold: Duration,
     state: Mutex<State>,
     operation_lock: tokio::sync::Mutex<()>,
     stop: tokio::sync::Notify,
@@ -258,6 +270,7 @@ impl LightsPlugin {
             midi_factory: options.midi_backend_factory,
             osc_factory: options.osc_backend_factory,
             monitor_interval: options.monitor_interval,
+            test_cue_hold: options.test_cue_hold,
             state: Mutex::new(State {
                 settings,
                 backend: None,
@@ -283,6 +296,7 @@ impl LightsPlugin {
                 engine: None,
                 replay_load: None,
                 session: None,
+                test_cue_status: None,
             }),
             operation_lock: tokio::sync::Mutex::new(()),
             stop: tokio::sync::Notify::new(),
@@ -880,11 +894,11 @@ impl Inner {
             let st = self.st();
             format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
         };
-        self.set_connection(
-            ConnectionStatus::Connected,
-            &format!("Sent {address} to {target}."),
-        )
-        .await;
+        let detail = format!("Sent {address} to {target}.");
+        // Note the text before it goes up, so a refresh that is already on its way finds it fresh.
+        self.st().test_cue_status = Some((Instant::now(), detail.clone()));
+        self.set_connection(ConnectionStatus::Connected, &detail)
+            .await;
         LightingOutcome::new(
             true,
             format!("Sent {address} to {target} (UDP, delivery not confirmed)."),
@@ -1900,7 +1914,7 @@ impl Inner {
     /// Re-judge the Lighting card after the helper link changed. Only moves between Ready and Connected while
     /// the OSC output is open; an error or a closed output keeps its own status.
     async fn refresh_osc_status(self: &Arc<Self>) {
-        let target = {
+        let (target, held) = {
             let st = self.st();
             let open = st.settings.enabled
                 && st.settings.method == LightingMethod::Osc
@@ -1912,10 +1926,45 @@ impl Inner {
             if !open {
                 return;
             }
-            format!("{}:{}", st.settings.osc_host, st.settings.osc_port)
+            (
+                format!("{}:{}", st.settings.osc_host, st.settings.osc_port),
+                self.test_cue_hold_left(&st),
+            )
         };
+        // The Test cue button just wrote "Sent ... to ...". The link's first status changes arrive
+        // a moment after start and would turn that text straight back into "Ready ... Capture is not
+        // connected yet" within milliseconds. Leave it for the hold, then look again, so a change
+        // of the link inside the hold is not lost.
+        if let Some(left) = held {
+            self.refresh_osc_status_after(left);
+            return;
+        }
         let (status, detail) = osc_connection(self.capture_connected(), &target);
-        self.set_connection(status, &detail).await;
+        // The test cue can land between the check above and this write, so decide again under the
+        // same lock that writes.
+        let written = self
+            .set_connection_unless(status, &detail, |st| self.test_cue_hold_left(st).is_some())
+            .await;
+        if !written {
+            self.refresh_osc_status_after(self.test_cue_hold);
+        }
+    }
+
+    fn refresh_osc_status_after(self: &Arc<Self>, wait: Duration) {
+        let inner = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(wait).await;
+            inner.refresh_osc_status().await;
+        });
+    }
+
+    /// How much longer the card keeps the text the last test cue wrote (`None` = not held).
+    fn test_cue_hold_left(&self, st: &State) -> Option<Duration> {
+        let (at, detail) = st.test_cue_status.as_ref()?;
+        if st.detail.as_ref() != Some(detail) {
+            return None;
+        }
+        self.test_cue_hold.checked_sub(at.elapsed())
     }
 
     async fn connect(self: Arc<Self>) -> bool {
@@ -2123,10 +2172,24 @@ impl Inner {
     }
 
     async fn set_connection(&self, status: ConnectionStatus, detail: &str) {
+        self.set_connection_unless(status, detail, |_| false).await;
+    }
+
+    /// `set_connection`, except that nothing is written when `skip` says so; `skip` runs under the
+    /// lock that guards the write. False when it was skipped.
+    async fn set_connection_unless(
+        &self,
+        status: ConnectionStatus,
+        detail: &str,
+        skip: impl Fn(&State) -> bool,
+    ) -> bool {
         {
             let mut st = self.st();
+            if skip(&st) {
+                return false;
+            }
             if st.connection_status == status && st.detail.as_deref() == Some(detail) {
-                return;
+                return true;
             }
             st.connection_status = status;
             st.detail = Some(detail.to_string());
@@ -2142,6 +2205,7 @@ impl Inner {
                 },
             ))
             .await;
+        true
     }
 }
 
