@@ -23,10 +23,28 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     rt.start().await;
     let app = build_app(rt.clone(), AppOptions { web_root: None });
     let binary = dir.path().join("cloudflared");
-    let lifecycle = attach_with(&rt, app, dir.path(), &binary, Platform::system(), None)
-        .await
-        .unwrap()
-        .expect("attached");
+    // Passing options also keeps the app's weekly city lookup off. The supervisor checks in
+    // unconditionally, so with the default options this test enrolled with the real beta control
+    // plane, and when that service was slow `lifecycle.stop()` waited for it past its 20 s limit
+    // (it failed on all four CI platforms of one run, after passing on three of them a few hours earlier). The
+    // origin below is a closed loopback port that is not a trusted control plane: the check-in is
+    // refused before any request is made, as in the test below.
+    let options = stagepilot_remote::desktop::DesktopOptions {
+        control_plane_origin: "http://127.0.0.1:9".into(),
+        pacing: stagepilot_remote::bootstrap::Pacing::instant(),
+        ..Default::default()
+    };
+    let lifecycle = attach_with(
+        &rt,
+        app,
+        dir.path(),
+        &binary,
+        Platform::system(),
+        Some(options),
+    )
+    .await
+    .unwrap()
+    .expect("attached");
 
     let wiring = rt.remote_wiring();
     assert!(wiring.access.is_some());
