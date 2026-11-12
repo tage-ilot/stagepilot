@@ -4,7 +4,12 @@
 
 ### Fixed
 
+- **Shutting StagePilot down no longer waits for a check-in with the control plane that is backing off.** The check-in every install makes can be told to wait up to five minutes before trying again, and stopping the app used to wait for that. Now stopping starts no further attempt and ends the waiting, and an attempt already on the wire is left to finish by itself. What StagePilot sends is unchanged. Five tests that raced the clock (keychain answer, launch, the dismissed Lightkey offer, microphone open, the dense-song screen) now wait for what they check instead, so they no longer fail on a slow computer.
 - **The test of a take with a link drop and a seek no longer fails on slow machines.** `a_take_with_a_drop_and_a_seek_is_saved_once_complete_with_the_gaps_counted` failed once on the rc.12 Windows runner (recorded 7.14 s, expected 6.11 s). It compared the seconds the link counted with the real time measured around real sleeps, left out the stretch recorded after the reconnection, and so had only 0.2 s of room before the poll lag of the link used it up. It now runs the link, the fake relay and the fake HTTP agent on one clock the test moves by hand, and the expected seconds are exactly the stretches the link recorded. The test for recording changes at song time also expects the seconds each change was sent at instead of the length of its sleeps. The fake relay of these tests also keeps serving when Windows reports a datagram sent to a closed port (WSAECONNRESET) as an error of its next read, and the take test waits until the relay has read the link's unsubscribe before it moves on: without that the two take tests hung on the Windows runner. Nothing in StagePilot itself changes.
+
+### Changed
+
+- **The app and the web page are about 7 MB smaller and load faster on phones; the pictures look the same.** The five connection icons were 1024 px pictures of 1.4 MB each, shown at 25 to 70 px; they are now 256 px (22 to 45 KB each). The grainy page background keeps its size and is saved with a lighter setting (1.5 MB down to 0.8 MB). An unused extra Lighting icon (1.5 MB) is gone, and the browser tab icon is 11 KB lighter (same picture). A test now fails if a picture in `frontend/src/assets` grows past 300 KB (the background has its own limit).
 
 ## [2.43.0] - 2026-11-11
 
