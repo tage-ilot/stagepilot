@@ -155,7 +155,16 @@ impl FakeRelay {
         tokio::spawn(async move {
             let wall = move || clock.wall();
             let mut buf = vec![0u8; 2048];
-            while let Ok((n, from)) = socket.recv_from(&mut buf).await {
+            loop {
+                let (n, from) = match socket.recv_from(&mut buf).await {
+                    Ok(got) => got,
+                    // Windows reports an earlier send_to a port nobody listens on any more (the
+                    // link's socket, closed while its pongs or an event were on the way) as a
+                    // WSAECONNRESET error of the NEXT recv_from on this socket. It says nothing
+                    // about this relay: keep serving, as a real relay (a Mac's process) does.
+                    Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => continue,
+                    Err(_) => break,
+                };
                 let Ok((_, OscPacket::Message(m))) = rosc::decoder::decode_udp(&buf[..n]) else {
                     continue;
                 };
@@ -562,6 +571,11 @@ impl Rig {
 }
 
 async fn wait_for(check: impl Fn() -> bool, timeout: f64) {
+    wait_until("condition", check, timeout).await;
+}
+
+/// `wait_for` that says which step it was waiting for when it gives up.
+async fn wait_until(what: &str, check: impl Fn() -> bool, timeout: f64) {
     let end = Instant::now() + Duration::from_secs_f64(timeout);
     while Instant::now() < end {
         if check() {
@@ -569,7 +583,7 @@ async fn wait_for(check: impl Fn() -> bool, timeout: f64) {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    panic!("condition not reached in time");
+    panic!("{what} not reached in time");
 }
 
 async fn pause(seconds: f64) {
@@ -1283,13 +1297,14 @@ async fn take_with_a_drop_and_a_seek(duration: u32, skip: f64) -> Take {
     // song second 0.4: P1 moves
     clock.advance(0.4);
     rig.relay.change(vec![dim("P1", 0.3)], 0.0, 0).await;
-    wait_for(|| is("P1", 0.3), WAIT).await;
+    wait_until("the first change of P1", || is("P1", 0.3), WAIT).await;
     // song second 0.8: the stream drops; P1 moves while nobody is listening
     clock.advance(0.4);
     let dropped = clock.now();
     rig.settings.lock().unwrap().1 = false;
     rig.settle(&s, started);
-    wait_for(
+    wait_until(
+        "the stream to drop",
         || {
             rig.link
                 .status()
@@ -1299,13 +1314,23 @@ async fn take_with_a_drop_and_a_seek(duration: u32, skip: f64) -> Take {
         WAIT,
     )
     .await;
+    // The link has only SENT its unsubscribe by now. Wait until the relay has read it: otherwise
+    // the relay still has a subscriber and sends the next change to the link's closed socket,
+    // which Windows answers with a connection reset on the relay's next read.
+    wait_until(
+        "the relay to read the unsubscribe",
+        || rig.relay.asked("unsubscribe") >= 1,
+        WAIT,
+    )
+    .await;
     // song second 2.3: the stream is back
     clock.advance(1.5);
     rig.relay.change(vec![dim("P1", 0.6)], 0.0, 0).await;
     rig.settings.lock().unwrap().1 = true;
     // the new keyframe carries P1 = 0.6: the link is live again and has read it
-    wait_for(|| is("P1", 0.6), WAIT).await;
-    wait_for(
+    wait_until("the keyframe with P1 = 0.6", || is("P1", 0.6), WAIT).await;
+    wait_until(
+        "the link to be live again",
         || {
             rig.link
                 .status()
@@ -1337,10 +1362,15 @@ async fn take_with_a_drop_and_a_seek(duration: u32, skip: f64) -> Take {
         .await;
     clock.advance(0.5);
     rig.relay.change(vec![dim("P2", 0.9)], 0.0, 0).await;
-    wait_for(|| is("P2", 0.9), WAIT).await;
+    wait_until("the change of P2 after the seek", || is("P2", 0.9), WAIT).await;
     clock.advance(0.5);
     rig.song_stop(&s, f64::from(duration)).await;
-    wait_for(|| !rig.saved.lock().unwrap().is_empty(), WAIT).await;
+    wait_until(
+        "the take to be saved",
+        || !rig.saved.lock().unwrap().is_empty(),
+        WAIT,
+    )
+    .await;
     assert_eq!(rig.saved.lock().unwrap().len(), 1, "saved exactly once");
     let saved = rig.saved.lock().unwrap().remove(0);
     let message = rig.link.status().message.unwrap_or_default();
