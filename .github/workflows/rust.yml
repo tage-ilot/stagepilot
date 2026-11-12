@@ -88,6 +88,8 @@ jobs:
           rustc --version
           cargo --version
 
+      # The key names the files that change what is built (the dev profile lives in Cargo.toml), so a
+      # profile change starts a fresh cache instead of restoring a target directory built another way.
       - name: Restore cargo cache
         id: cache
         uses: actions/cache@v4
@@ -96,7 +98,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-v2-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          key: rust-v2-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'rust-toolchain.toml') }}
 
       - name: cargo fmt --check
         run: cargo fmt --all --check
