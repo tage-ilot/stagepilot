@@ -2,9 +2,44 @@
 
 ## [Unreleased]
 
+## [2.43.0] - 2026-11-11
+
+StagePilot 2.43.0 is the Lightkey release. StagePilot records what the lights do during a song, replays it by itself the next time the song plays, and sets up the Lighting computer for you. It also reminds you to scan Playback again before the service. The candidates rc.3 to rc.12 below hold the step-by-step history.
+
 ### Added
 
-- **The header now reminds you to scan Playback again when the service is less than an hour away and Playback has not been scanned since, and keeps quiet while the service plan is going.** Operators scan right before the service because timings get changed at the last minute, and a fresh scan also corrects a song order StagePilot only learned. In the hour before the service start time, if the last scan is older than that hour, the status pill reads `Scan Playback again` (in the same red as the other warnings) and its list explains: `The service starts in 42 minutes and Playback has not been scanned in the hour before it. Scan it so song order and lengths are right.` It goes away by itself when a scan completes or when the service starts. It does not show while the service is going: from the service start until the plan's last song has ended, between songs too. A sound check before the service does not hide the reminder: a run-through that is not part of the service only hides it while a song plays and for 5 minutes after, so one or two songs played at 40 minutes before the service do not silence it for the whole hour. StagePilot reads the end from the last song's own countdown; if the last song has no length it uses the service start plus the song lengths plus 30 minutes, and it never counts the plan as going for more than 3 hours. With several services the reminder is for the next one that has not started: it comes back after the plan is over when another service is less than an hour away and Playback has not been scanned since (a rehearsal that ends before the service comes back too, until a scan completes). One service a Sunday gets the hour-before reminder only. There is no pop-up, button or sound, and the read-only Live status view is unchanged. Nothing is scanned automatically and nothing is written to Planning Center. See \"Scan again in the hour before the service\" in `docs/playback-api.md`.
+- **Lightkey capture and replay, song by song.** Each song is in Auto, Replay or Record. In Auto, a song without a complete capture is recorded and a song with one is replayed. A capture is complete when the recorded time is within 10 s of the song's length, gaps allowed. Every capture is saved, finishes by itself at the song's end, and keeps the starting look of all the lights (house lights included), so a replay begins from the right picture. The raw recording of each finished song is kept in `lightkey-recordings/` next to `settings.json`.
+- **Smooth replay.** A recorded song is fitted with straight-line ramps and detected effect loops instead of being thinned, and replayed through a pacing queue so a big look lands on the beat. A very busy song is simplified evenly instead of freezing the moving heads, and a song is never thrown away for size.
+- **The operator wins, per light.** If you change a light in Lightkey during a replay, StagePilot leaves that light alone for 30 seconds.
+- **Set up the Lighting computer from the Lighting section.** One copy-ready command installs the Lightkey helper on the Lighting Mac, and StagePilot finds that computer by itself afterwards. The Lighting section shows the Lightkey project and its fixture count, and the Lighting card says Connected when capture and replay are both live.
+- **A reminder to scan Playback again.** The header status shows "Scan Playback again" when the next service is less than an hour away and Playback has not been scanned since. It stays quiet while the service plan is going (also between songs, such as a sermon), works for any number of services, and a sound check before the service does not hide it. A fresh scan always sets the exact song order and lengths.
+- **Countdowns work before you scan.** StagePilot learns which Playback song is which plan song as they play. This learned order is a stopgap: scan to correct it.
+- **Problems show in the header status pill**, like every other problem: a damaged song, unreadable settings, a recording that must be made again.
+- **Lighting timeline.** Captured lights show as Look rows, cue types are colour-coded with a legend, the room loudness is drawn behind the timeline, and Clear and Clear all ask in a proper dialog first. The Lighting card says when it is saving a long recording.
+- Configuration panels open and close with a short animation from their connection card.
+
+### Changed
+
+- **Old Lightkey takes are not replayed.** Captures stored only in `lightkey-takes.json` are ignored (the file is left alone). Record those songs again. Cue maps saved in settings load and replay as before.
+- The Location setting is gone. Once a week the app asks db-ip.com for the city of its internet address (only the city is kept).
+
+### Fixed
+
+- **Opening StagePilot on another device during a song no longer stops the lights.** Every page load saved the settings again and Lighting treated that as a change. Saving settings that are already running now changes nothing, and a real change mid-song resumes at the second the song had reached.
+- **Reloading the page or losing the connection during a song scan no longer leaves the scan stuck on "running".** A cancelled or failed scan puts Playback back on the song it started on.
+- **Jumping into the middle of a newly selected song and pressing play now switches StagePilot to that song.** Pause, jump, play follows the jump.
+- **The moving heads no longer freeze for 30 seconds after a song starts**, and a preset switched on just before a song no longer keeps the song's first look away from those lights.
+- **Captures made after a link drop are no longer stored about 6.6 s early.** A pause, even late in the song, no longer ends the recording early.
+- **A damaged lighting recording or a setting saved from an open page can no longer reset StagePilot's settings or erase captures.**
+- **Planning Center no longer stays in error after the keychain prompt is answered**, and a keychain prompt that is pending or refused can no longer hold StagePilot up at start.
+- The song countdown no longer runs about 0.6 s behind Playback, and Elapsed time follows the song position after a pause, resume or seek.
+- A test cue's result stays on the Lighting card instead of flipping straight back to Ready.
+
+### Compatibility and known limits
+
+- **Do not edit Lighting cues in v2.42.0 after trying this version.** v2.42.0 starts on a file saved here, but deleting or reordering rows there can attach ramp or message data to the wrong row. Do not go back to an older version with Look rows saved.
+- The first look of a song can still leave 290 to 485 ms after its time (it cannot be sent before the song starts); later looks are within about 45 ms.
+- Lightkey capture and replay is for Lightkey only.
 
 ## [2.43.0-rc.12] - 2026-11-11
 
