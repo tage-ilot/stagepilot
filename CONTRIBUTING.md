@@ -56,6 +56,21 @@ cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
 cargo check --manifest-path desktop/src-tauri/Cargo.toml
 ```
 
+`cargo test` runs the same tests and always works. CI runs them with
+[cargo-nextest](https://nexte.st) (`cargo install --locked cargo-nextest`, or
+`scripts/ci/install_nextest.sh`), which starts a process per test and overlaps the test binaries:
+
+```sh
+cargo nextest run --workspace --exclude midi-probe     # what `cargo test` runs, without doctests
+cargo test --workspace --exclude midi-probe --doc      # doctests (nextest does not run them)
+cargo nextest run --profile ci --workspace --exclude midi-probe   # as CI: one retry, FLAKY report
+```
+
+The heavy timing tests are limited to one at a time by `.config/nextest.toml`. A test must pass
+when it runs alone (nextest runs each in its own process): do not rely on another test having
+set up shared state first. A test that passes only on the CI retry is reported as FLAKY in the job
+summary; fix it, do not ignore it.
+
 Use `cargo fmt` without `--check` to apply formatting. Frontend
 formatting follows the scripts and configuration committed in that workspace.
 Run `npm --prefix frontend run lint` before pushing frontend changes.

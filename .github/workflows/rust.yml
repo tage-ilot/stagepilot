@@ -1,10 +1,22 @@
 # Builds and tests the Cargo workspace on every platform the app ships on, and runs the
 # Linux-only contract replay and generated-types checks.
 # Isolated from the release workflows: nothing here is packaged or published.
+#
+# Tests run with cargo-nextest (scripts/ci/run_nextest.sh, .config/nextest.toml); doctests run
+# with cargo test (nextest does not run them). The release-profile rig artifacts (headless
+# server, midi probe, rig latency probe) are built only on a manual run with `rig_artifacts`.
 name: rust
 
 on:
   workflow_dispatch:
+    inputs:
+      rig_artifacts:
+        description: >-
+          Also build the release-profile rig artifacts (headless server, midi probe, rig latency
+          probe) and upload them with 3-day retention. They are for rig verification only and
+          take 5-10 minutes per desktop platform, so they are off by default.
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -18,6 +30,8 @@ on:
       - "contract/**"
       - "scripts/contract/**"
       - "scripts/diff_generated_types.mjs"
+      - "scripts/ci/**"
+      - ".config/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -30,6 +44,8 @@ on:
       - "contract/**"
       - "scripts/contract/**"
       - "scripts/diff_generated_types.mjs"
+      - "scripts/ci/**"
+      - ".config/**"
       - ".github/workflows/rust.yml"
 
 permissions:
@@ -38,6 +54,11 @@ permissions:
 concurrency:
   group: rust-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # No incremental state in CI: nothing reuses it, and it only makes the target directory (and so
+  # the cache) bigger.
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   # Windows, macOS Apple Silicon, macOS Intel. Linux has its own job below because it must run on
@@ -72,7 +93,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          key: rust-v2-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
 
       - name: cargo fmt --check
         run: cargo fmt --all --check
@@ -83,22 +104,57 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend -- -D warnings
 
-      - name: cargo test
+      - name: Install cargo-nextest (pinned, checksum verified)
+        shell: bash
+        run: bash scripts/ci/install_nextest.sh
+
+      # Compile the test binaries as their own step so the log (and the step time) separates the
+      # compile from the test run.
+      - name: Build the tests
+        shell: bash
+        run: cargo nextest run --no-run --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
+
+      - name: cargo nextest
+        shell: bash
+        run: bash scripts/ci/run_nextest.sh --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
+
+      # nextest does not run doctests.
+      - name: cargo test --doc
+        shell: bash
+        run: cargo test --workspace --doc --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
+
+      # The shipped headless binary must carry the MIDI backend: without it, MIDI settings make
+      # startup fail, and `--version` says `midi-backend: none`. Fail the build if it does.
+      # A debug build of the same package and feature (no LTO), reusing the dependencies the
+      # test build compiled.
+      - name: stagepilot-headless lists the midir MIDI backend
         shell: bash
         run: |
-          start=$(date +%s)
-          cargo test --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
-          echo "test_seconds=$(( $(date +%s) - start )) runner=${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
+          cargo build -p stagepilot-headless --features midir-backend
+          bin=target/debug/stagepilot-headless
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          "$bin" --version | tee -a "$GITHUB_STEP_SUMMARY"
+          "$bin" --version | grep -qx 'midi-backend: midir'
 
+      - name: midir port listing (no MIDI is sent)
+        shell: bash
+        run: cargo run -p midi-probe | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Rig verification artifacts: release profile with thin LTO, so 5-10 minutes per platform.
+      # Manual runs only (Actions > rust > Run workflow > rig_artifacts); never on pull requests
+      # or normal main pushes.
       - name: Build the rig latency probe (artifact only; nothing is published)
+        if: github.event_name == 'workflow_dispatch' && inputs.rig_artifacts
         shell: bash
         run: cargo build --release -p stagepilot-playback --example rig_latency
 
       - name: Build headless server and midi probe (rig verification A artifact only)
+        if: github.event_name == 'workflow_dispatch' && inputs.rig_artifacts
         shell: bash
         run: cargo build --release -p stagepilot-headless -p midi-probe --features stagepilot-headless/midir-backend
 
       - name: Upload rig verification binaries
+        if: github.event_name == 'workflow_dispatch' && inputs.rig_artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rig-headless-${{ matrix.runner }}
@@ -111,6 +167,7 @@ jobs:
           retention-days: 3
 
       - name: Upload rig latency probe
+        if: github.event_name == 'workflow_dispatch' && inputs.rig_artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rig-latency-${{ matrix.runner }}
@@ -119,21 +176,6 @@ jobs:
             target/release/examples/rig_latency.exe
           if-no-files-found: ignore
           retention-days: 3
-
-      # The shipped headless binary must carry the MIDI backend: without it, MIDI settings make
-      # startup fail, and `--version` says `midi-backend: none`. Fail the build if it does.
-      - name: stagepilot-headless lists the midir MIDI backend
-        shell: bash
-        run: |
-          cargo build --release -p stagepilot-headless --features midir-backend
-          bin=target/release/stagepilot-headless
-          [ -f "$bin.exe" ] && bin="$bin.exe"
-          "$bin" --version | tee -a "$GITHUB_STEP_SUMMARY"
-          "$bin" --version | grep -qx 'midi-backend: midir'
-
-      - name: midir port listing (no MIDI is sent)
-        shell: bash
-        run: cargo run --release -p midi-probe | tee -a "$GITHUB_STEP_SUMMARY"
 
   rust-linux:
     name: Rust — Linux
@@ -156,8 +198,18 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --exclude midi-probe --all-targets -- -D warnings
 
-      - name: cargo test
-        run: cargo test --workspace --exclude midi-probe
+      - name: Install cargo-nextest (pinned, checksum verified)
+        run: bash scripts/ci/install_nextest.sh
+
+      - name: Build the tests
+        run: cargo nextest run --no-run --workspace --exclude midi-probe
+
+      - name: cargo nextest
+        run: bash scripts/ci/run_nextest.sh --workspace --exclude midi-probe
+
+      # nextest does not run doctests.
+      - name: cargo test --doc
+        run: cargo test --workspace --exclude midi-probe --doc
 
       # The default (no ALSA) build must say so loudly rather than look MIDI-capable.
       - name: stagepilot-headless reports no MIDI backend without the feature
