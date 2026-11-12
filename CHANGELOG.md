@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The app and the web page are about 7 MB smaller and load faster on phones; the pictures look the same.** The five connection icons were 1024 px pictures of 1.4 MB each, shown at 25 to 70 px; they are now 256 px (22 to 45 KB each). The grainy page background keeps its size and is saved with a lighter setting (1.5 MB down to 0.8 MB). An unused extra Lighting icon (1.5 MB) is gone, and the browser tab icon is 11 KB lighter (same picture). A test now fails if a picture in `frontend/src/assets` grows past 300 KB (the background has its own limit).
+
 ## [2.43.0] - 2026-11-11
 
 StagePilot 2.43.0 is the Lightkey release. StagePilot records what the lights do during a song, replays it by itself the next time the song plays, and sets up the Lighting computer for you. It also reminds you to scan Playback again before the service. The candidates rc.3 to rc.12 below hold the step-by-step history.
