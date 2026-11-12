@@ -212,24 +212,31 @@ async fn app(keychain: &FakeKeychain, method: ConnectionMethod) -> App {
     };
     let runtime = Runtime::with_pco(Arc::new(service), false, options);
     runtime.set_keychain_retry_interval(Duration::from_millis(200));
-    let port = free_port().await;
-    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
-    let serving = runtime.clone();
-    let server = tokio::spawn(async move {
-        let address = format!("127.0.0.1:{port}").parse().unwrap();
-        let _ = serve_until(serving, address, None, async move {
-            let _ = stopped.await;
-        })
-        .await;
-    });
-    let app = App {
-        port,
-        runtime,
-        stop: Some(stop),
-        server: Some(server),
-    };
-    app.wait_for_health(HANG_GUARD).await;
-    app
+    // The port is picked, released and then bound by the server, so a parallel test (or any other
+    // process on the machine) can take it in between. The server binds before it starts anything
+    // (a conflict ends `serve_until` with an error at once), so a server that ended before it
+    // answered is the event that says "that port was taken": try another, same runtime.
+    loop {
+        let port = free_port().await;
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let serving = runtime.clone();
+        let server = tokio::spawn(async move {
+            let address = format!("127.0.0.1:{port}").parse().unwrap();
+            let _ = serve_until(serving, address, None, async move {
+                let _ = stopped.await;
+            })
+            .await;
+        });
+        let app = App {
+            port,
+            runtime: runtime.clone(),
+            stop: Some(stop),
+            server: Some(server),
+        };
+        if app.wait_for_health_or_end().await {
+            return app;
+        }
+    }
 }
 
 impl App {
@@ -248,15 +255,30 @@ impl App {
         Some((status, serde_json::from_str(body).unwrap_or(Value::Null)))
     }
 
-    async fn wait_for_health(&self, within: Duration) {
-        let end = Instant::now() + within;
+    /// `true` once this app's own server answers the health check; `false` if the server ended
+    /// first (its port was taken by someone else, so the health answer, if any, is not its own).
+    /// A server that never answers and never ends is a hang: the guard panics.
+    async fn wait_for_health_or_end(&self) -> bool {
+        let end = Instant::now() + HANG_GUARD;
+        let server = self.server.as_ref().expect("server");
+        let mut last = None;
         while Instant::now() < end {
-            if let Some((200, _)) = self.get("/api/v1/health").await {
-                return;
+            if server.is_finished() {
+                return false;
+            }
+            last = self.get("/api/v1/health").await.map(|(code, _)| code);
+            if last == Some(200) {
+                tokio::task::yield_now().await;
+                return !server.is_finished();
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        panic!("/api/v1/health did not answer within {within:?}");
+        panic!(
+            "/api/v1/health did not answer within {HANG_GUARD:?} (port {}, last status {last:?}, \
+             server ended: {})",
+            self.port,
+            server.is_finished()
+        );
     }
 
     async fn pco_detail(&self) -> Option<String> {
