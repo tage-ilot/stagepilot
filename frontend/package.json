@@ -1,6 +1,6 @@
 {
   "name": "@stagepilot/frontend",
-  "version": "2.43.0-rc.12",
+  "version": "2.43.0",
   "private": true,
   "type": "module",
   "scripts": {
