@@ -74,6 +74,52 @@ Playback songs"). The section can be folded with its chevron; the choice is reme
 starts expanded. A folded section still shows a one-line summary ("Saved - 6 songs", "Learning - 2 of 6 placed",
 "No order yet") and the scan button.
 
+### Scan again in the hour before the service
+
+Timings are often changed at the last minute, and a fresh scan also corrects a song order StagePilot only learned, so
+scan Playback again **within the hour before the service**. Nothing starts a scan for you and a scan writes nothing to
+Planning Center by itself. To remind the operator the dashboard's header status pill lists **Scan Playback again**
+(a warning row; the pill reads it when nothing else is wrong) when all of this is true: Playback is the connected
+source and is not playing or scanning; a Planning Center plan is loaded; the next service start on it (its
+`service_times`, read on the plan's date in the saved time zone) is less than 60 minutes away; the last completed
+scan (`captured_at` of the Playback status) is older than the start of that hour; and **the plan is not going**.
+
+The reminder stays quiet while the loaded plan is going. Two different things count, and a sound check is not the
+service:
+
+- **A service in progress.** From a service's start time until the plan's last song has ended, including the time
+  between songs (a sermon between two songs stays quiet). A run of songs that was still playing when the start passed
+  counts as part of the service from the start on, so there is no gap.
+- **A run-through that is not part of a service in progress** (a sound check or rehearsal whose songs stopped before the
+  next service start, before the first service or between two services). It counts as going only while a song is
+  playing and for **5 minutes** after the last song activity (the timer stopped, or the countdown reached 0:00). After
+  5 minutes with no song the run is over and the reminder returns if it is due and no scan has completed since; a song
+  played later starts a new run. A run-through that plays the plan's last song to its end is over as soon as that song
+  has ended (no 5-minute wait). So one or two songs at 40 minutes before the service hide the reminder only while they
+  play and for 5 minutes after, not for the rest of the hour.
+
+The dashboard reads the end of a service from the last song's own countdown: the song is the plan's last one, it has a
+length, and its countdown has reached 0:00 (or the timer stopped with nothing left). A song paused part-way is not the
+end. When the app cannot tell (the last song has no length, or no song has played since the service began) it uses an
+estimate: the service start plus the sum of the song lengths plus 30 minutes. In every case a service stops counting as
+going 3 hours after its start (or after the first song of the run that was playing at the start), so the reminder can
+never stay hidden for good. If the operator skips the last song of a real service the end is never seen and the service
+is counted as going until that 3-hour limit. After the plan is over the rule is the plain one again: a later service of
+the same plan that is still ahead, with Playback not scanned since the hour before it began, brings the reminder back
+(that is the moment to scan between two services).
+
+What the dashboard remembers (while the page is open, from the state it already receives; no API change): when the
+first song of the run was started, when the last song ended, and the time of the last song activity.
+
+Any number of services work the same way. The start times are sorted and repeated times count once; the reminder is
+always about the next start that has not happened yet, whether the services are an hour apart, closer than that, or
+overlap the song time (a start that passes while the plan is going simply needs no reminder). One service a Sunday: the
+reminder shows in the hour before it, is quiet from the start to the last song, and is not shown again.
+
+The row goes away by itself when a scan completes, when the service start time passes, or when the plan starts going.
+A scan that is out of date for another reason (the setlist or the plan changed) keeps its own notice, and this row
+is not added next to it. It is worked out in the dashboard from the status it already has; the API did not change.
+
 ### Learned order (provisional, before a scan)
 
 With **Learn the order as songs play** on (the default; `playback_api.learn_order`),

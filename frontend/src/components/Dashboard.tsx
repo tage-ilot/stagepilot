@@ -51,6 +51,7 @@ import {
   readinessHasError,
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
+import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -766,6 +767,17 @@ export function Dashboard({
     lights,
   });
   const remoteOffline = useRemoteOffline(canConfigure);
+  // What has been seen of the plan being played, so "Scan Playback again" stays quiet while it is going (planProgress.ts).
+  const [planRun, setPlanRun] = useState<PlanRunMemory | null>(null);
+  useEffect(() => {
+    setPlanRun((previous) => observePlanRun(previous, {
+      now: clockNow,
+      planId: state.plan?.id,
+      durations: (state.plan?.songs ?? []).map((song) => song.duration_seconds),
+      playingIndex: state.playing_song_index ?? (state.timer.status === "running" ? state.current_song_index : null),
+      timer: state.timer,
+    }));
+  }, [clockNow, state.plan, state.playing_song_index, state.current_song_index, state.timer]);
   const checks = buildReadinessChecks({
     state,
     stateOnly: !canConfigure,
@@ -774,6 +786,9 @@ export function Dashboard({
     live,
     views: connectionViews,
     remoteOffline,
+    playback: playback?.status,
+    now: clockNow,
+    planRun,
   });
   const ready = readinessPassed(checks);
   const systemError = readinessHasError(checks);

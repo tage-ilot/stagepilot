@@ -1367,6 +1367,209 @@ describe("Dashboard widget layout", () => {
     expect(screen.queryByRole("button", { name: "Drag Manual Controls to a new dashboard position" })).not.toBeInTheDocument();
   });
 
+  describe("Scan Playback again in the header status pill (F-S1)", () => {
+    // The plan is on 2026-07-13 at 09:00 in Los Angeles (settings.timezone), which is 16:00 UTC.
+    const apiSettings: SettingsResponse = { ...productionSettings, settings: { ...productionSettings.settings, integration_modes: { ...productionSettings.settings.integration_modes, midi_source: "playback_api" } } };
+    const controller = (overrides: Parameters<typeof playbackStatus>[0] = {}): PlaybackController => ({
+      status: playbackStatus({ discovery: "done", order_mode: "scanned", captured_at: "2026-07-12T20:00:00Z", ...overrides }), events: [], error: null, message: null, pending: null,
+      saveArrangement: vi.fn(async () => true), save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn(),
+    });
+    const readyState = () => applicationState(loadedServiceState, { plugins: {} });
+    const rows = () => within(screen.getByRole("tooltip", { hidden: true })).getAllByRole("listitem");
+    const rowFor = (label: string) => rows().find((row) => row.textContent?.includes(label));
+    const at = (iso: string) => { vi.useFakeTimers(); vi.setSystemTime(new Date(iso)); };
+    const SENTENCE = "The service starts in 30 minutes and Playback has not been scanned in the hour before it. Scan it so song order and lengths are right.";
+
+    it("30 minutes before the service: the pill reads the label in the alarm colours and the list has an error row", () => {
+      at("2026-07-13T15:30:00Z");
+      renderDashboard(loadedServiceState, { state: readyState(), settings: apiSettings, playback: controller() });
+      const pill = screen.getByRole("button", { name: /^Scan Playback again$/ });
+      expect(pill).toBe(screen.getByTestId("header-chip"));
+      expect(pill).toHaveClass("border-danger-edge", "text-danger-pill");
+      expect(pill).toHaveAttribute("title", SENTENCE);
+      expect(pill.querySelector(".header-chip-status")?.textContent).toBe("Scan Playback again");
+      const row = rowFor("Scan Playback again");
+      expect(row).toHaveTextContent("!");
+      expect(row).not.toHaveTextContent(/optional/i);
+      expect(row).toHaveAttribute("title", SENTENCE);
+      expect(screen.getByRole("tooltip", { hidden: true })).not.toHaveTextContent(/optional/i);
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Got it|Dismiss/ })).not.toBeInTheDocument();
+    });
+
+    it("an hour or more before the service, or already scanned in the hour, the pill stays Ready and the row is not there", () => {
+      at("2026-07-13T14:59:00Z");
+      const { unmount } = renderDashboard(loadedServiceState, { state: readyState(), settings: apiSettings, playback: controller() });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toHaveClass("border-success-soft");
+      expect(rowFor("Scan Playback again")).toBeUndefined();
+      unmount();
+      vi.setSystemTime(new Date("2026-07-13T15:30:00Z"));
+      renderDashboard(loadedServiceState, { state: readyState(), settings: apiSettings, playback: controller({ captured_at: "2026-07-13T15:10:00Z" }) });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      expect(rowFor("Scan Playback again")).toBeUndefined();
+    });
+
+    it("goes away by itself when a scan completes, and when the service start passes", () => {
+      at("2026-07-13T15:30:00Z");
+      const options = { state: readyState(), settings: apiSettings };
+      const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller() });
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+      // Playback is polled: the next answer carries the new scan time.
+      rerender(dashboardElement(loadedServiceState, { ...options, playback: controller({ captured_at: "2026-07-13T15:31:00Z" }) }));
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      expect(rowFor("Scan Playback again")).toBeUndefined();
+      // Not scanned, but the clock reaches the start: the dashboard's own tick takes the row away.
+      rerender(dashboardElement(loadedServiceState, { ...options, playback: controller() }));
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+      act(() => { vi.advanceTimersByTime(31 * 60_000); });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      expect(rowFor("Scan Playback again")).toBeUndefined();
+    });
+
+    it("counts the minutes down with the clock, without a reload", () => {
+      at("2026-07-13T15:30:00Z");
+      renderDashboard(loadedServiceState, { state: readyState(), settings: apiSettings, playback: controller() });
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("title", expect.stringContaining("starts in 30 minutes"));
+      act(() => { vi.advanceTimersByTime(10 * 60_000); });
+      expect(screen.getByTestId("header-chip")).toHaveAttribute("title", expect.stringContaining("starts in 20 minutes"));
+    });
+
+    it("sits with another problem: both rows are listed and the reminder leads", () => {
+      at("2026-07-13T15:30:00Z");
+      renderDashboard(loadedServiceState, {
+        state: readyState(),
+        settings: { ...apiSettings, settings_set_aside: [{ song_key: "k1", song_title: "Ever Be" }] },
+        playback: controller(),
+      });
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+      expect(rowFor("Scan Playback again")).toBeDefined();
+      expect(rowFor("Record Ever Be again")).toBeDefined();
+    });
+
+    it("is not shown while a song plays", () => {
+      at("2026-07-13T15:30:00Z");
+      renderDashboard(loadedServiceState, { state: readyState(), settings: apiSettings, playback: controller({ playing: true }) });
+      expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+    });
+
+    describe("quiet while the loaded plan is going (F-S2)", () => {
+      // Services at 09:00 (16:00Z) and 10:00 (17:00Z) with two 5-minute songs; the second service's window opens at 16:00Z.
+      const songs = [0, 1].map((n) => ({ ...loadedPlan.songs[0]!, id: `item-${n + 1}`, title: `Song ${n + 1}`, duration_seconds: 300, order: n + 1 }));
+      const plan: ServicePlan = { ...loadedPlan, songs, service_times: ["09:00", "10:00"] };
+      const stopped = { status: "stopped" as const, duration_seconds: 300, started_at: null, position_seconds: 300, remaining_seconds: 0, last_error: null };
+      const withTimer = (overrides: Partial<ApplicationState>) => applicationState(loadedServiceState, { plan, plugins: {}, ...overrides });
+      const pillText = () => screen.getByTestId("header-chip").textContent;
+
+      it("stays Ready through the first service, between songs and during the last song, and comes back (with the minutes) after the last song, until a scan", () => {
+        at("2026-07-13T15:30:00Z");
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, state: withTimer({}), playback: controller() });
+        expect(pillText()).toContain("Scan Playback again"); // 30 minutes before the 09:00 service
+
+        // 09:06: song 1 has ended, song 2 has not started (between songs).
+        act(() => { vi.setSystemTime(new Date("2026-07-13T16:06:00Z")); vi.advanceTimersByTime(6_000); });
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: withTimer({ playing_song_index: 0, playing_song: songs[0]!, current_song_index: 0, current_song: songs[0]!, up_next_song: songs[1]!, timer: stopped }) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        expect(rowFor("Scan Playback again")).toBeUndefined();
+
+        // 09:12: the last song runs (it was started at 09:12).
+        const running = { status: "running" as const, duration_seconds: 300, started_at: "2026-07-13T16:12:00Z", position_seconds: 0, last_error: null };
+        act(() => { vi.setSystemTime(new Date("2026-07-13T16:12:00Z")); vi.advanceTimersByTime(1_000); });
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: withTimer({ playing_song_index: 1, playing_song: songs[1]!, current_song_index: 1, current_song: songs[1]!, up_next_song: null, timer: running }) }));
+        act(() => { vi.advanceTimersByTime(4 * 60_000); });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+
+        // 09:18: its countdown has reached 0:00 and stopped. The plan is over; the 10:00 service is 42 minutes away and Playback was last scanned yesterday.
+        act(() => { vi.advanceTimersByTime(2 * 60_000); });
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: withTimer({ playing_song_index: 1, playing_song: songs[1]!, current_song_index: 1, current_song: songs[1]!, up_next_song: null, timer: stopped }) }));
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        expect(screen.getByTestId("header-chip")).toHaveAttribute("title", expect.stringContaining("starts in 42 minutes"));
+        expect(rowFor("Scan Playback again")).toBeDefined();
+
+        // A scan completes: gone. Later the 10:00 service starts: still gone.
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller({ captured_at: "2026-07-13T16:20:00Z" }), state: withTimer({ playing_song_index: 1, playing_song: songs[1]!, current_song_index: 1, current_song: songs[1]!, up_next_song: null, timer: stopped }) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+
+      it("the last song counts as ended when its countdown reaches 0:00 while the page is open, without a reload", () => {
+        at("2026-07-13T16:12:00Z");
+        const running = { status: "running" as const, duration_seconds: 300, started_at: "2026-07-13T16:12:00Z", position_seconds: 0, last_error: null };
+        renderDashboard(loadedServiceState, { settings: apiSettings, playback: controller(), state: withTimer({ playing_song_index: 1, playing_song: songs[1]!, current_song_index: 1, current_song: songs[1]!, up_next_song: null, timer: running }) });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(4 * 60_000 + 50_000); });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument(); // 09:16:50: 10 seconds left
+        act(() => { vi.advanceTimersByTime(20_000); });
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again"); // over, though StagePilot's timer never stopped
+      });
+
+      it("one service (Hunter's church): quiet from the start, and after the last song nothing is ahead so it never returns", () => {
+        at("2026-07-13T15:30:00Z");
+        const single: ServicePlan = { ...plan, service_times: ["09:00"] };
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller(), state: applicationState(loadedServiceState, { plan: single, plugins: {} }) });
+        expect(pillText()).toContain("Scan Playback again");
+        act(() => { vi.setSystemTime(new Date("2026-07-13T16:00:00Z")); vi.advanceTimersByTime(5_000); });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument(); // the service has started
+        act(() => { vi.advanceTimersByTime(40 * 60_000); });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument(); // 09:40, 30 minutes after the estimate; nothing ahead
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: applicationState(loadedServiceState, { plan: single, plugins: {}, playing_song_index: 1, timer: stopped }) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+    });
+
+    describe("a sound check before the service does not hide the reminder (F-S3)", () => {
+      // One service at 09:00 (16:00Z), two 5-minute songs. The team plays song 1 as a sound check at 08:20 (15:20Z), 40 minutes before.
+      const songs = [0, 1].map((n) => ({ ...loadedPlan.songs[0]!, id: `item-${n + 1}`, title: `Song ${n + 1}`, duration_seconds: 300, order: n + 1 }));
+      const plan: ServicePlan = { ...loadedPlan, songs, service_times: ["09:00"] };
+      const timerState = (timer: ApplicationState["timer"]) => applicationState(loadedServiceState, { plan, plugins: {}, playing_song_index: 0, playing_song: songs[0]!, current_song_index: 0, current_song: songs[0]!, up_next_song: songs[1]!, timer });
+      const running = { status: "running" as const, duration_seconds: 300, started_at: "2026-07-13T15:20:00Z", position_seconds: 0, last_error: null };
+      const stopped = { status: "stopped" as const, duration_seconds: 300, started_at: null, position_seconds: 300, remaining_seconds: 0, last_error: null };
+
+      it("is Ready while the sound check plays and for 5 minutes after, shows the reminder at 6 minutes (the last song was never played), and is gone at the service start", () => {
+        at("2026-07-13T15:20:05Z");
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller(), state: timerState(running) });
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(4 * 60_000 + 50_000); }); // 08:24:55, the song is nearly over
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(10_000); }); // 08:25:05, the song ended and its timer stopped
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: timerState(stopped) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(3 * 60_000); }); // 3 minutes after
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(3 * 60_000); }); // 08:31, 6 minutes after the song
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        expect(screen.getByTestId("header-chip")).toHaveAttribute("title", expect.stringContaining("starts in 29 minutes"));
+        expect(rowFor("Scan Playback again")).toBeDefined();
+        act(() => { vi.advanceTimersByTime(28 * 60_000); }); // 08:59, still there
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        act(() => { vi.advanceTimersByTime(90_000); }); // the service has started
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+
+      it("a scan after the sound check clears the reminder", () => {
+        at("2026-07-13T15:20:05Z");
+        const options = { settings: apiSettings };
+        const { rerender } = renderDashboard(loadedServiceState, { ...options, playback: controller(), state: timerState(running) });
+        act(() => { vi.advanceTimersByTime(10 * 60_000); });
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller(), state: timerState(stopped) }));
+        expect(screen.getByTestId("header-chip")).toHaveTextContent("Scan Playback again");
+        rerender(dashboardElement(loadedServiceState, { ...options, playback: controller({ captured_at: "2026-07-13T15:31:00Z" }), state: timerState(stopped) }));
+        expect(screen.getByRole("button", { name: /^Ready$/ })).toBeInTheDocument();
+      });
+    });
+
+    it("the read-only Live status view shows nothing new", () => {
+      at("2026-07-13T15:30:00Z");
+      renderDashboard(loadedServiceState, {
+        state: readyState(), settings: apiSettings, playback: controller(),
+        capabilities: { ...LOCAL_CAPABILITIES, canConfigure: false },
+      });
+      expect(screen.getByTestId("header-chip")).toHaveTextContent("Live status");
+      expect(rows().some((row) => /Scan Playback again/.test(row.textContent ?? ""))).toBe(false);
+    });
+  });
+
   describe("settings problems in the header status pill (F-H7)", () => {
     const readyState = () => applicationState(loadedServiceState, { plugins: {} });
     const damaged = (...songs: Array<[string, string]>): SettingsResponse => ({
