@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.43.0-rc.12] - 2026-11-11
+
 ### Fixed
 
 - **The test of a take with a link drop and a seek no longer fails on slow machines.** `a_take_with_a_drop_and_a_seek_is_saved_once_complete_with_the_gaps_counted` failed once on the rc.12 Windows runner (recorded 7.14 s, expected 6.11 s). It compared the seconds the link counted with the real time measured around real sleeps, left out the stretch recorded after the reconnection, and so had only 0.2 s of room before the poll lag of the link used it up. It now runs the link, the fake relay and the fake HTTP agent on one clock the test moves by hand, and the expected seconds are exactly the stretches the link recorded. Nothing in StagePilot itself changes.
