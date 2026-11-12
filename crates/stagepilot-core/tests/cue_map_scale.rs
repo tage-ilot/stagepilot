@@ -1,12 +1,20 @@
 //! Cue-map revisions (U-01) and the size/latency of a settings file holding a whole service's
 //! worth of captured looks (K-01). The measurement prints its numbers (`--nocapture`) and
 //! only asserts the file size and a very generous time bound, so it is a tripwire, not a benchmark.
+//!
+//! Quick mode: with `STAGEPILOT_QUICK_SONG_TESTS=1` (set by the pull-request run of `rust.yml`
+//! only) the 40-song test saves 8 songs and its size bound is a fifth of the full one. With the
+//! variable unset it runs in full, as on main, on a manual dispatch and in a release. The switch
+//! is read in `quick`.
 
 use stagepilot_core::config::*;
 use stagepilot_core::settings::*;
 use std::collections::BTreeMap;
 use std::time::Instant;
 use uuid::Uuid;
+
+#[path = "support/quick_song_tests.rs"]
+mod quick;
 
 fn row(at: f64, messages: usize, tag: usize) -> OscLightingCue {
     OscLightingCue {
@@ -86,7 +94,8 @@ fn forty_dense_songs_settings_file_size_and_save_latency() {
     let dir = tempfile::tempdir().unwrap();
     let service = service(dir.path());
     let mut lights = LightsSettings::default();
-    for n in 0..40 {
+    let songs = quick::pick(40, 8);
+    for n in 0..songs {
         let rows: Vec<OscLightingCue> = (0..148)
             .map(|i| row(f64::from(i) * 0.5, 40, i as usize))
             .collect();
@@ -114,7 +123,7 @@ fn forty_dense_songs_settings_file_size_and_save_latency() {
     let payload = serde_json::to_vec(&service.snapshot()).unwrap().len();
     let serialise = started.elapsed();
     println!(
-        "K-01 40 songs, {messages} messages: settings.json {} KiB ({:.1} MiB); first save {:?}, one-edit save {:?}; GET settings payload {} KiB, serialised in {:?}",
+        "K-01 {songs} songs, {messages} messages: settings.json {} KiB ({:.1} MiB); first save {:?}, one-edit save {:?}; GET settings payload {} KiB, serialised in {:?}",
         bytes / 1024,
         bytes as f64 / 1_048_576.0,
         first_save,
@@ -125,7 +134,7 @@ fn forty_dense_songs_settings_file_size_and_save_latency() {
     // Timing is only reported: CI runners differ by 2x or more (Linux 2.2 s, macOS 6 s, Windows 5 s per
     // save in a debug build). The size is stable, so that is what is asserted.
     assert!(
-        bytes < 100 * 1_048_576,
+        bytes < 100 * 1_048_576 * songs as u64 / 40,
         "settings.json grew to {bytes} bytes"
     );
     assert!(

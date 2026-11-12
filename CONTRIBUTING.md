@@ -60,6 +60,25 @@ Use `cargo fmt` without `--check` to apply formatting. Frontend
 formatting follows the scripts and configuration committed in that workspace.
 Run `npm --prefix frontend run lint` before pushing frontend changes.
 
+### Quick big-song tests (pull requests only)
+
+A handful of tests guard the Lightkey save caps and time budgets with very large songs
+(`stagepilot-lights/tests/lightkey_big_songs.rs`, and `big_song_caps.rs` and `cue_map_scale.rs` in
+`stagepilot-core/tests`). They take minutes on a CI runner. Setting
+`STAGEPILOT_QUICK_SONG_TESTS=1` makes them run a scaled version (a shorter song or fewer fixtures
+and addresses, with the caps scaled by the same factor and the same assertions) or print
+`skipped (quick mode): <name>` when scaling would stop them testing what they are for.
+
+- Unset (the default), everything runs in full: a plain `cargo test`, `cargo nextest run`, pushes
+  to `main`, a manual run of `rust.yml` and every release path.
+- `.github/workflows/rust.yml` sets it to `1` only for the `pull_request` event.
+- To try the quick version locally: `STAGEPILOT_QUICK_SONG_TESTS=1 cargo test -p stagepilot-lights
+  --test lightkey_big_songs`. Run the full ones (variable unset) before a release or when you
+  change the fit, the caps or the replay engine.
+- A test reads the switch only through `crates/stagepilot-core/tests/support/quick_song_tests.rs`;
+  a new heavy test should do the same and say in its file header what its quick version still
+  proves.
+
 Tests should describe observable behavior, including bounds, timeouts, malformed
 input, reconnects, and failure isolation. Vendor API tests must use mocks and
 must never require contributor credentials.
