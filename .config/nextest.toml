@@ -34,5 +34,10 @@ final-status-level = "flaky"
 [[profile.default.overrides]]
 filter = "binary(lightkey_big_songs) | binary(big_song_caps) | binary(cue_map_scale) | binary(lightkey_fixtures_link)"
 test-group = "heavy"
+# A heavy test also needs the whole machine to itself: some of them measure wall-clock time (the
+# replay tick budget in lightkey_big_songs failed on the macOS Intel runner when other binaries'
+# tests ran beside it, which `cargo test` never did because it ran one binary at a time). The group
+# above keeps the heavy ones one after another; this keeps everything else out while one runs.
+threads-required = "num-cpus"
 # Generous for the heavy group: warn after 60 s, terminate after 10 minutes.
 slow-timeout = { period = "60s", terminate-after = 10 }
