@@ -314,7 +314,10 @@ async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
         let (code, _) = app.get(path).await.unwrap_or((0, Value::Null));
         assert_eq!(code, 200, "{path}");
         // Answered with the read still stuck: the request did not wait behind the keychain.
-        assert!(keychain.waiting(), "{path} came back only after the dialog was answered");
+        assert!(
+            keychain.waiting(),
+            "{path} came back only after the dialog was answered"
+        );
     }
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
     assert!(!pco_connected(&app));
