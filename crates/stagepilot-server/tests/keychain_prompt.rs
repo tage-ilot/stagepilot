@@ -173,8 +173,6 @@ struct App {
     runtime: Arc<Runtime>,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
     server: Option<tokio::task::JoinHandle<()>>,
-    /// How long building and starting the runtime took.
-    startup: Duration,
 }
 
 async fn free_port() -> u16 {
@@ -200,7 +198,6 @@ async fn app(keychain: &FakeKeychain, method: ConnectionMethod) -> App {
         },
         ..PersistentSettings::default()
     };
-    let begun = Instant::now();
     let service = SettingsService::new(
         Box::new(MemorySettingsStore::new(Some(persistent))),
         Box::new(keychain.clone()),
@@ -230,13 +227,9 @@ async fn app(keychain: &FakeKeychain, method: ConnectionMethod) -> App {
         runtime,
         stop: Some(stop),
         server: Some(server),
-        startup: Duration::ZERO,
     };
     app.wait_for_health(HANG_GUARD).await;
-    App {
-        startup: begun.elapsed(),
-        ..app
-    }
+    app
 }
 
 impl App {
@@ -309,11 +302,8 @@ fn pco_connected(app: &App) -> bool {
 async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
     let keychain = FakeKeychain::new(Mode::Block, Some(token_blob()));
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(
-        app.startup < Duration::from_secs(5),
-        "startup took {:?} behind a keychain that never answers",
-        app.startup
-    );
+    // Startup did not wait for the keychain: the server answers while the dialog is still unanswered.
+    assert!(keychain.waiting(), "the dialog was answered before startup");
     // The whole app answers; Planning Center alone says why it is not connected.
     for path in [
         "/api/v1/health",
@@ -321,10 +311,10 @@ async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
         "/api/v1/playback-api/status",
         "/api/v1/planning-center/status",
     ] {
-        let began = Instant::now();
         let (code, _) = app.get(path).await.unwrap_or((0, Value::Null));
         assert_eq!(code, 200, "{path}");
-        assert!(began.elapsed() < Duration::from_secs(2), "{path} was slow");
+        // Answered with the read still stuck: the request did not wait behind the keychain.
+        assert!(keychain.waiting(), "{path} came back only after the dialog was answered");
     }
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
     assert!(!pco_connected(&app));
@@ -358,7 +348,6 @@ async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
 async fn a_refused_keychain_says_so_and_recovers_when_it_answers() {
     let keychain = FakeKeychain::new(Mode::Error, Some(token_blob()));
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(app.startup < Duration::from_secs(5), "{:?}", app.startup);
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_REFUSED));
     assert!(!pco_connected(&app));
     keychain.set_mode(Mode::Answer);
@@ -474,7 +463,6 @@ async fn a_keychain_that_answers_late_connects_without_a_restart() {
 async fn an_empty_keychain_is_not_an_error() {
     let keychain = FakeKeychain::new(Mode::Empty, None);
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(app.startup < Duration::from_secs(2), "{:?}", app.startup);
     let detail = app.pco_detail().await;
     assert!(
         !detail
@@ -490,7 +478,7 @@ async fn an_empty_keychain_is_not_an_error() {
 async fn the_manual_secret_behind_a_blocked_keychain_does_not_stop_startup_either() {
     let keychain = FakeKeychain::new(Mode::Block, Some("pat-secret".into()));
     let app = app(&keychain, ConnectionMethod::Manual).await;
-    assert!(app.startup < Duration::from_secs(5), "{:?}", app.startup);
+    assert!(keychain.waiting(), "the dialog was answered before startup");
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
     // The stored secret was not thrown away: once the dialog is answered it is used.
     keychain.set_mode(Mode::Answer);

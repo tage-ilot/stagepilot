@@ -375,19 +375,40 @@ async fn an_audio_open_that_never_returns_never_holds_up_any_song() {
         );
     }
     assert_eq!(input.open_count(), 0, "nothing ever opened");
-    // The dialog is finally answered: the stuck open finishes, nothing hangs. An input that
-    // opens after the song it was opened for has stopped is not closed by the open itself: it
-    // stays open until the next stop or poll reconciles the hub (see the PR for F-C1). So the
-    // test does not wait for it to "close again" by itself, which is a race between the late
-    // open and whichever queued reconcile runs last; it waits for the open to return and then
-    // gives the hub its next stop, after which nothing may be open.
+    // The dialog is finally answered: the stuck open finishes and the input is open.
+    //
+    // What is NOT asserted: that it "closes again" by itself. The rounds above stopped at 5 s of a
+    // 10 s song, which is a pause: the recording is kept and still wants the input, so an open
+    // input is the right state. The old wait for `open_count() == 0` only passed when it saw the
+    // count dip to zero in between (the queued input jobs of the earlier rounds run in no fixed
+    // order once the open returns), which is luck of timing and failed in about half of the runs
+    // with 16 busy loops. What the test proves is the outcome: the open returns, nothing hangs,
+    // and when a song then really ends the input is closed.
     input.release_opens();
     wait_for(|| input.opens_returned.load(Ordering::SeqCst) >= 1).await;
-    if std::env::var("FC1_PROBE").is_ok() {
-        eprintln!("PROBE open_count before the next stop: {}", input.open_count());
+    wait_for_closed_after_a_song_ends(&rig, &input).await;
+}
+
+/// Plays the song to its end until the input is closed (the end of a song finishes its recording,
+/// which syncs the input with no recorder). The queued jobs from the rounds before the dialog
+/// was answered can still be draining, and one of them may set its dead recorder after the end;
+/// the next whole song then closes it, so this goes on round by round to a hang guard.
+async fn wait_for_closed_after_a_song_ends(rig: &Rig, input: &FakeInput) {
+    let end = Instant::now() + Duration::from_secs(120);
+    loop {
+        rig.start(&song(10)).await;
+        rig.stop(&song(10), 10.0).await;
+        for _ in 0..20 {
+            if input.open_count() == 0 {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            Instant::now() < end,
+            "the input never closed after a song ended"
+        );
     }
-    rig.stop(&song(10), 5.0).await;
-    wait_for(|| input.open_count() == 0).await;
 }
 
 #[tokio::test]
