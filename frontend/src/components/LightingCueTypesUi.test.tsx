@@ -16,6 +16,9 @@ const settingsFor = (method: "osc" | "midi", osc_cues: OscLightingCue[], cues: L
   settings: { lights: { ...base, method, cue_maps: { "song-1": { song_key: "song-1", song_title: "Holy Forever", cues, osc_cues } } } },
 }) as unknown as SettingsResponse;
 
+/** The most elements the dense-song screen may hold after filtering (measured at about 1,400; see the test). */
+const DENSE_NODE_BOUND = 3_000;
+
 const f = (value: number) => [{ type: "float" as const, value }];
 const look = (id: string, at: number, over: Partial<OscLightingCue> = {}): OscLightingCue => ({
   id, at_seconds: at, address: "", args: [], label: "", source: "captured",
@@ -226,7 +229,13 @@ describe("MIDI timeline", () => {
 });
 
 describe("dense song with filters", () => {
-  it("400 looks plus mixed cues: filtering and clustering stay inside a time budget", async () => {
+  /**
+   * Not a stopwatch: how long jsdom takes depends on the runner (8 s here under 16 busy loops, 1 s idle; a macOS Intel runner is
+   * slower still), so a seconds budget failed on load and proved nothing about the code. What a return to "draw every row" changes
+   * is how much is DRAWN, so the test bounds that: the elements on screen after filtering (1,368 measured; the bound is about twice
+   * that). The result is the same on a fast and a slow runner. A real hang is caught by the test timeout below.
+   */
+  it("400 looks plus mixed cues: filtering and clustering draw a bounded number of elements", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 1000, bottom: 56, width: 1000, height: 56, x: 0, y: 0, toJSON: () => ({}) });
     const rows: OscLightingCue[] = [
       ...Array.from({ length: 400 }, (_, i) => look(`l${i}`, i * 0.7, { edited: i % 25 === 0 })),
@@ -238,14 +247,12 @@ describe("dense song with filters", () => {
     expect(total()).toBe(500);
     expect(screen.queryAllByTestId("lighting-cluster").length).toBeGreaterThan(0);
     const user = userEvent.setup();
-    const started = performance.now();
     await user.click(chip("Captured look"));
     await user.click(chip("Edited look"));
-    const elapsed = performance.now() - started;
     expect(total()).toBe(100);
-    expect(elapsed).toBeLessThan(15000); // generous: a slow CI runner (macOS Intel) took 4.5 s; a real blow-up is far above this
+    expect(document.body.querySelectorAll("*").length).toBeLessThan(DENSE_NODE_BOUND);
     expect(screen.getByText("2 types hidden")).toBeInTheDocument();
     expect(screen.getByTestId("lighting-cue-list").querySelectorAll('[data-testid="cue-type-badge"]').length).toBeLessThanOrEqual(40);
     expect(onSaveCues).not.toHaveBeenCalled();
-  }, 30000);
+  }, 120_000); // a hang guard only
 });

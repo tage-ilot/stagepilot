@@ -1,13 +1,31 @@
 //! The real Remote wiring in `launch` (lifespan order, status, diagnostics identity, shutdown).
 //! Uses a temp root and a `cloudflared` path that does not exist, so no process is ever started
-//! and no network is touched (Remote stays disabled).
+//! and no network is touched (Remote stays disabled). The supervisor's always-on check-in is
+//! pointed at an origin the bootstrap store does not trust, so it is refused before any request
+//! (with the default options it POSTed to the real control plane from every test run, and
+//! `stop` waited for that blocking call: 20 s on a congested CI runner was not enough).
 
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
+use stagepilot_remote::desktop::DesktopOptions;
 use stagepilot_remote::platform::Platform;
 use stagepilot_server::launch::{attach_with, desktop_remote_from_env};
 use stagepilot_server::{build_app, AppOptions, ManagerError, Runtime};
 use std::sync::Arc;
 use std::time::Duration;
+
+/// Options that keep the supervisor off the network: the origin is not a trusted control plane
+/// (refused before any request) and nothing sleeps between attempts.
+fn offline_options() -> DesktopOptions {
+    DesktopOptions {
+        control_plane_origin: "http://127.0.0.1:9".into(),
+        pacing: stagepilot_remote::bootstrap::Pacing::instant(),
+        ..Default::default()
+    }
+}
+
+/// A hang guard, not a speed requirement: it only has to catch a stop that never returns, so it
+/// is far above anything a slow runner needs. The test asserts that `stop` returns, not when.
+const HANG_GUARD: Duration = Duration::from_secs(120);
 
 fn runtime() -> Arc<Runtime> {
     Runtime::new(
@@ -23,10 +41,17 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     rt.start().await;
     let app = build_app(rt.clone(), AppOptions { web_root: None });
     let binary = dir.path().join("cloudflared");
-    let lifecycle = attach_with(&rt, app, dir.path(), &binary, Platform::system(), None)
-        .await
-        .unwrap()
-        .expect("attached");
+    let lifecycle = attach_with(
+        &rt,
+        app,
+        dir.path(),
+        &binary,
+        Platform::system(),
+        Some(offline_options()),
+    )
+    .await
+    .unwrap()
+    .expect("attached");
 
     let wiring = rt.remote_wiring();
     assert!(wiring.access.is_some());
@@ -49,9 +74,9 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     // Resetting with nothing retired succeeds.
     assert_eq!(manager.reset_identity().await, Ok(()));
 
-    tokio::time::timeout(Duration::from_secs(20), lifecycle.stop())
+    tokio::time::timeout(HANG_GUARD, lifecycle.stop())
         .await
-        .expect("supervisor and reconcile task stop promptly");
+        .expect("supervisor and reconcile task stop (hang guard, not a speed limit)");
     rt.stop().await;
 }
 
