@@ -502,7 +502,15 @@ async fn keep_waiting_silences_the_offer_and_the_chosen_address_stays() {
         rig.probes.load(Ordering::SeqCst) >= before + 2 * routes.ips().len()
     })
     .await;
-    assert_eq!(state(&status(&rig).await), "none");
+    // The probe counter says every address was asked; it does not say the scan is over. While a
+    // scan runs the state is `searching` (a real, correct state: see `decide`), and the result of
+    // the scan is only published when it ends, which on a slow runner is later than the last
+    // probe. So wait for the scan to end, then look at what it decided. A found computer that
+    // came back as an offer would end the scan as `offer`, so this still catches a silence that
+    // did not hold.
+    let settled = until(&rig, "the scan to end", |s| state(s) != "searching").await;
+    assert_eq!(state(&settled), "none", "{settled}");
+    assert!(settled["discovery"]["found"].as_array().unwrap().is_empty());
     assert_eq!(
         saved(&rig).await["lightkey"]["api_url"],
         "http://10.30.0.50"

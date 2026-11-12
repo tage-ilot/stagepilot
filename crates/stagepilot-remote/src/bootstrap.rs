@@ -375,6 +375,11 @@ impl DesktopBootstrapStore {
         })
     }
 
+    /// The transport used when a call names none (the real one unless a test injects another).
+    pub fn default_transport(&self) -> Arc<dyn HttpTransport> {
+        self.default_transport.clone()
+    }
+
     fn client(&self, origin: &str, transport: Option<&Arc<dyn HttpTransport>>) -> HttpClient {
         HttpClient::new(
             origin,

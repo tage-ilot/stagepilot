@@ -434,6 +434,78 @@ async fn run_loop_checks_in_while_the_lookup_hangs() {
     task.await.unwrap();
 }
 
+/// Answers every request "429, retry in 300 s" (the longest wait the enrolment honours) and
+/// counts them.
+#[derive(Clone, Default)]
+struct RateLimited(Arc<Mutex<u32>>);
+
+impl HttpTransport for RateLimited {
+    fn send(&self, _request: &HttpRequest) -> Result<HttpResponse, TransportError> {
+        *self.0.lock().unwrap() += 1;
+        let mut response = HttpResponse::new(429, "{}");
+        response.headers.insert("retry-after".into(), "300".into());
+        Ok(response)
+    }
+}
+
+/// Production hung here: the first enrolment attempt was answered 429 with `Retry-After: 300`
+/// (a rate-limited control plane), the supervisor's check-in slept 300 s per retry, and
+/// `stop` (and then the process) waited for it. Real pacing, no clock the test controls: the
+/// test waits for events (the first request arrived; the check-in thread has ended) with a hang
+/// guard that is far above anything but a stuck sleep.
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_does_not_wait_for_a_check_in_that_is_backing_off() {
+    const HANG_GUARD: std::time::Duration = std::time::Duration::from_secs(120);
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("resources/cloudflared");
+    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    std::fs::write(&binary, b"test binary").unwrap();
+    let root = dir.path().join("remote");
+    let limited = RateLimited::default();
+    let manager = Arc::new(
+        DesktopRemoteManager::new(
+            &root,
+            &binary,
+            test_platform(Arc::new(limited.clone())).platform,
+            DesktopOptions {
+                bootstrap_store: Some(verified_store(
+                    &root.join("bootstrap.json"),
+                    memory_credentials(),
+                )),
+                transport: Some(Arc::new(limited.clone())),
+                control_plane_origin: ORIGIN.into(),
+                pacing: Pacing::real(),
+                device_name: Some("stage-pc".into()),
+                ..DesktopOptions::default()
+            },
+        )
+        .unwrap(),
+    );
+    let stop = StopFlag::new();
+    let task = tokio::spawn(manager.clone().run(stop.clone()));
+    let began = std::time::Instant::now();
+    while *limited.0.lock().unwrap() < 1 {
+        assert!(began.elapsed() < HANG_GUARD, "no request reached the fake");
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    // The check-in is now in its retry sleep. Stop returns without waiting for it ...
+    stop.set();
+    tokio::time::timeout(HANG_GUARD, task)
+        .await
+        .expect("the supervisor stops (hang guard, not a speed limit)")
+        .unwrap();
+    // ... and the abandoned check-in ends by itself (it held the last other reference to the
+    // manager) without a second attempt.
+    while Arc::strong_count(&manager) > 1 {
+        assert!(
+            began.elapsed() < HANG_GUARD,
+            "the check-in is still sleeping through the stop"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(*limited.0.lock().unwrap(), 1, "no attempt after stop");
+}
+
 #[test]
 fn sanitize_location_table() {
     let long = "a".repeat(81);

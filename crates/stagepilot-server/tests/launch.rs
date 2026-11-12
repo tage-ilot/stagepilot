@@ -1,6 +1,9 @@
 //! The real Remote wiring in `launch` (lifespan order, status, diagnostics identity, shutdown).
-//! Uses a temp root and a `cloudflared` path that does not exist, so no process is ever started
-//! and no network is touched (Remote stays disabled).
+//! Uses a temp root and a `cloudflared` path that does not exist, so no process is ever started.
+//! The supervisor checks in with the control plane even while Remote is off (enrolment, then a
+//! status report), so these tests point it at an untrusted loopback origin: the check-in is
+//! refused before any request is made and nothing leaves the machine. With the default options it
+//! used to enrol with the real beta control plane from every test run.
 
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_remote::platform::Platform;
@@ -67,9 +70,10 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     // Resetting with nothing retired succeeds.
     assert_eq!(manager.reset_identity().await, Ok(()));
 
-    tokio::time::timeout(Duration::from_secs(20), lifecycle.stop())
+    // A hang guard, not a speed requirement: it only has to catch a stop that never returns.
+    tokio::time::timeout(Duration::from_secs(120), lifecycle.stop())
         .await
-        .expect("supervisor and reconcile task stop promptly");
+        .expect("supervisor and reconcile task stop (hang guard, not a speed limit)");
     rt.stop().await;
 }
 

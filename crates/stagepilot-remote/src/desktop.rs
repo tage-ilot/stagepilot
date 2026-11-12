@@ -47,6 +47,28 @@ pub struct DesktopRemoteManager {
     ip_lookup: Option<Arc<dyn HttpTransport>>,
     ip_lookup_disabled: bool,
     lookup_running: AtomicBool,
+    /// The stop flag of the running supervisor (`run`), so a request made after stop fails at once
+    /// and a retry sleep ends instead of holding shutdown.
+    run_stop: Mutex<Option<Arc<StopFlag>>>,
+}
+
+/// Refuses every request once `stop` is set. A request already in flight still ends by its own
+/// timeout (it cannot be interrupted), but no further attempt starts after stop.
+struct StopAwareTransport {
+    inner: Arc<dyn HttpTransport>,
+    stop: Arc<StopFlag>,
+}
+
+impl HttpTransport for StopAwareTransport {
+    fn send(
+        &self,
+        request: &crate::http::HttpRequest,
+    ) -> Result<crate::http::HttpResponse, crate::http::TransportError> {
+        if self.stop.is_set() {
+            return Err(crate::http::TransportError("Remote is stopping".into()));
+        }
+        self.inner.send(request)
+    }
 }
 
 pub struct DesktopOptions {
@@ -143,7 +165,46 @@ impl DesktopRemoteManager {
             ip_lookup: options.ip_lookup,
             ip_lookup_disabled: options.ip_lookup_disabled.unwrap_or_else(disabled_in_env),
             lookup_running: AtomicBool::new(false),
+            run_stop: Mutex::new(None),
         })
+    }
+
+    fn running_stop(&self) -> Option<Arc<StopFlag>> {
+        self.run_stop.lock().unwrap().clone()
+    }
+
+    /// `base` (or the default) that fails fast once the supervisor is stopping.
+    fn transport_for_calls(
+        &self,
+        base: Option<Arc<dyn HttpTransport>>,
+    ) -> Option<Arc<dyn HttpTransport>> {
+        match self.running_stop() {
+            Some(stop) => Some(Arc::new(StopAwareTransport {
+                inner: base.unwrap_or_else(|| self.bootstrap.default_transport()),
+                stop,
+            })),
+            None => base,
+        }
+    }
+
+    /// The configured pacing, except that while the supervisor runs a backoff sleep is cut into
+    /// short slices and ends as soon as it stops (a 429 `Retry-After` can ask for 300 s).
+    fn pacing_for_calls(&self) -> Pacing {
+        let Some(stop) = self.running_stop() else {
+            return self.pacing.clone();
+        };
+        let sleep = self.pacing.sleep.clone();
+        Pacing {
+            sleep: Arc::new(move |seconds| {
+                let mut left = seconds;
+                while left > 0.0 && !stop.is_set() {
+                    let slice = left.min(0.25);
+                    sleep(slice);
+                    left -= slice;
+                }
+            }),
+            random: self.pacing.random.clone(),
+        }
     }
 
     fn binary_exists(&self) -> bool {
@@ -300,6 +361,7 @@ impl DesktopRemoteManager {
 
     /// The supervisor loop: lightweight check-in, control reconcile and connector stepping.
     pub async fn run(self: Arc<Self>, stop: Arc<StopFlag>) {
+        *self.run_stop.lock().unwrap() = Some(stop.clone());
         let mut reconcile_at = 0.0_f64;
         let mut reconcile_delay = 1.0_f64;
         // Always-on check-in: once at start and every interval, UNCONDITIONALLY (independent of
@@ -327,7 +389,14 @@ impl DesktopRemoteManager {
         while !stop.is_set() {
             if clock.monotonic() >= checkin_at {
                 let me = self.clone();
-                let _ = tokio::task::spawn_blocking(move || me.lightweight_checkin()).await;
+                // Stop does not wait for a check-in that is still talking to the control plane:
+                // the call cannot be interrupted, but it starts no further attempt, its backoff
+                // sleeps end, and it is abandoned here so shutdown is prompt.
+                let mut checkin = tokio::task::spawn_blocking(move || me.lightweight_checkin());
+                tokio::select! {
+                    _ = &mut checkin => {}
+                    _ = stop.wait(f64::from(u32::MAX)) => {}
+                }
                 // The city lookup runs on its own task so a slow or failing lookup can never
                 // hold up the check-in or this loop; a changed city is reported right away.
                 let me = self.clone();
@@ -376,6 +445,7 @@ impl DesktopRemoteManager {
             let _ = me.publish_off_status_if_disabled();
         })
         .await;
+        *self.run_stop.lock().unwrap() = None;
     }
 
     pub fn active(&self) -> Res<BootstrapMetadata> {
@@ -387,8 +457,8 @@ impl DesktopRemoteManager {
                 None => self.bootstrap.ensure_enrolled(
                     &self.control_plane_origin,
                     self.remote_port,
-                    self.transport.as_ref(),
-                    &self.pacing,
+                    self.transport_for_calls(self.transport.clone()).as_ref(),
+                    &self.pacing_for_calls(),
                     None,
                 ),
                 Some(active) => {
@@ -426,9 +496,12 @@ impl DesktopRemoteManager {
         let client = HttpClient::new(
             &config.control_plane_url,
             20.0,
-            self.transport
-                .clone()
-                .unwrap_or_else(|| self.platform.http.clone()),
+            self.transport_for_calls(Some(
+                self.transport
+                    .clone()
+                    .unwrap_or_else(|| self.platform.http.clone()),
+            ))
+            .unwrap_or_else(|| self.platform.http.clone()),
         );
         let (store, meta) = (self.bootstrap.clone(), metadata.clone());
         Ok(BetaRemoteControl::new(
@@ -436,7 +509,7 @@ impl DesktopRemoteManager {
             client,
             self.platform.locker.clone(),
             Some(Arc::new(move || store.credential(&meta))),
-            self.pacing.clone(),
+            self.pacing_for_calls(),
             self.device_name.as_deref(),
         )
         .with_location(self.location().as_deref()))
@@ -494,8 +567,8 @@ impl DesktopRemoteManager {
         let Ok(active) = self.bootstrap.ensure_enrolled(
             &self.control_plane_origin,
             self.remote_port,
-            self.transport.as_ref(),
-            &self.pacing,
+            self.transport_for_calls(self.transport.clone()).as_ref(),
+            &self.pacing_for_calls(),
             self.device_name.as_deref(),
         ) else {
             return;

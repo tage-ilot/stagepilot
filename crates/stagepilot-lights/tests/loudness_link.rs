@@ -74,6 +74,8 @@ struct FakeInput {
     errors: Mutex<Option<ErrorSink>>,
     opened: Mutex<Vec<Option<String>>>,
     open_now: Arc<AtomicUsize>,
+    /// How many `open` calls have returned a stream so far (open or since closed).
+    opens_returned: AtomicUsize,
     /// How long `open` blocks, like a microphone permission dialog.
     open_delay: Mutex<Duration>,
     /// When set, `open` never returns until `release_opens`: a permission dialog nobody answers.
@@ -128,6 +130,7 @@ impl AudioInput for FakeInput {
         *self.sink.lock().unwrap() = Some(samples);
         *self.errors.lock().unwrap() = Some(errors);
         self.open_now.fetch_add(1, Ordering::SeqCst);
+        self.opens_returned.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(FakeStream(self.open_now.clone())))
     }
 }
@@ -299,8 +302,10 @@ impl Rig {
     }
 }
 
+/// Waits for an event the code under test will cause. The limit is a hang guard that only catches
+/// a real hang: it was 3 s, which a congested runner (or 16 busy loops) out-waited.
 async fn wait_for(check: impl Fn() -> bool) {
-    let end = Instant::now() + Duration::from_secs(3);
+    let end = Instant::now() + Duration::from_secs(120);
     while Instant::now() < end {
         if check() {
             return;
@@ -370,9 +375,40 @@ async fn an_audio_open_that_never_returns_never_holds_up_any_song() {
         );
     }
     assert_eq!(input.open_count(), 0, "nothing ever opened");
-    // The dialog is finally answered: the stuck opens finish and close again, nothing hangs.
+    // The dialog is finally answered: the stuck open finishes and the input is open.
+    //
+    // What is NOT asserted: that it "closes again" by itself. The rounds above stopped at 5 s of a
+    // 10 s song, which is a pause: the recording is kept and still wants the input, so an open
+    // input is the right state. The old wait for `open_count() == 0` only passed when it saw the
+    // count dip to zero in between (the queued input jobs of the earlier rounds run in no fixed
+    // order once the open returns), which is luck of timing and failed in about half of the runs
+    // with 16 busy loops. What the test proves is the outcome: the open returns, nothing hangs,
+    // and when a song then really ends the input is closed.
     input.release_opens();
-    wait_for(|| input.open_count() == 0).await;
+    wait_for(|| input.opens_returned.load(Ordering::SeqCst) >= 1).await;
+    wait_for_closed_after_a_song_ends(&rig, &input).await;
+}
+
+/// Plays the song to its end until the input is closed (the end of a song finishes its recording,
+/// which syncs the input with no recorder). The queued jobs from the rounds before the dialog
+/// was answered can still be draining, and one of them may set its dead recorder after the end;
+/// the next whole song then closes it, so this goes on round by round to a hang guard.
+async fn wait_for_closed_after_a_song_ends(rig: &Rig, input: &FakeInput) {
+    let end = Instant::now() + Duration::from_secs(120);
+    loop {
+        rig.start(&song(10)).await;
+        rig.stop(&song(10), 10.0).await;
+        for _ in 0..20 {
+            if input.open_count() == 0 {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            Instant::now() < end,
+            "the input never closed after a song ended"
+        );
+    }
 }
 
 #[tokio::test]

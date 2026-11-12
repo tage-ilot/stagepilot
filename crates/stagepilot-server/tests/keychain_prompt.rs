@@ -3,13 +3,18 @@
 //! rc.3 on the macOS iMac sat in `SecKeychainFindGenericPassword` during startup, waiting on an
 //! approval dialog nobody could answer, and the backend never opened its port. These tests build
 //! the real runtime and the real HTTP server around a fake credential store that behaves like that
-//! dialog (blocks until released, refuses, errors, answers after 3 s, holds nothing) and check:
+//! dialog (blocks until released, refuses, errors, answers late, holds nothing) and check:
 //!
 //! * the server answers `/api/v1/health` over a real socket within a generous bound;
 //! * only Planning Center says what is wrong ("Waiting for keychain access" / "refused");
 //! * when the store starts answering, Planning Center connects by itself, with no restart.
 //!
 //! No real keychain and no rig are involved.
+//!
+//! Time: a late answer is a gate the test opens (`release`), not a `sleep` the runner may or may
+//! not out-wait. "Startup did not wait for the keychain" is shown by the gate still being closed
+//! when the server answers, and every wait for a state change (`until`) has a long hang guard
+//! that only catches a real hang, never a slow runner.
 
 use axum::body::Body;
 use axum::extract::Request as AxumRequest;
@@ -31,6 +36,10 @@ use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
+/// How long any wait may last before the test calls it a hang. It is not a speed requirement: a
+/// slow or congested runner must pass, so it is far above anything but a real hang.
+const HANG_GUARD: Duration = Duration::from_secs(120);
+
 // ---- the fake keychain --------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -38,7 +47,8 @@ enum Mode {
     /// Waits on a dialog nobody answers, until `release`.
     Block,
     Error,
-    /// Answers after 3 s.
+    /// A late answer: the read in flight waits for `release` (the dialog is answered), then
+    /// returns the stored token; nobody changes the mode in between.
     Slow,
     /// Answers at once: no entry stored.
     Empty,
@@ -51,7 +61,8 @@ struct Inner {
     released: Mutex<bool>,
     cv: Condvar,
     value: Mutex<Option<String>>,
-    slow_done: Mutex<bool>,
+    /// How many calls have reached the fake (a blocked call counts as soon as it is in).
+    calls: Mutex<usize>,
 }
 
 #[derive(Clone)]
@@ -64,7 +75,7 @@ impl FakeKeychain {
             released: Mutex::new(false),
             cv: Condvar::new(),
             value: Mutex::new(value),
-            slow_done: Mutex::new(false),
+            calls: Mutex::new(0),
         }))
     }
     fn set_mode(&self, mode: Mode) {
@@ -75,21 +86,22 @@ impl FakeKeychain {
         *self.0.released.lock().unwrap() = true;
         self.0.cv.notify_all();
     }
+    /// The dialog has not been answered yet.
+    fn waiting(&self) -> bool {
+        !*self.0.released.lock().unwrap()
+    }
+    /// Calls that have reached the fake so far.
+    fn calls(&self) -> usize {
+        *self.0.calls.lock().unwrap()
+    }
     fn act(&self) -> Result<(), CredentialStoreError> {
         let mode = *self.0.mode.lock().unwrap();
+        *self.0.calls.lock().unwrap() += 1;
         match mode {
-            Mode::Block => {
+            Mode::Block | Mode::Slow => {
                 let mut released = self.0.released.lock().unwrap();
                 while !*released {
                     released = self.0.cv.wait(released).unwrap();
-                }
-                Ok(())
-            }
-            Mode::Slow => {
-                // Only the first calls wait (the dialog is answered after 3 s).
-                if !*self.0.slow_done.lock().unwrap() {
-                    std::thread::sleep(Duration::from_secs(3));
-                    *self.0.slow_done.lock().unwrap() = true;
                 }
                 Ok(())
             }
@@ -161,8 +173,6 @@ struct App {
     runtime: Arc<Runtime>,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
     server: Option<tokio::task::JoinHandle<()>>,
-    /// How long building and starting the runtime took.
-    startup: Duration,
 }
 
 async fn free_port() -> u16 {
@@ -188,7 +198,6 @@ async fn app(keychain: &FakeKeychain, method: ConnectionMethod) -> App {
         },
         ..PersistentSettings::default()
     };
-    let begun = Instant::now();
     let service = SettingsService::new(
         Box::new(MemorySettingsStore::new(Some(persistent))),
         Box::new(keychain.clone()),
@@ -203,27 +212,30 @@ async fn app(keychain: &FakeKeychain, method: ConnectionMethod) -> App {
     };
     let runtime = Runtime::with_pco(Arc::new(service), false, options);
     runtime.set_keychain_retry_interval(Duration::from_millis(200));
-    let port = free_port().await;
-    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
-    let serving = runtime.clone();
-    let server = tokio::spawn(async move {
-        let address = format!("127.0.0.1:{port}").parse().unwrap();
-        let _ = serve_until(serving, address, None, async move {
-            let _ = stopped.await;
-        })
-        .await;
-    });
-    let app = App {
-        port,
-        runtime,
-        stop: Some(stop),
-        server: Some(server),
-        startup: Duration::ZERO,
-    };
-    app.wait_for_health(Duration::from_secs(10)).await;
-    App {
-        startup: begun.elapsed(),
-        ..app
+    // The port is picked, released and then bound by the server, so a parallel test (or any other
+    // process on the machine) can take it in between. The server binds before it starts anything
+    // (a conflict ends `serve_until` with an error at once), so a server that ended before it
+    // answered is the event that says "that port was taken": try another, same runtime.
+    loop {
+        let port = free_port().await;
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let serving = runtime.clone();
+        let server = tokio::spawn(async move {
+            let address = format!("127.0.0.1:{port}").parse().unwrap();
+            let _ = serve_until(serving, address, None, async move {
+                let _ = stopped.await;
+            })
+            .await;
+        });
+        let app = App {
+            port,
+            runtime: runtime.clone(),
+            stop: Some(stop),
+            server: Some(server),
+        };
+        if app.wait_for_health_or_end().await {
+            return app;
+        }
     }
 }
 
@@ -243,15 +255,30 @@ impl App {
         Some((status, serde_json::from_str(body).unwrap_or(Value::Null)))
     }
 
-    async fn wait_for_health(&self, within: Duration) {
-        let end = Instant::now() + within;
+    /// `true` once this app's own server answers the health check; `false` if the server ended
+    /// first (its port was taken by someone else, so the health answer, if any, is not its own).
+    /// A server that never answers and never ends is a hang: the guard panics.
+    async fn wait_for_health_or_end(&self) -> bool {
+        let end = Instant::now() + HANG_GUARD;
+        let server = self.server.as_ref().expect("server");
+        let mut last = None;
         while Instant::now() < end {
-            if let Some((200, _)) = self.get("/api/v1/health").await {
-                return;
+            if server.is_finished() {
+                return false;
+            }
+            last = self.get("/api/v1/health").await.map(|(code, _)| code);
+            if last == Some(200) {
+                tokio::task::yield_now().await;
+                return !server.is_finished();
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        panic!("/api/v1/health did not answer within {within:?}");
+        panic!(
+            "/api/v1/health did not answer within {HANG_GUARD:?} (port {}, last status {last:?}, \
+             server ended: {})",
+            self.port,
+            server.is_finished()
+        );
     }
 
     async fn pco_detail(&self) -> Option<String> {
@@ -260,14 +287,21 @@ impl App {
     }
 
     async fn until(&self, what: &str, check: impl Fn(&App) -> bool) {
-        let end = Instant::now() + Duration::from_secs(15);
+        let end = Instant::now() + HANG_GUARD;
         while Instant::now() < end {
             if check(self) {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        panic!("never reached: {what}");
+        // The state at the hang, so a failure on a runner nobody can log in to says where it stuck.
+        panic!(
+            "never reached (hang guard {HANG_GUARD:?}): {what}; planning_center_status={:?}, \
+             keychain_degraded={}, detail={:?}",
+            self.runtime.store.snapshot().planning_center_status,
+            self.runtime.keychain_degraded(),
+            self.pco_detail().await,
+        );
     }
 
     async fn shut_down(mut self) {
@@ -290,11 +324,8 @@ fn pco_connected(app: &App) -> bool {
 async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
     let keychain = FakeKeychain::new(Mode::Block, Some(token_blob()));
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(
-        app.startup < Duration::from_secs(5),
-        "startup took {:?} behind a keychain that never answers",
-        app.startup
-    );
+    // Startup did not wait for the keychain: the server answers while the dialog is still unanswered.
+    assert!(keychain.waiting(), "the dialog was answered before startup");
     // The whole app answers; Planning Center alone says why it is not connected.
     for path in [
         "/api/v1/health",
@@ -302,10 +333,13 @@ async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
         "/api/v1/playback-api/status",
         "/api/v1/planning-center/status",
     ] {
-        let began = Instant::now();
         let (code, _) = app.get(path).await.unwrap_or((0, Value::Null));
         assert_eq!(code, 200, "{path}");
-        assert!(began.elapsed() < Duration::from_secs(2), "{path} was slow");
+        // Answered with the read still stuck: the request did not wait behind the keychain.
+        assert!(
+            keychain.waiting(),
+            "{path} came back only after the dialog was answered"
+        );
     }
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
     assert!(!pco_connected(&app));
@@ -339,7 +373,6 @@ async fn a_keychain_that_never_answers_does_not_stop_the_server_and_recovers() {
 async fn a_refused_keychain_says_so_and_recovers_when_it_answers() {
     let keychain = FakeKeychain::new(Mode::Error, Some(token_blob()));
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(app.startup < Duration::from_secs(5), "{:?}", app.startup);
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_REFUSED));
     assert!(!pco_connected(&app));
     keychain.set_mode(Mode::Answer);
@@ -393,7 +426,7 @@ async fn once_the_keychain_answers_the_plugin_status_and_health_are_ok_again() {
     })
     .await;
 
-    let end = Instant::now() + Duration::from_secs(15);
+    let end = Instant::now() + HANG_GUARD;
     let (mut plugin, _) = pco_health(&app).await;
     while plugin != "running" && Instant::now() < end {
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -426,19 +459,27 @@ async fn once_the_keychain_answers_the_plugin_status_and_health_are_ok_again() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_keychain_that_answers_after_three_seconds_connects_without_a_restart() {
+async fn a_keychain_that_answers_late_connects_without_a_restart() {
     let keychain = FakeKeychain::new(Mode::Slow, Some(token_blob()));
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(
-        app.startup < Duration::from_secs(2),
-        "startup waited for a slow keychain: {:?}",
-        app.startup
-    );
+    // Startup did not wait for the keychain: the server answers while the read is still in
+    // flight and unanswered (the gate is closed). No clock is involved.
+    app.until("the keychain read is in flight", |_| keychain.calls() > 0)
+        .await;
+    assert!(keychain.waiting(), "the late answer came before startup");
     assert!(!pco_connected(&app));
+    assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
+    // The dialog is answered: the read in flight returns the token, and Planning Center
+    // connects by itself, however long the runner takes over it.
+    keychain.release();
     app.until(
         "Planning Center connects once the slow read finishes",
         pco_connected,
     )
+    .await;
+    app.until("the keychain wait is over", |a| {
+        !a.runtime.keychain_degraded()
+    })
     .await;
     app.shut_down().await;
 }
@@ -447,7 +488,6 @@ async fn a_keychain_that_answers_after_three_seconds_connects_without_a_restart(
 async fn an_empty_keychain_is_not_an_error() {
     let keychain = FakeKeychain::new(Mode::Empty, None);
     let app = app(&keychain, ConnectionMethod::Oauth).await;
-    assert!(app.startup < Duration::from_secs(2), "{:?}", app.startup);
     let detail = app.pco_detail().await;
     assert!(
         !detail
@@ -463,7 +503,7 @@ async fn an_empty_keychain_is_not_an_error() {
 async fn the_manual_secret_behind_a_blocked_keychain_does_not_stop_startup_either() {
     let keychain = FakeKeychain::new(Mode::Block, Some("pat-secret".into()));
     let app = app(&keychain, ConnectionMethod::Manual).await;
-    assert!(app.startup < Duration::from_secs(5), "{:?}", app.startup);
+    assert!(keychain.waiting(), "the dialog was answered before startup");
     assert_eq!(app.pco_detail().await.as_deref(), Some(KEYCHAIN_WAITING));
     // The stored secret was not thrown away: once the dialog is answered it is used.
     keychain.set_mode(Mode::Answer);
