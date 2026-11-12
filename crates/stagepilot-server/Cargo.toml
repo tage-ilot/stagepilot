@@ -56,6 +56,10 @@ subtle = "2.6.1"
 getrandom = "0.3"
 
 [dev-dependencies]
+# Tests of this crate (launch, diagnostics) run the real managers: their HTTP transports must refuse
+# production hosts. Dev-dependency only, so the shipped app is built without the guard.
+stagepilot-pco = { path = "../stagepilot-pco", features = ["forbid-production"] }
+stagepilot-remote = { path = "../stagepilot-remote", features = ["forbid-production"] }
 http-body-util = "0.1"
 tokio-tungstenite = "0.29"
 tower = { version = "0.5", features = ["util"] }

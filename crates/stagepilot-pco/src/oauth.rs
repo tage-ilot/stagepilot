@@ -347,6 +347,7 @@ impl ControlPlaneClient {
             .origin
             .join(path.trim_start_matches('/'))
             .map_err(|_| OAuthError::transient(INVALID_RESPONSE))?;
+        crate::production_guard::refuse_production(&url).map_err(|m| OAuthError::transient(&m))?;
         // Transient by construction: we never reached the service.
         let response = self
             .http

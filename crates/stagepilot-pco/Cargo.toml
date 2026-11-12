@@ -32,7 +32,16 @@ ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "serde-jso
 url = "2"
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 
+[features]
+# Test builds only: the real HTTP transports refuse a production service (the control plane, the
+# IP/city lookup, Planning Center) and end the process with a message that names the host. Off by
+# default and never named in a `[dependencies]` table: only dev-dependencies turn it on, so it is
+# not in the shipped app.
+forbid-production = []
+
 [dev-dependencies]
+# This crate's own tests: turns the guard on for its unit and integration tests.
+stagepilot-pco = { path = ".", features = ["forbid-production"] }
 axum = "0.8.9"
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "time", "sync", "test-util"] }
 tempfile = "3.23.1"
