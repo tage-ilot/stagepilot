@@ -39,7 +39,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tempfile = "3.23.1"
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
-tower-http = { version = "0.6", features = ["fs", "cors"] }
+tower-http = { version = "0.6", features = ["cors"] }
 chrono-tz = "0.10"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
@@ -48,7 +48,6 @@ hex = "0.4"
 httpdate = "1"
 md-5 = "0.10"
 percent-encoding = "2"
-mime_guess = "2"
 # Diagnostics upload (rustls with the pure `ring` provider, as the other HTTP clients here).
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
@@ -58,5 +57,5 @@ getrandom = "0.3"
 
 [dev-dependencies]
 http-body-util = "0.1"
-tokio-tungstenite = "0.27"
+tokio-tungstenite = "0.29"
 tower = { version = "0.5", features = ["util"] }
