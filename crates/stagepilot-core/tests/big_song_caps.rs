@@ -4,10 +4,11 @@
 //! these run unoptimised on a CI runner that may be five times slower).
 //!
 //! Quick mode: with `STAGEPILOT_QUICK_SONG_TESTS=1` (set by the pull-request run of `rust.yml`
-//! only) the save-and-load budget test uses a song with a tenth of the rows and effects, and a
-//! tenth of the file-size and time bounds; the cap-boundary test always runs in full (it is
-//! cheap, and it is the one that proves the real caps). With the variable unset both run in full,
-//! as on main, on a manual dispatch and in a release. The switch is read in `quick`.
+//! only) the save-and-load budget test uses a song with a tenth of the rows and effects and a
+//! tenth of the file-size bound (the time bounds stay as they are); the cap-boundary test always
+//! runs in full (it is cheap, and it is the one that proves the real caps). With the variable
+//! unset both run in full, as on main, on a manual dispatch and in a release. The switch is read
+//! in `quick`.
 
 use stagepilot_core::config::*;
 use stagepilot_core::settings::*;
@@ -136,7 +137,7 @@ fn a_song_exactly_at_the_caps_is_accepted_and_one_over_is_refused() {
 
 #[test]
 fn a_song_at_the_caps_saves_and_loads_inside_the_budget() {
-    // a tenth of the song in quick mode, with a tenth of the bounds
+    // a tenth of the song in quick mode, with a tenth of the size bound
     let share = quick::pick(1, 10);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("settings.json");
@@ -182,13 +183,13 @@ fn a_song_at_the_caps_saves_and_loads_inside_the_budget() {
         bytes as f64 / 1_048_576.0,
         snapshot as f64 / 1_048_576.0,
     );
+    // The size is stable, so its bound scales with the song. The time bounds do not: a slow
+    // runner takes seconds even for a tenth of the song (a macOS Intel runner needed 6.9 s for the
+    // tenth-size save), and a bound that shrinks with the song would be a flake.
     assert!(
         bytes < 250 * 1_048_576 / share as u64,
         "settings.json is {bytes} bytes"
     );
-    assert!(
-        second_save.as_secs() < 60 / share as u64,
-        "save took {second_save:?}"
-    );
-    assert!(load.as_secs() < 90 / share as u64, "load took {load:?}");
+    assert!(second_save.as_secs() < 60, "save took {second_save:?}");
+    assert!(load.as_secs() < 90, "load took {load:?}");
 }
