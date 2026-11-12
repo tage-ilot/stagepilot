@@ -278,6 +278,8 @@ impl PcoClient {
         body: Option<&serde_json::Value>,
     ) -> Result<reqwest::Response, SendFailure> {
         for attempt in 0..2 {
+            crate::production_guard::refuse_production(&url)
+                .map_err(|message| SendFailure::Auth(PcoError::configuration(&message)))?;
             let mut request = self.http.request(method.clone(), url.clone());
             if let Some(body) = body {
                 request = request.json(body);

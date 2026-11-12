@@ -182,6 +182,9 @@ async fn forward(
         active.control_plane_origin.trim_end_matches('/'),
         active.installation_id
     );
+    if stagepilot_remote::http::refuse_production(&url).is_err() {
+        return Forwarded::Failed;
+    }
     let response = client
         .post(url)
         .header("authorization", format!("Bearer {credential}"))

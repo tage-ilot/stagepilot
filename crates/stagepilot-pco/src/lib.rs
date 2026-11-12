@@ -10,6 +10,7 @@ pub mod models;
 pub mod oauth;
 pub mod plan_cache;
 pub mod plugin;
+pub mod production_guard;
 pub mod runtime;
 pub mod settings;
 pub mod setup;
