@@ -39,6 +39,13 @@ unimplemented = "deny"
 [profile.dev.package.stagepilot-lights]
 opt-level = 2
 
+# Line tables only: panics and RUST_BACKTRACE=1 still print file:line, but the compiler and the
+# linker no longer write (and the disk no longer holds) full variable and type debug info. The test
+# profile inherits from dev. Only debugger stepping (lldb/gdb) gets worse. Set
+# CARGO_PROFILE_DEV_DEBUG=2 to get full debug info back for a debugging session.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 opt-level = 3
 lto = "thin"
