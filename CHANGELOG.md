@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The header now reminds you to scan Playback again when the service is less than an hour away and Playback has not been scanned since, and keeps quiet while the service plan is going.** Operators scan right before the service because timings get changed at the last minute, and a fresh scan also corrects a song order StagePilot only learned. In the hour before the service start time, if the last scan is older than that hour, the status pill reads `Scan Playback again` (in the same red as the other warnings) and its list explains: `The service starts in 42 minutes and Playback has not been scanned in the hour before it. Scan it so song order and lengths are right.` It goes away by itself when a scan completes or when the service starts. It does not show while the service is going: from the service start until the plan's last song has ended, between songs too. A sound check before the service does not hide the reminder: a run-through that is not part of the service only hides it while a song plays and for 5 minutes after, so one or two songs played at 40 minutes before the service do not silence it for the whole hour. StagePilot reads the end from the last song's own countdown; if the last song has no length it uses the service start plus the song lengths plus 30 minutes, and it never counts the plan as going for more than 3 hours. With several services the reminder is for the next one that has not started: it comes back after the plan is over when another service is less than an hour away and Playback has not been scanned since (a rehearsal that ends before the service comes back too, until a scan completes). One service a Sunday gets the hour-before reminder only. There is no pop-up, button or sound, and the read-only Live status view is unchanged. Nothing is scanned automatically and nothing is written to Planning Center. See \"Scan again in the hour before the service\" in `docs/playback-api.md`.
+
 ## [2.43.0-rc.12] - 2026-11-11
 
 ### Fixed
