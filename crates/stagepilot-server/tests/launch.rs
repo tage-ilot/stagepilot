@@ -1,48 +1,16 @@
 //! The real Remote wiring in `launch` (lifespan order, status, diagnostics identity, shutdown).
 //! Uses a temp root and a `cloudflared` path that does not exist, so no process is ever started.
-//! No network is touched: the supervisor's always-on check-in (it runs even while Remote is off:
-//! it enrols this installation and reports its status) goes to a fake transport the test owns.
-//! With the default options it used to POST to the real control plane from every test run, and
-//! when that was rate-limited (429, `Retry-After`) `stop` and then the whole process waited for the
-//! retry sleeps: 601 s for this file on a congested CI runner.
+//! The supervisor checks in with the control plane even while Remote is off (enrolment, then a
+//! status report), so these tests point it at an untrusted loopback origin: the check-in is
+//! refused before any request is made and nothing leaves the machine. With the default options it
+//! used to enrol with the real beta control plane from every test run.
 
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
-use stagepilot_remote::desktop::DesktopOptions;
-use stagepilot_remote::http::{HttpRequest, HttpResponse, HttpTransport, TransportError};
 use stagepilot_remote::platform::Platform;
 use stagepilot_server::launch::{attach_with, desktop_remote_from_env};
 use stagepilot_server::{build_app, AppOptions, ManagerError, Runtime};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
-
-/// The control plane the supervisor talks to: records `METHOD path` of every request (no bodies,
-/// no headers: nothing secret) and answers 503, so nothing is ever enrolled and nothing waits.
-#[derive(Clone, Default)]
-struct FakeControlPlane(Arc<Mutex<Vec<String>>>);
-
-impl HttpTransport for FakeControlPlane {
-    fn send(&self, request: &HttpRequest) -> Result<HttpResponse, TransportError> {
-        self.0
-            .lock()
-            .unwrap()
-            .push(format!("{} {}", request.method, request.path()));
-        Ok(HttpResponse::new(503, "{}"))
-    }
-}
-
-/// Options that keep the supervisor off the network (the default control-plane origin is the
-/// trusted one, so the check-in really runs, against `fake`) and make nothing sleep.
-fn offline_options(fake: &FakeControlPlane) -> DesktopOptions {
-    DesktopOptions {
-        transport: Some(Arc::new(fake.clone())),
-        pacing: stagepilot_remote::bootstrap::Pacing::instant(),
-        ..Default::default()
-    }
-}
-
-/// A hang guard, not a speed requirement: it only has to catch a stop that never returns, so it
-/// is far above anything a slow runner needs. The test asserts that `stop` returns, not when.
-const HANG_GUARD: Duration = Duration::from_secs(120);
 
 fn runtime() -> Arc<Runtime> {
     Runtime::new(
@@ -58,14 +26,24 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     rt.start().await;
     let app = build_app(rt.clone(), AppOptions { web_root: None });
     let binary = dir.path().join("cloudflared");
-    let control_plane = FakeControlPlane::default();
+    // Passing options also keeps the app's weekly city lookup off. The supervisor checks in
+    // unconditionally, so with the default options this test enrolled with the real beta control
+    // plane, and when that service was slow `lifecycle.stop()` waited for it past its 20 s limit
+    // (it failed on all four CI platforms of one run, after passing on three of them a few hours earlier). The
+    // origin below is a closed loopback port that is not a trusted control plane: the check-in is
+    // refused before any request is made, as in the test below.
+    let options = stagepilot_remote::desktop::DesktopOptions {
+        control_plane_origin: "http://127.0.0.1:9".into(),
+        pacing: stagepilot_remote::bootstrap::Pacing::instant(),
+        ..Default::default()
+    };
     let lifecycle = attach_with(
         &rt,
         app,
         dir.path(),
         &binary,
         Platform::system(),
-        Some(offline_options(&control_plane)),
+        Some(options),
     )
     .await
     .unwrap()
@@ -92,13 +70,10 @@ async fn real_manager_is_wired_and_shut_down_in_order() {
     // Resetting with nothing retired succeeds.
     assert_eq!(manager.reset_identity().await, Ok(()));
 
-    tokio::time::timeout(HANG_GUARD, lifecycle.stop())
+    // A hang guard, not a speed requirement: it only has to catch a stop that never returns.
+    tokio::time::timeout(Duration::from_secs(120), lifecycle.stop())
         .await
         .expect("supervisor and reconcile task stop (hang guard, not a speed limit)");
-    // Whatever reached the control plane was the enrolment check-in and nothing else.
-    for request in control_plane.0.lock().unwrap().iter() {
-        assert_eq!(request, "POST /v1/installations/enroll");
-    }
     rt.stop().await;
 }
 
