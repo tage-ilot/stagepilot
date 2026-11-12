@@ -1,0 +1,38 @@
+# cargo-nextest configuration (https://nexte.st).
+#
+# CI runs `cargo nextest run --profile ci`. A plain `cargo nextest run` uses the default profile,
+# which has NO retries, so a flake is visible on a developer machine. `cargo test` still works
+# and runs the same tests; nextest adds a process per test, a schedule that overlaps the test
+# binaries, and the retry / flaky reporting CI uses.
+
+[test-groups]
+# One test at a time across the whole workspace. These binaries time wall-clock ticks or fit
+# hundreds of thousands of samples on every core. `cargo test` serialised the heavy ones with an
+# in-process mutex (`heavy()` in lightkey_big_songs); nextest runs every test in its own
+# process, so a mutex inside the test binary serialises nothing any more: this group does.
+heavy = { max-threads = 1 }
+
+[profile.default]
+fail-fast = false
+# 60 s: warn that a test is slow. 5 periods: kill a test that is hung (a normal one takes
+# well under a second; the slowest legitimate ones take about 3 minutes on a loaded CI runner).
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+[profile.ci]
+fail-fast = false
+# A test that fails and then passes is reported FLAKY. The workflow copies that list into the
+# job summary under a warning, so a retry is never silent.
+retries = 1
+# One line per test (with its duration) but no captured output for passing tests; every failure is
+# printed again at the end, and the flaky ones are listed.
+success-output = "never"
+failure-output = "immediate-final"
+status-level = "pass"
+final-status-level = "flaky"
+
+# Applies to every profile (a profile's own overrides come first, then these).
+[[profile.default.overrides]]
+filter = "binary(lightkey_big_songs) | binary(big_song_caps) | binary(cue_map_scale) | binary(lightkey_fixtures_link)"
+test-group = "heavy"
+# Generous for the heavy group: warn after 60 s, terminate after 10 minutes.
+slow-timeout = { period = "60s", terminate-after = 10 }
