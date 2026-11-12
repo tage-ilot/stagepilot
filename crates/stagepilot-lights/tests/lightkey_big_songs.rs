@@ -3,11 +3,15 @@
 //!
 //! Wall-clock assertions are generous (a slow macOS Intel runner takes about five times longer
 //! than this machine, and these run unoptimised).
+//!
+//! Quick mode: with `STAGEPILOT_QUICK_SONG_TESTS=1` (set by the pull-request run of `rust.yml`
+//! only) the heavy tests here run a scaled version: a shorter song or fewer fixtures and
+//! addresses, with the caps scaled by the same factor and the same assertions, or they print
+//! `skipped (quick mode): <name>` when scaling would stop them testing what they are for. With
+//! the variable unset every test runs in full, as on main, on a manual dispatch and in a
+//! release. The switch is read in one place: `quick` below.
 
-use stagepilot_core::config::{
-    SongLightingCueMap, MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG,
-    MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
-};
+use stagepilot_core::config::SongLightingCueMap;
 use stagepilot_lights::lightkey_curve::Timeline;
 use stagepilot_lights::lightkey_fit::{
     fit_within_caps, fit_within_caps_budgeted, Caps, Fitted, Size, Stage,
@@ -19,6 +23,9 @@ use stagepilot_lights::lightkey_looks::{
 use stagepilot_lights::lightkey_recording::{self, RawRecording};
 use stagepilot_lights::lightkey_smooth::smooth_rows;
 use std::time::Instant;
+
+#[path = "../../stagepilot-core/tests/support/quick_song_tests.rs"]
+mod quick;
 
 /// The heavy tests fit hundreds of thousands of changes on every core and the replay tests time
 /// ticks: run one at a time, or the clock measures the neighbours.
@@ -67,11 +74,34 @@ fn by_time(changes: &mut Changes) {
     changes.sort_by(|a, b| a.0.total_cmp(&b.0));
 }
 
+/// The caps a test fits against: `caps` as they are, or in quick mode `1/divisor` of every
+/// limit, for a song that is `1/divisor` of the full one (so it is over the caps by the same
+/// factor and takes the same road down the ladder).
+fn caps_for(caps: Caps, divisor: usize) -> Caps {
+    if !quick::on() {
+        return caps;
+    }
+    Caps {
+        rows: caps.rows / divisor,
+        messages: caps.messages / divisor,
+        effects: caps.effects / divisor,
+        cycle_steps: caps.cycle_steps / divisor,
+    }
+}
+
 /// The song-1 replica: 336 s, 66 fixtures. 40 fixtures change colour about once and a gobo about
 /// twice a second (steps), 16 run a beat chase, 10 have noisy dimmers on a slow swell, and a few
 /// fixtures ramp.
 fn song_one() -> (Vec<FixtureCommand>, Changes, f64) {
-    let duration = 336.0;
+    song_one_for(quick::pick(SONG_ONE_SECONDS, QUICK_SONG_ONE_SECONDS))
+}
+
+/// Song 1's length, and the quarter of it a quick run uses (the ramps below end at 80 s).
+const SONG_ONE_SECONDS: f64 = 336.0;
+const QUICK_SONG_ONE_SECONDS: f64 = 84.0;
+
+/// The song-1 replica cut to `duration` seconds; the same shape of changes at every length.
+fn song_one_for(duration: f64) -> (Vec<FixtureCommand>, Changes, f64) {
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let mut baseline = Vec::new();
     let mut changes: Changes = Vec::new();
@@ -246,8 +276,10 @@ fn song_one_saves_at_full_fidelity_under_the_new_caps() {
         "the new caps hold song 1 as recorded"
     );
     assert_eq!(fitted.fits, 1);
+    // 10,000 rows for the whole 336 s; a quick run's shorter song is proportionally less busy
+    let busy_rows = (10_000.0 * duration / SONG_ONE_SECONDS) as usize;
     assert!(
-        fitted.capture.rows.len() > 10_000,
+        fitted.capture.rows.len() > busy_rows,
         "the replica must be as busy as song 1: {} rows",
         fitted.capture.rows.len()
     );
@@ -261,13 +293,15 @@ fn song_one_saves_at_full_fidelity_under_the_new_caps() {
 fn song_one_with_the_old_caps_still_saves_through_the_fallback_stages() {
     let _one_at_a_time = heavy();
     let (baseline, changes, duration) = song_one();
-    let fitted = run(&baseline, &changes, duration, &Caps::OLD);
-    assert!(Caps::OLD.fits(&Size::of_capture(&fitted.capture)));
+    // quick mode: a quarter of the song against a quarter of the old caps
+    let caps = caps_for(Caps::OLD, 4);
+    let fitted = run(&baseline, &changes, duration, &caps);
+    assert!(caps.fits(&Size::of_capture(&fitted.capture)));
     assert_ne!(fitted.stage, Stage::Exact);
     assert!(fitted.fits <= 13, "{} fits", fitted.fits);
     assert!(fitted.kept_items < fitted.exact_items);
     let map = saves(&fitted);
-    assert!(map.osc_cues.len() <= Caps::OLD.rows);
+    assert!(map.osc_cues.len() <= caps.rows);
     // the song's last gobo and colour of every fixture is still what the timeline ends on
     final_values_intact(&map, &changes, duration, "gobo");
     final_values_intact(&map, &changes, duration, "color");
@@ -279,9 +313,9 @@ fn ends_inside(
     baseline: &[FixtureCommand],
     changes: &Changes,
     duration: f64,
+    caps: Caps,
 ) -> Fitted {
     println!("{name}");
-    let caps = Caps::default();
     // the real budget: a slow song goes to the trim instead of fitting again and again
     let fitted = run_budgeted(
         baseline,
@@ -296,23 +330,25 @@ fn ends_inside(
     );
     assert!(fitted.fits <= 13);
     assert!(fitted.fit_ms < 300_000, "{name}: {} ms", fitted.fit_ms);
+    // the song's own caps: the timeline's limits (`MAX_*`) in a full run, a fraction of them in a
+    // quick one
     assert!(
-        fitted.capture.rows.len() <= MAX_OSC_ROWS_PER_SONG
+        fitted.capture.rows.len() <= caps.rows
             && fitted
                 .capture
                 .rows
                 .iter()
                 .map(|r| r.messages.len())
                 .sum::<usize>()
-                <= MAX_OSC_MESSAGES_PER_SONG
-            && fitted.capture.effects.len() <= MAX_EFFECTS_PER_SONG
+                <= caps.messages
+            && fitted.capture.effects.len() <= caps.effects
             && fitted
                 .capture
                 .effects
                 .iter()
                 .map(|e| e.cycle.len())
                 .sum::<usize>()
-                <= MAX_EFFECT_CYCLE_STEPS_PER_SONG
+                <= caps.cycle_steps
     );
     assert!(fitted.kept_items > 0, "{name}: an empty capture");
     saves(&fitted);
@@ -322,6 +358,8 @@ fn ends_inside(
 #[test]
 fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
     let _one_at_a_time = heavy();
+    // ten minutes of flips; quick mode: one minute against a tenth of the caps
+    let (flips, seconds) = quick::pick((12_000, 600.0), (1_200, 60.0));
     let mut changes: Changes = Vec::new();
     let mut baseline = Vec::new();
     for n in 0..66 {
@@ -329,7 +367,7 @@ fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
         baseline.push(option(&f, "A"));
         // every fixture flips at its own phase so no two rows are alike
         let phase = f64::from(n) * 0.00071;
-        for k in 0..12_000 {
+        for k in 0..flips {
             changes.push((
                 f64::from(k) * 0.05 + phase + 0.001,
                 option(&f, if k % 2 == 0 { "B" } else { "A" }),
@@ -337,7 +375,13 @@ fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
         }
     }
     by_time(&mut changes);
-    let fitted = ends_inside("flips", &baseline, &changes, 600.0);
+    let fitted = ends_inside(
+        "flips",
+        &baseline,
+        &changes,
+        seconds,
+        caps_for(Caps::default(), 10),
+    );
     assert!(matches!(fitted.stage, Stage::Thinned | Stage::Trimmed));
 }
 
@@ -345,8 +389,10 @@ fn options_flipping_every_50_ms_for_ten_minutes_on_66_fixtures() {
 fn white_noise_on_200_addresses() {
     let _one_at_a_time = heavy();
     let mut rng = Rng(7);
+    // 200 addresses; quick mode: 50 of them against a quarter of the caps
+    let addresses = quick::pick(200, 50);
     let mut changes: Changes = Vec::new();
-    for n in 0..200 {
+    for n in 0..addresses {
         let f = format!("N{n}");
         let mut t = rng.next() * 0.02;
         while t < 30.0 {
@@ -355,7 +401,7 @@ fn white_noise_on_200_addresses() {
         }
     }
     by_time(&mut changes);
-    ends_inside("noise", &[], &changes, 30.0);
+    ends_inside("noise", &[], &changes, 30.0, caps_for(Caps::default(), 4));
 }
 
 #[test]
@@ -365,18 +411,20 @@ fn one_address_at_one_kilohertz() {
     let changes: Changes = (1..60_000)
         .map(|k| (f64::from(k) * 0.001, dim("Solo", rng.next())))
         .collect();
-    ends_inside("1 kHz", &[], &changes, 60.0);
+    ends_inside("1 kHz", &[], &changes, 60.0, Caps::default());
 }
 
 #[test]
 fn a_twenty_minute_song() {
     let _one_at_a_time = heavy();
+    // 20 minutes; quick mode: 2 minutes against a tenth of the caps
+    let seconds = quick::pick(1200.0, 120.0);
     let mut rng = Rng(23);
     let mut changes: Changes = Vec::new();
     for n in 0..20 {
         let f = format!("L{n}");
         let mut t = rng.next() * 0.1;
-        while t < 1200.0 {
+        while t < seconds {
             changes.push((t, dim(&f, rng.next())));
             changes.push((
                 t + 0.003,
@@ -386,11 +434,18 @@ fn a_twenty_minute_song() {
         }
     }
     by_time(&mut changes);
-    let fitted = ends_inside("20 minutes", &[], &changes, 1200.0);
+    let fitted = ends_inside(
+        "20 minutes",
+        &[],
+        &changes,
+        seconds,
+        caps_for(Caps::default(), 10),
+    );
     // however it got there (the fit budget may send it straight to the trim), a song a few times
     // over the caps keeps most of the caps' worth, not a token few
+    let kept_rows = quick::pick(10_000, 1_000);
     assert!(
-        fitted.capture.rows.len() > 10_000,
+        fitted.capture.rows.len() > kept_rows,
         "kept only {} rows",
         fitted.capture.rows.len()
     );
@@ -415,7 +470,7 @@ fn nan_infinity_and_huge_values_cannot_stop_a_save() {
     }
     assert_eq!(recorder.len(), 3, "NaN and the infinities are not recorded");
     let (baseline, changes) = recorder.raw();
-    let fitted = ends_inside("huge", &baseline, &changes, 10.0);
+    let fitted = ends_inside("huge", &baseline, &changes, 10.0, Caps::default());
     for row in &fitted.capture.rows {
         for m in &row.messages {
             assert!(m
@@ -437,7 +492,13 @@ fn nan_infinity_and_huge_values_cannot_stop_a_save() {
 
 #[test]
 fn one_change_only_and_no_change_at_all() {
-    let fitted = ends_inside("one change", &[], &vec![(1.0, dim("A", 0.5))], 10.0);
+    let fitted = ends_inside(
+        "one change",
+        &[],
+        &vec![(1.0, dim("A", 0.5))],
+        10.0,
+        Caps::default(),
+    );
     assert_eq!(fitted.stage, Stage::Exact);
     assert_eq!(fitted.capture.rows.len(), 1);
     let none = fit_within_caps(&[], &[], 10.0, &Caps::default());
@@ -451,10 +512,11 @@ fn one_change_only_and_no_change_at_all() {
 fn a_looser_tolerance_never_gives_more_items_than_a_tighter_one() {
     // loops (a chase), ramps and steps: the case where loop detection used to disappear at x8
     let (baseline, changes, _) = song_one();
-    // keep it quick: the chase and the swells, 120 s
+    // keep it quick: the chase and the swells, 120 s (quick mode: 30 s, sixty beats of the chase)
+    let window = quick::pick(120.0, 30.0);
     let changes: Changes = changes
         .into_iter()
-        .filter(|(t, c)| *t < 120.0 && (c.a.contains("dimmer")))
+        .filter(|(t, c)| *t < window && (c.a.contains("dimmer")))
         .collect();
     let mut previous: Option<(f64, usize)> = None;
     let mut with_loops = 0;
@@ -462,7 +524,7 @@ fn a_looser_tolerance_never_gives_more_items_than_a_tighter_one() {
         let capture = stagepilot_lights::lightkey_smooth::fit(
             &baseline,
             &changes,
-            120.0,
+            window,
             &stagepilot_lights::lightkey_smooth::SmoothParams {
                 tolerance_scale: scale,
                 ..Default::default()
@@ -549,9 +611,9 @@ fn the_redate_mark_survives_thinning() {
 #[test]
 fn the_raw_recording_is_written_pruned_and_refits_to_the_same_counts() {
     let (baseline, changes, _) = song_one();
-    let duration = 60.0;
-    // a 60 s cut keeps this quick
-    let changes: Changes = changes.into_iter().filter(|(t, _)| *t < 60.0).collect();
+    // a 60 s cut keeps this quick (quick mode: 30 s against half the old caps)
+    let duration = quick::pick(60.0, 30.0);
+    let changes: Changes = changes.into_iter().filter(|(t, _)| *t < duration).collect();
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("lightkey-recordings");
     let recording = RawRecording::new("song-1", duration, &baseline, &changes);
@@ -561,12 +623,12 @@ fn the_raw_recording_is_written_pruned_and_refits_to_the_same_counts() {
     let (b2, c2) = loaded.into_parts();
     assert_eq!(b2.len(), baseline.len());
     assert_eq!(c2.len(), changes.len());
-    let caps = Caps::OLD;
+    let caps = caps_for(Caps::OLD, 2);
     // No time limit: this test is about the same counts from the same recording, not about how
     // fast the machine is. With the default 30 s limit a busy machine stops the ladder early
     // and the two fits can end on different candidates.
-    let first = fit_within_caps_budgeted(&baseline, &changes, 60.0, &caps, u128::MAX);
-    let again = fit_within_caps_budgeted(&b2, &c2, 60.0, &caps, u128::MAX);
+    let first = fit_within_caps_budgeted(&baseline, &changes, duration, &caps, u128::MAX);
+    let again = fit_within_caps_budgeted(&b2, &c2, duration, &caps, u128::MAX);
     assert_eq!(
         Size::of_capture(&first.capture),
         Size::of_capture(&again.capture)
@@ -677,6 +739,10 @@ fn song_at_the_caps() -> (
 
 #[test]
 fn the_replay_engine_builds_and_ticks_inside_budget_at_the_caps() {
+    // the build and tick budgets are for a song at the caps: a smaller song would not test them
+    if quick::skip("the_replay_engine_builds_and_ticks_inside_budget_at_the_caps") {
+        return;
+    }
     let _one_at_a_time = heavy();
     use stagepilot_lights::lightkey_replay::ReplayEngine;
     let (rows, effects) = song_at_the_caps();
@@ -890,6 +956,8 @@ fn pan_tilt_song_at(
 fn every_capture_the_pipeline_builds_passes_the_loaders_rules() {
     let _one_at_a_time = heavy();
     let mut maps: Vec<(String, SongLightingCueMap)> = Vec::new();
+    // the rotating songs run 120 s; quick mode: 40 s (the longest loop is 8 s)
+    let rotating = quick::pick(120.0, 40.0);
 
     // the busy synthetic song of this file (steps, a 16-fixture chase, noisy dimmers, ramps)
     let (baseline, changes, duration) = song_one();
@@ -910,17 +978,17 @@ fn every_capture_the_pipeline_builds_passes_the_loaders_rules() {
         (6, 4.977, 1.0),
         (3, 0.9, 1.0),
     ] {
-        let (baseline, changes) = pan_tilt_song(fixtures, period, 120.0, &mut rng, spread);
+        let (baseline, changes) = pan_tilt_song(fixtures, period, rotating, &mut rng, spread);
         maps.push((
             format!("{fixtures} fixtures, {period} s, spread {spread}"),
-            saves(&run(&baseline, &changes, 120.0, &Caps::default())),
+            saves(&run(&baseline, &changes, rotating, &Caps::default())),
         ));
     }
 
     // members a hair under one whole period behind the first (the lag search and the refined
     // period meet here: the iMac's 8.025 s offset in an 8.003 s loop)
     for (period, behind) in [(8.003, [0.003, 0.01, 0.03]), (5.0, [0.001, 0.02, 0.05])] {
-        let (baseline, changes) = pan_tilt_song_at(4, period, 120.0, |n| {
+        let (baseline, changes) = pan_tilt_song_at(4, period, rotating, |n| {
             if n == 0 {
                 0.0
             } else {
@@ -929,7 +997,7 @@ fn every_capture_the_pipeline_builds_passes_the_loaders_rules() {
         });
         maps.push((
             format!("near-period offsets, {period} s"),
-            saves(&run(&baseline, &changes, 120.0, &Caps::default())),
+            saves(&run(&baseline, &changes, rotating, &Caps::default())),
         ));
     }
 

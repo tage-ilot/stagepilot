@@ -59,6 +59,9 @@ env:
   # No incremental state in CI: nothing reuses it, and it only makes the target directory (and so
   # the cache) bigger.
   CARGO_INCREMENTAL: "0"
+  # Scaled-down big-song tests on pull requests only; main, a manual dispatch and every release
+  # path run them in full (see CONTRIBUTING.md).
+  STAGEPILOT_QUICK_SONG_TESTS: ${{ github.event_name == 'pull_request' && '1' || '' }}
 
 jobs:
   # Windows, macOS Apple Silicon, macOS Intel. Linux has its own job below because it must run on
