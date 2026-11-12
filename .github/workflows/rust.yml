@@ -56,12 +56,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Lean CI builds: incremental state and debug info only make the target directory (and so the
-  # cache) bigger and the links slower; nothing reads them in CI. Panic messages still carry
-  # file and line numbers.
+  # No incremental state in CI: nothing reuses it, and it only makes the target directory (and so
+  # the cache) bigger.
   CARGO_INCREMENTAL: "0"
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   # Windows, macOS Apple Silicon, macOS Intel. Linux has its own job below because it must run on
