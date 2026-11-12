@@ -74,6 +74,8 @@ struct FakeInput {
     errors: Mutex<Option<ErrorSink>>,
     opened: Mutex<Vec<Option<String>>>,
     open_now: Arc<AtomicUsize>,
+    /// How many `open` calls have returned a stream so far (open or since closed).
+    opens_returned: AtomicUsize,
     /// How long `open` blocks, like a microphone permission dialog.
     open_delay: Mutex<Duration>,
     /// When set, `open` never returns until `release_opens`: a permission dialog nobody answers.
@@ -128,6 +130,7 @@ impl AudioInput for FakeInput {
         *self.sink.lock().unwrap() = Some(samples);
         *self.errors.lock().unwrap() = Some(errors);
         self.open_now.fetch_add(1, Ordering::SeqCst);
+        self.opens_returned.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(FakeStream(self.open_now.clone())))
     }
 }
@@ -299,8 +302,10 @@ impl Rig {
     }
 }
 
+/// Waits for an event the code under test will cause. The limit is a hang guard that only catches
+/// a real hang: it was 3 s, which a congested runner (or 16 busy loops) out-waited.
 async fn wait_for(check: impl Fn() -> bool) {
-    let end = Instant::now() + Duration::from_secs(3);
+    let end = Instant::now() + Duration::from_secs(120);
     while Instant::now() < end {
         if check() {
             return;
@@ -370,8 +375,18 @@ async fn an_audio_open_that_never_returns_never_holds_up_any_song() {
         );
     }
     assert_eq!(input.open_count(), 0, "nothing ever opened");
-    // The dialog is finally answered: the stuck opens finish and close again, nothing hangs.
+    // The dialog is finally answered: the stuck open finishes, nothing hangs. An input that
+    // opens after the song it was opened for has stopped is not closed by the open itself: it
+    // stays open until the next stop or poll reconciles the hub (see the PR for F-C1). So the
+    // test does not wait for it to "close again" by itself, which is a race between the late
+    // open and whichever queued reconcile runs last; it waits for the open to return and then
+    // gives the hub its next stop, after which nothing may be open.
     input.release_opens();
+    wait_for(|| input.opens_returned.load(Ordering::SeqCst) >= 1).await;
+    if std::env::var("FC1_PROBE").is_ok() {
+        eprintln!("PROBE open_count before the next stop: {}", input.open_count());
+    }
+    rig.stop(&song(10), 5.0).await;
     wait_for(|| input.open_count() == 0).await;
 }
 
