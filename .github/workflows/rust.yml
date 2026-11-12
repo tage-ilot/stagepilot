@@ -116,7 +116,7 @@ jobs:
 
       - name: cargo nextest
         shell: bash
-        run: bash scripts/ci/run_nextest.sh --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend -E 'not test(real_manager_is_wired_and_shut_down_in_order)'  # TEMPORARY
+        run: bash scripts/ci/run_nextest.sh --workspace --features stagepilot-midi/midir-backend,stagepilot-server/midir-backend,stagepilot-lights/cpal-backend
 
       # nextest does not run doctests.
       - name: cargo test --doc
@@ -205,7 +205,7 @@ jobs:
         run: cargo nextest run --no-run --workspace --exclude midi-probe
 
       - name: cargo nextest
-        run: bash scripts/ci/run_nextest.sh --workspace --exclude midi-probe -E 'not test(real_manager_is_wired_and_shut_down_in_order)'  # TEMPORARY
+        run: bash scripts/ci/run_nextest.sh --workspace --exclude midi-probe
 
       # nextest does not run doctests.
       - name: cargo test --doc
