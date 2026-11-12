@@ -29,6 +29,15 @@ uuid = { version = "1.18.1", features = ["v4", "serde"] }
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["signal"] }
 
+[features]
+# Test builds only: the real HTTP transports refuse a production service (the control plane, the
+# IP/city lookup, Planning Center) and end the process with a message that names the host. Off by
+# default and never named in a `[dependencies]` table: only dev-dependencies turn it on, so it is
+# not in the shipped app.
+forbid-production = []
+
 [dev-dependencies]
+# This crate's own tests: turns the guard on for its unit and integration tests.
+stagepilot-remote = { path = ".", features = ["forbid-production"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "sync", "time", "test-util"] }

@@ -7,9 +7,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::bootstrap::DEFAULT_CONTROL_PLANE_ORIGIN;
 use crate::error::{RemoteError, Res};
-use crate::ip_location::LOOKUP_URL;
 
 #[derive(Debug, Clone, Default)]
 pub struct HttpRequest {
@@ -134,39 +132,49 @@ impl HttpClient {
     }
 }
 
-/// Set to `1` by `.cargo/config.toml` for every test run: the real transport then refuses to
-/// contact a production service (see [`refuse_production`]). The shipped app never sets it.
-pub const FORBID_PRODUCTION_ENV: &str = "STAGEPILOT_FORBID_PRODUCTION_ORIGINS";
-
-/// Every production service this crate contacts on its own, without the user asking.
-const PRODUCTION_ORIGINS: [&str; 2] = [DEFAULT_CONTROL_PLANE_ORIGIN, LOOKUP_URL];
-
-thread_local! {
-    static EXPECT_REFUSAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+/// Test-build guard (cargo feature `forbid-production`, off by default and switched on only by
+/// the dev-dependencies of the crates whose tests could reach a production service). Without the
+/// feature this is the no-op below and none of the guard exists in the compiled program.
+#[cfg(not(feature = "forbid-production"))]
+#[inline(always)]
+pub fn refuse_production(_url: &str) -> Result<(), TransportError> {
+    Ok(())
 }
 
-/// Runs `f` with this thread expecting [`refuse_production`] to refuse (a test of the guard
-/// itself). Anywhere else a refusal ends the process, see [`refuse_production`].
-pub fn expecting_refusal<R>(f: impl FnOnce() -> R) -> R {
-    struct Restore(bool);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            EXPECT_REFUSAL.set(self.0);
-        }
+#[cfg(feature = "forbid-production")]
+pub use production_guard::{expecting_refusal, refuse_production};
+
+#[cfg(feature = "forbid-production")]
+mod production_guard {
+    use super::TransportError;
+    use crate::bootstrap::DEFAULT_CONTROL_PLANE_ORIGIN;
+    use crate::ip_location::LOOKUP_URL;
+
+    /// Every production service this crate contacts on its own, without the user asking.
+    const PRODUCTION_ORIGINS: [&str; 2] = [DEFAULT_CONTROL_PLANE_ORIGIN, LOOKUP_URL];
+
+    thread_local! {
+        static EXPECT_REFUSAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
-    let _restore = Restore(EXPECT_REFUSAL.replace(true));
-    f()
-}
 
-/// Test-run guard. With [`FORBID_PRODUCTION_ENV`]`=1` (read once per process) a URL whose host is
-/// a production service gets an error naming the host. Callers swallow transport errors (the
-/// supervisor retries a failed check-in), which would let a test pass without noticing, so the
-/// refusal also ends the process: the message goes to the real stderr and the exit code is 101.
-/// Only [`expecting_refusal`] gets the error back. With the variable unset this is one cached
-/// flag read and `Ok`.
-pub fn refuse_production(url: &str) -> Result<(), TransportError> {
-    static FORBID: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *FORBID.get_or_init(|| std::env::var(FORBID_PRODUCTION_ENV).is_ok_and(|v| v == "1")) {
+    /// Runs `f` with this thread expecting [`refuse_production`] to refuse (a test of the guard
+    /// itself). Anywhere else a refusal ends the process, see [`refuse_production`].
+    pub fn expecting_refusal<R>(f: impl FnOnce() -> R) -> R {
+        struct Restore(bool);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                EXPECT_REFUSAL.set(self.0);
+            }
+        }
+        let _restore = Restore(EXPECT_REFUSAL.replace(true));
+        f()
+    }
+
+    /// A URL whose host is a production service gets an error naming the host. Callers swallow
+    /// transport errors (the supervisor retries a failed check-in), which would let a test pass
+    /// without noticing, so the refusal also ends the process: the message goes to the real
+    /// stderr and the exit code is 101. Only [`expecting_refusal`] gets the error back.
+    pub fn refuse_production(url: &str) -> Result<(), TransportError> {
         if let Err(refused) = refuse_production_host(url) {
             if !EXPECT_REFUSAL.get() {
                 use std::io::Write;
@@ -175,28 +183,28 @@ pub fn refuse_production(url: &str) -> Result<(), TransportError> {
             }
             return Err(refused);
         }
+        Ok(())
     }
-    Ok(())
-}
 
-fn refuse_production_host(url: &str) -> Result<(), TransportError> {
-    let host_of = |url: &str| {
-        let url = url::Url::parse(url).ok()?;
-        Some(url.host_str()?.trim_end_matches('.').to_owned())
-    };
-    let Some(host) = host_of(url) else {
-        return Ok(());
-    };
-    if PRODUCTION_ORIGINS
-        .iter()
-        .any(|origin| host_of(origin).as_deref() == Some(host.as_str()))
-    {
-        return Err(TransportError(format!(
-            "refusing to contact production in a test: {host} ({FORBID_PRODUCTION_ENV}=1); \
-             point the test at a loopback fake (see CONTRIBUTING.md)"
-        )));
+    pub(super) fn refuse_production_host(url: &str) -> Result<(), TransportError> {
+        let host_of = |url: &str| {
+            let url = url::Url::parse(url).ok()?;
+            Some(url.host_str()?.trim_end_matches('.').to_owned())
+        };
+        let Some(host) = host_of(url) else {
+            return Ok(());
+        };
+        if PRODUCTION_ORIGINS
+            .iter()
+            .any(|origin| host_of(origin).as_deref() == Some(host.as_str()))
+        {
+            return Err(TransportError(format!(
+                "refusing to contact production in a test: {host}; point the test at a \
+                 loopback fake (see CONTRIBUTING.md)"
+            )));
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// The production transport. The blocking client owns a private runtime, which tokio refuses to
@@ -280,9 +288,11 @@ impl HttpTransport for ReqwestTransport {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "forbid-production"))]
 mod tests {
-    use super::*;
+    use super::production_guard::refuse_production_host;
+    use crate::bootstrap::DEFAULT_CONTROL_PLANE_ORIGIN;
+    use crate::ip_location::LOOKUP_URL;
 
     fn refused(url: &str) -> Option<String> {
         refuse_production_host(url).err().map(|e| e.0)

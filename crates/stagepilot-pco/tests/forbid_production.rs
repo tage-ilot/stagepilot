@@ -1,5 +1,6 @@
-//! The test-run guard on the real Planning Center clients (see `production_guard`): the default
+//! The test-build guard on the real Planning Center clients (see `production_guard`): the default
 //! API base and the control-plane origin are refused before any socket is opened.
+#![cfg(feature = "forbid-production")]
 
 mod support;
 

@@ -77,16 +77,18 @@ Run `npm --prefix frontend run lint` before pushing frontend changes.
 
 ### Tests never talk to production
 
-`.cargo/config.toml` sets `STAGEPILOT_FORBID_PRODUCTION_ORIGINS=1` for `cargo test` and
-`cargo nextest`. With it set, the real HTTP transports (`stagepilot-remote`, `stagepilot-pco`, the
-diagnostics upload) end the process with `refusing to contact production in a test: <host>` (exit
-code 101) instead of quietly contacting the beta control plane, db-ip.com or Planning Center. If
-you see it, point the test at a loopback fake: `DesktopOptions { control_plane_origin:
-"http://127.0.0.1:9".into(), .. }` or a fake `HttpTransport` (see `tests/checkin.rs`), and a mock
-`base_url` for Planning Center clients. A test of the guard wraps the call in `expecting_refusal`
-to get the error back. `cargo run` gets the variable too: use
-`STAGEPILOT_FORBID_PRODUCTION_ORIGINS=0 cargo run ...` to run the app against production on your
-machine. The shipped app never sets it.
+Tests refuse to contact production. The cargo feature `forbid-production` of `stagepilot-remote`
+and `stagepilot-pco` (off by default) is switched on by the `[dev-dependencies]` of the crates whose
+tests could reach a production service, so it exists in test builds only and not in the app you
+build or ship (`cargo run`, `cargo tauri dev` and release builds do not have it). With it, the real
+HTTP transports (`stagepilot-remote`, `stagepilot-pco`, the diagnostics upload) end the process
+with `refusing to contact production in a test: <host>` (exit code 101) instead of quietly
+contacting the beta control plane, db-ip.com or Planning Center. If you see it, point the test at a
+loopback fake: `DesktopOptions { control_plane_origin: "http://127.0.0.1:9".into(), .. }` or a fake
+`HttpTransport` (see `tests/checkin.rs`), and a mock `base_url` for Planning Center clients. A test
+of the guard wraps the call in `expecting_refusal` to get the error back. A new crate whose tests
+start these managers lists `stagepilot-remote` / `stagepilot-pco` in its own `[dev-dependencies]`
+with `features = ["forbid-production"]`.
 
 ### Quick big-song tests (pull requests only)
 

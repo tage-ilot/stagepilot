@@ -1,8 +1,3 @@
 # ts-rs writes generated TypeScript here (relative to each crate's manifest dir).
 [env]
 TS_RS_EXPORT_DIR = { value = "generated/ts", relative = true }
-# Every test run (`cargo test` and `cargo nextest`): the real HTTP transports refuse to contact a
-# production service (the control plane, the IP/city lookup, Planning Center) and say which host.
-# The shipped app never sets this. A developer who wants a local `cargo run` to talk to production
-# sets STAGEPILOT_FORBID_PRODUCTION_ORIGINS=0 for that command (not forced here, so that works).
-STAGEPILOT_FORBID_PRODUCTION_ORIGINS = "1"
