@@ -509,6 +509,10 @@ mod wrapper {
 
     /// A real listener on loopback serving a session; returns `(base_url, service)`.
     async fn serve(assets: Assets) -> (String, Arc<HelperInstall>) {
+        // The tests fetch the wrapper with `reqwest`, which has no TLS provider of its own here.
+        // Without this, a test run alone (nextest runs each test in its own process) panics
+        // unless an earlier test in the same process happened to install one.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let svc = Arc::new(HelperInstall::with_assets(assets));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
