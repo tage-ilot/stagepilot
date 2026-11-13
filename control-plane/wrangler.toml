@@ -42,7 +42,8 @@ bucket_name = "stagepilot-beta-diagnostics"
 # TESTING_SOURCES is a second optional deployment var of the same format and
 # normalization: installations that enroll from a listed source are marked
 # Testing, archived at once, and revoked by the normal 48h expiry sweep. Empty
-# or unset disables the feature. Its value is never committed (see
+# or unset disables the feature. Unlike ENROLLMENT_EXEMPT_SOURCES it is supplied from a
+# GitHub secret (masked in the public workflow log) and its value is never committed (see
 # docs/remote-control-plane.md).
 #
 # ENROLLMENT_WINDOW_SECONDS is the anonymous-enrollment quota window (seconds)

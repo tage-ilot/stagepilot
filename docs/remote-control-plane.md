@@ -62,9 +62,10 @@ Only that boolean is stored, never the address. Effects:
 - Enrollment quotas and limits are unchanged; a testing source is not exempt unless it is also in
   `ENROLLMENT_EXEMPT_SOURCES`.
 
-The value is a deployment secret: it is supplied as the `TESTING_SOURCES` repository/environment
-variable of the deploy workflow, and must never be committed (not in the repository, tests, docs
-or commit messages). If the testing network's address changes, the setting must be updated;
+The value is a deployment secret: it is supplied as the `TESTING_SOURCES` GitHub **secret** of the
+deploy workflow (not a variable: this repository is public, a variable's value is printed in the
+public workflow log, a secret's is masked), and must never be committed (not in the repository,
+tests, docs or commit messages). If the testing network's address changes, the setting must be updated;
 until then marking silently stops and new test installations look like ordinary ones.
 Existing installations are not changed (nothing stored says which source they came from); they
 leave through the 48h sweep.
