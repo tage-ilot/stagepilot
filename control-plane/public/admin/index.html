@@ -277,7 +277,7 @@
   </section>
 
   <section class="panel">
-    <h2>Installations</h2>
+    <h2>Installations <span id="installations-count" class="sub" style="font-weight:normal;"></span></h2>
     <div class="sub" style="margin-bottom:8px;">Each row is one app enrollment. A reinstall or a separate test run creates a new one — name it, archive it to tidy this list without cutting it off, or remove it to disconnect it for good.</div>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:8px;">
       <input type="checkbox" id="show-archived" />
@@ -313,6 +313,7 @@
     citiesList: document.getElementById('cities-list'),
     installationsList: document.getElementById('installations-list'),
     showArchived: document.getElementById('show-archived'),
+    installationsCount: document.getElementById('installations-count'),
   };
 
   var CATEGORY_LABELS = {
@@ -511,6 +512,12 @@
     lastInstallations = installations;
     var showArchived = els.showArchived && els.showArchived.checked;
     var visible = installations.filter(function (inst) { return showArchived || !inst.archived; });
+    var archivedCount = installations.filter(function (inst) { return inst.archived; }).length;
+    if (els.installationsCount) {
+      els.installationsCount.textContent = archivedCount
+        ? visible.length + ' shown, ' + archivedCount + ' archived'
+        : '';
+    }
     els.installationsList.innerHTML = '';
     if (!visible.length) {
       return renderEmpty(els.installationsList, showArchived ? 'No installations yet.' : 'No installations to show. Check "Show archived" to see archived ones.');
@@ -747,7 +754,9 @@
       var installations = installationsData.installations || [];
       var activeCutoff = Date.now() - 24 * 60 * 60 * 1000;
       var activeToday = installations.filter(function (inst) {
-        return !inst.revoked && new Date(inst.updatedAt).getTime() >= activeCutoff;
+        // Archived installations are hidden from the default list, so they
+        // are not counted as active today either (Total is unchanged).
+        return !inst.revoked && !inst.archived && new Date(inst.updatedAt).getTime() >= activeCutoff;
       }).length;
       var total = installations.filter(function (inst) { return !inst.revoked; }).length;
       var totalCount = metrics.activeInstallations != null ? metrics.activeInstallations : total;

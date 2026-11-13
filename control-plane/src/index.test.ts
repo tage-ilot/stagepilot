@@ -3201,3 +3201,220 @@ describe('testing sources (TESTING_SOURCES)', () => {
     expect(storage.values.get('installation:' + 'a'.repeat(32))).not.toHaveProperty('keep');
   });
 });
+
+describe('auto-archive installations from known test hostnames', () => {
+  const HOUR = 60 * 60 * 1000;
+  const NOW = Date.parse('2026-11-12T12:00:00.000Z');
+  const RUNNER = 'runnervmdaln5';
+  const REAL = 'JPL-Graphics-iMac.local';
+  let storage: MemoryStorage;
+  let provider: FakeCloudflare;
+  let registry: Registry;
+
+  const stored = (installation: Record<string, unknown>) => storage.values.get(`installation:${String(installation.installationId)}`) as Record<string, unknown>;
+  const checkIn = async (installation: Record<string, unknown>, deviceName: string) => {
+    const response = await registry.fetch(request(
+      statusPathWithDeviceName(installation, deviceName), 'GET', String(installation.installationCredential),
+    ));
+    expect(response.status).toBe(200);
+    return json(response);
+  };
+  const adminPatch = async (installation: Record<string, unknown>, action: string, value: Record<string, unknown>) => {
+    const response = await registry.fetch(request(
+      `/v1/admin/installations/${String(installation.installationId)}/${action}`, 'PATCH', adminToken, value,
+    ));
+    expect(response.status).toBe(200);
+    return json(response);
+  };
+  const listRow = async (installation: Record<string, unknown>) => {
+    const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    return (list.installations as Array<Record<string, unknown>>).find((row) => row.installationId === installation.installationId)!;
+  };
+  const activeCount = () => (storage.values.get('registry:stats') as { activeInstallations: number }).activeInstallations;
+
+  beforeEach(() => {
+    storage = new MemoryStorage();
+    provider = new FakeCloudflare();
+    vi.stubGlobal('fetch', provider.fetch);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    registry = new Registry({ storage } as unknown as DurableObjectState, env as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('archives a known runner name on the very first deviceName (enroll)', async () => {
+    const installation = await enroll(registry, 'autoarch-first-0001', { deviceName: RUNNER });
+    expect(stored(installation).archived).toBe(true);
+    expect((await listRow(installation)).archived).toBe(true);
+    // Nothing else changed: still an ordinary, active, unpinned installation.
+    expect(stored(installation).revoked).toBe(false);
+    expect(stored(installation).keep).toBeUndefined();
+    expect(stored(installation).testing).toBeUndefined();
+  });
+
+  it.each(['agent-hub', 'stagepilot-ci', 'sjc20-cw756-1b773749-f921-4979-9954-d2be6daecedb-0EED8C58845F.local'])(
+    'archives %s on a later status check-in',
+    async (name) => {
+      const installation = await enroll(registry, `autoarch-status-${name.slice(0, 6)}`);
+      expect(stored(installation).archived).toBeUndefined();
+      await checkIn(installation, name);
+      expect(stored(installation).archived).toBe(true);
+    },
+  );
+
+  it('does not archive a real host name', async () => {
+    const installation = await enroll(registry, 'autoarch-real-0001', { deviceName: REAL });
+    expect(stored(installation).archived).toBeUndefined();
+    await checkIn(installation, 'Johns-MacBook-Pro.local');
+    expect(stored(installation).archived).toBeUndefined();
+    expect((await listRow(installation)).archived).toBe(false);
+  });
+
+  it('archives on the anonymous check-in replay (enroll with the same nonce) when the name changes', async () => {
+    const installation = await enroll(registry, 'autoarch-replay-0001', { deviceName: REAL });
+    const replay = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, { nonce: 'autoarch-replay-0001', deviceName: RUNNER }));
+    expect(replay.status).toBe(201);
+    expect(stored(installation).archived).toBe(true);
+  });
+
+  it('archives on a reconcile body that changes the name', async () => {
+    const installation = await enroll(registry, 'autoarch-reconcile-0001', { deviceName: REAL });
+    const response = await registry.fetch(request(installationPath(installation, 'reconcile'), 'POST', String(installation.installationCredential), { deviceName: RUNNER }));
+    expect(response.status).toBe(200);
+    expect(stored(installation).archived).toBe(true);
+  });
+
+  it('never archives a pinned installation', async () => {
+    const installation = await enroll(registry, 'autoarch-pinned-0001', { deviceName: REAL });
+    await adminPatch(installation, 'keep', { keep: true });
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).deviceName).toBe(RUNNER);
+    expect(stored(installation).archived).toBeUndefined();
+    expect((await listRow(installation)).archived).toBe(false);
+  });
+
+  it('never archives a pinned installation that had no name before it was pinned', async () => {
+    const installation = await enroll(registry, 'autoarch-pinned-0002');
+    await adminPatch(installation, 'keep', { keep: true });
+    await checkIn(installation, 'agent-hub');
+    expect(stored(installation).archived).toBeUndefined();
+  });
+
+  it('never archives a provisioned installation', async () => {
+    const installation = await enroll(registry, 'autoarch-prov-0001', { deviceName: REAL });
+    const provisioned = await registry.fetch(request(
+      installationPath(installation, 'provision'), 'POST', String(installation.installationCredential),
+      { generation: '11111111-1111-4111-8111-111111111111' },
+    ));
+    expect(provisioned.status).toBe(200);
+    expect(stored(installation).phase).toBe('provisioned');
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).deviceName).toBe(RUNNER);
+    expect(stored(installation).archived).toBeUndefined();
+  });
+
+  it('never archives an installation that was ever provisioned, even if remote access is now off', async () => {
+    const installation = await enroll(registry, 'autoarch-prov-0002', { deviceName: REAL });
+    storage.values.set(`installation:${String(installation.installationId)}`, {
+      ...stored(installation), phase: 'disabled', desiredEnabled: false, everProvisioned: true,
+    });
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBeUndefined();
+  });
+
+  it('never archives an installation that is turning remote access on (provision request carries the name)', async () => {
+    const installation = await enroll(registry, 'autoarch-prov-0003');
+    const response = await registry.fetch(request(
+      installationPath(installation, 'provision'), 'POST', String(installation.installationCredential),
+      { generation: '22222222-2222-4222-8222-222222222222', deviceName: RUNNER },
+    ));
+    expect(response.status).toBe(200);
+    expect(stored(installation).deviceName).toBe(RUNNER);
+    expect(stored(installation).archived).toBeUndefined();
+  });
+
+  it('an operator Unarchive survives later check-ins, including a change to another test name', async () => {
+    const installation = await enroll(registry, 'autoarch-operator-0001', { deviceName: RUNNER });
+    expect(stored(installation).archived).toBe(true);
+    const unarchived = await adminPatch(installation, 'archive', { archived: false });
+    expect(unarchived.archived).toBe(false);
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBe(false);
+    await checkIn(installation, 'agent-hub');
+    expect(stored(installation).deviceName).toBe('agent-hub');
+    expect(stored(installation).archived).toBe(false);
+    const replay = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, { nonce: 'autoarch-operator-0001', deviceName: 'stagepilot-ci' }));
+    expect(replay.status).toBe(201);
+    expect(stored(installation).archived).toBe(false);
+    expect((await listRow(installation)).archived).toBe(false);
+  });
+
+  it('an operator Unarchive of an install that never carried a test name also blocks a later rename to one', async () => {
+    const installation = await enroll(registry, 'autoarch-operator-0002', { deviceName: REAL });
+    await adminPatch(installation, 'archive', { archived: true });
+    await adminPatch(installation, 'archive', { archived: false });
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBe(false);
+  });
+
+  it('a name change from a real host to a test host archives, and the change back does not unarchive', async () => {
+    const installation = await enroll(registry, 'autoarch-change-0001', { deviceName: REAL });
+    expect(stored(installation).archived).toBeUndefined();
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBe(true);
+    await checkIn(installation, REAL);
+    expect(stored(installation).deviceName).toBe(REAL);
+    expect(stored(installation).archived).toBe(true);
+    // The operator can still unarchive, and then the guard holds.
+    await adminPatch(installation, 'archive', { archived: false });
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBe(false);
+  });
+
+  it('does not re-archive on a check-in with an unchanged name (only first apply or a change counts)', async () => {
+    const installation = await enroll(registry, 'autoarch-same-0001', { deviceName: RUNNER });
+    // Simulate a record archived by neither path (legacy row): same name must not flip it.
+    storage.values.set(`installation:${String(installation.installationId)}`, { ...stored(installation), archived: false });
+    await checkIn(installation, RUNNER);
+    expect(stored(installation).archived).toBe(false);
+  });
+
+  it('does not change auth, status, quotas, counts or the 48h expiry', async () => {
+    const plain = await enroll(registry, 'autoarch-expiry-0001', { deviceName: REAL });
+    const runner = await enroll(registry, 'autoarch-expiry-0002', { deviceName: RUNNER });
+    expect(activeCount()).toBe(2);
+    const plainBody = await checkIn(plain, REAL);
+    const runnerBody = await checkIn(runner, RUNNER);
+    expect(runnerBody.revoked).toBe(false);
+    expect(runnerBody.phase).toBe(plainBody.phase);
+    expect(runnerBody.desiredEnabled).toBe(plainBody.desiredEnabled);
+    expect(activeCount()).toBe(2);
+    const plainRow = await listRow(plain);
+    const runnerRow = await listRow(runner);
+    expect(Date.parse(String(runnerRow.expiresAt)) - NOW).toBe(48 * HOUR);
+    expect(runnerRow.expiresAt).toBe(plainRow.expiresAt);
+
+    // Both leave through the same 48h sweep; archiving did not delay or advance it.
+    vi.setSystemTime(NOW + 48 * HOUR - 60_000);
+    await registry.alarm();
+    expect(stored(runner).revoked).toBe(false);
+    expect(stored(plain).revoked).toBe(false);
+    vi.setSystemTime(NOW + 48 * HOUR);
+    await registry.alarm();
+    expect(stored(runner).revoked).toBe(true);
+    expect(stored(plain).revoked).toBe(true);
+    expect(activeCount()).toBe(0);
+  });
+
+  it('operator-set flag is stored only by the admin archive route and never reported as an extra public field', async () => {
+    const installation = await enroll(registry, 'autoarch-flag-0001', { deviceName: RUNNER });
+    expect(stored(installation)).not.toHaveProperty('archivedByOperator');
+    await adminPatch(installation, 'archive', { archived: false });
+    expect(stored(installation).archivedByOperator).toBe(true);
+    const row = await listRow(installation);
+    expect(row).not.toHaveProperty('archivedByOperator');
+  });
+});

@@ -84,6 +84,12 @@ interface Installation {
   // or access-control state. Use `revoked` (via the existing revoke
   // endpoint) to actually cut off an installation's access.
   archived?: boolean;
+  // Set true the first time the operator explicitly archives or unarchives
+  // this installation (admin archive route). From then on the automatic
+  // test-hostname archiving (applyDeviceName) never touches `archived`
+  // again, so an operator's Unarchive is not undone by the next check-in.
+  // Display-only bookkeeping; never used for auth or access.
+  archivedByOperator?: boolean;
   // Pinned: never auto-revoked by the expiry sweep. Set via the admin keep
   // route, or once by the grandfather migration for provisioned installs.
   keep?: boolean;
@@ -1848,7 +1854,7 @@ export class Registry {
     if (typeof archived !== 'boolean') {
       return reply({ error: 'invalid request' }, 400);
     }
-    const updated: Installation = { ...installation, archived, updatedAt: new Date().toISOString() };
+    const updated: Installation = { ...installation, archived, archivedByOperator: true, updatedAt: new Date().toISOString() };
     await this.state.storage.put(`installation:${id}`, updated);
     return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, location: formatInstallationLocation(updated) });
   }
@@ -2262,6 +2268,22 @@ export class Registry {
     installation.deviceName = deviceName;
     if (!hadDeviceNameBefore && !installation.label) {
       installation.label = deviceName;
+    }
+    // Known CI / dev hosts hide themselves from the default admin list.
+    // Display-only: `archived` changes nothing about access, quotas, the 48h
+    // expiry or revocation. Never touches a pinned or ever-provisioned
+    // installation, and never overrides an operator's explicit archive or
+    // unarchive. It only ever sets `archived`; it never clears it.
+    if (
+      isKnownTestDevice(deviceName)
+      && !installation.archived
+      && !installation.archivedByOperator
+      && !installation.keep
+      && !installation.everProvisioned
+      && installation.phase !== 'provisioned'
+      && !installation.desiredEnabled
+    ) {
+      installation.archived = true;
     }
     return true;
   }
