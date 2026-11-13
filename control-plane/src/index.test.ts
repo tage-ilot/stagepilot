@@ -3591,6 +3591,65 @@ describe('offline test-install purge', () => {
     });
   });
 
+  describe('purge-now admin action', () => {
+    const purgeNow = (body: Record<string, unknown> = { confirm: true }, token: string | null = adminToken) =>
+      registry.fetch(request('/v1/admin/installations/purge-test', 'POST', token ?? undefined, body));
+
+    it('needs the admin token and an explicit confirm', async () => {
+      const id = seed({}, 5 * MINUTE);
+      expect((await purgeNow({ confirm: true }, null)).status).toBe(401);
+      expect((await purgeNow({ confirm: true }, 'wrong-token-not-admin-at-all-x')).status).toBe(401);
+      expect((await purgeNow({})).status).toBe(400);
+      expect((await purgeNow({ confirm: 'yes' })).status).toBe(400);
+      expect(exists(id)).toBe(true);
+    });
+
+    it('deletes test installations immediately, however recently seen, with their children and counters', async () => {
+      setStats(10);
+      const live = seed({ deviceName: RUNNER }, 2 * MINUTE);
+      const revoked = seed({ deviceName: 'agent-hub', revoked: true, archived: true }, 2 * MINUTE);
+      const testing = seed({ deviceName: REAL, testing: true }, MINUTE);
+      storage.values.set(`alert:${live}:heartbeat_stale:abc`, { id: 'a' });
+      storage.values.set(`approval:${live}:ap1`, { id: 'ap1' });
+      const response = await purgeNow();
+      expect(response.status).toBe(200);
+      expect(await json(response)).toEqual({ purged: 3, failed: 0, remaining: 0 });
+      for (const id of [live, revoked, testing]) {
+        expect(exists(id)).toBe(false);
+        expect(keysMentioning(id)).toEqual([]);
+      }
+      // Two were still counted as active (live, testing); the revoked one was not.
+      expect(stats().activeInstallations).toBe(8);
+      expect(stats().purgedInstallations).toBe(3);
+    });
+
+    it('never touches pinned, provisioned, ever-provisioned or real-host installations', async () => {
+      const pinned = seed({ keep: true }, 5 * MINUTE);
+      const provisioned = seed({ phase: 'provisioned' }, 5 * MINUTE);
+      const everProvisioned = seed({ everProvisioned: true }, 5 * MINUTE);
+      const realHost = seed({ deviceName: REAL }, 5 * MINUTE);
+      const noName = seed({ deviceName: undefined }, 5 * MINUTE);
+      const pinnedTesting = seed({ testing: true, keep: true }, 5 * MINUTE);
+      const target = seed({}, 5 * MINUTE);
+      expect(await json(await purgeNow())).toEqual({ purged: 1, failed: 0, remaining: 0 });
+      for (const id of [pinned, provisioned, everProvisioned, realHost, noName, pinnedTesting]) expect(exists(id)).toBe(true);
+      expect(exists(target)).toBe(false);
+    });
+
+    it('works through a large backlog in bounded calls', async () => {
+      setStats(0);
+      const ids = Array.from({ length: 260 }, () => seed({ revoked: true }, 3 * HOUR));
+      const keep = seed({ deviceName: REAL }, 3 * HOUR);
+      const first = await json(await purgeNow());
+      expect(first).toEqual({ purged: 250, failed: 0, remaining: 10 });
+      const second = await json(await purgeNow());
+      expect(second).toEqual({ purged: 10, failed: 0, remaining: 0 });
+      expect(ids.some(exists)).toBe(false);
+      expect(exists(keep)).toBe(true);
+      expect(stats().purgedInstallations).toBe(260);
+    });
+  });
+
   describe('purge rule', () => {
     it('identifies test installs by the testing flag or a known test hostname only', () => {
       expect(TEST_PURGE_OFFLINE_HOURS).toBe(48);
