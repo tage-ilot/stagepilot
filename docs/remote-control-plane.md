@@ -70,6 +70,37 @@ until then marking silently stops and new test installations look like ordinary 
 Existing installations are not changed (nothing stored says which source they came from); they
 leave through the 48h sweep.
 
+## Auto-archive of known test hostnames
+
+CI runners and the AgentHub dev host enroll constantly (428 GitHub-runner installations enrolled in
+one burst) and used to stay in the default admin list until archived by hand. An installation now
+hides itself when its self-reported `deviceName` is a known test host (`isKnownTestDevice`:
+`runnervm*`, the macOS runner UUID names, exactly `agent-hub`, exactly `stagepilot-ci`;
+case-insensitive, whole-name match).
+
+- **When:** only at the moment a `deviceName` is first applied or changes (enroll, the anonymous
+  check-in replay of `enroll`, `status`, `provision`, `reconcile`). A check-in that repeats the
+  stored name does nothing, so existing rows are not touched retroactively.
+- **Effect:** sets `archived: true`, nothing else. It never revokes, never sets `testing`, and does
+  not touch credentials, access, quotas, `activeInstallations` or the 48h expiry (the sweep still
+  revokes these installations at `createdAt + 48h`, exactly like any other unpinned one).
+- **Never for:** a pinned (`keep`) installation, one that has ever provisioned (`everProvisioned`
+  or phase `provisioned`), or one that is turning remote access on (`desiredEnabled`). The rule
+  only ever sets `archived`; it never clears it, so a later change back to a real host name leaves
+  the row archived (use Unarchive).
+- **Operator override guard:** the admin archive route (`PATCH .../archive`, either Archive or
+  Unarchive) stores `archivedByOperator: true`. From then on the rule never changes `archived`
+  for that installation, so an operator's Unarchive is not undone by the next check-in, even if
+  the name changes to another test host. The flag is internal and is not returned by the API.
+- `deviceName` stays untrusted and display-only: it is never used for auth, access or quotas, and
+  a client can only ever hide its own row, not gain anything.
+- The admin page's **Active today / Total** stat no longer counts archived installations as
+  active today (Total is unchanged), and the Installations heading shows how many rows are
+  shown versus archived (for example `1 shown, 464 archived`) whenever any are archived.
+
+Rollback: redeploy the previous Worker version. Rows already archived keep `archived: true` and a
+possible `archivedByOperator: true`, both harmless to older versions (unknown fields are ignored).
+
 ## Locations, Test Install, and the manual override
 
 ### App-reported location
