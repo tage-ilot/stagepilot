@@ -277,6 +277,8 @@ export const TEST_PURGE_OFFLINE_HOURS = 48;
 // At most this many installations are purged per sweep run (in addition to the
 // revoke caps above); the backlog drains over successive hourly runs.
 const SWEEP_MAX_PURGE = 100;
+// One operator-triggered purge call deletes at most this many test installations.
+const ADMIN_PURGE_MAX = 250;
 // lastSeenAt is rewritten at most this often per installation.
 const LAST_SEEN_WRITE_INTERVAL_MS = 10 * 60 * 1000;
 // Cloudflare Durable Object storage.delete([...]) accepts at most 128 keys.
@@ -858,6 +860,44 @@ export class Registry {
     return true;
   }
 
+  // Operator action: permanently delete test installations NOW instead of waiting
+  // for the 48h-offline sweep rule. Same eligibility as the sweep minus the time
+  // condition: a test installation (testing network or known test hostname) that
+  // is not pinned, never provisioned and not provisioned. Deletes through the
+  // same purgeInstallation path (provider teardown first, children, counters,
+  // record last). Bounded per call; call again while `remaining` is above 0.
+  private async adminPurgeTest(request: Request): Promise<Response> {
+    const input = await body(request);
+    if (input.confirm !== true) return reply({ error: 'confirm required' }, 400);
+    const rows = await this.state.storage.list<Installation>({ prefix: 'installation:' });
+    const candidates = [...rows.values()]
+      .filter((row) => isTestInstallation(row) && !row.keep && !row.everProvisioned && row.phase !== 'provisioned')
+      .sort((left, right) => left.id.localeCompare(right.id));
+    let purged = 0;
+    let failed = 0;
+    let providerUsed = 0;
+    let providerExhausted = false;
+    const purgedIds = new Set<string>();
+    for (const candidate of candidates) {
+      if (purged >= ADMIN_PURGE_MAX) break;
+      const needsProvider = Boolean(candidate.generation || candidate.tunnelId);
+      if (needsProvider && (providerUsed >= SWEEP_MAX_PROVIDER || providerExhausted)) continue;
+      if (needsProvider) providerUsed += 1;
+      try {
+        if (await this.purgeInstallation(candidate.id, candidate.lastSeenAt)) {
+          purged += 1;
+          purgedIds.add(candidate.id);
+        }
+      } catch (error) {
+        failed += 1;
+        console.error('admin test-install purge failed');
+        if (error instanceof Limited) providerExhausted = true;
+      }
+    }
+    if (purgedIds.size > 0) await this.forgetEnrollmentNonces(purgedIds);
+    return reply({ purged, failed, remaining: Math.max(0, candidates.length - purged) });
+  }
+
   // enrollment:<nonce> -> installation id (idempotency record). Without this
   // a purged id's nonce would keep pointing at nothing. Replaying such a nonce
   // is already safe (a missing installation falls through to a brand-new
@@ -934,6 +974,10 @@ export class Registry {
       if (request.method === 'PATCH' && adminClearTesting) {
         if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
         return await this.adminClearTesting(request, adminClearTesting[1]);
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/admin/installations/purge-test') {
+        if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
+        return await this.adminPurgeTest(request);
       }
       const adminRevoke = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/revoke$/);
       if (request.method === 'POST' && adminRevoke) {

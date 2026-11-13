@@ -240,3 +240,7 @@ characters (400 otherwise; 404 for an unknown id). An empty string clears the ov
 override is display-only: never used for auth or any security decision, and geolocation refreshes
 never overwrite it. The admin list exposes it as `locationOverride`, and the page has an inline
 "Set location" editor next to the name editor.
+
+### Purge test installations now (operator action)
+
+`POST /v1/admin/installations/purge-test` with `{"confirm": true}` (admin token) deletes test installations immediately instead of waiting for the 48h-offline rule. Eligibility is the same as the sweep minus the time condition: a test installation (testing network or known test hostname) that is not pinned, was never provisioned and is not currently provisioned. Deletion goes through the same path as the sweep (provider teardown first, then children, counters and the record last). At most 250 per call; the reply is `{purged, failed, remaining}`, so call again while `remaining` is above 0. Deleted records cannot be restored.
