@@ -244,3 +244,7 @@ never overwrite it. The admin list exposes it as `locationOverride`, and the pag
 ### Purge test installations now (operator action)
 
 `POST /v1/admin/installations/purge-test` with `{"confirm": true}` (admin token) deletes test installations immediately instead of waiting for the 48h-offline rule. Eligibility is the same as the sweep minus the time condition: a test installation (testing network or known test hostname) that is not pinned, was never provisioned and is not currently provisioned. Deletion goes through the same path as the sweep (provider teardown first, then children, counters and the record last). At most 250 per call; the reply is `{purged, failed, remaining}`, so call again while `remaining` is above 0. Deleted records cannot be restored.
+
+### Legacy nameless test installs and the active counter
+
+Installations from before device names were reported have no `deviceName`. One that is revoked and was never provisioned counts as a test installation (it is dead weight from the earliest test runs), so the 48h-offline sweep and the purge-now action delete it. A live, pinned or ever-provisioned installation is never matched by this. The sweep and the purge-now action also recount `activeInstallations` from the stored records, so a drifted counter (which the 500 cap and the admin "Total" read) corrects itself within an hour.

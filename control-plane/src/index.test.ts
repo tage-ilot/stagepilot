@@ -3591,6 +3591,58 @@ describe('offline test-install purge', () => {
     });
   });
 
+  describe('legacy nameless test installs and the active counter', () => {
+    const purgeNow = () => registry.fetch(request('/v1/admin/installations/purge-test', 'POST', adminToken, { confirm: true }));
+
+    it('treats a revoked, never-provisioned install with no device name as a test install, and nothing else without a name', () => {
+      expect(isTestInstallation({ deviceName: undefined, revoked: true, everProvisioned: false })).toBe(true);
+      expect(isTestInstallation({ deviceName: undefined, revoked: true })).toBe(true);
+      expect(isTestInstallation({ deviceName: undefined, revoked: false })).toBe(false);
+      expect(isTestInstallation({ deviceName: undefined, revoked: true, everProvisioned: true })).toBe(false);
+      expect(isTestInstallation({ deviceName: 'Church-PC', revoked: true, everProvisioned: false })).toBe(false);
+      expect(isTestInstallation({ deviceName: undefined })).toBe(false);
+    });
+
+    it('the sweep deletes a legacy nameless revoked row once it has been quiet 48h, keeps it before, and keeps pinned/provisioned ones', async () => {
+      setStats(0);
+      const old = seed({ deviceName: undefined, revoked: true, archived: true, label: 'Disposable live acceptance A' }, 49 * HOUR);
+      const recent = seed({ deviceName: undefined, revoked: true, archived: true }, 47 * HOUR);
+      const pinned = seed({ deviceName: undefined, revoked: true, keep: true }, 99 * HOUR);
+      const everProvisioned = seed({ deviceName: undefined, revoked: true, everProvisioned: true }, 99 * HOUR);
+      const liveNameless = seed({ deviceName: undefined }, 99 * HOUR);
+      await registry.alarm();
+      expect(exists(old)).toBe(false);
+      for (const id of [recent, pinned, everProvisioned, liveNameless]) expect(exists(id)).toBe(true);
+    });
+
+    it('purge-now also removes legacy nameless revoked rows, however recent', async () => {
+      const legacy = seed({ deviceName: undefined, revoked: true, archived: true }, 5 * MINUTE);
+      const live = seed({ deviceName: undefined }, 5 * MINUTE);
+      expect(await json(await purgeNow())).toEqual({ purged: 1, failed: 0, remaining: 0 });
+      expect(exists(legacy)).toBe(false);
+      expect(exists(live)).toBe(true);
+    });
+
+    it('the sweep recounts a drifted active counter from the stored records', async () => {
+      seed({ keep: true, deviceName: REAL }, HOUR);
+      seed({ revoked: true, deviceName: REAL }, HOUR);
+      setStats(2);
+      await registry.alarm();
+      expect(stats().activeInstallations).toBe(1);
+      setStats(0);
+      await registry.alarm();
+      expect(stats().activeInstallations).toBe(1);
+    });
+
+    it('purge-now also corrects the counter', async () => {
+      seed({ keep: true, deviceName: REAL }, HOUR);
+      seed({ deviceName: RUNNER }, HOUR);
+      setStats(7);
+      await purgeNow();
+      expect(stats().activeInstallations).toBe(1);
+    });
+  });
+
   describe('purge-now admin action', () => {
     const purgeNow = (body: Record<string, unknown> = { confirm: true }, token: string | null = adminToken) =>
       registry.fetch(request('/v1/admin/installations/purge-test', 'POST', token ?? undefined, body));
@@ -3618,8 +3670,8 @@ describe('offline test-install purge', () => {
         expect(exists(id)).toBe(false);
         expect(keysMentioning(id)).toEqual([]);
       }
-      // Two were still counted as active (live, testing); the revoked one was not.
-      expect(stats().activeInstallations).toBe(8);
+      // The counter is recounted from the stored records after a purge: nothing is left.
+      expect(stats().activeInstallations).toBe(0);
       expect(stats().purgedInstallations).toBe(3);
     });
 

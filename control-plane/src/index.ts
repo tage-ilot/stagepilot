@@ -548,8 +548,17 @@ export function isKnownTestDevice(deviceName: string | undefined): boolean {
 // testing network, or self-reports a known test hostname. deviceName is
 // untrusted: this only ever DELETES data of an unpinned, never-provisioned
 // installation, it never grants access or affects authentication.
-export function isTestInstallation(installation: Pick<Installation, 'testing' | 'deviceName'>): boolean {
-  return installation.testing === true || isKnownTestDevice(installation.deviceName);
+//
+// Legacy case: installations from before device names were reported have no
+// deviceName at all. One that has been revoked and never provisioned is dead
+// weight from the earliest test runs (e.g. "Disposable live acceptance" rows),
+// so it counts as a test installation too. A live, pinned or ever-provisioned
+// one never does (the purge guards check those separately).
+export function isTestInstallation(
+  installation: Pick<Installation, 'testing' | 'deviceName'> & Partial<Pick<Installation, 'revoked' | 'everProvisioned'>>,
+): boolean {
+  if (installation.testing === true || isKnownTestDevice(installation.deviceName)) return true;
+  return !installation.deviceName && installation.revoked === true && !installation.everProvisioned;
 }
 
 // Best available "last online" time as epoch ms: lastSeenAt, else updatedAt
@@ -786,6 +795,24 @@ export class Registry {
       }
     }
     if (purgedIds.size > 0) await this.forgetEnrollmentNonces(purgedIds);
+    await this.reconcileActiveCount();
+  }
+
+  // Recounts activeInstallations from the stored records and corrects drift (the
+  // counter is what the 500 cap and the admin "Total" read). Never throws: the
+  // sweep must still re-arm its alarm.
+  private async reconcileActiveCount(): Promise<void> {
+    try {
+      const rows = await this.state.storage.list<Installation>({ prefix: 'installation:' });
+      const actual = [...rows.values()].filter((row) => !row.revoked).length;
+      const stats = await this.stats();
+      if (stats.activeInstallations !== actual) {
+        stats.activeInstallations = actual;
+        await this.state.storage.put('registry:stats', stats);
+      }
+    } catch {
+      console.error('active installation recount failed');
+    }
   }
 
   // Permanently deletes one test installation and everything stored for it.
@@ -895,6 +922,7 @@ export class Registry {
       }
     }
     if (purgedIds.size > 0) await this.forgetEnrollmentNonces(purgedIds);
+    await this.reconcileActiveCount();
     return reply({ purged, failed, remaining: Math.max(0, candidates.length - purged) });
   }
 
