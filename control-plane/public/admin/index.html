@@ -8,292 +8,315 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #090d12;
-    --text: #f8f4ec;
-    --muted: #9aa9bb;
-    --quiet: #718096;
-    --accent: #c7231d;
-    --success: #42dda4;
-    --warning: #f6c453;
-    --danger: #fb7185;
-    --info: #7dd3fc;
-    --panel-shadow: 5px 6px 0 rgb(3 7 12 / 0.32), 0 18px 48px rgb(0 0 0 / 0.24);
+    /* Palette sampled from the film-flare reference, plus the teal accent */
+    --ink: #170c0b;
+    --page: #1c0f0d;
+    --card: #2b1613;
+    --card-2: #351b17;
+    --maroon: #3b1a18;
+    --brick: #7a231d;
+    --crimson: #bf2e29;
+    --coral: #d55c39;
+    --amber: #e3a33f;
+    --chartreuse: #d8c94a;
+    --teal: #1dc1c7;
+    --teal-hover: #4fd6db;
+    --cream: #f4e6c8;
+    --cream-dim: #d6bb9a;
+    --cream-quiet: #bfa285;
+    --line: #84382b;
+    --danger: #ff7a66;
+    /* One body font for everything; the display face is used for headings and card titles only. */
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --display: "Rockwell", "Roboto Slab", Georgia, "Times New Roman", serif;
   }
-
   * { box-sizing: border-box; }
-
+  [hidden] { display: none !important; }
+  html { background: var(--page); }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 14px;
-    line-height: 1.4;
+    margin: 0; color: var(--cream); font-family: var(--font); font-size: 14px; line-height: 1.45;
+    background: var(--page); position: relative; min-height: 100vh;
   }
-
-  .wrap {
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 24px 20px 64px;
+  button, input { font-family: var(--font); }
+  /* film grain over everything */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: 0.26; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.1 -0.1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; flex: none; }
+  svg.i.sm { width: 14px; height: 14px; }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
-  header.top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
+  /* Light-leak banner */
+  .hero {
+    position: relative; padding: 24px 0 110px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 34% 90% at 6% 0%, rgb(216 201 74 / 0.95) 0%, rgb(232 53 42 / 0.9) 38%, transparent 72%),
+      radial-gradient(ellipse 42% 120% at 34% 8%, rgb(191 46 41 / 0.75), transparent 70%),
+      radial-gradient(ellipse 36% 110% at 96% 118%, rgb(213 92 57 / 0.85), transparent 70%),
+      var(--maroon);
+    -webkit-mask-image: linear-gradient(#000 0%, rgb(0 0 0 / 0.9) 45%, rgb(0 0 0 / 0.4) 78%, transparent 100%);
+    mask-image: linear-gradient(#000 0%, rgb(0 0 0 / 0.9) 45%, rgb(0 0 0 / 0.4) 78%, transparent 100%);
   }
-
-  header.top h1 {
-    font-size: 18px;
-    font-weight: 700;
-    margin: 0;
+  .stripes {
+    height: 18px; position: relative; z-index: 3; margin-top: -96px; margin-bottom: 14px;
+    background: linear-gradient(var(--teal) 0 20%, var(--chartreuse) 20% 40%, var(--amber) 40% 60%, var(--coral) 60% 80%, var(--crimson) 80% 100%);
+    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
   }
-
-  header.top .sub {
-    color: var(--quiet);
-    font-size: 12px;
+  .inner { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+  .hero .inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .hero h1 {
+    margin: 0; font-family: var(--display); font-weight: 800; font-size: 28px; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--cream); text-shadow: 2px 2px 0 var(--ink);
   }
-
-  .token-bar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 20px;
+  .hero .tag { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cream); margin-top: 6px; text-shadow: 1px 1px 0 var(--ink); }
+  .sync {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; cursor: pointer;
+    background: var(--ink); color: var(--cream); border: 2px solid var(--cream); border-radius: 2px;
+    padding: 8px 13px; box-shadow: 3px 3px 0 rgb(0 0 0 / 0.55);
   }
+  .sync:hover { background: #2a1210; }
+  .sync:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 rgb(0 0 0 / 0.55); }
 
-  .token-bar input {
-    flex: 1;
-    min-width: 0;
-    background: #10161d;
-    border: 1px solid #1e2733;
-    border-radius: 8px;
-    color: var(--text);
-    padding: 8px 10px;
-    font-size: 13px;
+  /* Control card */
+  .float { margin: 0 auto; max-width: 1180px; padding: 0 20px; position: relative; z-index: 2; }
+  .float-card {
+    background: var(--card); border: 2px solid var(--cream); border-radius: 3px;
+    box-shadow: inset 0 0 0 4px var(--card), inset 0 0 0 5px var(--line), 7px 8px 0 var(--brick); padding: 18px;
   }
-
-  button {
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
-    cursor: pointer;
-    color: var(--text);
-    background: #1a232e;
+  .portal {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: linear-gradient(90deg, #8f241f 0%, var(--crimson) 55%, var(--coral) 100%);
+    border: 2px solid var(--ink); border-radius: 3px; padding: 10px 12px;
+    box-shadow: inset 0 0 0 2px rgb(244 230 200 / 0.55);
   }
-
-  button:hover { background: #222e3b; }
-  button:disabled { opacity: 0.5; cursor: default; }
-
-  button.primary {
-    background: var(--accent);
-    color: #ffffff;
+  .portal .logo {
+    width: 38px; height: 38px; border-radius: 2px; background: var(--cream); color: var(--ink);
+    display: grid; place-items: center; flex: none; border: 2px solid var(--ink);
   }
-  button.primary:hover { background: #cd3934; }
-
-  button.danger-btn {
-    background: transparent;
-    color: var(--danger);
-    border: 1px solid rgb(251 113 133 / 0.4);
+  .portal .name { font-family: var(--display); font-weight: 800; font-size: 17px; color: var(--cream); text-shadow: 1px 1px 0 var(--ink); text-transform: uppercase; letter-spacing: 0.05em; }
+  .portal .where { font-size: 12.5px; color: var(--cream); text-shadow: 1px 1px 0 var(--ink); }
+  .portal .grow { flex: 1; min-width: 160px; }
+  .token { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1 1 280px; max-width: 460px; }
+  .token input {
+    flex: 1 1 160px; min-width: 0; background: var(--ink); border: 2px solid var(--ink); outline: 0;
+    border-radius: 2px; color: var(--cream); padding: 8px 12px; font-size: 13.5px;
+    box-shadow: inset 0 0 0 1px rgb(244 230 200 / 0.25);
   }
+  .token input::placeholder { color: var(--cream-dim); }
+  .token input:focus { box-shadow: 0 0 0 2px var(--teal); }
 
-  button.ghost {
-    background: transparent;
-    border: 1px solid #1e2733;
-    color: var(--muted);
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+    border: 2px solid var(--cream); background: var(--card-2); color: var(--cream);
+    border-radius: 2px; padding: 7px 12px; box-shadow: 3px 3px 0 var(--brick); flex: none;
   }
+  .btn:hover { background: #46221c; }
+  .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--brick); }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .btn.primary { background: var(--teal); color: var(--ink); border-color: var(--ink); box-shadow: 3px 3px 0 var(--brick), inset 0 0 0 2px var(--cream); }
+  .btn.primary:hover { background: var(--teal-hover); }
+  .btn.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn.danger:hover { background: rgb(255 122 102 / 0.14); }
+  .btn.toggled { background: var(--teal); color: var(--ink); border-color: var(--ink); box-shadow: 3px 3px 0 var(--brick), inset 0 0 0 2px var(--cream); }
+  .btn.sm { padding: 5px 10px; font-size: 11px; }
 
-  .summary-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 24px;
-  }
-
-  .stat-card {
-    background: #10161d;
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: var(--panel-shadow);
-  }
-
-  .stat-card .num {
-    font-size: 28px;
-    font-weight: 700;
-  }
-
-  .stat-card .label {
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 4px;
-  }
-
-  section.panel {
-    background: #0d1219;
-    border-radius: 12px;
-    box-shadow: var(--panel-shadow);
-    margin-bottom: 24px;
-    overflow: hidden;
-  }
-
-  section.panel h2 {
-    font-size: 14px;
-    font-weight: 700;
-    margin: 0;
-    padding: 14px 16px;
-    border-bottom: 1px solid #1a222c;
-  }
-
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    border-bottom: 1px solid #151b23;
-  }
-
-  .row:last-child { border-bottom: none; }
-
-  .dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex: none;
-  }
-  .dot.warning { background: var(--warning); }
-  .dot.critical { background: var(--danger); }
-
-  .row-main { flex: 1; min-width: 0; }
-
-  .row-title {
-    font-weight: 600;
-    font-size: 13.5px;
-  }
-
-  .row-sub {
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 2px;
-  }
-
-  .row-meta {
-    color: var(--quiet);
-    font-size: 11px;
-    margin-top: 4px;
-  }
-
-  details.tech {
-    margin-top: 6px;
-  }
-  details.tech summary {
-    color: var(--quiet);
-    font-size: 11px;
-    cursor: pointer;
-  }
-  details.tech pre {
-    margin: 6px 0 0;
-    font-size: 11px;
-    color: var(--muted);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .row-actions { flex: none; display: flex; gap: 8px; }
-
-  .empty {
-    padding: 24px 16px;
-    color: var(--quiet);
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .status-line {
-    font-size: 12px;
-    color: var(--quiet);
-    margin-bottom: 12px;
-    min-height: 16px;
-  }
+  .status-line { min-height: 20px; font-size: 12.5px; color: var(--cream-dim); margin: 10px 0 0; letter-spacing: 0.02em; }
+  .status-line.ok { color: var(--chartreuse); }
   .status-line.error { color: var(--danger); }
-  .status-line.ok { color: var(--success); }
+  .status-line:not(:empty)::before { content: "● "; }
 
-  .badge-info { color: var(--info); }
-
-  .city-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 16px;
-    border-bottom: 1px solid #151b23;
-    font-size: 13px;
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .tile {
+    display: flex; align-items: center; gap: 12px; background: var(--maroon); border: 2px solid var(--cream-quiet);
+    border-radius: 3px; padding: 11px 16px; position: relative; min-width: 0;
+    -webkit-mask: radial-gradient(circle 7px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 7px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+    mask: radial-gradient(circle 7px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 7px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
   }
-  .city-row:last-child { border-bottom: none; }
-  .city-row .count { color: var(--muted); }
+  .tile .ic { color: var(--teal); padding-right: 12px; border-right: 2px dashed var(--line); width: 34px; height: 24px; box-sizing: content-box; }
+  .tile .num { white-space: nowrap; font-size: 22px; font-weight: 800; line-height: 1.05; color: var(--amber); font-variant-numeric: tabular-nums; }
+  .tile .lbl { color: var(--cream-dim); font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .tile.alert .num { color: var(--danger); }
 
+  /* Sections */
+  .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 26px; align-items: start; }
+  h2.sec {
+    display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+    font-family: var(--display); font-size: 15px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream);
+  }
+  h2.sec::before { content: ""; width: 10px; height: 10px; background: var(--teal); border: 2px solid var(--ink); box-shadow: 0 0 0 2px var(--teal); flex: none; transform: rotate(45deg); margin-right: 2px; }
+  h2.sec::after { content: ""; flex: 1; border-top: 2px dashed var(--line); order: 2; min-width: 12px; }
+  h2.sec .count { order: 3; font-family: var(--font); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--chartreuse); text-transform: uppercase; white-space: nowrap; }
+  .stack { display: grid; gap: 12px; }
+  .empty { color: var(--cream-dim); font-size: 13px; padding: 14px; border: 2px dashed var(--line); border-radius: 3px; }
+
+  .card {
+    min-width: 0;
+    background: var(--card); border: 2px solid var(--cream-quiet); border-radius: 3px;
+    box-shadow: 5px 5px 0 var(--brick); padding: 12px 14px;
+  }
+  .row { display: flex; gap: 12px; align-items: flex-start; }
+  .lead {
+    width: 40px; height: 40px; border-radius: 2px; background: var(--maroon); color: var(--teal);
+    border: 2px solid var(--line); display: grid; place-items: center; flex: none;
+  }
+  .lead.warn { background: rgb(227 163 63 / 0.16); color: var(--amber); border-color: var(--amber); }
+  .lead.crit { background: rgb(255 122 102 / 0.14); color: var(--danger); border-color: var(--danger); }
+  .lead.ok   { background: rgb(216 201 74 / 0.14); color: var(--chartreuse); border-color: var(--chartreuse); }
+  .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .title { font-family: var(--display); font-weight: 800; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+  .sub { color: var(--cream-dim); font-size: 12.5px; margin-top: 3px; overflow-wrap: anywhere; }
+  .sub.quiet { color: var(--cream-quiet); font-size: 12px; }
+  .meta { color: var(--cream-quiet); font-size: 12px; margin-top: 5px; }
+  .badge {
+    display: inline-flex; align-items: center; font-family: var(--font); font-size: 10.5px; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase; border-radius: 2px; padding: 2px 7px; border: 1.5px solid currentColor;
+    color: var(--chartreuse); background: rgb(216 201 74 / 0.1); white-space: nowrap;
+  }
+  .badge.amber { color: var(--amber); background: rgb(227 163 63 / 0.12); }
+  .badge.red { color: var(--danger); background: rgb(255 122 102 / 0.1); }
+  .badge.teal { color: var(--teal); background: rgb(29 193 199 / 0.12); }
+  .badge.grey { color: var(--cream-dim); background: transparent; border-style: dashed; }
+  .actions { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; align-items: center; }
+  .actions .grow { flex: 1; }
+  details.tech summary { list-style: none; cursor: pointer; color: var(--teal); font-size: 12.5px; font-weight: 600; padding: 8px 0 2px; }
+  details.tech summary::-webkit-details-marker { display: none; }
+  details.tech summary::before { content: "▸ "; }
+  details.tech[open] summary::before { content: "▾ "; }
+  details.tech pre { margin: 6px 0 0; padding: 8px 10px; background: var(--ink); border: 2px solid var(--line); border-radius: 2px; color: var(--cream-dim); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Locations */
+  .loc { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+  .loc svg { color: var(--teal); }
+  .loc .name { flex: 1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loc .n { background: var(--ink); border: 2px solid var(--teal); color: var(--teal); border-radius: 2px; padding: 1px 9px; font-weight: 800; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .loc.dim .name { color: var(--cream-dim); font-weight: 600; }
+  .loc.dim svg { color: var(--cream-quiet); }
+  .loc.dim .n { border-color: var(--cream-quiet); color: var(--cream-dim); border-style: dashed; }
+
+  /* Installations */
+  .wide { margin-top: 30px; }
+  .wide .head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .wide .note { color: var(--cream-dim); font-size: 12.5px; margin: 6px 0 14px; max-width: 900px; }
+  .check { display: inline-flex; gap: 8px; align-items: center; color: var(--cream-dim); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-left: auto; cursor: pointer; }
+  .check input { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; background: var(--ink); border: 2px solid var(--cream); border-radius: 2px; display: grid; place-items: center; cursor: pointer; }
+  .check input:checked { background: var(--teal); }
+  .check input:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(-45deg) translate(1px,-1px); }
+  .inst-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .inst-grid .card { display: flex; }
+  .inst-grid .row { flex: 1; min-width: 0; }
+  .inst-grid .body > .actions.last { padding-top: 12px; border-top: 2px dashed var(--line); margin-top: 0; }
+  .spacer { flex: 1; min-height: 14px; }
+  .edit-panel { margin-top: 11px; padding: 10px; border: 2px dashed var(--teal); border-radius: 3px; background: rgb(29 193 199 / 0.06); display: grid; gap: 8px; }
+  .edit-panel label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream-dim); }
+  .field { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .field input, .edit-panel input {
+    background: var(--ink); border: 2px solid var(--line); color: var(--cream); border-radius: 2px;
+    padding: 6px 10px; font-size: 13px; min-width: 0; flex: 1 1 150px; letter-spacing: 0;
+  }
+  .edit-panel .field .btn { width: 124px; justify-content: center; }
+  .edit-panel input::placeholder { color: var(--cream-quiet); }
+  .edit-panel input:focus { outline: 0; border-color: var(--teal); }
+  .diagnostics-panel { margin-top: 11px; display: grid; gap: 6px; }
+  .diag-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; font-size: 12.5px; color: var(--cream-dim); padding: 6px 8px; border: 2px dashed var(--line); border-radius: 2px; }
+  footer { margin: 34px 0 60px; color: var(--cream-quiet); font-size: 12px; letter-spacing: 0.04em; }
+  footer a { color: inherit; }
+
+  @media (max-width: 1000px) { .cols { grid-template-columns: minmax(0, 1fr); } .inst-grid { grid-template-columns: minmax(0, 1fr); } }
+  @media (pointer: coarse) {
+    .btn.sm { padding: 9px 13px; } .btn { padding: 10px 15px; }
+    details.tech summary { padding: 12px 0 6px; }
+  }
+  @media (max-width: 680px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hero h1 { font-size: 21px; }
+    .hero { padding-bottom: 100px; }
+    .stripes { margin-top: -90px; }
+    .tile { padding: 10px; gap: 9px; }
+    .tile .ic { padding-right: 8px; width: 20px; }
+    .tile .num { font-size: 17px; }
+    .tile .lbl { font-size: 9.5px; letter-spacing: 0.06em; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20h4"/></symbol>
+    <symbol id="inbox" viewBox="0 0 24 24"><path d="M4 13l2-7h12l2 7v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></symbol>
+    <symbol id="pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
+    <symbol id="refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></symbol>
+    <symbol id="radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l5-5"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></symbol>
+  </defs>
+</svg>
+
+<div class="hero">
+  <div class="inner">
     <div>
       <h1>StagePilot Fleet Admin</h1>
-      <div class="sub">Alerts and requests across every installation</div>
+      <div class="tag">Alerts &amp; requests across every installation</div>
     </div>
-    <button id="refresh-btn" class="ghost">Refresh</button>
-  </header>
-
-  <div class="token-bar">
-    <input id="token-input" type="password" placeholder="Admin token" autocomplete="off" />
-    <button id="save-token" class="primary">Connect</button>
+    <button id="refresh-btn" class="sync" type="button"><svg class="i sm"><use href="#refresh"/></svg><span id="sync-label">Refresh</span></button>
   </div>
-  <div id="status-line" class="status-line"></div>
-
-  <div class="summary-row">
-    <div class="stat-card">
-      <div class="num" id="stat-installations">–</div>
-      <div class="label">Active today / Total</div>
-    </div>
-    <div class="stat-card">
-      <div class="num" id="stat-alerts">–</div>
-      <div class="label">Open alerts</div>
-    </div>
-    <div class="stat-card">
-      <div class="num" id="stat-requests">–</div>
-      <div class="label">New requests</div>
-    </div>
-  </div>
-
-  <section class="panel">
-    <h2>Alerts</h2>
-    <div id="alerts-list"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Requests</h2>
-    <div id="requests-list"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Installations <span id="installations-count" class="sub" style="font-weight:normal;"></span></h2>
-    <div class="sub" style="margin-bottom:8px;">Each row is one app enrollment. A reinstall or a separate test run creates a new one — name it, archive it to tidy this list without cutting it off, or remove it to disconnect it for good.</div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:8px;">
-      <input type="checkbox" id="show-archived" />
-      Show archived
-    </label>
-    <div id="installations-list"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Locations</h2>
-    <div id="cities-list"></div>
-  </section>
-  <footer class="sub" style="margin-top:24px;color:var(--quiet);font-size:12px">
-    <a href="https://db-ip.com" rel="noopener noreferrer" style="color:inherit">IP Geolocation by DB-IP</a>
-  </footer>
 </div>
+<div class="stripes"></div>
+
+<div class="float">
+  <div class="float-card">
+    <div class="portal">
+      <div class="logo"><svg class="i"><use href="#radar"/></svg></div>
+      <div class="grow">
+        <div class="name">Fleet control plane</div>
+        <div class="where" id="host-label">stagepilot</div>
+      </div>
+      <div class="token">
+        <input id="token-input" type="password" placeholder="Admin password" aria-label="Admin password" autocomplete="off" />
+        <button id="save-token" class="btn primary" type="button"><svg class="i sm"><use href="#key"/></svg>Connect</button>
+      </div>
+    </div>
+    <div id="status-line" class="status-line" role="status"></div>
+
+    <div class="tiles">
+      <div class="tile"><svg class="i ic"><use href="#monitor"/></svg><div><div class="num" id="stat-installations">–</div><div class="lbl">Active / Total</div></div></div>
+      <div class="tile alert"><svg class="i ic"><use href="#bell"/></svg><div><div class="num" id="stat-alerts">–</div><div class="lbl">Open alerts</div></div></div>
+      <div class="tile"><svg class="i ic"><use href="#inbox"/></svg><div><div class="num" id="stat-requests">–</div><div class="lbl">New requests</div></div></div>
+      <div class="tile"><svg class="i ic"><use href="#pin"/></svg><div><div class="num" id="stat-locations">–</div><div class="lbl">Locations</div></div></div>
+    </div>
+  </div>
+</div>
+
+<main class="inner">
+  <div class="cols">
+    <section>
+      <h2 class="sec">Alerts<span class="count" id="alerts-count"></span></h2>
+      <div class="stack" id="alerts-list"></div>
+    </section>
+    <section>
+      <h2 class="sec">Requests<span class="count" id="requests-count"></span></h2>
+      <div class="stack" id="requests-list"></div>
+    </section>
+    <section>
+      <h2 class="sec">Locations<span class="count" id="locations-count"></span></h2>
+      <div class="stack" id="cities-list"></div>
+    </section>
+  </div>
+
+  <section class="wide">
+    <div class="head">
+      <h2 class="sec" style="margin:0;flex:1 1 320px">Installations<span class="count" id="installations-count"></span></h2>
+      <label class="check"><input type="checkbox" id="show-archived" /> Show archived</label>
+    </div>
+    <p class="note">Each card is one app enrollment. Press Edit to name it or set its location, pin it so it never expires, archive it to tidy this list, or remove it to disconnect it for good.</p>
+    <div class="inst-grid" id="installations-list"></div>
+  </section>
+
+  <footer><a href="https://db-ip.com" rel="noopener noreferrer">IP Geolocation by DB-IP</a></footer>
+</main>
 
 <script>
 (function () {
@@ -304,17 +327,25 @@
     tokenInput: document.getElementById('token-input'),
     saveToken: document.getElementById('save-token'),
     refreshBtn: document.getElementById('refresh-btn'),
+    syncLabel: document.getElementById('sync-label'),
     statusLine: document.getElementById('status-line'),
     statInstallations: document.getElementById('stat-installations'),
     statAlerts: document.getElementById('stat-alerts'),
     statRequests: document.getElementById('stat-requests'),
+    statLocations: document.getElementById('stat-locations'),
     alertsList: document.getElementById('alerts-list'),
     requestsList: document.getElementById('requests-list'),
     citiesList: document.getElementById('cities-list'),
+    alertsCount: document.getElementById('alerts-count'),
+    requestsCount: document.getElementById('requests-count'),
+    locationsCount: document.getElementById('locations-count'),
     installationsList: document.getElementById('installations-list'),
     showArchived: document.getElementById('show-archived'),
     installationsCount: document.getElementById('installations-count'),
   };
+  var lastSyncAt = 0;
+
+  document.getElementById('host-label').textContent = location.host;
 
   var CATEGORY_LABELS = {
     rate_limit_exhausted: 'Rate limit hit',
@@ -364,6 +395,10 @@
     els.statusLine.className = 'status-line' + (kind ? ' ' + kind : '');
   }
 
+  function updateSyncLabel() {
+    els.syncLabel.textContent = lastSyncAt ? 'Synced ' + timeAgo(new Date(lastSyncAt).toISOString()) : 'Refresh';
+  }
+
   function api(path, opts) {
     opts = opts || {};
     var headers = opts.headers || {};
@@ -392,6 +427,13 @@
     return e;
   }
 
+  // Static, trusted SVG markup only (no data from the API is ever placed here).
+  function lead(iconId, tone) {
+    var d = el('div', 'lead' + (tone ? ' ' + tone : ''));
+    d.innerHTML = '<svg class="i"><use href="#' + iconId + '"/></svg>';
+    return d;
+  }
+
   function renderEmpty(container, text) {
     container.innerHTML = '';
     container.appendChild(el('div', 'empty', text));
@@ -401,16 +443,19 @@
     els.alertsList.innerHTML = '';
     if (!alerts.length) return renderEmpty(els.alertsList, 'No open alerts. Everything looks fine.');
     alerts.forEach(function (alert) {
+      var critical = alert.severity === 'critical';
+      var card = el('div', 'card item');
+      card.dataset.alertId = alert.alertId;
       var row = el('div', 'row');
-      row.dataset.alertId = alert.alertId;
+      row.appendChild(lead('bell', critical ? 'crit' : 'warn'));
 
-      var dot = el('div', 'dot ' + (alert.severity === 'critical' ? 'critical' : 'warning'));
-      row.appendChild(dot);
-
-      var main = el('div', 'row-main');
-      main.appendChild(el('div', 'row-title', categoryLabel(alert.category) + ' — ' + alert.installationId + (alert.location ? ' · ' + alert.location : '')));
-      main.appendChild(el('div', 'row-sub', alert.message));
-      main.appendChild(el('div', 'row-meta', timeAgo(alert.lastSeen) + (alert.count > 1 ? ' · seen ' + alert.count + ' times' : '')));
+      var main = el('div', 'body');
+      var title = el('div', 'title', categoryLabel(alert.category));
+      title.appendChild(el('span', 'badge ' + (critical ? 'red' : 'amber'), critical ? 'Critical' : 'Warning'));
+      main.appendChild(title);
+      main.appendChild(el('div', 'sub', alert.installationId + (alert.location ? ' · ' + alert.location : '')));
+      main.appendChild(el('div', 'sub', alert.message));
+      main.appendChild(el('div', 'meta', timeAgo(alert.lastSeen) + (alert.count > 1 ? ' · seen ' + alert.count + ' times' : '')));
 
       var details = document.createElement('details');
       details.className = 'tech';
@@ -422,19 +467,20 @@
       details.appendChild(pre);
       main.appendChild(details);
 
-      row.appendChild(main);
-
-      var actions = el('div', 'row-actions');
-      var actionBtn = el('button', 'primary', alert.category === 'rate_limit_exhausted' ? 'Reset limit' : 'Mark done');
-      actionBtn.addEventListener('click', function () { handleAlertAction(alert, row, actionBtn); });
+      var actions = el('div', 'actions');
+      var actionBtn = el('button', 'btn primary sm', alert.category === 'rate_limit_exhausted' ? 'Reset limit' : 'Mark done');
+      actionBtn.type = 'button';
+      actionBtn.addEventListener('click', function () { handleAlertAction(alert, card, actionBtn); });
       actions.appendChild(actionBtn);
-      row.appendChild(actions);
+      main.appendChild(actions);
 
-      els.alertsList.appendChild(row);
+      row.appendChild(main);
+      card.appendChild(row);
+      els.alertsList.appendChild(card);
     });
   }
 
-  function handleAlertAction(alert, row, btn) {
+  function handleAlertAction(alert, card, btn) {
     btn.disabled = true;
     var task;
     if (alert.category === 'rate_limit_exhausted') {
@@ -444,7 +490,7 @@
       task = api('/v1/admin/alerts/' + encodeURIComponent(alert.alertId) + '/acknowledge', { method: 'POST' });
     }
     task.then(function () {
-      row.remove();
+      card.remove();
       setStatus('Done.', 'ok');
       refreshCounts();
     }).catch(function (err) {
@@ -457,35 +503,48 @@
     els.requestsList.innerHTML = '';
     if (!requests.length) return renderEmpty(els.requestsList, 'No new requests.');
     requests.forEach(function (reqItem) {
+      var card = el('div', 'card item');
+      card.dataset.requestId = reqItem.requestId;
       var row = el('div', 'row');
-      row.dataset.requestId = reqItem.requestId;
+      row.appendChild(lead('inbox'));
 
-      var main = el('div', 'row-main');
-      main.appendChild(el('div', 'row-title', 'New request — ' + reqItem.installationId));
-      main.appendChild(el('div', 'row-sub', reqItem.reason));
-      main.appendChild(el('div', 'row-meta', timeAgo(reqItem.createdAt)));
-      row.appendChild(main);
+      var main = el('div', 'body');
+      var title = el('div', 'title', 'New request');
+      title.appendChild(el('span', 'badge', 'New'));
+      main.appendChild(title);
+      main.appendChild(el('div', 'sub', reqItem.installationId));
+      main.appendChild(el('div', 'sub', reqItem.reason));
+      main.appendChild(el('div', 'meta', timeAgo(reqItem.createdAt)));
 
-      var actions = el('div', 'row-actions');
-      var approveBtn = el('button', 'primary', 'Approve');
-      var denyBtn = el('button', 'danger-btn', 'Deny');
-      approveBtn.addEventListener('click', function () { handleDecision(reqItem, row, true, [approveBtn, denyBtn]); });
-      denyBtn.addEventListener('click', function () { handleDecision(reqItem, row, false, [approveBtn, denyBtn]); });
+      var actions = el('div', 'actions');
+      var approveBtn = el('button', 'btn primary sm', 'Approve');
+      var denyBtn = el('button', 'btn danger sm', 'Deny');
+      approveBtn.type = 'button';
+      denyBtn.type = 'button';
+      approveBtn.addEventListener('click', function () { handleDecision(reqItem, card, true, [approveBtn, denyBtn]); });
+      denyBtn.addEventListener('click', function () { handleDecision(reqItem, card, false, [approveBtn, denyBtn]); });
       actions.appendChild(approveBtn);
       actions.appendChild(denyBtn);
-      row.appendChild(actions);
+      main.appendChild(actions);
 
-      els.requestsList.appendChild(row);
+      row.appendChild(main);
+      card.appendChild(row);
+      els.requestsList.appendChild(card);
     });
   }
 
   function renderCities(cities) {
     els.citiesList.innerHTML = '';
+    els.statLocations.textContent = String(cities.length);
+    els.locationsCount.textContent = cities.length ? cities.length + (cities.length === 1 ? ' place' : ' places') : '';
     if (!cities.length) return renderEmpty(els.citiesList, 'No installations have checked in yet.');
     cities.forEach(function (row) {
-      var line = el('div', 'city-row');
-      line.appendChild(el('span', null, row.location));
-      line.appendChild(el('span', 'count', String(row.count)));
+      var line = el('div', 'card loc' + (row.location === 'Test Install' ? ' dim' : ''));
+      var pinIcon = el('span');
+      pinIcon.innerHTML = '<svg class="i"><use href="#pin"/></svg>';
+      line.appendChild(pinIcon);
+      line.appendChild(el('span', 'name', row.location));
+      line.appendChild(el('span', 'n', String(row.count)));
       els.citiesList.appendChild(line);
     });
   }
@@ -513,50 +572,59 @@
     var showArchived = els.showArchived && els.showArchived.checked;
     var visible = installations.filter(function (inst) { return showArchived || !inst.archived; });
     var archivedCount = installations.filter(function (inst) { return inst.archived; }).length;
-    if (els.installationsCount) {
-      els.installationsCount.textContent = archivedCount
-        ? visible.length + ' shown, ' + archivedCount + ' archived'
-        : '';
-    }
+    els.installationsCount.textContent = archivedCount
+      ? visible.length + ' shown, ' + archivedCount + ' archived'
+      : (visible.length ? visible.length + ' shown' : '');
     els.installationsList.innerHTML = '';
     if (!visible.length) {
       return renderEmpty(els.installationsList, showArchived ? 'No installations yet.' : 'No installations to show. Check "Show archived" to see archived ones.');
     }
     visible.forEach(function (inst) {
+      var card = el('div', 'card item');
+      card.dataset.installationId = inst.installationId;
       var row = el('div', 'row');
-      row.dataset.installationId = inst.installationId;
+      var phase = phaseLabel(inst);
+      row.appendChild(lead('monitor', phase === 'Online' ? 'ok' : null));
 
-      var main = el('div', 'row-main');
+      var main = el('div', 'body');
       var titleText = inst.label || inst.hostname || inst.installationId;
-      main.appendChild(el('div', 'row-title', titleText + (inst.archived ? ' (archived)' : '')));
-      var locHint = inst.locationSource === 'app' ? ' (IP lookup by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
-      var subBits = [phaseLabel(inst), inst.location + locHint, 'last seen ' + timeAgo(inst.updatedAt)];
-      var expiry = expiryLabel(inst);
-      if (expiry) subBits.push(expiry);
-      main.appendChild(el('div', 'row-sub', subBits.join(' · ')));
-      if (inst.deviceName && inst.deviceName !== titleText) {
-        main.appendChild(el('div', 'row-sub', 'reported hostname: ' + inst.deviceName));
+      var title = el('div', 'title');
+      var titleName = el('span', null, titleText + (inst.archived ? ' (archived)' : ''));
+      title.appendChild(titleName);
+      title.appendChild(el('span', 'badge' + (phase === 'Removed' ? ' red' : phase === 'Online' ? '' : ' grey'), phase));
+      if (inst.keep) {
+        title.appendChild(el('span', 'badge teal', 'Pinned'));
+      } else {
+        var expiry = expiryLabel(inst);
+        if (expiry && expiry !== 'pinned') title.appendChild(el('span', 'badge amber', expiry));
       }
-      row.appendChild(main);
+      main.appendChild(title);
 
-      var diagLink = el('button', 'ghost', 'Diagnostics');
-      diagLink.addEventListener('click', function () { toggleDiagnostics(inst, row, diagLink); });
-      main.appendChild(diagLink);
-      loadDiagnosticsCount(inst, diagLink);
+      var locHint = inst.locationSource === 'app' ? ' (IP lookup by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
+      main.appendChild(el('div', 'sub', inst.location + locHint + ' · last seen ' + timeAgo(inst.updatedAt)));
+      if (inst.deviceName && inst.deviceName !== titleText) {
+        main.appendChild(el('div', 'sub quiet', 'reported hostname: ' + inst.deviceName));
+      }
 
-      var actions = el('div', 'row-actions');
+      // Edit fields stay hidden until the Edit button is pressed.
+      var editPanel = el('div', 'edit-panel');
+      editPanel.hidden = true;
+
+      var nameLabel = el('label', null, 'Name');
       var nameInput = document.createElement('input');
       nameInput.type = 'text';
       nameInput.placeholder = 'Name this installation';
       nameInput.value = inst.label || '';
-      nameInput.style.cssText = 'background:#10161d;border:1px solid #1e2733;border-radius:8px;color:var(--text);padding:6px 8px;font-size:12px;width:140px;';
-      var saveBtn = el('button', null, 'Save name');
+      var nameField = el('div', 'field');
+      var saveBtn = el('button', 'btn sm', 'Save name');
+      saveBtn.type = 'button';
       saveBtn.addEventListener('click', function () {
         saveBtn.disabled = true;
         api('/v1/admin/installations/' + encodeURIComponent(inst.installationId) + '/label', {
           method: 'PATCH',
           body: { label: nameInput.value.trim() },
         }).then(function () {
+          titleName.textContent = (nameInput.value.trim() || inst.hostname || inst.installationId) + (inst.archived ? ' (archived)' : '');
           setStatus('Saved.', 'ok');
           saveBtn.disabled = false;
         }).catch(function (err) {
@@ -564,17 +632,21 @@
           setStatus('Could not save: ' + err.message, 'error');
         });
       });
-      actions.appendChild(nameInput);
-      actions.appendChild(saveBtn);
+      nameField.appendChild(nameInput);
+      nameField.appendChild(saveBtn);
+      nameLabel.appendChild(nameField);
+      editPanel.appendChild(nameLabel);
 
+      var locLabel = el('label', null, 'Location');
       var locInput = document.createElement('input');
       locInput.type = 'text';
       locInput.maxLength = 80;
-      locInput.placeholder = 'Set location';
+      locInput.placeholder = 'Set location (blank = automatic)';
       locInput.title = 'Override the displayed location (blank = use automatic). Display only.';
       locInput.value = inst.locationOverride || '';
-      locInput.style.cssText = nameInput.style.cssText;
-      var locBtn = el('button', null, 'Set location');
+      var locField = el('div', 'field');
+      var locBtn = el('button', 'btn sm', 'Set location');
+      locBtn.type = 'button';
       locBtn.addEventListener('click', function () {
         locBtn.disabled = true;
         api('/v1/admin/installations/' + encodeURIComponent(inst.installationId) + '/location', {
@@ -588,11 +660,37 @@
           setStatus('Could not save: ' + err.message, 'error');
         });
       });
-      actions.appendChild(locInput);
-      actions.appendChild(locBtn);
+      locField.appendChild(locInput);
+      locField.appendChild(locBtn);
+      locLabel.appendChild(locField);
+      editPanel.appendChild(locLabel);
+      main.appendChild(editPanel);
+
+      main.appendChild(el('div', 'spacer'));
+      var actions = el('div', 'actions last');
+
+      var diagLink = el('button', 'btn sm', 'Diagnostics');
+      diagLink.type = 'button';
+      diagLink.addEventListener('click', function () { toggleDiagnostics(inst, main, diagLink); });
+      actions.appendChild(diagLink);
+      loadDiagnosticsCount(inst, diagLink);
+
+      var editBtn = el('button', 'btn sm', 'Edit');
+      editBtn.type = 'button';
+      editBtn.setAttribute('aria-expanded', 'false');
+      editBtn.addEventListener('click', function () {
+        var opening = editPanel.hidden;
+        editPanel.hidden = !opening;
+        editBtn.textContent = opening ? 'Done' : 'Edit';
+        editBtn.classList.toggle('toggled', opening);
+        editBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        if (opening) nameInput.focus();
+      });
+      actions.appendChild(editBtn);
 
       if (!inst.revoked) {
-        var pinBtn = el('button', null, inst.keep ? 'Pinned ✓' : 'Pin');
+        var pinBtn = el('button', 'btn sm', inst.keep ? 'Unpin' : 'Pin');
+        pinBtn.type = 'button';
         pinBtn.title = inst.keep ? 'Pinned: never auto-removed. Click to unpin.' : 'Click to keep this installation from expiring.';
         pinBtn.addEventListener('click', function () {
           pinBtn.disabled = true;
@@ -610,7 +708,8 @@
         actions.appendChild(pinBtn);
       }
 
-      var archiveBtn = el('button', null, inst.archived ? 'Unarchive' : 'Archive');
+      var archiveBtn = el('button', 'btn sm', inst.archived ? 'Unarchive' : 'Archive');
+      archiveBtn.type = 'button';
       archiveBtn.addEventListener('click', function () {
         archiveBtn.disabled = true;
         api('/v1/admin/installations/' + encodeURIComponent(inst.installationId) + '/archive', {
@@ -627,7 +726,9 @@
       actions.appendChild(archiveBtn);
 
       if (!inst.revoked) {
-        var removeBtn = el('button', 'danger-btn', 'Remove');
+        actions.appendChild(el('span', 'grow'));
+        var removeBtn = el('button', 'btn danger sm', 'Remove');
+        removeBtn.type = 'button';
         removeBtn.addEventListener('click', function () {
           if (!window.confirm('Remove "' + titleText + '"? This disconnects it for good.')) return;
           removeBtn.disabled = true;
@@ -642,9 +743,11 @@
         });
         actions.appendChild(removeBtn);
       }
-      row.appendChild(actions);
+      main.appendChild(actions);
 
-      els.installationsList.appendChild(row);
+      row.appendChild(main);
+      card.appendChild(row);
+      els.installationsList.appendChild(card);
     });
   }
 
@@ -669,8 +772,8 @@
       '/diagnostics/' + encodeURIComponent(bundleId);
   }
 
-  function toggleDiagnostics(inst, row, btn) {
-    var existing = row.querySelector('.diagnostics-panel');
+  function toggleDiagnostics(inst, container, btn) {
+    var existing = container.querySelector('.diagnostics-panel');
     if (existing) {
       existing.remove();
       return;
@@ -678,14 +781,14 @@
     var bundles = [];
     try { bundles = JSON.parse(btn.dataset.bundles || '[]'); } catch (e) { bundles = []; }
     var panel = el('div', 'diagnostics-panel');
-    panel.style.cssText = 'flex-basis:100%;margin-top:8px;';
     if (!bundles.length) {
-      panel.appendChild(el('div', 'row-meta', 'No diagnostic bundles uploaded.'));
+      panel.appendChild(el('div', 'meta', 'No diagnostic bundles uploaded.'));
     } else {
       bundles.forEach(function (bundle) {
-        var line = el('div', 'city-row');
+        var line = el('div', 'diag-row');
         line.appendChild(el('span', null, bundle.uploadedAt + ' · ' + formatBytes(bundle.size)));
-        var downloadBtn = el('button', 'ghost', 'Download');
+        var downloadBtn = el('button', 'btn sm', 'Download');
+        downloadBtn.type = 'button';
         downloadBtn.addEventListener('click', function () {
           // The route needs the admin bearer token, which a plain link
           // can't send, so fetch the bundle ourselves and open it as a blob.
@@ -708,16 +811,18 @@
         panel.appendChild(line);
       });
     }
-    row.appendChild(panel);
+    // Keep the panel just above the action buttons.
+    var actionsRow = container.querySelector('.actions.last');
+    container.insertBefore(panel, actionsRow || null);
   }
 
-  function handleDecision(reqItem, row, approved, btns) {
+  function handleDecision(reqItem, card, approved, btns) {
     btns.forEach(function (b) { b.disabled = true; });
     api('/v1/admin/approval-requests/' + encodeURIComponent(reqItem.requestId) + '/decide', {
       method: 'POST',
       body: { approved: approved },
     }).then(function () {
-      row.remove();
+      card.remove();
       setStatus('Done.', 'ok');
       refreshCounts();
     }).catch(function (err) {
@@ -727,10 +832,12 @@
   }
 
   function refreshCounts() {
-    var alertsCount = els.alertsList.querySelectorAll('.row').length;
-    var requestsCount = els.requestsList.querySelectorAll('.row').length;
+    var alertsCount = els.alertsList.querySelectorAll('.item').length;
+    var requestsCount = els.requestsList.querySelectorAll('.item').length;
     els.statAlerts.textContent = String(alertsCount);
     els.statRequests.textContent = String(requestsCount);
+    els.alertsCount.textContent = alertsCount ? alertsCount + ' open' : '';
+    els.requestsCount.textContent = requestsCount ? requestsCount + ' new' : '';
   }
 
   function loadAll() {
@@ -766,6 +873,8 @@
       renderCities(citiesData.cities || []);
       renderInstallations(installations);
       refreshCounts();
+      lastSyncAt = Date.now();
+      updateSyncLabel();
       setStatus('Up to date.', 'ok');
     }).catch(function (err) {
       if (err.message !== 'unauthorized') setStatus('Could not load: ' + err.message, 'error');
@@ -787,6 +896,7 @@
   });
 
   els.refreshBtn.addEventListener('click', loadAll);
+  setInterval(updateSyncLabel, 30000);
 
   if (getToken()) loadAll();
   else setStatus('Enter your admin token to load the fleet.', null);
