@@ -95,10 +95,15 @@ describe("deployment configuration", () => {
     const wrangler = fs.readFileSync(path.join(repository, "control-plane/wrangler.toml"), "utf8");
     assert.match(workflow, /workflow_dispatch:/);
     assert.doesNotMatch(workflow, /\bpush:/);
-    for (const name of ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE_ID", "REMOTE_HOST_SUFFIX", "REMOTE_PORT", "ENROLLMENT_ENABLED", "BETA_INSTALLATION_LIMIT", "BETA_RELEASE_VERSIONS", "BETA_LATEST_RELEASE_VERSION", "ENROLLMENT_EXEMPT_SOURCES", "TESTING_SOURCES"]) {
+    for (const name of ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE_ID", "REMOTE_HOST_SUFFIX", "REMOTE_PORT", "ENROLLMENT_ENABLED", "BETA_INSTALLATION_LIMIT", "BETA_RELEASE_VERSIONS", "BETA_LATEST_RELEASE_VERSION", "ENROLLMENT_EXEMPT_SOURCES"]) {
       assert.match(workflow, new RegExp(`vars\\.${name}`));
       assert.match(workflow, new RegExp(`--var ${name}:`));
     }
+    // TESTING_SOURCES is an address of our own network: this repository is public and a variable is printed in the
+    // workflow log, so it must come from a (masked) secret and never from a variable.
+    assert.match(workflow, /secrets\.TESTING_SOURCES/);
+    assert.match(workflow, /--var TESTING_SOURCES:/);
+    assert.doesNotMatch(workflow, /vars\.TESTING_SOURCES/);
     for (const name of RUNTIME_SECRET_NAMES) {
       assert.match(workflow, new RegExp(`secrets\\.${name}`));
       assert.match(workflow, new RegExp(`^ {12}${name}$`, "m"));
