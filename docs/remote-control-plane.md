@@ -40,6 +40,36 @@ Per run, oldest first:
 A failure on one installation logs a generic message, is skipped, and is retried next hour.
 A never-provisioned backlog of ~400 drains in about 4 runs.
 
+## Testing sources
+
+Installations that enroll from our own testing network are test installations. The deployment
+setting `TESTING_SOURCES` (comma-separated, same format and normalisation as
+`ENROLLMENT_EXEMPT_SOURCES`: exact IPv4 addresses, IPv6 as a canonical `/64`; invalid entries are
+dropped) lists those sources. Unset, empty or all-invalid means the feature does nothing.
+
+When a **new** installation is created (`POST /v1/installations/enroll`, and the authenticated
+`reenroll` route) from a listed source it is stored with `testing: true` and `archived: true`.
+Only that boolean is stored, never the address. Effects:
+
+- Location shows `Testing` (the admin hint says `testing`), below an operator `locationOverride`
+  and above the app-reported city, the network guess and `Test Install`.
+- It is hidden by the existing archived behaviour (the admin page hides archived rows unless
+  "Show archived" is ticked; the API returns them with `archived: true`).
+- It is revoked by the normal 48h expiry sweep, with the usual tunnel/DNS cleanup. It is never
+  grandfathered, and `PATCH .../keep` with `{"keep": true}` answers 409 until the operator clears
+  `testing` with `PATCH /v1/admin/installations/:id/testing` and `{"testing": false}` (clear-only;
+  there is no way to set it by hand, and `archived` is left as is).
+- Enrollment quotas and limits are unchanged; a testing source is not exempt unless it is also in
+  `ENROLLMENT_EXEMPT_SOURCES`.
+
+The value is a deployment secret: it is supplied as the `TESTING_SOURCES` GitHub **secret** of the
+deploy workflow (not a variable: this repository is public, a variable's value is printed in the
+public workflow log, a secret's is masked), and must never be committed (not in the repository,
+tests, docs or commit messages). If the testing network's address changes, the setting must be updated;
+until then marking silently stops and new test installations look like ordinary ones.
+Existing installations are not changed (nothing stored says which source they came from); they
+leave through the 48h sweep.
+
 ## Locations, Test Install, and the manual override
 
 ### App-reported location

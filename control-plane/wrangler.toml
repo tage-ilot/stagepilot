@@ -39,6 +39,13 @@ bucket_name = "stagepilot-beta-diagnostics"
 # enrollment-quota exemption list (comma-separated normalized sources; empty
 # or unset exempts nobody).
 #
+# TESTING_SOURCES is a second optional deployment var of the same format and
+# normalization: installations that enroll from a listed source are marked
+# Testing, archived at once, and revoked by the normal 48h expiry sweep. Empty
+# or unset disables the feature. Unlike ENROLLMENT_EXEMPT_SOURCES it is supplied from a
+# GitHub secret (masked in the public workflow log) and its value is never committed (see
+# docs/remote-control-plane.md).
+#
 # ENROLLMENT_WINDOW_SECONDS is the anonymous-enrollment quota window (seconds)
 # for ENROLLMENTS_PER_SOURCE; defaults to 86400 (24h) when unset.
 # TEMPORARY OPERATOR-TESTING CONFIGURATION: currently deployed as 3600 (1h)

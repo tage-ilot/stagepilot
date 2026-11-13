@@ -34,6 +34,9 @@ export function validateDeploymentEnvironment(environment) {
   // exemptions. Empty/unset means "no exemptions" so production behaviour is
   // unchanged by default; the Worker itself re-validates each entry.
   const enrollmentExemptSources = environment.ENROLLMENT_EXEMPT_SOURCES ?? "";
+  // Optional: comma-separated testing-network sources (same format as the
+  // exemption list). Empty/unset disables marking. The value is never logged.
+  const testingSources = environment.TESTING_SOURCES ?? "";
   // Optional: anonymous-enrollment quota window in seconds (defaults to
   // 86400 / 24h inside the Worker when unset or blank). TEMPORARY
   // OPERATOR-TESTING OVERRIDE: set to 3600 (1h) for the active beta test
@@ -86,7 +89,7 @@ export function validateDeploymentEnvironment(environment) {
     }
   }
 
-  return { accountId, zoneId, hostnameSuffix, remotePort, enrollmentEnabled, installationLimit, releaseVersions, latestReleaseVersion, enrollmentExemptSources, enrollmentWindowSeconds };
+  return { accountId, zoneId, hostnameSuffix, remotePort, enrollmentEnabled, installationLimit, releaseVersions, latestReleaseVersion, enrollmentExemptSources, testingSources, enrollmentWindowSeconds };
 }
 
 export function installedSecretNames(output) {
@@ -110,9 +113,10 @@ function main() {
   if (command === "validate") {
     const config = validateDeploymentEnvironment(process.env);
     const exemptCount = config.enrollmentExemptSources.split(",").map((value) => value.trim()).filter(Boolean).length;
+    const testingCount = config.testingSources.split(",").map((value) => value.trim()).filter(Boolean).length;
     const windowText = config.enrollmentWindowSeconds ? `${config.enrollmentWindowSeconds}s` : "default (86400s)";
     console.log(
-      `Deployment configuration valid: account/zone IDs present, suffix=${config.hostnameSuffix}, Remote port=${config.remotePort}, enrollment=${config.enrollmentEnabled}, installation limit=${config.installationLimit}, latest beta=${config.latestReleaseVersion}, enrollment exemptions=${exemptCount}, enrollment window=${windowText}; 5 runtime secrets present.`,
+      `Deployment configuration valid: account/zone IDs present, suffix=${config.hostnameSuffix}, Remote port=${config.remotePort}, enrollment=${config.enrollmentEnabled}, installation limit=${config.installationLimit}, latest beta=${config.latestReleaseVersion}, enrollment exemptions=${exemptCount}, testing sources=${testingCount}, enrollment window=${windowText}; 5 runtime secrets present.`,
     );
     return;
   }

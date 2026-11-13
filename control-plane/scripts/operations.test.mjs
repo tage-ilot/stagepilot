@@ -41,6 +41,7 @@ describe("deployment configuration", () => {
       releaseVersions: ["1.1.103-beta.1", "1.1.103-beta.2"],
       latestReleaseVersion: "1.1.103-beta.1",
       enrollmentExemptSources: "",
+      testingSources: "",
       enrollmentWindowSeconds: undefined,
     });
   });
@@ -50,6 +51,13 @@ describe("deployment configuration", () => {
       deploymentEnvironment({ ENROLLMENT_EXEMPT_SOURCES: "192.0.2.10,2001:db8:1:4::/64" }),
     );
     assert.equal(config.enrollmentExemptSources, "192.0.2.10,2001:db8:1:4::/64");
+  });
+
+  it("accepts a comma-separated testing-source list and defaults to none", () => {
+    const config = validateDeploymentEnvironment(
+      deploymentEnvironment({ TESTING_SOURCES: "192.0.2.10,2001:db8:1:4::/64" }),
+    );
+    assert.equal(config.testingSources, "192.0.2.10,2001:db8:1:4::/64");
   });
 
   it("accepts an explicit enrollment quota window override", () => {
@@ -91,6 +99,11 @@ describe("deployment configuration", () => {
       assert.match(workflow, new RegExp(`vars\\.${name}`));
       assert.match(workflow, new RegExp(`--var ${name}:`));
     }
+    // TESTING_SOURCES is an address of our own network: this repository is public and a variable is printed in the
+    // workflow log, so it must come from a (masked) secret and never from a variable.
+    assert.match(workflow, /secrets\.TESTING_SOURCES/);
+    assert.match(workflow, /--var TESTING_SOURCES:/);
+    assert.doesNotMatch(workflow, /vars\.TESTING_SOURCES/);
     for (const name of RUNTIME_SECRET_NAMES) {
       assert.match(workflow, new RegExp(`secrets\\.${name}`));
       assert.match(workflow, new RegExp(`^ {12}${name}$`, "m"));

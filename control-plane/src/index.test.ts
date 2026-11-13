@@ -2926,3 +2926,278 @@ describe('isKnownTestDevice', () => {
 
   it('rejects undefined', () => expect(isKnownTestDevice(undefined)).toBe(false));
 });
+
+describe('testing sources (TESTING_SOURCES)', () => {
+  const HOUR = 60 * 60 * 1000;
+  const NOW = Date.parse('2026-11-12T12:00:00.000Z');
+  // Documentation addresses only (RFC 5737 / RFC 3849). The IPv6 entry uses
+  // the same canonical /64 form as ENROLLMENT_EXEMPT_SOURCES; IPv4 is exact.
+  const V4 = '192.0.2.10';
+  const V6_RANGE = '2001:db8:1:4::/64';
+  const V6_INSIDE = '2001:db8:1:4:aaaa:bbbb:cccc:dddd';
+  const CONFIG = `${V4},${V6_RANGE}`;
+  const OTHER = '198.51.100.7';
+  let storage: MemoryStorage;
+  let provider: FakeCloudflare;
+
+  const makeRegistry = (testingSources?: string): Registry => new Registry(
+    { storage } as unknown as DurableObjectState,
+    { ...env, ...(testingSources === undefined ? {} : { TESTING_SOURCES: testingSources }) } as never,
+  );
+  const enrollFrom = async (registry: Registry, key: string, source: string, extra: Record<string, unknown> = {}) => {
+    const response = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, { nonce: key, ...extra }, source));
+    expect(response.status).toBe(201);
+    return json(response);
+  };
+  const stored = (installation: Record<string, unknown>) => storage.values.get(`installation:${String(installation.installationId)}`) as Record<string, unknown>;
+  const listRow = async (registry: Registry, installation: Record<string, unknown>) => {
+    const list = await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)));
+    return (list.installations as Array<Record<string, unknown>>).find((row) => row.installationId === installation.installationId)!;
+  };
+  const provision = async (registry: Registry, installation: Record<string, unknown>, generation: string) => {
+    const response = await registry.fetch(request(
+      installationPath(installation, 'provision'), 'POST', String(installation.installationCredential), { generation },
+    ));
+    expect(response.status).toBe(200);
+  };
+
+  beforeEach(() => {
+    storage = new MemoryStorage();
+    provider = new FakeCloudflare();
+    vi.stubGlobal('fetch', provider.fetch);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('marks an IPv4 testing-source enrollment testing and archived, with location Testing', async () => {
+    const registry = makeRegistry(CONFIG);
+    const installation = await enrollFrom(registry, 'testing-v4-0001', V4);
+    expect(stored(installation).testing).toBe(true);
+    expect(stored(installation).archived).toBe(true);
+    expect(stored(installation).keep).toBeUndefined();
+    const row = await listRow(registry, installation);
+    expect(row.location).toBe('Testing');
+    expect(row.locationSource).toBe('testing');
+    expect(row.testing).toBe(true);
+    expect(row.archived).toBe(true);
+    expect(row.keep).toBe(false);
+  });
+
+  it('matches IPv6 by its /64 range, including a source inside the range', async () => {
+    const registry = makeRegistry(CONFIG);
+    const inside = await enrollFrom(registry, 'testing-v6-0001', V6_INSIDE);
+    const sibling = await enrollFrom(registry, 'testing-v6-0002', '2001:db8:1:4::1');
+    const outside = await enrollFrom(registry, 'testing-v6-0003', '2001:db8:1:5::1');
+    expect(stored(inside).testing).toBe(true);
+    expect(stored(sibling).testing).toBe(true);
+    expect(stored(outside).testing).toBeUndefined();
+    expect(stored(outside).archived).toBeUndefined();
+  });
+
+  it('leaves enrollment from any other source unchanged', async () => {
+    const registry = makeRegistry(CONFIG);
+    const installation = await enrollFrom(registry, 'testing-other-0001', OTHER);
+    const record = stored(installation);
+    expect(record).not.toHaveProperty('testing');
+    expect(record).not.toHaveProperty('archived');
+    const row = await listRow(registry, installation);
+    expect(row.location).toBe('Unknown');
+    expect(row.locationSource).toBe('none');
+    expect(row.testing).toBe(false);
+    expect(row.archived).toBe(false);
+    // 192.0.2.11 is next to the configured address but not in it (IPv4 is exact).
+    expect(stored(await enrollFrom(registry, 'testing-other-0002', '192.0.2.11'))).not.toHaveProperty('testing');
+  });
+
+  it('is inert when TESTING_SOURCES is unset, empty, or only invalid entries', async () => {
+    const configs: Array<string | undefined> = [
+      undefined,
+      '',
+      ' , ,',
+      'not-an-address,999.1.1.1,192.0.2.0/24,2001:db8::1,192.0.2.010,2001:DB8:1:4:0:0:0:0/64',
+    ];
+    for (const [index, config] of configs.entries()) {
+      storage = new MemoryStorage();
+      const registry = makeRegistry(config);
+      for (const source of [V4, V6_INSIDE, '192.0.2.0']) {
+        const installation = await enrollFrom(registry, `testing-inert-${index}-${source}`, source);
+        expect(stored(installation)).not.toHaveProperty('testing');
+        expect(stored(installation)).not.toHaveProperty('archived');
+        expect((await listRow(registry, installation)).location).toBe('Unknown');
+      }
+    }
+  });
+
+  it('stores only the boolean: no source address appears anywhere in storage', async () => {
+    const registry = makeRegistry(CONFIG);
+    const first = await enrollFrom(registry, 'testing-privacy-0001', V4);
+    const second = await enrollFrom(registry, 'testing-privacy-0002', V6_INSIDE);
+    const dump = JSON.stringify([...storage.values.entries()]);
+    for (const needle of [V4, V6_INSIDE, '2001:db8:1:4', '2001:db8:1:4::']) {
+      expect(dump).not.toContain(needle);
+    }
+    expect(Object.keys(stored(first)).sort()).toEqual(
+      ['archived', 'createdAt', 'desiredEnabled', 'hostname', 'id', 'label', 'phase', 'revoked', 'testing', 'updatedAt'],
+    );
+    expect(Object.keys(stored(second)).sort()).toEqual(Object.keys(stored(first)).sort());
+    expect(JSON.stringify(first)).not.toContain(V4);
+  });
+
+  it('shows Testing above reported and network locations and over the Test Install label', async () => {
+    const registry = makeRegistry(CONFIG);
+    const installation = await enrollFrom(registry, 'testing-display-0001', V4, { deviceName: 'runnervmdaln5', location: 'Pasadena, CA' });
+    await registry.fetch(requestWithCf(
+      installationPath(installation, 'status'), 'GET', String(installation.installationCredential), undefined,
+      { city: 'Austin', region: 'TX', country: 'US' },
+    ));
+    expect(stored(installation).reportedLocation).toBe('Pasadena, CA');
+    expect(stored(installation).lastCity).toBe('Austin');
+    const row = await listRow(registry, installation);
+    expect(row.location).toBe('Testing');
+    expect(row.locationSource).toBe('testing');
+    // Existing behaviour is unchanged for a non-testing known test host.
+    const ci = await enrollFrom(registry, 'testing-display-0002', OTHER, { deviceName: 'runnervmdaln5' });
+    expect((await listRow(registry, ci)).location).toBe('Test Install');
+  });
+
+  it('lets an operator locationOverride win over Testing', async () => {
+    const registry = makeRegistry(CONFIG);
+    const installation = await enrollFrom(registry, 'testing-override-0001', V4);
+    const id = String(installation.installationId);
+    const set = await registry.fetch(request(`/v1/admin/installations/${id}/location`, 'PATCH', adminToken, { location: 'Pasadena' }));
+    expect(set.status).toBe(200);
+    const row = await listRow(registry, installation);
+    expect(row.location).toBe('Pasadena');
+    expect(row.locationSource).toBe('admin');
+    expect(row.testing).toBe(true);
+    await registry.fetch(request(`/v1/admin/installations/${id}/location`, 'PATCH', adminToken, { location: '' }));
+    expect((await listRow(registry, installation)).location).toBe('Testing');
+  });
+
+  it('keeps testing installations in the admin list as archived (the page hides archived by default)', async () => {
+    const registry = makeRegistry(CONFIG);
+    const testing = await enrollFrom(registry, 'testing-hidden-0001', V4);
+    const normal = await enrollFrom(registry, 'testing-hidden-0002', OTHER);
+    const list = (await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)))).installations as Array<Record<string, unknown>>;
+    // The default admin view is "not archived" (control-plane/public/admin).
+    const defaultView = list.filter((row) => !row.archived).map((row) => row.installationId);
+    expect(defaultView).toEqual([normal.installationId]);
+    // "Show archived" still lists the testing one, labelled Testing.
+    const withArchived = list.find((row) => row.installationId === testing.installationId)!;
+    expect(withArchived.location).toBe('Testing');
+  });
+
+  it('refuses to pin a testing installation (409) until the operator clears testing', async () => {
+    const registry = makeRegistry(CONFIG);
+    const installation = await enrollFrom(registry, 'testing-pin-0001', V4);
+    const id = String(installation.installationId);
+    const keepPath = `/v1/admin/installations/${id}/keep`;
+    const testingPath = `/v1/admin/installations/${id}/testing`;
+    const refused = await registry.fetch(request(keepPath, 'PATCH', adminToken, { keep: true }));
+    expect(refused.status).toBe(409);
+    expect(JSON.stringify(await json(refused))).toContain('clear testing');
+    expect(stored(installation).keep).toBeUndefined();
+    // Unpinning is still allowed.
+    expect((await registry.fetch(request(keepPath, 'PATCH', adminToken, { keep: false }))).status).toBe(200);
+
+    // The clear route: admin only, clear only, 404 for unknown ids.
+    expect((await registry.fetch(request(testingPath, 'PATCH', undefined, { testing: false }))).status).toBe(401);
+    expect((await registry.fetch(request(testingPath, 'PATCH', adminToken, { testing: true }))).status).toBe(400);
+    expect((await registry.fetch(request(testingPath, 'PATCH', adminToken, {}))).status).toBe(400);
+    expect((await registry.fetch(request(`/v1/admin/installations/${'f'.repeat(32)}/testing`, 'PATCH', adminToken, { testing: false }))).status).toBe(404);
+    expect(stored(installation).testing).toBe(true);
+    const cleared = await registry.fetch(request(testingPath, 'PATCH', adminToken, { testing: false }));
+    expect(cleared.status).toBe(200);
+    expect(stored(installation)).not.toHaveProperty('testing');
+    expect(stored(installation).archived).toBe(true);
+    expect((await listRow(registry, installation)).location).toBe('Unknown');
+    expect((await registry.fetch(request(keepPath, 'PATCH', adminToken, { keep: true }))).status).toBe(200);
+    expect(stored(installation).keep).toBe(true);
+  });
+
+  it('skips testing installations in the grandfather migration and revokes them at the TTL like any unpinned one', async () => {
+    const registry = makeRegistry(CONFIG);
+    const testing = await enrollFrom(registry, 'testing-sweep-0001', V4);
+    const normal = await enrollFrom(registry, 'testing-sweep-0002', OTHER);
+    await provision(registry, testing, '11111111-1111-4111-8111-111111111111');
+    await provision(registry, normal, '22222222-2222-4222-8222-222222222222');
+    expect(provider.tunnels.size).toBe(2);
+    expect(provider.records.size).toBe(2);
+    const expiresAt = String((await listRow(registry, testing)).expiresAt);
+    expect(Date.parse(expiresAt) - NOW).toBe(48 * HOUR);
+
+    // First sweep: the one-time migration pins the ordinary provisioned install only.
+    vi.setSystemTime(NOW + HOUR);
+    await registry.alarm();
+    expect(stored(normal).keep).toBe(true);
+    expect(stored(testing)).not.toHaveProperty('keep');
+    expect(stored(testing).revoked).toBe(false);
+
+    // One minute before the TTL: still alive.
+    vi.setSystemTime(Date.parse(expiresAt) - 60_000);
+    await registry.alarm();
+    expect(stored(testing).revoked).toBe(false);
+    expect(provider.tunnels.size).toBe(2);
+
+    // Exactly at createdAt + TTL: revoked and archived through the same path,
+    // tunnel and DNS removed, active count down by one.
+    vi.setSystemTime(Date.parse(expiresAt));
+    const before = (storage.values.get('registry:stats') as { activeInstallations: number }).activeInstallations;
+    await registry.alarm();
+    expect(stored(testing).revoked).toBe(true);
+    expect(stored(testing).archived).toBe(true);
+    expect(stored(testing).testing).toBe(true);
+    expect(stored(normal).revoked).toBe(false);
+    expect(provider.tunnels.size).toBe(1);
+    expect(provider.records.size).toBe(1);
+    expect([...provider.records.values()][0]?.name).toBe(normal.hostname);
+    expect((storage.values.get('registry:stats') as { activeInstallations: number }).activeInstallations).toBe(before - 1);
+  });
+
+  it('marks the installation minted by the authenticated reenroll route from a testing source too', async () => {
+    const registry = makeRegistry(CONFIG);
+    const normal = await enrollFrom(registry, 'testing-reenroll-0001', OTHER);
+    const fromTesting = await registry.fetch(request(
+      installationPath(normal, 'reenroll'), 'POST', String(normal.installationCredential), undefined, V4,
+    ));
+    expect(fromTesting.status).toBe(201);
+    const next = await json(fromTesting);
+    expect(stored(next).testing).toBe(true);
+    expect(stored(next).archived).toBe(true);
+    // From another source it stays an ordinary installation, and an
+    // unconfigured Worker never marks anything.
+    const again = await registry.fetch(request(
+      installationPath(next, 'reenroll'), 'POST', String(next.installationCredential), undefined, OTHER,
+    ));
+    expect(stored(await json(again))).not.toHaveProperty('testing');
+    const inert = makeRegistry(undefined);
+    const plain = await enrollFrom(inert, 'testing-reenroll-0002', OTHER);
+    const viaInert = await inert.fetch(request(installationPath(plain, 'reenroll'), 'POST', String(plain.installationCredential), undefined, V4));
+    expect(stored(await json(viaInert))).not.toHaveProperty('testing');
+  });
+
+  it('leaves the anonymous enrollment quota unchanged for testing sources', async () => {
+    const registry = makeRegistry(CONFIG);
+    for (const nonce of ['testing-quota-0001', 'testing-quota-0002', 'testing-quota-0003']) {
+      await enrollFrom(registry, nonce, V4);
+    }
+    const denied = await registry.fetch(request('/v1/installations/enroll', 'POST', undefined, { nonce: 'testing-quota-0004' }, V4));
+    expect(denied.status).toBe(429);
+  });
+
+  it('grandfather migration never pins a testing record even if one is already provisioned', async () => {
+    const registry = makeRegistry(CONFIG);
+    storage.values.set('installation:' + 'a'.repeat(32), {
+      id: 'a'.repeat(32), hostname: 'h.remote.example.com', label: '', phase: 'provisioned', desiredEnabled: true,
+      revoked: false, createdAt: new Date(NOW - HOUR).toISOString(), updatedAt: new Date(NOW - HOUR).toISOString(),
+      testing: true, archived: true, generation: 'g1', tunnelId: 't1',
+    });
+    await registry.alarm();
+    expect(storage.values.get('sweep:grandfathered')).toBe(true);
+    expect(storage.values.get('installation:' + 'a'.repeat(32))).not.toHaveProperty('keep');
+  });
+});
