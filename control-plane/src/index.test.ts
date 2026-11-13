@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Registry, isKnownTestDevice } from './index';
+import { Registry, TEST_PURGE_OFFLINE_HOURS, isKnownTestDevice, isTestInstallation, lastSeenMs } from './index';
 
 class MemoryStorage {
   readonly values = new Map<string, unknown>();
@@ -23,18 +23,31 @@ class MemoryStorage {
     return this.values.get(key) as T | undefined;
   }
 
+  // Keys written by each put() call, so tests can assert on write counts.
+  readonly putLog: string[][] = [];
+  // Size of every storage.delete([...]) batch, to prove the 128-key limit.
+  readonly deleteBatches: number[] = [];
+
   async put(keyOrEntries: string | Record<string, unknown>, value?: unknown): Promise<void> {
     if (typeof keyOrEntries === 'string') {
+      this.putLog.push([keyOrEntries]);
       this.values.set(keyOrEntries, structuredClone(value));
       return;
     }
+    this.putLog.push(Object.keys(keyOrEntries));
     for (const [key, entry] of Object.entries(keyOrEntries)) {
       this.values.set(key, structuredClone(entry));
     }
   }
 
-  async delete(key: string): Promise<boolean> {
-    return this.values.delete(key);
+  // Like the real Durable Object API: one key, or an array of at most 128.
+  async delete(keyOrKeys: string | string[]): Promise<boolean | number> {
+    if (typeof keyOrKeys === 'string') return this.values.delete(keyOrKeys);
+    if (keyOrKeys.length > 128) throw new Error('storage.delete accepts at most 128 keys');
+    this.deleteBatches.push(keyOrKeys.length);
+    let deleted = 0;
+    for (const key of keyOrKeys) if (this.values.delete(key)) deleted += 1;
+    return deleted;
   }
 
   async list<T>(options?: { prefix?: string }): Promise<Map<string, T>> {
@@ -3041,7 +3054,7 @@ describe('testing sources (TESTING_SOURCES)', () => {
       expect(dump).not.toContain(needle);
     }
     expect(Object.keys(stored(first)).sort()).toEqual(
-      ['archived', 'createdAt', 'desiredEnabled', 'hostname', 'id', 'label', 'phase', 'revoked', 'testing', 'updatedAt'],
+      ['archived', 'createdAt', 'desiredEnabled', 'hostname', 'id', 'label', 'lastSeenAt', 'phase', 'revoked', 'testing', 'updatedAt'],
     );
     expect(Object.keys(stored(second)).sort()).toEqual(Object.keys(stored(first)).sort());
     expect(JSON.stringify(first)).not.toContain(V4);
@@ -3404,8 +3417,11 @@ describe('auto-archive installations from known test hostnames', () => {
     expect(stored(plain).revoked).toBe(false);
     vi.setSystemTime(NOW + 48 * HOUR);
     await registry.alarm();
-    expect(stored(runner).revoked).toBe(true);
     expect(stored(plain).revoked).toBe(true);
+    // The runner is a known test host that was last seen 48h ago: it is
+    // revoked on the same schedule and then permanently purged in the same
+    // run. The counter dropped exactly once for it (not twice).
+    expect(storage.values.has(`installation:${String(runner.installationId)}`)).toBe(false);
     expect(activeCount()).toBe(0);
   });
 
@@ -3416,5 +3432,604 @@ describe('auto-archive installations from known test hostnames', () => {
     expect(stored(installation).archivedByOperator).toBe(true);
     const row = await listRow(installation);
     expect(row).not.toHaveProperty('archivedByOperator');
+  });
+});
+
+
+describe('offline test-install purge', () => {
+  const MINUTE = 60 * 1000;
+  const HOUR = 60 * MINUTE;
+  const NOW = Date.parse('2026-11-13T12:00:00.000Z');
+  const RUNNER = 'runnervmabc12';
+  const REAL = 'JPL-Graphics-iMac.local';
+  const GEN = '11111111-1111-4111-8111-111111111111';
+  let storage: MemoryStorage;
+  let provider: FakeCloudflare;
+  let diagnostics: FakeR2Bucket;
+  let registry: Registry;
+  let seq = 0;
+
+  function makeRegistry(extraEnv: Record<string, unknown> = {}): Registry {
+    return new Registry({ storage } as unknown as DurableObjectState, { ...env, DIAGNOSTICS: diagnostics, ...extraEnv } as never);
+  }
+
+  // A stored installation last seen `seenAgo` before NOW (createdAt is older).
+  function seed(overrides: Record<string, unknown> = {}, seenAgo = 49 * HOUR): string {
+    seq += 1;
+    const id = seq.toString(16).padStart(8, '0');
+    const seen = new Date(NOW - seenAgo).toISOString();
+    storage.values.set(`installation:${id}`, {
+      id, hostname: `sp-${id}.remote.example.com`, label: '', phase: 'disabled', desiredEnabled: false,
+      revoked: false, createdAt: new Date(NOW - seenAgo - HOUR).toISOString(), updatedAt: seen, lastSeenAt: seen,
+      deviceName: RUNNER, ...overrides,
+    });
+    return id;
+  }
+
+  const get = (id: string) => storage.values.get(`installation:${id}`) as Record<string, unknown> | undefined;
+  const exists = (id: string) => storage.values.has(`installation:${id}`);
+  const stats = () => storage.values.get('registry:stats') as {
+    activeInstallations: number; enrollments: number; diagnosticsBytesUsed: number; purgedInstallations?: number;
+  };
+  const setStats = (active: number, extra: Record<string, unknown> = {}) => storage.values.set('registry:stats', {
+    activeInstallations: active, enrollments: 5000, enrollmentDenied: 0, statusDenied: 0, mutationDenied: 0,
+    providerDenied: 0, diagnosticsBytesUsed: 0, ...extra,
+  });
+  const keysMentioning = (id: string) => [...storage.values.entries()]
+    .filter(([key, value]) => key.includes(id) || (typeof value === 'string' && value === id))
+    .map(([key]) => key);
+  const listRows = async () => ((await json(await registry.fetch(request('/v1/admin/installations', 'GET', adminToken)))).installations as Array<Record<string, unknown>>);
+
+  beforeEach(() => {
+    seq = 0;
+    storage = new MemoryStorage();
+    provider = new FakeCloudflare();
+    diagnostics = new FakeR2Bucket();
+    vi.stubGlobal('fetch', provider.fetch);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    storage.values.set('sweep:grandfathered', true);
+    registry = makeRegistry();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  describe('lastSeenAt', () => {
+    const installationWrites = (id: string) => storage.putLog.filter((keys) => keys.includes(`installation:${id}`)).length;
+
+    it('check-in sets it at creation and writes at most once per 10 minutes', async () => {
+      const installation = await enroll(registry, 'seen-throttle-0001', { deviceName: REAL });
+      const id = String(installation.installationId);
+      expect(get(id)?.lastSeenAt).toBe(new Date(NOW).toISOString());
+      const checkIn = () => registry.fetch(request('/v1/installations/enroll', 'POST', undefined, { nonce: 'seen-throttle-0001', deviceName: REAL }));
+
+      const before = installationWrites(id);
+      vi.setSystemTime(NOW + 9 * MINUTE + 59_000);
+      expect((await checkIn()).status).toBe(201);
+      expect(installationWrites(id)).toBe(before);
+      expect(get(id)?.lastSeenAt).toBe(new Date(NOW).toISOString());
+
+      vi.setSystemTime(NOW + 10 * MINUTE);
+      expect((await checkIn()).status).toBe(201);
+      expect(installationWrites(id)).toBe(before + 1);
+      expect(get(id)?.lastSeenAt).toBe(new Date(NOW + 10 * MINUTE).toISOString());
+
+      vi.setSystemTime(NOW + 15 * MINUTE);
+      await checkIn();
+      expect(installationWrites(id)).toBe(before + 1);
+    });
+
+    it('is refreshed by status, provision, reconcile, alerts, approvals and diagnostics requests', async () => {
+      const installation = await enroll(registry, 'seen-routes-0001', { deviceName: REAL });
+      const id = String(installation.installationId);
+      const credential = String(installation.installationCredential);
+      let clock = NOW;
+      const expectTouched = async (send: () => Promise<Response>, label: string) => {
+        clock += 11 * MINUTE;
+        vi.setSystemTime(clock);
+        const response = await send();
+        expect(response.status, label).toBeLessThan(300);
+        expect(get(id)?.lastSeenAt, label).toBe(new Date(clock).toISOString());
+      };
+      await expectTouched(() => registry.fetch(request(installationPath(installation, 'status'), 'GET', credential)), 'status');
+      await expectTouched(() => registry.fetch(request(installationPath(installation, 'provision'), 'POST', credential, { generation: GEN })), 'provision');
+      await expectTouched(() => registry.fetch(request(installationPath(installation, 'reconcile'), 'POST', credential, {})), 'reconcile');
+      await expectTouched(() => registry.fetch(request(`/v1/installations/${id}/alerts`, 'POST', credential, {
+        category: 'c', subject: 's', message: 'm', severity: 'warning', first_seen: 'a', last_seen: 'b', count: 1,
+      })), 'alerts');
+      await expectTouched(() => registry.fetch(request(`/v1/installations/${id}/approval-requests`, 'GET', credential)), 'approvals');
+      await expectTouched(() => registry.fetch(rawRequest(
+        `/v1/installations/${id}/diagnostics`, 'POST', credential, new TextEncoder().encode('{"a":1}'),
+      )), 'diagnostics');
+    });
+
+    it('is not set by a wrong credential, by admin actions, or by a missing installation', async () => {
+      const installation = await enroll(registry, 'seen-negative-0001', { deviceName: REAL });
+      const id = String(installation.installationId);
+      const original = new Date(NOW).toISOString();
+      vi.setSystemTime(NOW + HOUR);
+      const wrong = await registry.fetch(request(installationPath(installation, 'status'), 'GET', `spi_${id}.not-the-credential`));
+      expect(wrong.status).toBe(401);
+      expect(get(id)?.lastSeenAt).toBe(original);
+      const label = await registry.fetch(request(`/v1/admin/installations/${id}/label`, 'PATCH', adminToken, { label: 'x' }));
+      expect(label.status).toBe(200);
+      expect(get(id)?.lastSeenAt).toBe(original);
+      expect(get(id)?.updatedAt).toBe(new Date(NOW + HOUR).toISOString());
+    });
+
+    it('a revoked installation that still presents its credential counts as seen', async () => {
+      const id = seed({ revoked: true, deviceName: RUNNER });
+      // Authentic credential for a seeded record: enroll one, then revoke it.
+      const installation = await enroll(registry, 'seen-revoked-0001', { deviceName: RUNNER });
+      const real = String(installation.installationId);
+      await registry.fetch(request(installationPath(installation, 'revoke'), 'POST', String(installation.installationCredential)));
+      vi.setSystemTime(NOW + HOUR);
+      const response = await registry.fetch(request(installationPath(installation, 'status'), 'GET', String(installation.installationCredential)));
+      expect(response.status).toBe(401);
+      expect(get(real)?.lastSeenAt).toBe(new Date(NOW + HOUR).toISOString());
+      expect(exists(id)).toBe(true);
+    });
+
+    it('lastSeen falls back from lastSeenAt to updatedAt to createdAt', () => {
+      expect(lastSeenMs({ lastSeenAt: '2026-01-03T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' })).toBe(Date.parse('2026-01-03T00:00:00.000Z'));
+      expect(lastSeenMs({ updatedAt: '2026-01-02T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' })).toBe(Date.parse('2026-01-02T00:00:00.000Z'));
+      expect(lastSeenMs({ createdAt: '2026-01-01T00:00:00.000Z' } as never)).toBe(Date.parse('2026-01-01T00:00:00.000Z'));
+    });
+
+    it('is exposed in the admin list (null for a legacy row)', async () => {
+      const fresh = await enroll(registry, 'seen-list-0001', { deviceName: REAL });
+      const legacy = seed({ deviceName: REAL, keep: true }, HOUR);
+      const legacyRecord = get(legacy)!;
+      delete legacyRecord.lastSeenAt;
+      storage.values.set(`installation:${legacy}`, legacyRecord);
+      const rows = await listRows();
+      expect(rows.find((row) => row.installationId === fresh.installationId)?.lastSeenAt).toBe(new Date(NOW).toISOString());
+      expect(rows.find((row) => row.installationId === legacy)?.lastSeenAt).toBeNull();
+    });
+  });
+
+  describe('purge rule', () => {
+    it('identifies test installs by the testing flag or a known test hostname only', () => {
+      expect(TEST_PURGE_OFFLINE_HOURS).toBe(48);
+      expect(isTestInstallation({ testing: true })).toBe(true);
+      expect(isTestInstallation({ deviceName: 'runnervmdaln5' })).toBe(true);
+      expect(isTestInstallation({ deviceName: 'agent-hub' })).toBe(true);
+      expect(isTestInstallation({ deviceName: 'stagepilot-ci' })).toBe(true);
+      expect(isTestInstallation({ deviceName: REAL })).toBe(false);
+      expect(isTestInstallation({ deviceName: 'agent-hub-2' })).toBe(false);
+      expect(isTestInstallation({ testing: false })).toBe(false);
+      expect(isTestInstallation({})).toBe(false);
+    });
+
+    it('keeps a known-test-named install last seen 47h59m ago and purges it at exactly 48h', async () => {
+      const young = seed({ keep: false }, 48 * HOUR - MINUTE);
+      const exact = seed({}, 48 * HOUR);
+      setStats(2);
+      await registry.alarm();
+      expect(exists(young)).toBe(true);
+      expect(exists(exact)).toBe(false);
+      vi.setSystemTime(NOW + MINUTE);
+      await registry.alarm();
+      expect(exists(young)).toBe(false);
+    });
+
+    it('purges a testing-network install whose hostname is not a test name', async () => {
+      const id = seed({ testing: true, deviceName: REAL });
+      setStats(1);
+      await registry.alarm();
+      expect(exists(id)).toBe(false);
+    });
+
+    it('NEVER purges pinned, provisioned, ever-provisioned, real-host or unidentified installs, however long offline', async () => {
+      const tenDays = 240 * HOUR;
+      const protectedIds = {
+        pinnedTestHost: seed({ keep: true }, tenDays),
+        pinnedTesting: seed({ keep: true, testing: true, deviceName: undefined }, tenDays),
+        provisionedPhase: seed({ phase: 'provisioned', desiredEnabled: true, generation: GEN, tunnelId: 't', deviceName: RUNNER, keep: false }, tenDays),
+        everProvisioned: seed({ everProvisioned: true }, tenDays),
+        everProvisionedTesting: seed({ everProvisioned: true, testing: true }, tenDays),
+        realHostOffline: seed({ deviceName: REAL }, tenDays),
+        realPinned: seed({ deviceName: REAL, keep: true, everProvisioned: true, phase: 'provisioned', desiredEnabled: true }, tenDays),
+        noName: seed({ deviceName: undefined }, tenDays),
+        lookalike: seed({ deviceName: 'runnervm-with-dash' }, tenDays),
+      };
+      const purgeable = seed({}, tenDays);
+      setStats(10);
+      // A huge TTL isolates the purge guards from the (unchanged) revoke rule.
+      registry = makeRegistry({ INSTALLATION_TTL_HOURS: '100000' });
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      for (let run = 0; run < 3; run += 1) {
+        vi.setSystemTime(NOW + run * HOUR);
+        await registry.alarm();
+      }
+      errors.mockRestore();
+      expect(exists(purgeable)).toBe(false);
+      for (const [name, id] of Object.entries(protectedIds)) expect(exists(id), name).toBe(true);
+      expect(get(protectedIds.pinnedTestHost)?.revoked).toBe(false);
+      expect(get(protectedIds.realPinned)?.revoked).toBe(false);
+      expect(stats().purgedInstallations).toBe(1);
+    });
+
+    it('judges eligibility on the state at the start of the run: revoking a provisioned install does not make it purgeable in the same run', async () => {
+      // Artificial (a provisioned install always has everProvisioned) but it
+      // proves the phase guard cannot be defeated by the revoke ordering.
+      const id = seed({ phase: 'provisioned', desiredEnabled: true, generation: GEN, tunnelId: 't', deviceName: RUNNER }, 100 * HOUR);
+      setStats(1);
+      await registry.alarm();
+      expect(get(id)?.revoked).toBe(true);
+      expect(get(id)?.phase).toBe('disabled');
+    });
+
+    it('a spoofed test hostname on a real, pinned install cannot get it purged', async () => {
+      const real = await enroll(registry, 'spoof-0001', { deviceName: REAL });
+      const id = String(real.installationId);
+      const credential = String(real.installationCredential);
+      expect((await registry.fetch(request(`/v1/admin/installations/${id}/keep`, 'PATCH', adminToken, { keep: true }))).status).toBe(200);
+      expect((await registry.fetch(request(`${installationPath(real, 'status')}?deviceName=agent-hub`, 'GET', credential))).status).toBe(200);
+      expect(get(id)?.deviceName).toBe('agent-hub');
+      vi.setSystemTime(NOW + 200 * HOUR);
+      await registry.alarm();
+      expect(exists(id)).toBe(true);
+      expect(get(id)?.revoked).toBe(false);
+    });
+
+    it('legacy rows without lastSeenAt use updatedAt; lastSeenAt wins over a newer admin-bumped updatedAt', async () => {
+      const legacyOld = seed({ updatedAt: new Date(NOW - 49 * HOUR).toISOString() });
+      const legacyRecentUpdate = seed({ updatedAt: new Date(NOW - HOUR).toISOString() });
+      for (const id of [legacyOld, legacyRecentUpdate]) {
+        const record = get(id)!;
+        delete record.lastSeenAt;
+        storage.values.set(`installation:${id}`, record);
+      }
+      const touchedByAdminOnly = seed({ updatedAt: new Date(NOW - HOUR).toISOString() }, 72 * HOUR);
+      const online = seed({}, 5 * MINUTE);
+      setStats(4);
+      await registry.alarm();
+      expect(exists(legacyOld)).toBe(false);
+      expect(exists(legacyRecentUpdate)).toBe(true);
+      expect(exists(touchedByAdminOnly)).toBe(false);
+      expect(exists(online)).toBe(true);
+    });
+
+    it('also purges installs that were already revoked and archived (the legacy backlog)', async () => {
+      const ids = [seed({ revoked: true, archived: true }), seed({ revoked: true, archived: true, testing: true, deviceName: undefined })];
+      const stillCounted = seed({});
+      setStats(1);
+      await registry.alarm();
+      for (const id of ids) expect(exists(id)).toBe(false);
+      expect(exists(stillCounted)).toBe(false);
+      expect(stats().activeInstallations).toBe(0);
+    });
+
+    it('honors INSTALLATION_TEST_PURGE_HOURS and falls back to 48h for invalid values', async () => {
+      const id = seed({ keep: false }, 6 * HOUR);
+      setStats(1);
+      for (const bad of ['0', '0.5', 'abc', '-3', '']) {
+        await makeRegistry({ INSTALLATION_TEST_PURGE_HOURS: bad, INSTALLATION_TTL_HOURS: '1000' }).alarm();
+        expect(exists(id), bad).toBe(true);
+      }
+      await makeRegistry({ INSTALLATION_TEST_PURGE_HOURS: '5', INSTALLATION_TTL_HOURS: '1000' }).alarm();
+      expect(exists(id)).toBe(false);
+    });
+
+    it('the 48h-from-creation revoke rule is unchanged for non-test installs', async () => {
+      const plain = seed({ deviceName: REAL }, 49 * HOUR);
+      setStats(1);
+      await registry.alarm();
+      expect(get(plain)?.revoked).toBe(true);
+      expect(exists(plain)).toBe(true);
+    });
+  });
+
+  describe('counters', () => {
+    it('drops activeInstallations once for an active install, never for a revoked one, never below 0, and leaves enrollments alone', async () => {
+      seed({});
+      seed({ revoked: true });
+      seed({ revoked: true, archived: true });
+      setStats(1);
+      await registry.alarm();
+      expect(stats().activeInstallations).toBe(0);
+      expect(stats().enrollments).toBe(5000);
+      expect(stats().purgedInstallations).toBe(3);
+
+      seed({});
+      setStats(0);
+      await registry.alarm();
+      expect(stats().activeInstallations).toBe(0);
+      expect(stats().purgedInstallations).toBe(1);
+    });
+
+    it('works on a stats record stored before purgedInstallations existed', async () => {
+      seed({});
+      storage.values.set('registry:stats', {
+        activeInstallations: 1, enrollments: 1, enrollmentDenied: 0, statusDenied: 0, mutationDenied: 0, providerDenied: 0, diagnosticsBytesUsed: 0,
+      });
+      await registry.alarm();
+      expect(stats().purgedInstallations).toBe(1);
+      const metrics = await json(await registry.fetch(request('/v1/admin/metrics', 'GET', adminToken)));
+      expect(metrics.purgedInstallations).toBe(1);
+    });
+  });
+
+  describe('complete removal', () => {
+    it('deletes the record, alerts, approvals, pending actions, diagnostics metadata and R2 objects, the nonce and the bytes counter', async () => {
+      registry = makeRegistry();
+      const doomed = await enroll(registry, 'cascade-doomed-0001', { deviceName: RUNNER });
+      const keeper = await enroll(registry, 'cascade-keeper-0001', { deviceName: REAL });
+      const doomedId = String(doomed.installationId);
+      const keeperId = String(keeper.installationId);
+      expect((await registry.fetch(request(`/v1/admin/installations/${keeperId}/keep`, 'PATCH', adminToken, { keep: true }))).status).toBe(200);
+      for (const [installation, id] of [[doomed, doomedId], [keeper, keeperId]] as const) {
+        const credential = String(installation.installationCredential);
+        expect((await registry.fetch(request(`/v1/installations/${id}/alerts`, 'POST', credential, {
+          category: 'disk', subject: 'volume', message: 'low', severity: 'critical', first_seen: 'a', last_seen: 'b', count: 2,
+        }))).status).toBe(201);
+        expect((await registry.fetch(request(`/v1/installations/${id}/approval-requests`, 'POST', credential, { reason: 'please' }))).status).toBe(201);
+        for (let n = 0; n < 2; n += 1) {
+          vi.setSystemTime(NOW + n * 1000);
+          expect((await registry.fetch(rawRequest(`/v1/installations/${id}/diagnostics`, 'POST', credential, new TextEncoder().encode(JSON.stringify({ n, id }))))).status).toBe(201);
+        }
+        expect((await registry.fetch(request(`/v1/installations/${id}/rate-limit/reset`, 'POST', adminToken))).status).toBe(201);
+      }
+      vi.setSystemTime(NOW);
+      expect(diagnostics.objects.size).toBe(4);
+      expect(keysMentioning(doomedId).sort()).toEqual(expect.arrayContaining([
+        `installation:${doomedId}`, 'enrollment:cascade-doomed-0001',
+      ]));
+      expect(keysMentioning(doomedId).some((key) => key.startsWith('alert:'))).toBe(true);
+      expect(keysMentioning(doomedId).some((key) => key.startsWith('approval:'))).toBe(true);
+      expect(keysMentioning(doomedId).some((key) => key.startsWith('pending-action:'))).toBe(true);
+      expect(keysMentioning(doomedId).filter((key) => key.startsWith('diagnostics-meta:'))).toHaveLength(2);
+      const keeperKeys = keysMentioning(keeperId).sort();
+      const bytesBefore = stats().diagnosticsBytesUsed;
+      const doomedBytes = [...diagnostics.objects.entries()].filter(([key]) => key.includes(doomedId)).reduce((sum, [, object]) => sum + object.bytes.byteLength, 0);
+      expect(doomedBytes).toBeGreaterThan(0);
+      const cache = (registry as unknown as { tokenCache: Map<string, unknown> }).tokenCache;
+      cache.set(doomedId, { token: 'x', expiresAt: Number.MAX_SAFE_INTEGER });
+
+      vi.setSystemTime(NOW + 48 * HOUR);
+      await registry.alarm();
+
+      expect(keysMentioning(doomedId)).toEqual([]);
+      expect([...diagnostics.objects.keys()].some((key) => key.includes(doomedId))).toBe(false);
+      expect(diagnostics.objects.size).toBe(2);
+      expect(diagnostics.delete).toHaveBeenCalledTimes(2);
+      expect(cache.has(doomedId)).toBe(false);
+      expect(stats().diagnosticsBytesUsed).toBe(bytesBefore - doomedBytes);
+      expect(stats().purgedInstallations).toBe(1);
+      // Everything of the pinned install is untouched.
+      expect(keysMentioning(keeperId).sort()).toEqual(keeperKeys);
+      expect(get(keeperId)?.revoked).toBe(false);
+    });
+
+    it('deletes children in batches of at most 128 keys', async () => {
+      const id = seed({});
+      setStats(1);
+      for (let n = 0; n < 300; n += 1) {
+        storage.values.set(`alert:${id}:cat:${n}`, { id: `${id}:cat:${n}` });
+        storage.values.set(`approval:${id}:${n}`, { id: `${id}:${n}` });
+      }
+      storage.values.set(`alert:${id}0:cat:other`, { note: 'longer id is a different installation' });
+      await registry.alarm();
+      expect(exists(id)).toBe(false);
+      expect(keysMentioning(id).filter((key) => !key.includes(`${id}0`))).toEqual([]);
+      expect(storage.values.has(`alert:${id}0:cat:other`)).toBe(true);
+      expect(Math.max(...storage.deleteBatches)).toBeLessThanOrEqual(128);
+      expect(storage.deleteBatches.filter((size) => size === 128).length).toBeGreaterThanOrEqual(4);
+    });
+
+    it('removes an installation that still has provider resources only after the revoke succeeds', async () => {
+      registry = makeRegistry({ INSTALLATION_TTL_HOURS: '10000' });
+      const installation = await enroll(registry, 'provider-purge-0001', { deviceName: RUNNER });
+      const id = String(installation.installationId);
+      expect((await registry.fetch(request(installationPath(installation, 'provision'), 'POST', String(installation.installationCredential), { generation: GEN }))).status).toBe(200);
+      expect(provider.tunnels.size).toBe(1);
+      expect(provider.records.size).toBe(1);
+      // A half-finished provisioning: resources exist, never confirmed.
+      const record = get(id)!;
+      delete record.everProvisioned;
+      record.phase = 'enabling';
+      storage.values.set(`installation:${id}`, record);
+      setStats(1);
+
+      const original = provider.fetch.getMockImplementation()!;
+      let failing = true;
+      let recordPresentDuringTeardown: boolean[] = [];
+      provider.fetch.mockImplementation(async (input, init) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url);
+        if (String(init?.method ?? 'GET') === 'DELETE') {
+          recordPresentDuringTeardown.push(exists(id));
+          if (failing && url.pathname.includes('/cfd_tunnel/') && !url.pathname.endsWith('/connections')) throw new TypeError('provider down');
+        }
+        return original(input, init);
+      });
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      vi.setSystemTime(NOW + 49 * HOUR);
+      await registry.alarm();
+      // Revoke failed: record untouched (not deleted, not left half-revoked), counter intact.
+      expect(exists(id)).toBe(true);
+      expect(get(id)?.revoked).toBe(false);
+      expect(stats().activeInstallations).toBe(1);
+      expect(stats().purgedInstallations).toBeUndefined();
+      expect(errors).toHaveBeenCalledWith('installation purge failed');
+      expect(JSON.stringify(errors.mock.calls)).not.toContain('provider down');
+      expect(JSON.stringify(errors.mock.calls)).not.toContain(id);
+
+      failing = false;
+      recordPresentDuringTeardown = [];
+      vi.setSystemTime(NOW + 50 * HOUR);
+      await registry.alarm();
+      expect(provider.tunnels.size).toBe(0);
+      expect(provider.records.size).toBe(0);
+      expect(recordPresentDuringTeardown.length).toBeGreaterThan(0);
+      expect(recordPresentDuringTeardown.every(Boolean)).toBe(true);
+      expect(exists(id)).toBe(false);
+      // Decremented exactly once even though both disable() and the purge could have.
+      expect(stats().activeInstallations).toBe(0);
+      expect(stats().purgedInstallations).toBe(1);
+    });
+
+    it('a failing R2 delete leaves the record and is retried next hour; other installs are unaffected and the alarm is re-armed', async () => {
+      registry = makeRegistry();
+      const bad = await enroll(registry, 'r2-fail-0001', { deviceName: RUNNER });
+      const badId = String(bad.installationId);
+      expect((await registry.fetch(rawRequest(`/v1/installations/${badId}/diagnostics`, 'POST', String(bad.installationCredential), new TextEncoder().encode('{"x":1}')))).status).toBe(201);
+      const good = seed({}, 49 * HOUR);
+      setStats(2);
+      diagnostics.delete.mockRejectedValueOnce(new Error('r2 down'));
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.setSystemTime(NOW + 48 * HOUR);
+      await registry.alarm();
+      expect(exists(good)).toBe(false);
+      expect(exists(badId)).toBe(true);
+      expect(keysMentioning(badId).some((key) => key.startsWith('diagnostics-meta:'))).toBe(true);
+      expect(storage.alarmAt).toBe(NOW + 49 * HOUR);
+      vi.setSystemTime(NOW + 49 * HOUR);
+      await registry.alarm();
+      expect(keysMentioning(badId)).toEqual([]);
+      expect(diagnostics.objects.size).toBe(0);
+      expect(stats().diagnosticsBytesUsed).toBe(0);
+      errors.mockRestore();
+    });
+  });
+
+  describe('limits', () => {
+    it('purges at most 100 per run, oldest first, and drains a 1,000-record fixture over 10 runs', async () => {
+      // Distinct last-seen times: id n was last seen (49h + n minutes) ago.
+      const ids: string[] = [];
+      for (let n = 0; n < 1000; n += 1) {
+        const overrides: Record<string, unknown> = n % 3 === 0 ? { revoked: true, archived: true } : {};
+        if (n % 5 === 0) overrides.testing = true;
+        ids.push(seed(overrides, 49 * HOUR + n * MINUTE));
+      }
+      const unrevoked = ids.filter((id) => !get(id)?.revoked).length;
+      for (let n = 0; n < 40; n += 1) storage.values.set(`alert:${ids[n]}:c:${n}`, { n });
+      const pinned = seed({ keep: true }, 500 * HOUR);
+      const real = seed({ deviceName: REAL, keep: true }, 500 * HOUR);
+      setStats(unrevoked + 2);
+      registry = makeRegistry({ INSTALLATION_TTL_HOURS: '100000' });
+
+      await registry.alarm();
+      const remaining = () => ids.filter(exists);
+      expect(remaining()).toHaveLength(900);
+      // The 100 longest-offline went first (highest n).
+      for (const id of ids.slice(900)) expect(exists(id)).toBe(false);
+      for (const id of ids.slice(0, 900)) expect(exists(id)).toBe(true);
+      expect(stats().purgedInstallations).toBe(100);
+
+      for (let run = 2; run <= 10; run += 1) {
+        vi.setSystemTime(NOW + (run - 1) * HOUR);
+        await registry.alarm();
+        expect(remaining()).toHaveLength(1000 - run * 100);
+      }
+      expect(remaining()).toHaveLength(0);
+      expect(stats().purgedInstallations).toBe(1000);
+      expect(stats().activeInstallations).toBe(2);
+      expect(stats().enrollments).toBe(5000);
+      expect(exists(pinned)).toBe(true);
+      expect(exists(real)).toBe(true);
+      expect([...storage.values.keys()].filter((key) => key.startsWith('alert:'))).toEqual([]);
+      expect(Math.max(...storage.deleteBatches)).toBeLessThanOrEqual(128);
+      // An 11th run has nothing left to do.
+      await registry.alarm();
+      expect(stats().purgedInstallations).toBe(1000);
+    });
+
+    it('purges at most 10 installs that need provider calls per run, in addition to the plain ones', async () => {
+      const withProvider: string[] = [];
+      for (let n = 0; n < 12; n += 1) {
+        const id = seed({ phase: 'enabling', desiredEnabled: true, generation: GEN, tunnelId: 'tunnel-x', deviceName: RUNNER });
+        withProvider.push(id);
+      }
+      const plain = Array.from({ length: 5 }, () => seed({}));
+      setStats(17);
+      registry = makeRegistry({ INSTALLATION_TTL_HOURS: '100000' });
+      await registry.alarm();
+      expect(withProvider.filter(exists)).toHaveLength(2);
+      expect(plain.filter(exists)).toHaveLength(0);
+      await registry.alarm();
+      expect(withProvider.filter(exists)).toHaveLength(0);
+      expect(stats().activeInstallations).toBe(0);
+    });
+  });
+
+  describe('a purged installation calling back', () => {
+    const NEVER = 'f'.repeat(8);
+
+    it('gets exactly the response of an id that never existed, on every installation route, with no writes', async () => {
+      const installation = await enroll(registry, 'callback-0001', { deviceName: RUNNER });
+      const id = String(installation.installationId);
+      const credential = String(installation.installationCredential);
+      vi.setSystemTime(NOW + 48 * HOUR);
+      await registry.alarm();
+      expect(exists(id)).toBe(false);
+
+      const probes: Array<[string, string, unknown?]> = [
+        ['GET', 'status'], ['POST', 'provision', { generation: GEN }], ['POST', 'reconcile', {}], ['POST', 'disable'],
+        ['POST', 'revoke'], ['POST', 'reactivate'], ['POST', 'reenroll'], ['GET', 'approval-requests'],
+        ['POST', 'approval-requests', { reason: 'r' }], ['POST', 'alerts', { category: 'c', subject: 's', message: 'm', severity: 'warning', first_seen: 'a', last_seen: 'b', count: 1 }],
+        ['POST', 'pending-actions/abc/ack'],
+      ];
+      const snapshot = JSON.stringify([...storage.values.entries()]);
+      for (const [method, action, payload] of probes) {
+        const gone = await registry.fetch(request(`/v1/installations/${id}/${action}`, method, credential, payload));
+        const never = await registry.fetch(request(`/v1/installations/${NEVER}/${action}`, method, credential, payload));
+        expect(gone.status, action).toBe(never.status);
+        expect(gone.status, action).toBe(401);
+        expect(await gone.text(), action).toBe(await never.text());
+      }
+      const diag = await registry.fetch(rawRequest(`/v1/installations/${id}/diagnostics`, 'POST', credential, new TextEncoder().encode('{}')));
+      const diagNever = await registry.fetch(rawRequest(`/v1/installations/${NEVER}/diagnostics`, 'POST', credential, new TextEncoder().encode('{}')));
+      expect(diag.status).toBe(diagNever.status);
+      expect(await diag.text()).toBe(await diagNever.text());
+      // Nothing was created or resurrected by any of those calls.
+      expect(JSON.stringify([...storage.values.entries()].filter(([key]) => !key.startsWith('enrollment-source')))).toBe(
+        JSON.stringify(JSON.parse(snapshot).filter(([key]: [string]) => !key.startsWith('enrollment-source'))),
+      );
+      const admin = await registry.fetch(request(`/v1/admin/installations/${id}/diagnostics`, 'GET', adminToken));
+      const adminNever = await registry.fetch(request(`/v1/admin/installations/${NEVER}/diagnostics`, 'GET', adminToken));
+      expect(admin.status).toBe(404);
+      expect(await admin.text()).toBe(await adminNever.text());
+    });
+
+    it('replaying its enrollment nonce mints a brand-new complete installation, never the old half-formed one', async () => {
+      const installation = await enroll(registry, 'callback-nonce-0001', { deviceName: RUNNER });
+      const oldId = String(installation.installationId);
+      vi.setSystemTime(NOW + 48 * HOUR);
+      await registry.alarm();
+      expect(exists(oldId)).toBe(false);
+      // The purge forgot the idempotency record ...
+      expect(storage.values.has('enrollment:callback-nonce-0001')).toBe(false);
+      // ... and even a leftover one is harmless: a missing record falls through to a fresh enrollment.
+      storage.values.set('enrollment:callback-nonce-0001', oldId);
+      const again = await enroll(registry, 'callback-nonce-0001', { deviceName: REAL });
+      const newId = String(again.installationId);
+      expect(newId).not.toBe(oldId);
+      expect(exists(oldId)).toBe(false);
+      expect(get(newId)).toMatchObject({ id: newId, phase: 'disabled', revoked: false, desiredEnabled: false, deviceName: REAL });
+      expect(typeof get(newId)?.createdAt).toBe('string');
+      expect(typeof get(newId)?.lastSeenAt).toBe('string');
+      expect(storage.values.get('enrollment:callback-nonce-0001')).toBe(newId);
+      const status = await registry.fetch(request(installationPath(again, 'status'), 'GET', String(again.installationCredential)));
+      expect(status.status).toBe(200);
+      // The old credential still opens nothing.
+      const old = await registry.fetch(request(installationPath(installation, 'status'), 'GET', String(installation.installationCredential)));
+      expect(old.status).toBe(401);
+    });
+  });
+
+  describe('admin list', () => {
+    it('purged rows stop appearing', async () => {
+      const gone = seed({ archived: true });
+      const kept = seed({ keep: true, archived: true });
+      setStats(2);
+      expect((await listRows()).map((row) => row.installationId).sort()).toEqual([gone, kept].sort());
+      await registry.alarm();
+      expect((await listRows()).map((row) => row.installationId)).toEqual([kept]);
+    });
   });
 });

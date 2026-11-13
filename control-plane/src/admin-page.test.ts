@@ -46,4 +46,9 @@ describe('fleet admin page', () => {
       expect(page).toContain(`'${label}'`);
     }
   });
+
+  it("shows 'last seen' from lastSeenAt, falling back to updatedAt", () => {
+    expect(page).toContain("' · last seen ' + timeAgo(inst.lastSeenAt || inst.updatedAt)");
+    expect(page).not.toContain("last seen ' + timeAgo(inst.updatedAt)");
+  });
 });
