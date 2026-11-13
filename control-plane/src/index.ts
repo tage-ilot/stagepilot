@@ -19,6 +19,12 @@ interface Env {
   BETA_RELEASE_VERSIONS?: string;
   BETA_LATEST_RELEASE_VERSION?: string;
   ENROLLMENT_EXEMPT_SOURCES?: string;
+  // Optional comma-separated testing-network sources, same format and same
+  // normalisation as ENROLLMENT_EXEMPT_SOURCES. An installation that enrolls
+  // from one of them is stored with `testing: true` and `archived: true`
+  // (so the 48h expiry sweep revokes it). Unset/empty/invalid = inert. The
+  // value is a deployment secret: never commit it (see docs).
+  TESTING_SOURCES?: string;
   // Configurable enrollment-quota window in seconds. Defaults to 24h
   // (86400) when unset. TEMPORARY OPERATOR-TESTING OVERRIDE: this is
   // currently deployed as 3600 (1 hour) for the active beta test period so
@@ -81,6 +87,11 @@ interface Installation {
   // Pinned: never auto-revoked by the expiry sweep. Set via the admin keep
   // route, or once by the grandfather migration for provisioned installs.
   keep?: boolean;
+  // Enrolled from a configured TESTING_SOURCES network. Only this boolean is
+  // stored, never the source address. Displays as "Testing", is created
+  // archived, is never pinned (or grandfathered), and leaves via the normal
+  // 48h expiry sweep. Cleared only by the operator (admin testing route).
+  testing?: boolean;
   // Operator-set display location (admin location route). DISPLAY-ONLY: never
   // used for auth or any security decision, and never written by
   // recordRequestGeo. Wins over geolocation and over "Test Install".
@@ -415,6 +426,13 @@ function exemptSources(value: string | undefined): Set<string> {
   return set;
 }
 
+// True when `source` (already normalised) is in the TESTING_SOURCES setting.
+// Reuses the ENROLLMENT_EXEMPT_SOURCES parser, so the format, IPv6 /64
+// handling and drop-invalid-entries behaviour are identical.
+function isTestingSource(value: string | undefined, source: string | undefined): boolean {
+  return Boolean(source) && exemptSources(value).has(source as string);
+}
+
 function bearer(request: Request): string {
   const value = request.headers.get('authorization') ?? '';
   return value.startsWith('Bearer ') ? value.slice(7) : '';
@@ -499,7 +517,10 @@ function formatInstallationLocation(installation: Installation): string {
   // Only an unpinned install whose self-reported deviceName matches a known
   // test host shows "Test Install"; any other install with no geolocation is
   // Unknown. Display-only, never a security decision.
+  // An operator's explicit location wins; a testing-network installation then
+  // shows "Testing" ahead of any reported or network-derived city.
   return installation.locationOverride
+    || (installation.testing ? 'Testing' : '')
     || installation.reportedLocation
     || installation.lastCity
     || installation.lastRegion
@@ -510,6 +531,7 @@ function formatInstallationLocation(installation: Installation): string {
 // Where the displayed location came from, for the admin page hint.
 function installationLocationSource(installation: Installation): string {
   if (installation.locationOverride) return 'admin';
+  if (installation.testing) return 'testing';
   if (installation.reportedLocation) return 'app';
   if (installation.lastCity || installation.lastRegion || installation.lastCountry) return 'network';
   return 'none';
@@ -627,7 +649,7 @@ export class Registry {
     // feature existed (the real fleet). Recorded so it never repeats.
     if (!(await this.state.storage.get<boolean>(SWEEP_GRANDFATHER_FLAG))) {
       for (const installation of rows.values()) {
-        if (installation.phase === 'provisioned' && !installation.revoked && !installation.keep) {
+        if (installation.phase === 'provisioned' && !installation.revoked && !installation.keep && !installation.testing) {
           installation.keep = true;
           await this.save(installation);
         }
@@ -724,6 +746,11 @@ export class Registry {
         if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
         return await this.adminSetKeep(request, adminSetKeep[1]);
       }
+      const adminClearTesting = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/testing$/);
+      if (request.method === 'PATCH' && adminClearTesting) {
+        if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
+        return await this.adminClearTesting(request, adminClearTesting[1]);
+      }
       const adminRevoke = url.pathname.match(/^\/v1\/admin\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/revoke$/);
       if (request.method === 'POST' && adminRevoke) {
         if (!(await this.isAdmin(request))) return reply({ error: 'unauthorized' }, 401);
@@ -819,7 +846,7 @@ export class Registry {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeInstallationRate(installation, 'mutation');
-        return await this.withProviderLane('recovery', () => this.reenroll(installation));
+        return await this.withProviderLane('recovery', () => this.reenroll(installation, request));
       }
       // Authenticated Enable on a known-but-disabled-or-revoked installation:
       // unlike the other routes below, this deliberately allows a revoked
@@ -1278,6 +1305,10 @@ export class Registry {
         createdAt: now,
         updatedAt: now,
       };
+      if (isTestingSource(this.env.TESTING_SOURCES, source)) {
+        installation.testing = true;
+        installation.archived = true;
+      }
       this.applyDeviceName(installation, input.deviceName);
       this.applyReportedLocation(installation, input.location);
       const nextQuota: SourceQuota = {
@@ -1752,6 +1783,7 @@ export class Registry {
         label: installation.label || '',
         archived: installation.archived ?? false,
         keep: installation.keep ?? false,
+        testing: installation.testing ?? false,
         // When the sweep will revoke this installation; null if pinned/revoked.
         expiresAt: installation.keep || installation.revoked ? null : new Date(Date.parse(installation.createdAt) + ttlMs).toISOString(),
         location: formatInstallationLocation(installation),
@@ -1831,9 +1863,31 @@ export class Registry {
     if (typeof keep !== 'boolean') {
       return reply({ error: 'invalid request' }, 400);
     }
+    // A testing-network installation is never pinned: pinning would exempt it
+    // from the 48h sweep. The operator must clear `testing` first.
+    if (keep && installation.testing) {
+      return reply({ error: 'testing installation cannot be pinned; clear testing first' }, 409);
+    }
     const updated: Installation = { ...installation, keep, updatedAt: new Date().toISOString() };
     await this.state.storage.put(`installation:${id}`, updated);
     return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, keep: updated.keep ?? false, location: formatInstallationLocation(updated) });
+  }
+
+  // Clear-only: lets the operator take an installation out of the testing
+  // state (for example a real install behind the testing network) so it can
+  // be pinned. There is deliberately no way to SET testing here; only
+  // enrollment from a TESTING_SOURCES network does that. Archived stays as is.
+  private async adminClearTesting(request: Request, id: string): Promise<Response> {
+    const installation = await this.state.storage.get<Installation>(`installation:${id}`);
+    if (!installation) return reply({ error: 'not found' }, 404);
+    const input = await body(request);
+    if (input.testing !== false) {
+      return reply({ error: 'invalid request' }, 400);
+    }
+    const updated: Installation = { ...installation, updatedAt: new Date().toISOString() };
+    delete updated.testing;
+    await this.state.storage.put(`installation:${id}`, updated);
+    return reply({ ...publicInstallation(updated), label: updated.label || '', archived: updated.archived ?? false, keep: updated.keep ?? false, testing: false, location: formatInstallationLocation(updated) });
   }
 
   // NOTE: the route (/v1/admin/cities) and its `cities` response key keep their
@@ -2145,7 +2199,7 @@ export class Registry {
   // -- so a legitimate owner can regenerate repeatedly without ever being
   // rate-limited by ENROLLMENTS_PER_SOURCE, while an attacker who does not
   // hold the installation credential still cannot reach this path at all.
-  private async reenroll(installation: Installation): Promise<Response> {
+  private async reenroll(installation: Installation, request: Request): Promise<Response> {
     await this.disable(installation, true);
     const stats = await this.stats();
     if ((this.env.ENROLLMENT_ENABLED ?? 'true') !== 'true') {
@@ -2168,6 +2222,10 @@ export class Registry {
       createdAt: now,
       updatedAt: now,
     };
+    if (isTestingSource(this.env.TESTING_SOURCES, normalizeSourceAddress(request.headers.get('cf-connecting-ip') ?? ''))) {
+      fresh.testing = true;
+      fresh.archived = true;
+    }
     stats.activeInstallations += 1;
     stats.enrollments += 1;
     await this.state.storage.put({

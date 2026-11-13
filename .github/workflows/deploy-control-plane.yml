@@ -43,6 +43,7 @@ jobs:
       BETA_RELEASE_VERSIONS: ${{ vars.BETA_RELEASE_VERSIONS }}
       BETA_LATEST_RELEASE_VERSION: ${{ vars.BETA_LATEST_RELEASE_VERSION }}
       ENROLLMENT_EXEMPT_SOURCES: ${{ vars.ENROLLMENT_EXEMPT_SOURCES }}
+      TESTING_SOURCES: ${{ vars.TESTING_SOURCES }}
       ENROLLMENT_WINDOW_SECONDS: ${{ vars.ENROLLMENT_WINDOW_SECONDS }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
@@ -77,6 +78,7 @@ jobs:
             --var BETA_RELEASE_VERSIONS:${{ vars.BETA_RELEASE_VERSIONS }}
             --var BETA_LATEST_RELEASE_VERSION:${{ vars.BETA_LATEST_RELEASE_VERSION }}
             --var ENROLLMENT_EXEMPT_SOURCES:${{ vars.ENROLLMENT_EXEMPT_SOURCES }}
+            --var TESTING_SOURCES:${{ vars.TESTING_SOURCES }}
             --var ENROLLMENT_WINDOW_SECONDS:${{ vars.ENROLLMENT_WINDOW_SECONDS }}
       - name: Deploy and install Worker runtime secrets
         uses: cloudflare/wrangler-action@v4
@@ -96,6 +98,7 @@ jobs:
             --var BETA_RELEASE_VERSIONS:${{ vars.BETA_RELEASE_VERSIONS }}
             --var BETA_LATEST_RELEASE_VERSION:${{ vars.BETA_LATEST_RELEASE_VERSION }}
             --var ENROLLMENT_EXEMPT_SOURCES:${{ vars.ENROLLMENT_EXEMPT_SOURCES }}
+            --var TESTING_SOURCES:${{ vars.TESTING_SOURCES }}
             --var ENROLLMENT_WINDOW_SECONDS:${{ vars.ENROLLMENT_WINDOW_SECONDS }}
           secrets: |
             CLOUDFLARE_API_TOKEN
