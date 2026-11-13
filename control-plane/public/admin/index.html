@@ -601,7 +601,7 @@
       main.appendChild(title);
 
       var locHint = inst.locationSource === 'app' ? ' (IP lookup by app)' : inst.locationSource === 'network' ? ' (network guess)' : inst.locationSource === 'admin' ? ' (set by admin)' : '';
-      main.appendChild(el('div', 'sub', inst.location + locHint + ' · last seen ' + timeAgo(inst.updatedAt)));
+      main.appendChild(el('div', 'sub', inst.location + locHint + ' · last seen ' + timeAgo(inst.lastSeenAt || inst.updatedAt)));
       if (inst.deviceName && inst.deviceName !== titleText) {
         main.appendChild(el('div', 'sub quiet', 'reported hostname: ' + inst.deviceName));
       }

@@ -40,6 +40,9 @@ Per run, oldest first:
 A failure on one installation logs a generic message, is skipped, and is retried next hour.
 A never-provisioned backlog of ~400 drains in about 4 runs.
 
+After the revoke step the same run also purges offline test installations (next section), up to
+100 purges per run, which is in addition to, not instead of, the caps above.
+
 ## Testing sources
 
 Installations that enroll from our own testing network are test installations. The deployment
@@ -100,6 +103,82 @@ case-insensitive, whole-name match).
 
 Rollback: redeploy the previous Worker version. Rows already archived keep `archived: true` and a
 possible `archivedByOperator: true`, both harmless to older versions (unknown fields are ignored).
+
+## Permanent removal of offline test installations
+
+> **This deletes data permanently.** A purged installation cannot be restored. Rolling back the
+> Worker version does not bring the records back; only a Durable Object backup would.
+
+Revoking and archiving a test installation left its record, alerts, approvals and diagnostics in
+storage forever. The hourly sweep now deletes them completely.
+
+**Identified as a test install:** `installation.testing === true` (enrolled from `TESTING_SOURCES`)
+or `isKnownTestDevice(deviceName)` (`runnervm*`, the macOS runner UUID names, exactly `agent-hub`,
+exactly `stagepilot-ci`).
+
+**Not online for 48 hours:** `lastSeen(inst) = lastSeenAt ?? updatedAt ?? createdAt`, and
+`now - lastSeen >= TEST_PURGE_OFFLINE_HOURS` (48). Optional Worker var `INSTALLATION_TEST_PURGE_HOURS`
+(a number >= 1; invalid values fall back to 48).
+
+**`lastSeenAt`:** an ISO time set whenever an installation proves its credential: the status
+check-in, provision, reconcile, alerts, approvals, diagnostics, pending-action ack, reenroll,
+reactivate, and the anonymous check-in replay of `enroll` (a request from a revoked installation
+that still presents its credential also counts: it is online). It is written at most once per 10
+minutes per installation (`LAST_SEEN_WRITE_INTERVAL_MS`), so storage writes do not multiply. A wrong
+credential never sets it. Unlike `updatedAt` it is not bumped by admin actions (label, pin, archive).
+Installations that have not checked in since this field was introduced fall back to `updatedAt`,
+which is conservative (admin actions only delay a purge). It is returned by
+`GET /v1/admin/installations` as `lastSeenAt` (null when never recorded); the admin page shows
+"last seen" from `lastSeenAt || updatedAt`.
+
+**Purge rule.** In the sweep, after the revoke step, a test installation is purged when ALL hold:
+
+- it is not pinned (`keep`);
+- it was never provisioned (`everProvisioned` is not set) and its phase is not `provisioned`;
+- `lastSeen` is at least the purge window ago.
+
+Whether it was already revoked or archived does not matter, so the existing revoked test rows drain
+too. The conditions are judged on the state at the start of the run, so the revoke done by the same
+run (which bumps `updatedAt` and resets the phase) neither delays nor enables a purge. The 48h
+from-creation revoke rule is unchanged. Real installations are never matched: pinned, provisioned or
+ever-provisioned installs and any install whose name is not a known test name and that was not
+enrolled from a testing source are always kept, however long they are offline. `deviceName` is
+self-reported and still never affects authentication; the only thing a real installation that
+spoofs a test hostname can do is get **itself** purged, and only if it is unpinned and has never
+provisioned.
+
+**What is deleted** (per installation id, children first, the `installation:<id>` record last, in
+`storage.delete` batches of at most 128 keys):
+
+- `installation:<id>`
+- `alert:<id>:*`
+- `approval:<id>:*`
+- `pending-action:<id>:*`
+- `diagnostics-meta:<id>:*` and the matching R2 objects in `DIAGNOSTICS` (each meta record's `key`,
+  the same way the diagnostics expiry does it); `diagnosticsBytesUsed` is reduced by their size
+- the `enrollment:<nonce>` idempotency records that point at the id
+- the in-memory token cache entry
+
+If the installation still has provider resources (`generation` or `tunnelId`) the existing revoke
+path runs first on the `recovery` lane and the record is deleted only after it succeeds. Any failure
+(provider, R2, storage) logs a generic message, leaves the record, and is retried next hour.
+
+**Counters.** `activeInstallations` drops by one only when the installation was still counted as
+active (never twice, never below 0). `enrollments` is a historic total and is not changed. The stats
+object gains an optional `purgedInstallations` total (stored stats without it stay valid).
+
+**Limits.** At most 100 purges per run (oldest `lastSeen` first), of which at most 10 may need
+Cloudflare calls, on top of the revoke caps. One failing installation does not stop the run and the
+alarm is re-armed in `finally`.
+
+**A purged installation calling back** is indistinguishable from an id that never existed (401
+`unauthorized` on installation routes, 404 on admin routes). Enrollment: `enrollment:<nonce>` maps
+a nonce to an installation id. The purge removes those records, and even a leftover one is harmless:
+enroll finds no installation behind it and mints a brand-new complete installation with a new id,
+so a purged record can never reappear half-formed.
+
+Rollback: redeploy the previous Worker version. Already purged records are gone for good;
+`lastSeenAt` is an unknown field to the older version and is ignored.
 
 ## Locations, Test Install, and the manual override
 

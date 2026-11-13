@@ -36,6 +36,10 @@ interface Env {
   // Optional override (hours, >= 1) for the unpinned-installation lifetime.
   // Invalid values fall back to the 48h default.
   INSTALLATION_TTL_HOURS?: string;
+  // Optional override (hours, >= 1) for how long a TEST installation must have
+  // been offline before the sweep permanently deletes it. Invalid values fall
+  // back to the 48h default.
+  INSTALLATION_TEST_PURGE_HOURS?: string;
   // Static asset binding for the fleet admin panel (control-plane/public),
   // configured via the [assets] block in wrangler.toml.
   ASSETS?: Fetcher;
@@ -61,6 +65,12 @@ interface Installation {
   revoked: boolean;
   createdAt: string;
   updatedAt: string;
+  // Last time this installation made an authenticated request (check-in,
+  // status, provision, reconcile, alerts, ...). Written at most once per
+  // LAST_SEEN_WRITE_INTERVAL_MS so storage writes stay bounded. Unlike
+  // `updatedAt` it is NOT bumped by admin actions. Drives the offline purge
+  // of test installations; legacy rows without it fall back to updatedAt.
+  lastSeenAt?: string;
   statusRate?: RateWindow;
   mutationRate?: RateWindow;
   providerConfirmedAt?: number;
@@ -210,6 +220,9 @@ interface RegistryStats {
   // only billing past the free tier, so this counter is what actually stops
   // writes once the operator's chosen ceiling is reached.
   diagnosticsBytesUsed: number;
+  // Running total of installations permanently deleted by the offline purge.
+  // Optional so a stats record stored before this field existed stays valid.
+  purgedInstallations?: number;
 }
 
 interface SourceQuota extends RateWindow {
@@ -258,6 +271,16 @@ const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const SWEEP_MAX_LOCAL = 100;
 const SWEEP_MAX_PROVIDER = 10;
 const SWEEP_GRANDFATHER_FLAG = 'sweep:grandfathered';
+// Test installations (testing network or known test hostname) that have not
+// been seen for this long are permanently deleted by the sweep.
+export const TEST_PURGE_OFFLINE_HOURS = 48;
+// At most this many installations are purged per sweep run (in addition to the
+// revoke caps above); the backlog drains over successive hourly runs.
+const SWEEP_MAX_PURGE = 100;
+// lastSeenAt is rewritten at most this often per installation.
+const LAST_SEEN_WRITE_INTERVAL_MS = 10 * 60 * 1000;
+// Cloudflare Durable Object storage.delete([...]) accepts at most 128 keys.
+const STORAGE_DELETE_BATCH = 128;
 const BETA_RELEASE_REPOSITORY = 'tage-ilot/stagepilot-beta';
 const RELEASE_VERSION = /^\d+\.\d+\.\d+-beta\.\d+$/;
 const RELEASE_METADATA_PER_MINUTE = 30;
@@ -519,6 +542,21 @@ export function isKnownTestDevice(deviceName: string | undefined): boolean {
   return TEST_DEVICE_PATTERNS.some((pattern) => pattern.test(deviceName));
 }
 
+// "Identified as a test install": the installation came from a configured
+// testing network, or self-reports a known test hostname. deviceName is
+// untrusted: this only ever DELETES data of an unpinned, never-provisioned
+// installation, it never grants access or affects authentication.
+export function isTestInstallation(installation: Pick<Installation, 'testing' | 'deviceName'>): boolean {
+  return installation.testing === true || isKnownTestDevice(installation.deviceName);
+}
+
+// Best available "last online" time as epoch ms: lastSeenAt, else updatedAt
+// (legacy rows), else createdAt. An unparseable value yields NaN, which the
+// caller treats as "not provably offline" (never purged).
+export function lastSeenMs(installation: Pick<Installation, 'lastSeenAt' | 'updatedAt' | 'createdAt'>): number {
+  return Date.parse(installation.lastSeenAt ?? installation.updatedAt ?? installation.createdAt);
+}
+
 function formatInstallationLocation(installation: Installation): string {
   // Only an unpinned install whose self-reported deviceName matches a known
   // test host shows "Test Install"; any other install with no geolocation is
@@ -648,6 +686,25 @@ export class Registry {
     return hours * 60 * 60 * 1000;
   }
 
+  private testPurgeMs(): number {
+    const configured = Number(this.env.INSTALLATION_TEST_PURGE_HOURS ?? '');
+    const hours = Number.isFinite(configured) && configured >= 1 ? configured : TEST_PURGE_OFFLINE_HOURS;
+    return hours * 60 * 60 * 1000;
+  }
+
+  // Purge rule: a TEST installation (testing network or known test hostname)
+  // that has not been seen for the purge window, is not pinned, was never
+  // provisioned and is not currently provisioned. Whether it was already
+  // revoked/archived does not matter. A missing/unparseable last-seen time is
+  // never "offline" (NaN comparison is false), so such a row is kept.
+  private purgeEligible(installation: Installation, now: number, purgeMs: number): boolean {
+    return isTestInstallation(installation)
+      && !installation.keep
+      && !installation.everProvisioned
+      && installation.phase !== 'provisioned'
+      && now - lastSeenMs(installation) >= purgeMs;
+  }
+
   private async sweepExpired(): Promise<void> {
     this.validateConfiguration();
     const rows = await this.state.storage.list<Installation>({ prefix: 'installation:' });
@@ -663,6 +720,14 @@ export class Registry {
       await this.state.storage.put(SWEEP_GRANDFATHER_FLAG, true);
     }
     const now = Date.now();
+    // Purge candidates are decided on the state at the START of the run: the
+    // revoke below bumps updatedAt and resets phase, which must neither delay
+    // (legacy rows fall back to updatedAt) nor enable a purge.
+    const purgeMs = this.testPurgeMs();
+    const candidates = [...rows.values()]
+      .filter((row) => this.purgeEligible(row, now, purgeMs))
+      .sort((left, right) => lastSeenMs(left) - lastSeenMs(right) || left.id.localeCompare(right.id))
+      .map((row) => ({ id: row.id, lastSeenAt: row.lastSeenAt }));
     const ttl = this.installationTtlMs();
     const expired = [...rows.values()]
       .filter((row) => !row.revoked && !row.keep && now - Date.parse(row.createdAt) >= ttl)
@@ -670,6 +735,7 @@ export class Registry {
     let local = 0;
     let provider = 0;
     let providerExhausted = false;
+    const revokeFailed = new Set<string>();
     for (const installation of expired) {
       const needsProvider = Boolean(installation.generation || installation.tunnelId);
       if (needsProvider ? (provider >= SWEEP_MAX_PROVIDER || providerExhausted) : local >= SWEEP_MAX_LOCAL) continue;
@@ -680,6 +746,7 @@ export class Registry {
         await this.save(installation);
       } catch (error) {
         console.error('installation expiry revoke failed');
+        revokeFailed.add(installation.id);
         if (error instanceof Limited) providerExhausted = true;
         try {
           // disable() flags revoked before its provider calls; undo that so
@@ -693,6 +760,117 @@ export class Registry {
           // retried next hour
         }
       }
+    }
+    // Purge phase, on the candidates fixed before the revoke above. One that
+    // failed to revoke is not retried within the same run.
+    let purged = 0;
+    let purgeProvider = 0;
+    const purgedIds = new Set<string>();
+    for (const candidate of candidates) {
+      if (purged >= SWEEP_MAX_PURGE) break;
+      if (revokeFailed.has(candidate.id)) continue;
+      const current = rows.get(`installation:${candidate.id}`);
+      const needsProvider = Boolean(current?.generation || current?.tunnelId);
+      if (needsProvider && (purgeProvider >= SWEEP_MAX_PROVIDER || providerExhausted)) continue;
+      if (needsProvider) purgeProvider += 1;
+      try {
+        if (await this.purgeInstallation(candidate.id, candidate.lastSeenAt)) {
+          purged += 1;
+          purgedIds.add(candidate.id);
+        }
+      } catch (error) {
+        console.error('installation purge failed');
+        if (error instanceof Limited) providerExhausted = true;
+      }
+    }
+    if (purgedIds.size > 0) await this.forgetEnrollmentNonces(purgedIds);
+  }
+
+  // Permanently deletes one test installation and everything stored for it.
+  // Throws (leaving the record in place, to be retried next hour) when the
+  // provider teardown or any deletion fails. The installation record is
+  // deleted LAST, so a partial failure can never leave an orphaned child whose
+  // parent is already gone and unfindable.
+  private async purgeInstallation(id: string, seenAtDecision: string | undefined): Promise<boolean> {
+    const storage = this.state.storage;
+    const installation = await storage.get<Installation>(`installation:${id}`);
+    // Re-check against the stored record: never delete on a stale view. The
+    // time and phase conditions were decided at the start of the run; what
+    // can still change since is a pin, a provisioning, or a fresh sighting.
+    if (!installation || !isTestInstallation(installation) || installation.keep || installation.everProvisioned
+      || installation.lastSeenAt !== seenAtDecision) return false;
+    const wasRevoked = installation.revoked;
+
+    // 1. Provider resources first, through the existing revoke path. Only a
+    //    confirmed teardown lets the deletion continue.
+    if (installation.generation || installation.tunnelId) {
+      try {
+        await this.withProviderLane('recovery', () => this.disable(installation, true));
+      } catch (error) {
+        try {
+          // disable() flags revoked before its provider calls; undo that (only
+          // if we set it) so the retry runs the full path and the counter is
+          // decremented exactly once.
+          const stored = await storage.get<Installation>(`installation:${id}`);
+          if (stored && !wasRevoked && stored.revoked && stored.phase === 'revoking') {
+            stored.revoked = false;
+            await this.save(stored);
+          }
+        } catch {
+          // retried next hour
+        }
+        throw error;
+      }
+    }
+
+    // 2. Collect everything that hangs off this installation id. Every prefix
+    //    ends in ':' so a longer id can never match a shorter one.
+    const keys: string[] = [];
+    for (const prefix of ['alert:', 'approval:', 'pending-action:']) {
+      for (const key of (await storage.list({ prefix: `${prefix}${id}:` })).keys()) keys.push(key);
+    }
+    const diagnostics = await storage.list<DiagnosticsBundleMeta>({ prefix: `diagnostics-meta:${id}:` });
+    let diagnosticsBytes = 0;
+    for (const [metaKey, meta] of diagnostics) {
+      // Mirrors expireOldDiagnostics: R2 object first (idempotent, so a
+      // failure here retries cleanly), then its metadata record.
+      if (this.env.DIAGNOSTICS) await this.env.DIAGNOSTICS.delete(meta.key);
+      keys.push(metaKey);
+      diagnosticsBytes += Number.isFinite(meta.size) ? meta.size : 0;
+    }
+
+    // 3. Children, in batches the platform accepts.
+    for (let index = 0; index < keys.length; index += STORAGE_DELETE_BATCH) {
+      await storage.delete(keys.slice(index, index + STORAGE_DELETE_BATCH));
+    }
+
+    // 4. Counters, then the record itself (issued back to back so they commit
+    //    together). The counter only drops when the installation was still
+    //    counted as active: disable() above already decremented for one it
+    //    revoked, and a revoked one was decremented when it was revoked.
+    const stats = await this.stats();
+    if (!installation.revoked) stats.activeInstallations = Math.max(0, stats.activeInstallations - 1);
+    stats.diagnosticsBytesUsed = Math.max(0, stats.diagnosticsBytesUsed - diagnosticsBytes);
+    stats.purgedInstallations = (stats.purgedInstallations ?? 0) + 1;
+    await storage.put('registry:stats', stats);
+    await storage.delete([`installation:${id}`]);
+    this.tokenCache.delete(id);
+    return true;
+  }
+
+  // enrollment:<nonce> -> installation id (idempotency record). Without this
+  // a purged id's nonce would keep pointing at nothing. Replaying such a nonce
+  // is already safe (a missing installation falls through to a brand-new
+  // enrollment with a new id), so this is hygiene; failures are ignored.
+  private async forgetEnrollmentNonces(purgedIds: Set<string>): Promise<void> {
+    try {
+      const rows = await this.state.storage.list<string>({ prefix: 'enrollment:' });
+      const stale = [...rows.entries()].filter(([, value]) => purgedIds.has(value)).map(([key]) => key);
+      for (let index = 0; index < stale.length; index += STORAGE_DELETE_BATCH) {
+        await this.state.storage.delete(stale.slice(index, index + STORAGE_DELETE_BATCH));
+      }
+    } catch {
+      console.error('installation purge could not clear enrollment records');
     }
   }
 
@@ -800,7 +978,7 @@ export class Registry {
       const installationApproval = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/approval-requests$/);
       if (installationApproval && (request.method === 'POST' || request.method === 'GET')) {
         const installation = await this.state.storage.get<Installation>(`installation:${installationApproval[1]}`);
-        if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         if (request.method === 'GET') {
@@ -815,7 +993,7 @@ export class Registry {
       );
       if (request.method === 'POST' && actionAck) {
         const installation = await this.state.storage.get<Installation>(`installation:${actionAck[1]}`);
-        if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeInstallationRate(installation, 'mutation');
@@ -824,7 +1002,7 @@ export class Registry {
       const installationAlert = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/alerts$/);
       if (request.method === 'POST' && installationAlert) {
         const installation = await this.state.storage.get<Installation>(`installation:${installationAlert[1]}`);
-        if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeInstallationRate(installation, 'mutation');
@@ -839,7 +1017,7 @@ export class Registry {
       const installationDiagnostics = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/diagnostics$/);
       if (request.method === 'POST' && installationDiagnostics) {
         const installation = await this.state.storage.get<Installation>(`installation:${installationDiagnostics[1]}`);
-        if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeDiagnosticsRate(installation);
@@ -848,7 +1026,7 @@ export class Registry {
       const reenrollRoute = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/reenroll$/);
       if (request.method === 'POST' && reenrollRoute) {
         const installation = await this.state.storage.get<Installation>(`installation:${reenrollRoute[1]}`);
-        if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeInstallationRate(installation, 'mutation');
@@ -861,7 +1039,7 @@ export class Registry {
       const reactivateRoute = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/reactivate$/);
       if (request.method === 'POST' && reactivateRoute) {
         const installation = await this.state.storage.get<Installation>(`installation:${reactivateRoute[1]}`);
-        if (!installation || !(await this.isInstallation(request, installation))) {
+        if (!installation || !(await this.authenticateInstallation(request, installation, true))) {
           return reply({ error: 'unauthorized' }, 401);
         }
         await this.takeInstallationRate(installation, 'mutation');
@@ -870,7 +1048,7 @@ export class Registry {
       const route = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/(status|provision|disable|revoke|reconcile)$/);
       if (!route) return reply({ error: 'not found' }, 404);
       const installation = await this.state.storage.get<Installation>(`installation:${route[1]}`);
-      if (!installation || installation.revoked || !(await this.isInstallation(request, installation))) {
+      if (!installation || !(await this.authenticateInstallation(request, installation))) {
         return reply({ error: 'unauthorized' }, 401);
       }
       const action = route[2];
@@ -1176,6 +1354,32 @@ export class Registry {
     return equalSecret(token, await this.credential(installation.id, installation.credentialGeneration ?? 0));
   }
 
+  // Credential check used by every installation-authenticated route. A request
+  // that proves the installation credential counts as the installation being
+  // online (even if it is revoked and about to be refused), so it refreshes
+  // lastSeenAt. Returns false for an unproven credential (nothing is written)
+  // and, unless allowRevoked, for a revoked installation.
+  private async authenticateInstallation(
+    request: Request,
+    installation: Installation,
+    allowRevoked = false,
+  ): Promise<boolean> {
+    if (!(await this.isInstallation(request, installation))) return false;
+    await this.touchLastSeen(installation);
+    return allowRevoked || !installation.revoked;
+  }
+
+  // Throttled: lastSeenAt is persisted at most once per
+  // LAST_SEEN_WRITE_INTERVAL_MS so a polling fleet does not multiply storage
+  // writes. Within the window nothing is changed or written.
+  private async touchLastSeen(installation: Installation): Promise<void> {
+    const now = Date.now();
+    const previous = installation.lastSeenAt === undefined ? NaN : Date.parse(installation.lastSeenAt);
+    if (Number.isFinite(previous) && now - previous >= 0 && now - previous < LAST_SEEN_WRITE_INTERVAL_MS) return;
+    installation.lastSeenAt = new Date(now).toISOString();
+    await this.save(installation);
+  }
+
   // Authenticated reactivation for plain Enable on a previously-known but
   // disabled/revoked installation: the caller already proved ownership of
   // `installation` via its still-valid installation credential (isInstallation),
@@ -1310,6 +1514,7 @@ export class Registry {
         revoked: false,
         createdAt: now,
         updatedAt: now,
+        lastSeenAt: now,
       };
       if (isTestingSource(this.env.TESTING_SOURCES, source)) {
         installation.testing = true;
@@ -1331,6 +1536,11 @@ export class Registry {
         'enrollment-source-index': index.includes(sourceHash) ? index : [...index, sourceHash],
         'registry:stats': stats,
       });
+    }
+    if (installation) {
+      // The lightweight check-in (this route on every run() start) proves the
+      // installation is online, whether or not it was just re-enabled.
+      await this.touchLastSeen(installation);
     }
     if (installation && !installation.revoked) {
       // Idempotent replay of an already-known, active installation (most
@@ -1790,6 +2000,10 @@ export class Registry {
         archived: installation.archived ?? false,
         keep: installation.keep ?? false,
         testing: installation.testing ?? false,
+        // Last authenticated request (throttled to one write per 10 minutes);
+        // null for installations that have not checked in since this field
+        // was introduced. The admin page falls back to updatedAt.
+        lastSeenAt: installation.lastSeenAt ?? null,
         // When the sweep will revoke this installation; null if pinned/revoked.
         expiresAt: installation.keep || installation.revoked ? null : new Date(Date.parse(installation.createdAt) + ttlMs).toISOString(),
         location: formatInstallationLocation(installation),
@@ -2227,6 +2441,7 @@ export class Registry {
       revoked: false,
       createdAt: now,
       updatedAt: now,
+      lastSeenAt: now,
     };
     if (isTestingSource(this.env.TESTING_SOURCES, normalizeSourceAddress(request.headers.get('cf-connecting-ip') ?? ''))) {
       fresh.testing = true;
