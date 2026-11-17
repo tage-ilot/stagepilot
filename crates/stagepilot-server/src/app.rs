@@ -92,6 +92,7 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         ))
         .route("/ws", get(ws_state))
         .merge(crate::playback_routes::routes())
+        .merge(crate::playback_library::routes())
         .with_state(runtime.clone());
 
     let router = match options.web_root.filter(|r| r.join("index.html").is_file()) {
@@ -344,6 +345,7 @@ fn restart_relevant(settings: &PersistentSettings) -> Value {
         for key in [
             "midi",
             "playback_api",
+            "playback_library",
             "integration_modes",
             "propresenter",
             "planning_center_length_undo",
@@ -363,7 +365,7 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
     let Some(value @ Value::Object(_)) = parsed.clone() else {
         return unprocessable(validation::invalid_body(&body, parsed.as_ref()));
     };
-    let requested = match PersistentSettings::from_value(value) {
+    let mut requested = match PersistentSettings::from_value(value) {
         Ok((settings, _migration)) => settings,
         Err(errors) => {
             let detail = errors
@@ -380,6 +382,9 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
         }
     };
     let _serialised = rt.pco.lock.lock().await;
+    // The Playback library connection is changed by its own route only (`PUT /api/v1/playback-library/settings`),
+    // so a save of anything else, even from an older window, never switches it on or off.
+    requested.playback_library = rt.settings_service.snapshot().playback_library;
     let previous = rt.settings_service.effective_runtime_settings();
     let previous_effective = rt.settings_service.effective_snapshot();
     let timer_running = rt.store.snapshot().timer.status == TimerStatus::Running;

@@ -60,6 +60,8 @@ pub struct Runtime {
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
     pub helper_install: Arc<crate::helper_install::HelperInstall>,
+    /// The optional Playback library (read-only; asks only while a window asks, and only when on).
+    pub playback_library: Arc<crate::playback_library::PlaybackLibrary>,
 }
 
 /// How often a keychain that has not answered is asked again.
@@ -287,6 +289,7 @@ impl Runtime {
             keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
             keychain_watch: Mutex::new(None),
             helper_install: Arc::new(crate::helper_install::HelperInstall::new()),
+            playback_library: Arc::new(crate::playback_library::PlaybackLibrary::new()),
         });
         runtime.note_keychain_state();
         runtime
