@@ -405,10 +405,9 @@ async fn picking_a_plan_loads_it_like_the_upcoming_one_and_back_returns() {
     let h = harness(&m, settings("42"), &july_12(), PinKeeper::in_memory());
     h.plugin.start().await.unwrap();
     let state = h.store.snapshot();
-    let selection = state.selection.expect("selection after the first load");
-    assert!(!selection.pinned);
-    assert_eq!(selection.plan_id.as_deref(), Some("a"));
-    assert_eq!(state.upcoming.expect("upcoming").plan_id, "a");
+    // Nothing is picked: the state says nothing about it (older states look the same).
+    assert!(state.selection.is_none());
+    assert!(state.upcoming.is_none());
 
     h.pick("c").await;
     let state = h.store.snapshot();
@@ -444,7 +443,7 @@ async fn picking_a_plan_loads_it_like_the_upcoming_one_and_back_returns() {
     h.back().await;
     let state = h.store.snapshot();
     assert_eq!(state.plan.map(|p| p.id).as_deref(), Some("a"));
-    assert!(!state.selection.unwrap().pinned);
+    assert!(state.selection.is_none() && state.upcoming.is_none());
     assert_eq!(h.keeper.get(SOURCE_PLANNING_CENTER), None);
     h.plugin.stop().await.unwrap();
 }
@@ -716,7 +715,7 @@ async fn a_damaged_pin_file_is_ignored_and_loading_goes_on() {
     );
     h.plugin.start().await.unwrap();
     assert_eq!(h.plan_id().as_deref(), Some("a"));
-    assert!(!h.store.snapshot().selection.unwrap().pinned);
+    assert!(h.store.snapshot().selection.is_none());
     assert_eq!(h.plugin.pin(), None);
     // A new pick replaces the damaged file.
     h.pick("b").await;
@@ -803,7 +802,7 @@ async fn the_upcoming_plan_picked_is_not_a_pin_once_it_is_the_upcoming_one() {
     let state = h.store.snapshot();
     assert_eq!(state.plan.map(|p| p.id).as_deref(), Some("b"));
     assert!(
-        !state.selection.unwrap().pinned,
+        state.selection.is_none(),
         "b is the upcoming service now, so nothing is 'not the upcoming service'"
     );
     h.plugin.stop().await.unwrap();

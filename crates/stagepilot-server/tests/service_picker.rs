@@ -152,7 +152,11 @@ async fn picking_a_demo_sunday_pins_it_and_back_to_upcoming_unpins() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["message"], "Back to the upcoming service.");
     assert_eq!(body["state"]["plan"]["id"], "demo-service-plan");
-    assert_eq!(body["state"]["selection"]["pinned"], false);
+    assert!(
+        body["state"].get("selection").is_none(),
+        "nothing is picked: {body}"
+    );
+    assert!(body["state"].get("upcoming").is_none());
     let (_, list) = rig.call("GET", LIST, None).await;
     assert!(list["pinned_id"].is_null());
 
@@ -175,7 +179,11 @@ async fn picking_the_upcoming_plan_is_going_back_to_it() {
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(rig.plan_id().as_deref(), Some("demo-service-plan"));
-    assert_eq!(body["state"]["selection"]["pinned"], false);
+    assert!(
+        body["state"].get("selection").is_none(),
+        "nothing is picked: {body}"
+    );
+    assert!(body["state"].get("upcoming").is_none());
     let (_, list) = rig.call("GET", LIST, None).await;
     assert!(
         list["pinned_id"].is_null(),
@@ -462,7 +470,11 @@ async fn planning_center_plans_are_listed_picked_and_released() {
     let (status, body) = rig.call("DELETE", PIN, None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["state"]["plan"]["id"], "plan-1");
-    assert_eq!(body["state"]["selection"]["pinned"], false);
+    assert!(
+        body["state"].get("selection").is_none(),
+        "nothing is picked: {body}"
+    );
+    assert!(body["state"].get("upcoming").is_none());
 }
 
 #[tokio::test]

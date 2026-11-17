@@ -341,47 +341,71 @@ impl Inner {
         None
     }
 
-    /// Tell the state which service is loaded and whether the operator picked it. `hint` is
-    /// the result of a load that is about to be projected; without one the loaded plan is read
-    /// from the state.
+    /// Tell the state which service is loaded when the operator picked it. `hint` is what a
+    /// load that is about to be projected found; without one the pick is read from the pin
+    /// file. Nothing is said while the upcoming service is loaded and there is no note: a
+    /// state without `selection` means "not picked", which keeps every older state unchanged.
     fn publish_selection(&self, hint: Option<SelectionHint>, plan: Option<&ServicePlan>) {
         let notice = lock(&self.notice).clone();
         let pin = self.keeper().get(SOURCE_PLANNING_CENTER);
         let today = self.today();
         self.store.mutate(|s| {
-            let plan = plan.or(s.plan.as_ref()).cloned();
-            // A pick that is (now) the upcoming service is simply the upcoming service.
-            let is_upcoming =
-                |p: &ServicePlan, u: Option<&UpcomingService>| u.is_some_and(|u| u.plan_id == p.id);
-            let pinned = match (&hint, &plan, &pin) {
-                (Some(h), Some(p), _) => h.pinned && !is_upcoming(p, h.upcoming.as_ref()),
-                (None, Some(p), Some(k)) => {
-                    k.plan_id == p.id
-                        && !k.is_expired(today)
-                        && !is_upcoming(p, s.upcoming.as_ref())
-                }
-                _ => false,
+            let Some(plan) = plan.or(s.plan.as_ref()).cloned() else {
+                s.selection = notice.map(|notice| ServiceSelection {
+                    notice: Some(notice),
+                    ..ServiceSelection::default()
+                });
+                s.upcoming = None;
+                return;
             };
-            let upcoming = if pinned {
-                hint.as_ref()
-                    .and_then(|h| h.upcoming.clone())
-                    .or_else(|| s.upcoming.clone().filter(|u| u.date >= today))
-            } else if s.service_load.status == ServiceLoadStatus::Loaded || hint.is_some() {
-                plan.as_ref().map(|p| UpcomingService {
-                    plan_id: p.id.clone(),
-                    date: p.date,
-                    title: p.title.clone(),
-                })
+            // A pick that is (now) the upcoming service is simply the upcoming service.
+            let (pinned, upcoming) = match hint {
+                Some(h) => {
+                    let is_upcoming = h.upcoming.as_ref().is_some_and(|u| u.plan_id == plan.id);
+                    (h.pinned && !is_upcoming, h.upcoming)
+                }
+                None => (
+                    pin.as_ref()
+                        .is_some_and(|k| k.plan_id == plan.id && !k.is_expired(today)),
+                    None,
+                ),
+            };
+            s.selection = (pinned || notice.is_some()).then(|| ServiceSelection {
+                pinned,
+                plan_id: Some(plan.id.clone()),
+                date: Some(plan.date),
+                notice,
+            });
+            s.upcoming = if pinned {
+                upcoming.or_else(|| s.upcoming.take().filter(|u| u.date >= today))
             } else {
                 None
             };
-            s.selection = Some(ServiceSelection {
+        });
+    }
+
+    /// After a refresh that did not load a plan of its own (nothing found, a question for the
+    /// operator, a pick that ended): keep what the state said, minus a pick that is gone, plus
+    /// the one-time note.
+    fn sync_notice(&self) {
+        let notice = lock(&self.notice).clone();
+        let pin = self.keeper().get(SOURCE_PLANNING_CENTER);
+        self.store.mutate(|s| {
+            let plan = s.plan.as_ref().map(|p| (p.id.clone(), p.date));
+            let held = s.selection.take();
+            let pinned = held.as_ref().is_some_and(|h| h.pinned)
+                && pin
+                    .as_ref()
+                    .is_some_and(|k| plan.as_ref().is_some_and(|(id, _)| &k.plan_id == id));
+            s.selection = (pinned || notice.is_some()).then(|| ServiceSelection {
                 pinned,
-                plan_id: plan.as_ref().map(|p| p.id.clone()),
-                date: plan.as_ref().map(|p| p.date),
+                plan_id: plan.as_ref().map(|(id, _)| id.clone()),
+                date: plan.as_ref().map(|(_, date)| *date),
                 notice,
             });
-            s.upcoming = upcoming;
+            if !pinned {
+                s.upcoming = None;
+            }
         });
     }
 
@@ -648,12 +672,7 @@ impl Inner {
             .keeper()
             .get(SOURCE_PLANNING_CENTER)
             .is_some_and(|p| p.plan_id == plan_id);
-        let back_to_upcoming = plan_id.is_empty()
-            || (self.keeper().get(SOURCE_PLANNING_CENTER).is_none()
-                && snapshot
-                    .upcoming
-                    .as_ref()
-                    .is_some_and(|u| u.plan_id == plan_id));
+        let back_to_upcoming = plan_id.is_empty();
         if pinned_pick || back_to_upcoming {
             self.request_regular_refresh(true).await;
             return;
@@ -1059,9 +1078,9 @@ impl Inner {
             )
             .await;
         } else {
-            // Not found / ambiguous outcomes and a pin that ended carry no plan of their own;
-            // say so, with the one-time notice if there is one.
-            self.publish_selection(None, None);
+            // A pick that ended, or an outcome with no plan of its own, may bring the one-time
+            // note; the selection of a plan that was just loaded was set before it arrived.
+            self.sync_notice();
         }
     }
 

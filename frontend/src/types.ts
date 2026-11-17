@@ -142,9 +142,9 @@ export interface ApplicationState {
   recent_errors: ErrorSummary[];
   last_successful_plan_reload_at: string | null;
   last_action: string | null;
-  /** Which service is loaded and whether the operator picked it (absent until a Services source says). */
+  /** The service the operator picked instead of the upcoming one (absent while the upcoming service is loaded, unless a note is to be shown). */
   selection?: ServiceSelection;
-  /** The upcoming service, even while another one is picked (absent when unknown). */
+  /** The upcoming service, while another one is picked (absent otherwise). */
   upcoming?: UpcomingService;
 }
 

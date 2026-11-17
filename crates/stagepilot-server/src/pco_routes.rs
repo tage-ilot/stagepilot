@@ -777,6 +777,7 @@ const NO_SOURCE_MESSAGE: &str = "Services are not connected yet.";
 const NOT_LISTED_MESSAGE: &str = "That service is not in the list of upcoming services.";
 const PASSED_MESSAGE: &str = "That service date has passed.";
 const TIMER_RUNNING_MESSAGE: &str = "Stop the timer before changing the service.";
+const CHANGE_FAILED_MESSAGE: &str = "The service could not be changed. Try again.";
 const BACK_MESSAGE: &str = "Back to the upcoming service.";
 
 /// `GET /planning-center/plans/upcoming`: plans from today on, for the picker. A failure is a
@@ -896,10 +897,7 @@ async fn change_selection(rt: &Rt, wanted: Option<String>) -> Response {
     };
     if !report.failures.is_empty() {
         let _ = picker.restore_pin(previous);
-        return respond(http_error(
-            503,
-            "The service could not be changed. Try again.",
-        ));
+        return respond(http_error(503, CHANGE_FAILED_MESSAGE));
     }
     match &pin_target {
         Some(plan) => {

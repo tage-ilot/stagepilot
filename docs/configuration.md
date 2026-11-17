@@ -168,8 +168,10 @@ and ignored. It holds across reloads and restarts. It ends at the end of its dat
 (the next reload, or the clock check that runs every 30 seconds, loads the upcoming plan and the state says
 "Back to the upcoming service"), or when the plan is no longer in Planning Center ("The plan you picked is
 not in Planning Center any more; back to the upcoming service"). A failed Planning Center call never ends a
-pick. The application state carries `selection` (`pinned`, `plan_id`, `date`, optional `notice`) and
-`upcoming` (`plan_id`, `date`, `title`); both are left out until a Services source has set them. With
+pick. While a service is picked the application state carries `selection` (`pinned`, `plan_id`, `date`,
+optional `notice`) and `upcoming` (`plan_id`, `date`, `title`); `selection` also appears alone, with a
+`notice` and `pinned: false`, after a pick ended by itself. In every other state both are left out, so the
+state is the same as before the picker existed (no `selection` means "not picked"). With
 `STAGEPILOT_SERVICE_SOURCE=demo` the demo offers today's plan and six weekly Sunday plans.
 
 For a local production-integration smoke test, set all required values in the

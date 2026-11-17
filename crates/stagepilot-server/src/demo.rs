@@ -321,20 +321,22 @@ impl Loader {
         let (plan, pinned, upcoming) = self.plan_to_load(today());
         let notice = lock(&self.notice).clone();
         if let Some(store) = &self.store {
-            let selection = ServiceSelection {
+            // Said only when something is to be said (as the Planning Center source does): a
+            // state without `selection` is the upcoming service, unpicked.
+            let selection = (pinned || notice.is_some()).then(|| ServiceSelection {
                 pinned,
                 plan_id: Some(plan.id.clone()),
                 date: Some(plan.date),
                 notice,
-            };
-            let upcoming = UpcomingService {
+            });
+            let upcoming = pinned.then(|| UpcomingService {
                 plan_id: upcoming.id.clone(),
                 date: upcoming.date,
                 title: upcoming.title.clone(),
-            };
+            });
             store.mutate(move |s| {
-                s.selection = Some(selection);
-                s.upcoming = Some(upcoming);
+                s.selection = selection;
+                s.upcoming = upcoming;
             });
         }
         publish_plan(&self.bus, plan).await;

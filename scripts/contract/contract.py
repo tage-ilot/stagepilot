@@ -73,11 +73,6 @@ RUST_EXTENSIONS = {
     # A finished recording being fitted and saved (F-H5): on the Lightkey status only while it
     # lasts. Rust-only; the contract profiles never hold a save open, so it is normally absent.
     "saving": {"song", "started_at"},
-    # Service date picker: which service is loaded and whether the operator picked it instead of the
-    # upcoming one (`selection`), and the upcoming service itself (`upcoming`), on the application
-    # state. Rust-only; a pick adds no key to the recorded flows (nothing is pinned in them).
-    "selection": {"pinned", "plan_id", "date"},
-    "upcoming": {"plan_id", "date", "title"},
 }
 # Rust-only behaviour. These change what the server does, not the shape of a response, so the
 # replay cannot show them: the recorded transcripts never send the event sequence, and every
