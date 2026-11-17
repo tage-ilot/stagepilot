@@ -18,7 +18,11 @@ plan_position: number,
 /**
  * The plan's length for the song in seconds.
  */
-plan_seconds: number | null, status: PlanMatch, 
+plan_seconds: number | null, 
+/**
+ * The key the plan names for the song (Planning Center's item key), null when it names none.
+ */
+plan_key: string | null, status: PlanMatch, 
 /**
  * How sure the pairing is (`matched` is exact or close; `uncertain` is uncertain); null when unpaired.
  */
