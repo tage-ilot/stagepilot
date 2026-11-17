@@ -100,6 +100,38 @@ pub fn countdown_length(scan: Option<f64>, end: Option<f64>) -> Option<(f64, Len
     }
 }
 
+/// The biggest cover picture the window will ever be sent, in bytes (the helper's are 8 to 77 KB).
+pub const MAX_ARTWORK_BYTES: u32 = 2_000_000;
+/// Sections kept per song (the longest real arrangement seen has 39).
+pub const MAX_SECTIONS: usize = 200;
+/// Longest section name kept, in characters.
+const MAX_SECTION_NAME: usize = 40;
+/// The latest second a section may name (a day).
+const MAX_SECTION_SECONDS: f64 = 86_400.0;
+
+/// The cover picture of a song, described. The picture itself is never in the plan: the window asks
+/// for it on its own route (`/api/v1/playback-library/songs/<id>/artwork`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct LibraryArtwork {
+    /// `image/jpeg` or `image/png`.
+    #[serde(rename = "type")]
+    #[ts(rename = "type")]
+    pub content_type: String,
+    pub bytes: u32,
+    /// The helper's `ETag` for the picture, quotes included. A changed picture has a new one.
+    pub etag: String,
+}
+
+/// One section of the arranged song, on Playback's played clock (seconds from the start).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct LibrarySection {
+    pub name: String,
+    pub start: f64,
+    pub end: f64,
+}
+
 /// One song of a Playback setlist as far as StagePilot shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -127,8 +159,14 @@ pub struct LibrarySong {
     pub length_source: Option<LengthSource>,
     /// The arrangement's name.
     pub arrangement: Option<String>,
-    /// Number of sections of the arrangement (needs the song's own answer; null when not read).
-    pub sections: Option<u32>,
+    /// Number of sections of the arrangement as the helper counts them (needs the song's own
+    /// answer; null when not read). `sections` below holds only the usable ones.
+    pub section_count: Option<u32>,
+    /// The arrangement in playing order (repeats are separate entries), from the song's own answer.
+    /// Entries with odd numbers are left out; empty when none is usable or the answer was not read.
+    pub sections: Vec<LibrarySection>,
+    /// The cover picture, when the helper holds one (helper 0.2 and later).
+    pub artwork: Option<LibraryArtwork>,
     /// When a rented song stops being available (RFC 3339), null when it is not a rental.
     pub rental_expires_utc: Option<String>,
 }
@@ -268,6 +306,9 @@ pub struct Health {
     pub detail: Option<String>,
     pub songs: Option<u32>,
     pub setlists: Option<u32>,
+    /// The helper's `library_revision`: an opaque token that differs whenever Playback's database
+    /// changed. Compared for equality only. Absent on helper 0.1.x, and then "not available".
+    pub library_revision: Option<String>,
 }
 
 /// Reads `GET /health`. Anything odd gives `Database::Unknown`, never a panic.
@@ -287,6 +328,7 @@ pub fn parse_health(value: &Value) -> Health {
         detail: text_of(value, "detail"),
         songs: count_of(value, "songs"),
         setlists: count_of(value, "setlists"),
+        library_revision: text_of(value, "library_revision").map(|v| v.chars().take(64).collect()),
     }
 }
 
@@ -376,7 +418,9 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         countdown_length_s: resolved.map(|(seconds, _)| seconds),
         length_source: resolved.map(|(_, source)| source),
         arrangement: text_of(item, "arrangement"),
-        sections: None,
+        section_count: None,
+        sections: Vec::new(),
+        artwork: artwork_of(item),
         rental_expires_utc: instant_of(item, "rental_expires_utc"),
     })
 }
@@ -423,14 +467,85 @@ pub fn parse_setlist(value: &Value) -> Option<ParsedSetlist> {
     })
 }
 
-/// Adds what `/songs/<id>` knows to a song: the number of sections, and the arrangement's name
-/// when the setlist did not give one. Odd answers change nothing.
+/// A section's time: finite, not negative, at most a day.
+fn section_second(value: Option<&Value>) -> Option<f64> {
+    let n = value?.as_f64()?;
+    (n.is_finite() && (0.0..=MAX_SECTION_SECONDS).contains(&n)).then_some(n)
+}
+
+/// `arrangement_detail.sections[]` as `{name, start, end}` in playing order. An entry whose times are
+/// missing, not numbers, negative, over a day or with its end not after its start is left out; a name
+/// is trimmed and cut at 40 characters (a missing one is "Section"); at most 200 are kept.
+pub fn parse_sections(sections: &Value) -> Vec<LibrarySection> {
+    let Some(list) = sections.as_array() else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|entry| {
+            let start = section_second(entry.get("performed_start"))?;
+            let end = section_second(entry.get("performed_end"))?;
+            if end <= start {
+                return None;
+            }
+            let name: String = entry
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .chars()
+                .filter(|c| !c.is_control())
+                .collect::<String>()
+                .trim()
+                .chars()
+                .take(MAX_SECTION_NAME)
+                .collect();
+            let name = name.trim().to_string();
+            Some(LibrarySection {
+                name: if name.is_empty() { "Section".to_string() } else { name },
+                start,
+                end,
+            })
+        })
+        .take(MAX_SECTIONS)
+        .collect()
+}
+
+/// A song's `artwork` object (`{path, type, bytes, etag}`) as far as the window needs it. Anything
+/// odd (not a JPEG or PNG, no etag or one that is not plain text, a size that is not a number or
+/// over the cap) is no picture: a song without one shows no cover.
+pub fn artwork_of(object: &Value) -> Option<LibraryArtwork> {
+    let art = object.get("artwork")?;
+    let content_type = text_of(art, "type")?.to_ascii_lowercase();
+    if !matches!(content_type.as_str(), "image/jpeg" | "image/png") {
+        return None;
+    }
+    let bytes = u32::try_from(whole_number(art.get("bytes"))?).ok()?;
+    if bytes == 0 || bytes > MAX_ARTWORK_BYTES {
+        return None;
+    }
+    let etag = art.get("etag")?.as_str()?;
+    let plain = !etag.is_empty()
+        && etag.len() <= 80
+        && etag.bytes().all(|b| (0x21..=0x7e).contains(&b) && b != b',');
+    plain.then(|| LibraryArtwork {
+        content_type,
+        bytes,
+        etag: etag.to_string(),
+    })
+}
+
+/// Adds what `/songs/<id>` knows to a song: the sections (their number and the usable ones), the
+/// arrangement's name when the setlist did not give one, and the cover when the setlist item had
+/// none. Odd answers change nothing.
 pub fn apply_detail(song: &mut LibrarySong, detail: &Value) {
+    if song.artwork.is_none() {
+        song.artwork = artwork_of(detail);
+    }
     let Some(arrangement) = detail.get("arrangement_detail") else {
         return;
     };
     if let Some(sections) = arrangement.get("sections").and_then(Value::as_array) {
-        song.sections = u32::try_from(sections.len()).ok();
+        song.section_count = u32::try_from(sections.len()).ok();
+        song.sections = parse_sections(&arrangement["sections"]);
     }
     if song.arrangement.is_none() {
         song.arrangement = text_of(arrangement, "title");
@@ -607,7 +722,9 @@ mod tests {
             countdown_length_s: Some(300.0),
             length_source: Some(LengthSource::LastMeasure),
             arrangement: None,
-            sections: None,
+            section_count: None,
+            sections: Vec::new(),
+            artwork: None,
             rental_expires_utc: None,
         }
     }
@@ -1002,17 +1119,17 @@ mod tests {
             &mut s,
             &json!({"arrangement_detail": {"title": "Short", "sections": [{}, {}, {}]}}),
         );
-        assert_eq!(s.sections, Some(3));
+        assert_eq!(s.section_count, Some(3));
         assert_eq!(s.arrangement.as_deref(), Some("Short"));
         s.arrangement = Some("Default".into());
         apply_detail(
             &mut s,
             &json!({"arrangement_detail": {"title": "Other", "sections": []}}),
         );
-        assert_eq!(s.sections, Some(0));
+        assert_eq!(s.section_count, Some(0));
         assert_eq!(s.arrangement.as_deref(), Some("Default"));
         apply_detail(&mut s, &json!({"arrangement_detail": {"sections": "many"}}));
-        assert_eq!(s.sections, Some(0));
+        assert_eq!(s.section_count, Some(0));
     }
 
     #[test]
@@ -1052,5 +1169,128 @@ mod tests {
             words(json!({"database": "strange"})).0,
             LibraryState::Problem
         );
+    }
+
+    // ---- sections and cover info (F-P1c) ----
+
+    fn names(list: &[LibrarySection]) -> Vec<(&str, f64, f64)> {
+        list.iter().map(|s| (s.name.as_str(), s.start, s.end)).collect()
+    }
+
+    #[test]
+    fn good_sections_keep_their_order_and_repeats() {
+        let value = json!([
+            {"name": "Count Off", "performed_start": 0.0, "performed_end": 3.5},
+            {"name": "Verse 1", "performed_start": 3.5, "performed_end": 20},
+            {"name": "Verse 1", "performed_start": 20, "performed_end": 36.25},
+        ]);
+        assert_eq!(
+            names(&parse_sections(&value)),
+            [("Count Off", 0.0, 3.5), ("Verse 1", 3.5, 20.0), ("Verse 1", 20.0, 36.25)]
+        );
+    }
+
+    #[test]
+    fn junk_sections_are_dropped_one_by_one() {
+        let value = json!([
+            {"name": "Missing end", "performed_start": 1.0},
+            {"name": "Missing start", "performed_end": 1.0},
+            {"name": "Text", "performed_start": "1", "performed_end": "2"},
+            {"name": "Negative", "performed_start": -1.0, "performed_end": 2.0},
+            {"name": "Too late", "performed_start": 1.0, "performed_end": 86_400.5},
+            {"name": "Zero length", "performed_start": 5.0, "performed_end": 5.0},
+            {"name": "Backwards", "performed_start": 9.0, "performed_end": 4.0},
+            null, 7, "x", [],
+            {"name": "Fine", "performed_start": 0.0, "performed_end": 86_400.0},
+        ]);
+        assert_eq!(names(&parse_sections(&value)), [("Fine", 0.0, 86_400.0)]);
+        // Not a list at all, and a list of nothing usable: no sections, no bar.
+        assert!(parse_sections(&json!({"a": 1})).is_empty());
+        assert!(parse_sections(&json!(null)).is_empty());
+        assert!(parse_sections(&json!([{"name": "x"}])).is_empty());
+    }
+
+    #[test]
+    fn a_name_is_trimmed_cut_at_forty_characters_and_never_empty() {
+        let long = format!("  {}  ", "é".repeat(60));
+        let value = json!([
+            {"name": long, "performed_start": 0.0, "performed_end": 1.0},
+            {"name": "  Chorus \u{7}1 ", "performed_start": 1.0, "performed_end": 2.0},
+            {"name": "   ", "performed_start": 2.0, "performed_end": 3.0},
+            {"name": 5, "performed_start": 3.0, "performed_end": 4.0},
+        ]);
+        let got = parse_sections(&value);
+        assert_eq!(got[0].name.chars().count(), 40);
+        assert_eq!(got[1].name, "Chorus 1");
+        assert_eq!((got[2].name.as_str(), got[3].name.as_str()), ("Section", "Section"));
+    }
+
+    #[test]
+    fn at_most_two_hundred_sections_are_kept() {
+        let many: Vec<Value> = (0..500)
+            .map(|n| json!({"name": format!("S{n}"), "performed_start": n as f64, "performed_end": n as f64 + 0.5}))
+            .collect();
+        let got = parse_sections(&Value::Array(many));
+        assert_eq!(got.len(), MAX_SECTIONS);
+        assert_eq!(got[199].name, "S199");
+    }
+
+    #[test]
+    fn the_detail_adds_sections_and_counts_every_entry_even_the_dropped_ones() {
+        let mut one = song("Song One", 1);
+        apply_detail(
+            &mut one,
+            &json!({"arrangement_detail": {"title": "Short", "sections": [
+                {"name": "Intro", "performed_start": 0.0, "performed_end": 4.0},
+                {"name": "Broken"},
+            ]}}),
+        );
+        assert_eq!(one.section_count, Some(2));
+        assert_eq!(one.sections.len(), 1);
+        assert_eq!(one.arrangement.as_deref(), Some("Short"));
+        // A detail with no sections list leaves them as they were.
+        apply_detail(&mut one, &json!({"arrangement_detail": {"title": "x"}}));
+        assert_eq!((one.section_count, one.sections.len()), (Some(2), 1));
+    }
+
+    #[test]
+    fn cover_info_needs_a_picture_type_a_size_in_range_and_a_plain_etag() {
+        let ok = json!({"artwork": {"path": "/songs/1/artwork", "type": "image/jpeg", "bytes": 46874, "etag": "\"0123456789abcdef\""}});
+        let art = artwork_of(&ok).unwrap();
+        assert_eq!(
+            (art.content_type.as_str(), art.bytes, art.etag.as_str()),
+            ("image/jpeg", 46874, "\"0123456789abcdef\"")
+        );
+        assert_eq!(
+            artwork_of(&json!({"artwork": {"type": "IMAGE/PNG", "bytes": 10, "etag": "W/\"a\""}})).map(|a| a.content_type),
+            Some("image/png".to_string())
+        );
+        for bad in [
+            json!({}),
+            json!({"artwork": null}),
+            json!({"artwork": "x"}),
+            json!({"artwork": {"type": "image/gif", "bytes": 10, "etag": "\"a\""}}),
+            json!({"artwork": {"type": "text/html", "bytes": 10, "etag": "\"a\""}}),
+            json!({"artwork": {"type": "image/png", "bytes": 0, "etag": "\"a\""}}),
+            json!({"artwork": {"type": "image/png", "bytes": 2_000_001, "etag": "\"a\""}}),
+            json!({"artwork": {"type": "image/png", "bytes": -4, "etag": "\"a\""}}),
+            json!({"artwork": {"type": "image/png", "bytes": "10", "etag": "\"a\""}}),
+            json!({"artwork": {"type": "image/png", "bytes": 10}}),
+            json!({"artwork": {"type": "image/png", "bytes": 10, "etag": ""}}),
+            json!({"artwork": {"type": "image/png", "bytes": 10, "etag": "a b"}}),
+            json!({"artwork": {"type": "image/png", "bytes": 10, "etag": "a\nb"}}),
+            json!({"artwork": {"type": "image/png", "bytes": 10, "etag": "x".repeat(81)}}),
+        ] {
+            assert_eq!(artwork_of(&bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn health_reads_the_revision_when_there_is_one() {
+        let with = parse_health(&json!({"ok": true, "database": "ok", "library_revision": "a1b2c3d4e5f6"}));
+        assert_eq!(with.library_revision.as_deref(), Some("a1b2c3d4e5f6"));
+        for none in [json!({"ok": true}), json!({"library_revision": 5}), json!({"library_revision": "  "})] {
+            assert_eq!(parse_health(&none).library_revision, None);
+        }
     }
 }
