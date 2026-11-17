@@ -1723,6 +1723,28 @@ textarea:focus-visible {
   border-radius: 4px;
   overflow: hidden;
 }
+/* The lighting timeline's arrangement bar (the "song map"): the same tint as the chips' bar, but each block is placed by its own
+   start and length (inline left / width in percent of the timeline) and carries Playback's short form when that fits. The 1 px gap
+   is a transparent right border that the background does not paint under. */
+.song-map-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  min-width: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--ds-ink);
+  background: color-mix(in srgb, var(--c) 30%, var(--ds-surface-panel));
+  background-clip: padding-box;
+  border-top: 3px solid var(--c);
+  border-right: 1px solid transparent;
+}
 .library-seg {
   flex: var(--w) 1 0;
   min-width: 2px;
