@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Optional "Playback library": see each plan song's key, BPM, length and arrangement from Playback.** In the Playback API panel you can switch on the Playback library and give the address of the Playback computer (port 8780 unless you add one). StagePilot then shows, on the Songs strip and in the panel, each plan song's key (and "was C" when it is not the original), BPM, length where its countdown ends, number of sections and arrangement, and the header pill warns when a plan song is not in Playback's setlist, is in a different place, is a rental that ends before the service, or Playback has no setlist for that date. A length that differs from the plan by more than 15 s is shown as information only. It is off by default, only reads, and changes nothing in Playback, Planning Center, the saved scan, the timers or the lights. The helper on the Playback computer is installed by hand for now.
+
 ### Fixed
 
 - **Shutting StagePilot down no longer waits for a check-in with the control plane that is backing off.** The check-in every install makes can be told to wait up to five minutes before trying again, and stopping the app used to wait for that. Now stopping starts no further attempt and ends the waiting, and an attempt already on the wire is left to finish by itself. What StagePilot sends is unchanged. Five tests that raced the clock (keychain answer, launch, the dismissed Lightkey offer, microphone open, the dense-song screen) now wait for what they check instead, so they no longer fail on a slow computer.

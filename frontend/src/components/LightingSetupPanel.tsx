@@ -56,6 +56,8 @@ import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpo
 import { LightingTimeline } from "./LightingTimeline";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { SongsStrip, type SongChip } from "./SongsStrip";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import { chipLibrary } from "./playbackLibrary";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40, shortLightingMessage } from "./liveLink";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
@@ -127,6 +129,7 @@ export function LightingSetupPanel({
   onUndoCapture,
   onClearLoudness,
   onSavePads,
+  library,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -144,6 +147,8 @@ export function LightingSetupPanel({
   onTestOsc?: (address: string, args: OscArgument[]) => void;
   onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod, options?: { removeEffectIds?: string[] }) => void;
   onClearAllCues?: (songs: Song[], method: LightingMethod) => void;
+  /** The optional Playback library (read-only): key, BPM, length and arrangement on each song chip. */
+  library?: PlaybackLibraryController;
 } & Partial<LightingPanelActions>) {
   const testReasonId = useId();
   const songs = useMemo(() => state.plan?.songs ?? [], [state.plan?.songs]);
@@ -501,11 +506,17 @@ export function LightingSetupPanel({
     if (counts.looks + counts.handmade + (counts.loops ?? 0) === 0) return;
     setPendingClear(clearSongRequest(song.title, counts, () => saveEmpty(song, method, cueMaps?.[key]?.effects)));
   };
+  // What the optional Playback library says about each plan song (nothing while it is off or has not answered).
+  const libraryChips = useMemo(
+    () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = chipLibrary(song); return chip ? [[song.key, chip] as const] : []; })),
+    [library?.plan],
+  );
   const songChips: SongChip[] = useMemo(() => songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
-    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map) };
-  }), [songs, cueMaps, method]);
+    const libraryChip = libraryChips.get(songKey(song)) ?? null;
+    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map), library: libraryChip };
+  }), [songs, cueMaps, method, libraryChips]);
 
   const askClearLoudness = () => {
     if (!onClearLoudness || !selectedSongKey) return;

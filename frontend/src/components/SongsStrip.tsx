@@ -1,4 +1,5 @@
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
+import type { ChipLibrary } from "./playbackLibrary";
 import { Button } from "./ui/Button";
 
 /** One song of the loaded service plan, with what is saved for it under the method on screen. */
@@ -13,6 +14,8 @@ export interface SongChip {
   hasLoudness: boolean;
   /** What the saved rows say about capturing; absent on callers that predate capture status. */
   label?: CaptureLabel;
+  /** What the optional Playback library says about the song (key, BPM, length, arrangement); information only. */
+  library?: ChipLibrary | null;
 }
 
 const isCaptured = (chip: SongChip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0 || chip.hasLoudness;
@@ -59,6 +62,7 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
             chip.title,
             has ? countText(chip, noun) : "not captured",
             has && chip.hasLoudness ? "has loudness" : null,
+            chip.library?.title ?? null,
             live ? "live now" : null,
           ].filter(Boolean).join(", ");
           return (
@@ -82,6 +86,7 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
                 <span aria-hidden="true" className="max-w-[16rem] shrink-0 truncate font-semibold" title={chip.title}>{chip.title}</span>
                 <span aria-hidden="true" className="min-w-0 truncate tabular-nums text-ink-body">{`· ${has || chip.label ? countText(chip, noun) : "not captured"}`}</span>
                 {has && chip.hasLoudness && <span aria-hidden="true" className="shrink-0" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
+                {chip.library && <span aria-hidden="true" className="min-w-0 truncate tabular-nums text-ink-muted" data-testid="song-chip-library" title={chip.library.title}>{`· ${chip.library.text}`}</span>}
               </button>
               {chip.looks + (chip.loops ?? 0) + chip.handmade > 0 && (
                 <button

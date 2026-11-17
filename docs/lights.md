@@ -1317,7 +1317,9 @@ count in MIDI mode), a note glyph when it has loudness, and an **x** that opens 
 only. A plan song with nothing saved is greyed with a dashed outline and says "not captured". Clicking a chip selects
 that song in the timeline exactly like the **Song** menu (a hand pick; **Follow live** returns). The song that is
 playing has a green dot, the selected chip an outline. The chips look small but their buttons are 44 px tall, and the
-list scrolls inside a fixed height, so 40 songs do not push the page around.
+list scrolls inside a fixed height, so 40 songs do not push the page around. With the optional Playback library on
+(see `docs/playback-api.md`), a song that is also in Playback's setlist for the plan's date shows its key, BPM, length,
+sections and arrangement after the count; this is information only.
 
 ### Song lighting timeline section
 

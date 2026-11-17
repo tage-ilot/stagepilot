@@ -276,6 +276,7 @@ export function buildReadinessChecks({
   playback = null,
   now = Date.now(),
   planRun = null,
+  libraryLine = null,
 }: {
   state: ApplicationState;
   stateOnly?: boolean;
@@ -291,6 +292,8 @@ export function buildReadinessChecks({
   planRun?: PlanRunMemory | null;
   /** Remote Access is turned on but has stayed unreachable through its retries (see useRemoteOffline). */
   remoteOffline?: boolean;
+  /** The Playback library's one line for the pill (see playbackLibrary.ts `libraryPillLine`); null when everything agrees or it is off. */
+  libraryLine?: { label: string; detail: string } | null;
 }): ReadinessCheck[] {
   if (stateOnly) {
     return [
@@ -421,6 +424,16 @@ export function buildReadinessChecks({
     severity: "warning",
     status: "error",
     detail: "Remote Access is turned on but cannot be reached. StagePilot keeps retrying; this computer is unaffected.",
+  });
+  // Listed only when the optional Playback library has something actionable to say. Not required: it never blocks Ready.
+  if (libraryLine) checks.push({
+    id: "playback-library",
+    label: libraryLine.label,
+    passed: false,
+    required: false,
+    severity: "warning",
+    status: "error",
+    detail: libraryLine.detail,
   });
   checks.push(...settingsSetAsideChecks(settings));
   return checks;
