@@ -29,6 +29,10 @@ pub trait Plugin: Send + Sync + 'static {
     async fn stop(&self) -> Result<(), String>;
     /// The plugin's current health.
     async fn health(&self) -> Result<PluginHealth, String>;
+    /// A Services source lets the operator pick a service other than the upcoming one.
+    fn plan_picker(&self) -> Option<&dyn crate::service_pin::PlanPicker> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

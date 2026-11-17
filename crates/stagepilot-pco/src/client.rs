@@ -105,6 +105,22 @@ pub trait PcoApi: Send + Sync {
         selected_plan_id: &str,
     ) -> Result<PlanDiscoveryResult, PcoError>;
 
+    /// Every plan dated `from` through `from + days` (their date in `timezone_name`) for these
+    /// service types, in no particular order: one plans call per service type, not one per plan
+    /// (the date is the plan's `sort_date`). Used by the service date picker only; it loads no
+    /// songs. A client that cannot do this says so instead of guessing.
+    async fn list_upcoming_plans(
+        &self,
+        _service_types: &[ServiceType],
+        _from: NaiveDate,
+        _days: i64,
+        _timezone_name: &str,
+    ) -> Result<Vec<PlanCandidate>, PcoError> {
+        Err(PcoError::Unexpected(
+            "This Planning Center client cannot list upcoming plans.".into(),
+        ))
+    }
+
     async fn get_plan_item(
         &self,
         service_type_id: &str,
@@ -660,6 +676,56 @@ impl PcoClient {
         Ok(resources)
     }
 
+    /// The plans of one service type in a date range, dated by `sort_date`.
+    async fn upcoming_for_service_type(
+        &self,
+        service_type: &ServiceType,
+        from: NaiveDate,
+        days: i64,
+        timezone: Tz,
+    ) -> Result<Vec<PlanCandidate>, PcoError> {
+        let until = from + Duration::days(days);
+        let plans = self
+            .list_plans(&service_type.id, from, timezone, days)
+            .await?;
+        let mut found = Vec::new();
+        for plan in &plans {
+            // A sort date at exactly 00:00 UTC is a date without a time; in a western zone it
+            // would read as the day before, so such a plan is dated by its service times.
+            let sort_time = plan
+                .attributes
+                .sort_date
+                .filter(|t| t.with_timezone(&chrono::Utc).time() != chrono::NaiveTime::MIN);
+            let times: Vec<DateTime<FixedOffset>> = match sort_time {
+                Some(t) => vec![t.with_timezone(&timezone).fixed_offset()],
+                None => {
+                    let plan_times = self.list_plan_times(&service_type.id, &plan.id).await?;
+                    matching_service_times(&plan_times, from, until, timezone)
+                }
+            };
+            let Some(first) = times.first() else {
+                continue;
+            };
+            let date = first.date_naive();
+            if date < from || date > until {
+                continue;
+            }
+            found.push(PlanCandidate {
+                id: plan.id.clone(),
+                title: plan_title(plan),
+                service_type_id: service_type.id.clone(),
+                service_type_name: service_type.name.clone(),
+                target_date: date,
+                service_times: times
+                    .iter()
+                    .copied()
+                    .filter(|t| t.date_naive() == date)
+                    .collect(),
+            });
+        }
+        Ok(found)
+    }
+
     async fn plan_candidates_for_date(
         &self,
         service_type: &ServiceType,
@@ -880,6 +946,44 @@ impl PcoApi for PcoClient {
             None,
         )
         .await
+    }
+
+    async fn list_upcoming_plans(
+        &self,
+        service_types: &[ServiceType],
+        from: NaiveDate,
+        days: i64,
+        timezone_name: &str,
+    ) -> Result<Vec<PlanCandidate>, PcoError> {
+        if !(0..=365).contains(&days) {
+            return Err(PcoError::configuration(
+                "The Planning Center plan lookahead must be between 0 and 365 days.",
+            ));
+        }
+        let timezone = parse_timezone(timezone_name)?;
+        let mut found = Vec::new();
+        let mut failures: Vec<PcoError> = Vec::new();
+        for service_type in service_types {
+            match self
+                .upcoming_for_service_type(service_type, from, days, timezone)
+                .await
+            {
+                Ok(plans) => found.extend(plans),
+                Err(error) if error.is_planning_center_error() => {
+                    tracing::warn!(
+                        exception_type = error.type_name(),
+                        http_status = error.http_status(),
+                        "planning_center_service_type_list_failed"
+                    );
+                    failures.push(error);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        if !failures.is_empty() && failures.len() == service_types.len() {
+            return Err(failures.remove(0));
+        }
+        Ok(found)
     }
 
     async fn get_plan_item(

@@ -13,6 +13,7 @@ pub mod events;
 pub mod logging;
 pub mod plugin;
 pub mod redact;
+pub mod service_pin;
 pub mod settings;
 pub mod settings_errors;
 pub mod settings_file;

@@ -6,8 +6,10 @@ import type { EventSummary } from "./EventSummary";
 import type { PluginHealth } from "./PluginHealth";
 import type { ServiceLoadState } from "./ServiceLoadState";
 import type { ServicePlan } from "./ServicePlan";
+import type { ServiceSelection } from "./ServiceSelection";
 import type { Song } from "./Song";
 import type { TimerState } from "./TimerState";
+import type { UpcomingService } from "./UpcomingService";
 
 export type ApplicationState = { revision: bigint, updated_at: string, application_status: ApplicationStatus, plan: ServicePlan | null, 
 /**
@@ -17,4 +19,13 @@ current_song: Song | null, next_song: Song | null, current_song_index: number | 
 /**
  * What the screen says: the song actually started, and the song Start next will play.
  */
-playing_song: Song | null, playing_song_index: number | null, up_next_song: Song | null, planning_center_status: ConnectionStatus, midi_status: ConnectionStatus, propresenter_status: ConnectionStatus, lights_status: ConnectionStatus, service_load: ServiceLoadState, timer: TimerState, plugins: { [key in string]: PluginHealth }, recent_events: Array<EventSummary>, recent_errors: Array<ErrorSummary>, last_successful_plan_reload_at: string | null, last_action: string | null, };
+playing_song: Song | null, playing_song_index: number | null, up_next_song: Song | null, planning_center_status: ConnectionStatus, midi_status: ConnectionStatus, propresenter_status: ConnectionStatus, lights_status: ConnectionStatus, service_load: ServiceLoadState, timer: TimerState, plugins: { [key in string]: PluginHealth }, recent_events: Array<EventSummary>, recent_errors: Array<ErrorSummary>, last_successful_plan_reload_at: string | null, last_action: string | null, 
+/**
+ * Which service is loaded: the upcoming one or one the operator picked. Absent until a
+ * Services source has said so.
+ */
+selection?: ServiceSelection, 
+/**
+ * The upcoming service (what loads when nothing is pinned). Absent when unknown.
+ */
+upcoming?: UpcomingService, };

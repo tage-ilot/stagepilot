@@ -15,11 +15,17 @@ use chrono_tz::Tz;
 use stagepilot_core::bus::{EventBus, Subscription};
 use stagepilot_core::events::{new_event, EventPayload, EventType, Integration};
 use stagepilot_core::plugin::Plugin;
+use stagepilot_core::service_pin::{
+    PinKeeper, PlanPicker, ServicePin, UpcomingPlan, UpcomingPlans, NOTICE_PIN_PASSED,
+    NOTICE_PIN_VANISHED, PICKER_CACHE_SECONDS, PICKER_DAYS, PICKER_MAX_PLANS,
+    SOURCE_PLANNING_CENTER,
+};
 use stagepilot_core::state::*;
 use stagepilot_core::state_service::ActionOutcome;
 use stagepilot_core::store::StateStore;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration as StdDuration, Instant};
 
 pub const PLUGIN_NAME: &str = "planning_center";
 pub const PLUGIN_VERSION: &str = "0.1.0";
@@ -98,6 +104,22 @@ struct Inner {
     idle: tokio::sync::watch::Sender<bool>,
     health: Mutex<Health>,
     stopping: AtomicBool,
+    /// The service the operator picked instead of the upcoming one (`service-pin.json`).
+    pins: Mutex<Arc<PinKeeper>>,
+    /// A one-time, neutral note about a pin that ended by itself; shown with the selection.
+    notice: Mutex<Option<String>>,
+    /// The picker's list of plans, kept for a minute.
+    plan_list: Mutex<Option<CachedPlanList>>,
+    plan_list_ttl_ms: AtomicU64,
+    /// How often a held pin is checked against the date (the midnight rollover).
+    expiry_interval_ms: AtomicU64,
+    expiry_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+struct CachedPlanList {
+    at: Instant,
+    key: String,
+    plans: Vec<UpcomingPlan>,
 }
 
 #[derive(Clone)]
@@ -113,6 +135,18 @@ struct LoadContext {
     api_connected: bool,
     configured: Option<Vec<ServiceType>>,
     previous_type_active: bool,
+    /// The pinned plan was loaded (the result is that plan, not the upcoming one).
+    pinned_loaded: bool,
+    /// The pinned plan is not in Planning Center any more (or not in the configured service
+    /// types): the pin is dropped and the upcoming plan is loaded instead.
+    pin_vanished: bool,
+}
+
+/// What `apply_result` tells the state about the service it loads.
+struct SelectionHint {
+    pinned: bool,
+    /// The upcoming service while another one is pinned (when it could be found).
+    upcoming: Option<UpcomingService>,
 }
 
 impl PcoPlugin {
@@ -149,8 +183,33 @@ impl PcoPlugin {
                     last_activity_at: None,
                 }),
                 stopping: AtomicBool::new(false),
+                pins: Mutex::new(PinKeeper::in_memory()),
+                notice: Mutex::new(None),
+                plan_list: Mutex::new(None),
+                plan_list_ttl_ms: AtomicU64::new(PICKER_CACHE_SECONDS * 1000),
+                expiry_interval_ms: AtomicU64::new(30_000),
+                expiry_watch: Mutex::new(None),
             }),
         })
+    }
+
+    /// Where the pin lives (the server gives the plugin its `service-pin.json`).
+    pub fn set_pin_keeper(&self, keeper: Arc<PinKeeper>) {
+        *lock(&self.inner.pins) = keeper;
+    }
+
+    /// Tests: how long a plan list is kept (zero keeps nothing).
+    pub fn set_plan_list_ttl(&self, ttl: StdDuration) {
+        self.inner
+            .plan_list_ttl_ms
+            .store(ttl.as_millis() as u64, Ordering::SeqCst);
+    }
+
+    /// Tests: how often a held pin is checked against the date.
+    pub fn set_expiry_check_interval(&self, interval: StdDuration) {
+        self.inner
+            .expiry_interval_ms
+            .store(interval.as_millis().max(1) as u64, Ordering::SeqCst);
     }
 
     /// Replace settings before the plugin manager starts this plugin.
@@ -224,6 +283,7 @@ impl PcoPlugin {
                 return ActionOutcome::rejected(detail);
             }
         }
+        *lock(&inner.plan_list) = None;
         inner.request_regular_refresh(true).await;
         let new_client = lock(&inner.client).clone();
         if let (Some(previous), Some(current)) = (previous_client, new_client) {
@@ -258,6 +318,158 @@ impl Inner {
 
     fn settings(&self) -> PcoSettings {
         lock(&self.settings).clone()
+    }
+
+    fn keeper(&self) -> Arc<PinKeeper> {
+        lock(&self.pins).clone()
+    }
+
+    /// The pin that still counts today. A pin whose date has passed (in the configured time
+    /// zone) is removed here, once, with a one-time notice.
+    fn active_pin(&self) -> Option<ServicePin> {
+        let keeper = self.keeper();
+        let pin = keeper.get(SOURCE_PLANNING_CENTER)?;
+        if !pin.is_expired(self.today()) {
+            return Some(pin);
+        }
+        if let Err(error) = keeper.clear() {
+            tracing::warn!(reason = %error, "service_pin_expired_not_cleared");
+        }
+        *lock(&self.notice) = Some(NOTICE_PIN_PASSED.to_string());
+        None
+    }
+
+    /// Tell the state which service is loaded and whether the operator picked it. `hint` is
+    /// the result of a load that is about to be projected; without one the loaded plan is read
+    /// from the state.
+    fn publish_selection(&self, hint: Option<SelectionHint>, plan: Option<&ServicePlan>) {
+        let notice = lock(&self.notice).clone();
+        let pin = self.keeper().get(SOURCE_PLANNING_CENTER);
+        let today = self.today();
+        self.store.mutate(|s| {
+            let plan = plan.or(s.plan.as_ref()).cloned();
+            // A pick that is (now) the upcoming service is simply the upcoming service.
+            let is_upcoming =
+                |p: &ServicePlan, u: Option<&UpcomingService>| u.is_some_and(|u| u.plan_id == p.id);
+            let pinned = match (&hint, &plan, &pin) {
+                (Some(h), Some(p), _) => h.pinned && !is_upcoming(p, h.upcoming.as_ref()),
+                (None, Some(p), Some(k)) => {
+                    k.plan_id == p.id
+                        && !k.is_expired(today)
+                        && !is_upcoming(p, s.upcoming.as_ref())
+                }
+                _ => false,
+            };
+            let upcoming = if pinned {
+                hint.as_ref()
+                    .and_then(|h| h.upcoming.clone())
+                    .or_else(|| s.upcoming.clone().filter(|u| u.date >= today))
+            } else if s.service_load.status == ServiceLoadStatus::Loaded || hint.is_some() {
+                plan.as_ref().map(|p| UpcomingService {
+                    plan_id: p.id.clone(),
+                    date: p.date,
+                    title: p.title.clone(),
+                })
+            } else {
+                None
+            };
+            s.selection = Some(ServiceSelection {
+                pinned,
+                plan_id: plan.as_ref().map(|p| p.id.clone()),
+                date: plan.as_ref().map(|p| p.date),
+                notice,
+            });
+            s.upcoming = upcoming;
+        });
+    }
+
+    /// The upcoming service as plain discovery finds it (no pin), without keeping its songs.
+    async fn discover_upcoming(
+        &self,
+        search_date: NaiveDate,
+        previous_plan_service_type_id: Option<&str>,
+    ) -> Option<UpcomingService> {
+        let mut ctx = LoadContext {
+            api_connected: false,
+            configured: None,
+            previous_type_active: true,
+            pinned_loaded: false,
+            pin_vanished: false,
+        };
+        match self
+            .load_result(
+                search_date,
+                None,
+                previous_plan_service_type_id,
+                &mut ctx,
+                None,
+            )
+            .await
+        {
+            Ok(PlanDiscoveryResult::Loaded { candidate, .. }) => Some(UpcomingService {
+                plan_id: candidate.id,
+                date: candidate.target_date,
+                title: candidate.title,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The plans the picker lists (cached for a minute): one plans call per service type.
+    async fn picker_plans(&self) -> Result<Vec<UpcomingPlan>, PcoError> {
+        let today = self.today();
+        let key = format!(
+            "{}|{today}",
+            self.settings().service_type_id.unwrap_or_default()
+        );
+        let ttl = StdDuration::from_millis(self.plan_list_ttl_ms.load(Ordering::SeqCst));
+        if let Some(cached) = lock(&self.plan_list).as_ref() {
+            if cached.key == key && cached.at.elapsed() < ttl {
+                return Ok(cached.plans.clone());
+            }
+        }
+        let client = self.client()?;
+        let service_types = client.list_service_types().await?;
+        let configured = self.configured_service_types(&service_types)?;
+        let mut found = client
+            .list_upcoming_plans(&configured, today, PICKER_DAYS, &self.timezone_name)
+            .await?;
+        found.sort_by(|a, b| {
+            (a.target_date, a.service_times.first(), a.id.as_str()).cmp(&(
+                b.target_date,
+                b.service_times.first(),
+                b.id.as_str(),
+            ))
+        });
+        found.truncate(PICKER_MAX_PLANS);
+        let plans: Vec<UpcomingPlan> = found
+            .into_iter()
+            .map(|c| UpcomingPlan {
+                id: c.id,
+                date: c.target_date,
+                title: c.title,
+                service_type_id: c.service_type_id,
+                service_type_name: c.service_type_name,
+            })
+            .collect();
+        *lock(&self.plan_list) = Some(CachedPlanList {
+            at: Instant::now(),
+            key,
+            plans: plans.clone(),
+        });
+        Ok(plans)
+    }
+
+    /// The midnight rollover: a held pin whose date has passed is dropped by a refresh, which
+    /// then loads the upcoming plan.
+    async fn check_pin_expiry(self: &Arc<Self>) {
+        let expired = self
+            .keeper()
+            .get(SOURCE_PLANNING_CENTER)
+            .is_some_and(|p| p.is_expired(self.today()));
+        if expired && !self.stopping.load(Ordering::SeqCst) {
+            self.request_regular_refresh(false).await;
+        }
     }
 
     fn with_cache_warning(&self, detail: &str) -> String {
@@ -427,6 +639,23 @@ impl Inner {
             return;
         }
         let snapshot = self.store.snapshot();
+        // The operator's pick (the pin the route just saved) or "back to the upcoming service"
+        // (the pin was cleared; the id is the upcoming plan's, or empty): load as a refresh
+        // does, which reads the pin.
+        let pinned_pick = self
+            .keeper()
+            .get(SOURCE_PLANNING_CENTER)
+            .is_some_and(|p| p.plan_id == plan_id);
+        let back_to_upcoming = plan_id.is_empty()
+            || (self.keeper().get(SOURCE_PLANNING_CENTER).is_none()
+                && snapshot
+                    .upcoming
+                    .as_ref()
+                    .is_some_and(|u| u.plan_id == plan_id));
+        if pinned_pick || back_to_upcoming {
+            self.request_regular_refresh(true).await;
+            return;
+        }
         let today = self.today();
         let target_date = snapshot.service_load.target_date;
         let candidate_ids: Vec<&str> = snapshot
@@ -518,6 +747,7 @@ impl Inner {
         selected_plan_id: Option<&str>,
         previous_plan_service_type_id: Option<&str>,
         ctx: &mut LoadContext,
+        pin: Option<&ServicePin>,
     ) -> Result<PlanDiscoveryResult, PcoError> {
         let client = self.client()?;
         let service_types = client.list_service_types().await?;
@@ -530,6 +760,35 @@ impl Inner {
             || configured
                 .iter()
                 .any(|s| Some(s.id.as_str()) == previous_plan_service_type_id);
+        if let (Some(pin), None) = (pin, selected_plan_id) {
+            // The operator picked this service: load exactly that plan, on its own date, the
+            // way the upcoming plan is loaded. A plan that is gone (or no longer in the
+            // configured service types) falls through to the normal upcoming search.
+            let pinned_type = pin
+                .service_type_id
+                .as_deref()
+                .and_then(|id| configured.iter().find(|s| s.id == id));
+            if let Some(service_type) = pinned_type {
+                match client
+                    .load_plan_for_date(
+                        service_type,
+                        pin.date,
+                        &self.timezone_name,
+                        Some(&pin.plan_id),
+                        0,
+                    )
+                    .await
+                {
+                    Ok(result @ PlanDiscoveryResult::Loaded { .. }) => {
+                        ctx.pinned_loaded = true;
+                        return Ok(result);
+                    }
+                    Ok(_) | Err(PcoError::PlanSelection(_)) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            ctx.pin_vanished = true;
+        }
         let lookahead = i64::from(settings.upcoming_lookahead_days);
         let mut result = if settings.service_type_id.as_deref() == Some(ALL_SERVICE_TYPES_ID) {
             client
@@ -568,6 +827,7 @@ impl Inner {
 
     async fn refresh_once(self: &Arc<Self>, selected_plan_id: Option<String>) {
         let search_date = self.today();
+        let pin = self.active_pin();
         let previous_state = self.store.snapshot();
         let previous_plan_date = Self::actionable_plan_date(&previous_state, search_date);
         let has_actionable_plan = previous_plan_date.is_some();
@@ -621,6 +881,8 @@ impl Inner {
             api_connected: false,
             configured: None,
             previous_type_active: true,
+            pinned_loaded: false,
+            pin_vanished: false,
         };
         let keep_candidates = selected_plan_id.is_some() && previous_candidates.len() >= 2;
         let outcome = self
@@ -629,6 +891,7 @@ impl Inner {
                 selected_plan_id.as_deref(),
                 previous_plan_service_type_id.as_deref(),
                 &mut ctx,
+                pin.as_ref(),
             )
             .await;
         let result = match outcome {
@@ -732,6 +995,32 @@ impl Inner {
             "Planning Center Services is connected.",
         )
         .await;
+        if ctx.pin_vanished {
+            if let Err(error) = self.keeper().clear() {
+                tracing::warn!(reason = %error, "service_pin_vanished_not_cleared");
+            }
+            *lock(&self.notice) = Some(NOTICE_PIN_VANISHED.to_string());
+        }
+        let hint = if ctx.pinned_loaded {
+            // Another service is loaded on purpose: still say which one is the upcoming one.
+            let upcoming = self
+                .discover_upcoming(search_date, previous_plan_service_type_id.as_deref())
+                .await;
+            SelectionHint {
+                pinned: true,
+                upcoming,
+            }
+        } else {
+            SelectionHint {
+                pinned: false,
+                upcoming: None,
+            }
+        };
+        let pinned_date = if ctx.pinned_loaded {
+            pin.as_ref().map(|p| p.date)
+        } else {
+            None
+        };
         if let Err(error) = self
             .apply_result(
                 result,
@@ -739,6 +1028,8 @@ impl Inner {
                 previous_plan_date,
                 previous_skipped.clone(),
                 ctx.previous_type_active,
+                hint,
+                pinned_date,
             )
             .await
         {
@@ -769,6 +1060,10 @@ impl Inner {
                 current_plan_date.is_some(),
             )
             .await;
+        } else {
+            // Not found / ambiguous outcomes and a pin that ended carry no plan of their own;
+            // say so, with the one-time notice if there is one.
+            self.publish_selection(None, None);
         }
     }
 
@@ -779,9 +1074,13 @@ impl Inner {
         previous_plan_date: Option<NaiveDate>,
         previous_skipped: Vec<SkippedServiceItem>,
         previous_plan_type_still_active: bool,
+        hint: SelectionHint,
+        pinned_date: Option<NaiveDate>,
     ) -> Result<(), PcoError> {
         let lookahead = i64::from(self.settings().upcoming_lookahead_days);
         let search_end = search_date + Duration::days(lookahead);
+        // A pinned plan may be dated beyond the upcoming search window.
+        let loaded_end = pinned_date.map_or(search_end, |d| d.max(search_end));
         match result {
             PlanDiscoveryResult::NotFound { target_date, .. } => {
                 if target_date != search_date {
@@ -846,7 +1145,7 @@ impl Inner {
                 skipped_items,
             } => {
                 let loaded_date = plan.date;
-                if !(search_date <= loaded_date && loaded_date <= search_end)
+                if !(search_date <= loaded_date && loaded_date <= loaded_end)
                     || candidate.target_date != loaded_date
                     || candidate.id != plan.id
                 {
@@ -867,6 +1166,9 @@ impl Inner {
                     )
                     .await;
                 }
+                // Which service this is, before the plan itself arrives, so nothing shows the
+                // new plan with the old "picked / upcoming" answer.
+                self.publish_selection(Some(hint), Some(&plan));
                 let before = self.store.snapshot();
                 let report = self
                     .bus
@@ -976,6 +1278,7 @@ impl Inner {
         let refreshed = cached.last_successful_refresh;
         self.store
             .mutate(|s| s.last_successful_plan_reload_at = Some(refreshed));
+        self.publish_selection(None, Some(&cached.plan));
         self.publish_load_state(
             ServiceLoadStatus::Loading,
             cached.plan.date,
@@ -1098,6 +1401,24 @@ impl Plugin for PcoPlugin {
         }
         lock(&inner.subscriptions).extend(subscriptions);
         lock(&inner.health).status = PluginStatus::Running;
+        {
+            // The midnight rollover: nothing else reloads the plan by itself, so a held pin
+            // is checked against the date now and then.
+            let this = inner.clone();
+            let handle = tokio::spawn(async move {
+                loop {
+                    let wait = this.expiry_interval_ms.load(Ordering::SeqCst);
+                    tokio::time::sleep(StdDuration::from_millis(wait)).await;
+                    if this.stopping.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    this.check_pin_expiry().await;
+                }
+            });
+            if let Some(previous) = lock(&inner.expiry_watch).replace(handle) {
+                previous.abort();
+            }
+        }
         inner.request_regular_refresh(true).await;
         Ok(())
     }
@@ -1109,6 +1430,9 @@ impl Plugin for PcoPlugin {
         }
         lock(&inner.health).status = PluginStatus::Stopping;
         inner.stopping.store(true, Ordering::SeqCst);
+        if let Some(watch) = lock(&inner.expiry_watch).take() {
+            watch.abort();
+        }
         for subscription in lock(&inner.subscriptions).drain(..) {
             inner.bus.unsubscribe(&subscription);
         }
@@ -1141,5 +1465,82 @@ impl Plugin for PcoPlugin {
             last_error: health.last_error.clone(),
             last_activity_at: health.last_activity_at,
         })
+    }
+
+    fn plan_picker(&self) -> Option<&dyn PlanPicker> {
+        Some(self)
+    }
+}
+
+#[async_trait]
+impl PlanPicker for PcoPlugin {
+    async fn upcoming_plans(&self) -> Result<UpcomingPlans, String> {
+        let inner = &self.inner;
+        // Drops a pin whose date has passed before it is reported.
+        let pin = inner.active_pin();
+        let plans = inner.picker_plans().await.map_err(|error| {
+            let detail = error.to_string();
+            tracing::warn!(
+                exception_type = error.type_name(),
+                http_status = error.http_status(),
+                "planning_center_plan_list_failed"
+            );
+            if detail.is_empty() {
+                "Planning Center could not list the upcoming services.".to_string()
+            } else {
+                detail
+            }
+        })?;
+        let known = inner
+            .store
+            .snapshot()
+            .upcoming
+            .map(|u| u.plan_id)
+            .filter(|id| plans.iter().any(|p| &p.id == id));
+        let upcoming_id = known.or_else(|| {
+            // Not known from the loaded plan: the only plan on the nearest date, if there is
+            // exactly one, within the days the upcoming search looks.
+            let lookahead = i64::from(inner.settings().upcoming_lookahead_days);
+            let first = plans.first()?;
+            if first.date > inner.today() + Duration::days(lookahead) {
+                return None;
+            }
+            let same_day = plans.iter().filter(|p| p.date == first.date).count();
+            (same_day == 1).then(|| first.id.clone())
+        });
+        Ok(UpcomingPlans {
+            plans,
+            upcoming_id,
+            pinned_id: pin.as_ref().map(|p| p.plan_id.clone()),
+            pinned_date: pin.map(|p| p.date),
+        })
+    }
+
+    fn today(&self) -> NaiveDate {
+        self.inner.today()
+    }
+
+    fn pin(&self) -> Option<ServicePin> {
+        self.inner.keeper().get(SOURCE_PLANNING_CENTER)
+    }
+
+    fn set_pin(&self, plan: &UpcomingPlan) -> Result<(), String> {
+        *lock(&self.inner.notice) = None;
+        self.inner.keeper().set(ServicePin::new(
+            SOURCE_PLANNING_CENTER,
+            &plan.id,
+            plan.date,
+            Some(plan.service_type_id.clone()),
+            Some(plan.title.clone()),
+        ))
+    }
+
+    fn clear_pin(&self) -> Result<(), String> {
+        *lock(&self.inner.notice) = None;
+        self.inner.keeper().clear()
+    }
+
+    fn restore_pin(&self, previous: Option<ServicePin>) -> Result<(), String> {
+        self.inner.keeper().restore(previous)
     }
 }

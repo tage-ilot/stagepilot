@@ -187,6 +187,10 @@ pub struct PlanAttributes {
     pub title: String,
     #[serde(default, deserialize_with = "null_as_default")]
     pub dates: String,
+    /// When the plan's first service starts (Planning Center's own sort key). Optional: a plan
+    /// without it gets its date from its service times instead.
+    #[serde(default)]
+    pub sort_date: Option<DateTime<FixedOffset>>,
 }
 
 #[derive(Debug, Deserialize)]
