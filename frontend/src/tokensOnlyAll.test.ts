@@ -20,6 +20,8 @@ const forbidden: Array<[string, RegExp]> = [
 const allowList: string[] = [
   // Generated from frontend/scripts/design-tokens.mjs; it is where the literals live.
   "/design-tokens.css",
+  // Playback's own fixed section colors (one table, the same in every song); they are data from Playback, not StagePilot's palette.
+  "/components/sectionColors.ts",
 ];
 // index.css has no raw hex (checked below). It still holds rgb() shadows, glows and scrims that no DESIGN.md token covers,
 // so only the rgb()/rgba() rule is waived for it; every other rule applies.
