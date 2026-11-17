@@ -39,6 +39,7 @@ import type {
   PlanningCenterTestInput,
   PlanningCenterTestResponse,
   PlanSelectionResponse,
+  UpcomingServicePlans,
   ProPresenterOperationResponse,
   ProPresenterSettingsInput,
   ProPresenterStatusResponse,
@@ -207,6 +208,17 @@ export const selectPlanningCenterPlan = (planId: string) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan_id: planId }),
   });
+// The service date picker: the plans from today on, picking one other than the upcoming service, and going back.
+export const getUpcomingServicePlans = () =>
+  requestJson<UpcomingServicePlans>("/api/v1/planning-center/plans/upcoming", { cache: "no-store" });
+export const pinServicePlan = (planId: string) =>
+  requestJson<PlanSelectionResponse>("/api/v1/planning-center/plans/pin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan_id: planId }),
+  });
+export const unpinServicePlan = () =>
+  requestJson<PlanSelectionResponse>("/api/v1/planning-center/plans/pin", { method: "DELETE" });
 export const getSettings = () => requestJson<SettingsResponse>("/api/v1/settings");
 // Lighting (captures, cue maps, Lightkey options) is saved by its own routes and by the server
 // itself, so the general settings save never sends it back: a page opened earlier would erase it.

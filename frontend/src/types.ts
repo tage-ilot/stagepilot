@@ -142,6 +142,41 @@ export interface ApplicationState {
   recent_errors: ErrorSummary[];
   last_successful_plan_reload_at: string | null;
   last_action: string | null;
+  /** Which service is loaded and whether the operator picked it (absent until a Services source says). */
+  selection?: ServiceSelection;
+  /** The upcoming service, even while another one is picked (absent when unknown). */
+  upcoming?: UpcomingService;
+}
+
+export interface ServiceSelection {
+  /** The operator picked this service instead of the upcoming one. */
+  pinned: boolean;
+  plan_id: string | null;
+  date: string | null;
+  /** A one-time neutral note about a pick that ended by itself. */
+  notice?: string;
+}
+
+export interface UpcomingService {
+  plan_id: string;
+  date: string;
+  title: string;
+}
+
+/** One service in the picker's list (`GET /api/v1/planning-center/plans/upcoming`). */
+export interface UpcomingServicePlan {
+  id: string;
+  date: string;
+  title: string;
+  service_type_id: string;
+  service_type_name: string;
+}
+
+export interface UpcomingServicePlans {
+  plans: UpcomingServicePlan[];
+  upcoming_id: string | null;
+  pinned_id: string | null;
+  pinned_date: string | null;
 }
 
 export interface HealthResponse {

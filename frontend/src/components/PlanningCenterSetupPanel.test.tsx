@@ -10,6 +10,10 @@ const desktop = vi.hoisted(() => ({
   openExternalUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+const picker = vi.hoisted(() => ({ getUpcomingServicePlans: vi.fn() }));
+
+vi.mock("../api", () => ({ getUpcomingServicePlans: picker.getUpcomingServicePlans }));
+
 vi.mock("../desktop", () => ({
   openExternalUrl: desktop.openExternalUrl,
 }));
@@ -129,6 +133,7 @@ function panelElement({
   pendingOperation = null as "save" | null,
   error = null as string | null,
   panelPlugins = {} as Record<string, unknown>,
+  servicePlanChoice = undefined as import("../hooks/useServicePlanChoice").ServicePlanChoice | undefined,
 } = {}) {
   return (
     <PlanningCenterSetupPanel
@@ -140,6 +145,7 @@ function panelElement({
       onReload={vi.fn()}
       onSave={onSave}
       onSelectPlan={vi.fn()}
+      servicePlanChoice={servicePlanChoice}
       onSignInOAuth={onSignInOAuth}
       onTest={onTest}
       pendingAction={null}
@@ -820,5 +826,54 @@ describe("Services hold-until-saved conformance (guard)", () => {
     expect(css).toMatch(/\.status-checks-box \{\s*container-type: inline-size;/);
     expect(css).toMatch(/@container \(min-width: 30rem\) \{\s*\.status-checks \{\s*grid-template-columns: repeat\(4, minmax\(max-content, 1fr\)\);/);
     expect(css).toMatch(/@container \(min-width: 23rem\) \{\s*\.status-checks \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  });
+});
+
+describe("the service date picker in the Services panel", () => {
+  const choice = { pending: false, error: null, announcement: "", pick: vi.fn(), back: vi.fn() };
+  const answer = {
+    plans: [
+      { id: "p1", date: "2026-11-22", title: "Sunday Service", service_type_id: "42", service_type_name: "Weekend" },
+      { id: "p2", date: "2026-11-29", title: "Advent Sunday", service_type_id: "42", service_type_name: "Weekend" },
+    ],
+    upcoming_id: "p1",
+    pinned_id: null,
+    pinned_date: null,
+  };
+  const loaded = (id: string, title: string, date: string) => ({
+    ...state,
+    plan: { id, title, date, service_type: "Weekend", service_type_id: "42", service_times: [], duration_source: "x", songs: [] },
+    selection: { pinned: id !== "p1", plan_id: id, date },
+    upcoming: { plan_id: "p1", date: "2026-11-22", title: "Sunday Service" },
+  }) as ApplicationState;
+
+  it("shows the date of the loaded service above the service type and steps through the services", async () => {
+    picker.getUpcomingServicePlans.mockResolvedValue(answer);
+    renderPanel({ servicePlanChoice: choice, panelPlugins: { planning_center: {} }, panelState: loaded("p1", "Sunday Service", "2026-11-22") });
+    const section = await screen.findByRole("region", { name: "Service date" });
+    expect(within(section).getByTestId("picker-selected")).toHaveTextContent("Sun, Nov 22, 2026");
+    expect(within(section).getByText("Upcoming service")).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+    await userEvent.click(within(section).getByRole("button", { name: "Next service" }));
+    expect(choice.pick).toHaveBeenCalledWith("p2");
+    expect(section.compareDocumentPosition(screen.getByLabelText("Service type")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("is also there for the demo Services source and shows Back to upcoming while another is picked", async () => {
+    picker.getUpcomingServicePlans.mockResolvedValue({ ...answer, pinned_id: "p2", pinned_date: "2026-11-29" });
+    renderPanel({ servicePlanChoice: choice, panelPlugins: { demo: {} }, panelState: loaded("p2", "Advent Sunday", "2026-11-29") });
+    const section = await screen.findByRole("region", { name: "Service date" });
+    expect(within(section).getByTestId("not-upcoming-pill")).toHaveTextContent("Not the upcoming service: Sun, Nov 29");
+    await userEvent.click(within(section).getByRole("button", { name: "Back to upcoming" }));
+    expect(choice.back).toHaveBeenCalled();
+  });
+
+  it("is not shown without a Services source or without the picker's controller", async () => {
+    picker.getUpcomingServicePlans.mockResolvedValue(answer);
+    const { unmount } = renderPanel({ servicePlanChoice: choice });
+    expect(screen.queryByRole("region", { name: "Service date" })).not.toBeInTheDocument();
+    unmount();
+    renderPanel({ panelPlugins: { planning_center: {} } });
+    expect(screen.queryByRole("region", { name: "Service date" })).not.toBeInTheDocument();
   });
 });
