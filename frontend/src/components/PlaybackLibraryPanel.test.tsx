@@ -13,7 +13,7 @@ const status = (over: Partial<LibraryStatus> = {}): LibraryStatus => ({
 const planOf = (over: Partial<LibraryPlan> = {}): LibraryPlan => ({
   enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { title: "Set", date: "2026-11-22", songs: 2 }, newest: null, stale: false, checked_at: null,
   songs: [
-    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 355, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, arrangement: "Default", sections: 8, rental_expires_utc: null } },
+    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 355, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, countdown_length_s: 388.64, length_source: "last_measure", arrangement: "Default", sections: 8, rental_expires_utc: null } },
     { key: "b", title: "Song Two", plan_position: 2, plan_seconds: 300, status: "missing", library: null },
   ],
   ...over,

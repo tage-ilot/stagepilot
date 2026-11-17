@@ -353,6 +353,8 @@ impl PlaybackLibrary {
             key_original: None,
             bpm: None,
             scan_length_s: None,
+            countdown_length_s: None,
+            length_source: None,
             arrangement: None,
             sections: None,
             rental_expires_utc: None,

@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use stagepilot_core::config::PlaybackLibrarySettings;
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
 use stagepilot_core::state::{ServicePlan, Song};
-use stagepilot_playback::library::{LibraryPlan, LibraryState, PlanMatch};
+use stagepilot_playback::library::{LengthSource, LibraryPlan, LibraryState, PlanMatch};
 use stagepilot_server::playback_library::{base_url, PlaybackLibrary};
 use stagepilot_server::{build_app, AppOptions, OutputBackends, Runtime};
 use std::net::SocketAddr;
@@ -826,27 +826,73 @@ fn the_plan_json_is_the_shape_the_window_reads() {
 }
 
 #[tokio::test]
-async fn the_length_is_the_scan_length_and_a_song_without_one_has_none() {
+async fn the_countdown_length_is_the_last_measure_unless_no_grid_or_too_long_before_the_end_else_none(
+) {
     let helper = Helper::new();
-    let mut no_grid = item(12, 2, "Song Two");
-    no_grid["scan_length_s"] = Value::Null; // no beat grid; `length_s` is still 300.5
-    helper.set(|b| b.items = vec![item(11, 1, "Song One"), no_grid]);
+    let mut no_grid = item(12, 2, "Song Two"); // `length_s` 300.5, no beat grid
+    no_grid["scan_length_s"] = Value::Null;
+    let mut neither = item(13, 3, "Song Three");
+    neither["scan_length_s"] = Value::Null;
+    neither["length_s"] = Value::Null;
+    let mut junk_end = item(14, 4, "Song Four");
+    junk_end["scan_length_s"] = Value::Null;
+    junk_end["length_s"] = json!("300.5");
+    let mut junk_scan = item(15, 5, "Song Five");
+    junk_scan["scan_length_s"] = json!(-3);
+    let mut long_last = item(16, 6, "Song Six");
+    long_last["scan_length_s"] = json!(290.0);
+    helper.set(|b| {
+        b.items = vec![
+            item(11, 1, "Song One"),
+            no_grid,
+            neither,
+            junk_end,
+            junk_scan,
+            long_last,
+        ];
+    });
     let address = helper.serve().await;
     let result = PlaybackLibrary::new()
         .plan(
             &settings_for(&address),
-            Some(&plan("2026-11-22", &["Song One", "Song Two"])),
+            Some(&plan(
+                "2026-11-22",
+                &[
+                    "Song One",
+                    "Song Two",
+                    "Song Three",
+                    "Song Four",
+                    "Song Five",
+                    "Song Six",
+                ],
+            )),
             false,
         )
         .await;
-    let one = result.songs[0].library.as_ref().unwrap();
-    let two = result.songs[1].library.as_ref().unwrap();
-    // 297.25 is what a scan measures (the start of the last measure); the sections' total, 300.5, is never used.
-    assert_eq!(one.scan_length_s, Some(297.25));
-    assert_eq!(two.scan_length_s, None);
-    let text = serde_json::to_string(&result).unwrap();
-    assert!(
-        !text.contains("\"length_s\"") && !text.contains("300.5"),
-        "{text}"
+    let got: Vec<(Option<f64>, Option<LengthSource>)> = result
+        .songs
+        .iter()
+        .map(|s| {
+            let l = s.library.as_ref().unwrap();
+            (l.countdown_length_s, l.length_source)
+        })
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (Some(297.25), Some(LengthSource::LastMeasure)), // the start of the last measure (a scan measures this)
+            (Some(300.5), Some(LengthSource::SongEndNoGrid)), // no beat grid: the end of the song
+            (None, None),                                    // neither
+            (None, None),                                    // a junk end of the song is none
+            (Some(300.5), Some(LengthSource::SongEndNoGrid)), // a junk last-measure start falls back to the end
+            (Some(300.5), Some(LengthSource::SongEndLongLastMeasure)), // the last measure starts 10.5 s before the end
+        ]
+    );
+    // The saved scan result and the other numbers are untouched: `scan_length_s` stays what the helper said.
+    let first = result.songs[0].library.as_ref().unwrap();
+    assert_eq!(first.scan_length_s, Some(297.25));
+    assert_eq!(
+        result.songs[1].library.as_ref().unwrap().scan_length_s,
+        None
     );
 }

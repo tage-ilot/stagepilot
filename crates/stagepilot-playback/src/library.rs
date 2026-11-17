@@ -56,6 +56,50 @@ pub struct LibraryStatus {
     pub checked_at: Option<String>,
 }
 
+/// The last measure may start at most this many seconds before the end of the song; beyond that
+/// the end of the song is the countdown length (Hunter, 2026-11-16).
+pub const LAST_MEASURE_LIMIT_S: f64 = 6.0;
+
+/// Where a song's countdown length comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LengthSource {
+    /// The start of the song's last measure (`scan_length_s`).
+    LastMeasure,
+    /// The end of the song, because the song has no bar lines.
+    SongEndNoGrid,
+    /// The end of the song, because the last measure starts more than `LAST_MEASURE_LIMIT_S`
+    /// before it (or, inconsistently, after it).
+    SongEndLongLastMeasure,
+}
+
+/// Milliseconds, so two numbers are compared at 3 decimals and 6.0000000001 is 6.
+fn millis(seconds: f64) -> i64 {
+    (seconds * 1000.0).round() as i64
+}
+
+/// The one rule for a song's countdown length. `scan` is the start of the last measure and `end`
+/// the end of the song, both already read safely (junk is `None`).
+/// * both: the end when the last measure starts after it (inconsistent) or more than
+///   `LAST_MEASURE_LIMIT_S` before it (a gap of exactly the limit keeps the last measure); else the last measure;
+/// * only `scan`: `scan`; only `end` (no bar lines): `end`; neither: none.
+pub fn countdown_length(scan: Option<f64>, end: Option<f64>) -> Option<(f64, LengthSource)> {
+    match (scan, end) {
+        (Some(scan), Some(end)) => {
+            let gap = millis(end) - millis(scan);
+            if gap < 0 || gap > millis(LAST_MEASURE_LIMIT_S) {
+                Some((end, LengthSource::SongEndLongLastMeasure))
+            } else {
+                Some((scan, LengthSource::LastMeasure))
+            }
+        }
+        (Some(scan), None) => Some((scan, LengthSource::LastMeasure)),
+        (None, Some(end)) => Some((end, LengthSource::SongEndNoGrid)),
+        (None, None) => None,
+    }
+}
+
 /// One song of a Playback setlist as far as StagePilot shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -69,11 +113,18 @@ pub struct LibrarySong {
     pub key: Option<String>,
     pub key_original: Option<String>,
     pub bpm: Option<f64>,
-    /// Where StagePilot's countdown for the song ends, in seconds: the start of the song's last
-    /// measure, which is where the song goes quiet (the helper's `scan_length_s`, the same number
-    /// StagePilot's own scan measures). Null for a song with no beat grid. The helper's `length_s`
-    /// (the sections' total, last measure included) is deliberately never read.
+    /// The start of the song's last measure, in seconds, which is where the song goes quiet (the
+    /// helper's `scan_length_s`, the same number StagePilot's own scan measures). Null for a song
+    /// with no beat grid.
     pub scan_length_s: Option<f64>,
+    /// Where StagePilot's countdown for the song ends, in seconds, resolved by `countdown_length`:
+    /// the start of the last measure, unless the song has no beat grid or that is more than
+    /// `LAST_MEASURE_LIMIT_S` before the end of the song (the helper's `length_s`), in which case
+    /// the end of the song; null when the helper gave neither. This is the one length the window
+    /// shows and compares with the plan.
+    pub countdown_length_s: Option<f64>,
+    /// Which of the two `countdown_length_s` is (null when there is no length).
+    pub length_source: Option<LengthSource>,
     /// The arrangement's name.
     pub arrangement: Option<String>,
     /// Number of sections of the arrangement (needs the song's own answer; null when not read).
@@ -310,6 +361,8 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         return None;
     }
     let title = text_of(item, "title")?;
+    let scan_length_s = number_in(item, "scan_length_s", 86_400.0);
+    let resolved = countdown_length(scan_length_s, number_in(item, "length_s", 86_400.0));
     Some(LibrarySong {
         setlist_song_id: whole_number(item.get("setlist_song_id")),
         position: count_of(item, "order")
@@ -319,7 +372,9 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         key: key_name(item, "key"),
         key_original: key_name(item, "key_original"),
         bpm: number_in(item, "bpm", 1000.0),
-        scan_length_s: number_in(item, "scan_length_s", 86_400.0),
+        scan_length_s,
+        countdown_length_s: resolved.map(|(seconds, _)| seconds),
+        length_source: resolved.map(|(_, source)| source),
         arrangement: text_of(item, "arrangement"),
         sections: None,
         rental_expires_utc: instant_of(item, "rental_expires_utc"),
@@ -549,6 +604,8 @@ mod tests {
             key_original: Some("G".into()),
             bpm: Some(72.0),
             scan_length_s: Some(300.0),
+            countdown_length_s: Some(300.0),
+            length_source: Some(LengthSource::LastMeasure),
             arrangement: None,
             sections: None,
             rental_expires_utc: None,
@@ -736,6 +793,8 @@ mod tests {
         assert_eq!(one.key_original.as_deref(), Some("C"));
         assert_eq!(one.bpm, Some(65.0));
         assert_eq!(one.scan_length_s, Some(388.64));
+        assert_eq!(one.countdown_length_s, Some(388.64));
+        assert_eq!(one.length_source, Some(LengthSource::LastMeasure));
         assert_eq!(one.arrangement.as_deref(), Some("Default"));
         assert_eq!(
             one.rental_expires_utc.as_deref(),
@@ -748,6 +807,134 @@ mod tests {
             (two.key.clone(), two.bpm, two.scan_length_s),
             (None, None, None)
         );
+    }
+
+    /// The countdown length of one setlist item: (scan_length_s, countdown_length_s, length_source).
+    fn lengths(item: Value) -> (Option<f64>, Option<f64>, Option<LengthSource>) {
+        let mut item = item;
+        item["title"] = json!("Song One");
+        let song = parse_song(&item, 0).expect("a song");
+        (
+            song.scan_length_s,
+            song.countdown_length_s,
+            song.length_source,
+        )
+    }
+
+    #[test]
+    fn the_countdown_length_rule_as_a_table() {
+        use LengthSource::{LastMeasure, SongEndLongLastMeasure, SongEndNoGrid};
+        type Row = (Option<f64>, Option<f64>, Option<(f64, LengthSource)>);
+        let table: [Row; 14] = [
+            // both present, the gap is small: the start of the last measure.
+            (Some(297.25), Some(300.5), Some((297.25, LastMeasure))),
+            (Some(300.5), Some(300.5), Some((300.5, LastMeasure))),
+            // a gap of exactly 6.0 keeps the last measure, 6.001 does not.
+            (Some(294.5), Some(300.5), Some((294.5, LastMeasure))),
+            (
+                Some(294.499),
+                Some(300.5),
+                Some((300.5, SongEndLongLastMeasure)),
+            ),
+            // 6.0000000001 is 6 (compared at 3 decimals).
+            (
+                Some(294.4999999999),
+                Some(300.5),
+                Some((294.4999999999, LastMeasure)),
+            ),
+            // the last measure after the end of the song is inconsistent data: the end.
+            (
+                Some(301.0),
+                Some(300.5),
+                Some((300.5, SongEndLongLastMeasure)),
+            ),
+            (
+                Some(300.501),
+                Some(300.5),
+                Some((300.5, SongEndLongLastMeasure)),
+            ),
+            // the real-world gaps are small: nothing changes.
+            (Some(388.64), Some(392.9), Some((388.64, LastMeasure))),
+            (Some(0.0), Some(5.0), Some((0.0, LastMeasure))),
+            (
+                Some(0.0),
+                Some(6.001),
+                Some((6.001, SongEndLongLastMeasure)),
+            ),
+            // only one side.
+            (None, Some(300.5), Some((300.5, SongEndNoGrid))),
+            (Some(297.25), None, Some((297.25, LastMeasure))),
+            (None, None, None),
+            (Some(0.0), None, Some((0.0, LastMeasure))),
+        ];
+        for (scan, end, expected) in table {
+            assert_eq!(
+                countdown_length(scan, end),
+                expected,
+                "scan {scan:?}, end {end:?}"
+            );
+        }
+        assert_eq!(LAST_MEASURE_LIMIT_S, 6.0);
+    }
+
+    #[test]
+    fn the_countdown_length_is_read_from_the_helper_with_junk_as_missing() {
+        let none = (None, None, None);
+        // both present and close: the last measure wins.
+        assert_eq!(
+            lengths(json!({"length_s": 300.5, "scan_length_s": 297.25})),
+            (Some(297.25), Some(297.25), Some(LengthSource::LastMeasure))
+        );
+        // far apart (a long last measure): the end of the song.
+        assert_eq!(
+            lengths(json!({"length_s": 300.5, "scan_length_s": 290.0})),
+            (
+                Some(290.0),
+                Some(300.5),
+                Some(LengthSource::SongEndLongLastMeasure)
+            )
+        );
+        // no beat grid, null or missing: the end of the song.
+        let no_grid = (None, Some(300.5), Some(LengthSource::SongEndNoGrid));
+        assert_eq!(
+            lengths(json!({"length_s": 300.5, "scan_length_s": null})),
+            no_grid
+        );
+        assert_eq!(lengths(json!({"length_s": 300.5})), no_grid);
+        // both null or missing: no length.
+        assert_eq!(
+            lengths(json!({"length_s": null, "scan_length_s": null})),
+            none
+        );
+        assert_eq!(lengths(json!({})), none);
+        // a junk end of the song with no beat grid: no length; with a beat grid: the beat grid.
+        for junk in [
+            json!("300.5"),
+            json!(-1),
+            json!(1e300),
+            json!([300]),
+            json!(true),
+            json!(null),
+        ] {
+            assert_eq!(
+                lengths(json!({"length_s": junk, "scan_length_s": null})),
+                none,
+                "{junk}"
+            );
+            assert_eq!(
+                lengths(json!({"length_s": junk, "scan_length_s": 297.25})),
+                (Some(297.25), Some(297.25), Some(LengthSource::LastMeasure)),
+                "{junk}"
+            );
+        }
+        // a junk start of the last measure is the same as a missing one: the end of the song.
+        for junk in [json!("297.25"), json!(-1), json!(1e300), json!({"a": 1})] {
+            assert_eq!(
+                lengths(json!({"length_s": 300.5, "scan_length_s": junk})),
+                no_grid,
+                "{junk}"
+            );
+        }
     }
 
     #[test]
@@ -781,6 +968,9 @@ mod tests {
         assert_eq!(long[0].title.chars().count(), MAX_TEXT);
         assert_eq!(long[0].bpm, None);
         assert_eq!(long[0].scan_length_s, None);
+        // `length_s` 5.0 is a fine number, so a junk scan length falls back to the end of the song.
+        assert_eq!(long[0].countdown_length_s, Some(5.0));
+        assert_eq!(long[0].length_source, Some(LengthSource::SongEndNoGrid));
         assert_eq!(long[0].position, 1);
         assert_eq!(long[0].setlist_song_id, None);
         assert_eq!(long[0].rental_expires_utc, None);
@@ -788,6 +978,10 @@ mod tests {
         assert_eq!(
             (big[0].bpm, big[0].scan_length_s, big[0].position),
             (None, None, 1)
+        );
+        assert_eq!(
+            (big[0].countdown_length_s, big[0].length_source),
+            (None, None)
         );
         assert_eq!(parse_setlist(&odd[9]).expect("a setlist").date, None);
     }

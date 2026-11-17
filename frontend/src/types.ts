@@ -938,6 +938,9 @@ export interface LibraryStatus {
   checked_at: string | null;
 }
 
+/** Where a song's countdown length comes from (the backend's `LengthSource`). */
+export type LengthSource = "last_measure" | "song_end_no_grid" | "song_end_long_last_measure";
+
 export interface LibrarySong {
   setlist_song_id: number | null;
   /** Place in the Playback setlist, from 1. */
@@ -946,8 +949,12 @@ export interface LibrarySong {
   key: string | null;
   key_original: string | null;
   bpm: number | null;
-  /** Where the countdown ends: the start of the song's last measure (the helper's `scan_length_s`). Null: no beat grid. */
+  /** The start of the song's last measure (the helper's `scan_length_s`). Null: no beat grid. */
   scan_length_s: number | null;
+  /** Where the countdown ends, resolved by the backend: `scan_length_s`, or the end of the song (the helper's `length_s`) when there is no beat grid or the last measure starts more than 6 s before it; null when neither is known. */
+  countdown_length_s: number | null;
+  /** Which one `countdown_length_s` is; null when there is no length. */
+  length_source: LengthSource | null;
   arrangement: string | null;
   sections: number | null;
   rental_expires_utc: string | null;

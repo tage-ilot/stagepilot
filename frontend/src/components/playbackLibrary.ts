@@ -1,12 +1,14 @@
-import type { LibraryPlan, LibraryPlanSong, LibrarySong, ServicePlan } from "../types";
+import type { LengthSource, LibraryPlan, LibraryPlanSong, LibrarySong, ServicePlan } from "../types";
 import { serviceStartsMs, zonedWallTimeToMs } from "./dashboard/scanReminder";
 
 /**
  * The optional Playback library, read-only: what the helper on the Playback computer says about each plan song, and the plain
  * words for where it disagrees with the plan. Nothing here is saved or sent anywhere; it only reads a `LibraryPlan`.
  *
- * The length is where StagePilot's countdown ends, the START OF THE SONG'S LAST MEASURE (`scan_length_s`), never the sections'
- * total (owner, 2026-11-16: "countdowns ending at the start of the last measure ... more accurate to where the song goes quiet").
+ * The length is where StagePilot's countdown ends: the START OF THE SONG'S LAST MEASURE (`scan_length_s`); the END OF THE SONG
+ * (`length_s`) for a song with no beat grid or whose last measure starts more than 6 s before the end. The backend resolves the
+ * rule into `countdown_length_s` (and says in `length_source` which one it is); this window only displays that one (owner, 2026-11-16: "countdowns ending at the start of the last measure ...
+ * more accurate to where the song goes quiet"; "if it has no beat grid the end of the song can be used instead").
  */
 
 /** Playback's length may differ from the plan's by this much before it is worth saying (information only). */
@@ -25,6 +27,13 @@ export interface LibraryNotice {
   text: string;
 }
 
+/** Added to the chip's tooltip when the length is the end of the song, and why (nothing for the start of the last measure). */
+const LENGTH_SOURCE_WORDS: Record<LengthSource, string | null> = {
+  last_measure: null,
+  song_end_no_grid: "Playback has no bar lines for this song, so this is where the song ends.",
+  song_end_long_last_measure: "This song's last measure is longer than 6 seconds, so this is where the song ends.",
+};
+
 const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
 
 /** "Ab (was C) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
@@ -32,7 +41,7 @@ export function songFacts(song: LibrarySong): string[] {
   const facts: string[] = [];
   if (song.key) facts.push(song.key_original && song.key_original !== song.key ? `${song.key} (was ${song.key_original})` : song.key);
   if (song.bpm !== null) facts.push(`${Number.isInteger(song.bpm) ? song.bpm : Math.round(song.bpm * 10) / 10} BPM`);
-  if (song.scan_length_s !== null) facts.push(formatLength(song.scan_length_s));
+  if (song.countdown_length_s !== null) facts.push(formatLength(song.countdown_length_s));
   if (song.sections !== null) facts.push(sectionWord(song.sections));
   if (song.arrangement) facts.push(song.arrangement);
   return facts;
@@ -40,7 +49,7 @@ export function songFacts(song: LibrarySong): string[] {
 
 /** Playback's length for a plan song when it differs from the plan's by more than 15 s, else null. */
 export function lengthDifference(song: LibraryPlanSong): { playback: string; plan: string } | null {
-  const playback = song.library?.scan_length_s ?? null;
+  const playback = song.library?.countdown_length_s ?? null;
   if (playback === null || song.plan_seconds === null) return null;
   if (Math.abs(playback - song.plan_seconds) <= LENGTH_TOLERANCE_SECONDS) return null;
   return { playback: formatLength(playback), plan: formatLength(song.plan_seconds) };
@@ -65,6 +74,8 @@ export function chipLibrary(song: LibraryPlanSong | undefined): ChipLibrary | nu
   if (!facts.length) return null;
   const title = [`Playback: ${facts.join(", ")}`];
   if (different) title.push(`Playback counts this song down to ${different.playback}; the plan says ${different.plan}.`);
+  const why = song.library.countdown_length_s !== null && song.library.length_source ? LENGTH_SOURCE_WORDS[song.library.length_source] : null;
+  if (why) title.push(why);
   return { text: facts.join(" · "), title: title.join(". ") };
 }
 
