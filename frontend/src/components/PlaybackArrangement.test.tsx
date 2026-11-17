@@ -51,6 +51,32 @@ describe("Song arrangement", () => {
     expect(summary()).toContain("5 of 5 service songs are linked");
   });
 
+  it("gives every row a stamp in words and one full sentence for a screen reader", async () => {
+    const user = userEvent.setup();
+    render(<Host />);
+    const stamp = (i: number) => pairs()[i]!.querySelector("[data-stamp]")!.textContent;
+    expect([0, 1, 2, 3, 4].map(stamp)).toEqual(["✓Matched", "✓Matched", "✓Matched", "!Check length", "!Check length"]);
+    expect(within(pairs()[0]!).getByText("Plan song 1, One Thing Remains goes with Playback song 1. Matched. 5 s apart")).toHaveClass("sr-only");
+    await user.click(skip("Skip I Sing Praises"));
+    expect(stamp(3)).toBe("⌀Skipped");
+    expect(within(pairs()[3]!).getByText("Plan song 4, I Sing Praises has no Playback song. Skipped.")).toHaveClass("sr-only");
+    await user.click(skip("Skip One Thing Remains"));
+    expect(pairs().at(-1)!.querySelector("[data-stamp]")).toHaveTextContent("Only in Playback");
+    expect(pairs()[0]!.querySelector("[data-stamp]")).toHaveTextContent("Skipped");
+    await user.click(skip("Skip Playback song 5"));
+    expect(pairs().at(-1)!.querySelector("[data-stamp]")).toHaveTextContent("Skipped");
+    await user.click(skip("Skip One Thing Remains"));
+    expect(pairs().map((row) => row.querySelector("[data-stamp]")!.textContent).includes("−Only in plan")).toBe(false);
+  });
+
+  it("stamps a plan song that has nothing left to pair with as only in the plan", async () => {
+    const user = userEvent.setup();
+    render(<Host />);
+    await user.click(skip("Skip Playback song 1"));
+    expect(pairs().at(-1)!.querySelector("[data-stamp]")).toHaveTextContent("Only in plan");
+    expect(screen.getByTestId("arrangement-badge")).toHaveTextContent("Does not line up");
+  });
+
   it("flags a pair whose lengths are far apart as probably a different song, never silently fixing it", () => {
     render(<Host />);
     expect(pairs()[3]).toHaveTextContent("I Sing Praises");
@@ -91,7 +117,8 @@ describe("Song arrangement", () => {
     const box = pairs()[0]!.querySelector(".arr-plan")!;
     const row = within(box as HTMLElement).getByRole("switch").closest("label")!;
     expect(row).toHaveTextContent(/^Skip$/);
-    expect(row).toHaveClass("self-end", "mt-auto");
+    expect(row).toHaveClass("self-end");
+    expect(row.parentElement).toHaveClass("mt-auto", "justify-between");
     expect(screen.getAllByRole("switch").filter((s) => /^Skip /.test(s.getAttribute("aria-label") ?? ""))).toHaveLength(10);
   });
 

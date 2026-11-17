@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { forgetPlaybackHelper, getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, updatePlaybackLibrarySettings } from "../api";
+import { choosePlaybackLibrarySetlist, forgetPlaybackHelper, getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, updatePlaybackLibrarySettings } from "../api";
 import { describeError } from "../errorText";
 import type { LibraryPlan, LibraryStatus, SettingsResponse } from "../types";
 
@@ -17,11 +17,13 @@ export interface PlaybackLibraryController {
   status: LibraryStatus | null;
   plan: LibraryPlan | null;
   error: string | null;
-  pending: "save" | "check" | "forget" | null;
+  pending: "save" | "check" | "forget" | "setlist" | null;
   /** Saves the override of the helper's computer (empty: the Playback host). */
   saveAddress: (address: string) => Promise<boolean>;
   /** "Forget the network script": the key is deleted; the script keeps running but cannot be used. */
   forget: () => Promise<boolean>;
+  /** Chooses which Playback setlist the loaded plan is matched with (null: the one on the plan's date). The backend keeps it in memory for this plan only; nothing is saved or sent to Playback. */
+  chooseSetlist: (setlistId: number | null) => Promise<boolean>;
   /** The Check button: reads the helper's health now. */
   check: () => void;
   /** A setup box is waiting for the script: look every few seconds instead of every 30. */
@@ -42,7 +44,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
   const [status, setStatus] = useState<LibraryStatus | null>(null);
   const [plan, setPlan] = useState<LibraryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<"save" | "check" | "forget" | null>(null);
+  const [pending, setPending] = useState<"save" | "check" | "forget" | "setlist" | null>(null);
   const [watching, setWatching] = useState(false);
   const generation = useRef(0);
   // A background read clears the error a read left, never the one an action (save, forget) left: that one stays until the next action.
@@ -123,6 +125,23 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
     }
   }, [canConfigure, onSettings]);
 
+  const chooseSetlist = useCallback(async (setlistId: number | null): Promise<boolean> => {
+    if (!canConfigure) return false;
+    setPending("setlist");
+    errorFrom.current = null;
+    setError(null);
+    try {
+      setPlan(await choosePlaybackLibrarySetlist(setlistId));
+      return true;
+    } catch (cause) {
+      errorFrom.current = "action";
+      setError(describeError(cause, "StagePilot could not switch the Playback setlist."));
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }, [canConfigure]);
+
   const check = useCallback(() => {
     if (!enabled) return;
     setPending("check");
@@ -131,5 +150,5 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
 
   const watch = useCallback((on: boolean) => setWatching(on), []);
 
-  return { target, address, status, plan, error, pending, saveAddress, forget, check, watch };
+  return { target, address, status, plan, error, pending, saveAddress, forget, chooseSetlist, check, watch };
 }

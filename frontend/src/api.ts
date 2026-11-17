@@ -453,6 +453,11 @@ export const getPlaybackLibraryWaveform = (setlistSongId: number) =>
   requestJson<SongWaveform>(`/api/v1/playback-library/songs/${setlistSongId}/waveform`);
 export const getPlaybackLibraryStatus = (check = false) => requestJson<LibraryStatus>(libraryAsk("status", check));
 export const getPlaybackLibraryPlan = (check = false) => requestJson<LibraryPlan>(libraryAsk("plan", check));
+/** Chooses which Playback setlist the loaded plan is matched with (null: the one on the plan's date). Kept in memory by the backend, for this plan only; nothing is sent to Playback or Planning Center. */
+export const choosePlaybackLibrarySetlist = (setlistId: number | null) =>
+  requestJson<LibraryPlan>("/api/v1/playback-library/setlist", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setlist_id: setlistId }),
+  });
 /** Saves the optional override of the helper's computer (empty: the saved Playback host). */
 export const updatePlaybackLibrarySettings = (address: string) =>
   requestJson<LibraryStatus>("/api/v1/playback-library/settings", {

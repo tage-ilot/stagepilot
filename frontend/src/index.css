@@ -1485,11 +1485,17 @@ textarea:focus-visible {
   }
 }
 
-/* Song arrangement (Playback song order). The panel decides by its OWN width, not the window's, so it stacks
-   in a squished window as well as on a phone. Wide: plan | link | Playback on one row. Narrow: each pair stacks,
-   the plan box keeps left and the Playback box keeps right so the two sides still read. */
+/* Song arrangement: the matchup LEDGER (Playback song order). The panel decides by its OWN width, not the window's, so it stacks
+   in a squished window as well as on a phone. Wide: each row is a stamp strip, then plan | join mark | Playback, then the
+   plain-words notes, ruled off like a ledger line. Narrow: each pair stacks (plan, vertical join, Playback), the plan box kept
+   left and the Playback box kept right so the two sides still read. */
 .song-arrangement {
   container-type: inline-size;
+}
+
+.arr-list {
+  border-top: 2px solid var(--ds-edge-medium);
+  border-bottom: 2px solid var(--ds-edge-medium);
 }
 
 .arr-cols,
@@ -1497,6 +1503,31 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 4rem minmax(0, 1fr);
   align-items: stretch;
+}
+
+.arr-cols {
+  padding-inline: 0;
+}
+
+.arr-line {
+  row-gap: 0.5rem;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.arr-line + .arr-line {
+  border-top: 2px dashed var(--ds-edge-medium);
+}
+
+.arr-head {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.25rem 0.75rem;
+}
+
+.arr-notes {
+  flex: 1 1 16rem;
 }
 
 .arr-link {
@@ -1511,13 +1542,19 @@ textarea:focus-visible {
   left: 0;
   right: 0;
   top: 50%;
-  height: 2px;
-  background: var(--ds-integration-playback-soft);
+  height: 0;
+  border-top: 2px dashed var(--ds-warning);
+}
+
+.arr-link[data-sure]::before {
+  border-top: 2px solid var(--ds-integration-playback-soft);
+}
+
+.arr-link[data-skipped]::before {
+  border-top: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
 }
 
 .arr-link[data-none]::before {
-  height: 0;
-  background: none;
   border-top: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
 }
 
@@ -1528,10 +1565,7 @@ textarea:focus-visible {
 
   .arr-line {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .arr-list {
-    row-gap: 5rem;
+    row-gap: 0.25rem;
   }
 
   .arr-link {
@@ -1543,13 +1577,21 @@ textarea:focus-visible {
     right: auto;
     top: 0;
     bottom: 0;
-    width: 2px;
+    width: 0;
     height: auto;
+    border-top: 0;
+    border-left: 2px dashed var(--ds-warning);
+  }
+
+  .arr-link[data-sure]::before {
+    border-left: 2px solid var(--ds-integration-playback-soft);
+  }
+
+  .arr-link[data-skipped]::before {
+    border-left: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
   }
 
   .arr-link[data-none]::before {
-    width: 0;
-    border-top: 0;
     border-left: 2px dashed color-mix(in srgb, var(--ds-ink) 40%, transparent);
   }
 
@@ -1557,7 +1599,8 @@ textarea:focus-visible {
     display: none;
   }
 
-  .arr-line[data-lone] .arr-link {
+  .arr-line[data-kind="plan-only"] .arr-link,
+  .arr-line[data-kind="playback-only"] .arr-link {
     display: none;
   }
 

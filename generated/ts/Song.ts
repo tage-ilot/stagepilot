@@ -4,4 +4,9 @@ export type Song = { id: string, title: string, duration_seconds: number | null,
 /**
  * Computed from `duration_seconds` (`m:ss`, or `h:mm:ss`); present on every serialised song.
  */
-formatted_duration: string | null, };
+formatted_duration: string | null, 
+/**
+ * The key Planning Center names for the song in this plan (its item's `key_name`, e.g. "A" or "Bb"); absent when the
+ * plan names none. Read-only information for the Playback library matchup: nothing acts on it.
+ */
+key_name?: string, };

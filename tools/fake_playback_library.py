@@ -290,6 +290,11 @@ class Handler(BaseHTTPRequestHandler):
                 today = datetime.date.today().isoformat()
                 past = [d for d in state.dates() if d <= today] or state.dates()
                 return self._send(200, state.setlist(past[-1]))
+            if which.isdigit() and len(which) == 8:
+                # Playback's own number for a setlist (what `/setlists` lists as `setlist_id`): here the date without dashes.
+                which = "%s-%s-%s" % (which[:4], which[4:6], which[6:])
+            elif which in state.args.no_setlist_on:
+                return self._send(404, {"error": "no setlist for that date"})
             try:
                 datetime.date.fromisoformat(which)
             except ValueError:
@@ -360,6 +365,7 @@ def main(argv=None):
     parser.add_argument("--version", default="0.3.0", help="the version it reports (try 0.2.9 for the update notice)")
     parser.add_argument("--old", action="store_true", help="behave like helper 0.2.0: no auth field in /health")
     parser.add_argument("--date", help="the date that gets the six-song setlist (default: today)")
+    parser.add_argument("--no-setlist-on", action="append", default=[], metavar="DATE", help="a date Playback has no setlist for (answers 404 for it, the way a Sunday with no setlist does); repeatable")
     parser.add_argument("--pair-from", metavar="URL", help="before starting, fetch StagePilot's one-time install script at URL and keep its key in --key-file (preview only)")
     args = parser.parse_args(argv)
     if args.pair_from:

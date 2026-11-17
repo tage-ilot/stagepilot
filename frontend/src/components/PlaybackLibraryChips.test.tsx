@@ -111,6 +111,13 @@ describe("the song chips in the Playback config", () => {
     expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
   });
 
+  it("says an uncertain pair is only a maybe: the Playback title, no cover, no bar, nothing taken from it", () => {
+    mount(planOf([planSong("Way Maker", 1, { status: "uncertain", confidence: "uncertain", library: null, candidate: library({ title: "Waymaker" }) })]));
+    expect(chips()[0]).toHaveTextContent("Way Makermay be “Waymaker” in Playback, not sure");
+    expect(chips()[0]!.querySelector("img")).toBeNull();
+    expect(screen.queryByTestId("library-bar")).toBeNull();
+  });
+
   it("keeps the words for a song Playback is missing or cannot tell apart, as a chip with no cover and no bar", () => {
     mount(planOf([
       planSong("Song One", 1),

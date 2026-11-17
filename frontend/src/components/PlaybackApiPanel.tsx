@@ -90,7 +90,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           <PlanningCenterLengths status={status} onStatus={playback?.acceptStatus} />
           </div>
           {mismatch && <p className="text-sm text-ink-body">{mismatch}</p>}
-          <PlaybackArrangement draft={draft} status={status} />
+          <PlaybackArrangement draft={draft} library={library} status={status} />
           {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-danger-text">{status.last_error}</p>}
           </div>
           </div>

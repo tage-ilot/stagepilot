@@ -42,6 +42,8 @@ export interface Song {
   title: string;
   duration_seconds: number | null;
   formatted_duration?: string | null;
+  /** The key the plan names for the song (Planning Center's item key); left out when it names none. */
+  key_name?: string;
   order: number;
   service_sequence?: number | null;
   is_generic: boolean;
@@ -979,7 +981,9 @@ export interface DashboardAccess {
 // ---- the optional Playback library (mirrors the generated Library* types) ----------------------
 
 export type LibraryState = "off" | "ready" | "waiting" | "no_setlist" | "problem";
-export type PlanMatch = "matched" | "missing" | "duplicate_in_plan" | "duplicate_in_playback";
+export type PlanMatch = "matched" | "uncertain" | "missing" | "duplicate_in_plan" | "duplicate_in_playback";
+/** How sure a title match is: exact (same words), close (same but for a bracket or a "feat." tail), uncertain (alike, not the same). */
+export type MatchConfidence = "exact" | "close" | "uncertain";
 
 /** Where the network script (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
 export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable" | "forgotten";
@@ -1062,11 +1066,19 @@ export interface LibraryPlanSong {
   title: string;
   plan_position: number;
   plan_seconds: number | null;
+  /** The key the plan names for the song (Planning Center's item key); null when it names none. */
+  plan_key: string | null;
   status: PlanMatch;
+  /** Null when unpaired. A `matched` song is exact or close; an `uncertain` one is uncertain. */
+  confidence: MatchConfidence | null;
   library: LibrarySong | null;
+  /** The Playback song an `uncertain` pairing is about; never a source of cover, key or waveform. */
+  candidate: LibrarySong | null;
 }
 
 export interface LibrarySetlist {
+  /** Playback's own number for it (what the chooser sends back); null when the helper gave none. */
+  id: number | null;
   title: string;
   date: string | null;
   songs: number;
@@ -1080,6 +1092,12 @@ export interface LibraryPlan {
   setlist: LibrarySetlist | null;
   newest: LibrarySetlist | null;
   songs: LibraryPlanSong[];
+  /** Songs of the setlist that go with no plan song, in Playback's order. */
+  playback_only: LibrarySong[];
+  /** The operator chose this setlist (it is not the one on the plan's date). */
+  chosen: boolean;
+  /** Playback's recent setlists for the chooser: given when none is on the plan's date, or one was chosen. */
+  setlists: LibrarySetlist[];
   stale: boolean;
   checked_at: string | null;
 }

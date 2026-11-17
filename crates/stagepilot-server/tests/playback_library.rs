@@ -15,7 +15,7 @@ use stagepilot_core::config::PlaybackLibrarySettings;
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
 use stagepilot_core::state::{ServicePlan, Song};
 use stagepilot_playback::library::{
-    HelperState, LengthSource, LibraryPlan, LibraryState, PlanMatch,
+    HelperState, LengthSource, LibraryPlan, LibraryState, MatchConfidence, PlanMatch,
 };
 use stagepilot_server::playback_library::{base_url, sign, PlaybackLibrary};
 use stagepilot_server::{build_app, AppOptions, OutputBackends, Runtime};
@@ -60,6 +60,8 @@ struct Behaviour {
     wave_delay: Duration,
     /// The query string of each waveform ask.
     wave_queries: Vec<String>,
+    /// Other setlists the fake holds, by Playback's number: (id, title, date, items).
+    others: Vec<(i64, String, String, Vec<Value>)>,
     /// The helper's key: when set it answers the way helper 0.3.0 does (a signed request, or 401; the bare
     /// `/health` answers the minimal body).
     key: Option<String>,
@@ -247,6 +249,24 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
             health["auth"] = json!("key");
         }
         return json_ok(health);
+    }
+    if path == "/setlists" {
+        let mut list = vec![
+            json!({"setlist_id": 1, "title": "Set For Test", "performance_date": b.setlist_date, "songs": b.items.len()}),
+        ];
+        for (id, title, date, items) in &b.others {
+            list.push(json!({"setlist_id": id, "title": title, "performance_date": date, "songs": items.len()}));
+        }
+        return json_ok(json!({"setlists": list}));
+    }
+    if let Some((id, title, date, items)) = path
+        .strip_prefix("/setlists/")
+        .and_then(|r| r.parse::<i64>().ok())
+        .and_then(|n| b.others.iter().find(|o| o.0 == n))
+    {
+        return json_ok(
+            json!({"setlist_id": id, "title": title, "performance_date": date, "items": items}),
+        );
     }
     if let Some(date) = path.strip_prefix("/setlists/") {
         let setlist = |performance_date: &str| json!({"setlist_id": 1, "title": "Set For Test", "performance_date": performance_date, "items": b.items});
@@ -1011,11 +1031,17 @@ fn the_plan_json_is_the_shape_the_window_reads() {
         setlist: None,
         newest: None,
         songs: vec![],
+        playback_only: vec![],
+        chosen: false,
+        setlists: vec![],
         stale: false,
         checked_at: None,
     })
     .unwrap();
     assert_eq!(value["state"], json!("no_setlist"));
+    assert_eq!(value["playback_only"], json!([]));
+    assert_eq!(value["chosen"], json!(false));
+    assert_eq!(value["setlists"], json!([]));
 }
 
 #[tokio::test]
@@ -2758,5 +2784,283 @@ async fn the_key_is_in_no_answer_no_setting_and_no_log_line() {
     assert!(
         !stagepilot_core::redact::redact_text(&format!("helper_key={KEY} x-pbl-sig: {KEY}"))
             .contains(KEY)
+    );
+}
+
+// ---- the matchup: how sure each pair is, songs only Playback has, and the setlist chooser -------------
+
+fn other_setlist(helper: &Helper) {
+    helper.set(|b| {
+        b.others = vec![
+            (
+                7,
+                "Saturday Night".into(),
+                "2026-11-21".into(),
+                vec![
+                    item(31, 1, "Song One"),
+                    item(32, 2, "Extra Song"),
+                    item(33, 3, "Song Three (Feat. Guest)"),
+                ],
+            ),
+            (
+                6,
+                "Old Set".into(),
+                "2026-11-08".into(),
+                vec![item(41, 1, "Song One")],
+            ),
+        ];
+    });
+}
+
+#[tokio::test]
+async fn the_plan_says_how_sure_each_pair_is_and_which_songs_only_playback_has() {
+    let helper = Helper::new();
+    helper.set(|b| {
+        b.items = vec![
+            item(11, 1, "Song One"),
+            item(12, 2, "Way Maker"),
+            item(13, 3, "Song Three (Live at Home)"),
+            item(14, 4, "Only Here"),
+        ];
+    });
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let mut sunday = plan(
+        "2026-11-22",
+        &["Song One", "Waymaker", "Song Three Reprise", "Missing One"],
+    );
+    sunday.songs[0].key_name = Some("A".into());
+    let result = library
+        .plan(&settings_for(&address), Some(&sunday), false)
+        .await;
+    assert_eq!(result.state, LibraryState::Ready);
+    let seen: Vec<(PlanMatch, Option<MatchConfidence>)> = result
+        .songs
+        .iter()
+        .map(|s| (s.status, s.confidence))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            (PlanMatch::Matched, Some(MatchConfidence::Exact)),
+            (PlanMatch::Uncertain, Some(MatchConfidence::Uncertain)),
+            (PlanMatch::Uncertain, Some(MatchConfidence::Uncertain)),
+            (PlanMatch::Missing, None),
+        ]
+    );
+    // An uncertain pair names the Playback song but never hands it over as the song's library.
+    assert!(result.songs[1].library.is_none());
+    assert_eq!(
+        result.songs[1].candidate.as_ref().map(|c| c.title.as_str()),
+        Some("Way Maker")
+    );
+    let only: Vec<&str> = result
+        .playback_only
+        .iter()
+        .map(|s| s.title.as_str())
+        .collect();
+    assert_eq!(only, ["Only Here"]);
+    assert!(!result.chosen);
+    assert_eq!(result.songs[0].plan_key.as_deref(), Some("A"));
+    assert_eq!(result.songs[1].plan_key, None);
+    assert!(
+        result.setlists.is_empty(),
+        "no chooser while the date has a setlist"
+    );
+}
+
+#[tokio::test]
+async fn with_no_setlist_on_the_date_the_other_setlists_are_offered_by_number_name_date_and_song_count(
+) {
+    let helper = Helper::new();
+    other_setlist(&helper);
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let result = library
+        .plan(
+            &settings_for(&address),
+            Some(&plan("2026-11-29", &["Song One"])),
+            false,
+        )
+        .await;
+    assert_eq!(result.state, LibraryState::NoSetlist);
+    assert!(
+        result.songs.is_empty() && result.setlist.is_none(),
+        "nothing is paired until the operator chooses"
+    );
+    let offered: Vec<(Option<i64>, &str, Option<&str>, u32)> = result
+        .setlists
+        .iter()
+        .map(|s| (s.id, s.title.as_str(), s.date.as_deref(), s.songs))
+        .collect();
+    assert_eq!(
+        offered,
+        [
+            (Some(1), "Set For Test", Some("2026-11-22"), 3),
+            (Some(7), "Saturday Night", Some("2026-11-21"), 3),
+            (Some(6), "Old Set", Some("2026-11-08"), 1),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_chosen_setlist_is_used_for_that_plan_only_and_null_goes_back_to_the_date() {
+    let helper = Helper::new();
+    other_setlist(&helper);
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let settings = settings_for(&address);
+    let sunday = plan("2026-11-29", &["Song One", "Song Three"]);
+    assert_eq!(
+        library.plan(&settings, Some(&sunday), false).await.state,
+        LibraryState::NoSetlist
+    );
+
+    library.choose(&sunday.id, Some(7));
+    let chosen = library.plan(&settings, Some(&sunday), true).await;
+    assert_eq!(chosen.state, LibraryState::Ready);
+    assert!(chosen.chosen);
+    assert_eq!(
+        chosen.setlist.as_ref().map(|s| (s.id, s.title.as_str())),
+        Some((Some(7), "Saturday Night"))
+    );
+    let seen: Vec<(PlanMatch, Option<MatchConfidence>)> = chosen
+        .songs
+        .iter()
+        .map(|s| (s.status, s.confidence))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            (PlanMatch::Matched, Some(MatchConfidence::Exact)),
+            (PlanMatch::Matched, Some(MatchConfidence::Close))
+        ]
+    );
+    assert_eq!(
+        chosen
+            .playback_only
+            .iter()
+            .map(|s| s.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Extra Song"]
+    );
+    assert_eq!(
+        chosen.setlists.len(),
+        3,
+        "the chooser stays so the choice can be changed"
+    );
+    assert!(helper.hits().contains(&"/setlists/7".to_string()));
+
+    // Another plan has its own say: it is read by its date, and the choice is still there for the first.
+    let other = ServicePlan {
+        id: "plan-2".into(),
+        ..plan("2026-11-29", &["Song One"])
+    };
+    assert_eq!(
+        library.plan(&settings, Some(&other), true).await.state,
+        LibraryState::NoSetlist
+    );
+    assert_eq!(library.chosen_for("plan-1"), Some(7));
+    assert_eq!(library.chosen_for("plan-2"), None);
+
+    library.choose(&sunday.id, None);
+    let back = library.plan(&settings, Some(&sunday), true).await;
+    assert_eq!(back.state, LibraryState::NoSetlist);
+    assert!(!back.chosen);
+}
+
+#[tokio::test]
+async fn a_chosen_setlist_that_playback_no_longer_has_is_forgotten() {
+    let helper = Helper::new();
+    other_setlist(&helper);
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let settings = settings_for(&address);
+    let sunday = plan("2026-11-29", &["Song One"]);
+    library.choose(&sunday.id, Some(99));
+    let result = library.plan(&settings, Some(&sunday), true).await;
+    assert_eq!(result.state, LibraryState::NoSetlist);
+    assert!(!result.chosen);
+    assert_eq!(
+        library.chosen_for(&sunday.id),
+        None,
+        "the next read goes by the date again"
+    );
+}
+
+#[tokio::test]
+async fn a_new_address_forgets_the_choice_because_the_numbers_belong_to_the_old_helper() {
+    let library = PlaybackLibrary::new();
+    library.choose("plan-1", Some(7));
+    library.reset().await;
+    assert_eq!(library.chosen_for("plan-1"), None);
+}
+
+#[tokio::test]
+async fn the_setlist_route_chooses_and_changes_nothing_that_is_saved() {
+    let helper = Helper::new();
+    other_setlist(&helper);
+    let address = helper.serve().await;
+    let (router, runtime) = app().await;
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"address": address})),
+    )
+    .await;
+    let before = (
+        runtime.settings_service.snapshot().playback_api,
+        runtime.settings_service.snapshot().playback_library.address,
+    );
+
+    // Nothing but a whole number or null is a choice.
+    for bad in [
+        json!({}),
+        json!({"setlist_id": "7"}),
+        json!({"setlist_id": -3}),
+        json!({"setlist_id": 1.5}),
+    ] {
+        let (status, _) = call(
+            &router,
+            "PUT",
+            "/api/v1/playback-library/setlist",
+            Some(bad.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+    }
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/setlist",
+        Some(json!({"setlist_id": 7})),
+    )
+    .await;
+    // The demo plan is loaded: either it has songs (and the choice is read) or it says so in words; never a 5xx.
+    assert!(
+        status == StatusCode::OK || status == StatusCode::CONFLICT,
+        "{status} {body}"
+    );
+    if status == StatusCode::OK {
+        assert!(
+            matches!(body["state"].as_str(), Some("ready" | "no_setlist")),
+            "{body}"
+        );
+    }
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/setlist",
+        Some(json!({"setlist_id": null})),
+    )
+    .await;
+    assert!(status == StatusCode::OK || status == StatusCode::CONFLICT);
+    assert_eq!(
+        (
+            runtime.settings_service.snapshot().playback_api,
+            runtime.settings_service.snapshot().playback_library.address
+        ),
+        before
     );
 }

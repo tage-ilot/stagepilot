@@ -6,7 +6,9 @@ import { chipLibrary, libraryNotices, songFaceFacts } from "./playbackLibrary";
 
 /** What a chip says for a song Playback cannot be paired with (no cover, no bar). */
 const unpaired = (song: LibraryPlanSong) =>
-  song.status === "missing" ? "not in Playback's setlist" : "appears more than once, so StagePilot cannot tell which Playback song it is";
+  song.status === "missing" ? "not in Playback's setlist"
+    : song.status === "uncertain" ? `may be “${song.candidate?.title ?? "another song"}” in Playback, not sure`
+      : "appears more than once, so StagePilot cannot tell which Playback song it is";
 
 /**
  * One plan song as a chip: a 28 px cover (only when Playback has a picture), the title, key, BPM and countdown length, and under both a
