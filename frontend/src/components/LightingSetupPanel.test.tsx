@@ -1008,7 +1008,7 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
     <LightingSetupPanel error={null} library={library} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
   );
   const wire = (answer: () => Promise<Response>) => {
-    const fetchMock = vi.fn(answer);
+    const fetchMock = vi.fn<typeof fetch>(() => answer());
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
   };
