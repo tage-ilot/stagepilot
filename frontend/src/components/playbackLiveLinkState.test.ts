@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { libraryStatus } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
-import { apiGood, apiLine, pillState, scriptActive, scriptLine, scriptNote } from "./playbackLiveLinkState";
+import type { HelperState } from "../types";
+import { apiGood, apiLine, pillParts, scriptActive, scriptLine, scriptNote } from "./playbackLiveLinkState";
 
 describe("the Playback API line: the backend's own sentence, with a tone", () => {
   it("connected, MIDI, searching and not connected", () => {
@@ -27,7 +28,7 @@ describe("the network script line: words for every state, and never a warning fo
     expect(line("ready")).toEqual({ tone: "success", text: "Ready, version 0.3.0" });
     expect(line("not_installed")).toEqual({ tone: "idle", text: "Not installed" });
     expect(line("outdated").text).toBe("Update available, version 0.2.0");
-    expect(line("needs_key")).toEqual({ tone: "info", text: "Needs the command again" });
+    expect(line("needs_key")).toEqual({ tone: "warning", text: "Needs the command again" });
     expect(line("unreachable")).toEqual({ tone: "warning", text: "Not answering" });
     expect(line("forgotten")).toEqual({ tone: "idle", text: "Forgotten" });
   });
@@ -49,12 +50,34 @@ describe("the network script line: words for every state, and never a warning fo
   });
 });
 
-describe("the pill: both good, the API alone, the script alone, neither", () => {
-  it("summarises the two lines", () => {
-    expect(pillState(true, true)).toEqual({ text: "Connected", tone: "success" });
-    expect(pillState(true, false).text).toBe("API only");
-    expect(pillState(false, true).text).toBe("Script only");
-    expect(pillState(false, false)).toEqual({ text: "Not connected", tone: "idle" });
+describe("the pill: one short word for each of the two statuses", () => {
+  const line = (tone: "success" | "idle" | "info" | "midi") => ({ tone, text: "x" });
+  const library = (state: HelperState) => libraryStatus(state);
+
+  it("says Connected for both when the API is connected and the script answers", () => {
+    const parts = pillParts({ good: true, line: line("success") }, library("ready"), true);
+    expect(parts.api).toEqual({ word: "Connected", tone: "success" });
+    expect(parts.script).toEqual({ word: "Connected", tone: "success" });
+  });
+
+  it("names the API's other states: searching, MIDI only, not connected", () => {
+    expect(pillParts({ good: false, line: line("info") }, null, false).api).toEqual({ word: "Searching", tone: "info" });
+    expect(pillParts({ good: false, line: line("midi") }, null, false).api.word).toBe("MIDI only");
+    expect(pillParts({ good: false, line: line("idle") }, null, false).api).toEqual({ word: "Not connected", tone: "idle" });
+  });
+
+  it("names each state of the network script, and needs-setup is amber, never the calm teal of a healthy state", () => {
+    const word = (state: HelperState) => pillParts({ good: true, line: line("success") }, library(state), true).script;
+    expect(word("outdated").word).toBe("Update available");
+    expect(word("needs_key")).toEqual({ word: "Needs setup", tone: "warning" });
+    expect(word("unreachable")).toEqual({ word: "Not answering", tone: "warning" });
+    expect(word("forgotten").word).toBe("Forgotten");
+    expect(word("not_installed")).toEqual({ word: "Not installed", tone: "idle" });
+  });
+
+  it("says Not installed when there is no computer yet and Checking while the first answer is awaited", () => {
+    expect(pillParts({ good: false, line: line("idle") }, null, false).script.word).toBe("Not installed");
+    expect(pillParts({ good: true, line: line("success") }, null, true).script.word).toBe("Checking");
   });
 });
 
