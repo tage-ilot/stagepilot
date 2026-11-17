@@ -1,31 +1,19 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, LibraryStatus } from "../types";
-import { PlaybackLibraryPanel } from "./PlaybackLibraryPanel";
+import type { LibraryPlan, LibrarySection, LibrarySong } from "../types";
+import { libraryController, libraryPlan, librarySong, librarySongOf } from "../test/libraryFixtures";
+import { PlaybackLibrarySongs } from "./PlaybackLibrarySongs";
 import { arrangementLabel } from "./playbackLibrary";
 
-const status = (over: Partial<LibraryStatus> = {}): LibraryStatus => ({
-  enabled: true, address: "http://10.20.0.102", state: "ready", message: "Playback library 0.2.0 is ready: 12 songs in 3 setlists.",
-  version: "0.2.0", songs: 12, setlists: 3, stale: false, checked_at: null, ...over,
-});
 const sectionsOf = (...parts: Array<[string, number, number]>): LibrarySection[] => parts.map(([name, start, end]) => ({ name, start, end }));
-const library = (over: Partial<LibrarySong> = {}): LibrarySong => ({
-  setlist_song_id: 2000001, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, countdown_length_s: 388.64,
-  length_source: "last_measure", arrangement: "Default", section_count: 3,
-  sections: sectionsOf(["Count Off", 0, 4], ["Verse 1", 4, 24], ["Vamp on 1", 24, 28]),
-  artwork: { type: "image/jpeg", bytes: 46874, etag: "\"0123456789abcdef\"" }, rental_expires_utc: null, ...over,
-});
-const planSong = (title: string, position: number, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
-  key: `k${position}`, title, plan_position: position, plan_seconds: 389, status: "matched", library: library({ title, position, setlist_song_id: 2000000 + position }), ...over,
-});
-const planOf = (songs: LibraryPlanSong[], over: Partial<LibraryPlan> = {}): LibraryPlan => ({
-  enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { title: "Set", date: "2026-11-22", songs: songs.length }, newest: null, stale: false, checked_at: null, songs, ...over,
-});
+const library = (over: Partial<LibrarySong> = {}): LibrarySong => librarySong({ sections: sectionsOf(["Count Off", 0, 4], ["Verse 1", 4, 24], ["Vamp on 1", 24, 28]), ...over });
+const planSong = librarySongOf;
+const planOf = libraryPlan;
 const mount = (plan: LibraryPlan | null, over: Partial<PlaybackLibraryController> = {}) =>
-  render(<PlaybackLibraryPanel
-    library={{ enabled: true, address: "http://10.20.0.102", status: status(), plan, error: null, pending: null, save: vi.fn().mockResolvedValue(true), check: vi.fn(), ...over }}
+  render(<PlaybackLibrarySongs
+    library={libraryController("ready", { plan, ...over })}
     plan={{ date: "2026-11-22", service_times: ["10:00"] } as never}
     timeZone="America/Los_Angeles"
   />);
@@ -142,16 +130,18 @@ describe("the song chips in the Playback config", () => {
     }
   });
 
-  it("shows no chips unless the helper has current data: its words stand instead", () => {
-    for (const state of ["waiting", "problem", "no_setlist", "off"] as const) {
-      const { unmount } = mount(planOf([planSong("Song One", 1)], { state, message: "Words for the state." }), { status: status({ state, message: "Words for the state." }) });
+  it("shows no chips unless the helper has current data: nothing at all for the states that have none", () => {
+    for (const state of ["waiting", "problem", "off"] as const) {
+      const { unmount } = mount(planOf([planSong("Song One", 1)], { state, message: "Words for the state." }));
+      expect(screen.queryByTestId("playback-library")).toBeNull();
       expect(screen.queryByTestId("library-songs")).toBeNull();
-      expect(screen.getByTestId("library-status")).toHaveTextContent("Words for the state.");
       expect(screen.queryByRole("img")).toBeNull();
       unmount();
     }
-    mount(null);
+    // Another date is the one notice that stands without chips.
+    mount(planOf([], { state: "no_setlist", message: "Playback has no setlist for 2026-11-22; its newest is Set from 2026-11-15." }));
     expect(screen.queryByTestId("library-songs")).toBeNull();
+    expect(screen.getByTestId("library-notices")).toHaveTextContent("Playback has no setlist for 2026-11-22");
   });
 
   it("keeps showing the chips (marked old by the status) while Playback does not answer for a moment", () => {

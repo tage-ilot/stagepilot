@@ -145,9 +145,14 @@ async fn authorise(
     if (mutation || websocket) && origins != [ing.public_origin.as_bytes()] {
         return Err(denial(403, "Remote same-origin request required."));
     }
-    // The Lighting computer's installer is LAN only, whoever is logged in remotely.
-    if path == crate::helper_install::PREFIX
-        || path.starts_with(&format!("{}/", crate::helper_install::PREFIX))
+    // The Lighting and Playback computers' installers are LAN only, whoever is logged in remotely (the
+    // Playback one carries the helper's key).
+    if [
+        crate::helper_install::PREFIX,
+        crate::playback_helper_install::PREFIX,
+    ]
+    .iter()
+    .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")))
     {
         return Err(denial(404, "Not Found"));
     }

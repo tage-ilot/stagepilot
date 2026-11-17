@@ -1,5 +1,6 @@
-//! The optional Playback library setting: off by default, absent from older files, and a saved file
-//! that never had it saves back byte for byte the same.
+//! The optional Playback library setting: absent by default and from older files, and a saved file
+//! that never had it saves back byte for byte the same. `enabled` is no longer a switch: absent is
+//! "never paired", `true` "has been in use", `false` "forgotten" (an old switch that was off reads so).
 
 use serde_json::{json, Value};
 use stagepilot_core::config::{clean_playback_library_address, PlaybackLibrarySettings};
@@ -24,7 +25,7 @@ fn an_older_file_without_it_loads_off_and_saves_back_without_it() {
         settings.playback_library,
         PlaybackLibrarySettings::default()
     );
-    assert!(!settings.playback_library.enabled);
+    assert_eq!(settings.playback_library.enabled, None);
     let saved = settings.to_file_value();
     assert!(saved.get("playback_library").is_none(), "{saved}");
     // And what was saved loads to the same settings.
@@ -40,7 +41,7 @@ fn an_older_file_without_it_loads_off_and_saves_back_without_it() {
 fn the_setting_round_trips_and_the_address_is_cleaned_like_the_lightkey_helper_address() {
     let file = json!({"schema_version": 2, "playback_library": {"enabled": true, "address": " 10.20.0.102:8780/ "}});
     let settings = load(file).unwrap();
-    assert!(settings.playback_library.enabled);
+    assert_eq!(settings.playback_library.enabled, Some(true));
     assert_eq!(settings.playback_library.address, "http://10.20.0.102:8780");
     let saved = settings.to_file_value();
     assert_eq!(
@@ -56,6 +57,22 @@ fn the_setting_round_trips_and_the_address_is_cleaned_like_the_lightkey_helper_a
     assert_eq!(
         kept.to_file_value()["playback_library"],
         json!({"enabled": false, "address": "http://10.0.0.9"})
+    );
+    // Forgotten with nothing else kept is still saved (an absent field would read as "never paired"), and an
+    // older build, which only knows the old switch, reads the same file.
+    let forgotten =
+        load(json!({"schema_version": 2, "playback_library": {"enabled": false}})).unwrap();
+    assert_eq!(forgotten.playback_library.enabled, Some(false));
+    assert!(!forgotten.playback_library.is_default());
+    assert_eq!(
+        forgotten.to_file_value()["playback_library"],
+        json!({"enabled": false, "address": ""})
+    );
+    // A paired file with no address override has no address in it to speak of, only the empty text.
+    let paired = load(json!({"schema_version": 2, "playback_library": {"enabled": true}})).unwrap();
+    assert_eq!(
+        paired.to_file_value()["playback_library"],
+        json!({"enabled": true, "address": ""})
     );
     // An empty object is the default.
     assert!(load(json!({"schema_version": 2, "playback_library": {}}))

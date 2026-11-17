@@ -1,11 +1,11 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
-import { openExternalUrl } from "../desktop";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { ServicePlan } from "../types";
-import { PlaybackLibraryPanel } from "./PlaybackLibraryPanel";
+import { PlaybackLibrarySongs } from "./PlaybackLibrarySongs";
+import { PlaybackLiveLink } from "./PlaybackLiveLink";
 import { PlanningCenterLengths } from "./PlanningCenterLengths";
 import { ScanProgress } from "./ScanProgress";
 import { PlaybackArrangement } from "./PlaybackArrangement";
@@ -14,52 +14,21 @@ import { Dialog } from "./ui/Dialog";
 import { Disclosure } from "./ui/Disclosure";
 import { cx } from "./ui/cx";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
-import { Field } from "./ui/Field";
-import { InlineAlert } from "./ui/InlineAlert";
-import { Input } from "./ui/Input";
-import { Select } from "./ui/Select";
 import { Switch } from "./ui/Switch";
-import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackBannerTone, playbackOrderNotice, playbackSongCountMismatch, scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
+import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-playback-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-playback active:text-integration-playback-text";
-const toneClass = {
-  connected: "border-integration-playback-soft/40 bg-integration-playback-soft/10 text-integration-playback-text",
-  midi: "border-warning/30 bg-warning/10 text-warning-text",
-  searching: "border-warning/30 bg-warning/10 text-warning-text",
-  idle: "border-edge bg-edge-subtle text-ink-body",
-} as const;
-const LOCAL_NETWORK_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
-const OTHER_COMPUTER = "__other__";
-const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
-
-
-const SCAN_CANCEL_GUARD_MS = 600;
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
-// (skipped songs) until Save configuration.
+// (skipped songs) until Save configuration. The scan, the computer chooser and the network script are the first block, PlaybackLiveLink.
 export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZone = "UTC" }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; plan?: ServicePlan | null; timeZone?: string }) {
   const status = playback?.status;
-  const [host, setHost] = useState("");
-  const [choice, setChoice] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [orderOpen, setOrderOpen] = usePersistedFlag(SONG_ORDER_OPEN_KEY, true);
   const orderBodyId = useId();
   // Shown optimistically while the save runs; a failed save puts it back.
   const [learnDraft, setLearnDraft] = useState<boolean | null>(null);
-  useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
 
-  const scan = status?.scan;
-  const scanning = scan?.state === "scanning" || playback?.pending === "scan";
   const running = status?.discovery === "running" || playback?.pending === "discover";
   const apiConnected = status?.sources.playback_api.connected ?? false;
-  const other = choice === OTHER_COMPUTER;
-  const trimmed = other ? host.trim() : choice;
-  const hostOk = validPlaybackHost(trimmed);
-  const savedHost = status?.settings.host ?? null;
-  const candidates = status?.scan.candidates ?? [];
-  const computers = [
-    ...candidates.map((candidate) => ({ host: candidate.host, label: `${candidate.name} (${candidate.host})` })),
-    ...(savedHost && !candidates.some((candidate) => candidate.host === savedHost) ? [{ host: savedHost, label: `${savedHost} (saved)` }] : []),
-  ];
   const orderSaved = Boolean(status?.song_order.length) && !status?.stale && !status?.plan_changed;
   const notice = status ? playbackOrderNotice(status) : null;
   const mismatch = status && orderSaved ? playbackSongCountMismatch(status) : null;
@@ -76,101 +45,10 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
     try { await playback?.save({ ...status.settings, learn_order: next }); } finally { setLearnDraft(null); }
   };
 
-  const [copied, setCopied] = useState(false);
-  const copyDetails = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
-  };
-  // The scan button turns into Cancel once the scan starts, so the second click of a double click
-  // must not land on Cancel. Clicks on Cancel in the first moments are ignored.
-  const scanClickedAt = useRef(0);
-  const startScan = () => { scanClickedAt.current = Date.now(); playback?.scan(); };
-  const cancelScan = () => { if (Date.now() - scanClickedAt.current < SCAN_CANCEL_GUARD_MS) return; playback?.cancelScan(); };
-  const connect = () => { if (trimmed && hostOk) { scanClickedAt.current = Date.now(); playback?.scan(trimmed); } };
-  const tone = status ? playbackBannerTone(status) : "idle";
-
   return (
     <div className="mt-4 space-y-4">
 
-      <div className="playback-connect">
-        <div className="playback-connect-grid">
-        <div className="min-w-0 space-y-3">
-          <div className="playback-scan-row">
-            {scanning
-              ? <Button className="flex-none" onClick={cancelScan} size="touch" variant="primary">Scanning… (cancel)</Button>
-              : <Button className="flex-none" onClick={startScan} size="touch" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
-        <div className={`min-w-0 flex-1 rounded-ds-xl border px-4 py-2.5 ${toneClass[tone]}`} role="status" aria-live="polite" data-testid="playback-banner">
-          <p className="text-sm font-semibold">{status ? status.reason : playback?.error ?? "Checking Playback…"}</p>
-          {status?.scan.state === "scanning" && <p className="mt-1 text-sm tabular-nums opacity-80" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
-        </div>
-          </div>
-          {scan?.state === "not_found" && !scanning && (scan.error_class === "permission_denied"
-            ? (
-              <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
-                <p className="font-semibold">macOS is blocking StagePilot's local-network access</p>
-                <ol className="mt-2 list-decimal pl-5 space-y-1">
-                  <li>Quit StagePilot.</li>
-                  <li>Open System Settings &gt; Privacy &amp; Security &gt; Local Network.</li>
-                  <li>Turn StagePilot off and on again (if it is not listed, run Scan Network once and click Allow when macOS asks).</li>
-                  <li>Reopen StagePilot and scan again.</li>
-                </ol>
-                <div className="mt-2 flex flex-wrap gap-3">
-                  <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url ?? LOCAL_NETWORK_URL)}>Open Local Network settings</button>
-                  {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                  {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
-                </div>
-              </InlineAlert>
-            )
-            : scan.error_class
-            ? (
-              <InlineAlert tone="danger" className="p-3 text-ink-body" data-testid="scan-error">
-                <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't scan the network"}</p>
-                <p className="mt-1">{scan.reason}</p>
-                <p className="mt-1 text-xs text-ink-muted">{scanSummary(scan)}</p>
-                <div className="mt-2 flex flex-wrap gap-3">
-                  {scan.settings_url && <button className={linkButton} type="button" onClick={() => void openExternalUrl(scan.settings_url as string)}>Open Local Network settings</button>}
-                  {scan.details && <button className={linkButton} type="button" onClick={() => void copyDetails(scan.details as string)}>{copied ? "Copied" : "Copy diagnostic details"}</button>}
-                  {!scan.typed && <button className={linkButton} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>}
-                </div>
-              </InlineAlert>
-            )
-            : (
-              <div className="rounded-ds-lg bg-edge-subtle p-3 text-sm text-ink-body">
-                <p className="font-semibold">Make sure:</p>
-                <ul className="mt-1 list-disc pl-5 text-ink-body">{CHECKLIST.map((line) => <li key={line}>{line}</li>)}</ul>
-                {scan.hosts_total ? <p className="mt-1 text-xs tabular-nums text-ink-muted">{scanSummary(scan)}</p> : null}
-                <button className={`mt-2 ${linkButton}`} type="button" onClick={() => setChoice(OTHER_COMPUTER)}>Enter address instead</button>
-              </div>
-            ))}
-          {scan?.state === "found" && scan.candidates.length > 1 && !scanning && (
-            <div className="rounded-ds-lg bg-edge-subtle p-3" role="group" aria-label="Choose which Playback">
-              <p className="text-sm font-semibold text-ink">Choose which Playback</p>
-              <ul className="mt-2 grid gap-2">{scan.candidates.map((candidate) => (
-                <li key={candidate.host}><Button className="w-full justify-start text-left" onClick={() => playback?.scan(candidate.host)} tone="playback" variant="tinted">{candidate.name} <span className="ml-1.5 text-xs text-ink-muted">{candidate.host}</span></Button></li>
-              ))}</ul>
-            </div>
-          )}
-          {playback?.error && <p role="alert" className="text-sm text-danger-text">{playback.error}</p>}
-          {playback?.message && <p role="status" className="text-sm text-integration-playback-text">{playback.message}</p>}
-        </div>
-
-        <div className="min-w-0 space-y-3">
-          <form id="playback-specific" className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); connect(); }}>
-            <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Playback host">
-              <Select value={computers.some((computer) => computer.host === choice) || other ? choice : ""} placeholder="Choose a computer…" onChange={(event) => setChoice(event.target.value)}>
-                {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
-                <option value={OTHER_COMPUTER}>Other computer…</option>
-              </Select>
-            </Field>
-            {other && <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Computer name or address">
-              <Input value={host} placeholder="For example, 192.0.2.10…" onChange={(event) => setHost(event.target.value)} error={!hostOk} />
-            </Field>}
-            {choice && <Button type="submit" disabled={!trimmed || !hostOk || scanning} tone="playback" variant="tinted">Connect</Button>}
-            {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
-            {other && !hostOk && <p role="alert" className="w-full text-sm text-danger-text">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
-          </form>
-        </div>
-        </div>
-      </div>
+      <PlaybackLiveLink library={library} playback={playback} />
 
       {status && (
         <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
@@ -218,7 +96,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           </div>
         </section>
       )}
-      {library && <PlaybackLibraryPanel library={library} plan={plan} timeZone={timeZone} />}
+      {library && <PlaybackLibrarySongs library={library} plan={plan} timeZone={timeZone} />}
       <Dialog
         open={confirm}
         dismissible={false}

@@ -2,12 +2,22 @@
 
 /**
  * The optional "Playback library" connection: read-only data about the songs of Playback (key, BPM,
- * length, arrangement) from a helper on the Playback computer. Off by default and left out of the
- * saved file while it is off and empty, so an older file saves back unchanged. It lives beside, not
+ * length, arrangement) from a helper (the "network script") on the Playback computer. Left out of the
+ * saved file while it holds nothing, so an older file saves back unchanged. It lives beside, not
  * inside, `playback_api`: a change there makes the Playback connection restart, and this one must
  * never touch it.
+ *
+ * There is no on/off switch any more: the helper is asked whenever a Playback host is saved. The
+ * old `enabled` field is kept, with a new meaning that older files read the same way:
+ * * absent: the helper was never paired;
+ * * `true`: the helper answered with the key (it has been in use);
+ * * `false`: the operator forgot it (or an old file had the switch off): the library stays off
+ *   until a new install pairs. Older builds read all three as the switch they know.
+ *
+ * `address` is an optional override of the helper's computer; empty means the saved Playback host.
+ * The helper's key is NOT here: it lives in the credential store.
  */
-export type PlaybackLibrarySettings = { enabled: boolean, 
+export type PlaybackLibrarySettings = { enabled?: boolean, 
 /**
  * `host` or `host:port` (port 8780 when left out), saved as `http://host[:port]`.
  */

@@ -47,22 +47,22 @@ export function LiveLinkField({ caption, className, children }: { caption: strin
  * THE one place the connection state is written down on the Live Link block: a dot AND words (never colour alone), announced
  * politely when it changes. `detail` (why it is not connected) rides in the tooltip and the accessible name, not in extra paragraphs.
  */
-export function LiveLinkPill({ text, tone, detail }: { text: string; tone: Tone; detail?: string | null }) {
-  const full = detail ? `sACN DMX Live Link: ${text}. ${detail}` : `sACN DMX Live Link: ${text}`;
+export function LiveLinkPill({ text, tone, detail, name = "sACN DMX Live Link", testId = "lightkey-link" }: { text: string; tone: Tone; detail?: string | null; name?: string; testId?: string }) {
+  const full = detail ? `${name}: ${text}. ${detail}` : `${name}: ${text}`;
   return (
-    <span aria-label={full} aria-live="polite" className="live-link-pill inline-flex items-center gap-[7px] whitespace-nowrap rounded-ds-full border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink" data-testid="lightkey-link" data-tone={tone} role="status" title={full}>
+    <span aria-label={full} aria-live="polite" className="live-link-pill inline-flex items-center gap-[7px] whitespace-nowrap rounded-ds-full border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink" data-testid={testId} data-tone={tone} role="status" title={full}>
       <StatusDot ignoreAccent tone={tone} />
       <span>{text}</span>
     </span>
   );
 }
 
-/** The bordered Live Link block: title, the state pill beside it, then whatever the caller lays out. */
-export function LiveLinkShell({ pill, className, testId, children }: { pill?: ReactNode; className?: string; testId?: string; children: ReactNode }) {
+/** The bordered Live Link block: title, the state pill beside it, then whatever the caller lays out. The Playback panel's block gives its own title. */
+export function LiveLinkShell({ pill, className, testId, title = "sACN DMX Live Link", children }: { pill?: ReactNode; className?: string; testId?: string; title?: string; children: ReactNode }) {
   return (
-    <section aria-label="sACN DMX Live Link" className={`live-link mt-6 rounded-ds-xl border border-edge bg-surface-panel-strong px-3 py-2.5 ${className ?? ""}`} data-testid={testId}>
+    <section aria-label={title} className={`live-link mt-6 rounded-ds-xl border border-edge bg-surface-panel-strong px-3 py-2.5 ${className ?? ""}`} data-testid={testId}>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
         {pill}
       </div>
       {children}

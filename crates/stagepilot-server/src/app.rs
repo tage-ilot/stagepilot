@@ -93,6 +93,11 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .route("/ws", get(ws_state))
         .merge(crate::playback_routes::routes())
         .merge(crate::playback_library::routes())
+        // "Set up the Playback computer": the same, for the Playback helper (LAN only, with the key inside).
+        .merge(crate::playback_helper_install::api_routes())
+        .merge(crate::playback_helper_install::served_routes(
+            runtime.playback_helper_install.clone(),
+        ))
         .with_state(runtime.clone());
 
     let router = match options.web_root.filter(|r| r.join("index.html").is_file()) {

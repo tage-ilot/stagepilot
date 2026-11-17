@@ -10,6 +10,7 @@ import type {
   LengthPreview,
   LibraryPlan,
   LibraryStatus,
+  PlaybackHelperInstall,
   SongWaveform,
   LightingCaptureResponse,
   LightingPad,
@@ -452,7 +453,20 @@ export const getPlaybackLibraryWaveform = (setlistSongId: number) =>
   requestJson<SongWaveform>(`/api/v1/playback-library/songs/${setlistSongId}/waveform`);
 export const getPlaybackLibraryStatus = (check = false) => requestJson<LibraryStatus>(libraryAsk("status", check));
 export const getPlaybackLibraryPlan = (check = false) => requestJson<LibraryPlan>(libraryAsk("plan", check));
-export const updatePlaybackLibrarySettings = (enabled: boolean, address: string) =>
+/** Saves the optional override of the helper's computer (empty: the saved Playback host). */
+export const updatePlaybackLibrarySettings = (address: string) =>
   requestJson<LibraryStatus>("/api/v1/playback-library/settings", {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, address }),
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }),
   });
+/** "Forget the network script": deletes the key StagePilot made. The script keeps running on the Playback computer but cannot be used. */
+export const forgetPlaybackHelper = () => requestJson<LibraryStatus>("/api/v1/playback-library/forget", { method: "POST" });
+/** Opens (or extends) the one-time setup session for the Playback computer; `address` is THIS computer's address there, when StagePilot cannot find it. */
+export const startPlaybackHelperInstall = (address?: string) =>
+  requestJson<PlaybackHelperInstall>("/api/v1/playback-library/helper-install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(address ? { address } : {}),
+  });
+/** Ends the setup session (the command stops working at once). */
+export const endPlaybackHelperInstall = () =>
+  requestJson<{ ended: boolean }>("/api/v1/playback-library/helper-install", { method: "DELETE" });

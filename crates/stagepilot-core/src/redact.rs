@@ -11,7 +11,7 @@ pub const REDACTED: &str = "[REDACTED]";
 fn sensitive_key() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(?:authorization|cookie|credential|password|secret|token)").unwrap()
+        Regex::new(r"(?i)(?:authorization|cookie|credential|password|secret|token|helper[_-]?key|playback[_-]?library[_-]?key|x-pbl-sig)").unwrap()
     })
 }
 
@@ -19,7 +19,7 @@ fn sensitive_text() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"(?i)(bearer\s+|basic\s+|(?:password|secret|token|api[_-]?key)\s*[=:]\s*)[^\s,;&]+",
+            r"(?i)(bearer\s+|basic\s+|(?:password|secret|token|api[_-]?key|helper[_-]?key|x-pbl-sig)\s*[=:]\s*)[^\s,;&]+",
         )
         .unwrap()
     })
@@ -67,6 +67,24 @@ mod tests {
 
     fn object(value: Value) -> Map<String, Value> {
         value.as_object().unwrap().clone()
+    }
+
+    /// The Playback helper's key and its signature header never reach a log line.
+    #[test]
+    fn the_playback_helper_key_and_signature_are_redacted() {
+        let event = redact_secrets(&object(json!({
+            "event": "asked helper_key=AbCdEf x-pbl-sig: 0123abcd ok",
+            "helper_key": "AbCdEf",
+            "playback_library_key": "AbCdEf",
+            "headers": {"X-PBL-Sig": "0123abcd", "X-PBL-Time": "1794945365"},
+        })));
+        assert_eq!(event["helper_key"], "[REDACTED]");
+        assert_eq!(event["playback_library_key"], "[REDACTED]");
+        assert_eq!(event["headers"]["X-PBL-Sig"], "[REDACTED]");
+        assert_eq!(
+            event["event"],
+            "asked helper_key=[REDACTED] x-pbl-sig: [REDACTED] ok"
+        );
     }
 
     /// `test_structured_log_redaction_covers_keys_nested_values_and_messages`
