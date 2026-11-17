@@ -24,6 +24,10 @@
 //! * Cover pictures come through here and nowhere else (the window never calls the helper): only for a
 //!   song of the current paired plan, at most 2 MB, JPEG or PNG by type and by first bytes, held in
 //!   memory only (64 pictures, 8 MB, oldest out first), never written to disk, a log or the plan.
+//! * A song's waveform comes through here too, and only when the window shows that song's lighting
+//!   timeline: a song of the current paired plan, at most 20,000 numbers in 0..=1, 6 s and 600,000
+//!   bytes at most, cut to whole numbers 0..=255 (nothing else of the answer is passed on), held in
+//!   memory only (16 songs, by `library_revision`; 10 minutes for a helper that sends none).
 //! * Every failure is one short plain sentence.
 //! * Library data is held in memory only.
 
@@ -38,6 +42,7 @@ use axum::Router;
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::StreamExt;
 use serde_json::{json, Value};
+use sha2::Digest;
 use stagepilot_core::config::{
     clean_playback_library_address, PlaybackLibrarySettings, DEFAULT_PLAYBACK_LIBRARY_PORT,
 };
@@ -80,6 +85,17 @@ const ARTWORK_MAX_PICTURES: usize = 64;
 const ARTWORK_MAX_TOTAL: usize = 8 * 1024 * 1024;
 /// Pictures fetched from the helper at the same time.
 const ARTWORK_AT_ONCE: usize = 4;
+/// The helper decodes a song's picture on first use (under a second): a waveform gets longer than a check.
+const WAVEFORM_TIMEOUT: Duration = Duration::from_secs(6);
+const WAVEFORM_CAP: usize = 600_000;
+const WAVEFORM_MAX_POINTS: usize = 20_000;
+const WAVEFORM_MAX_STEP_S: f64 = 10.0;
+const WAVEFORM_MAX_SONGS: usize = 16;
+/// A helper that sends no `library_revision` cannot say when a waveform is out of date.
+const WAVEFORM_NO_REVISION_TTL: Duration = Duration::from_secs(10 * 60);
+const WAVEFORM_AT_ONCE: usize = 2;
+/// Points per second asked of the helper (a 7-minute song is about 3,400 numbers).
+const WAVEFORM_POINTS_PER_SECOND: u32 = 8;
 
 const DID_NOT_ANSWER: &str = "The Playback computer did not answer.";
 const NOT_UNDERSTOOD: &str =
@@ -293,12 +309,48 @@ pub enum ArtworkFailure {
     NoAnswer,
 }
 
+/// A song's waveform as the window gets it: `{"step_s": 0.125, "peak": [0..255, ...]}` and nothing else.
+#[derive(Clone)]
+pub struct Waveform {
+    /// A quoted tag made from the bytes below.
+    pub etag: String,
+    /// The JSON answer.
+    pub body: Bytes,
+}
+
+struct WaveEntry {
+    wave: Waveform,
+    /// The helper's `library_revision` at the last good read when this was fetched (none: the helper sends none).
+    revision: Option<String>,
+    fetched: Instant,
+    /// Insertion order: the lowest goes first when the cache is full.
+    seq: u64,
+}
+
+#[derive(Default)]
+struct WaveCache {
+    songs: HashMap<(String, u64), WaveEntry>,
+    next: u64,
+}
+
+/// Why a waveform could not be given to the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaveformFailure {
+    /// The song has none, or what the helper sent is not a waveform within the limits.
+    NoWaveform,
+    /// The Playback computer did not answer (or answered with an error).
+    NoAnswer,
+}
+
 pub struct PlaybackLibrary {
     http: reqwest::Client,
     inner: Mutex<Inner>,
     /// Cover pictures, in memory only.
     art: std::sync::Mutex<ArtCache>,
     art_gate: tokio::sync::Semaphore,
+    /// Waveforms, in memory only.
+    waves: std::sync::Mutex<WaveCache>,
+    wave_gate: tokio::sync::Semaphore,
     /// Added to the clock (tests move it to pass minutes at once; it is 0 in the product).
     skew_ms: AtomicU64,
 }
@@ -326,6 +378,8 @@ impl PlaybackLibrary {
             inner: Mutex::new(Inner::default()),
             art: std::sync::Mutex::new(ArtCache::default()),
             art_gate: tokio::sync::Semaphore::new(ARTWORK_AT_ONCE),
+            waves: std::sync::Mutex::new(WaveCache::default()),
+            wave_gate: tokio::sync::Semaphore::new(WAVEFORM_AT_ONCE),
             skew_ms: AtomicU64::new(0),
         }
     }
@@ -349,8 +403,17 @@ impl PlaybackLibrary {
             .map_or((0, 0), |art| (art.pictures.len(), art.total))
     }
 
+    /// How many waveforms are held (tests only).
+    #[doc(hidden)]
+    pub fn waveforms_held(&self) -> usize {
+        self.waves.lock().map_or(0, |waves| waves.songs.len())
+    }
+
     /// The setting is off: forget everything held (so switching it on starts from nothing).
     fn forget(&self) {
+        if let Ok(mut waves) = self.waves.lock() {
+            *waves = WaveCache::default();
+        }
         if let Ok(mut inner) = self.inner.try_lock() {
             if !inner.base.is_empty() {
                 *inner = Inner::default();
@@ -900,6 +963,160 @@ impl PlaybackLibrary {
     }
 }
 
+// ---- waveforms ------------------------------------------------------------------------------------
+
+/// The helper's waveform answer, checked: `peak` is 1 to 20,000 finite numbers in 0..=1 and `step_s`
+/// a finite number above 0 and at most 10. Returns the step and each peak as a whole number 0..=255
+/// (the share times 255, rounded). Anything else, and every other field (`mean`, ...), is dropped.
+pub fn parse_waveform(value: &Value) -> Option<(f64, Vec<u8>)> {
+    let step = value.get("step_s")?.as_f64()?;
+    if !step.is_finite() || step <= 0.0 || step > WAVEFORM_MAX_STEP_S {
+        return None;
+    }
+    let peaks = value.get("peak")?.as_array()?;
+    if peaks.is_empty() || peaks.len() > WAVEFORM_MAX_POINTS {
+        return None;
+    }
+    let mut peak = Vec::with_capacity(peaks.len());
+    for number in peaks {
+        let share = number.as_f64()?;
+        if !share.is_finite() || !(0.0..=1.0).contains(&share) {
+            return None;
+        }
+        // 0.0..=1.0 times 255, rounded, always fits.
+        peak.push((share * 255.0).round() as u8);
+    }
+    Some((step, peak))
+}
+
+impl PlaybackLibrary {
+    /// `GET base/songs/<id>/waveform?points_per_second=8&clock=performed`, at most `WAVEFORM_CAP`
+    /// bytes, 6 s in all, same client as every other ask (no redirect, no proxy).
+    async fn get_waveform(&self, base: &str, id: u64) -> Result<(f64, Vec<u8>), WaveformFailure> {
+        let url = format!(
+            "{base}/songs/{id}/waveform?points_per_second={WAVEFORM_POINTS_PER_SECOND}&clock=performed"
+        );
+        let mut response = self
+            .http
+            .get(&url)
+            .header("accept", "application/json")
+            .timeout(WAVEFORM_TIMEOUT)
+            .send()
+            .await
+            .map_err(|_| WaveformFailure::NoAnswer)?;
+        match response.status().as_u16() {
+            200 => {}
+            404 => return Err(WaveformFailure::NoWaveform),
+            _ => return Err(WaveformFailure::NoAnswer),
+        }
+        if response
+            .content_length()
+            .is_some_and(|n| n > WAVEFORM_CAP as u64)
+        {
+            return Err(WaveformFailure::NoWaveform);
+        }
+        let mut body: Vec<u8> = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| WaveformFailure::NoAnswer)?
+        {
+            if body.len() + chunk.len() > WAVEFORM_CAP {
+                return Err(WaveformFailure::NoWaveform);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice::<Value>(&body)
+            .ok()
+            .and_then(|value| parse_waveform(&value))
+            .ok_or(WaveformFailure::NoWaveform)
+    }
+
+    /// The `library_revision` of the helper's last good full read (none: it sends none).
+    async fn read_revision(&self) -> Option<String> {
+        let inner = self.inner.lock().await;
+        inner.read.as_ref().and_then(|mark| mark.revision.clone())
+    }
+
+    fn held_waveform(&self, key: &(String, u64), revision: Option<&String>) -> Option<Waveform> {
+        let waves = self.waves.lock().ok()?;
+        let entry = waves.songs.get(key)?;
+        let fresh = match (revision, entry.revision.as_ref()) {
+            // The helper's database has not changed since this was fetched.
+            (Some(now), Some(then)) => now == then,
+            // No token to compare: it stands for ten minutes.
+            (None, None) => {
+                self.now().saturating_duration_since(entry.fetched) < WAVEFORM_NO_REVISION_TTL
+            }
+            _ => false,
+        };
+        fresh.then(|| entry.wave.clone())
+    }
+
+    /// The waveform of one song of the current paired plan (the route has checked that). Held in
+    /// memory by song and by the helper's last good `library_revision`; asked of the helper only
+    /// when nothing fresh is held. 16 songs at most, the oldest goes first.
+    pub async fn waveform(
+        &self,
+        settings: &PlaybackLibrarySettings,
+        id: u64,
+    ) -> Result<Waveform, WaveformFailure> {
+        if !settings.enabled {
+            return Err(WaveformFailure::NoWaveform);
+        }
+        let base = base_url(&settings.address).ok_or(WaveformFailure::NoWaveform)?;
+        let key = (base.clone(), id);
+        let revision = self.read_revision().await;
+        if let Some(wave) = self.held_waveform(&key, revision.as_ref()) {
+            return Ok(wave);
+        }
+        let _slot = self
+            .wave_gate
+            .acquire()
+            .await
+            .map_err(|_| WaveformFailure::NoAnswer)?;
+        // Another window may have fetched it while this one waited for its turn.
+        if let Some(wave) = self.held_waveform(&key, revision.as_ref()) {
+            return Ok(wave);
+        }
+        let (step_s, peak) = self.get_waveform(&base, id).await?;
+        let body = Bytes::from(
+            serde_json::to_vec(&json!({"step_s": step_s, "peak": peak}))
+                .map_err(|_| WaveformFailure::NoWaveform)?,
+        );
+        let digest = sha2::Sha256::digest(&body);
+        let wave = Waveform {
+            etag: format!("\"{}\"", hex::encode(&digest[..8])),
+            body,
+        };
+        let fetched = self.now();
+        let mut waves = self.waves.lock().map_err(|_| WaveformFailure::NoAnswer)?;
+        waves.next += 1;
+        let seq = waves.next;
+        waves.songs.insert(
+            key,
+            WaveEntry {
+                wave: wave.clone(),
+                revision,
+                fetched,
+                seq,
+            },
+        );
+        while waves.songs.len() > WAVEFORM_MAX_SONGS {
+            let Some(oldest) = waves
+                .songs
+                .iter()
+                .min_by_key(|(_, entry)| entry.seq)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            waves.songs.remove(&oldest);
+        }
+        Ok(wave)
+    }
+}
+
 // ---- routes -----------------------------------------------------------------------------------
 
 type Rt = Arc<Runtime>;
@@ -923,6 +1140,10 @@ pub fn routes() -> Router<Rt> {
         .route(
             "/api/v1/playback-library/songs/{setlist_song_id}/artwork",
             get(artwork),
+        )
+        .route(
+            "/api/v1/playback-library/songs/{setlist_song_id}/waveform",
+            get(waveform),
         )
         .route("/api/v1/playback-library/settings", put(settings))
 }
@@ -1046,6 +1267,72 @@ async fn artwork(
         }
         Err(ArtworkFailure::NoPicture) => no_picture(),
         Err(ArtworkFailure::NoAnswer) => http_error(503, DID_NOT_ANSWER).into_response(),
+    }
+}
+
+/// The waveform of one song of the current paired plan, for the window (it never calls the helper).
+/// 404 for everything that is not exactly that: the setting off (nothing is asked at all), an id that
+/// is not a whole number, an id that is not a paired song of the plan on screen, a song with no
+/// waveform, a helper that sends something that is not one. 503 when the helper does not answer.
+async fn waveform(
+    State(rt): State<Rt>,
+    Path(raw): Path<String>,
+    request_headers: HeaderMap,
+) -> Response {
+    let none = || http_error(404, "No waveform.").into_response();
+    let settings = rt.settings_service.snapshot().playback_library;
+    if !settings.enabled {
+        return none();
+    }
+    let Ok(id) = raw.parse::<u64>() else {
+        return none();
+    };
+    let loaded = rt.store.snapshot().plan;
+    let current = rt
+        .playback_library
+        .plan(&settings, loaded.as_ref(), false)
+        .await;
+    let paired = current.state == LibraryState::Ready
+        && current.songs.iter().any(|song| {
+            song.status == PlanMatch::Matched
+                && song
+                    .library
+                    .as_ref()
+                    .and_then(|library| library.setlist_song_id)
+                    .and_then(|n| u64::try_from(n).ok())
+                    == Some(id)
+        });
+    if !paired {
+        return none();
+    }
+    match rt.playback_library.waveform(&settings, id).await {
+        Ok(wave) => {
+            let not_modified = etag_matches(request_headers.get(header::IF_NONE_MATCH), &wave.etag);
+            let mut response = if not_modified {
+                StatusCode::NOT_MODIFIED.into_response()
+            } else {
+                (StatusCode::OK, wave.body.clone()).into_response()
+            };
+            let headers = response.headers_mut();
+            for (name, value) in [
+                (header::ETAG, wave.etag.as_str()),
+                (header::CACHE_CONTROL, "private, max-age=300"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ] {
+                if let Ok(value) = HeaderValue::from_str(value) {
+                    headers.insert(name, value);
+                }
+            }
+            if !not_modified {
+                headers.insert(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/json"),
+                );
+            }
+            response
+        }
+        Err(WaveformFailure::NoWaveform) => none(),
+        Err(WaveformFailure::NoAnswer) => http_error(503, DID_NOT_ANSWER).into_response(),
     }
 }
 

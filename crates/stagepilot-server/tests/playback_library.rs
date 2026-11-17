@@ -49,6 +49,14 @@ struct Behaviour {
     art: Option<Art>,
     /// What each cover request carried as `If-None-Match`.
     art_asks: Vec<(i64, Option<String>)>,
+    /// What the fake answers to a waveform ask (`None`: 404), as text, so a test can send any bytes.
+    waveform: Option<String>,
+    /// Answer every waveform ask with this status instead.
+    wave_status: Option<u16>,
+    /// Wait this long before a waveform answer only.
+    wave_delay: Duration,
+    /// The query string of each waveform ask.
+    wave_queries: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -144,6 +152,12 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
     let (delay, broken, redirect) = {
         let mut b = helper.inner.lock().unwrap();
         b.hits.push(uri.path().to_string());
+        let mut delay_extra = Duration::ZERO;
+        if uri.path().ends_with("/waveform") {
+            b.wave_queries
+                .push(uri.query().unwrap_or_default().to_string());
+            delay_extra = b.wave_delay;
+        }
         if let Some(id) = uri
             .path()
             .strip_prefix("/songs/")
@@ -156,7 +170,7 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
                 .map(str::to_string);
             b.art_asks.push((id, inm));
         }
-        (b.delay, b.broken, b.redirect)
+        (b.delay + delay_extra, b.broken, b.redirect)
     };
     if !delay.is_zero() {
         tokio::time::sleep(delay).await;
@@ -201,8 +215,20 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
         return (StatusCode::NOT_FOUND, "{\"error\": \"no setlist\"}").into_response();
     }
     if let Some(id) = path.strip_prefix("/songs/") {
-        if id.ends_with("waveform") {
-            return json_ok(json!({"peak": []}));
+        if id.ends_with("/waveform") {
+            if let Some(status) = b.wave_status {
+                return (StatusCode::from_u16(status).unwrap(), "{\"error\": \"no\"}")
+                    .into_response();
+            }
+            return match b.waveform.clone() {
+                Some(text) => (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    text,
+                )
+                    .into_response(),
+                None => (StatusCode::NOT_FOUND, "{\"error\": \"no waveform\"}").into_response(),
+            };
         }
         if let Some(number) = id.strip_suffix("/artwork") {
             let Some(art) = b.art.clone() else {
@@ -1835,4 +1861,455 @@ async fn big_pictures_stop_at_eight_megabytes_in_all() {
         StatusCode::OK
     );
     assert_eq!(helper.art_asks().len(), 7);
+}
+
+// ---- waveforms ------------------------------------------------------------------------------------
+
+const WAVE_ONE: &str = "/api/v1/playback-library/songs/11/waveform";
+
+/// What helper 0.2 says (`mean` and the other fields are there to be left out).
+fn helper_wave(step: f64, peak: &[f64]) -> String {
+    json!({"setlist_song_id": 11, "clock": "performed", "source": "Waveform1x.32.png", "step_s": step,
+           "count": peak.len(), "peak": peak, "mean": peak.iter().map(|p| p / 2.0).collect::<Vec<_>>()})
+    .to_string()
+}
+
+/// Three paired songs and a helper that has this waveform for them.
+async fn waves(text: Option<String>) -> (Helper, axum::Router, Arc<Runtime>) {
+    let (helper, router, runtime) = covers(None).await;
+    helper.set(|b| b.waveform = text);
+    (helper, router, runtime)
+}
+
+#[tokio::test]
+async fn a_waveform_reaches_the_window_as_whole_numbers_and_nothing_else() {
+    let (helper, router, _) = waves(Some(helper_wave(0.125, &[0.0, 0.5, 1.0, 0.2]))).await;
+    let (status, headers, body) = raw(&router, WAVE_ONE, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let sent: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(sent, json!({"step_s": 0.125, "peak": [0, 128, 255, 51]}));
+    assert_eq!(sent.as_object().unwrap().len(), 2, "{sent}");
+    let head = |name: header::HeaderName| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    assert_eq!(
+        head(header::CONTENT_TYPE).as_deref(),
+        Some("application/json")
+    );
+    assert_eq!(
+        head(header::CACHE_CONTROL).as_deref(),
+        Some("private, max-age=300")
+    );
+    assert_eq!(
+        head(header::X_CONTENT_TYPE_OPTIONS).as_deref(),
+        Some("nosniff")
+    );
+    assert!(head(header::ETAG).is_some_and(|tag| tag.starts_with('"') && tag.ends_with('"')));
+    // Asked once, for that song, the way the spec says.
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    assert_eq!(
+        helper.inner.lock().unwrap().wave_queries,
+        ["points_per_second=8&clock=performed"]
+    );
+}
+
+#[tokio::test]
+async fn the_check_and_the_plan_never_ask_for_a_waveform() {
+    let (helper, router, _) = waves(Some(helper_wave(0.125, &[0.1, 0.2]))).await;
+    for path in ["status?check=1", "plan?check=1", "plan", "status"] {
+        let (status, _) = call(
+            &router,
+            "GET",
+            &format!("/api/v1/playback-library/{path}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    assert_eq!(helper.count("/songs/11/waveform"), 0, "{:?}", helper.hits());
+}
+
+#[tokio::test]
+async fn wrong_shapes_are_no_waveform_and_the_limits_themselves_are_fine() {
+    let many = |n: usize| vec![0.5; n];
+    let bad: Vec<(&str, String)> = vec![
+        ("too many points", helper_wave(0.125, &many(20_001))),
+        ("negative value", helper_wave(0.125, &[0.1, -0.1])),
+        ("value above 1", helper_wave(0.125, &[0.1, 1.01])),
+        ("no points", helper_wave(0.125, &[])),
+        ("step 0", helper_wave(0.0, &[0.1])),
+        ("negative step", helper_wave(-0.5, &[0.1])),
+        ("step over 10", helper_wave(10.5, &[0.1])),
+        ("huge step", helper_wave(1.0e300, &[0.1])),
+        (
+            "text instead of numbers",
+            r#"{"step_s": 0.25, "peak": ["NaN", "0.5"]}"#.into(),
+        ),
+        (
+            "null in the list",
+            r#"{"step_s": 0.25, "peak": [0.1, null]}"#.into(),
+        ),
+        (
+            "a number past f64",
+            r#"{"step_s": 0.25, "peak": [1e999]}"#.into(),
+        ),
+        ("no step", r#"{"peak": [0.1, 0.2]}"#.into()),
+        (
+            "step as text",
+            r#"{"step_s": "0.25", "peak": [0.1]}"#.into(),
+        ),
+        ("no peak", r#"{"step_s": 0.25}"#.into()),
+        ("peak not a list", r#"{"step_s": 0.25, "peak": 0.5}"#.into()),
+        ("not JSON", "<html>".into()),
+        ("a list", "[0.1, 0.2]".into()),
+    ];
+    for (what, text) in bad {
+        let (helper, router, runtime) = waves(Some(text)).await;
+        let (status, _, _) = raw(&router, WAVE_ONE, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{what}");
+        assert_eq!(helper.count("/songs/11/waveform"), 1, "{what}");
+        assert_eq!(runtime.playback_library.waveforms_held(), 0, "{what}");
+    }
+    // 20,000 points and a 10 second step are the largest allowed.
+    let (_, router, _) = waves(Some(helper_wave(10.0, &many(20_000)))).await;
+    let (status, _, body) = raw(&router, WAVE_ONE, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let sent: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(sent["peak"].as_array().unwrap().len(), 20_000);
+    assert_eq!(sent["step_s"], json!(10.0));
+}
+
+#[tokio::test]
+async fn an_answer_over_600000_bytes_is_refused_and_exactly_that_many_is_fine() {
+    let pad = |total: usize| {
+        let base = helper_wave(0.25, &[0.5, 0.25]);
+        format!("{base}{}", " ".repeat(total - base.len()))
+    };
+    let (_, router, _) = waves(Some(pad(600_000))).await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    let (_, router, _) = waves(Some(pad(600_001))).await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_redirect_is_not_followed_and_an_error_from_the_helper_is_a_503() {
+    let (helper, router, runtime) = waves(Some(helper_wave(0.25, &[0.5]))).await;
+    // Read the plan once so that the route does not need to ask for it again.
+    let (status, _) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(status, StatusCode::OK);
+    helper.set(|b| b.redirect = true);
+    assert_eq!(
+        raw(&router, WAVE_ONE, None).await.0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        helper.count("/health"),
+        1,
+        "a redirect target was not followed"
+    );
+    helper.set(|b| {
+        b.redirect = false;
+        b.wave_status = Some(500);
+    });
+    assert_eq!(
+        raw(&router, WAVE_ONE, None).await.0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(runtime.playback_library.waveforms_held(), 0);
+}
+
+#[tokio::test]
+async fn a_helper_without_a_waveform_is_a_404() {
+    let (helper, router, _) = waves(None).await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+}
+
+#[tokio::test]
+async fn a_slow_helper_gets_six_seconds_not_three_and_then_is_given_up_on() {
+    let (helper, router, _) = waves(Some(helper_wave(0.25, &[0.5, 1.0]))).await;
+    let (status, _) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(status, StatusCode::OK);
+    // Longer than the 3 s of every other ask, shorter than 6 s: still answered.
+    helper.set(|b| b.wave_delay = Duration::from_millis(4500));
+    let started = Instant::now();
+    let (status, _, body) = raw(&router, WAVE_ONE, None).await;
+    assert_eq!(status, StatusCode::OK, "{:?}", started.elapsed());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap()["peak"],
+        json!([128, 255])
+    );
+    // Longer than 6 s: given up on after about 6 s.
+    helper.set(|b| b.wave_delay = Duration::from_secs(9));
+    let started = Instant::now();
+    let (status, _, _) = raw(&router, "/api/v1/playback-library/songs/12/waveform", None).await;
+    let took = started.elapsed();
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        took >= Duration::from_secs(5) && took < Duration::from_secs(8),
+        "{took:?}"
+    );
+}
+
+#[tokio::test]
+async fn only_a_paired_song_of_the_current_plan_has_a_waveform_route() {
+    let (helper, router, runtime) = waves(Some(helper_wave(0.25, &[0.5]))).await;
+    for path in [
+        "abc",
+        "-11",
+        "11.0",
+        "1e1",
+        "%2e%2e%2fhealth",
+        "11%2f..%2f..%2fhealth",
+        "99999999999999999999999",
+        "0",
+        "10",
+        "14",
+    ] {
+        let uri = format!("/api/v1/playback-library/songs/{path}/waveform");
+        assert_eq!(
+            raw(&router, &uri, None).await.0,
+            StatusCode::NOT_FOUND,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        helper.count("/songs/") - 3,
+        0,
+        "only the three detail reads: {:?}",
+        helper.hits()
+    );
+    assert!(helper.inner.lock().unwrap().wave_queries.is_empty());
+    // In Playback's setlist, not in the plan on screen.
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/12/waveform", None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(helper.inner.lock().unwrap().wave_queries.len(), 1);
+    // A plan song Playback does not have.
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song Nine"])));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(helper.inner.lock().unwrap().wave_queries.len(), 1);
+}
+
+#[tokio::test]
+async fn with_the_setting_off_the_waveform_route_is_a_404_and_the_helper_sees_nothing() {
+    let helper = Helper::new();
+    helper.set(|b| b.waveform = Some(helper_wave(0.25, &[0.5, 0.7])));
+    let address = helper.serve().await;
+    let (router, runtime) = app().await;
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
+    // Off by default.
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
+    // Saved address but switched off.
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"enabled": false, "address": address})),
+    )
+    .await;
+    assert_eq!(
+        raw(&router, WAVE_ONE, Some("\"x\"")).await.0,
+        StatusCode::NOT_FOUND
+    );
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(helper.hits().is_empty(), "{:?}", helper.hits());
+    // On, a waveform held, then off again: it is let go.
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"enabled": true})),
+    )
+    .await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(runtime.playback_library.waveforms_held(), 1);
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"enabled": false})),
+    )
+    .await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(runtime.playback_library.waveforms_held(), 0);
+}
+
+/// A fake helper with a revision token, three paired songs and a waveform for each.
+async fn revised(token: Option<&str>) -> (Helper, axum::Router, Arc<Runtime>) {
+    let (helper, router, runtime) = waves(Some(helper_wave(0.25, &[0.5, 1.0]))).await;
+    helper.set(|b| b.health = Some(with_revision(token)));
+    // A fresh read of the helper's health, so the token is the one held.
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    (helper, router, runtime)
+}
+
+#[tokio::test]
+async fn a_waveform_is_kept_while_the_revision_is_unchanged_and_fetched_again_when_it_changes() {
+    let (helper, router, runtime) = revised(Some("aaaaaaaaaaaa")).await;
+    let (first, headers, body) = raw(&router, WAVE_ONE, None).await;
+    assert_eq!(first, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // Same token: from memory, however many windows ask and however many checks pass.
+    for _ in 0..3 {
+        runtime
+            .playback_library
+            .advance_clock(Duration::from_secs(31));
+        let (status, _, again) = raw(&router, WAVE_ONE, None).await;
+        assert_eq!((status, again), (StatusCode::OK, body.clone()));
+    }
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // Another token (the library changed): the next ask goes to the helper, with new numbers.
+    helper.set(|b| {
+        b.health = Some(with_revision(Some("bbbbbbbbbbbb")));
+        b.waveform = Some(helper_wave(0.25, &[1.0, 0.0]));
+    });
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    let (status, new_headers, new_body) = raw(&router, WAVE_ONE, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 2);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&new_body).unwrap()["peak"],
+        json!([255, 0])
+    );
+    assert_ne!(headers.get(header::ETAG), new_headers.get(header::ETAG));
+    // Flipping back to the first token fetches once more (only the last good token counts).
+    helper.set(|b| b.health = Some(with_revision(Some("aaaaaaaaaaaa"))));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 3);
+    assert_eq!(runtime.playback_library.waveforms_held(), 1);
+}
+
+#[tokio::test]
+async fn a_helper_with_no_revision_is_trusted_for_ten_minutes_then_asked_again() {
+    let (helper, router, runtime) = revised(None).await;
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // Nine minutes on (the clock is faked), in checks of 31 s or more: still held.
+    for _ in 0..9 {
+        runtime
+            .playback_library
+            .advance_clock(Duration::from_secs(60));
+        assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    }
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // Past ten minutes in all: asked again, once.
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(90));
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 2);
+    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
+    assert_eq!(helper.count("/songs/11/waveform"), 2);
+}
+
+#[tokio::test]
+async fn at_most_sixteen_songs_are_held_and_the_oldest_goes_first() {
+    let helper = Helper::new();
+    helper.set(|b| {
+        b.health = Some(with_revision(Some("cccccccccccc")));
+        b.waveform = Some(helper_wave(0.25, &[0.5]));
+        b.items = (11..31)
+            .map(|id| item(id, id as u32 - 10, &format!("Song {id}")))
+            .collect();
+    });
+    let address = helper.serve().await;
+    let (router, runtime) = app().await;
+    let titles: Vec<String> = (11..31).map(|id| format!("Song {id}")).collect();
+    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &titles)));
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"enabled": true, "address": address})),
+    )
+    .await;
+    for id in 11..31 {
+        let uri = format!("/api/v1/playback-library/songs/{id}/waveform");
+        assert_eq!(raw(&router, &uri, None).await.0, StatusCode::OK, "{id}");
+    }
+    assert_eq!(
+        helper.count("/songs/") - 20,
+        20,
+        "20 reads of songs and 20 waveforms"
+    );
+    assert_eq!(runtime.playback_library.waveforms_held(), 16);
+    // The newest are held, the oldest went.
+    let before = helper.inner.lock().unwrap().wave_queries.len();
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/30/waveform", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(helper.inner.lock().unwrap().wave_queries.len(), before);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/11/waveform", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(helper.inner.lock().unwrap().wave_queries.len(), before + 1);
+    assert_eq!(runtime.playback_library.waveforms_held(), 16);
+}
+
+#[tokio::test]
+async fn the_window_gets_304_when_it_already_holds_the_waveform() {
+    let (helper, router, _) = waves(Some(helper_wave(0.25, &[0.5, 1.0]))).await;
+    let (_, headers, body) = raw(&router, WAVE_ONE, None).await;
+    let etag = headers
+        .get(header::ETAG)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let (status, headers, again) = raw(&router, WAVE_ONE, Some(&etag)).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert!(again.is_empty());
+    assert_eq!(headers.get(header::ETAG).unwrap().to_str().unwrap(), etag);
+    assert_eq!(
+        headers
+            .get(header::CACHE_CONTROL)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "private, max-age=300"
+    );
+    // A weak form and a list are understood; another tag gets the numbers.
+    assert_eq!(
+        raw(&router, WAVE_ONE, Some(&format!("\"zz\", W/{etag}")))
+            .await
+            .0,
+        StatusCode::NOT_MODIFIED
+    );
+    let (status, _, other) = raw(&router, WAVE_ONE, Some("\"0000000000000000\"")).await;
+    assert_eq!((status, other), (StatusCode::OK, body));
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
 }
