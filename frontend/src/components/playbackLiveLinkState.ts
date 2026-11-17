@@ -32,7 +32,7 @@ export const apiGood = (status: Pick<PlaybackConnection, "sources"> | null | und
 const HELPER_TONE: Record<HelperState, Tone> = {
   ready: "success",
   outdated: "info",
-  needs_key: "info",
+  needs_key: "warning",
   not_installed: "idle",
   forgotten: "idle",
   unreachable: "warning",
@@ -56,17 +56,31 @@ export function scriptLine(status: LibraryStatus | null, hasComputer: boolean): 
 /** The library is used in these two states only; everything the library feeds waits for one of them. */
 export const scriptActive = (status: LibraryStatus | null | undefined): boolean => Boolean(status?.active);
 
-export interface LiveLinkPillState {
-  text: "Connected" | "API only" | "Script only" | "Not connected";
+export interface PillPart {
+  /** One or two words after the label: "Connected", "Not installed". */
+  word: string;
   tone: Tone;
 }
 
-/** The pill beside the title: both good = Connected, the API alone = API only, the script alone = Script only, neither = Not connected. */
-export function pillState(api: boolean, script: boolean): LiveLinkPillState {
-  if (api && script) return { text: "Connected", tone: "success" };
-  if (api) return { text: "API only", tone: "success" };
-  if (script) return { text: "Script only", tone: "info" };
-  return { text: "Not connected", tone: "idle" };
+/**
+ * The two statuses in the pill beside the title: "Playback API: Connected - Network script: Connected". One short word each (the long
+ * sentence rides in the strip under the fields and in the tooltip). The script is "Connected" when it answers with the key, even if a
+ * newer one is available (that is said as "Update available").
+ */
+export function pillParts(api: { good: boolean; line: LiveLinkLine }, status: LibraryStatus | null, hasComputer: boolean): { api: PillPart; script: PillPart } {
+  const apiPart: PillPart = api.good
+    ? { word: "Connected", tone: "success" }
+    : api.line.tone === "info" ? { word: "Searching", tone: "info" } : api.line.tone === "midi" ? { word: "MIDI only", tone: "midi" } : { word: "Not connected", tone: "idle" };
+  const state = status?.helper.state;
+  const script: PillPart = !status
+    ? { word: hasComputer ? "Checking" : "Not installed", tone: "idle" }
+    : state === "ready" ? { word: "Connected", tone: HELPER_TONE.ready }
+      : state === "outdated" ? { word: "Update available", tone: HELPER_TONE.outdated }
+        : state === "needs_key" ? { word: "Needs setup", tone: HELPER_TONE.needs_key }
+          : state === "unreachable" ? { word: "Not answering", tone: HELPER_TONE.unreachable }
+            : state === "forgotten" ? { word: "Forgotten", tone: HELPER_TONE.forgotten }
+              : { word: "Not installed", tone: HELPER_TONE.not_installed };
+  return { api: apiPart, script };
 }
 
 /** What to say when the library has a data problem while the script itself answers (macOS has not allowed it yet, Playback's data is unreadable). */

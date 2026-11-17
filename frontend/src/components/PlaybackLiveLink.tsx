@@ -5,18 +5,16 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40 } from "./liveLink";
-import { LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
+import { DisclosureButton, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
-import { apiGood, apiLine, pillState, scriptLine, scriptNote, scriptActive, type LiveLinkLine } from "./playbackLiveLinkState";
+import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
 import { scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
-import { StatusDot } from "./ui/StatusDot";
 
 const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-playback-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-playback active:text-integration-playback-text";
 const LOCAL_NETWORK_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
@@ -24,20 +22,6 @@ const OTHER_COMPUTER = "__other__";
 const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turned on in Playback", "Both computers are on the same network"];
 const SCAN_CANCEL_GUARD_MS = 600;
 const TITLE = "Playback Live Link";
-
-/** One status line: a dot AND words (never colour alone), the label first. */
-function StatusLine({ label, line, testId, live = false, children }: { label: string; line: LiveLinkLine; testId: string; live?: boolean; children?: React.ReactNode }) {
-  return (
-    <div data-testid={testId} data-tone={line.tone} {...(live ? { role: "status", "aria-live": "polite" as const } : {})}>
-      <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.8125rem] leading-[1.45]">
-        <StatusDot ignoreAccent tone={line.tone} />
-        <span className="font-semibold text-ink">{label}:</span>
-        <span className="min-w-0 text-ink-body">{line.text}</span>
-      </p>
-      {children}
-    </div>
-  );
-}
 
 /**
  * The first block of the Playback API panel, built like the Lighting "sACN DMX Live Link" block: a bordered card with a title, a state pill
@@ -57,7 +41,12 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const [copied, setCopied] = useState(false);
   const [forgetOpen, setForgetOpen] = useState(false);
   const [override, setOverride] = useState("");
+  // The two quiet boxes under the strip, opened by its buttons (null = the default: the setup box is open while the script is not ready).
+  const [setupOpen, setSetupOpen] = useState<boolean | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const forgetId = useId();
+  const setupId = useId();
+  const advancedId = useId();
   useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
   const savedOverride = (library?.address ?? "").replace(/^http:\/\//, "");
   useEffect(() => { setOverride(savedOverride); }, [savedOverride]);
@@ -94,8 +83,12 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const api = status ? apiLine(status, "Checking Playback…") : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
   const hasComputer = Boolean(library?.target || savedHost);
   const script = library ? scriptLine(library.status, hasComputer) : null;
-  const pill = pillState(apiGood(status), scriptActive(library?.status));
+  const parts = pillParts({ good: apiGood(status), line: api }, library?.status ?? null, hasComputer);
   const pillDetail = [`Playback API: ${api.text}`, script ? `Network script: ${script.text}` : null].filter(Boolean).join(". ");
+  const scriptState = library?.status?.helper.state ?? null;
+  const needsSetup = scriptState !== "ready" && scriptState !== null;
+  const setupShown = setupOpen ?? needsSetup;
+  const setupLabel = scriptState === "outdated" ? "Update the network script" : "Network script setup";
   const note = scriptNote(library?.status ?? null);
   const paired = Boolean(library?.status?.helper.paired) && library?.status?.helper.state !== "forgotten";
   const overrideChanged = override.trim() !== savedOverride;
@@ -104,16 +97,11 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   return (
     <LiveLinkShell
       className="!mt-0"
-      pill={<LiveLinkPill detail={pillDetail} name={TITLE} testId="playback-live-link-pill" text={pill.text} tone={pill.tone} />}
+      pill={<LiveLinkPill detail={pillDetail} name={TITLE} second={library ? { text: `Network script: ${parts.script.word}`, tone: parts.script.tone } : undefined} testId="playback-live-link-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />}
       testId="playback-live-link"
       title={TITLE}
     >
-      <div className="mt-2 space-y-1.5" data-testid="playback-live-link-lines">
-        <StatusLine label="Playback API" line={api} live testId="playback-banner">
-          {status?.scan.state === "scanning" && <p className="mt-0.5 pl-[1.125rem] text-[0.8125rem] tabular-nums text-ink-muted" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
-        </StatusLine>
-        {script && <StatusLine label="Network script" line={script} testId="network-script-status" />}
-      </div>
+      {status?.scan.state === "scanning" && <p className="mt-2 text-[0.8125rem] tabular-nums text-ink-muted" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
 
       <form className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="playback-live-link-line" id="playback-specific" onSubmit={(event) => { event.preventDefault(); connect(); }}>
         <LiveLinkField caption="Playback computer" className="live-link-host">
@@ -128,8 +116,8 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
           </LiveLinkField>
         )}
         {scanning
-          ? <Button className={`flex-none ${CONTROL_40}`} onClick={cancelScan} type="button" variant="primary">Scanning… (cancel)</Button>
-          : <Button className={`flex-none ${CONTROL_40}`} onClick={startScan} type="button" variant="primary">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
+          ? <Button className={`flex-none ${CONTROL_40}`} onClick={cancelScan} tone="playback" type="button" variant="tinted">Scanning… (cancel)</Button>
+          : <Button className={`flex-none ${CONTROL_40}`} onClick={startScan} tone="playback" type="button" variant="tinted">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
         {choice && <Button className={CONTROL_40} disabled={!trimmed || !hostOk || scanning} tone="playback" type="submit" variant="tinted">Connect</Button>}
         {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
         {other && !hostOk && <p className="w-full text-sm text-danger-text" role="alert">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
@@ -186,29 +174,47 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
         {playback?.message && <p role="status" className="text-sm text-integration-playback-text">{playback.message}</p>}
       </div>
 
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.78125rem] text-ink-muted" data-testid="live-link-sub">
+        <p aria-live="polite" className="min-w-0 flex-[1_1_16rem]" role="status">
+          <span className="block sm:inline" data-testid="playback-banner">{api.text}</span>
+          {script && (
+            <>
+              <span aria-hidden="true" className="hidden sm:inline">{" \u00B7 "}</span>
+              <span className="block sm:inline" data-testid="network-script-status" data-tone={script.tone}>Network script: {script.text}.</span>
+            </>
+          )}
+        </p>
+        {library && (
+          <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="live-link-actions">
+            <DisclosureButton controls={setupId} onToggle={() => setSetupOpen(!setupShown)} open={setupShown}>{setupLabel}</DisclosureButton>
+            <DisclosureButton controls={advancedId} onToggle={() => setAdvancedOpen(!advancedOpen)} open={advancedOpen}>Advanced</DisclosureButton>
+          </div>
+        )}
+      </div>
+
       {library && (
         <>
           {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="network-script-note" role="status">{note}</p>}
-          <PlaybackInstallBox hasComputer={hasComputer} library={library} />
+          <div hidden={!setupShown} id={setupId}>
+            <PlaybackInstallBox hasComputer={hasComputer} library={library} />
+          </div>
           {library.error && <p className="mt-2 text-sm text-danger-text" role="alert">{library.error}</p>}
-          <div className="mt-3">
-            <Disclosure title="Advanced" tone="playback" variant="advanced">
-              <div className="space-y-3 pt-1" data-testid="playback-live-link-advanced">
-                <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void library.saveAddress(override.trim()); }}>
-                  <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Network script address">
-                    <Input onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
-                  </Field>
-                  <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
-                </form>
-                <p className="text-xs text-ink-muted">Leave this empty: the network script is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
-                {paired && (
-                  <div>
-                    <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the network script</Button>
-                    <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The script keeps running on the Playback computer but StagePilot can no longer use it.</p>
-                  </div>
-                )}
-              </div>
-            </Disclosure>
+          <div className="mt-2 rounded-ds-lg border border-edge bg-surface-900/60 p-3" data-testid="playback-live-link-advanced" hidden={!advancedOpen} id={advancedId}>
+            <div className="space-y-3">
+              <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void library.saveAddress(override.trim()); }}>
+                <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Network script address">
+                  <Input onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
+                </Field>
+                <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
+              </form>
+              <p className="text-xs text-ink-muted">Leave this empty: the network script is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
+              {paired && (
+                <div>
+                  <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the network script</Button>
+                  <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The script keeps running on the Playback computer but StagePilot can no longer use it.</p>
+                </div>
+              )}
+            </div>
           </div>
           <Dialog
             actions={
