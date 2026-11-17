@@ -683,10 +683,10 @@ pub async fn pending_selection(State(rt): State<Rt>) -> Response {
 }
 
 /// `{"plan_id": "..."}` as `PlanSelectionRequest` validates it (unknown keys are ignored).
-fn parse_plan_id(body: &[u8]) -> Result<String, Response> {
+fn parse_plan_id(body: &[u8]) -> Result<String, Json> {
     let mut b = match Body::parse(body) {
         Ok(b) => b,
-        Err(errors) => return Err(respond(unprocessable(errors))),
+        Err(errors) => return Err(unprocessable(errors)),
     };
     let plan_id = b.string("plan_id", 1, Some(128), true);
     if let Some(id) = &plan_id {
@@ -702,7 +702,7 @@ fn parse_plan_id(body: &[u8]) -> Result<String, Response> {
         }
     }
     if let Err(errors) = b.finish() {
-        return Err(respond(unprocessable(errors)));
+        return Err(unprocessable(errors));
     }
     Ok(plan_id.unwrap_or_default())
 }
@@ -710,7 +710,7 @@ fn parse_plan_id(body: &[u8]) -> Result<String, Response> {
 pub async fn select_plan(State(rt): State<Rt>, body: Bytes) -> Response {
     let plan_id = match parse_plan_id(&body) {
         Ok(id) => id,
-        Err(response) => return response,
+        Err(response) => return respond(response),
     };
     let current = rt.store.snapshot();
     let is_candidate = current
@@ -798,7 +798,7 @@ pub async fn upcoming_plans(State(rt): State<Rt>) -> Response {
 pub async fn pin_plan(State(rt): State<Rt>, body: Bytes) -> Response {
     let plan_id = match parse_plan_id(&body) {
         Ok(id) => id,
-        Err(response) => return response,
+        Err(response) => return respond(response),
     };
     let _serialised = rt.pco.lock.lock().await;
     change_selection(&rt, Some(plan_id)).await

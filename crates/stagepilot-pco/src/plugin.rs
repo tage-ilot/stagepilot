@@ -147,6 +147,8 @@ struct SelectionHint {
     pinned: bool,
     /// The upcoming service while another one is pinned (when it could be found).
     upcoming: Option<UpcomingService>,
+    /// The date of the picked plan: it may lie beyond the upcoming search window.
+    pinned_date: Option<NaiveDate>,
 }
 
 impl PcoPlugin {
@@ -1009,17 +1011,14 @@ impl Inner {
             SelectionHint {
                 pinned: true,
                 upcoming,
+                pinned_date: pin.as_ref().map(|p| p.date),
             }
         } else {
             SelectionHint {
                 pinned: false,
                 upcoming: None,
+                pinned_date: None,
             }
-        };
-        let pinned_date = if ctx.pinned_loaded {
-            pin.as_ref().map(|p| p.date)
-        } else {
-            None
         };
         if let Err(error) = self
             .apply_result(
@@ -1029,7 +1028,6 @@ impl Inner {
                 previous_skipped.clone(),
                 ctx.previous_type_active,
                 hint,
-                pinned_date,
             )
             .await
         {
@@ -1075,12 +1073,11 @@ impl Inner {
         previous_skipped: Vec<SkippedServiceItem>,
         previous_plan_type_still_active: bool,
         hint: SelectionHint,
-        pinned_date: Option<NaiveDate>,
     ) -> Result<(), PcoError> {
         let lookahead = i64::from(self.settings().upcoming_lookahead_days);
         let search_end = search_date + Duration::days(lookahead);
         // A pinned plan may be dated beyond the upcoming search window.
-        let loaded_end = pinned_date.map_or(search_end, |d| d.max(search_end));
+        let loaded_end = hint.pinned_date.map_or(search_end, |d| d.max(search_end));
         match result {
             PlanDiscoveryResult::NotFound { target_date, .. } => {
                 if target_date != search_date {

@@ -10,9 +10,7 @@ use chrono::{Datelike, Duration as ChronoDuration, Utc, Weekday};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use stagepilot_core::config::{IntegrationModes, ServiceSource};
-use stagepilot_core::service_pin::{
-    FileServicePinStore, PinKeeper, ServicePin, ServicePinStore, SOURCE_DEMO,
-};
+use stagepilot_core::service_pin::{FileServicePinStore, ServicePin, ServicePinStore, SOURCE_DEMO};
 use stagepilot_core::settings::{
     PersistentPlanningCenterSettings, PersistentSettings, RuntimeSettings, SettingsService,
 };
@@ -299,7 +297,6 @@ async fn a_demo_pin_whose_date_passed_ends_with_a_notice() {
         Some("Back to the upcoming service")
     );
     assert!(!path.exists(), "the stale pin file is gone");
-    let _ = PinKeeper::in_memory();
 }
 
 // ---- Planning Center ---------------------------------------------------------------------------
