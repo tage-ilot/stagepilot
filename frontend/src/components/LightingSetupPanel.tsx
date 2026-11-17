@@ -54,6 +54,8 @@ import { useHiddenCueTypes } from "./useHiddenCueTypes";
 import type { CueTypeId } from "./lightingCueTypes";
 import { classifyMidiCue, classifyOscCue, midiNoteName, midiSpokenLabel, typeSpokenLabel } from "./lightingCueTypes";
 import { LightingTimeline } from "./LightingTimeline";
+import { SONG_MAP_KEY } from "./lightingSongMap";
+import { useSongWaveform } from "../hooks/useSongWaveform";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { SongsStrip, type SongChip } from "./SongsStrip";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
@@ -517,6 +519,18 @@ export function LightingSetupPanel({
     () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = chipLibrary(song); return chip ? [[song.key, chip] as const] : []; })),
     [library?.plan],
   );
+  // The selected song's arrangement and waveform from the Playback library, for the timeline's song map: only a song that is paired
+  // (same key as the Songs strip) with current data. The waveform is asked for only while the song map is switched on.
+  const [songMapOn, setSongMapOn] = usePersistedFlag(SONG_MAP_KEY, true);
+  const songMapLibrary = useMemo(
+    () => (library?.plan?.state === "ready" ? library.plan.songs.find((song) => song.key === selectedSongKey && song.status === "matched")?.library ?? null : null),
+    [library?.plan, selectedSongKey],
+  );
+  const songMapSections = songMapLibrary && songMapLibrary.sections.length ? songMapLibrary.sections : null;
+  const waveform = useSongWaveform(
+    songMapOn && songMapSections && selectedSong && songMapLibrary?.setlist_song_id != null ? songMapLibrary.setlist_song_id : null,
+    songMapSections ? `${songMapSections.length}:${songMapSections[songMapSections.length - 1]!.end}` : "",
+  );
   const songChips: SongChip[] = useMemo(() => songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
@@ -937,6 +951,10 @@ export function LightingSetupPanel({
         {selectedSong && (
           <LightingTimeline
             toolbar={toolbarNode}
+            arrangement={songMapSections}
+            waveform={waveform}
+            songMap={songMapOn}
+            onSongMapChange={setSongMapOn}
             disabled={pendingOperation !== null}
             markers={timelineMarkers}
             onMerge={mergeSelected}

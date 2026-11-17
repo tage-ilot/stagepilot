@@ -982,6 +982,12 @@ export interface LibraryArtwork {
   etag: string;
 }
 
+/** A song's waveform from the Playback library, through the backend: one whole number 0..255 per `step_s` seconds (the loudest column of the helper's picture in that step). The scale (linear or dB) is not known, so it is drawn as given and never labelled. */
+export interface SongWaveform {
+  step_s: number;
+  peak: number[];
+}
+
 export interface LibraryPlanSong {
   key: string;
   title: string;

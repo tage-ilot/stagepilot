@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
-import type { LightingEffect, SongLoudness } from "../types";
+import { usePersistedFlag } from "../hooks/usePersistedFlag";
+import type { LibrarySection, LightingEffect, SongLoudness, SongWaveform } from "../types";
 import { barClassFor } from "./cueTypeBars";
 import { CueTypeLegend } from "./CueTypeParts";
 import { useHiddenCueTypes } from "./useHiddenCueTypes";
@@ -20,6 +21,8 @@ import {
   type TimelineMarker,
 } from "./lightingTimelineMath";
 import { loudnessAltText, loudnessPath } from "./loudness";
+import { arrangementBlocks, BAR_HEIGHT_PX, BLOCK_GAP_PX, blockLabel, canvasMeasure, SONG_MAP_KEY, WAVEFORM_HEIGHT_PX, waveformPath } from "./lightingSongMap";
+import { arrangementLabel } from "./playbackLibrary";
 import { EffectDetail } from "./LightingEffectDetail";
 import { assignEffectLanes, clampRampStart, effectLabel, formatFade, rampGeometry } from "./lightingSmooth";
 import { Button } from "./ui/Button";
@@ -44,7 +47,17 @@ const EFFECT_LANE_PX = 24; // one line of loops under the track (44 on touch, se
 export function LightingTimeline({
   songLength, markers, playhead, onMove, onRemove, disabled = false, selectedIds = [], onSelectionChange, onMerge, onSelect, loudness,
   method = "osc", hiddenTypes, onToggleType, onShowAllTypes, toolbar, effects = [], onRemoveEffect, mergeBlockedReason = null,
+  arrangement = null, waveform = null, songMap, onSongMapChange, measureLabel,
 }: {
+  /** The song's arrangement from the Playback library (view-only): drawn as a bar of tinted section blocks above the cues. Nothing is drawn, and no switch shown, without it. */
+  arrangement?: readonly LibrarySection[] | null;
+  /** The song's waveform from the Playback library (view-only), drawn under the arrangement bar. Without it the bar shows alone. */
+  waveform?: SongWaveform | null;
+  /** Whether the song map (bar and waveform) is shown; when not given the timeline keeps its own choice in this browser. */
+  songMap?: boolean;
+  onSongMapChange?: (on: boolean) => void;
+  /** Text width in px for the block labels (tests inject one; the browser measures with a canvas). */
+  measureLabel?: (text: string) => number;
   /** The song's repeating loops, drawn as striped bands under the cue bars (one line each, at most three lines). */
   effects?: LightingEffect[];
   /** Asks to remove a loop (the panel confirms first). Loops are never moved or edited from here. */
@@ -79,6 +92,9 @@ export function LightingTimeline({
   const hidden = hiddenTypes ?? ownHidden.hidden;
   const toggleType = onToggleType ?? ownHidden.toggle;
   const showAllTypes = onShowAllTypes ?? ownHidden.showAll;
+  const ownSongMap = usePersistedFlag(SONG_MAP_KEY, true);
+  const songMapOn = songMap ?? ownSongMap[0];
+  const setSongMapOn = onSongMapChange ?? ownSongMap[1];
   const [zoomIndex, setZoomIndex] = useState(0);
   const [heightMode, setHeightMode] = useHeightMode();
   const [selectedId, setSelectedIdRaw] = useState<string | null>(null);
@@ -121,6 +137,17 @@ export function LightingTimeline({
   const step = rulerStep(length);
   const loudnessShape = loudness ? loudnessPath(loudness, length) : null;
   const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, index) => index * step);
+  // The song map (the Playback library's arrangement bar and waveform): only for a song that has blocks to show.
+  const blocks = useMemo(() => arrangementBlocks(arrangement ?? [], length), [arrangement, length]);
+  const hasSongMap = blocks.length > 0;
+  const showSongMap = hasSongMap && songMapOn;
+  const waveShape = useMemo(() => (showSongMap && waveform ? waveformPath(waveform, length) : null), [showSongMap, waveform, length]);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [labelFont, setLabelFont] = useState("11px sans-serif");
+  useEffect(() => {
+    if (barRef.current) setLabelFont(window.getComputedStyle(barRef.current).font || "11px sans-serif");
+  }, [showSongMap]);
+  const measureText = useMemo(() => measureLabel ?? canvasMeasure(labelFont), [measureLabel, labelFont]);
 
   // The width the labels have to share. jsdom (the tests) has no ResizeObserver, so fall back to one read.
   useEffect(() => {
@@ -307,6 +334,9 @@ export function LightingTimeline({
             <Button aria-label="Zoom in" className={CONTROL_34} disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
             <span aria-live="polite" className="min-w-[3.25rem] text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "" : `${zoom} px/s`}</span>
           </div>
+          {hasSongMap && (
+            <Button aria-pressed={songMapOn} className={CONTROL_34} onClick={() => setSongMapOn(!songMapOn)} title="The song's sections and waveform from the Playback library" variant={songMapOn ? "secondary" : "tinted"}>Song map</Button>
+          )}
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className="text-type-body-sm text-ink-muted">Height</span>
             <ConnectionMethod<HeightMode>
@@ -327,6 +357,45 @@ export function LightingTimeline({
               <span className={`absolute top-0 text-type-body-sm tabular-nums text-ink-muted ${tick === 0 ? "" : tick / length > 0.97 ? "-translate-x-full" : "-translate-x-1/2"}`} key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
             ))}
           </div>
+          {showSongMap && (
+            <div className="mt-2" data-testid="lighting-song-map">
+              <div
+                aria-label={arrangementLabel([...(arrangement ?? [])])}
+                className="relative"
+                data-testid="lighting-arrangement"
+                ref={barRef}
+                role="img"
+                style={{ height: `${BAR_HEIGHT_PX}px` }}
+              >
+                {blocks.map((block) => {
+                  const text = blockLabel(block.abbreviation, (block.widthPct / 100) * trackWidth - BLOCK_GAP_PX, measureText);
+                  return (
+                    <span
+                      className="song-map-seg"
+                      data-testid="lighting-arrangement-block"
+                      key={block.index}
+                      style={{ "--c": block.color, left: `${Number(block.leftPct.toFixed(4))}%`, width: `${Number(block.widthPct.toFixed(4))}%` } as CSSProperties}
+                      title={block.title}
+                    >{text}</span>
+                  );
+                })}
+              </div>
+              {waveShape && (
+                <div className="relative mt-1" data-testid="lighting-waveform-row" style={{ height: `${WAVEFORM_HEIGHT_PX}px` }}>
+                  <div aria-hidden="true" className="absolute inset-x-0 top-1/2 h-px bg-edge-subtle" />
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 h-full w-full text-integration-playback opacity-[0.55]"
+                    data-testid="lighting-waveform"
+                    preserveAspectRatio="none"
+                    viewBox="0 0 2400 100"
+                  >
+                    <path d={waveShape} fill="currentColor" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          )}
           <div
             aria-label={`Lighting cues, 0 to ${formatElapsed(length)}`}
             className="relative mt-2"

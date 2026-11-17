@@ -1107,6 +1107,33 @@ with thousands separators (`12,000 captured items`). Work that walks every row (
 counts, the ramp descriptions) is redone only when the rows change, not on every tick of the
 follow-along. Measured numbers are in the pull request that added this.
 
+### Song map: the song's sections and waveform (from the Playback library)
+
+When the Playback library is on (Playback API panel), the selected song is paired with a Playback song and the Playback computer has
+given current data, two rows appear on the timeline between the time ruler and the cue track. They scroll and zoom together with the
+cues, so a marker is always under the part of the song it plays in. They are for looking only: you cannot click, drag or focus anything
+in them, and they change no cue, no look and nothing in Playback.
+
+- **Arrangement bar (26 px).** One block per section, in playing order and as wide as the time the section plays; a repeated
+  section is another block. The blocks are tinted the way Playback tints them (30 % of the section's color over the panel, a 3 px line
+  in the full color on top). A block shows Playback's short form of the section (`V1`, `C`, `B1`) only when it fits in the block;
+  otherwise it stays blank. Hover a block (or press and hold it on a touch screen) for the full name and times, such as
+  `Chorus · 0:47–1:16`. The arrangement can run a few seconds past where StagePilot counts the song down to; what runs past is cut
+  off, so the timeline is never made longer for it. A screen reader reads the bar as one picture ("Arrangement: Count Off, Intro, ...").
+- **Waveform (44 px).** The song's waveform as a mirrored shape around a center line, in the Playback color, drawn against the
+  loudest point of the song itself. Playback has not said whether its numbers are linear or decibels, so the shape is drawn as given
+  and nothing about it is labelled in a unit. It is decoration (hidden from a screen reader). The loudness recorded in the room (the
+  faint shape inside the cue track) is a different thing and stays exactly as it was.
+- **No cover picture** is shown on the timeline.
+- **Song map** (toolbar button, next to Height) shows or hides both rows. It is on by default and is remembered in this browser. Turn
+  it off if you are short of screen height: while it is off the waveform is not even asked for. The button is there only when the song
+  has a bar to show.
+
+When the song is not paired, Playback has no current data for it, the library is off, or the Song map is off, the timeline looks
+exactly as it did before: no rows, no empty space, no message. If only the waveform is missing (Playback holds none for the song, or
+did not answer in time), the arrangement bar shows alone. The window never talks to the Playback computer: the waveform comes through
+StagePilot (see "Playback library (optional)" in `playback-api.md`), and only while that song's timeline is on screen.
+
 ### Saving and restarts
 
 Captures, undo and cue-map saves are serialized on the backend, so a capture

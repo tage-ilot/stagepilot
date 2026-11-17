@@ -990,3 +990,82 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
     expect(screen.getAllByRole("button", { name: "Test" })[0]).toBeEnabled();
   });
 });
+
+describe("the song map on the panel's timeline (the Playback library's arrangement and waveform)", () => {
+  const libSong = (over: Record<string, unknown> = {}) => ({
+    setlist_song_id: 2000001, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", bpm: 65, scan_length_s: 330, countdown_length_s: 330,
+    length_source: "last_measure", arrangement: "Default", section_count: 3,
+    sections: [{ name: "Count Off", start: 0, end: 4 }, { name: "Verse 1", start: 4, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
+    artwork: null, rental_expires_utc: null, ...over,
+  });
+  const libraryOf = (songs: unknown[], over: Record<string, unknown> = {}) => ({
+    enabled: true, address: "10.0.0.5", status: null, error: null, pending: null, save: vi.fn(), check: vi.fn(),
+    plan: { enabled: true, state: "ready", message: null, plan_date: "2026-07-19", setlist: null, newest: null, stale: false, checked_at: null, songs },
+    ...over,
+  }) as never;
+  const planSong = (over: Record<string, unknown> = {}) => ({ key: "song-1", title: "Holy Forever", plan_position: 1, plan_seconds: 336, status: "matched", library: libSong(), ...over });
+  const mountWith = (library: never) => render(
+    <LightingSetupPanel error={null} library={library} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
+  );
+  const wire = (answer: () => Promise<Response>) => {
+    const fetchMock = vi.fn(answer);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+  const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => { vi.unstubAllGlobals(); window.localStorage.clear(); });
+
+  it("shows the paired song's bar and, once the backend answers, its waveform; the window asks the backend for it, never the helper", async () => {
+    const fetchMock = wire(() => json({ step_s: 0.125, peak: [0, 100, 255, 100] }));
+    mountWith(libraryOf([planSong()]));
+    expect(screen.getByTestId("lighting-arrangement")).toBeInTheDocument();
+    expect(await screen.findByTestId("lighting-waveform")).toHaveAttribute("aria-hidden", "true");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/api/v1/playback-library/songs/2000001/waveform");
+    expect(url).not.toContain("10.0.0.5");
+    expect(screen.getByRole("button", { name: "Song map" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows the bar alone, with no error, when the waveform cannot be had", async () => {
+    const fetchMock = wire(() => json({ detail: "No waveform." }, 404));
+    mountWith(libraryOf([planSong()]));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(screen.getByTestId("lighting-arrangement")).toBeInTheDocument();
+    expect(screen.queryByTestId("lighting-waveform")).toBeNull();
+    expect(screen.queryByText(/waveform/i)).toBeNull();
+  });
+
+  it("adds nothing, and asks for nothing, for a song that is not paired, a library with no data, or a library that is off", async () => {
+    const fetchMock = wire(() => json({ step_s: 1, peak: [1] }));
+    for (const library of [
+      undefined,
+      libraryOf([planSong({ key: "another-song" })]),
+      libraryOf([planSong({ status: "missing", library: null })]),
+      libraryOf([planSong({ library: libSong({ sections: [] }) })]),
+      libraryOf([planSong()], { plan: null }),
+      libraryOf([planSong()], { plan: { enabled: true, state: "problem", message: "The Playback computer did not answer.", songs: [] } }),
+    ]) {
+      const { unmount } = mountWith(library as never);
+      expect(screen.queryByTestId("lighting-song-map")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Song map" })).toBeNull();
+      unmount();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("with the Song map switched off nothing is drawn and the waveform is not even asked for; switching it on asks once", async () => {
+    window.localStorage.setItem("stagepilot.lighting.songMap", "false");
+    const fetchMock = wire(() => json({ step_s: 0.5, peak: [10, 200, 30] }));
+    mountWith(libraryOf([planSong()]));
+    expect(screen.queryByTestId("lighting-song-map")).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Song map" }));
+    expect(await screen.findByTestId("lighting-waveform")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
