@@ -21,11 +21,11 @@ current_song: Song | null, next_song: Song | null, current_song_index: number | 
  */
 playing_song: Song | null, playing_song_index: number | null, up_next_song: Song | null, planning_center_status: ConnectionStatus, midi_status: ConnectionStatus, propresenter_status: ConnectionStatus, lights_status: ConnectionStatus, service_load: ServiceLoadState, timer: TimerState, plugins: { [key in string]: PluginHealth }, recent_events: Array<EventSummary>, recent_errors: Array<ErrorSummary>, last_successful_plan_reload_at: string | null, last_action: string | null, 
 /**
- * Which service is loaded: the upcoming one or one the operator picked. Absent until a
- * Services source has said so.
+ * The service the operator picked instead of the upcoming one; absent while the upcoming
+ * one is loaded (and no note is to be shown).
  */
 selection?: ServiceSelection, 
 /**
- * The upcoming service (what loads when nothing is pinned). Absent when unknown.
+ * The upcoming service (what loads when nothing is pinned), while another one is picked.
  */
 upcoming?: UpcomingService, };
