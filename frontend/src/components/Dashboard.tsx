@@ -482,6 +482,7 @@ export function Dashboard({
   undoLightingCapture,
   clearLightingLoudness,
   clearAllLightingCues = () => undefined,
+  noteSettingsRevision,
   updater,
 }: {
   capabilities?: AccessCapabilities;
@@ -543,6 +544,8 @@ export function Dashboard({
   undoLightingCapture?: LightingPanelActions["onUndoCapture"];
   clearLightingLoudness?: LightingPanelActions["onClearLoudness"];
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
+  /** The backend's save count of the settings, read by the Lightkey strip; a copy of the settings with an older one is reloaded. */
+  noteSettingsRevision?: (revision: number | undefined) => void;
   updater?: UpdaterController;
 }) {
   const { canOperate, canConfigure } = capabilities;
@@ -1130,6 +1133,7 @@ export function Dashboard({
             lights={lights}
             message={lightingMessage}
             onClearAllCues={clearAllLightingCues}
+            onSettingsRevision={noteSettingsRevision}
             onClose={closeConnection}
             onRefresh={refreshLighting}
             onSaveCues={saveLightingCues}

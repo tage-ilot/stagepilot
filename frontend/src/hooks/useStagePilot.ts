@@ -73,6 +73,7 @@ import { describeError, OFFLINE_SENTENCE } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
 import { useSingleFlight } from "./useSingleFlight";
 
+import { keepUnchanged } from "../lib/keepUnchanged";
 import { useDashboardAccess } from "../access/AccessContext";
 import { accessGeneration, invalidateAccess, onAccessInvalidated } from "../access/accessState";
 
@@ -80,6 +81,18 @@ const MAX_RECONNECT_DELAY = 10_000;
 const MIDI_MONITOR_INTERVAL = 750;
 const PROPRESENTER_MONITOR_INTERVAL = 3_000;
 const LIGHTS_MONITOR_INTERVAL = 3_000;
+// The settings can weigh tens of megabytes: after the backend says they changed, wait this long (one reload per burst of saves).
+const SETTINGS_RELOAD_DELAY = 2_000;
+
+/** `getSettings`, counted while it runs, so a reload the backend's signal asks for never overlaps one a save started. */
+async function readSettings(reads: { current: number }): Promise<SettingsResponse> {
+  reads.current += 1;
+  try {
+    return await getSettings();
+  } finally {
+    reads.current -= 1;
+  }
+}
 
 export function useStagePilot() {
   const access = useDashboardAccess();
@@ -96,6 +109,7 @@ export function useStagePilot() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const settingsRef = useRef<SettingsResponse | null>(null);
   settingsRef.current = settings;
+  const settingsReads = useRef(0);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [pendingSettingsOperation, setPendingSettingsOperation] = useState(false);
@@ -129,6 +143,10 @@ export function useStagePilot() {
   >(null);
 
   const [lights, setLights] = useState<LightsStatusResponse | null>(null);
+  // The backend's save count of the settings, as the Lightkey strip last read it (`noteSettingsRevision`).
+  const [backendSettingsRevision, setBackendSettingsRevision] = useState<number | undefined>(undefined);
+  const backendSettingsRevisionRef = useRef<number | undefined>(undefined);
+  backendSettingsRevisionRef.current = backendSettingsRevision;
   const [lightingError, setLightingError] = useState<string | null>(null);
   const [lightingMessage, setLightingMessage] = useState<string | null>(null);
   const [pendingLightingOperation, setPendingLightingOperation] = useState<
@@ -188,7 +206,7 @@ export function useStagePilot() {
   const loadSettings = useCallback(async () => {
     if (!canConfigure) return;
     try {
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       setSettingsError(null);
     } catch (cause) {
       setSettingsError(describeError(cause, "Configuration unavailable."));
@@ -403,6 +421,43 @@ export function useStagePilot() {
     previousPlanningCenterStatus.current = status;
     void loadPlanningCenterStatus();
   }, [loadPlanningCenterStatus, state?.planning_center_status]);
+
+  // The backend saves settings by itself (a finished recording, loudness, an Auto re-record) and says so with `settings_revision`
+  // on the Lightkey status the strip polls (`noteSettingsRevision`). When it is ahead of the copy on screen, load the settings again: once per burst, never two at a time,
+  // never on a timer when nothing changed. Unchanged parts keep their objects, so what is being edited stays as it is.
+  const liveSettingsRevision = backendSettingsRevision;
+  const shownSettingsRevision = settings?.settings_revision;
+  const reloadTimer = useRef<number | undefined>(undefined);
+  const settingsBehind = canConfigure
+    && liveSettingsRevision !== undefined && shownSettingsRevision !== undefined
+    && liveSettingsRevision > shownSettingsRevision;
+  useEffect(() => {
+    if (!settingsBehind || reloadTimer.current !== undefined) return;
+    const arm = () => {
+      reloadTimer.current = window.setTimeout(() => {
+        reloadTimer.current = undefined;
+        const live = backendSettingsRevisionRef.current;
+        const shown = settingsRef.current?.settings_revision;
+        if (live === undefined || shown === undefined || live <= shown) return; // a save of this window caught up meanwhile
+        if (settingsReads.current > 0) { arm(); return; } // one is already on its way
+        void (async () => {
+          try {
+            const next = await readSettings(settingsReads);
+            // A reload that was overtaken by a newer copy (a save of this window) must not put the older one back.
+            setSettings((current) => ((current?.settings_revision ?? 0) > (next.settings_revision ?? 0) ? current : keepUnchanged(current, next)));
+            setSettingsError(null);
+          } catch {
+            // What is shown stays; the next change, or the next live connection, asks again.
+          }
+        })();
+      }, SETTINGS_RELOAD_DELAY);
+    };
+    arm();
+  }, [settingsBehind, liveSettingsRevision, shownSettingsRevision]);
+  useEffect(() => () => {
+    if (reloadTimer.current !== undefined) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = undefined;
+  }, []);
 
   // Retry for a failed panel load: every panel reads its own error, so reload them all and recover without a page reload.
   const retryLoads = useCallback(() => {
@@ -852,7 +907,7 @@ export function useStagePilot() {
     try {
       const response = await updateLightsSettings(input);
       setLights(response.lights);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       setLightingMessage(response.message);
       if (!response.accepted) setLightingError(response.message);
     } catch (cause) {
@@ -944,12 +999,12 @@ export function useStagePilot() {
     try {
       const response = await updateLightingCueMap(cueMap);
       setLights(response.lights);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       setLightingMessage(response.message);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
         // Show what is saved now; the panel reloads its rows from it.
-        try { setSettings(await getSettings()); } catch { /* the error below still shows */ }
+        try { setSettings(await readSettings(settingsReads)); } catch { /* the error below still shows */ }
       }
       setLightingError(describeError(cause, "Lighting cue map failed to save."));
     } finally {
@@ -965,7 +1020,7 @@ export function useStagePilot() {
     try {
       const response = await updateLightingPads(pads);
       setLights(response.lights);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       return true;
     } catch (cause) {
       setLightingError(describeError(cause, "Lighting pads failed to save."));
@@ -988,7 +1043,7 @@ export function useStagePilot() {
       setLights(response.lights);
       setLightingMessage(response.message);
       if (!response.accepted) setLightingError(response.message);
-      if (capture && response.cue_id) setSettings(await getSettings());
+      if (capture && response.cue_id) setSettings(await readSettings(settingsReads));
       return response;
     } catch (cause) {
       setLightingError(describeError(cause, "Pad failed to fire."));
@@ -1005,7 +1060,7 @@ export function useStagePilot() {
       const response = await undoLightingCapture(songKey, cueId);
       setLights(response.lights);
       setLightingMessage(response.message);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       return response.accepted;
     } catch (cause) {
       setLightingError(describeError(cause, "Undo failed."));
@@ -1022,7 +1077,7 @@ export function useStagePilot() {
       const response = await clearLightingLoudness(songKey);
       setLights(response.lights);
       setLightingMessage(response.message);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       return response.accepted;
     } catch (cause) {
       setLightingError(describeError(cause, "Loudness could not be cleared."));
@@ -1047,14 +1102,19 @@ export function useStagePilot() {
           method,
           cues: [],
           osc_cues: [],
+          // Like every cue-map save: a song that changed since this screen loaded (a recording finished) is refused, not erased.
+          ...(settingsRef.current ? { revision: settingsRef.current.settings.lights.cue_revisions?.[song.source_song_id ?? song.id] ?? 0 } : {}),
           ...(method === "osc" ? { remove_effect_ids: (settingsRef.current?.settings.lights.cue_maps[song.source_song_id ?? song.id]?.effects ?? []).map((effect) => effect.id) } : {}),
         });
         latestLighting = response.lights;
       }
       if (latestLighting) setLights(latestLighting);
-      setSettings(await getSettings());
+      setSettings(await readSettings(settingsReads));
       setLightingMessage(`Cleared lighting cues for all ${songs.length} songs in the service plan.`);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409) {
+        try { setSettings(await readSettings(settingsReads)); } catch { /* the error below still shows */ }
+      }
       setLightingError(
         describeError(cause, "Lighting cue maps failed to clear."),
       );
@@ -1063,6 +1123,8 @@ export function useStagePilot() {
       setPendingLightingOperation(null);
     }
   }, [claim, release, canConfigure]);
+
+  const noteSettingsRevision = useCallback((revision: number | undefined) => setBackendSettingsRevision(revision), []);
 
   const activateConfiguredServices = useCallback(async () => {
     if (!canActivateServices) return;
@@ -1190,5 +1252,6 @@ export function useStagePilot() {
     clearLightingLoudness: clearLightingLoudness_,
     clearAllLightingCues,
     activateConfiguredServices,
+    noteSettingsRevision,
   };
 }

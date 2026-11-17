@@ -485,6 +485,8 @@ export interface LightkeyDiscovery {
 }
 
 export interface LightkeyStatus {
+  /** How many times the saved settings changed since the backend started, whoever caused it (a finished recording, a save). Only on this status read (`GET /api/v1/lights/lightkey`), not on the copy inside the Lighting settings; a copy of the settings holding an older number is out of date. */
+  settings_revision?: number;
   api_url: string;
   link: LightkeyLink;
   detail: string | null;
@@ -596,6 +598,8 @@ export interface SettingsSetAsideSong {
 
 export interface SettingsResponse {
   settings: PersistentSettings;
+  /** The backend's settings save count (`ApplicationState.settings_revision`) this copy holds at least. */
+  settings_revision?: number;
   planning_center_secret_saved: boolean;
   warning: string | null;
   /** Set when a song's lighting data was damaged and set aside at load; the rest loaded. */

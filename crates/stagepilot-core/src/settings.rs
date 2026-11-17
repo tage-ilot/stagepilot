@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use ts_rs::TS;
 
@@ -1051,6 +1052,9 @@ pub struct SettingsService {
     credentials: Box<dyn CredentialStore>,
     environ: BTreeMap<String, String>,
     state: Mutex<ServiceState>,
+    /// How many saves this process has made (0 at start). Bumped in the one place every save passes
+    /// through, so a recording, a loudness take, a cue-map save and a settings save all count.
+    revision: AtomicU64,
 }
 
 impl SettingsService {
@@ -1071,7 +1075,19 @@ impl SettingsService {
                 credential_saved: false,
                 secret_unread: false,
             }),
+            revision: AtomicU64::new(0),
         }
+    }
+
+    /// The number of saves since this process started. A copy of the settings read after this
+    /// call holds at least those saves; it restarts at 0 with the process.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::SeqCst)
+    }
+
+    /// Count a save that has reached disk and the in-memory copy.
+    fn saved(&self) {
+        self.revision.fetch_add(1, Ordering::SeqCst);
     }
 
     /// File-backed settings at the default path, keyring credentials, process environment.
@@ -1349,9 +1365,12 @@ impl SettingsService {
         }
         self.store.save(&settings)?;
         let runtime = self.resolve(&settings);
-        let mut s = self.lock();
-        s.persistent = settings;
-        s.runtime = Some(runtime);
+        {
+            let mut s = self.lock();
+            s.persistent = settings;
+            s.runtime = Some(runtime);
+        }
+        self.saved();
         Ok(())
     }
 
@@ -1443,6 +1462,8 @@ impl SettingsService {
                 }
                 s.persistent = updated;
                 s.runtime = Some(runtime);
+                drop(s);
+                self.saved();
                 Ok(())
             }
         }
@@ -1546,6 +1567,36 @@ mod keychain_tests {
         assert_eq!(fake.reads(), 0);
         service.load();
         assert_eq!(fake.reads(), 0);
+    }
+
+    #[test]
+    fn every_save_counts_once_and_reads_do_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = FakeKeychain::new(None);
+        let service = service(&fake, &dir);
+        service.load();
+        assert_eq!(service.revision(), 0, "a process starts at 0");
+        let _ = (
+            service.snapshot(),
+            service.effective_snapshot(),
+            service.effective_runtime_settings(),
+        );
+        assert_eq!(service.revision(), 0, "a read is not a save");
+
+        let mut updated = service.snapshot();
+        updated.timezone = "America/Chicago".into();
+        service.save(updated).unwrap();
+        assert_eq!(service.revision(), 1, "a settings save");
+        service.persist_lights(service.snapshot().lights).unwrap();
+        assert_eq!(
+            service.revision(),
+            2,
+            "a lights save (recording, loudness, cue map)"
+        );
+        service
+            .update_planning_center(service.snapshot().planning_center, Some("secret"), false)
+            .unwrap();
+        assert_eq!(service.revision(), 3, "a Services save");
     }
 
     #[test]

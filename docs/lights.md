@@ -1319,6 +1319,17 @@ that song in the timeline exactly like the **Song** menu (a hand pick; **Follow 
 playing has a green dot, the selected chip an outline. The chips look small but their buttons are 44 px tall, and the
 list scrolls inside a fixed height, so 40 songs do not push the page around.
 
+The strip, the counts and the timeline update by themselves when the backend saves a recording (or a loudness take, an
+Auto re-record, anything it saves without being asked). The backend counts every save of the settings in
+`settings_revision` (0 at start, counted in the one place every save passes through) and publishes it on the Lightkey
+status (`GET /api/v1/lights/lightkey`, which the Lightkey strip polls) and with every settings read. A window holding an
+older number reloads the settings once, 2 seconds after the first change of a burst, never two at a time and never when
+the number is unchanged (the settings can be tens of megabytes, so no timer asks). Unchanged parts keep their identity,
+so a row being typed, the selected song, an open dialog and the timeline's zoom and scroll stay as they are. A save
+from a screen that has not reloaded yet still carries the old song revision and gets 409 (see "Saving a song's cue
+map"); **Clear all songs...** sends each song's revision too. The Record prompt about replacing hand edits reads what
+the screen shows, so it is only as current as the screen.
+
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
