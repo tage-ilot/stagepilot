@@ -32,10 +32,10 @@ describe("the chip words", () => {
   });
 
   it("shows the length where the countdown ends (the start of the last measure), never the sections' total", () => {
-    // The helper's `length_s` (446.102) is not even in the data this window reads; `scan_length_s` (442.409) is the length.
-    const chip = chipLibrary(song("Song One", 1, { scan_length_s: 442.409 }, { plan_seconds: 442 }));
-    expect(chip?.text).toContain("7:22");
-    expect(chip?.text).not.toContain("7:26");
+    // The helper's `length_s` (392.9) is not even in the data this window reads; `scan_length_s` (388.64) is the length.
+    const chip = chipLibrary(song("Song One", 1, { scan_length_s: 388.64 }, { plan_seconds: 389 }));
+    expect(chip?.text).toContain("6:29");
+    expect(chip?.text).not.toContain("6:33");
     expect(Object.keys(playback())).not.toContain("length_s");
   });
 
@@ -47,7 +47,7 @@ describe("the chip words", () => {
   });
 
   it("marks the plan's length next to Playback's when they are more than 15 s apart, and not otherwise", () => {
-    expect(chipLibrary(song("Song One", 1, { scan_length_s: 442.409 }, { plan_seconds: 408 }))?.text).toContain("7:22 (plan 6:48)");
+    expect(chipLibrary(song("Song One", 1, { scan_length_s: 388.64 }, { plan_seconds: 355 }))?.text).toContain("6:29 (plan 5:55)");
     expect(chipLibrary(song("Song One", 1, { scan_length_s: 315 }, { plan_seconds: 300 }))?.text).not.toContain("plan");
     expect(chipLibrary(song("Song One", 1, { scan_length_s: 316 }, { plan_seconds: 300 }))?.text).toContain("(plan 5:00)");
     expect(chipLibrary(song("Song One", 1, null))).toBeNull();
@@ -85,9 +85,9 @@ describe("the notices", () => {
   });
 
   it("says Playback's length when it is more than 15 s from the plan's, as information only", () => {
-    const longer = ready([song("Song One", 1, { scan_length_s: 442.409 }, { plan_seconds: 408 })]);
+    const longer = ready([song("Song One", 1, { scan_length_s: 388.64 }, { plan_seconds: 355 })]);
     const notices = libraryNotices(longer, plan, TZ);
-    expect(notices.map((n) => n.text)).toEqual(["Song One: Playback counts this song down to 7:22; the plan says 6:48."]);
+    expect(notices.map((n) => n.text)).toEqual(["Song One: Playback counts this song down to 6:29; the plan says 5:55."]);
     expect(notices[0]).toMatchObject({ kind: "length", actionable: false });
     expect(libraryPillLine(notices)).toBeNull();
     expect(texts(ready([song("Song One", 1, { scan_length_s: 315 }, { plan_seconds: 300 })]))).toEqual([]);
@@ -119,7 +119,7 @@ describe("the one line in the header pill", () => {
   const pill = (library: LibraryPlan) => libraryPillLine(libraryNotices(library, plan, TZ));
 
   it("is one line with the actionable notices, and leaves the length difference out", () => {
-    const line = pill(ready([song("Song One", 1, { scan_length_s: 442.409 }, { plan_seconds: 408 }), song("Song Two", 2, null)]));
+    const line = pill(ready([song("Song One", 1, { scan_length_s: 388.64 }, { plan_seconds: 355 }), song("Song Two", 2, null)]));
     expect(line?.label).toBe("Playback library: Song Two is not in Playback's setlist");
     expect(line?.detail).toBe("Song Two is not in Playback's setlist.");
   });

@@ -145,13 +145,13 @@ describe("SongsStrip capture labels", () => {
 
   it("shows what the Playback library says on a matched song, and nothing on the others", () => {
     const withLibrary: SongChip[] = [
-      { ...chips[0]!, library: { text: "Ab (was C) · 65 BPM · 7:22 (plan 6:48) · 8 sections · Default", title: "Playback: Ab (was C), 65 BPM, 7:22 (plan 6:48), 8 sections, Default. Playback counts this song down to 7:22; the plan says 6:48." } },
+      { ...chips[0]!, library: { text: "Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default", title: "Playback: Ab (was C), 65 BPM, 6:29 (plan 5:55), 8 sections, Default. Playback counts this song down to 6:29; the plan says 5:55." } },
       chips[1]!,
     ];
     mount({ chips: withLibrary });
     const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
-    expect(within(items[0]!).getByTestId("song-chip-library")).toHaveTextContent("Ab (was C) · 65 BPM · 7:22 (plan 6:48) · 8 sections · Default");
-    expect(within(items[0]!).getByRole("button", { name: /Playback counts this song down to 7:22; the plan says 6:48/ })).toBeInTheDocument();
+    expect(within(items[0]!).getByTestId("song-chip-library")).toHaveTextContent("Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default");
+    expect(within(items[0]!).getByRole("button", { name: /Playback counts this song down to 6:29; the plan says 5:55/ })).toBeInTheDocument();
     expect(within(items[1]!).queryByTestId("song-chip-library")).toBeNull();
     // The chip's other words are unchanged.
     expect(items[0]).toHaveTextContent("12 looks");

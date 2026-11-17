@@ -13,7 +13,7 @@ const status = (over: Partial<LibraryStatus> = {}): LibraryStatus => ({
 const planOf = (over: Partial<LibraryPlan> = {}): LibraryPlan => ({
   enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { title: "Set", date: "2026-11-22", songs: 2 }, newest: null, stale: false, checked_at: null,
   songs: [
-    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 408, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 442.409, arrangement: "Default", sections: 8, rental_expires_utc: null } },
+    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 355, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, arrangement: "Default", sections: 8, rental_expires_utc: null } },
     { key: "b", title: "Song Two", plan_position: 2, plan_seconds: 300, status: "missing", library: null },
   ],
   ...over,
@@ -56,7 +56,7 @@ describe("Playback library panel", () => {
   it("lists each song with its key, BPM, length (where the countdown ends), sections and arrangement", () => {
     mount(controller());
     const songs = within(screen.getByTestId("library-songs")).getAllByRole("listitem");
-    expect(songs[0]).toHaveTextContent("Song One · Ab (was C) · 65 BPM · 7:22 · 8 sections · Default");
+    expect(songs[0]).toHaveTextContent("Song One · Ab (was C) · 65 BPM · 6:29 · 8 sections · Default");
     expect(songs[1]).toHaveTextContent("Song Two · not in Playback's setlist");
   });
 
@@ -64,14 +64,14 @@ describe("Playback library panel", () => {
     mount(controller());
     const notices = within(screen.getByTestId("library-notices")).getAllByRole("listitem").map((item) => item.textContent);
     expect(notices).toEqual([
-      "Song One: Playback counts this song down to 7:22; the plan says 6:48.",
+      "Song One: Playback counts this song down to 6:29; the plan says 5:55.",
       "Song Two is not in Playback's setlist.",
     ]);
   });
 
   it("has no notices when everything agrees", () => {
     const agree = planOf({ songs: [planOf().songs[0]!] });
-    agree.songs[0]!.plan_seconds = 442;
+    agree.songs[0]!.plan_seconds = 389;
     mount(controller({ plan: agree }));
     expect(screen.queryByTestId("library-notices")).toBeNull();
   });

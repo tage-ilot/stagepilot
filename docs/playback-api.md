@@ -404,7 +404,7 @@ A small private helper (`huntrw6/playback-library`, a Python agent, port 8780, `
 | Different order | `<Song> is song 2 in the plan but song 3 in Playback.` (judged among songs in both lists) | yes |
 | Rental ends before the service | `<Song> is a rental in Playback that ends before the service starts.` (the plan's last service time; else `...before the end of <date>.`) | yes |
 | No setlist for the date | `Playback has no setlist for <date>; its newest is <title> from <date>.` | yes |
-| Length differs by more than 15 s | `<Song>: Playback counts this song down to 7:22; the plan says 6:48.` | no |
+| Length differs by more than 15 s | `<Song>: Playback counts this song down to 6:29; the plan says 5:55.` | no |
 
 **How it asks.** Only while a window is open and the setting is on: a window asks every 30 s while visible, and the backend asks the helper at most once per 30 s however many windows there are (Check may ask again after 2 s). Each request takes 3 s at most, follows no redirect, and an answer larger than 16 KiB (health) or 256 KiB (a setlist or a song) is refused. It reads `/health`, `/setlists/<date>` (and `/setlists/latest` when there is none) and `/songs/<id>` for the section count; it never asks for a waveform. A failure is one plain sentence (for example `The Playback computer did not answer.`); the last good answer stands in for up to 60 s and is marked as old. Library data is held in memory only.
 

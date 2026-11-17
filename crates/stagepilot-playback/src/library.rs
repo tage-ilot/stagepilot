@@ -718,7 +718,7 @@ mod tests {
             "items": [
                 {"setlist_song_id": 2000001, "order": 1, "title": "Song One", "artist": "x",
                  "key": {"id": 3, "name": "Ab"}, "key_original": {"name": "C"}, "bpm": 65.0,
-                 "length_s": 446.102, "scan_length_s": 442.409, "arrangement": "Default",
+                 "length_s": 392.9, "scan_length_s": 388.64, "arrangement": "Default",
                  "rental_expires_utc": "2026-11-24T01:36:00+00:00"},
                 {"title": "Song Two"},
                 {"order": 3},
@@ -735,7 +735,7 @@ mod tests {
         assert_eq!(one.key.as_deref(), Some("Ab"));
         assert_eq!(one.key_original.as_deref(), Some("C"));
         assert_eq!(one.bpm, Some(65.0));
-        assert_eq!(one.scan_length_s, Some(442.409));
+        assert_eq!(one.scan_length_s, Some(388.64));
         assert_eq!(one.arrangement.as_deref(), Some("Default"));
         assert_eq!(
             one.rental_expires_utc.as_deref(),
