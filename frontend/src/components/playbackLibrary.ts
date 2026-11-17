@@ -1,4 +1,4 @@
-import type { LengthSource, LibraryPlan, LibraryPlanSong, LibrarySong, ServicePlan } from "../types";
+import type { LengthSource, LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, ServicePlan } from "../types";
 import { serviceStartsMs, zonedWallTimeToMs } from "./dashboard/scanReminder";
 
 /**
@@ -34,15 +34,21 @@ const LENGTH_SOURCE_WORDS: Record<LengthSource, string | null> = {
   song_end_long_last_measure: "This song's last measure is longer than 6 seconds, so this is where the song ends.",
 };
 
-const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
+export const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
 
-/** "Ab (was C) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
-export function songFacts(song: LibrarySong): string[] {
+/** The face of a song: key (and "was X" when it differs), BPM and the countdown length m:ss; only what the helper gave. */
+export function songFaceFacts(song: LibrarySong): string[] {
   const facts: string[] = [];
   if (song.key) facts.push(song.key_original && song.key_original !== song.key ? `${song.key} (was ${song.key_original})` : song.key);
   if (song.bpm !== null) facts.push(`${Number.isInteger(song.bpm) ? song.bpm : Math.round(song.bpm * 10) / 10} BPM`);
   if (song.countdown_length_s !== null) facts.push(formatLength(song.countdown_length_s));
-  if (song.sections !== null) facts.push(sectionWord(song.sections));
+  return facts;
+}
+
+/** "Ab (was C) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
+export function songFacts(song: LibrarySong): string[] {
+  const facts = songFaceFacts(song);
+  if (song.section_count !== null) facts.push(sectionWord(song.section_count));
   if (song.arrangement) facts.push(song.arrangement);
   return facts;
 }
@@ -146,4 +152,14 @@ export function libraryPillLine(notices: LibraryNotice[]): { label: string; deta
   const short = actionable.map((notice) => notice.text.replace(/\.$/, "")).join("; ");
   const label = actionable.length === 1 || short.length <= 90 ? `Playback library: ${short}` : `Playback library: ${actionable.length} things to check`;
   return { label, detail };
+}
+
+/** The names an arrangement bar says aloud before "and N more". */
+export const BAR_NAMES_SPOKEN = 12;
+
+/** "Arrangement: Count Off, Intro, Verse 1 and 18 more (30 sections)": at most 12 names, in playing order. */
+export function arrangementLabel(sections: LibrarySection[]): string {
+  const names = sections.slice(0, BAR_NAMES_SPOKEN).map((section) => section.name).join(", ");
+  const more = sections.length - BAR_NAMES_SPOKEN;
+  return `Arrangement: ${names}${more > 0 ? ` and ${more} more` : ""} (${sections.length} ${sections.length === 1 ? "section" : "sections"})`;
 }

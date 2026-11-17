@@ -13,7 +13,7 @@ const status = (over: Partial<LibraryStatus> = {}): LibraryStatus => ({
 const planOf = (over: Partial<LibraryPlan> = {}): LibraryPlan => ({
   enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { title: "Set", date: "2026-11-22", songs: 2 }, newest: null, stale: false, checked_at: null,
   songs: [
-    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 355, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, countdown_length_s: 388.64, length_source: "last_measure", arrangement: "Default", sections: 8, rental_expires_utc: null } },
+    { key: "a", title: "Song One", plan_position: 1, plan_seconds: 355, status: "matched", library: { setlist_song_id: 1, position: 1, title: "Song One", key: "Ab", key_original: "C", bpm: 65, scan_length_s: 388.64, countdown_length_s: 388.64, length_source: "last_measure", arrangement: "Default", section_count: 8, sections: [], artwork: null, rental_expires_utc: null } },
     { key: "b", title: "Song Two", plan_position: 2, plan_seconds: 300, status: "missing", library: null },
   ],
   ...over,
@@ -53,11 +53,26 @@ describe("Playback library panel", () => {
     expect(screen.getByTestId("library-status")).toHaveTextContent("Playback library 0.1.1 is ready: 12 songs in 3 setlists.");
   });
 
-  it("lists each song with its key, BPM, length (where the countdown ends), sections and arrangement", () => {
+  it("shows each plan song as a chip: title, key, BPM and the countdown length (sections and arrangement are in the tooltip)", () => {
     mount(controller());
-    const songs = within(screen.getByTestId("library-songs")).getAllByRole("listitem");
-    expect(songs[0]).toHaveTextContent("Song One · Ab (was C) · 65 BPM · 6:29 · 8 sections · Default");
-    expect(songs[1]).toHaveTextContent("Song Two · not in Playback's setlist");
+    const chips = within(screen.getByTestId("library-songs")).getAllByRole("listitem");
+    expect(chips).toHaveLength(2);
+    expect(chips[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
+    expect(chips[0]).not.toHaveTextContent("sections");
+    expect(chips[0]).not.toHaveTextContent("Default");
+    expect(chips[0]).toHaveAttribute("title", expect.stringContaining("8 sections, Default"));
+    // A song Playback does not have keeps its words, as a chip of the same shape: no cover, no bar.
+    expect(chips[1]).toHaveTextContent("Song Twonot in Playback's setlist");
+    expect(chips[1]).toHaveClass("rounded-ds-xl", "border");
+    expect(chips[1]!.querySelector("img")).toBeNull();
+    expect(within(chips[1]!).queryByRole("img")).toBeNull();
+  });
+
+  it("puts the chips in a responsive grid of 270 px columns with a 10 px gap", () => {
+    mount(controller());
+    const grid = screen.getByTestId("library-songs");
+    expect(grid.className).toContain("grid-template-columns:repeat(auto-fill,minmax(270px,1fr))");
+    expect(grid.className).toContain("gap-[10px]");
   });
 
   it("lists every notice: the actionable ones and the length, which is only information", () => {

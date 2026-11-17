@@ -568,7 +568,12 @@ impl PlaybackLibrary {
     /// good was read yet (the plan, the date or the setting changed, or the last read failed); the
     /// helper sends no `library_revision`; the token differs from the one at the last good read; that
     /// read is 10 minutes old; or a paired song lacks its own data.
-    fn needs_full_read(&self, inner: &Inner, revision: Option<&String>, titles: &[PlanTitle]) -> bool {
+    fn needs_full_read(
+        &self,
+        inner: &Inner,
+        revision: Option<&String>,
+        titles: &[PlanTitle],
+    ) -> bool {
         let Some(Ok(fetched)) = &inner.setlist.last else {
             return true;
         };
@@ -760,7 +765,9 @@ fn picture_starts_right(content_type: &str, bytes: &[u8]) -> bool {
 fn plain_etag(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 80
-        && value.bytes().all(|b| (0x21..=0x7e).contains(&b) && b != b',')
+        && value
+            .bytes()
+            .all(|b| (0x21..=0x7e).contains(&b) && b != b',')
 }
 
 /// What one ask for a picture gave.
@@ -781,7 +788,10 @@ impl PlaybackLibrary {
         expected_etag: &str,
     ) -> Result<Raw, ArtworkFailure> {
         let url = format!("{base}/songs/{id}/artwork");
-        let mut request = self.http.get(&url).header("accept", "image/jpeg, image/png");
+        let mut request = self
+            .http
+            .get(&url)
+            .header("accept", "image/jpeg, image/png");
         if let Some(etag) = held.filter(|e| plain_etag(e)) {
             request = request.header("if-none-match", etag);
         }
@@ -871,7 +881,10 @@ impl PlaybackLibrary {
         match answer? {
             Raw::NotModified => {
                 // The helper says the held copy is still the picture: keep its bytes.
-                let entry = art.pictures.get_mut(&key).ok_or(ArtworkFailure::NoPicture)?;
+                let entry = art
+                    .pictures
+                    .get_mut(&key)
+                    .ok_or(ArtworkFailure::NoPicture)?;
                 entry.checked = now;
                 Ok(entry.picture.clone())
             }
@@ -1025,7 +1038,11 @@ async fn artwork(
             if etag_matches(request_headers.get(header::IF_NONE_MATCH), &picture.etag) {
                 return picture_response(None, &picture.etag, picture.content_type);
             }
-            picture_response(Some(picture.bytes.clone()), &picture.etag, picture.content_type)
+            picture_response(
+                Some(picture.bytes.clone()),
+                &picture.etag,
+                picture.content_type,
+            )
         }
         Err(ArtworkFailure::NoPicture) => no_picture(),
         Err(ArtworkFailure::NoAnswer) => http_error(503, DID_NOT_ANSWER).into_response(),

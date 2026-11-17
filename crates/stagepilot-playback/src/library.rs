@@ -500,7 +500,11 @@ pub fn parse_sections(sections: &Value) -> Vec<LibrarySection> {
                 .collect();
             let name = name.trim().to_string();
             Some(LibrarySection {
-                name: if name.is_empty() { "Section".to_string() } else { name },
+                name: if name.is_empty() {
+                    "Section".to_string()
+                } else {
+                    name
+                },
                 start,
                 end,
             })
@@ -525,7 +529,9 @@ pub fn artwork_of(object: &Value) -> Option<LibraryArtwork> {
     let etag = art.get("etag")?.as_str()?;
     let plain = !etag.is_empty()
         && etag.len() <= 80
-        && etag.bytes().all(|b| (0x21..=0x7e).contains(&b) && b != b',');
+        && etag
+            .bytes()
+            .all(|b| (0x21..=0x7e).contains(&b) && b != b',');
     plain.then(|| LibraryArtwork {
         content_type,
         bytes,
@@ -1174,7 +1180,9 @@ mod tests {
     // ---- sections and cover info (F-P1c) ----
 
     fn names(list: &[LibrarySection]) -> Vec<(&str, f64, f64)> {
-        list.iter().map(|s| (s.name.as_str(), s.start, s.end)).collect()
+        list.iter()
+            .map(|s| (s.name.as_str(), s.start, s.end))
+            .collect()
     }
 
     #[test]
@@ -1186,7 +1194,11 @@ mod tests {
         ]);
         assert_eq!(
             names(&parse_sections(&value)),
-            [("Count Off", 0.0, 3.5), ("Verse 1", 3.5, 20.0), ("Verse 1", 20.0, 36.25)]
+            [
+                ("Count Off", 0.0, 3.5),
+                ("Verse 1", 3.5, 20.0),
+                ("Verse 1", 20.0, 36.25)
+            ]
         );
     }
 
@@ -1222,7 +1234,10 @@ mod tests {
         let got = parse_sections(&value);
         assert_eq!(got[0].name.chars().count(), 40);
         assert_eq!(got[1].name, "Chorus 1");
-        assert_eq!((got[2].name.as_str(), got[3].name.as_str()), ("Section", "Section"));
+        assert_eq!(
+            (got[2].name.as_str(), got[3].name.as_str()),
+            ("Section", "Section")
+        );
     }
 
     #[test]
@@ -1262,7 +1277,8 @@ mod tests {
             ("image/jpeg", 46874, "\"0123456789abcdef\"")
         );
         assert_eq!(
-            artwork_of(&json!({"artwork": {"type": "IMAGE/PNG", "bytes": 10, "etag": "W/\"a\""}})).map(|a| a.content_type),
+            artwork_of(&json!({"artwork": {"type": "IMAGE/PNG", "bytes": 10, "etag": "W/\"a\""}}))
+                .map(|a| a.content_type),
             Some("image/png".to_string())
         );
         for bad in [
@@ -1287,9 +1303,15 @@ mod tests {
 
     #[test]
     fn health_reads_the_revision_when_there_is_one() {
-        let with = parse_health(&json!({"ok": true, "database": "ok", "library_revision": "a1b2c3d4e5f6"}));
+        let with = parse_health(
+            &json!({"ok": true, "database": "ok", "library_revision": "a1b2c3d4e5f6"}),
+        );
         assert_eq!(with.library_revision.as_deref(), Some("a1b2c3d4e5f6"));
-        for none in [json!({"ok": true}), json!({"library_revision": 5}), json!({"library_revision": "  "})] {
+        for none in [
+            json!({"ok": true}),
+            json!({"library_revision": 5}),
+            json!({"library_revision": "  "}),
+        ] {
             assert_eq!(parse_health(&none).library_revision, None);
         }
     }

@@ -1065,7 +1065,11 @@ fn with_revision(token: Option<&str>) -> Value {
     health
 }
 
-async fn ask(library: &PlaybackLibrary, settings: &PlaybackLibrarySettings, titles: &[&str]) -> LibraryPlan {
+async fn ask(
+    library: &PlaybackLibrary,
+    settings: &PlaybackLibrarySettings,
+    titles: &[&str],
+) -> LibraryPlan {
     // Past the 30 s between two asks, without waiting.
     library.advance_clock(Duration::from_secs(31));
     library
@@ -1084,7 +1088,11 @@ async fn an_unchanged_revision_costs_one_health_request_per_check() {
     let first = ask(&library, &settings, &titles).await;
     assert_eq!(first.state, LibraryState::Ready);
     assert_eq!(
-        (helper.count("/health"), helper.count("/setlists/"), helper.count("/songs/")),
+        (
+            helper.count("/health"),
+            helper.count("/setlists/"),
+            helper.count("/songs/")
+        ),
         (1, 1, 3)
     );
     for round in 1..=3 {
@@ -1096,7 +1104,11 @@ async fn an_unchanged_revision_costs_one_health_request_per_check() {
         assert_eq!(helper.hits().len(), 5 + round, "{:?}", helper.hits());
     }
     assert_eq!(
-        (helper.count("/health"), helper.count("/setlists/"), helper.count("/songs/")),
+        (
+            helper.count("/health"),
+            helper.count("/setlists/"),
+            helper.count("/songs/")
+        ),
         (4, 1, 3)
     );
 }
@@ -1118,16 +1130,27 @@ async fn a_new_revision_reads_everything_again_and_a_flip_back_does_too() {
         b.items = vec![changed, item(12, 2, "Song Two"), item(13, 3, "Song Three")];
     });
     let after = ask(&library, &settings, &titles).await;
-    assert_eq!(after.songs[0].library.as_ref().unwrap().key.as_deref(), Some("D"));
     assert_eq!(
-        (helper.count("/health"), helper.count("/setlists/"), helper.count("/songs/")),
+        after.songs[0].library.as_ref().unwrap().key.as_deref(),
+        Some("D")
+    );
+    assert_eq!(
+        (
+            helper.count("/health"),
+            helper.count("/setlists/"),
+            helper.count("/songs/")
+        ),
         (2, 2, 6)
     );
     // Back to the first token: still a change, so still a full read.
     helper.set(|b| b.health = Some(with_revision(Some("aaaaaaaaaaaa"))));
     let _ = ask(&library, &settings, &titles).await;
     assert_eq!(
-        (helper.count("/health"), helper.count("/setlists/"), helper.count("/songs/")),
+        (
+            helper.count("/health"),
+            helper.count("/setlists/"),
+            helper.count("/songs/")
+        ),
         (3, 3, 9)
     );
     // And the same token again costs one request.
@@ -1148,7 +1171,10 @@ async fn a_helper_without_a_revision_is_read_in_full_every_time() {
         assert_eq!(result.state, LibraryState::Ready);
         assert_eq!(helper.count("/setlists/"), round);
         assert_eq!(helper.count("/songs/"), 3 * round);
-        assert!(result.songs.iter().all(|s| s.library.as_ref().unwrap().artwork.is_none()));
+        assert!(result
+            .songs
+            .iter()
+            .all(|s| s.library.as_ref().unwrap().artwork.is_none()));
     }
 }
 
@@ -1223,11 +1249,17 @@ async fn a_paired_song_without_its_data_is_read_again_without_waiting_for_a_new_
     // The same token, but song two has no data: the next check reads again.
     let second = ask(&library, &settings, &titles).await;
     assert_eq!(helper.count("/setlists/"), 2);
-    assert_eq!(second.songs[1].library.as_ref().unwrap().section_count, None);
+    assert_eq!(
+        second.songs[1].library.as_ref().unwrap().section_count,
+        None
+    );
     // It recovers: read once more, and then it is quiet.
     helper.set(|b| b.broken_songs.clear());
     let third = ask(&library, &settings, &titles).await;
-    assert_eq!(third.songs[1].library.as_ref().unwrap().section_count, Some(7));
+    assert_eq!(
+        third.songs[1].library.as_ref().unwrap().section_count,
+        Some(7)
+    );
     let before = helper.hits().len();
     let _ = ask(&library, &settings, &titles).await;
     assert_eq!(helper.hits().len(), before + 1);
@@ -1339,7 +1371,11 @@ async fn covers(art: Option<Art>) -> (Helper, axum::Router, Arc<Runtime>) {
     helper.set(|b| {
         b.items = (11..=13)
             .map(|id| {
-                let mut song = item(id, id as u32 - 10, ["Song One", "Song Two", "Song Three"][id as usize - 11]);
+                let mut song = item(
+                    id,
+                    id as u32 - 10,
+                    ["Song One", "Song Two", "Song Three"][id as usize - 11],
+                );
                 song["artwork"] = artwork_info(id, "image/jpeg", ETAG_A, 4096);
                 song
             })
@@ -1348,9 +1384,9 @@ async fn covers(art: Option<Art>) -> (Helper, axum::Router, Arc<Runtime>) {
     });
     let address = helper.serve().await;
     let (router, runtime) = app().await;
-    runtime.store.mutate(|s| {
-        s.plan = Some(plan("2026-11-22", &["Song One", "Song Two", "Song Three"]))
-    });
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One", "Song Two", "Song Three"])));
     let (status, _) = call(
         &router,
         "PUT",
@@ -1371,7 +1407,12 @@ async fn a_jpeg_cover_reaches_the_window_with_its_etag_and_the_cache_headers() {
     let (status, headers, body) = raw(&router, COVER_ONE, None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, picture);
-    let head = |name: header::HeaderName| headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let head = |name: header::HeaderName| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
     assert_eq!(head(header::CONTENT_TYPE).as_deref(), Some("image/jpeg"));
     assert_eq!(head(header::ETAG).as_deref(), Some(ETAG_A));
     assert_eq!(
@@ -1416,13 +1457,22 @@ async fn the_window_gets_304_when_it_already_holds_the_picture() {
     assert!(helper.art_asks().is_empty());
     // Weak form and a list count; another etag gets the picture.
     assert_eq!(
-        raw(&router, COVER_ONE, Some("W/\"zzz\", W/\"0123456789abcdef\"")).await.0,
+        raw(
+            &router,
+            COVER_ONE,
+            Some("W/\"zzz\", W/\"0123456789abcdef\"")
+        )
+        .await
+        .0,
         StatusCode::NOT_MODIFIED
     );
     let (status, _, body) = raw(&router, COVER_ONE, Some("\"old\"")).await;
     assert_eq!((status, body.len()), (StatusCode::OK, 4096));
     // And once held in memory the same rule applies.
-    assert_eq!(raw(&router, COVER_ONE, Some("*")).await.0, StatusCode::NOT_MODIFIED);
+    assert_eq!(
+        raw(&router, COVER_ONE, Some("*")).await.0,
+        StatusCode::NOT_MODIFIED
+    );
 }
 
 #[tokio::test]
@@ -1455,10 +1505,16 @@ async fn what_is_not_a_picture_is_not_served() {
     for (what, answer) in [
         ("a web page", art("text/html", ETAG_A, jpeg(500))),
         ("a gif", art("image/gif", ETAG_A, b"GIF89a....".to_vec())),
-        ("jpeg type, other bytes", art("image/jpeg", ETAG_A, b"<html>nope</html>".to_vec())),
+        (
+            "jpeg type, other bytes",
+            art("image/jpeg", ETAG_A, b"<html>nope</html>".to_vec()),
+        ),
         ("jpeg type, png bytes", art("image/jpeg", ETAG_A, png(500))),
         ("png type, jpeg bytes", art("image/png", ETAG_A, jpeg(500))),
-        ("png type, cut signature", art("image/png", ETAG_A, vec![0x89, 0x50, 0x4E, 0x47])),
+        (
+            "png type, cut signature",
+            art("image/png", ETAG_A, vec![0x89, 0x50, 0x4E, 0x47]),
+        ),
         ("nothing", art("image/jpeg", ETAG_A, vec![])),
     ] {
         let (helper, router, runtime) = covers(Some(answer)).await;
@@ -1498,7 +1554,10 @@ async fn a_redirect_is_not_followed_and_a_slow_helper_is_given_up_on() {
     let (status, _, _) = raw(&router, "/api/v1/playback-library/songs/12/artwork", None).await;
     let took = started.elapsed();
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert!(took >= Duration::from_secs(2) && took < Duration::from_secs(6), "{took:?}");
+    assert!(
+        took >= Duration::from_secs(2) && took < Duration::from_secs(6),
+        "{took:?}"
+    );
 }
 
 #[tokio::test]
@@ -1508,7 +1567,9 @@ async fn a_304_from_the_helper_keeps_the_held_picture() {
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::OK);
     assert_eq!(helper.art_asks(), [(11, None)]);
     // Eleven minutes later the held copy is checked, with the etag it holds.
-    runtime.playback_library.advance_clock(Duration::from_secs(11 * 60));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(11 * 60));
     let (status, headers, body) = raw(&router, COVER_ONE, None).await;
     assert_eq!((status, body), (StatusCode::OK, picture.clone()));
     assert_eq!(headers[header::ETAG], ETAG_A);
@@ -1533,13 +1594,19 @@ async fn a_changed_picture_replaces_the_held_one() {
         b.health = Some(with_revision(Some("bbbbbbbbbbbb")));
         b.items = (11..=13)
             .map(|id| {
-                let mut song = item(id, id as u32 - 10, ["Song One", "Song Two", "Song Three"][id as usize - 11]);
+                let mut song = item(
+                    id,
+                    id as u32 - 10,
+                    ["Song One", "Song Two", "Song Three"][id as usize - 11],
+                );
                 song["artwork"] = artwork_info(id, "image/png", second, 2000);
                 song
             })
             .collect();
     });
-    runtime.playback_library.advance_clock(Duration::from_secs(31));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
     let (status, headers, body) = raw(&router, COVER_ONE, None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.len(), 2000);
@@ -1565,7 +1632,11 @@ async fn only_a_paired_song_of_the_current_plan_has_a_cover_route() {
         "/api/v1/playback-library/songs/10/artwork",
         "/api/v1/playback-library/songs/14/artwork",
     ] {
-        assert_eq!(raw(&router, path, None).await.0, StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(
+            raw(&router, path, None).await.0,
+            StatusCode::NOT_FOUND,
+            "{path}"
+        );
     }
     assert!(helper.art_asks().is_empty(), "{:?}", helper.art_asks());
     // A song that is in Playback's setlist but not in the plan on screen is not answered either.
@@ -1575,7 +1646,9 @@ async fn only_a_paired_song_of_the_current_plan_has_a_cover_route() {
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::OK);
     assert_eq!(
-        raw(&router, "/api/v1/playback-library/songs/12/artwork", None).await.0,
+        raw(&router, "/api/v1/playback-library/songs/12/artwork", None)
+            .await
+            .0,
         StatusCode::NOT_FOUND
     );
     assert_eq!(helper.art_asks().len(), 1);
@@ -1583,7 +1656,9 @@ async fn only_a_paired_song_of_the_current_plan_has_a_cover_route() {
     runtime
         .store
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song Nine"])));
-    runtime.playback_library.advance_clock(Duration::from_secs(31));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(helper.art_asks().len(), 1);
 }
@@ -1614,7 +1689,10 @@ async fn with_the_setting_off_the_cover_route_is_a_404_and_the_helper_sees_nothi
         Some(json!({"enabled": false, "address": address})),
     )
     .await;
-    assert_eq!(raw(&router, COVER_ONE, Some(ETAG_A)).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        raw(&router, COVER_ONE, Some(ETAG_A)).await.0,
+        StatusCode::NOT_FOUND
+    );
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
     // On, a picture held, then off again: the picture is let go.
@@ -1681,9 +1759,19 @@ async fn the_cache_holds_at_most_64_pictures_and_8_mb_and_lets_the_oldest_go_fir
     assert_eq!(runtime.playback_library.artwork_held(), (64, 6400));
     assert_eq!(helper.art_asks().len(), 70);
     // The newest are still held; the oldest six are not.
-    assert_eq!(raw(&router, "/api/v1/playback-library/songs/169/artwork", None).await.0, StatusCode::OK);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/169/artwork", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
     assert_eq!(helper.art_asks().len(), 70);
-    assert_eq!(raw(&router, "/api/v1/playback-library/songs/100/artwork", None).await.0, StatusCode::OK);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/100/artwork", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
     assert_eq!(helper.art_asks().len(), 71);
     assert_eq!(runtime.playback_library.artwork_held().0, 64);
 }
@@ -1733,8 +1821,18 @@ async fn big_pictures_stop_at_eight_megabytes_in_all() {
     assert_eq!(runtime.playback_library.artwork_held(), (4, 7_600_000));
     assert_eq!(helper.art_asks().len(), 6);
     // The newest is held, the oldest is not.
-    assert_eq!(raw(&router, "/api/v1/playback-library/songs/205/artwork", None).await.0, StatusCode::OK);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/205/artwork", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
     assert_eq!(helper.art_asks().len(), 6);
-    assert_eq!(raw(&router, "/api/v1/playback-library/songs/200/artwork", None).await.0, StatusCode::OK);
+    assert_eq!(
+        raw(&router, "/api/v1/playback-library/songs/200/artwork", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
     assert_eq!(helper.art_asks().len(), 7);
 }

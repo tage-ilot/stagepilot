@@ -960,8 +960,26 @@ export interface LibrarySong {
   /** Which one `countdown_length_s` is; null when there is no length. */
   length_source: LengthSource | null;
   arrangement: string | null;
-  sections: number | null;
+  /** Number of sections as the helper counts them; null when the song's own answer was not read. */
+  section_count: number | null;
+  /** The arrangement in playing order (repeats are separate entries), seconds on Playback's played clock; empty when none is usable. */
+  sections: LibrarySection[];
+  /** The cover picture, described (never the bytes: the window asks for them on `playbackLibraryArtworkUrl`); null when the song has none. */
+  artwork: LibraryArtwork | null;
   rental_expires_utc: string | null;
+}
+
+export interface LibrarySection {
+  name: string;
+  start: number;
+  end: number;
+}
+
+export interface LibraryArtwork {
+  type: "image/jpeg" | "image/png";
+  bytes: number;
+  /** The helper's ETag, quotes included; a changed picture has another one. */
+  etag: string;
 }
 
 export interface LibraryPlanSong {

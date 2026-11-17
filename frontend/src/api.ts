@@ -431,6 +431,9 @@ export const setLightkeyRecording = (recording: boolean) =>
 
 // The optional Playback library (read-only; the one PUT saves its own setting and nothing else).
 const libraryAsk = (path: string, check: boolean) => `/api/v1/playback-library/${path}${check ? "?check=1" : ""}`;
+/** Where the window gets a song's cover (the backend serves it; the window never calls the helper). `?v=` is the picture's etag, so a changed picture is fetched again. */
+export const playbackLibraryArtworkUrl = (setlistSongId: number, etag: string) =>
+  `${apiOrigin}/api/v1/playback-library/songs/${setlistSongId}/artwork?v=${encodeURIComponent(etag)}`;
 export const getPlaybackLibraryStatus = (check = false) => requestJson<LibraryStatus>(libraryAsk("status", check));
 export const getPlaybackLibraryPlan = (check = false) => requestJson<LibraryPlan>(libraryAsk("plan", check));
 export const updatePlaybackLibrarySettings = (enabled: boolean, address: string) =>

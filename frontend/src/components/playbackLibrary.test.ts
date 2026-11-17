@@ -9,7 +9,7 @@ const plan = { date: "2026-11-22", service_times: ["10:00"] };
 
 const playback = (over: Partial<LibrarySong> = {}): LibrarySong => ({
   setlist_song_id: 1, position: 1, title: "Song One", key: "G", key_original: "G", bpm: 72, scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure",
-  arrangement: "Default", sections: 6, rental_expires_utc: null, ...over,
+  arrangement: "Default", section_count: 6, sections: [], artwork: null, rental_expires_utc: null, ...over,
 });
 const song = (title: string, position: number, library: Partial<LibrarySong> | null, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
   key: `k-${title}`, title, plan_position: position, plan_seconds: 300,
@@ -25,7 +25,7 @@ const texts = (library: LibraryPlan, p = plan) => libraryNotices(library, p, TZ)
 describe("the chip words", () => {
   it("shows key (and was X when it differs), BPM, length m:ss, sections and the arrangement", () => {
     expect(songFacts(playback({ key: "Ab", key_original: "C", bpm: 65, scan_length_s: 297.25, countdown_length_s: 297.25 }))).toEqual(["Ab (was C)", "65 BPM", "4:57", "6 sections", "Default"]);
-    expect(songFacts(playback({ key: "G", key_original: "G", bpm: 72.4, sections: 1, arrangement: null }))).toEqual(["G", "72.4 BPM", "5:00", "1 section"]);
+    expect(songFacts(playback({ key: "G", key_original: "G", bpm: 72.4, section_count: 1, arrangement: null }))).toEqual(["G", "72.4 BPM", "5:00", "1 section"]);
     expect(formatLength(0)).toBe("0:00");
     expect(formatLength(61.4)).toBe("1:01");
     expect(formatLength(3599.6)).toBe("60:00");
