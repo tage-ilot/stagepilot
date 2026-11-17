@@ -105,6 +105,10 @@ RUST_SCALAR_EXTENSIONS = {
     # Lightkey capture/replay mode ("auto" | "replay" | "record") of #293; the Python app only had
     # the Record switch and the Replay on/off.
     "mode": (str,),
+    # F-U1: how many times the saved settings changed since the backend started, on the Lightkey
+    # status and on the settings response, so an open window reloads settings the backend saved by
+    # itself (a finished recording). The recorded Python app never told a window.
+    "settings_revision": (int,),
 }
 # Reviewed, intentional differences from the Python 2.41.1 recording (rc.4 audit fixes). Each entry
 # is a regex over one diff line plus the reason. Anything not listed still fails the replay, so keep

@@ -101,6 +101,8 @@ export interface LightingPanelActions {
   /** Removes the selected song's loudness envelope (nothing else). */
   onClearLoudness?: (songKey: string) => Promise<boolean>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
+  /** The backend's save count of the settings, every time the Lightkey strip reads its status. */
+  onSettingsRevision: (revision: number | undefined) => void;
 }
 
 export const LIGHTING_TIMELINE_OPEN_KEY = "stagepilot.lighting.timeline-open";
@@ -127,6 +129,7 @@ export function LightingSetupPanel({
   onUndoCapture,
   onClearLoudness,
   onSavePads,
+  onSettingsRevision,
 }: {
   connectionStatus?: ConnectionStatus;
   lights: LightsStatusResponse | null;
@@ -240,7 +243,10 @@ export function LightingSetupPanel({
   const [captureMode, setCaptureMode] = useState<CaptureMode>("capture");
   // The Lightkey project that is open now (the strip reads it); the song's timeline compares it with the project the song was captured under.
   const [openProject, setOpenProject] = useState<string | null>(null);
-  const onLightkeyStatus = useCallback((status: LightkeyStatus) => setOpenProject(status.project ?? null), []);
+  const onLightkeyStatus = useCallback((status: LightkeyStatus) => {
+    setOpenProject(status.project ?? null);
+    onSettingsRevision?.(status.settings_revision);
+  }, [onSettingsRevision]);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [lastCapture, setLastCapture] = useState<{ songKey: string; cueId: string } | null>(null);
   const [boardBusy, setBoardBusy] = useState(false);

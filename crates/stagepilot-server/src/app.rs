@@ -302,6 +302,9 @@ fn to_value<T: serde::Serialize>(value: &T) -> Value {
 // ---- settings ---------------------------------------------------------------------------------
 
 pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required: bool) -> Value {
+    // Read BEFORE the settings: a save that lands in between leaves the copy newer than this
+    // number, so the window reloads once more at worst, never too little.
+    let settings_revision = rt.settings_service.revision();
     let settings = if persisted {
         rt.settings_service.snapshot()
     } else {
@@ -314,6 +317,8 @@ pub(crate) fn settings_response(rt: &Runtime, persisted: bool, restart_required:
         settings.web_dashboard_pin_enabled && settings.web_dashboard_pin_hash.is_none();
     json!({
         "settings": settings,
+        // How many saves this copy holds at least; the live state carries the backend's number.
+        "settings_revision": settings_revision,
         "pin_is_default": pin_is_default,
         "planning_center_secret_saved": rt.settings_service.credential_saved(),
         "warning": rt.settings_service.warning(),

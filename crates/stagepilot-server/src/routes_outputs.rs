@@ -1349,7 +1349,14 @@ async fn lightkey_response(rt: &Runtime, accepted: bool, message: String) -> Jso
 }
 
 async fn lightkey_status(State(rt): State<Rt>) -> Json {
-    ok(to_value(&rt.outputs.lights.lightkey_status().await))
+    // `settings_revision`: how many saves of the settings this backend has made (0 at start). The
+    // Lightkey strip polls this status; a number above the one on the window's copy of the settings
+    // means a recording (or any other save nobody asked this window for) finished and the window
+    // loads them again. Read before the status, so the window never believes it is more current.
+    let settings_revision = rt.settings_service.revision();
+    let mut body = to_value(&rt.outputs.lights.lightkey_status().await);
+    body["settings_revision"] = json!(settings_revision);
+    ok(body)
 }
 
 /// `LightkeySettingsRequest`: every field optional, send only what changed.
