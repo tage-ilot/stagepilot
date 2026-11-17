@@ -152,6 +152,26 @@ operator to choose among those plans and does not offer plans on later dates. A
 not-found result means no eligible service plan exists today or within the
 configured future window.
 
+### Picking another service than the upcoming one
+
+The operator can load a service other than the upcoming one (Services section: arrows and a calendar).
+`GET /api/v1/planning-center/plans/upcoming` lists the plans from today through 180 days (at most 60, by
+date, for the configured service type or all of them; one Planning Center call per service type, kept for
+60 seconds). `POST /api/v1/planning-center/plans/pin` with `{"plan_id": "..."}` loads that plan through the
+same `ServicePlanSelectionRequested` event as every plan selection and keeps it; `DELETE` on the same path
+goes back to the upcoming service. Picking the upcoming plan is the same as going back. The pick is refused
+(409) for a plan that is not in the list, and while the countdown is running.
+
+The pick is kept in `service-pin.json` beside `settings.json` (`STAGEPILOT_SERVICE_PIN_PATH` moves it); it is
+not a settings key, so older builds are unaffected. It is written atomically; a damaged file is logged once
+and ignored. It holds across reloads and restarts. It ends at the end of its date in the configured time zone
+(the next reload, or the clock check that runs every 30 seconds, loads the upcoming plan and the state says
+"Back to the upcoming service"), or when the plan is no longer in Planning Center ("The plan you picked is
+not in Planning Center any more; back to the upcoming service"). A failed Planning Center call never ends a
+pick. The application state carries `selection` (`pinned`, `plan_id`, `date`, optional `notice`) and
+`upcoming` (`plan_id`, `date`, `title`); both are left out until a Services source has set them. With
+`STAGEPILOT_SERVICE_SOURCE=demo` the demo offers today's plan and six weekly Sunday plans.
+
 For a local production-integration smoke test, set all required values in the
 launching process. Do not paste real values into tracked files:
 
