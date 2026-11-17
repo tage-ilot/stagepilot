@@ -3,6 +3,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { openExternalUrl } from "../desktop";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import type { ServicePlan } from "../types";
+import { PlaybackLibraryPanel } from "./PlaybackLibraryPanel";
 import { PlanningCenterLengths } from "./PlanningCenterLengths";
 import { ScanProgress } from "./ScanProgress";
 import { PlaybackArrangement } from "./PlaybackArrangement";
@@ -33,7 +36,7 @@ const CHECKLIST = ["Playback is open on a computer", "Remote Connections is turn
 const SCAN_CANCEL_GUARD_MS = 600;
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
 // (skipped songs) until Save configuration.
-export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackController; draft?: PlaybackDraft }) {
+export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZone = "UTC" }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; plan?: ServicePlan | null; timeZone?: string }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
@@ -215,6 +218,7 @@ export function PlaybackApiPanel({ playback, draft }: { playback?: PlaybackContr
           </div>
         </section>
       )}
+      {library && <PlaybackLibraryPanel library={library} plan={plan} timeZone={timeZone} />}
       <Dialog
         open={confirm}
         dismissible={false}

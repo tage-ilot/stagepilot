@@ -6,6 +6,7 @@ pub mod client;
 pub mod discovery;
 pub mod find;
 pub mod lengths;
+pub mod library;
 pub mod mapping;
 pub mod normalizer;
 pub mod plugin;

@@ -207,6 +207,11 @@ pub struct PersistentSettings {
     pub midi: MidiSettings,
     #[serde(default)]
     pub playback_api: PlaybackApiSettings,
+    /// The optional Playback library connection (see `PlaybackLibrarySettings`). Left out of the
+    /// saved file while it is off, so an older file saves back unchanged.
+    #[serde(default, skip_serializing_if = "PlaybackLibrarySettings::is_default")]
+    #[ts(optional, as = "Option<PlaybackLibrarySettings>")]
+    pub playback_library: PlaybackLibrarySettings,
     #[serde(default)]
     pub network_midi: NetworkMidiSettings,
     #[serde(default)]
@@ -247,6 +252,7 @@ impl Default for PersistentSettings {
             planning_center: PersistentPlanningCenterSettings::default(),
             midi: MidiSettings::default(),
             playback_api: PlaybackApiSettings::default(),
+            playback_library: PlaybackLibrarySettings::default(),
             network_midi: NetworkMidiSettings::default(),
             lights: LightsSettings::default(),
             propresenter: ProPresenterSettings::default(),
@@ -384,6 +390,7 @@ impl PersistentSettings {
         self.planning_center.normalise();
         self.midi.normalise();
         self.playback_api.normalise();
+        self.playback_library.normalise();
         self.network_midi.normalise();
         self.lights.normalise();
         self.propresenter.normalise();
@@ -411,6 +418,8 @@ impl PersistentSettings {
             .validate(&[json!("planning_center")], errors);
         self.midi.validate(&[json!("midi")], errors);
         self.playback_api.validate(&[json!("playback_api")], errors);
+        self.playback_library
+            .validate(&[json!("playback_library")], errors);
         self.network_midi.validate(&[json!("network_midi")], errors);
         self.lights.validate(&[json!("lights")], errors);
         self.propresenter.validate(&[json!("propresenter")], errors);

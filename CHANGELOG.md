@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Optional "Playback library": see each plan song's key, BPM, length and arrangement from Playback.** In the Playback API panel you can switch on the Playback library and give the address of the Playback computer (port 8780 unless you add one). StagePilot then shows, on the Songs strip and in the panel, each plan song's key (and "was C" when it is not the original), BPM, countdown length (the start of the song's last measure; if that is more than 6 seconds before the end of the song, or the song has no bar lines, the end of the song), number of sections and arrangement, and the header pill warns when a plan song is not in Playback's setlist, is in a different place, is a rental that ends before the service, or Playback has no setlist for that date. A length that differs from the plan by more than 15 s is shown as information only. It is off by default, only reads, and changes nothing in Playback, Planning Center, the saved scan, the timers or the lights. The helper on the Playback computer is installed by hand for now.
+
 ### Fixed
 
 - **The Songs strip and the timeline now update by themselves when a recording finishes; before, the window kept showing "not captured" until you restarted StagePilot.** After a service the window could still say "0 of 4 fully captured" although the backend had saved all four songs; only the Lightkey strip's own sentence was current. The backend now counts every save of the settings (a recording, a loudness take, a cue-map save) and the open window loads the settings again, once per burst of saves and never when nothing changed; what you are typing is not disturbed. **Clear all songs...** now also refuses, like every other cue-map save, to erase a song that was recorded after the window last loaded.

@@ -193,6 +193,8 @@ export interface PersistentSettings {
     debounce_ms: number;
   };
   playback_api?: PlaybackApiSettings;
+  /** The optional Playback library; left out of the file while it is off (mirrors the generated `PlaybackLibrarySettings`). */
+  playback_library?: { enabled: boolean; address: string };
   lights: LightsSettings;
   propresenter: {
     enabled: boolean;
@@ -921,4 +923,70 @@ export interface DashboardAccess {
   user: { email: string; role: "Viewer" | "Operator" } | null;
   expires_at: number | null;
   csrf_token: string | null;
+}
+
+// ---- the optional Playback library (mirrors the generated Library* types) ----------------------
+
+export type LibraryState = "off" | "ready" | "waiting" | "no_setlist" | "problem";
+export type PlanMatch = "matched" | "missing" | "duplicate_in_plan" | "duplicate_in_playback";
+
+export interface LibraryStatus {
+  enabled: boolean;
+  address: string;
+  state: LibraryState;
+  message: string;
+  version: string | null;
+  songs: number | null;
+  setlists: number | null;
+  stale: boolean;
+  checked_at: string | null;
+}
+
+/** Where a song's countdown length comes from (the backend's `LengthSource`). */
+export type LengthSource = "last_measure" | "song_end_no_grid" | "song_end_long_last_measure";
+
+export interface LibrarySong {
+  setlist_song_id: number | null;
+  /** Place in the Playback setlist, from 1. */
+  position: number;
+  title: string;
+  key: string | null;
+  key_original: string | null;
+  bpm: number | null;
+  /** The start of the song's last measure (the helper's `scan_length_s`). Null: no beat grid. */
+  scan_length_s: number | null;
+  /** Where the countdown ends, resolved by the backend: `scan_length_s`, or the end of the song (the helper's `length_s`) when there is no beat grid or the last measure starts more than 6 s before it; null when neither is known. */
+  countdown_length_s: number | null;
+  /** Which one `countdown_length_s` is; null when there is no length. */
+  length_source: LengthSource | null;
+  arrangement: string | null;
+  sections: number | null;
+  rental_expires_utc: string | null;
+}
+
+export interface LibraryPlanSong {
+  key: string;
+  title: string;
+  plan_position: number;
+  plan_seconds: number | null;
+  status: PlanMatch;
+  library: LibrarySong | null;
+}
+
+export interface LibrarySetlist {
+  title: string;
+  date: string | null;
+  songs: number;
+}
+
+export interface LibraryPlan {
+  enabled: boolean;
+  state: LibraryState;
+  message: string | null;
+  plan_date: string | null;
+  setlist: LibrarySetlist | null;
+  newest: LibrarySetlist | null;
+  songs: LibraryPlanSong[];
+  stale: boolean;
+  checked_at: string | null;
 }

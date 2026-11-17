@@ -7,11 +7,13 @@ import type {
   MidiInputsResponse,
   MidiMonitorMessage,
   MidiSettingsInput,
+  ServicePlan,
   SettingsResponse,
   Song,
 } from "../types";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { PlaybackSaveBar, usePlaybackDraft, type PlaybackMethod } from "./PlaybackSaveFooter";
 import { usePlaybackSave } from "./usePlaybackSave";
@@ -67,6 +69,8 @@ export function MidiSetupPanel({
   onSaveSettings,
   songs = [],
   playback,
+  library,
+  plan = null,
 }: {
   midi: MidiInputsResponse | null;
   messages: MidiMonitorMessage[];
@@ -86,6 +90,9 @@ export function MidiSetupPanel({
   onSaveSettings: (settings: MidiSettingsInput) => void | boolean | Promise<boolean | void>;
   songs?: Song[];
   playback?: PlaybackController;
+  library?: PlaybackLibraryController;
+  /** The loaded service plan: the Playback library pairs its songs with Playback's. */
+  plan?: ServicePlan | null;
 }) {
   // An install saved with the old simulated MIDI source opens on Playback API; the option no longer exists.
   const rawMethod = settings?.settings.integration_modes.midi_source;
@@ -216,7 +223,7 @@ export function MidiSetupPanel({
         />}
       />
 
-      {draft.method === "playback_api" && <PlaybackApiPanel playback={playback} draft={draft} />}
+      {draft.method === "playback_api" && <PlaybackApiPanel playback={playback} draft={draft} library={library} plan={plan} timeZone={settings?.settings.timezone ?? "UTC"} />}
       {draft.method !== "playback_api" && <div id="playback-midi-method">
         {playback?.status && <p className="mt-2 text-sm text-ink-body">{playbackMidiNote(playback.status)}</p>}
 

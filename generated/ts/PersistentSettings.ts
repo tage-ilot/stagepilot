@@ -8,6 +8,12 @@ import type { OnboardingSettings } from "./OnboardingSettings";
 import type { PersistentPlanningCenterSettings } from "./PersistentPlanningCenterSettings";
 import type { PlanningCenterLengthUndo } from "./PlanningCenterLengthUndo";
 import type { PlaybackApiSettings } from "./PlaybackApiSettings";
+import type { PlaybackLibrarySettings } from "./PlaybackLibrarySettings";
 import type { ProPresenterSettings } from "./ProPresenterSettings";
 
-export type PersistentSettings = { planning_center_length_undo: Array<PlanningCenterLengthUndo>, schema_version: number, onboarding: OnboardingSettings, integration_modes: IntegrationModes, timezone: string, log_level: LogLevel, server_port: number, lan_access: boolean, web_dashboard_pin_enabled: boolean, planning_center: PersistentPlanningCenterSettings, midi: MidiSettings, playback_api: PlaybackApiSettings, network_midi: NetworkMidiSettings, lights: LightsSettings, propresenter: ProPresenterSettings, };
+export type PersistentSettings = { planning_center_length_undo: Array<PlanningCenterLengthUndo>, schema_version: number, onboarding: OnboardingSettings, integration_modes: IntegrationModes, timezone: string, log_level: LogLevel, server_port: number, lan_access: boolean, web_dashboard_pin_enabled: boolean, planning_center: PersistentPlanningCenterSettings, midi: MidiSettings, playback_api: PlaybackApiSettings, 
+/**
+ * The optional Playback library connection (see `PlaybackLibrarySettings`). Left out of the
+ * saved file while it is off, so an older file saves back unchanged.
+ */
+playback_library?: PlaybackLibrarySettings, network_midi: NetworkMidiSettings, lights: LightsSettings, propresenter: ProPresenterSettings, };

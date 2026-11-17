@@ -386,6 +386,32 @@ WebSockets. The application-test default finder is disabled by an autouse fixtur
 so migration does not make unrelated tests scan a real production LAN. No real
 Playback/hardware validation, deployment, release or merge has been performed.
 
+## Playback library (optional)
+
+A small private helper (`huntrw6/playback-library`, a Python agent, port 8780, `GET` only) can run on the Playback computer and tell StagePilot what Playback knows about each song of a setlist: the key it is played in (and the original), the BPM, the song's length, the arrangement's name and its number of sections. It is **off by default** and nothing else in StagePilot depends on it. Scanning, pairing, timers, lights, ProPresenter and Planning Center behave exactly as before whether it is on or not.
+
+**The setting.** Playback API panel, section "Playback library (optional)": a switch and an address (`host` or `host:port`, port 8780 unless you give one; the same address rules as the Lightkey helper). **Check** asks the helper how it is and says so in plain words: its version, whether macOS has let it read Playback (a helper that has just restarted says "not ready yet": click Allow on the Playback computer), and how many songs and setlists it has. The setting is saved on its own (`playback_library` in the settings file, left out while off and empty, so an older file saves back unchanged; it is not part of `playback_api`, so changing it never restarts the Playback connection) and by its own route, `PUT /api/v1/playback-library/settings`; saving the general settings never switches it.
+
+**What StagePilot shows.** The loaded plan's songs are paired with Playback's setlist **for the plan's date** (`GET /api/v1/playback-library/plan`). If Playback has none for that date StagePilot says `Playback has no setlist for <date>; its newest is <title> from <date>.` and never falls back to the newest silently. A pair is made by title: lower case, accents removed, `&` as `and`, punctuation and repeated spaces ignored, and an ending of `(Live)`, `[Live]` or `- Live` (also `- Live at ...`) ignored, so `A / B` and `A/B` agree. It must be the only song with that title on **both** sides; otherwise the song is "not matched" (the same song twice in the plan is never matched). Neither list is reordered. Each matched song shows on its chip in the Songs strip (Lighting panel) and in the Playback API panel: key (and `was X`), BPM, length as `m:ss`, number of sections and the arrangement.
+
+**The length is where the countdown ends.** Countdown length: the start of the song's last measure; if that is more than 6 seconds before the end of the song, or the song has no bar lines, the end of the song. StagePilot's countdowns end at the start of the song's last measure, because that is where the song goes quiet, so the library's length is first the helper's `scan_length_s` (what StagePilot's own scan measures). It is used unless (1) the song has no beat grid (no `scan_length_s`), or (2) it is more than 6 seconds before the helper's `length_s` (the end of the song, the sum of the arranged sections; compared at three decimals, exactly 6 seconds keeps the last measure), or it is after it (inconsistent data); then the end of the song is used. A song with only a last measure uses it; a song with neither shows no length and raises no notice (a missing, non-numeric, negative or absurdly large value counts as missing). The chip's hover text says why when it is the end of the song: `Playback has no bar lines for this song, so this is where the song ends.` or `This song's last measure is longer than 6 seconds, so this is where the song ends.` The rule is one function in the backend (`countdown_length`, limit `LAST_MEASURE_LIMIT_S`); the window gets the one resolved number as `countdown_length_s` and `length_source` (`last_measure`, `song_end_no_grid` or `song_end_long_last_measure`), and `scan_length_s` is still passed as the helper gave it. The length is only shown: it is never used to change the plan, the scan result or a timer.
+
+**Notices** (plain words; the header pill carries one combined line with the actionable ones only, and nothing when everything agrees; the length is information on the chip and in the panel):
+
+| Notice | Wording | Pill |
+|---|---|---|
+| Plan song not in Playback | `<Song> is not in Playback's setlist.` | yes |
+| Different order | `<Song> is song 2 in the plan but song 3 in Playback.` (judged among songs in both lists) | yes |
+| Rental ends before the service | `<Song> is a rental in Playback that ends before the service starts.` (the plan's last service time; else `...before the end of <date>.`) | yes |
+| No setlist for the date | `Playback has no setlist for <date>; its newest is <title> from <date>.` | yes |
+| Length differs by more than 15 s | `<Song>: Playback counts this song down to 6:29; the plan says 5:55.` | no |
+
+**How it asks.** Only while a window is open and the setting is on: a window asks every 30 s while visible, and the backend asks the helper at most once per 30 s however many windows there are (Check may ask again after 2 s). Each request takes 3 s at most, follows no redirect, and an answer larger than 16 KiB (health) or 256 KiB (a setlist or a song) is refused. It reads `/health`, `/setlists/<date>` (and `/setlists/latest` when there is none) and `/songs/<id>` for the section count; it never asks for a waveform. A failure is one plain sentence (for example `The Playback computer did not answer.`); the last good answer stands in for up to 60 s and is marked as old. Library data is held in memory only.
+
+**What it never does.** It never writes to Planning Center, never changes the saved scan result (`playback_api` order and lengths), pairing, timers, ProPresenter, lights or Auto/Record, never sends Playback a command, holds no secret and fetches no waveform.
+
+**Installing the helper.** For now by hand on the Playback Mac (it is a private repository); only the computer running StagePilot should be allowed to call it. A later release is expected to include the helper and an install box like the Lightkey helper's.
+
 ## Local Network access on macOS
 
 If Scan Network reports that macOS blocked StagePilot, open **System Settings >

@@ -1035,6 +1035,58 @@ pub fn validate_osc_message_address(value: &str) -> Result<(), &'static str> {
     validate_osc_address(value)
 }
 
+/// Default port of the optional Playback library helper (`playback-library`, a small agent on the
+/// Playback computer that only answers GET).
+pub const DEFAULT_PLAYBACK_LIBRARY_PORT: u16 = 8780;
+
+const PLAYBACK_LIBRARY_ADDRESS_MESSAGE: &str =
+    "Enter the Playback library address as host or host:port, e.g. 10.20.0.102:8780.";
+
+/// The address rule of the Playback library: the same as the Lightkey helper's.
+pub fn clean_playback_library_address(value: &str) -> Result<String, &'static str> {
+    clean_helper_address(value, PLAYBACK_LIBRARY_ADDRESS_MESSAGE)
+}
+
+/// The optional "Playback library" connection: read-only data about the songs of Playback (key, BPM,
+/// length, arrangement) from a helper on the Playback computer. Off by default and left out of the
+/// saved file while it is off and empty, so an older file saves back unchanged. It lives beside, not
+/// inside, `playback_api`: a change there makes the Playback connection restart, and this one must
+/// never touch it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct PlaybackLibrarySettings {
+    #[serde(default)]
+    pub enabled: bool,
+    /// `host` or `host:port` (port 8780 when left out), saved as `http://host[:port]`.
+    #[serde(default)]
+    pub address: String,
+}
+
+impl PlaybackLibrarySettings {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn normalise(&mut self) {
+        if let Ok(clean) = clean_playback_library_address(&self.address) {
+            self.address = clean;
+        }
+    }
+
+    pub fn validate(&self, path: &[Value], errors: &mut Errors) {
+        match clean_playback_library_address(&self.address) {
+            Err(message) => value_error(
+                errors,
+                &path_with(path, "address"),
+                message,
+                json!(self.address),
+            ),
+            Ok(clean) => check_len(errors, path, "address", &clean, 0, 300),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LightingPad {
@@ -1334,9 +1386,10 @@ fn py_space(c: char) -> bool {
     c.is_whitespace() || ('\x1c'..='\x1f').contains(&c)
 }
 
-/// The `api_url` validator of `LightkeySettings`: trim, drop trailing `/`, default the scheme to
-/// `http://`, refuse spaces and paths. `Err` carries the validator's message.
-pub fn clean_lightkey_api_url(value: &str) -> Result<String, &'static str> {
+/// The address rule shared by the optional helpers on another computer (the Lightkey helper and the
+/// Playback library): trim, drop trailing `/`, default the scheme to `http://`, refuse spaces and
+/// paths. `message` is what the operator reads when it is refused.
+fn clean_helper_address(value: &str, message: &'static str) -> Result<String, &'static str> {
     let text = value
         .trim_matches(py_space)
         .trim_end_matches('/')
@@ -1351,9 +1404,15 @@ pub fn clean_lightkey_api_url(value: &str) -> Result<String, &'static str> {
     };
     let rest = text.split_once("://").map_or("", |(_, rest)| rest);
     if rest.is_empty() || text.chars().any(py_space) || rest.contains('/') {
-        return Err(API_URL_MESSAGE);
+        return Err(message);
     }
     Ok(text)
+}
+
+/// The `api_url` validator of `LightkeySettings`: trim, drop trailing `/`, default the scheme to
+/// `http://`, refuse spaces and paths. `Err` carries the validator's message.
+pub fn clean_lightkey_api_url(value: &str) -> Result<String, &'static str> {
+    clean_helper_address(value, API_URL_MESSAGE)
 }
 
 impl LightkeySettings {

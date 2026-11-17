@@ -55,6 +55,8 @@ import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import { libraryNotices, libraryPillLine } from "./playbackLibrary";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
@@ -446,6 +448,7 @@ export function Dashboard({
   midi,
   midiMessages,
   playback,
+  library,
   midiError,
   midiMessage,
   pendingMidiOperation,
@@ -505,6 +508,8 @@ export function Dashboard({
   midi: MidiInputsResponse | null;
   midiMessages: MidiMonitorMessage[];
   playback?: PlaybackController;
+  /** The optional Playback library (read-only): shown in the Playback API panel and the Songs strip, warned about in the header pill. */
+  library?: PlaybackLibraryController;
   midiError: string | null;
   midiMessage: string | null;
   pendingMidiOperation: "refresh" | "connect" | "disconnect" | null;
@@ -792,6 +797,7 @@ export function Dashboard({
     playback: playback?.status,
     now: clockNow,
     planRun,
+    libraryLine: libraryPillLine(libraryNotices(library?.plan, state.plan, settings?.settings.timezone ?? "UTC")),
   });
   const ready = readinessPassed(checks);
   const systemError = readinessHasError(checks);
@@ -1092,6 +1098,8 @@ export function Dashboard({
           {shown === "midi" && (
           <MidiSetupPanel
             playback={playback}
+            library={library}
+            plan={state.plan}
             error={midiError}
             onRetryLoad={retryLoads}
             message={midiMessage}
@@ -1126,6 +1134,7 @@ export function Dashboard({
         )}
           {shown === "lights" && (
           <LightingSetupPanel
+            library={library}
             onDirtyChange={setPanelDirty}
             connectionStatus={connectionViews.lights.status}
             error={lightingError}

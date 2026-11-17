@@ -8,6 +8,8 @@ import type {
   DashboardAccess,
   HealthResponse,
   LengthPreview,
+  LibraryPlan,
+  LibraryStatus,
   LightingCaptureResponse,
   LightingPad,
   LightkeyActionResponse,
@@ -425,4 +427,13 @@ export const setLightkeyRecording = (recording: boolean) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recording }),
+  });
+
+// The optional Playback library (read-only; the one PUT saves its own setting and nothing else).
+const libraryAsk = (path: string, check: boolean) => `/api/v1/playback-library/${path}${check ? "?check=1" : ""}`;
+export const getPlaybackLibraryStatus = (check = false) => requestJson<LibraryStatus>(libraryAsk("status", check));
+export const getPlaybackLibraryPlan = (check = false) => requestJson<LibraryPlan>(libraryAsk("plan", check));
+export const updatePlaybackLibrarySettings = (enabled: boolean, address: string) =>
+  requestJson<LibraryStatus>("/api/v1/playback-library/settings", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, address }),
   });

@@ -71,6 +71,7 @@ import type {
 import { restartDesktopBackend, signInWithPlanningCenter } from "../desktop";
 import { describeError, OFFLINE_SENTENCE } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
+import { usePlaybackLibrary } from "./usePlaybackLibrary";
 import { useSingleFlight } from "./useSingleFlight";
 
 import { keepUnchanged } from "../lib/keepUnchanged";
@@ -114,6 +115,7 @@ export function useStagePilot() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [pendingSettingsOperation, setPendingSettingsOperation] = useState(false);
   const playback = usePlaybackInput(canConfigure, setSettings);
+  const library = usePlaybackLibrary(canConfigure, settings, setSettings);
 
   const [planningCenterStatus, setPlanningCenterStatus] =
     useState<PlanningCenterStatusResponse | null>(null);
@@ -1195,6 +1197,7 @@ export function useStagePilot() {
 
   return {
     playback,
+    library,
     state,
     health,
     live,
