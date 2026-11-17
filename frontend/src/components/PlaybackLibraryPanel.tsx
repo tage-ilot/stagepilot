@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
+import { playbackLibraryArtworkUrl } from "../api";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { ServicePlan } from "../types";
-import { libraryNotices, songFacts } from "./playbackLibrary";
+import type { LibraryPlanSong, ServicePlan } from "../types";
+import { ArrangementBar } from "./ArrangementBar";
+import { chipLibrary, libraryNotices, songFaceFacts } from "./playbackLibrary";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
@@ -10,6 +12,48 @@ import { Switch } from "./ui/Switch";
 
 /** What the plain "Check" says before the helper has answered. */
 const OFF_WORDS = "Off. StagePilot does not ask the Playback computer for anything.";
+
+/** What a chip says for a song Playback cannot be paired with (no cover, no bar). */
+const unpaired = (song: LibraryPlanSong) =>
+  song.status === "missing" ? "not in Playback's setlist" : "appears more than once, so StagePilot cannot tell which Playback song it is";
+
+/**
+ * One plan song as a chip: a 28 px cover (only when Playback has a picture), the title, key, BPM and countdown length, and under both a
+ * thin bar of the arrangement. A song Playback is missing or cannot tell apart keeps its words, as a chip of the same shape.
+ */
+function SongChip({ song }: { song: LibraryPlanSong }) {
+  const library = song.library;
+  const cover = library?.artwork && library.setlist_song_id !== null ? playbackLibraryArtworkUrl(library.setlist_song_id, library.artwork.etag) : null;
+  const facts = library ? songFaceFacts(library).join(" · ") || "no details" : unpaired(song);
+  return (
+    <li
+      className="flex min-w-0 flex-col rounded-ds-xl border border-edge-medium bg-surface-panel px-3 py-2 text-sm"
+      data-song={song.key}
+      data-status={song.status}
+      title={library ? chipLibrary(song)?.title : undefined}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        {cover && (
+          <img
+            alt=""
+            className="h-7 w-7 shrink-0 rounded-ds-md bg-surface-900 object-cover"
+            decoding="async"
+            height={28}
+            loading="lazy"
+            onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
+            src={cover}
+            width={28}
+          />
+        )}
+        <div className="min-w-0 leading-tight">
+          <span className="block truncate font-semibold text-ink">{song.title}</span>
+          <span className="block truncate text-xs tabular-nums text-ink-muted">{facts}</span>
+        </div>
+      </div>
+      {library && <ArrangementBar sections={library.sections} />}
+    </li>
+  );
+}
 
 /**
  * "Playback library (optional)", in the Playback API panel. A small helper on the Playback computer can tell StagePilot each song's
@@ -50,18 +94,8 @@ export function PlaybackLibraryPanel({ library, plan, timeZone }: { library: Pla
       <p className={`text-sm ${problem ? "text-warning-text" : "text-ink-body"}`} data-testid="library-status" role="status">{words}</p>
       {library.error && <p className="text-sm text-danger-text" role="alert">{library.error}</p>}
       {songs.length > 0 && (
-        <ul aria-label="Songs in Playback" className="space-y-0.5 text-sm text-ink-body" data-testid="library-songs">
-          {songs.map((song) => (
-            <li data-song={song.key} data-status={song.status} key={`${song.key}-${song.plan_position}`}>
-              <span className="font-semibold text-ink">{song.title}</span>
-              {" "}
-              <span className="tabular-nums text-ink-muted">
-                {song.library ? `· ${songFacts(song.library).join(" · ") || "no details"}`
-                  : song.status === "missing" ? "· not in Playback's setlist"
-                    : "· appears more than once, so StagePilot cannot tell which Playback song it is"}
-              </span>
-            </li>
-          ))}
+        <ul aria-label="Songs in Playback" className="grid gap-[10px] [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]" data-testid="library-songs">
+          {songs.map((song) => <SongChip key={`${song.key}-${song.plan_position}`} song={song} />)}
         </ul>
       )}
       {notices.length > 0 && (

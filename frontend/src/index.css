@@ -1713,3 +1713,19 @@ textarea:focus-visible {
 .panel-reveal__notch-back, .panel-reveal__notch-bg { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 0 solid transparent; background-origin: border-box; }
 /* Decorative only: the selected card's own styling stays the cue, so forced colours simply drop the notch. */
 @media (forced-colors: active) { .panel-reveal__notch-track { display: none; } }
+
+/* The Playback library's arrangement bar (one thin bar under a song's chip). A block's width is its time (--w, seconds); its color is
+   the section's own (--c), mixed 30 % into the chip's background like Playback's tint, with a 3 px top border in the full color. */
+.library-bar {
+  display: flex;
+  gap: 1px;
+  height: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.library-seg {
+  flex: var(--w) 1 0;
+  min-width: 2px;
+  background: color-mix(in srgb, var(--c) 30%, var(--ds-surface-panel));
+  border-top: 3px solid var(--c);
+}

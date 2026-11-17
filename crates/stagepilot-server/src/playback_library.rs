@@ -18,13 +18,21 @@
 //!   and an answer larger than its cap (16 KiB health, 256 KiB setlist or song) is refused. The
 //!   waveform is never asked for.
 //! * The last good answer is kept for 60 s and shown, marked as old, while the helper does not answer.
+//! * A check is cheap: every 30 s only `/health` is asked, and the setlist and the songs are read again
+//!   only when its `library_revision` is new, the plan or the setting changed, 10 minutes have passed,
+//!   or a paired song lacks its data. A helper that sends no revision is read in full each time.
+//! * Cover pictures come through here and nowhere else (the window never calls the helper): only for a
+//!   song of the current paired plan, at most 2 MB, JPEG or PNG by type and by first bytes, held in
+//!   memory only (64 pictures, 8 MB, oldest out first), never written to disk, a log or the plan.
 //! * Every failure is one short plain sentence.
 //! * Library data is held in memory only.
 
 use crate::runtime::Runtime;
 use crate::validation::{http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, put};
 use axum::Router;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -35,10 +43,12 @@ use stagepilot_core::config::{
 };
 use stagepilot_core::state::ServicePlan;
 use stagepilot_playback::library::{
-    apply_detail, health_words, match_plan, parse_health, parse_setlist, LibraryPlan,
-    LibrarySetlist, LibraryState, LibraryStatus, ParsedSetlist, PlanTitle,
+    apply_detail, health_words, match_plan, parse_health, parse_setlist, LibraryArtwork,
+    LibraryPlan, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus, ParsedSetlist,
+    PlanMatch, PlanTitle, MAX_ARTWORK_BYTES,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -59,6 +69,17 @@ const DETAIL_AT_ONCE: usize = 4;
 /// The whole of one refresh of a setlist and its songs.
 const REFRESH_BUDGET: Duration = Duration::from_secs(8);
 const DETAIL_BUDGET: Duration = Duration::from_secs(5);
+/// Even when the helper's `library_revision` has not changed, the setlist and songs are read again
+/// after this long (a safety net for a token that does not move when it should).
+pub const SAFETY_NET: Duration = Duration::from_secs(10 * 60);
+/// A picture the helper described with the same `ETag` is served from memory for this long before
+/// the helper is asked (`If-None-Match`) whether it is still the same.
+const ARTWORK_RECHECK: Duration = Duration::from_secs(10 * 60);
+const ARTWORK_CAP: usize = MAX_ARTWORK_BYTES as usize;
+const ARTWORK_MAX_PICTURES: usize = 64;
+const ARTWORK_MAX_TOTAL: usize = 8 * 1024 * 1024;
+/// Pictures fetched from the helper at the same time.
+const ARTWORK_AT_ONCE: usize = 4;
 
 const DID_NOT_ANSWER: &str = "The Playback computer did not answer.";
 const NOT_UNDERSTOOD: &str =
@@ -139,24 +160,33 @@ impl<T> Default for Slot<T> {
 
 impl<T: Clone> Slot<T> {
     /// Whether a new ask is allowed `gap` after the last one.
-    fn due(&self, gap: Duration) -> bool {
-        self.asked.is_none_or(|at| at.elapsed() >= gap)
+    fn due(&self, gap: Duration, now: Instant) -> bool {
+        self.asked
+            .is_none_or(|at| now.saturating_duration_since(at) >= gap)
     }
 
-    fn record(&mut self, result: Result<T, Failure>) {
-        self.asked = Some(Instant::now());
+    fn record(&mut self, result: Result<T, Failure>, now: Instant) {
+        self.asked = Some(now);
         if let Ok(value) = &result {
-            self.good = Some((Instant::now(), Utc::now(), value.clone()));
+            self.good = Some((now, Utc::now(), value.clone()));
         }
         self.last = Some(result);
     }
 
+    /// The helper confirmed (by an unchanged revision) that the last good answer is still right.
+    fn touch(&mut self, now: Instant) {
+        self.asked = Some(now);
+        if let Some(Ok(value)) = &self.last {
+            self.good = Some((now, Utc::now(), value.clone()));
+        }
+    }
+
     /// The answer to show: the last ask's, or the last good one (marked old, under `KEEP_GOOD`).
-    fn shown(&self) -> Result<(T, bool, Option<DateTime<Utc>>), Failure> {
+    fn shown(&self, now: Instant) -> Result<(T, bool, Option<DateTime<Utc>>), Failure> {
         match &self.last {
             Some(Ok(value)) => Ok((value.clone(), false, self.good.as_ref().map(|g| g.1))),
             Some(Err(failure)) => match &self.good {
-                Some((at, when, value)) if at.elapsed() < KEEP_GOOD => {
+                Some((at, when, value)) if now.saturating_duration_since(*at) < KEEP_GOOD => {
                     Ok((value.clone(), true, Some(*when)))
                 }
                 _ => Err(failure.clone()),
@@ -176,19 +206,101 @@ struct Inner {
     /// The setlist for one plan date.
     setlist_date: String,
     setlist: Slot<Fetched>,
+    /// When the setlist and its songs were last read in full, and the `library_revision` the helper
+    /// had then (none when it sends none).
+    read: Option<ReadMark>,
+    /// The loaded plan as the pairing sees it (date and titles): a change means a full read.
+    plan_key: String,
+}
+
+struct ReadMark {
+    at: Instant,
+    revision: Option<String>,
 }
 
 #[derive(Clone)]
 struct Detail {
-    sections: Option<u32>,
+    section_count: Option<u32>,
+    sections: Vec<LibrarySection>,
+    artwork: Option<LibraryArtwork>,
     arrangement: Option<String>,
+}
+
+/// A cover picture held in memory, as the helper sent it.
+#[derive(Clone)]
+pub struct Picture {
+    /// `image/jpeg` or `image/png`.
+    pub content_type: &'static str,
+    /// The helper's `ETag`, quotes included.
+    pub etag: String,
+    pub bytes: Bytes,
+}
+
+struct ArtEntry {
+    picture: Picture,
+    /// Insertion order: the lowest goes first when the cache is full.
+    seq: u64,
+    checked: Instant,
+}
+
+#[derive(Default)]
+struct ArtCache {
+    pictures: HashMap<(String, u64), ArtEntry>,
+    total: usize,
+    next: u64,
+}
+
+impl ArtCache {
+    fn remove(&mut self, key: &(String, u64)) {
+        if let Some(old) = self.pictures.remove(key) {
+            self.total -= old.picture.bytes.len();
+        }
+    }
+
+    fn insert(&mut self, key: (String, u64), picture: Picture, now: Instant) {
+        self.remove(&key);
+        self.total += picture.bytes.len();
+        self.next += 1;
+        let seq = self.next;
+        self.pictures.insert(
+            key,
+            ArtEntry {
+                picture,
+                seq,
+                checked: now,
+            },
+        );
+        while self.pictures.len() > ARTWORK_MAX_PICTURES || self.total > ARTWORK_MAX_TOTAL {
+            let Some(oldest) = self
+                .pictures
+                .iter()
+                .min_by_key(|(_, entry)| entry.seq)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            self.remove(&oldest);
+        }
+    }
+}
+
+/// Why a cover could not be given to the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArtworkFailure {
+    /// The song has no picture, or what the helper sent is not a JPEG or PNG within the cap.
+    NoPicture,
+    /// The Playback computer did not answer (or answered with an error).
+    NoAnswer,
 }
 
 pub struct PlaybackLibrary {
     http: reqwest::Client,
     inner: Mutex<Inner>,
-    /// What each song's own answer gave, for `KEEP_GOOD` (key: base URL and Playback's song id).
-    details: std::sync::Mutex<HashMap<(String, i64), (Instant, Detail)>>,
+    /// Cover pictures, in memory only.
+    art: std::sync::Mutex<ArtCache>,
+    art_gate: tokio::sync::Semaphore,
+    /// Added to the clock (tests move it to pass minutes at once; it is 0 in the product).
+    skew_ms: AtomicU64,
 }
 
 impl Default for PlaybackLibrary {
@@ -212,7 +324,40 @@ impl PlaybackLibrary {
         Self {
             http,
             inner: Mutex::new(Inner::default()),
-            details: std::sync::Mutex::new(HashMap::new()),
+            art: std::sync::Mutex::new(ArtCache::default()),
+            art_gate: tokio::sync::Semaphore::new(ARTWORK_AT_ONCE),
+            skew_ms: AtomicU64::new(0),
+        }
+    }
+
+    fn now(&self) -> Instant {
+        Instant::now() + Duration::from_millis(self.skew_ms.load(Ordering::Relaxed))
+    }
+
+    /// Moves this module's clock forward (tests only: the 10-minute safety net without waiting).
+    #[doc(hidden)]
+    pub fn advance_clock(&self, by: Duration) {
+        let ms = u64::try_from(by.as_millis()).unwrap_or(u64::MAX);
+        self.skew_ms.fetch_add(ms, Ordering::Relaxed);
+    }
+
+    /// How many pictures and how many bytes are held (tests only).
+    #[doc(hidden)]
+    pub fn artwork_held(&self) -> (usize, usize) {
+        self.art
+            .lock()
+            .map_or((0, 0), |art| (art.pictures.len(), art.total))
+    }
+
+    /// The setting is off: forget everything held (so switching it on starts from nothing).
+    fn forget(&self) {
+        if let Ok(mut inner) = self.inner.try_lock() {
+            if !inner.base.is_empty() {
+                *inner = Inner::default();
+            }
+        }
+        if let Ok(mut art) = self.art.lock() {
+            *art = ArtCache::default();
         }
     }
 
@@ -279,6 +424,7 @@ impl PlaybackLibrary {
     /// the Check button: it may ask again 2 s after the last ask instead of 30 s.
     pub async fn status(&self, settings: &PlaybackLibrarySettings, check: bool) -> LibraryStatus {
         if !settings.enabled {
+            self.forget();
             return Self::off(settings);
         }
         let Some(base) = base_url(&settings.address) else {
@@ -302,14 +448,14 @@ impl PlaybackLibrary {
             };
         }
         let gap = if check { MIN_CHECK } else { MIN_REFRESH };
-        if inner.health.due(gap) {
+        if inner.health.due(gap, self.now()) {
             let answer = self.get_ok(base, "/health", HEALTH_CAP).await;
             // A helper that answers 503 to /health is told apart from one that is silent.
             inner
                 .health
-                .record(answer.map(|value| parse_health(&value)));
+                .record(answer.map(|value| parse_health(&value)), self.now());
         }
-        match inner.health.shown() {
+        match inner.health.shown(self.now()) {
             Ok((health, stale, when)) => {
                 let (state, mut message) = health_words(&health);
                 if stale {
@@ -331,16 +477,9 @@ impl PlaybackLibrary {
         }
     }
 
-    /// One song's section count and arrangement name (cached for `KEEP_GOOD`).
+    /// One song's own answer: its sections and arrangement name. Never cached here: the revision
+    /// check decides when songs are read again, and a copy served from a cache would outlive it.
     async fn song_detail(&self, base: &str, id: i64) -> Option<Detail> {
-        let key = (base.to_string(), id);
-        if let Ok(cache) = self.details.lock() {
-            if let Some((at, detail)) = cache.get(&key) {
-                if at.elapsed() < KEEP_GOOD {
-                    return Some(detail.clone());
-                }
-            }
-        }
         let value = self
             .get_ok(base, &format!("/songs/{id}"), BODY_CAP)
             .await
@@ -356,21 +495,18 @@ impl PlaybackLibrary {
             countdown_length_s: None,
             length_source: None,
             arrangement: None,
-            sections: None,
+            section_count: None,
+            sections: Vec::new(),
+            artwork: None,
             rental_expires_utc: None,
         };
         apply_detail(&mut scratch, &value);
-        let detail = Detail {
+        Some(Detail {
+            section_count: scratch.section_count,
             sections: scratch.sections,
+            artwork: scratch.artwork,
             arrangement: scratch.arrangement,
-        };
-        if let Ok(mut cache) = self.details.lock() {
-            if cache.len() > 500 {
-                cache.clear();
-            }
-            cache.insert(key, (Instant::now(), detail.clone()));
-        }
-        Some(detail)
+        })
     }
 
     /// Reads the setlist for `date`, then each song's own answer for its section count.
@@ -416,10 +552,52 @@ impl PlaybackLibrary {
         let deadline = tokio::time::Instant::now() + DETAIL_BUDGET;
         while let Ok(Some((i, detail))) = tokio::time::timeout_at(deadline, answers.next()).await {
             if let (Some(detail), Some(song)) = (detail, setlist.songs.get_mut(i)) {
+                song.section_count = detail.section_count;
                 song.sections = detail.sections;
+                if song.artwork.is_none() {
+                    song.artwork = detail.artwork;
+                }
                 if song.arrangement.is_none() {
                     song.arrangement = detail.arrangement;
                 }
+            }
+        }
+    }
+
+    /// Whether the setlist and the songs must be read again, not just `/health`. Yes when: nothing
+    /// good was read yet (the plan, the date or the setting changed, or the last read failed); the
+    /// helper sends no `library_revision`; the token differs from the one at the last good read; that
+    /// read is 10 minutes old; or a paired song lacks its own data.
+    fn needs_full_read(
+        &self,
+        inner: &Inner,
+        revision: Option<&String>,
+        titles: &[PlanTitle],
+    ) -> bool {
+        let Some(Ok(fetched)) = &inner.setlist.last else {
+            return true;
+        };
+        let (Some(mark), Some(revision)) = (&inner.read, revision) else {
+            return true;
+        };
+        if mark.revision.as_ref() != Some(revision)
+            || self.now().saturating_duration_since(mark.at) >= SAFETY_NET
+        {
+            return true;
+        }
+        match fetched {
+            Fetched::Waiting => true,
+            Fetched::NoSetlist { .. } => false,
+            Fetched::Setlist(parsed) => {
+                let paired: HashSet<i64> = match_plan(titles, &parsed.songs)
+                    .iter()
+                    .filter(|song| song.status == PlanMatch::Matched)
+                    .filter_map(|song| song.library.as_ref()?.setlist_song_id)
+                    .collect();
+                parsed.songs.iter().take(DETAIL_SONGS).any(|song| {
+                    song.section_count.is_none()
+                        && song.setlist_song_id.is_some_and(|id| paired.contains(&id))
+                })
             }
         }
     }
@@ -444,6 +622,7 @@ impl PlaybackLibrary {
             checked_at: None,
         };
         if !settings.enabled {
+            self.forget();
             return empty(LibraryState::Off, Some(SWITCHED_OFF.to_string()));
         }
         let Some(base) = base_url(&settings.address) else {
@@ -455,30 +634,6 @@ impl PlaybackLibrary {
         if plan.songs.is_empty() {
             return empty(LibraryState::Ready, None);
         }
-        // One ask at a time: a second window waits here and then reads what the first one learned.
-        let mut inner = self.inner.lock().await;
-        let status = self.status_locked(&mut inner, settings, &base, check).await;
-        if status.state != LibraryState::Ready {
-            return empty(status.state, Some(status.message));
-        }
-        if inner.setlist_date != date {
-            inner.setlist_date = date.clone();
-            inner.setlist = Slot::default();
-        }
-        let gap = if check { MIN_CHECK } else { MIN_REFRESH };
-        if inner.setlist.due(gap) {
-            let answer = tokio::time::timeout(REFRESH_BUDGET, self.fetch_setlist(&base, &date))
-                .await
-                .unwrap_or(Err(Failure::NoAnswer));
-            inner.setlist.record(answer);
-        }
-        let (fetched, stale, when) = match inner.setlist.shown() {
-            Ok(shown) => shown,
-            Err(failure) => return empty(LibraryState::Problem, Some(failure.words())),
-        };
-        drop(inner);
-        let checked_at = when.map(|t| t.to_rfc3339_opts(SecondsFormat::Secs, true));
-        let stale_note = stale.then(|| LOOKED_OLD.to_string());
         let titles: Vec<PlanTitle> = plan
             .songs
             .iter()
@@ -491,6 +646,59 @@ impl PlaybackLibrary {
                 seconds: song.duration_seconds,
             })
             .collect();
+        // One ask at a time: a second window waits here and then reads what the first one learned.
+        let mut inner = self.inner.lock().await;
+        let status = self.status_locked(&mut inner, settings, &base, check).await;
+        if status.state != LibraryState::Ready {
+            return empty(status.state, Some(status.message));
+        }
+        if inner.setlist_date != date {
+            inner.setlist_date = date.clone();
+            inner.setlist = Slot::default();
+            inner.read = None;
+        }
+        let plan_key = titles
+            .iter()
+            .map(|t| t.title.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if inner.plan_key != plan_key {
+            inner.plan_key = plan_key;
+            inner.read = None;
+        }
+        let gap = if check { MIN_CHECK } else { MIN_REFRESH };
+        if inner.setlist.due(gap, self.now()) {
+            // Only a helper that answered `/health` just now is read further; one that did not is
+            // not asked for more (what is held stands in, marked old, as before).
+            let revision = match &inner.health.last {
+                Some(Ok(health)) => Some(health.library_revision.clone()),
+                _ => None,
+            };
+            if let Some(revision) = revision {
+                if self.needs_full_read(&inner, revision.as_ref(), &titles) {
+                    let answer =
+                        tokio::time::timeout(REFRESH_BUDGET, self.fetch_setlist(&base, &date))
+                            .await
+                            .unwrap_or(Err(Failure::NoAnswer));
+                    let good = answer.is_ok();
+                    inner.setlist.record(answer, self.now());
+                    inner.read = good.then(|| ReadMark {
+                        at: self.now(),
+                        revision,
+                    });
+                } else {
+                    inner.setlist.touch(self.now());
+                }
+            }
+        }
+        let (fetched, stale, when) = match inner.setlist.shown(self.now()) {
+            Ok(shown) => shown,
+            Err(failure) => return empty(LibraryState::Problem, Some(failure.words())),
+        };
+        drop(inner);
+        let stale = stale || status.stale;
+        let checked_at = when.map(|t| t.to_rfc3339_opts(SecondsFormat::Secs, true));
+        let stale_note = stale.then(|| LOOKED_OLD.to_string());
         let finish = |state, message, setlist, newest, songs| LibraryPlan {
             enabled: true,
             state,
@@ -532,6 +740,166 @@ impl PlaybackLibrary {
     }
 }
 
+// ---- cover pictures -------------------------------------------------------------------------------
+
+/// `image/jpeg` or `image/png` as the picture's type, whatever the case or parameters.
+fn picture_type(value: &str) -> Option<&'static str> {
+    let kind = value.split(';').next()?.trim().to_ascii_lowercase();
+    match kind.as_str() {
+        "image/jpeg" => Some("image/jpeg"),
+        "image/png" => Some("image/png"),
+        _ => None,
+    }
+}
+
+/// Whether the first bytes are those of a JPEG or a PNG, and the one the type says.
+fn picture_starts_right(content_type: &str, bytes: &[u8]) -> bool {
+    match content_type {
+        "image/jpeg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "image/png" => bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        _ => false,
+    }
+}
+
+/// An `ETag` that is safe to pass on: one visible ASCII token, 80 characters at most, no commas.
+fn plain_etag(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 80
+        && value
+            .bytes()
+            .all(|b| (0x21..=0x7e).contains(&b) && b != b',')
+}
+
+/// What one ask for a picture gave.
+enum Raw {
+    NotModified,
+    Missing,
+    Picture(Picture),
+}
+
+impl PlaybackLibrary {
+    /// `GET base/songs/<id>/artwork`, at most `ARTWORK_CAP` bytes, 3 s in all, same client as every
+    /// other ask (no redirect, no proxy). `held` is the `ETag` of the copy held, sent as `If-None-Match`.
+    async fn get_picture(
+        &self,
+        base: &str,
+        id: u64,
+        held: Option<&str>,
+        expected_etag: &str,
+    ) -> Result<Raw, ArtworkFailure> {
+        let url = format!("{base}/songs/{id}/artwork");
+        let mut request = self
+            .http
+            .get(&url)
+            .header("accept", "image/jpeg, image/png");
+        if let Some(etag) = held.filter(|e| plain_etag(e)) {
+            request = request.header("if-none-match", etag);
+        }
+        let mut response = request.send().await.map_err(|_| ArtworkFailure::NoAnswer)?;
+        match response.status().as_u16() {
+            304 => return Ok(Raw::NotModified),
+            404 => return Ok(Raw::Missing),
+            200 => {}
+            _ => return Err(ArtworkFailure::NoAnswer),
+        }
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(picture_type)
+            .ok_or(ArtworkFailure::NoPicture)?;
+        let etag = response
+            .headers()
+            .get(header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .filter(|e| plain_etag(e))
+            .map_or_else(|| expected_etag.to_string(), str::to_string);
+        if response
+            .content_length()
+            .is_some_and(|n| n > ARTWORK_CAP as u64)
+        {
+            return Err(ArtworkFailure::NoPicture);
+        }
+        let mut body: Vec<u8> = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ArtworkFailure::NoAnswer)?
+        {
+            if body.len() + chunk.len() > ARTWORK_CAP {
+                return Err(ArtworkFailure::NoPicture);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        if !picture_starts_right(content_type, &body) {
+            return Err(ArtworkFailure::NoPicture);
+        }
+        Ok(Raw::Picture(Picture {
+            content_type,
+            etag,
+            bytes: Bytes::from(body),
+        }))
+    }
+
+    /// The cover of one song of the current paired plan. `expected` is what the plan says about it
+    /// (its `ETag`). A held copy with that `ETag` is given at once for ten minutes; after that, and
+    /// when the plan names another `ETag`, the helper is asked (`If-None-Match` with the held one:
+    /// a `304` keeps the held bytes). Held in memory only.
+    pub async fn picture(
+        &self,
+        settings: &PlaybackLibrarySettings,
+        id: u64,
+        expected: &LibraryArtwork,
+    ) -> Result<Picture, ArtworkFailure> {
+        if !settings.enabled {
+            return Err(ArtworkFailure::NoPicture);
+        }
+        let base = base_url(&settings.address).ok_or(ArtworkFailure::NoPicture)?;
+        let key = (base.clone(), id);
+        let held = {
+            let art = self.art.lock().map_err(|_| ArtworkFailure::NoAnswer)?;
+            art.pictures
+                .get(&key)
+                .map(|entry| (entry.picture.clone(), entry.checked))
+        };
+        if let Some((picture, checked)) = &held {
+            if picture.etag == expected.etag
+                && self.now().saturating_duration_since(*checked) < ARTWORK_RECHECK
+            {
+                return Ok(picture.clone());
+            }
+        }
+        let _slot = self
+            .art_gate
+            .acquire()
+            .await
+            .map_err(|_| ArtworkFailure::NoAnswer)?;
+        let held_etag = held.as_ref().map(|(picture, _)| picture.etag.as_str());
+        let answer = self.get_picture(&base, id, held_etag, &expected.etag).await;
+        let now = self.now();
+        let mut art = self.art.lock().map_err(|_| ArtworkFailure::NoAnswer)?;
+        match answer? {
+            Raw::NotModified => {
+                // The helper says the held copy is still the picture: keep its bytes.
+                let entry = art
+                    .pictures
+                    .get_mut(&key)
+                    .ok_or(ArtworkFailure::NoPicture)?;
+                entry.checked = now;
+                Ok(entry.picture.clone())
+            }
+            Raw::Missing => {
+                art.remove(&key);
+                Err(ArtworkFailure::NoPicture)
+            }
+            Raw::Picture(picture) => {
+                art.insert(key, picture.clone(), now);
+                Ok(picture)
+            }
+        }
+    }
+}
+
 // ---- routes -----------------------------------------------------------------------------------
 
 type Rt = Arc<Runtime>;
@@ -552,6 +920,10 @@ pub fn routes() -> Router<Rt> {
     Router::new()
         .route("/api/v1/playback-library/status", get(status))
         .route("/api/v1/playback-library/plan", get(plan))
+        .route(
+            "/api/v1/playback-library/songs/{setlist_song_id}/artwork",
+            get(artwork),
+        )
         .route("/api/v1/playback-library/settings", put(settings))
 }
 
@@ -618,4 +990,91 @@ async fn settings(State(rt): State<Rt>, body: Bytes) -> Json {
             .status(&next.playback_library, false)
             .await,
     ))
+}
+
+/// The cover of one song of the current paired plan, for the window. The window never calls the
+/// helper: this is the only way a picture reaches it. 404 for everything that is not exactly that:
+/// the setting off (nothing is asked at all), an id that is not a whole number, an id that is not a
+/// paired song of the plan on screen, a song with no picture, a helper that sends something that is
+/// not a picture.
+async fn artwork(
+    State(rt): State<Rt>,
+    Path(raw): Path<String>,
+    request_headers: HeaderMap,
+) -> Response {
+    let no_picture = || http_error(404, "No picture.").into_response();
+    let settings = rt.settings_service.snapshot().playback_library;
+    if !settings.enabled {
+        return no_picture();
+    }
+    let Ok(id) = raw.parse::<u64>() else {
+        return no_picture();
+    };
+    let loaded = rt.store.snapshot().plan;
+    let current = rt
+        .playback_library
+        .plan(&settings, loaded.as_ref(), false)
+        .await;
+    let expected = (current.state == LibraryState::Ready)
+        .then(|| {
+            current.songs.iter().find_map(|song| {
+                let library = song.library.as_ref()?;
+                let same = library.setlist_song_id.and_then(|n| u64::try_from(n).ok()) == Some(id);
+                (song.status == PlanMatch::Matched && same)
+                    .then(|| library.artwork.clone())
+                    .flatten()
+            })
+        })
+        .flatten();
+    let Some(expected) = expected else {
+        return no_picture();
+    };
+    // The window already holds the picture the plan describes: nothing is fetched.
+    if etag_matches(request_headers.get(header::IF_NONE_MATCH), &expected.etag) {
+        return picture_response(None, &expected.etag, &expected.content_type);
+    }
+    match rt.playback_library.picture(&settings, id, &expected).await {
+        Ok(picture) => {
+            if etag_matches(request_headers.get(header::IF_NONE_MATCH), &picture.etag) {
+                return picture_response(None, &picture.etag, picture.content_type);
+            }
+            picture_response(
+                Some(picture.bytes.clone()),
+                &picture.etag,
+                picture.content_type,
+            )
+        }
+        Err(ArtworkFailure::NoPicture) => no_picture(),
+        Err(ArtworkFailure::NoAnswer) => http_error(503, DID_NOT_ANSWER).into_response(),
+    }
+}
+
+/// `If-None-Match` names this `ETag` (any of a list, weak or not, or `*`).
+fn etag_matches(header: Option<&HeaderValue>, etag: &str) -> bool {
+    let Some(text) = header.and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let bare = |tag: &str| tag.trim().trim_start_matches("W/").to_string();
+    text.split(',')
+        .any(|tag| tag.trim() == "*" || bare(tag) == bare(etag))
+}
+
+/// 200 with the picture, or 304 with none, both with the headers the window may cache by.
+fn picture_response(bytes: Option<Bytes>, etag: &str, content_type: &str) -> Response {
+    let mut response = match bytes {
+        Some(bytes) => (StatusCode::OK, bytes).into_response(),
+        None => StatusCode::NOT_MODIFIED.into_response(),
+    };
+    let headers = response.headers_mut();
+    for (name, value) in [
+        (header::ETAG, etag),
+        (header::CONTENT_TYPE, content_type),
+        (header::CACHE_CONTROL, "private, max-age=3600"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    ] {
+        if let Ok(value) = HeaderValue::from_str(value) {
+            headers.insert(name, value);
+        }
+    }
+    response
 }
