@@ -18,7 +18,9 @@ use stagepilot_server::playback_helper_install::{NO_ADDRESS, NO_PLAYBACK_COMPUTE
 // Only the tests that run the generated script with a real `sh` and `curl` (Unix) use these.
 #[cfg(unix)]
 use stagepilot_server::playback_helper_install::{served_routes, Assets, PlaybackHelperInstall};
-use stagepilot_server::playback_library::{sign, PlaybackLibrary};
+use stagepilot_server::playback_library::sign;
+#[cfg(unix)]
+use stagepilot_server::playback_library::PlaybackLibrary;
 use stagepilot_server::remote_types::RemoteContext;
 use stagepilot_server::{
     build_app, AppOptions, OutputBackends, RemoteAccess, RemoteIngress, Runtime,

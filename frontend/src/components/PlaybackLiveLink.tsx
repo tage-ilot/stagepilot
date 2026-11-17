@@ -7,7 +7,7 @@ import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40 } from "./liveLink";
 import { LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
-import { apiGood, apiLine, pillState, scriptLine, scriptNote, scriptActive, type LiveLinkLine } from "./playbackLiveLink";
+import { apiGood, apiLine, pillState, scriptLine, scriptNote, scriptActive, type LiveLinkLine } from "./playbackLiveLinkState";
 import { scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";

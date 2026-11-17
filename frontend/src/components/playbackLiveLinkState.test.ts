@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { libraryStatus } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
-import { apiGood, apiLine, pillState, scriptActive, scriptLine, scriptNote } from "./playbackLiveLink";
+import { apiGood, apiLine, pillState, scriptActive, scriptLine, scriptNote } from "./playbackLiveLinkState";
 
 describe("the Playback API line: the backend's own sentence, with a tone", () => {
   it("connected, MIDI, searching and not connected", () => {
