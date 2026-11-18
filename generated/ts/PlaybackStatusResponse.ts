@@ -10,4 +10,14 @@ export type PlaybackStatusResponse = { planning_center_lengths: LengthUpdateResu
 /**
  * `scanned`, `learned` or `none`: where the Playback song -> plan song pairing comes from.
  */
-order_mode: string, learned_songs: Array<LearnedSongModel>, order_note: string | null, song_lengths: Array<number | null>, skipped_song_ids: Array<bigint>, skipped_plan_song_ids: Array<string>, arrangement_current: boolean, discovery_duration_seconds: number | null, planning_center_update_service_type_id: string | null, planning_center_update_reason: string | null, lengths_measured_at: string | null, plan_songs: Array<PlaybackPlanSong>, song_count: number, plan_song_count: number, captured_version: bigint | null, captured_at: string | null, stale: boolean, plan_changed: boolean, lengths_applied: boolean, settings: PlaybackSettingsRequest, };
+order_mode: string, 
+/**
+ * `library`, `scan`, `learned` or `none`: who made the order the pairing is read from. A
+ * scanned order is `scan` or `library` (the Library Link's setlist saved by StagePilot itself).
+ */
+order_source: string, 
+/**
+ * Why the Library Link's order is not in use, as one plain line; information only. Null when it is
+ * in use, when no Library Link is in use, or when nothing was decided yet.
+ */
+order_library_note: string | null, learned_songs: Array<LearnedSongModel>, order_note: string | null, song_lengths: Array<number | null>, skipped_song_ids: Array<bigint>, skipped_plan_song_ids: Array<string>, arrangement_current: boolean, discovery_duration_seconds: number | null, planning_center_update_service_type_id: string | null, planning_center_update_reason: string | null, lengths_measured_at: string | null, plan_songs: Array<PlaybackPlanSong>, song_count: number, plan_song_count: number, captured_version: bigint | null, captured_at: string | null, stale: boolean, plan_changed: boolean, lengths_applied: boolean, settings: PlaybackSettingsRequest, };

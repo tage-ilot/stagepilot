@@ -239,3 +239,20 @@ describe("time zones and daylight saving", () => {
     expect(SCAN_REMINDER_WINDOW_MS).toBe(60 * MIN);
   });
 });
+
+describe("an order from the Library Link (T9)", () => {
+  it("stays quiet while the Library Link's order is in use, however old its save is", () => {
+    expect(due(before(30), { playback: scanned(180, { order_source: "library", order_library_note: null }) })).toBeNull();
+  });
+
+  it("is due as before for a scan order, a learned order, or an old status that names no source", () => {
+    expect(due(before(30), { playback: scanned(180, { order_source: "scan", order_library_note: null }) })).toMatchObject({ minutesLeft: 30 });
+    expect(due(before(30), { playback: scanned(180, { order_source: "learned" }) })).toMatchObject({ minutesLeft: 30 });
+    expect(due(before(30), { playback: scanned(180) })).toMatchObject({ minutesLeft: 30 });
+  });
+
+  it("is due again when the Library Link's order is no longer trusted (its line says why)", () => {
+    const note = "Not using the Library Link's order: Playback is not connected.";
+    expect(due(before(30), { playback: scanned(180, { order_source: "library", order_library_note: note }) })).toMatchObject({ minutesLeft: 30 });
+  });
+});

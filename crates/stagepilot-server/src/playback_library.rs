@@ -17,10 +17,15 @@
 //! * There is no on/off switch and nothing to forget: while a Playback host is saved the helper is asked, at
 //!   most once per 30 s (see below), and a helper that is not there is not a warning anywhere
 //!   (`HelperState::NotInstalled`). The key is made once and kept; running the setup command again reuses it.
-//! * Nothing is polled. A window asking (`GET /status`, `GET /plan`) is the only thing that causes a
-//!   request, and the helper is asked at most once per 30 s however many windows ask; the Check
-//!   button (`?check=1`) may ask again after 2 s. Failures are remembered for the same time, so a
-//!   computer that does not answer is not asked again and again.
+//! * The helper is asked on a few occasions only. A window asking (`GET /status`, `GET /plan`). The look the
+//!   runtime makes by itself when it starts (health, then the open setlist and its songs, read fresh), when
+//!   a key is paired: if the helper is silent it is tried again after 2 s, 5 s, 15 s and then every 30 s,
+//!   until it has answered once. The watcher's look every few seconds once the Library Link has been in use
+//!   (`playback_order`). And the "Scan Playback Songs" button when the Library Link works (a fresh read).
+//!   A computer that never had a Library Link set up (no key) is never asked in the background. Apart from
+//!   the fresh reads, the helper is asked at most once per 30 s however many ask; the Check button
+//!   (`?check=1`) may ask again after 2 s. Failures are remembered for the same time, so a computer that
+//!   does not answer is not asked again and again.
 //! * One request is 3 s at most (connect, answer and body together), a redirect is never followed,
 //!   and an answer larger than its cap (16 KiB health, 256 KiB setlist or song) is refused. The
 //!   waveform is never asked for.
@@ -268,6 +273,34 @@ impl SetlistAsk {
     }
 }
 
+/// The loaded plan's songs as the pairing reads them. The one place a plan becomes `PlanTitle`s, so the
+/// window's matchup and the song order are decided from exactly the same input.
+pub fn plan_titles(plan: &ServicePlan) -> Vec<PlanTitle> {
+    plan.songs
+        .iter()
+        .map(|song| PlanTitle {
+            key: song
+                .source_song_id
+                .clone()
+                .unwrap_or_else(|| song.id.clone()),
+            title: song.title.clone(),
+            seconds: song.duration_seconds,
+            key_name: song.key_name.clone(),
+        })
+        .collect()
+}
+
+/// What the Library Link says about the setlist Playback has open, for the song order.
+#[derive(Debug, Clone)]
+pub struct OpenSetlist {
+    /// The helper is ready or outdated and can read Playback: it is part of the song order at all.
+    pub in_use: bool,
+    /// The answer is a fresh one, not the last good copy shown while the helper is silent.
+    pub current: bool,
+    /// Playback's open setlist; `None` when it cannot be read or Playback has none open.
+    pub setlist: Option<ParsedSetlist>,
+}
+
 /// One kind of answer with its throttle and its last good copy.
 struct Slot<T> {
     asked: Option<Instant>,
@@ -338,6 +371,10 @@ struct Inner {
     read: Option<ReadMark>,
     /// The loaded plan as the pairing sees it (date and titles): a change means a full read.
     plan_key: String,
+    /// The setlist Playback has open (`/setlists/current`), read for the song order and nothing else
+    /// (`None` inside: Playback has no open setlist), and when it was last read in full.
+    open: Slot<Option<ParsedSetlist>>,
+    open_read: Option<ReadMark>,
 }
 
 struct ReadMark {
@@ -1075,6 +1112,106 @@ impl PlaybackLibrary {
         }
     }
 
+    /// The setlist Playback opened last (`/setlists/current`), which is the one the Playback API plays. It is
+    /// read on its own, apart from the setlist the window matches with the plan (that one may be the
+    /// setlist of another date, chosen by a person): the song order must come from the open one.
+    ///
+    /// The helper is asked no more often than the rest: `/health` at most every 30 s, the setlist only
+    /// when the helper's `library_revision` is new or 10 minutes have passed (a helper that sends no
+    /// revision is read each time). Nothing is asked when no Playback computer is saved.
+    pub async fn open_setlist(&self, settings: &PlaybackLibrarySettings) -> OpenSetlist {
+        self.open_setlist_inner(settings, false).await
+    }
+
+    /// The same, read fresh: the health, the open setlist and its songs are asked now, whatever the
+    /// 30 s gap or an unchanged `library_revision` would have said. This is what a person's press on
+    /// "Scan Playback Songs" and the connection made at start-up cause. The next window that asks
+    /// for the plan reads it in full too.
+    pub async fn open_setlist_fresh(&self, settings: &PlaybackLibrarySettings) -> OpenSetlist {
+        self.open_setlist_inner(settings, true).await
+    }
+
+    async fn open_setlist_inner(
+        &self,
+        settings: &PlaybackLibrarySettings,
+        fresh: bool,
+    ) -> OpenSetlist {
+        let none = OpenSetlist {
+            in_use: false,
+            current: false,
+            setlist: None,
+        };
+        let Some(base) = base_url(&settings.address) else {
+            return none;
+        };
+        let mut inner = self.inner.lock().await;
+        if fresh {
+            // Forget when anything was last asked: every answer below is read again.
+            inner.health.asked = None;
+            inner.open.asked = None;
+            inner.open_read = None;
+            inner.setlist.asked = None;
+            inner.read = None;
+        }
+        let status = self.status_locked(&mut inner, settings, &base, false).await;
+        if !status.active {
+            return none;
+        }
+        if status.state != LibraryState::Ready {
+            return OpenSetlist {
+                in_use: true,
+                current: !status.stale,
+                setlist: None,
+            };
+        }
+        if inner.open.due(MIN_REFRESH, self.now()) {
+            let revision = match &inner.health.last {
+                Some(Ok(health)) => Some(health.library_revision.clone()),
+                _ => None,
+            };
+            if let Some(revision) = revision {
+                let unchanged = matches!(&inner.open.last, Some(Ok(_)))
+                    && matches!((&inner.open_read, &revision), (Some(mark), Some(now))
+                        if mark.revision.as_ref() == Some(now)
+                            && self.now().saturating_duration_since(mark.at) < SAFETY_NET);
+                if unchanged {
+                    inner.open.touch(self.now());
+                } else {
+                    let answer = tokio::time::timeout(REFRESH_BUDGET, self.fetch_open(&base))
+                        .await
+                        .unwrap_or(Err(Failure::NoAnswer));
+                    let good = answer.is_ok();
+                    inner.open.record(answer, self.now());
+                    inner.open_read = good.then(|| ReadMark {
+                        at: self.now(),
+                        revision,
+                    });
+                }
+            }
+        }
+        match inner.open.shown(self.now()) {
+            Ok((setlist, stale, _)) => OpenSetlist {
+                in_use: true,
+                current: !stale && !status.stale,
+                setlist,
+            },
+            Err(_) => OpenSetlist {
+                in_use: true,
+                current: true,
+                setlist: None,
+            },
+        }
+    }
+
+    async fn fetch_open(&self, base: &str) -> Result<Option<ParsedSetlist>, Failure> {
+        match self.get(base, "/setlists/current", BODY_CAP).await? {
+            (200, value) => parse_setlist(&value).map(Some).ok_or(Failure::Unreadable),
+            // Nothing is open, or the library cannot be read yet: there is no setlist to use.
+            (404 | 503, _) => Ok(None),
+            (other, _) => Err(Failure::Status(other)),
+        }
+    }
+
     /// The loaded plan paired with Playback's setlist for the plan's date.
     pub async fn plan(
         &self,
@@ -1110,19 +1247,7 @@ impl PlaybackLibrary {
         if plan.songs.is_empty() {
             return empty(LibraryState::Ready, None);
         }
-        let titles: Vec<PlanTitle> = plan
-            .songs
-            .iter()
-            .map(|song| PlanTitle {
-                key: song
-                    .source_song_id
-                    .clone()
-                    .unwrap_or_else(|| song.id.clone()),
-                title: song.title.clone(),
-                seconds: song.duration_seconds,
-                key_name: song.key_name.clone(),
-            })
-            .collect();
+        let titles = plan_titles(plan);
         // One ask at a time: a second window waits here and then reads what the first one learned.
         let mut inner = self.inner.lock().await;
         let status = self.status_locked(&mut inner, settings, &base, check).await;

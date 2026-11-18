@@ -25,6 +25,8 @@ import { PLAN_IDLE_MS, type PlanRunMemory } from "./planProgress";
  * before the first service) covers both, and while the plan is going nothing is listed, so no second reminder is ever raised
  * in the middle of a service.
  *
+ * An order saved from the Library Link is never reminded about while it is in use (`order_source` library, no `order_library_note`).
+ *
  * A scan that is out of date for another reason (the setlist or the plan changed, or there is no order at all) already has its
  * own blocking notice (`playbackOrderNotice`); then this row stays away, so the same cause is never listed twice.
  */
@@ -166,6 +168,9 @@ export function scanReminderDue({ now, plan, timeZone, playback, songRunning = f
   if (!playback.enabled || !playback.connected || playback.active_source !== "playback_api") return null;
   if (songRunning || playback.playing || playback.discovery === "running") return null;
   if (playbackOrderNotice(playback)) return null; // its own notice already says the scan is out of date
+  // An order the Library Link made is kept current by the Library Link itself: it reads Playback's setlist as it changes, so there is nothing
+  // to scan. It stays quiet while the Library Link's order is in use; when that stops (its line says why), the reminder applies as for a scan.
+  if (playback.order_source === "library" && !playback.order_library_note) return null;
   const starts = serviceStartsMs(plan, timeZone);
   const memory = run && (!plan.id || run.planId === plan.id) ? run : null; // memory of another plan says nothing about this one
   if (planGoing(now, starts, plan.songs, memory)) return null;

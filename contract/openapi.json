@@ -3178,6 +3178,21 @@
       ],
       "title": "Lengths Measured At"
      },
+     "order_source": {
+      "anyOf": [
+       {
+        "enum": [
+         "scan",
+         "library"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Order Source"
+     },
      "planning_center_update_service_type_id": {
       "anyOf": [
        {
@@ -3712,6 +3727,17 @@
       ],
       "title": "Lengths Measured At"
      },
+     "order_library_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Order Library Note"
+     },
      "order_mode": {
       "default": "none",
       "title": "Order Mode",
@@ -3727,6 +3753,11 @@
        }
       ],
       "title": "Order Note"
+     },
+     "order_source": {
+      "default": "none",
+      "title": "Order Source",
+      "type": "string"
      },
      "plan_changed": {
       "default": false,

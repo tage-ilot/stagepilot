@@ -164,6 +164,12 @@ pub struct PlaybackStatusResponse {
     pub song_order: Vec<i64>,
     /// `scanned`, `learned` or `none`: where the Playback song -> plan song pairing comes from.
     pub order_mode: String,
+    /// `library`, `scan`, `learned` or `none`: who made the order the pairing is read from. A
+    /// scanned order is `scan` or `library` (the Library Link's setlist saved by StagePilot itself).
+    pub order_source: String,
+    /// Why the Library Link's order is not in use, as one plain line; information only. Null when it is
+    /// in use, when no Library Link is in use, or when nothing was decided yet.
+    pub order_library_note: Option<String>,
     pub learned_songs: Vec<LearnedSongModel>,
     pub order_note: Option<String>,
     pub song_lengths: Vec<Option<f64>>,

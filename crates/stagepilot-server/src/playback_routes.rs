@@ -26,6 +26,8 @@ use stagepilot_playback::find::DiscoverySource;
 use stagepilot_playback::plugin::{PlaybackError, LOCAL_NETWORK_SETTINGS_URL};
 use std::sync::Arc;
 
+use crate::playback_order::Pressed;
+
 type Rt = Arc<Runtime>;
 
 /// What Python answers (503) when Planning Center failed for a reason the operator cannot fix.
@@ -45,6 +47,10 @@ pub fn routes() -> Router<Rt> {
         .route(
             "/api/v1/playback-api/discover-song-order/cancel",
             post(cancel_discover),
+        )
+        .route(
+            "/api/v1/playback-api/song-order/refresh-from-library",
+            post(refresh_from_library),
         )
         .route(
             "/api/v1/playback-api/planning-center-lengths/categories",
@@ -753,6 +759,8 @@ fn status_json(rt: &Runtime) -> Value {
         song_count: song_order.len() as u32,
         song_order,
         order_mode: order_mode.as_str().to_string(),
+        order_source: rt.playback.order_source().to_string(),
+        order_library_note: rt.playback.library_note(),
         learned_songs: learned
             .iter()
             .map(|l| LearnedSongModel {
@@ -955,6 +963,29 @@ async fn discover(State(rt): State<Rt>, body: Bytes) -> Json {
     match rt.playback.discover_song_order().await {
         Ok(()) => ok(status_json(&rt)),
         Err(error) => failure(error, 409),
+    }
+}
+
+/// Rust-only: "Scan Playback Songs" when the Library Link works. Reads the Library Link fresh instead of
+/// stepping through Playback (nothing is selected, sought or played, so it works while a song plays), decides
+/// with the same five conditions as the automatic order and saves it as the library's, over an older scan too.
+/// Answers the Playback status: `order_source` `library` and no `order_library_note` when it was read, or the
+/// plain reason in `order_library_note` when a condition fails (nothing is changed then). A Library Link that
+/// cannot be used answers 409 with one plain sentence, and the caller scans through Playback instead.
+async fn refresh_from_library(State(rt): State<Rt>) -> Json {
+    if rt.playback.discovery_snapshot().state.as_str() == "running" {
+        return http_error(409, "Wait for the Playback song scan to finish.");
+    }
+    match crate::playback_order::refresh_from_library(&rt).await {
+        Pressed::Read | Pressed::NotUsed => ok(status_json(&rt)),
+        Pressed::Unavailable => http_error(
+            409,
+            "The Library Link is not ready, so the song order cannot be read from it.",
+        ),
+        Pressed::Busy => http_error(
+            409,
+            "StagePilot could not save the song order just now. Try again in a moment.",
+        ),
     }
 }
 

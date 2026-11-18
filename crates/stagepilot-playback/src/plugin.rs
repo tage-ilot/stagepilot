@@ -26,13 +26,16 @@ use crate::find::{
     scan_network, CancelToken, ScanCandidate, ScanHooks, ScanOutcome, ScanReport, SystemNetwork,
     DEFAULT_TIMEOUT, SCAN_BLOCK_DETAIL,
 };
+use crate::library_order::LibraryOrder;
 use crate::mapping::{LearnedSong, Mapper, Observation, OrderMode, Plan};
 use crate::normalizer::{Heartbeat, PlaybackEvent, SetlistId};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use stagepilot_core::bus::EventBus;
-use stagepilot_core::config::{MidiSource, PlaybackApiSettings, SetlistId as CfgSetlistId};
+use stagepilot_core::config::{
+    MidiSource, OrderSource, PlaybackApiSettings, SetlistId as CfgSetlistId,
+};
 use stagepilot_core::events::{new_event, EventPayload, EventType, Integration};
 use stagepilot_core::plugin::Plugin;
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
@@ -430,6 +433,8 @@ struct Shared {
     discovery_error: Option<String>,
     discovery_cancel: CancelToken,
     discovery_abort: Option<tokio::task::AbortHandle>,
+    /// Why the Library Link's order is not in use, as one plain line (information only).
+    library_note: Option<String>,
 }
 
 struct Inner {
@@ -556,6 +561,7 @@ impl PlaybackPlugin {
             discovery_error: None,
             discovery_cancel: CancelToken::new(),
             discovery_abort: None,
+            library_note: None,
         }));
         let mut dispatcher = ArbitratedDispatcher::new(
             arbiter.clone(),
@@ -651,6 +657,55 @@ impl PlaybackPlugin {
             s.mapper.learned_songs(),
             s.mapper.learned_note(plan_songs),
         )
+    }
+
+    /// Where the saved order came from, for the status: `library`, `scan`, `learned` or `none`. A
+    /// saved order with no recorded source is a scan.
+    pub fn order_source(&self) -> &'static str {
+        let s = lock(&self.inner.shared);
+        match s.mapper.order_mode() {
+            OrderMode::Scanned => match s.config.order_source {
+                Some(OrderSource::Library) => "library",
+                _ => "scan",
+            },
+            OrderMode::Learned => "learned",
+            OrderMode::None => "none",
+        }
+    }
+
+    /// The one plain line saying why the Library Link's order is not used, when it is not.
+    pub fn library_note(&self) -> Option<String> {
+        lock(&self.inner.shared).library_note.clone()
+    }
+
+    pub fn set_library_note(&self, note: Option<String>) {
+        lock(&self.inner.shared).library_note = note;
+    }
+
+    /// What the Library Link's order is decided from on the Playback side: whether the API is
+    /// connected, its latest heartbeat and whether it is still loading a setlist.
+    pub fn library_evidence(&self) -> (bool, Option<Heartbeat>, bool) {
+        let connected = self
+            .inner
+            .with_arbiter(|a| a.snapshot().playback_api.connected);
+        let s = lock(&self.inner.shared);
+        (connected && s.active, s.heartbeat, s.loading_setlist)
+    }
+
+    /// The skips saved in Song arrangement (Playback songs by number, plan songs by id): the pairing the
+    /// countdown uses is read with them.
+    pub fn saved_skips(&self) -> (Vec<i64>, Vec<String>) {
+        let s = lock(&self.inner.shared);
+        (
+            s.config.skipped_song_ids.clone(),
+            s.config.skipped_plan_song_ids.clone(),
+        )
+    }
+
+    /// The API is selected, enabled and has a client: the only time an order is worth deciding.
+    pub fn wants_library_order(&self) -> bool {
+        let s = lock(&self.inner.shared);
+        s.midi_source == MidiSource::PlaybackApi && s.config.enabled
     }
 
     pub fn mapper_stale(&self) -> bool {
@@ -794,6 +849,7 @@ impl PlaybackPlugin {
         settings.playback_api.planning_center_update_service_type_id =
             saved.planning_center_update_service_type_id.clone();
         settings.playback_api.scan_plan_key = saved.scan_plan_key.clone();
+        settings.playback_api.order_source = saved.order_source;
         settings.playback_api.lengths_applied_key = saved.lengths_applied_key.clone();
         options_of(&settings.playback_api, true)
             .validate()
@@ -861,6 +917,87 @@ impl PlaybackPlugin {
             return conflict("Wait for Discover Song Order before changing inputs.");
         }
         self.inner.reconfigure_locked(self.inner.effective()).await
+    }
+
+    // ---- the Library Link's order -----------------------------------------------------------
+
+    /// Save the Library Link's order the way a finished scan is saved (`order_source` `library`).
+    /// Returns whether anything was written. Nothing is written, and `Ok(false)` comes back, when:
+    /// * a scan or an update is running, or Playback is playing (tried again at the next look);
+    /// * the API no longer says what the order was decided from (its setlist version, or a selected
+    ///   song that is in the order);
+    /// * a person's own scan still stands: the plan and the API's setlist version are the ones the
+    ///   scan was made for;
+    /// * the order, lengths, version, plan and setlist already saved are exactly these.
+    pub async fn apply_library_order(&self, wanted: &LibraryOrder) -> Result<bool, PlaybackError> {
+        Ok(self.save_library_order(wanted, false).await? == LibrarySave::Written)
+    }
+
+    /// A person pressed "Scan Playback Songs" and the Library Link works: the same save as
+    /// `apply_library_order`, except that it also replaces an order a scan made (the press asks for exactly
+    /// this) and that it does not wait for Playback to stop: nothing is stepped, so a song that is playing is
+    /// not disturbed. The order, lengths and version of a song order that already is the library's are not
+    /// written again.
+    pub async fn apply_library_order_on_request(
+        &self,
+        wanted: &LibraryOrder,
+    ) -> Result<LibrarySave, PlaybackError> {
+        self.save_library_order(wanted, true).await
+    }
+
+    async fn save_library_order(
+        &self,
+        wanted: &LibraryOrder,
+        on_request: bool,
+    ) -> Result<LibrarySave, PlaybackError> {
+        let inner = &self.inner;
+        let _life = inner.lifecycle.lock().await;
+        if inner.check_idle().is_err() {
+            return Ok(LibrarySave::Declined);
+        }
+        let heartbeat = lock(&inner.shared).heartbeat;
+        let still_true = heartbeat.is_some_and(|h| {
+            (on_request || !h.playing)
+                && h.setlist_version == Some(wanted.version)
+                && wanted.order.contains(&h.song_id)
+        });
+        if !still_true || wanted.order.len() != wanted.lengths.len() {
+            return Ok(LibrarySave::Declined);
+        }
+        let plan = inner.store.snapshot().plan;
+        let key = inner.scan_key(plan.as_ref());
+        let setlist_id = inner.status().setlist_id.as_ref().map(to_cfg);
+        let config = lock(&inner.shared).config.clone();
+        if !config.song_order.is_empty() {
+            let source = config.order_source.unwrap_or(OrderSource::Scan);
+            let same_plan = match (&config.scan_plan_key, &key) {
+                (Some(saved), Some(now)) => saved == now,
+                _ => true,
+            };
+            let same_version = config.captured_version == Some(wanted.version);
+            if !on_request && source == OrderSource::Scan && same_plan && same_version {
+                return Ok(LibrarySave::Declined);
+            }
+            if source == OrderSource::Library
+                && same_plan
+                && same_version
+                && config.song_order == wanted.order
+                && config.song_lengths == wanted.lengths
+                && config.setlist_id == setlist_id
+            {
+                return Ok(LibrarySave::AlreadySaved);
+            }
+        }
+        inner
+            .install_captured(Captured {
+                order: wanted.order.clone(),
+                lengths: wanted.lengths.clone(),
+                version: wanted.version,
+                source: OrderSource::Library,
+                duration: None,
+            })
+            .map_err(PlaybackError::Save)?;
+        Ok(LibrarySave::Written)
     }
 
     // ---- scanning ---------------------------------------------------------------------------
@@ -1679,23 +1816,39 @@ impl Inner {
         done: crate::discovery::DiscoveryOutcome,
         started: Instant,
     ) -> Result<(), String> {
+        self.install_captured(Captured {
+            order: done.order,
+            lengths: done.lengths,
+            version: done.version,
+            source: OrderSource::Scan,
+            duration: Some(started.elapsed().as_secs_f64()),
+        })
+    }
+
+    /// Save a song order and its lengths and install the order in the mapper. The one place that
+    /// does it: a finished scan and the Library Link's order are saved the same way, field for field,
+    /// and differ only in `order_source` (and the scan's duration, which the library has none of).
+    fn install_captured(&self, captured: Captured) -> Result<(), String> {
         let status = self.status();
         let plan = self.store.snapshot().plan;
         let key = self.scan_key(plan.as_ref());
         let mut config = lock(&self.shared).config.clone();
         config.scan_plan_key = key;
-        config.song_order = done.order.clone();
-        config.captured_version = Some(done.version);
+        config.song_order = captured.order.clone();
+        config.captured_version = Some(captured.version);
         config.setlist_id = status.setlist_id.as_ref().map(to_cfg);
         config.captured_at = Some(Utc::now());
-        config.song_lengths = done.lengths.clone();
-        config.discovery_duration_seconds = Some(started.elapsed().as_secs_f64());
+        config.song_lengths = captured.lengths.clone();
+        config.discovery_duration_seconds = captured.duration;
         config.lengths_measured_at = Some(Utc::now());
+        config.order_source = Some(captured.source);
         // A new setlist has new Playback song ids. A saved skip that is not in the scanned order
         // can never match a song again, and it would make every later arrangement save fail with
         // "A skipped Playback song is not in the scanned song order."
         let kept = config.skipped_song_ids.len();
-        config.skipped_song_ids.retain(|id| done.order.contains(id));
+        config
+            .skipped_song_ids
+            .retain(|id| captured.order.contains(id));
         if config.skipped_song_ids.len() != kept {
             config.lengths_applied_key = None;
         }
@@ -1703,10 +1856,10 @@ impl Inner {
             .map_err(|e| e.to_string())?;
         let mut s = lock(&self.shared);
         s.config = config.clone();
-        s.discovery_total = done.order.len();
+        s.discovery_total = captured.order.len();
         s.mapper.install_order(
-            &done.order,
-            done.version,
+            &captured.order,
+            captured.version,
             config.setlist_id.as_ref().map(from_cfg),
         )?;
         s.mapper.set_skips(&[], &config.skipped_plan_song_ids);
@@ -1714,6 +1867,27 @@ impl Inner {
         s.mapper.observe(heartbeat, &[], None);
         Ok(())
     }
+}
+
+/// What saving the Library Link's order came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibrarySave {
+    /// The order was written.
+    Written,
+    /// The saved order is already exactly this one; nothing was written.
+    AlreadySaved,
+    /// Not written: a scan or an update is running, the API no longer says what the order was decided from,
+    /// or a person's own scan still stands.
+    Declined,
+}
+
+/// A song order on its way to being saved.
+struct Captured {
+    order: Vec<i64>,
+    lengths: Vec<Option<f64>>,
+    version: i64,
+    source: OrderSource,
+    duration: Option<f64>,
 }
 
 // ---------------------------------------------------------------------------------------------

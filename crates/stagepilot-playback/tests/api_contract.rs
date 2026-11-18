@@ -174,6 +174,8 @@ fn the_status_response_matches_openapi() {
         discovery_total: 0,
         song_order: vec![],
         order_mode: "none".into(),
+        order_source: "none".into(),
+        order_library_note: None,
         learned_songs: vec![],
         order_note: None,
         song_lengths: vec![],
