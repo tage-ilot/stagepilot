@@ -133,8 +133,14 @@ async fn every_call_of_the_trait_works_through_the_real_helper() {
     );
     assert_eq!(info.libraries, ["Playback", "Songs"]);
     assert!(info.data_folder_exists);
-    assert!(!info.can_import, "this is not a Mac");
-    assert!(info.import_blocker.unwrap().contains("Mac"));
+    if cfg!(target_os = "macos") {
+        // A Mac is where the helper CAN drive ProPresenter on screen (a CI Mac even has the screen permission), so only what
+        // the helper says about itself is checked here; the on-screen calls are never made from a test.
+        assert_eq!(info.os, "macOS");
+    } else {
+        assert!(!info.can_import, "this is not a Mac");
+        assert!(info.import_blocker.unwrap().contains("Mac"));
+    }
 
     std::fs::write(helper.lib("Songs").join("Original (1).pro"), song(4242)).unwrap();
     let listed = host.list_library("Songs").await.unwrap();
@@ -193,11 +199,15 @@ async fn every_call_of_the_trait_works_through_the_real_helper() {
     for bad in ["..", "a/b", "%2e%2e"] {
         assert!(host.list_library(bad).await.is_err(), "{bad}");
     }
-    assert!(matches!(
-        host.search_import("12345", "New Song", None).await,
-        Err(LinkError::CannotImport(_))
-    ));
-    assert!(!host.select_library("Playback").await.unwrap().tried);
+    if !cfg!(target_os = "macos") {
+        // Off a Mac the helper cannot reach the screen, so both calls end at once; on a Mac they would click in a real
+        // ProPresenter, which a test never does.
+        assert!(matches!(
+            host.search_import("12345", "New Song", None).await,
+            Err(LinkError::CannotImport(_))
+        ));
+        assert!(!host.select_library("Playback").await.unwrap().tried);
+    }
 }
 
 #[tokio::test]
