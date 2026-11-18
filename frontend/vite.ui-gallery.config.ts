@@ -16,5 +16,6 @@ export default defineConfig({
       }), autoprefixer()],
     },
   },
-  build: { outDir: "dist-gallery", rollupOptions: { input: "ui-gallery.html" } },
+  // The section gallery (`npm run build:gallery`) writes to the same folder: neither build empties it.
+  build: { outDir: "dist-gallery", emptyOutDir: false, rollupOptions: { input: "ui-gallery.html" } },
 });

@@ -84,7 +84,7 @@ describe("ProPresenterLinkBlock: this computer or another one", () => {
 
   it("another computer: the button Set up the ProPresenter computer opens the box (open by default while not set up)", async () => {
     block(helperStatus("not_installed"));
-    const button = disclosure(/Set up the ProPresenter computer/);
+    const button = disclosure(/Presenter Link setup/);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("propresenter-install")).toBeVisible();
     expect(screen.queryByTestId("propresenter-link-local")).toBeNull();
@@ -95,7 +95,7 @@ describe("ProPresenterLinkBlock: this computer or another one", () => {
 
   it("another computer, ready: the setup box is closed (the button is still there for another computer)", () => {
     block(helperStatus("ready"));
-    expect(disclosure(/Set up the ProPresenter computer/)).toHaveAttribute("aria-expanded", "false");
+    expect(disclosure(/Presenter Link setup/)).toHaveAttribute("aria-expanded", "false");
   });
 
   it("an outdated Link: the button is Update the Presenter Link; one that StagePilot updates by itself needs no command and says so", () => {
@@ -104,7 +104,7 @@ describe("ProPresenterLinkBlock: this computer or another one", () => {
     unmount();
     block(helperStatus("outdated", { update: { mode: "automatic", version: "0.1.0", message: "StagePilot updates the Presenter Link by itself when nothing is playing." } }));
     expect(screen.getByTestId("propresenter-link-update")).toHaveTextContent("StagePilot updates the Presenter Link by itself when nothing is playing.");
-    expect(disclosure(/Set up the ProPresenter computer/)).toHaveAttribute("aria-expanded", "false");
+    expect(disclosure(/Presenter Link setup/)).toHaveAttribute("aria-expanded", "false");
   });
 
   it("the box makes the command only when its button is pressed", async () => {
@@ -154,10 +154,11 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
   });
   const withFields = (connection: ProPresenterConnectionFields, status: LinkStatus | null = helperStatus("ready")) => render(<ProPresenterLinkBlock connection={connection} link={linkController(status)} propresenter={presentation()} />);
 
-  it("draws Host, Port and Test connection under the two status lines and above the setup box; without `connection` it draws none of them", () => {
+  it("draws Host, Port and Test connection above the status line and the setup box; without `connection` it draws none of them", () => {
     withFields(fields(), helperStatus("not_installed"));
     const row = screen.getByTestId("propresenter-live-link-line");
-    expect(screen.getByTestId("propresenter-live-link-sub").compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The connection row is on top (DOM order changed on purpose: it used to sit under the status lines).
+    expect(row.compareDocumentPosition(screen.getByTestId("propresenter-live-link-sub")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(row.compareDocumentPosition(screen.getByTestId("propresenter-install")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(row).getByLabelText("Host")).toHaveValue("192.168.1.60");
     expect(within(row).getByLabelText("Port")).toHaveValue("1025");
