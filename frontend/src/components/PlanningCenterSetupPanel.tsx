@@ -10,6 +10,8 @@ import type {
   PlanningCenterTestInput,
   SettingsResponse,
 } from "../types";
+import type { ServicePlanChoice } from "../hooks/useServicePlanChoice";
+import { ServicePlanPicker } from "./ServicePlanPicker";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Disclosure } from "./ui/Disclosure";
@@ -154,6 +156,8 @@ export function PlanningCenterSetupPanel({
   onSave,
   onReload,
   onSelectPlan,
+  servicePlanChoice,
+  canOperate = true,
   onSignInOAuth,
   onDisconnectOAuth,
 }: {
@@ -177,6 +181,9 @@ export function PlanningCenterSetupPanel({
   ) => void;
   onReload: () => void;
   onSelectPlan: (planId: string) => void;
+  /** The service date picker: which service is loaded and a way to load another one. */
+  servicePlanChoice?: ServicePlanChoice;
+  canOperate?: boolean;
   onSignInOAuth?: () => void;
   onDisconnectOAuth?: () => void;
 }) {
@@ -482,6 +489,16 @@ export function PlanningCenterSetupPanel({
       </div>
 
       <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
+        {servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) && (
+          <div className="mb-5 border-b border-edge-subtle pb-5">
+            <ServicePlanPicker
+              canOperate={canOperate}
+              choice={servicePlanChoice}
+              state={state}
+              timezone={savedTimezone ?? systemTimezone()}
+            />
+          </div>
+        )}
         <div className="service-plan-fields grid gap-4">
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
             <Select

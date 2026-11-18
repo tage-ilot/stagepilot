@@ -17,6 +17,7 @@ import { playbackStatus } from "../test/playbackFixtures";
 import * as api from "../api";
 import { REMOTE_OFFLINE_GRACE_MS } from "../hooks/useRemoteOffline";
 import { LOCAL_CAPABILITIES } from "../access/accessState";
+import type { ServicePlanChoice } from "../hooks/useServicePlanChoice";
 import { Dashboard } from "./Dashboard";
 
 const loadedPlan: ServicePlan = {
@@ -232,7 +233,9 @@ function dashboardElement(
     updater,
     playback,
     capabilities,
+    servicePlanChoice,
   }: {
+    servicePlanChoice?: ServicePlanChoice;
     capabilities?: AccessCapabilities;
     actionMessage?: string | null;
     error?: string | null;
@@ -265,6 +268,7 @@ function dashboardElement(
       refreshMidi={vi.fn()}
       selectMidi={vi.fn()}
       selectPlan={selectPlan}
+      servicePlanChoice={servicePlanChoice}
       settings={settings}
       state={state}
       updater={updater}
@@ -2119,5 +2123,86 @@ describe("Long content and empty lists", () => {
   it("does not show the empty state when the plan has songs", () => {
     renderDashboard(loadedServiceState);
     expect(screen.queryByText("No songs in this service plan yet.")).not.toBeInTheDocument();
+  });
+});
+
+describe("the service date picker's pill in the Service plan header", () => {
+  const choice = (overrides: Partial<ServicePlanChoice> = {}): ServicePlanChoice => ({
+    pending: false,
+    error: null,
+    announcement: "",
+    pick: vi.fn(),
+    back: vi.fn(),
+    ...overrides,
+  });
+  const pinnedState = (extra: Partial<ApplicationState> = {}) =>
+    applicationState(loadedServiceState, {
+      plan: { ...loadedPlan, id: "plan-pinned", title: "Advent Sunday", date: "2026-07-19" },
+      selection: { pinned: true, plan_id: "plan-pinned", date: "2026-07-19" },
+      upcoming: { plan_id: "previous-plan", date: "2026-07-13", title: "Previous Sunday Service" },
+      ...extra,
+    });
+
+  it("says the service is not the upcoming one and goes back from the same place", async () => {
+    const servicePlanChoice = choice();
+    renderDashboard(loadedServiceState, { state: pinnedState(), servicePlanChoice });
+    expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Not the upcoming service: Sun, Jul 19");
+    await userEvent.click(screen.getByRole("button", { name: "Back to upcoming" }));
+    expect(servicePlanChoice.back).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows nothing while the loaded service is the upcoming one", () => {
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, { selection: { pinned: false, plan_id: "previous-plan", date: "2026-07-13" } }),
+      servicePlanChoice: choice(),
+    });
+    expect(screen.queryByTestId("not-upcoming")).not.toBeInTheDocument();
+  });
+
+  it("does not change the Ready or Check system verdict", () => {
+    const { unmount } = renderDashboard(loadedServiceState, { servicePlanChoice: choice() });
+    const plain = screen.getByTestId("header-chip").textContent;
+    unmount();
+    renderDashboard(loadedServiceState, { state: applicationState(loadedServiceState, { selection: { pinned: true, plan_id: "previous-plan", date: "2026-07-13" } }), servicePlanChoice: choice() });
+    expect(screen.getByTestId("not-upcoming-pill")).toBeInTheDocument();
+    expect(screen.getByTestId("header-chip").textContent).toBe(plain);
+    expect(screen.getByTestId("not-upcoming-pill").closest("[data-tone]")).toHaveAttribute("data-tone", "warning");
+  });
+
+  it("is a neutral warning, never the danger colours", () => {
+    renderDashboard(loadedServiceState, { state: pinnedState(), servicePlanChoice: choice() });
+    const pill = screen.getByTestId("not-upcoming-pill");
+    expect(pill.className).toMatch(/warning/);
+    expect(pill.className).not.toMatch(/danger/);
+  });
+
+  it("shows the pill but no button to a session that can only look", () => {
+    renderDashboard(loadedServiceState, {
+      state: pinnedState(),
+      servicePlanChoice: choice(),
+      capabilities: { ...LOCAL_CAPABILITIES, canOperate: false },
+    });
+    expect(screen.getByTestId("not-upcoming-pill")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to upcoming" })).not.toBeInTheDocument();
+  });
+
+  it("shows the one-time note that a pick ended, and Dismiss hides it", async () => {
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, { selection: { pinned: false, plan_id: "previous-plan", date: "2026-07-13", notice: "Back to the upcoming service" } }),
+      servicePlanChoice: choice(),
+    });
+    const note = screen.getByText("Back to the upcoming service");
+    expect(note.closest("[data-tone]")).toHaveAttribute("data-tone", "info");
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Back to the upcoming service")).not.toBeInTheDocument();
+  });
+
+  it("says in the note's own words when the picked plan is gone from Planning Center", () => {
+    const text = "The plan you picked is not in Planning Center any more; back to the upcoming service";
+    renderDashboard(loadedServiceState, {
+      state: applicationState(loadedServiceState, { selection: { pinned: false, plan_id: "previous-plan", date: "2026-07-13", notice: text } }),
+      servicePlanChoice: choice(),
+    });
+    expect(screen.getByText(text)).toBeInTheDocument();
   });
 });

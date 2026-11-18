@@ -91,6 +91,7 @@ fn length_service(
         let playback = playback.clone();
         Arc::new(move || playback.status().heartbeat.is_some_and(|h| h.playing))
     };
+    service.set_pin_keeper(pco.pins.clone());
     service.is_playing = is_playing.clone();
     service.set_write_allowed(Arc::new(move || !is_playing()));
     let current = playback.clone();
@@ -232,15 +233,18 @@ impl Runtime {
         // Registration order is the health order Python reports: lights, services, the Playback
         // input (real MIDI or the Playback API), then ProPresenter.
         register(&plugins, outputs.lights.clone() as Arc<dyn Plugin>);
+        let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
-            let demo = Arc::new(DemoPlugin::with_simulation(
-                bus.clone(),
-                settings.integration_modes.timer_output == TimerOutput::Simulated,
-            ));
+            let demo = Arc::new(
+                DemoPlugin::with_simulation(
+                    bus.clone(),
+                    settings.integration_modes.timer_output == TimerOutput::Simulated,
+                )
+                .with_picker(pco.pins.clone(), store.clone()),
+            );
             outputs.set_demo(demo.clone());
             register(&plugins, demo);
         }
-        let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::PlanningCenter {
             match pco.build_plugin(bus.clone(), store.clone()) {
                 Ok(plugin) => {

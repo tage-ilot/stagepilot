@@ -11,6 +11,9 @@ import {
   saveLightkeySettings,
   selectMidiInput,
   selectPlanningCenterPlan,
+  getUpcomingServicePlans,
+  pinServicePlan,
+  unpinServicePlan,
   simulateMidiCue,
   testLightingCue,
   testPlanningCenter,
@@ -176,6 +179,59 @@ describe("selectPlanningCenterPlan", () => {
         body: JSON.stringify({ plan_id: "plan-evening" }),
       },
     );
+  });
+});
+
+describe("the service date picker routes", () => {
+  const ok = (body: unknown) => vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue(body) });
+
+  it("asks for the upcoming services without caching", async () => {
+    const answer = { plans: [], upcoming_id: null, pinned_id: null, pinned_date: null };
+    const fetchMock = ok(answer);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getUpcomingServicePlans()).resolves.toEqual(answer);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${apiOrigin}/api/v1/planning-center/plans/upcoming`,
+      { cache: "no-store", credentials: "include", headers: { Accept: "application/json" } },
+    );
+  });
+
+  it("pins a service by its plan id", async () => {
+    const fetchMock = ok({ accepted: true, message: "Loaded.", state: {} });
+    vi.stubGlobal("fetch", fetchMock);
+    await pinServicePlan("plan-9");
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${apiOrigin}/api/v1/planning-center/plans/pin`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_id: "plan-9" }),
+      },
+    );
+  });
+
+  it("goes back to the upcoming service with a DELETE", async () => {
+    const fetchMock = ok({ accepted: true, message: "Back.", state: {} });
+    vi.stubGlobal("fetch", fetchMock);
+    await unpinServicePlan();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${apiOrigin}/api/v1/planning-center/plans/pin`,
+      { method: "DELETE", credentials: "include", headers: { Accept: "application/json" } },
+    );
+  });
+
+  it("carries the server's words when a pick is refused", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({ detail: "That service is not in the list of upcoming services." }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(pinServicePlan("nope")).rejects.toMatchObject({
+      status: 409,
+      message: "That service is not in the list of upcoming services.",
+    });
   });
 });
 

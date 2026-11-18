@@ -13,6 +13,7 @@ use chrono::Utc;
 use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use stagepilot_core::events::ActionName;
+use stagepilot_core::service_pin::{PinKeeper, ServicePin, SOURCE_PLANNING_CENTER};
 use stagepilot_core::settings::{PlanningCenterLengthUndo, SettingsService};
 use stagepilot_core::state::{ConnectionStatus, ServicePlan, TimerStatus};
 use stagepilot_core::state_service::StateService;
@@ -152,6 +153,9 @@ pub struct LengthService {
     pub write_allowed: Mutex<Arc<dyn Fn() -> bool + Send + Sync>>,
     pub plan_current: PlanCurrent,
     pub on_applied: Arc<dyn Fn(&str) + Send + Sync>,
+    /// The service the operator picked instead of the upcoming one. The preview follows it, so
+    /// the scanned lengths are matched to the plan StagePilot has loaded.
+    pins: Mutex<Option<Arc<PinKeeper>>>,
     result: Mutex<LengthUpdateResult>,
     lock: tokio::sync::Mutex<()>,
     preview: Mutex<Option<PreviewState>>,
@@ -183,11 +187,24 @@ impl LengthService {
             write_allowed: Mutex::new(Arc::new(move || !playing())),
             plan_current: Arc::new(|| Box::pin(async { true })),
             on_applied: Arc::new(|_| {}),
+            pins: Mutex::new(None),
             result: Mutex::new(LengthUpdateResult::default()),
             lock: tokio::sync::Mutex::new(()),
             preview: Mutex::new(None),
             target_label: Mutex::new(String::new()),
         }
+    }
+
+    pub fn set_pin_keeper(&self, keeper: Arc<PinKeeper>) {
+        *lk(&self.pins) = Some(keeper);
+    }
+
+    /// The picked service in this category that still counts today.
+    fn pinned_plan(&self, category_id: &str, today: chrono::NaiveDate) -> Option<ServicePin> {
+        let keeper = lk(&self.pins).clone()?;
+        keeper
+            .get(SOURCE_PLANNING_CENTER)
+            .filter(|p| !p.is_expired(today) && p.service_type_id.as_deref() == Some(category_id))
     }
 
     pub fn with_reload_timeout(mut self, timeout: Duration) -> Self {
@@ -260,15 +277,39 @@ impl LengthService {
                 .ok_or_else(|| {
                     LengthError::Value("Choose an available Planning Center category.".into())
                 })?;
-            let mut result = client
-                .load_plan_for_date(
-                    &category,
-                    today,
-                    &runtime.timezone,
-                    None,
-                    i64::from(pco.upcoming_lookahead_days),
-                )
-                .await?;
+            let mut result = match self.pinned_plan(&category.id, today) {
+                // The loaded plan is the one the operator picked: that is the plan whose
+                // scanned lengths these are.
+                Some(pin) => match client
+                    .load_plan_for_date(
+                        &category,
+                        pin.date,
+                        &runtime.timezone,
+                        Some(&pin.plan_id),
+                        0,
+                    )
+                    .await
+                {
+                    Err(PcoError::PlanSelection(_))
+                    | Ok(crate::models::PlanDiscoveryResult::NotFound { .. }) => {
+                        return Err(LengthError::Value(
+                            "The service you picked is not in Planning Center any more.".into(),
+                        ))
+                    }
+                    other => other?,
+                },
+                None => {
+                    client
+                        .load_plan_for_date(
+                            &category,
+                            today,
+                            &runtime.timezone,
+                            None,
+                            i64::from(pco.upcoming_lookahead_days),
+                        )
+                        .await?
+                }
+            };
             if let crate::models::PlanDiscoveryResult::Ambiguous { candidates, .. } = &result {
                 if let Some(chosen) = preferred_candidate(&pco, candidates) {
                     let id = chosen.id.clone();

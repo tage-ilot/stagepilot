@@ -233,6 +233,8 @@ impl StateService {
             s.timer = TimerState::default();
             s.last_successful_plan_reload_at = None;
             s.last_action = None;
+            s.selection = None;
+            s.upcoming = None;
         });
     }
 
@@ -721,13 +723,16 @@ impl StateService {
             return Ok(());
         };
         let previous = self.inner.store.snapshot();
+        // Only a reload of the SAME plan keeps the cursor; another service (the operator picked
+        // one) starts at its first song, whatever songs the two plans share.
+        let same_plan = previous.plan.as_ref().is_some_and(|p| p.id == incoming.id);
         let preserved = safe_match(
-            previous.plan.as_ref(),
+            previous.plan.as_ref().filter(|_| same_plan),
             previous.current_song_index,
             incoming,
         );
         let playing = safe_match(
-            previous.plan.as_ref(),
+            previous.plan.as_ref().filter(|_| same_plan),
             previous.playing_song_index,
             incoming,
         );
@@ -735,7 +740,7 @@ impl StateService {
         // id (never by position), falling back to "after the cursor" when it cannot be found.
         let pending_now = self.pending();
         let old_len = previous.plan.as_ref().map_or(0, |p| p.songs.len());
-        let pending_match = if pending_now < old_len {
+        let pending_match = if same_plan && pending_now < old_len {
             safe_match(previous.plan.as_ref(), Some(pending_now), incoming)
         } else {
             None // past the final song: nothing to follow

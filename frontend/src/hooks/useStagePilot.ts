@@ -73,6 +73,7 @@ import { describeError, OFFLINE_SENTENCE } from "../errorText";
 import { usePlaybackInput } from "./usePlaybackInput";
 import { usePlaybackLibrary } from "./usePlaybackLibrary";
 import { useSingleFlight } from "./useSingleFlight";
+import { useServicePlanChoice } from "./useServicePlanChoice";
 
 import { keepUnchanged } from "../lib/keepUnchanged";
 import { useDashboardAccess } from "../access/AccessContext";
@@ -172,6 +173,8 @@ export function useStagePilot() {
         : currentState,
     );
   }, []);
+
+  const servicePlanChoice = useServicePlanChoice(canOperate, applyState);
 
   const loadMidiInputs = useCallback(async () => {
     if (!canConfigure) return;
@@ -1231,6 +1234,7 @@ export function useStagePilot() {
     dispatch,
     retryLoads,
     selectPlan,
+    servicePlanChoice,
     saveGeneralSettings,
     saveMidiSettings,
     testPlanningCenterConnection,

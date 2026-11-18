@@ -13,6 +13,7 @@ use axum::response::{IntoResponse, Response};
 use serde_json::{json, Map, Value};
 use stagepilot_core::config::{ConnectionMethod, ServiceSource};
 use stagepilot_core::events::{new_event, ActionName, EventPayload, EventType};
+use stagepilot_core::service_pin::NOTICE_PIN_VANISHED;
 use stagepilot_core::settings::{PersistentPlanningCenterSettings, UpdateError};
 use stagepilot_core::state::{PluginStatus, ServiceLoadStatus, TimerStatus};
 use stagepilot_pco::errors::PcoError;
@@ -681,30 +682,35 @@ pub async fn pending_selection(State(rt): State<Rt>) -> Response {
     })))
 }
 
+/// `{"plan_id": "..."}` as `PlanSelectionRequest` validates it (unknown keys are ignored).
+fn parse_plan_id(body: &[u8]) -> Result<String, Json> {
+    let mut b = match Body::parse(body) {
+        Ok(b) => b,
+        Err(errors) => return Err(unprocessable(errors)),
+    };
+    let plan_id = b.string("plan_id", 1, Some(128), true);
+    if let Some(id) = &plan_id {
+        if !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            b.errors.push(
+                json!({"type": "string_pattern_mismatch", "loc": ["body", "plan_id"],
+                "msg": "String should match pattern '^[A-Za-z0-9_-]+$'", "input": id,
+                "ctx": {"pattern": "^[A-Za-z0-9_-]+$"}}),
+            );
+        }
+    }
+    if let Err(errors) = b.finish() {
+        return Err(unprocessable(errors));
+    }
+    Ok(plan_id.unwrap_or_default())
+}
+
 pub async fn select_plan(State(rt): State<Rt>, body: Bytes) -> Response {
-    let plan_id = {
-        let mut b = match Body::parse(&body) {
-            Ok(b) => b,
-            Err(errors) => return respond(unprocessable(errors)),
-        };
-        let plan_id = b.string("plan_id", 1, Some(128), true);
-        if let Some(id) = &plan_id {
-            if !id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-            {
-                b.errors.push(
-                    json!({"type": "string_pattern_mismatch", "loc": ["body", "plan_id"],
-                    "msg": "String should match pattern '^[A-Za-z0-9_-]+$'", "input": id,
-                    "ctx": {"pattern": "^[A-Za-z0-9_-]+$"}}),
-                );
-            }
-        }
-        // `PlanSelectionRequest` ignores unknown keys (no `extra="forbid"`).
-        if let Err(errors) = b.finish() {
-            return respond(unprocessable(errors));
-        }
-        plan_id.unwrap_or_default()
+    let plan_id = match parse_plan_id(&body) {
+        Ok(id) => id,
+        Err(response) => return respond(response),
     };
     let current = rt.store.snapshot();
     let is_candidate = current
@@ -757,6 +763,188 @@ pub async fn select_plan(State(rt): State<Rt>, body: Bytes) -> Response {
     }
 }
 
+// ---- the service date picker (arrows, calendar, pin) ----------------------------------------------------------------
+
+/// The running Services source that can offer a picker (Demo or Planning Center).
+fn picker_plugin(rt: &Rt) -> Option<Arc<dyn stagepilot_core::plugin::Plugin>> {
+    rt.plugins
+        .get("demo")
+        .or_else(|| rt.plugins.get(PLUGIN_NAME))
+        .filter(|p| p.plan_picker().is_some())
+}
+
+const NO_SOURCE_MESSAGE: &str = "Services are not connected yet.";
+const NOT_LISTED_MESSAGE: &str = "That service is not in the list of upcoming services.";
+const PASSED_MESSAGE: &str = "That service date has passed.";
+const TIMER_RUNNING_MESSAGE: &str = "Stop the timer before changing the service.";
+const CHANGE_FAILED_MESSAGE: &str = "The service could not be changed. Try again.";
+const BACK_MESSAGE: &str = "Back to the upcoming service.";
+
+/// `GET /planning-center/plans/upcoming`: plans from today on, for the picker. A failure is a
+/// plain message; the loaded plan is never touched.
+pub async fn upcoming_plans(State(rt): State<Rt>) -> Response {
+    let Some(plugin) = picker_plugin(&rt) else {
+        return respond(http_error(503, NO_SOURCE_MESSAGE));
+    };
+    let Some(picker) = plugin.plan_picker() else {
+        return respond(http_error(503, NO_SOURCE_MESSAGE));
+    };
+    match picker.upcoming_plans().await {
+        Ok(list) => respond(ok(to_value(&list))),
+        Err(message) => respond(http_error(503, &message)),
+    }
+}
+
+/// `POST /planning-center/plans/pin {plan_id}`.
+pub async fn pin_plan(State(rt): State<Rt>, body: Bytes) -> Response {
+    let plan_id = match parse_plan_id(&body) {
+        Ok(id) => id,
+        Err(response) => return respond(response),
+    };
+    let _serialised = rt.pco.lock.lock().await;
+    change_selection(&rt, Some(plan_id)).await
+}
+
+/// `DELETE /planning-center/plans/pin`: back to the upcoming service.
+pub async fn unpin_plan(State(rt): State<Rt>) -> Response {
+    let _serialised = rt.pco.lock.lock().await;
+    change_selection(&rt, None).await
+}
+
+/// Pin `wanted` (or clear the pin) and load what the pin now says, through the same
+/// `ServicePlanSelectionRequested` event `select_plan` uses. A change that cannot be loaded
+/// leaves the pin and the loaded plan as they were.
+async fn change_selection(rt: &Rt, wanted: Option<String>) -> Response {
+    let Some(plugin) = picker_plugin(rt) else {
+        return respond(http_error(503, NO_SOURCE_MESSAGE));
+    };
+    let Some(picker) = plugin.plan_picker() else {
+        return respond(http_error(503, NO_SOURCE_MESSAGE));
+    };
+    if rt.store.snapshot().timer.status == TimerStatus::Running {
+        return respond(http_error(409, TIMER_RUNNING_MESSAGE));
+    }
+    let today = picker.today();
+    let previous = picker.pin();
+    let previous_active = previous.clone().filter(|p| !p.is_expired(today));
+
+    // What the pin becomes: a plan to pin, or nothing (Back to upcoming).
+    let mut pin_target = None;
+    if let Some(id) = &wanted {
+        let list = match picker.upcoming_plans().await {
+            Ok(list) => list,
+            Err(message) => return respond(http_error(503, &message)),
+        };
+        let Some(plan) = list.plans.iter().find(|p| &p.id == id) else {
+            return respond(http_error(409, NOT_LISTED_MESSAGE));
+        };
+        if plan.date < today {
+            return respond(http_error(409, PASSED_MESSAGE));
+        }
+        // Picking the upcoming service is the same as going back to it.
+        if list.upcoming_id.as_deref() != Some(id.as_str()) {
+            pin_target = Some(plan.clone());
+        }
+    }
+    let state = rt.store.snapshot();
+    let unchanged = match &pin_target {
+        Some(plan) => {
+            previous_active
+                .as_ref()
+                .is_some_and(|p| p.plan_id == plan.id)
+                && state.plan.as_ref().is_some_and(|p| p.id == plan.id)
+        }
+        None => previous_active.is_none() && state.plan.is_some(),
+    };
+    if unchanged {
+        return respond(ok(json!({
+            "accepted": true,
+            "message": match &pin_target {
+                Some(plan) => format!("Loaded \"{}\".", plan.title),
+                None => BACK_MESSAGE.to_string(),
+            },
+            "state": state,
+        })));
+    }
+    let saved = match &pin_target {
+        Some(plan) => picker.set_pin(plan),
+        None => picker.clear_pin(),
+    };
+    if let Err(message) = saved {
+        return respond(http_error(503, &message));
+    }
+    let event_id = pin_target.as_ref().map_or(String::new(), |p| p.id.clone());
+    let report = rt
+        .bus
+        .publish(new_event(
+            EventType::ServicePlanSelectionRequested,
+            "api",
+            EventPayload::ServicePlanSelection {
+                plan_id: event_id.clone(),
+            },
+        ))
+        .await;
+    let updated = rt.store.snapshot();
+    let loaded = updated.service_load.status;
+    let failure = |detail: &str| {
+        updated
+            .service_load
+            .message
+            .as_deref()
+            .filter(|m| !m.is_empty())
+            .unwrap_or(detail)
+            .to_string()
+    };
+    if !report.failures.is_empty() {
+        let _ = picker.restore_pin(previous);
+        return respond(http_error(503, CHANGE_FAILED_MESSAGE));
+    }
+    match &pin_target {
+        Some(plan) => {
+            let is_loaded = loaded == ServiceLoadStatus::Loaded
+                && updated.plan.as_ref().is_some_and(|p| p.id == plan.id);
+            if is_loaded {
+                return respond(ok(json!({
+                    "accepted": true,
+                    "message": format!("Loaded \"{}\".", plan.title),
+                    "state": updated,
+                })));
+            }
+            let still_pinned = picker.pin().is_some_and(|p| p.plan_id == plan.id);
+            if !still_pinned {
+                // The plan is gone from Planning Center: the source dropped the pin and loaded
+                // the upcoming service, and said so.
+                let notice = updated
+                    .selection
+                    .as_ref()
+                    .and_then(|s| s.notice.clone())
+                    .unwrap_or_else(|| NOTICE_PIN_VANISHED.to_string());
+                return respond(http_error(409, &notice));
+            }
+            // A load that failed leaves the old plan; the old pin stays too.
+            let _ = picker.restore_pin(previous);
+            respond(http_error(
+                503,
+                &failure("Planning Center could not load the selected service."),
+            ))
+        }
+        None => {
+            if loaded == ServiceLoadStatus::Error {
+                let _ = picker.restore_pin(previous);
+                return respond(http_error(
+                    503,
+                    &failure("Planning Center could not load the upcoming service."),
+                ));
+            }
+            respond(ok(json!({
+                "accepted": true,
+                "message": BACK_MESSAGE,
+                "state": updated,
+            })))
+        }
+    }
+}
+
 // ---- live Services source ---------------------------------------------------------------------------------------------
 
 /// Make the running Services plugin match the saved settings. The caller holds `rt.pco.lock`
@@ -781,7 +969,9 @@ pub async fn apply_service_source(rt: &Rt) -> Result<Option<String>, &'static st
         .get("demo")
         .or_else(|| rt.plugins.get(PLUGIN_NAME));
     let new_plugin: Arc<dyn stagepilot_core::plugin::Plugin> = match target {
-        ServiceSource::Demo => Arc::new(DemoPlugin::new(rt.bus.clone())),
+        ServiceSource::Demo => Arc::new(
+            DemoPlugin::new(rt.bus.clone()).with_picker(rt.pco.pins.clone(), rt.store.clone()),
+        ),
         ServiceSource::PlanningCenter => {
             match rt.pco.build_plugin(rt.bus.clone(), rt.store.clone()) {
                 Ok(plugin) => {
@@ -857,4 +1047,12 @@ pub fn router() -> axum::Router<Rt> {
         )
         .route("/api/v1/planning-center/plan-selection", post(select_plan))
         .route("/api/v1/planning-center/plans/select", post(select_plan))
+        .route(
+            "/api/v1/planning-center/plans/upcoming",
+            get(upcoming_plans),
+        )
+        .route(
+            "/api/v1/planning-center/plans/pin",
+            post(pin_plan).delete(unpin_plan),
+        )
 }

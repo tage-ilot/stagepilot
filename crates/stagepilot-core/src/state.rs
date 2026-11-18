@@ -273,6 +273,37 @@ impl ServiceLoadState {
     }
 }
 
+/// Which service is loaded when the operator picked it (the "pin") instead of the upcoming one.
+/// Added after the Python recording, so it is left out unless a service is picked (or a one-time
+/// note is to be shown).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ServiceSelection {
+    /// The operator picked this service instead of the upcoming one.
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub plan_id: Option<String>,
+    #[serde(default)]
+    #[ts(as = "Option<String>")]
+    pub date: Option<NaiveDate>,
+    /// A one-time, neutral note about a pin that ended by itself ("Back to the upcoming
+    /// service"). It stays until the operator picks again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub notice: Option<String>,
+}
+
+/// The service StagePilot would load on its own (the upcoming one), even while another is pinned.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UpcomingService {
+    pub plan_id: String,
+    #[ts(as = "String")]
+    pub date: NaiveDate,
+    pub title: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TimerState {
@@ -353,6 +384,15 @@ pub struct ApplicationState {
     pub recent_errors: Vec<ErrorSummary>,
     pub last_successful_plan_reload_at: Option<DateTime<Utc>>,
     pub last_action: Option<String>,
+    /// The service the operator picked instead of the upcoming one; absent while the upcoming
+    /// one is loaded (and no note is to be shown).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selection: Option<ServiceSelection>,
+    /// The upcoming service (what loads when nothing is pinned), while another one is picked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub upcoming: Option<UpcomingService>,
 }
 
 impl Default for ApplicationState {
@@ -379,6 +419,8 @@ impl Default for ApplicationState {
             recent_errors: Vec::new(),
             last_successful_plan_reload_at: None,
             last_action: None,
+            selection: None,
+            upcoming: None,
         }
     }
 }

@@ -11,6 +11,9 @@ use crate::plugin::{PcoPlugin, TodayProvider};
 use crate::setup::{current_settings, SetupService};
 use stagepilot_core::bus::EventBus;
 use stagepilot_core::credential_guard::GuardedCredentialStore;
+use stagepilot_core::service_pin::{
+    default_service_pin_path, FileServicePinStore, PinKeeper, ServicePinStore,
+};
 use stagepilot_core::settings::{
     CredentialStore, KeyringCredentialStore, MemoryCredentialStore, SettingsService,
 };
@@ -32,6 +35,8 @@ pub struct PcoOptions {
     pub control_plane_origin: Option<String>,
     pub today: Option<TodayProvider>,
     pub plan_cache: Option<Arc<dyn PlanCacheStore>>,
+    /// Where the picked service is kept (`service-pin.json`); in memory for ephemeral instances.
+    pub pin_store: Option<Arc<dyn ServicePinStore>>,
     pub oauth_credentials: Option<Arc<dyn CredentialStore>>,
     pub factory: Option<PcoClientFactory>,
 }
@@ -41,6 +46,9 @@ pub struct PcoRuntime {
     pub setup: SetupService,
     pub factory: PcoClientFactory,
     pub cache: Arc<dyn PlanCacheStore>,
+    /// The service the operator picked instead of the upcoming one; shared by every Services
+    /// source and the song-length preview.
+    pub pins: Arc<PinKeeper>,
     pub today: Option<TodayProvider>,
     pub settings: Arc<SettingsService>,
     /// Serialises connection-changing routes with the live source switch (`reconcile_lock`).
@@ -95,12 +103,22 @@ impl PcoRuntime {
                 ))
             }
         });
+        let pins = PinKeeper::new(options.pin_store.unwrap_or_else(|| {
+            if options.memory_tokens {
+                Arc::new(stagepilot_core::service_pin::MemoryServicePinStore::default())
+            } else {
+                Arc::new(FileServicePinStore::new(default_service_pin_path(
+                    settings.environ(),
+                )))
+            }
+        }));
         let setup = SetupService::new(settings.clone(), factory.clone(), Some(oauth.clone()));
         Arc::new(Self {
             oauth,
             setup,
             factory,
             cache,
+            pins,
             today: options.today,
             settings,
             lock: tokio::sync::Mutex::new(()),
@@ -115,7 +133,7 @@ impl PcoRuntime {
 
     pub fn build_plugin(&self, bus: EventBus, store: StateStore) -> Result<PcoPlugin, PcoError> {
         let timezone = self.settings.effective_runtime_settings().timezone;
-        PcoPlugin::new(
+        let plugin = PcoPlugin::new(
             bus,
             store,
             self.effective(),
@@ -123,7 +141,9 @@ impl PcoRuntime {
             self.factory.clone(),
             self.today.clone(),
             Some(self.cache.clone()),
-        )
+        )?;
+        plugin.set_pin_keeper(self.pins.clone());
+        Ok(plugin)
     }
 
     /// The running plugin, if the Services source is Planning Center and it started.

@@ -10,6 +10,8 @@ import { songClock } from "../lib/songClock";
 import stagepilotIcon from "../assets/stagepilot-icon.png";
 import { HeaderStatusChip } from "./HeaderStatusChip";
 import { useDelayedHover } from "../hooks/useDelayedHover";
+import type { ServicePlanChoice } from "../hooks/useServicePlanChoice";
+import { NotUpcomingPill } from "./NotUpcomingPill";
 import { useRemoteOffline } from "../hooks/useRemoteOffline";
 import { landLogo } from "../startup/logoLanding";
 import type {
@@ -463,6 +465,7 @@ export function Dashboard({
   dispatch,
   retryLoads = () => undefined,
   selectPlan,
+  servicePlanChoice,
   saveGeneralSettings = () => undefined,
   saveMidiSettings = () => undefined,
   testPlanningCenterConnection = () => undefined,
@@ -524,6 +527,8 @@ export function Dashboard({
   dispatch: (action: ActionName) => void;
   retryLoads?: () => void;
   selectPlan: (planId: string) => void;
+  /** Picking a service other than the upcoming one (the service date picker, the "not the upcoming service" pill). */
+  servicePlanChoice?: ServicePlanChoice;
   saveGeneralSettings?: (settings: GeneralSettingsInput) => void;
   saveMidiSettings?: (settings: MidiSettingsInput) => void | boolean | Promise<boolean | void>;
   testPlanningCenterConnection?: (input: PlanningCenterTestInput) => void;
@@ -861,6 +866,9 @@ export function Dashboard({
   const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
   const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
   const [panelDirty, setPanelDirty] = useState(false);
+  // A one-time note about a pick that ended by itself ("Back to the upcoming service"); closing it hides that note.
+  const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
+  const servicePickNotice = state.selection?.notice && state.selection.notice !== dismissedNotice ? state.selection.notice : null;
   const [leaveTarget, setLeaveTarget] = useState<ConnectionPanel | null | undefined>(undefined);
   const discardButton = useRef<HTMLButtonElement>(null);
   const discardOpen = leaveTarget !== undefined;
@@ -1084,6 +1092,8 @@ export function Dashboard({
             onReload={() => dispatch("reload_plan")}
             onSave={savePlanningCenter}
             onSelectPlan={selectPlan}
+            canOperate={canOperate}
+            servicePlanChoice={servicePlanChoice}
             onSignInOAuth={signInPlanningCenterOAuth}
             onTest={testPlanningCenterConnection}
             pendingAction={pendingAction}
@@ -1202,6 +1212,21 @@ export function Dashboard({
               <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
                 {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
               </p>
+              {plan && state.selection?.pinned && (
+                <NotUpcomingPill
+                  canOperate={canOperate && Boolean(servicePlanChoice)}
+                  className="mt-2"
+                  date={plan.date}
+                  onBack={() => servicePlanChoice?.back()}
+                  pending={servicePlanChoice?.pending}
+                />
+              )}
+              {servicePickNotice && (
+                <InlineAlert className="mt-2 flex flex-wrap items-center gap-2" neutral tone="info">
+                  <span>{servicePickNotice}</span>
+                  <Button onClick={() => setDismissedNotice(servicePickNotice)} variant="secondary">Dismiss</Button>
+                </InlineAlert>
+              )}
             </div>
             <div className="text-right">
               <p className="font-pixel !text-sm text-ink-body">{plan?.songs.length ?? 0} songs</p>

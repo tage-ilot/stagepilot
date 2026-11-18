@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Pick another service than the upcoming one: arrows, a calendar, and a "Not the upcoming service" pill.** In the Services section, above the service type, you now see the date and title of the service StagePilot has loaded (`Sun, Nov 22, 2026 - Sunday Service`) with an "Upcoming service" tag when it is the upcoming one. The arrows step to the previous or next service (not day) among the services from today on, and the Calendar button opens a month where the days with a service are marked and the other days are dimmed; it works with the keyboard (arrow keys, Page Up and Page Down for the month, Enter, Escape) and fills the width of a phone. Picking any other service loads it exactly as the upcoming one is loaded (songs, lighting, captures, the ProPresenter timer and the Playback arrangement all follow it) and keeps it: across reloads and restarts, until you change it, until its date has passed (it ends at midnight in your Planning Center time zone and a note says "Back to the upcoming service"), or until the plan is gone from Planning Center (the note says so). While it is picked, a "Not the upcoming service: Sun, Nov 29" pill with a Back to upcoming button sits in the Service plan header and in the Services section; the pill is a neutral warning and never changes Ready or Check system. The choice is kept in its own small file (`service-pin.json`, next to the settings) and is refused while a countdown is running. In the demo (`STAGEPILOT_SERVICE_SOURCE=demo`) there are now six weekly Sunday services to try it with. New routes: `GET /api/v1/planning-center/plans/upcoming`, `POST` and `DELETE /api/v1/planning-center/plans/pin`; while a service is picked the state carries two new fields, `selection` and `upcoming` (they are left out otherwise, so nothing else in the state changes).
+
+### Fixed
+
+- **"Match the Playback lengths to Planning Center" reads the service you picked.** It used to look for the upcoming plan by itself; while another service is picked, the scanned lengths belong to that service, so the preview now reads the same one (or says that it is gone from Planning Center).
+- **Switching to another service no longer keeps the highlighted song of the old one.** A reload of the same service keeps your place; a different service starts at its first song.
+
 ## [2.44.0-rc.1] - 2026-11-17
 
 ### Added
