@@ -437,6 +437,7 @@ fn song(key: &str) -> Song {
         source_song_id: Some(key.into()),
         description: None,
         formatted_duration: None,
+        key_name: None,
     }
 }
 

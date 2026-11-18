@@ -843,6 +843,48 @@ fn extract_songs_skip_reasons_match_python() {
     );
 }
 
+#[test]
+fn the_key_a_plan_names_for_a_song_is_kept_only_when_it_is_short_text() {
+    let make = |id: &str, key: serde_json::Value| {
+        let mut value = item(id, "song", "Song", 1, Some(60), Some("1"));
+        value["attributes"]["key_name"] = key;
+        serde_json::from_value::<ItemResource>(value).unwrap()
+    };
+    let items = [
+        make("a", serde_json::json!("Ab")),
+        make("b", serde_json::json!("  C  ")),
+        make("c", serde_json::Value::Null),
+        make("d", serde_json::json!(7)),
+        make("e", serde_json::json!("a key far too long to be one")),
+        make("f", serde_json::json!("")),
+    ];
+    let keys: Vec<Option<String>> = items
+        .iter()
+        .map(|i| extract_songs(std::slice::from_ref(i)).0[0].key_name.clone())
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            Some("Ab".to_string()),
+            Some("C".to_string()),
+            None,
+            None,
+            None,
+            None
+        ]
+    );
+    // Without the attribute at all the song is as it always was, and says nothing about a key when sent on.
+    let plain =
+        serde_json::from_value::<ItemResource>(item("g", "song", "Song", 1, Some(60), Some("1")))
+            .unwrap();
+    let song = extract_songs(std::slice::from_ref(&plain)).0.remove(0);
+    assert_eq!(song.key_name, None);
+    assert!(serde_json::to_value(&song)
+        .unwrap()
+        .get("key_name")
+        .is_none());
+}
+
 #[tokio::test]
 async fn item_pagination_stays_on_item_endpoint_and_sorts_across_pages() {
     let mock = Mock::start(|r| {

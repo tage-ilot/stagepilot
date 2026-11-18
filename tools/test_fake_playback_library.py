@@ -33,7 +33,7 @@ def serve(*extra, key=KEY):
     if key is not None:
         handle.write(key + "\n")
     handle.close()
-    args = fake.argparse.Namespace(port=0, bind="127.0.0.1", key_file=handle.name, version="0.3.0", old=False, date="2026-11-22")
+    args = fake.argparse.Namespace(port=0, bind="127.0.0.1", key_file=handle.name, version="0.3.0", old=False, date="2026-11-22", no_setlist_on=[])
     for name, value in extra:
         setattr(args, name, value)
     server = fake.Server(("127.0.0.1", 0), fake.Handler)
@@ -107,6 +107,16 @@ class Fake(unittest.TestCase):
         other = json.loads(get(self.base, "/setlists/2026-11-29")[1])
         self.assertEqual([i["title"] for i in other["items"]], ["Battle Belongs"])
         self.assertEqual(get(self.base, "/setlists/not-a-date")[0], 404)
+
+    def test_a_setlist_is_found_by_its_number_and_a_date_can_have_none(self):
+        listed = json.loads(get(self.base, "/setlists")[1])["setlists"]
+        self.assertTrue(all(isinstance(s["setlist_id"], int) and s["songs"] >= 1 for s in listed))
+        by_number = json.loads(get(self.base, "/setlists/20261122")[1])
+        self.assertEqual((by_number["setlist_id"], by_number["performance_date"], len(by_number["items"])), (20261122, "2026-11-22", 6))
+        self.assertEqual(get(self.base, "/setlists/9999")[0], 404)
+        self.server.state.args.no_setlist_on = ["2026-12-06"]
+        self.assertEqual(get(self.base, "/setlists/2026-12-06")[0], 404)
+        self.assertEqual(get(self.base, "/setlists/2026-11-29")[0], 200)
 
     def test_a_song_has_sections_a_cover_and_a_waveform(self):
         item = json.loads(get(self.base, "/setlists/2026-11-22")[1])["items"][0]

@@ -60,10 +60,10 @@ use stagepilot_core::settings::{CredentialStore, MemoryCredentialStore};
 use stagepilot_core::state::ServicePlan;
 use stagepilot_playback::helper_assets::BUNDLED_HELPER_VERSION;
 use stagepilot_playback::library::{
-    apply_detail, health_words, helper_state_for, helper_words, match_plan, parse_health,
-    parse_setlist, HelperState, HelperStatus, LibraryArtwork, LibraryPlan, LibrarySection,
-    LibrarySetlist, LibraryState, LibraryStatus, ParsedSetlist, PlanMatch, PlanTitle,
-    MAX_ARTWORK_BYTES,
+    apply_detail, health_words, helper_state_for, helper_words, match_plan, match_setlist,
+    parse_health, parse_setlist, parse_setlist_list, HelperState, HelperStatus, LibraryArtwork,
+    LibraryPlan, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus, ParsedSetlist,
+    PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -221,13 +221,39 @@ fn usable_key(key: &str) -> bool {
 /// What one ask of `/setlists/<date>` gave.
 #[derive(Debug, Clone)]
 enum Fetched {
-    Setlist(ParsedSetlist),
-    /// Playback has no setlist for the date; `newest` is the one it has most recently.
+    /// The setlist, and Playback's recent setlists for the chooser (read only when one was chosen).
+    Setlist(ParsedSetlist, Vec<LibrarySetlist>),
+    /// Playback has no setlist for the date (or the one chosen is gone); `newest` is the one it has most recently
+    /// and `others` its recent setlists, for the chooser.
     NoSetlist {
         newest: Option<LibrarySetlist>,
+        others: Vec<LibrarySetlist>,
     },
     /// The helper is up and Playback's library cannot be read yet.
     Waiting,
+}
+
+/// Which setlist is asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SetlistAsk {
+    /// The one Playback has for a plan's date (`YYYY-MM-DD`).
+    Date(String),
+    /// One the operator chose, by Playback's own number.
+    Id(i64),
+}
+
+impl SetlistAsk {
+    fn path(&self) -> String {
+        match self {
+            Self::Date(date) => format!("/setlists/{date}"),
+            Self::Id(id) => format!("/setlists/{id}"),
+        }
+    }
+
+    /// What the held answer belongs to; another one means everything is read again.
+    fn key(&self) -> String {
+        self.path()
+    }
 }
 
 /// One kind of answer with its throttle and its last good copy.
@@ -293,7 +319,7 @@ struct Inner {
     base: String,
     health: HealthSlot,
     /// The setlist for one plan date.
-    setlist_date: String,
+    setlist_ask: String,
     setlist: Slot<Fetched>,
     /// When the setlist and its songs were last read in full, and the `library_revision` the helper
     /// had then (none when it sends none).
@@ -433,6 +459,9 @@ pub struct PlaybackLibrary {
     key_gate: std::sync::Mutex<()>,
     /// Seconds since the epoch, for the `X-PBL-Time` header (tests replace it).
     wall: std::sync::Mutex<WallClock>,
+    /// The setlist the operator chose for one plan (the plan's id, Playback's setlist number). In memory only: it
+    /// ends with the program, and it belongs to that plan alone (another plan, or none, ignores it).
+    choice: std::sync::Mutex<Option<(String, i64)>>,
 }
 
 impl Default for PlaybackLibrary {
@@ -470,6 +499,7 @@ impl PlaybackLibrary {
             keys: Arc::new(GuardedCredentialStore::new(credentials)),
             key_gate: std::sync::Mutex::new(()),
             wall: std::sync::Mutex::new(Box::new(system_seconds)),
+            choice: std::sync::Mutex::new(None),
         }
     }
 
@@ -548,6 +578,24 @@ impl PlaybackLibrary {
     pub async fn reset(&self) {
         self.forget();
         *self.inner.lock().await = Inner::default();
+        *self.choice.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+
+    /// The setlist the operator chose for this plan, if any.
+    pub fn chosen_for(&self, plan_id: &str) -> Option<i64> {
+        self.choice
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .filter(|(id, _)| id == plan_id)
+            .map(|(_, setlist)| *setlist)
+    }
+
+    /// Chooses Playback's setlist `setlist_id` for the plan (or, with `None`, goes back to the setlist on the plan's
+    /// date). Kept in memory for this plan only; one choice at a time.
+    pub fn choose(&self, plan_id: &str, setlist_id: Option<i64>) {
+        *self.choice.lock().unwrap_or_else(|p| p.into_inner()) =
+            setlist_id.map(|setlist| (plan_id.to_string(), setlist));
     }
 
     fn now(&self) -> Instant {
@@ -793,29 +841,55 @@ impl PlaybackLibrary {
         })
     }
 
-    /// Reads the setlist for `date`, then each song's own answer for its section count.
-    async fn fetch_setlist(&self, base: &str, date: &str) -> Result<Fetched, Failure> {
-        let (status, value) = self
-            .get(base, &format!("/setlists/{date}"), BODY_CAP)
-            .await?;
+    /// Playback's recent setlists for the chooser; none when the helper cannot say.
+    async fn recent_setlists(&self, base: &str) -> Vec<LibrarySetlist> {
+        match self
+            .get(base, &format!("/setlists?limit={MAX_SETLISTS}"), BODY_CAP)
+            .await
+        {
+            Ok((200, value)) => parse_setlist_list(&value),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Reads the setlist `ask` names (the one on a date, or one the operator chose by number), then each song's own
+    /// answer for its section count.
+    async fn fetch_setlist(&self, base: &str, ask: &SetlistAsk) -> Result<Fetched, Failure> {
+        let (status, value) = self.get(base, &ask.path(), BODY_CAP).await?;
         match status {
             200 => {
                 let mut parsed = parse_setlist(&value).ok_or(Failure::Unreadable)?;
-                if parsed.date.as_deref().is_some_and(|d| d != date) {
-                    // Whatever the helper meant, it is not the setlist of this day.
-                    return Ok(Fetched::NoSetlist {
-                        newest: Some(parsed.summary()),
-                    });
+                if let SetlistAsk::Date(date) = ask {
+                    if parsed.date.as_deref().is_some_and(|d| d != date) {
+                        // Whatever the helper meant, it is not the setlist of this day.
+                        return Ok(Fetched::NoSetlist {
+                            newest: Some(parsed.summary()),
+                            others: self.recent_setlists(base).await,
+                        });
+                    }
+                }
+                if let SetlistAsk::Id(id) = ask {
+                    if parsed.id.is_some_and(|n| n != *id) {
+                        return Ok(Fetched::NoSetlist {
+                            newest: None,
+                            others: self.recent_setlists(base).await,
+                        });
+                    }
                 }
                 self.read_song_details(base, &mut parsed).await;
-                Ok(Fetched::Setlist(parsed))
+                let others = match ask {
+                    SetlistAsk::Id(_) => self.recent_setlists(base).await,
+                    SetlistAsk::Date(_) => Vec::new(),
+                };
+                Ok(Fetched::Setlist(parsed, others))
             }
             404 => {
                 let newest = match self.get(base, "/setlists/latest", BODY_CAP).await {
                     Ok((200, value)) => parse_setlist(&value).map(|p| p.summary()),
                     _ => None,
                 };
-                Ok(Fetched::NoSetlist { newest })
+                let others = self.recent_setlists(base).await;
+                Ok(Fetched::NoSetlist { newest, others })
             }
             503 => Ok(Fetched::Waiting),
             other => Err(Failure::Status(other)),
@@ -872,7 +946,7 @@ impl PlaybackLibrary {
         match fetched {
             Fetched::Waiting => true,
             Fetched::NoSetlist { .. } => false,
-            Fetched::Setlist(parsed) => {
+            Fetched::Setlist(parsed, _) => {
                 let paired: HashSet<i64> = match_plan(titles, &parsed.songs)
                     .iter()
                     .filter(|song| song.status == PlanMatch::Matched)
@@ -905,6 +979,9 @@ impl PlaybackLibrary {
             setlist: None,
             newest: None,
             songs: vec![],
+            playback_only: vec![],
+            chosen: false,
+            setlists: vec![],
             stale: false,
             checked_at: None,
         };
@@ -936,6 +1013,7 @@ impl PlaybackLibrary {
                     .unwrap_or_else(|| song.id.clone()),
                 title: song.title.clone(),
                 seconds: song.duration_seconds,
+                key_name: song.key_name.clone(),
             })
             .collect();
         // One ask at a time: a second window waits here and then reads what the first one learned.
@@ -945,8 +1023,13 @@ impl PlaybackLibrary {
         if !status.active || status.state != LibraryState::Ready {
             return empty(status.state, Some(status.message));
         }
-        if inner.setlist_date != date {
-            inner.setlist_date = date.clone();
+        let chosen = self.chosen_for(&plan.id);
+        let ask = match chosen {
+            Some(id) => SetlistAsk::Id(id),
+            None => SetlistAsk::Date(date.clone()),
+        };
+        if inner.setlist_ask != ask.key() {
+            inner.setlist_ask = ask.key();
             inner.setlist = Slot::default();
             inner.read = None;
         }
@@ -970,7 +1053,7 @@ impl PlaybackLibrary {
             if let Some(revision) = revision {
                 if self.needs_full_read(&inner, revision.as_ref(), &titles) {
                     let answer =
-                        tokio::time::timeout(REFRESH_BUDGET, self.fetch_setlist(&base, &date))
+                        tokio::time::timeout(REFRESH_BUDGET, self.fetch_setlist(&base, &ask))
                             .await
                             .unwrap_or(Err(Failure::NoAnswer));
                     let good = answer.is_ok();
@@ -992,26 +1075,40 @@ impl PlaybackLibrary {
         let stale = stale || status.stale;
         let checked_at = when.map(|t| t.to_rfc3339_opts(SecondsFormat::Secs, true));
         let stale_note = stale.then(|| LOOKED_OLD.to_string());
-        let finish = |state, message, setlist, newest, songs| LibraryPlan {
-            enabled: true,
-            state,
-            message,
-            plan_date: Some(date.clone()),
-            setlist,
-            newest,
-            songs,
-            stale,
-            checked_at: checked_at.clone(),
-        };
+        let finish =
+            |state, message, setlist, newest, songs, playback_only, chosen, setlists| LibraryPlan {
+                enabled: true,
+                state,
+                message,
+                plan_date: Some(date.clone()),
+                setlist,
+                newest,
+                songs,
+                playback_only,
+                chosen,
+                setlists,
+                stale,
+                checked_at: checked_at.clone(),
+            };
         match fetched {
-            Fetched::Setlist(parsed) => finish(
-                LibraryState::Ready,
-                stale_note,
-                Some(parsed.summary()),
-                None,
-                match_plan(&titles, &parsed.songs),
-            ),
-            Fetched::NoSetlist { newest } => {
+            Fetched::Setlist(parsed, others) => {
+                let matched = match_setlist(&titles, &parsed.songs);
+                finish(
+                    LibraryState::Ready,
+                    stale_note,
+                    Some(parsed.summary()),
+                    None,
+                    matched.songs,
+                    matched.playback_only,
+                    chosen.is_some(),
+                    others,
+                )
+            }
+            Fetched::NoSetlist { newest, others } => {
+                // A chosen setlist that Playback no longer has is forgotten: the plan goes back to its date.
+                if chosen.is_some() {
+                    self.choose(&plan.id, None);
+                }
                 let message = match &newest {
                     Some(n) => format!(
                         "Playback has no setlist for {date}; its newest is {} from {}.",
@@ -1020,13 +1117,25 @@ impl PlaybackLibrary {
                     ),
                     None => format!("Playback has no setlist for {date}."),
                 };
-                finish(LibraryState::NoSetlist, Some(message), None, newest, vec![])
+                finish(
+                    LibraryState::NoSetlist,
+                    Some(message),
+                    None,
+                    newest,
+                    vec![],
+                    vec![],
+                    false,
+                    others,
+                )
             }
             Fetched::Waiting => finish(
                 LibraryState::Waiting,
                 Some(NOT_READY.to_string()),
                 None,
                 None,
+                vec![],
+                vec![],
+                false,
                 vec![],
             ),
         }
@@ -1381,6 +1490,7 @@ pub fn routes() -> Router<Rt> {
             "/api/v1/playback-library/songs/{setlist_song_id}/waveform",
             get(waveform),
         )
+        .route("/api/v1/playback-library/setlist", put(choose_setlist))
         .route("/api/v1/playback-library/settings", put(settings))
         .route("/api/v1/playback-library/forget", post(forget))
 }
@@ -1445,6 +1555,35 @@ async fn plan(State(rt): State<Rt>, Query(ask): Query<Ask>) -> Json {
         .await;
     note_in_use(&rt, plan.state == LibraryState::Ready && plan.enabled).await;
     ok(to_json(&plan))
+}
+
+/// `PUT /api/v1/playback-library/setlist` `{setlist_id}`: which Playback setlist the loaded plan is matched with, when
+/// none is on its date. `null` goes back to the setlist on the plan's date. It is remembered in memory for this plan
+/// only (never saved, never sent to Playback or Planning Center) and answers with the plan read again.
+async fn choose_setlist(State(rt): State<Rt>, body: Bytes) -> Json {
+    let value: Option<Value> = serde_json::from_slice(&body).ok();
+    let setlist_id = match value.as_ref().and_then(|v| v.get("setlist_id")) {
+        Some(Value::Null) => None,
+        Some(Value::Number(n)) => match n.as_i64().filter(|n| *n >= 0) {
+            Some(id) => Some(id),
+            None => return http_error(422, "setlist_id must be a whole number."),
+        },
+        _ => {
+            return http_error(
+                422,
+                "Send {\"setlist_id\": the number of a Playback setlist, or null}.",
+            )
+        }
+    };
+    let loaded = rt.store.snapshot().plan;
+    let Some(plan) = loaded.as_ref() else {
+        return http_error(409, "No service plan is loaded.");
+    };
+    rt.playback_library.choose(&plan.id, setlist_id);
+    let settings = effective_settings(&rt);
+    let answer = rt.playback_library.plan(&settings, Some(plan), true).await;
+    note_in_use(&rt, answer.state == LibraryState::Ready && answer.enabled).await;
+    ok(to_json(&answer))
 }
 
 /// `PUT /api/v1/playback-library/settings` `{address}`: the optional override of the helper's computer

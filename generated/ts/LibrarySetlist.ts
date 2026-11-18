@@ -3,7 +3,11 @@
 /**
  * A setlist in a few words.
  */
-export type LibrarySetlist = { title: string, 
+export type LibrarySetlist = { 
+/**
+ * Playback's own number for the setlist (what `/setlists/<id>` takes); null when the helper gave none.
+ */
+id: bigint | null, title: string, 
 /**
  * `YYYY-MM-DD`, the date on the Playback computer.
  */

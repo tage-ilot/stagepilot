@@ -601,6 +601,7 @@ fn song(duration: u32) -> Song {
         source_song_id: Some("song-1".into()),
         description: None,
         formatted_duration: None,
+        key_name: None,
     }
 }
 

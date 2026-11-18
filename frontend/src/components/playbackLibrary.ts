@@ -21,7 +21,7 @@ export const formatLength = (seconds: number): string => {
 
 export interface LibraryNotice {
   id: string;
-  kind: "missing" | "order" | "length" | "rental" | "date";
+  kind: "missing" | "title" | "order" | "length" | "rental" | "date";
   /** An actionable notice goes in the header pill; the rest is information (the chips and the Playback API panel). */
   actionable: boolean;
   text: string;
@@ -33,6 +33,13 @@ const LENGTH_SOURCE_WORDS: Record<LengthSource, string | null> = {
   song_end_no_grid: "Playback has no bar lines for this song, so this is where the song ends.",
   song_end_long_last_measure: "This song's last measure is longer than 6 seconds, so this is where the song ends.",
 };
+
+/** The hover text of a countdown length: which point of the song the countdown ends at, and why when it is the end of the song. */
+export function lengthSourceTitle(song: LibrarySong): string | null {
+  if (song.countdown_length_s === null) return null;
+  const why = song.length_source ? LENGTH_SOURCE_WORDS[song.length_source] : null;
+  return why ?? "StagePilot's countdown for this song ends at the start of its last measure.";
+}
 
 export const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
 
@@ -119,6 +126,12 @@ export function libraryNotices(
   for (const song of library.songs) {
     if (song.status === "missing") {
       ordered.push({ id: `missing:${song.key}:${song.plan_position}`, kind: "missing", actionable: true, text: `${song.title} is not in Playback's setlist.` });
+    }
+    if (song.status === "uncertain" && song.candidate) {
+      ordered.push({
+        id: `title:${song.key}:${song.plan_position}`, kind: "title", actionable: true,
+        text: `${song.title} may be “${song.candidate.title}” in Playback's setlist. Check that they are the same song.`,
+      });
     }
     if (song.library && planRank.get(song) !== playbackRank.get(song)) {
       ordered.push({

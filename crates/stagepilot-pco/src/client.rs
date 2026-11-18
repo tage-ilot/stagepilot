@@ -1200,6 +1200,7 @@ pub fn extract_songs(resources: &[ItemResource]) -> (Vec<Song>, Vec<SkippedPlanI
         song.is_generic = source_song.is_none();
         song.source_song_id = source_song.map(|s| s.id.clone());
         song.description = description;
+        song.key_name = attributes.key_name.clone();
         songs.push(song);
     }
     (songs, skipped)

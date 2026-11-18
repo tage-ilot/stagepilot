@@ -103,6 +103,11 @@ pub struct Song {
     /// Computed from `duration_seconds` (`m:ss`, or `h:mm:ss`); present on every serialised song.
     #[serde(default)]
     pub formatted_duration: Option<String>,
+    /// The key Planning Center names for the song in this plan (its item's `key_name`, e.g. "A" or "Bb"); absent when the
+    /// plan names none. Read-only information for the Playback library matchup: nothing acts on it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<String>")]
+    pub key_name: Option<String>,
 }
 
 pub fn format_duration(duration_seconds: u32) -> String {
@@ -127,6 +132,7 @@ impl Song {
             source_song_id: None,
             description: None,
             formatted_duration: duration_seconds.map(format_duration),
+            key_name: None,
         }
     }
 

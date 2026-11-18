@@ -12,13 +12,13 @@ const playback = (over: Partial<LibrarySong> = {}): LibrarySong => ({
   arrangement: "Default", section_count: 6, sections: [], artwork: null, rental_expires_utc: null, ...over,
 });
 const song = (title: string, position: number, library: Partial<LibrarySong> | null, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
-  key: `k-${title}`, title, plan_position: position, plan_seconds: 300,
-  status: library ? "matched" : "missing",
-  library: library ? playback({ title, position, ...library }) : null, ...over,
+  key: `k-${title}`, title, plan_position: position, plan_seconds: 300, plan_key: null,
+  status: library ? "matched" : "missing", confidence: library ? "exact" : null,
+  library: library ? playback({ title, position, ...library }) : null, candidate: null, ...over,
 });
 const ready = (songs: LibraryPlanSong[], over: Partial<LibraryPlan> = {}): LibraryPlan => ({
   enabled: true, state: "ready", message: null, plan_date: "2026-11-22",
-  setlist: { title: "Set", date: "2026-11-22", songs: songs.length }, newest: null, songs, stale: false, checked_at: null, ...over,
+  setlist: { id: 1, title: "Set", date: "2026-11-22", songs: songs.length }, newest: null, songs, playback_only: [], chosen: false, setlists: [], stale: false, checked_at: null, ...over,
 });
 const texts = (library: LibraryPlan, p = plan) => libraryNotices(library, p, TZ).map((n) => n.text);
 
@@ -109,6 +109,13 @@ describe("the notices", () => {
 
   it("names a plan song that is missing from Playback", () => {
     expect(texts(ready([song("Song One", 1, {}), song("Song Two", 2, null)]))).toEqual(["Song Two is not in Playback's setlist."]);
+  });
+
+  it("asks for a look at an uncertain pair, naming both titles, and treats a close match as a match", () => {
+    const uncertain = song("Way Maker", 1, null, { status: "uncertain", confidence: "uncertain", candidate: playback({ title: "Waymaker" }) });
+    expect(texts(ready([uncertain]))).toEqual(["Way Maker may be “Waymaker” in Playback's setlist. Check that they are the same song."]);
+    expect(libraryNotices(ready([uncertain]), plan, TZ)[0]).toMatchObject({ kind: "title", actionable: true });
+    expect(texts(ready([song("So Much", 1, {}, { confidence: "close" })]))).toEqual([]);
   });
 
   it("names both positions when the order differs, and does not blame the songs after a missing one", () => {

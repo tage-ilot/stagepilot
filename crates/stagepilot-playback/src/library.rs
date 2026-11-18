@@ -223,14 +223,31 @@ pub struct LibrarySong {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum PlanMatch {
-    /// Exactly one song of the plan and exactly one of Playback have this title.
+    /// Exactly one song of the plan and exactly one of Playback have this title (the same words, or the same
+    /// words but for a bracket or a "feat." tail: see `MatchConfidence`).
     Matched,
+    /// The titles are only alike (one starts with the other, or a letter is off): the Playback song is named in
+    /// `candidate`, never used as the song's library.
+    Uncertain,
     /// Playback's setlist has no song with this title.
     Missing,
     /// The plan has this title more than once, so no Playback song can be told apart.
     DuplicateInPlan,
     /// Playback's setlist has this title more than once.
     DuplicateInPlayback,
+}
+
+/// How sure the title match is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum MatchConfidence {
+    /// The same title once case, punctuation, accents, "&" and a "(Live)" ending are set aside.
+    Exact,
+    /// The same title once every bracket and a "feat." tail are also set aside.
+    Close,
+    /// Alike, not the same: shown with both titles for the operator to judge.
+    Uncertain,
 }
 
 /// One plan song, in plan order, with its Playback song when there is exactly one.
@@ -244,14 +261,22 @@ pub struct LibraryPlanSong {
     pub plan_position: u32,
     /// The plan's length for the song in seconds.
     pub plan_seconds: Option<u32>,
+    /// The key the plan names for the song (Planning Center's item key), null when it names none.
+    pub plan_key: Option<String>,
     pub status: PlanMatch,
+    /// How sure the pairing is (`matched` is exact or close; `uncertain` is uncertain); null when unpaired.
+    pub confidence: Option<MatchConfidence>,
     pub library: Option<LibrarySong>,
+    /// The Playback song an `uncertain` pairing is about. Never a source of cover, key or waveform for anything.
+    pub candidate: Option<LibrarySong>,
 }
 
 /// A setlist in a few words.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct LibrarySetlist {
+    /// Playback's own number for the setlist (what `/setlists/<id>` takes); null when the helper gave none.
+    pub id: Option<i64>,
     pub title: String,
     /// `YYYY-MM-DD`, the date on the Playback computer.
     pub date: Option<String>,
@@ -274,6 +299,13 @@ pub struct LibraryPlan {
     pub newest: Option<LibrarySetlist>,
     /// One entry per plan song, in plan order. Empty with no plan or an empty plan.
     pub songs: Vec<LibraryPlanSong>,
+    /// Songs of the chosen setlist that go with no plan song, in Playback's order.
+    pub playback_only: Vec<LibrarySong>,
+    /// True when the operator chose this setlist (it is not the one on the plan's date).
+    pub chosen: bool,
+    /// Playback's other recent setlists, newest first, for the chooser. Given when there is none for the date or
+    /// one was chosen; empty otherwise.
+    pub setlists: Vec<LibrarySetlist>,
     /// True when Playback did not answer just now and this is the last good answer (under a minute old).
     pub stale: bool,
     pub checked_at: Option<String>,
@@ -525,6 +557,7 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
 /// A setlist as the helper gives it (`/setlists/<date>`, `/setlists/latest`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedSetlist {
+    pub id: Option<i64>,
     pub title: String,
     pub date: Option<String>,
     pub songs: Vec<LibrarySong>,
@@ -533,6 +566,7 @@ pub struct ParsedSetlist {
 impl ParsedSetlist {
     pub fn summary(&self) -> LibrarySetlist {
         LibrarySetlist {
+            id: self.id,
             title: self.title.clone(),
             date: self.date.clone(),
             songs: u32::try_from(self.songs.len()).unwrap_or(u32::MAX),
@@ -558,10 +592,34 @@ pub fn parse_setlist(value: &Value) -> Option<ParsedSetlist> {
         .filter_map(|(index, item)| parse_song(item, index))
         .collect();
     Some(ParsedSetlist {
+        id: whole_number(value.get("setlist_id")),
         title: text_of(value, "title").unwrap_or_else(|| "a setlist".to_string()),
         date: date_of(value, "performance_date"),
         songs,
     })
+}
+
+/// Setlists kept from `/setlists` (the chooser offers a handful of the newest).
+pub const MAX_SETLISTS: usize = 30;
+
+/// `/setlists` as the chooser's lines, newest first as the helper sends them. An entry with no number to ask for it by
+/// is left out (it could not be chosen); a missing title is "a setlist"; a song count that is not a number is 0.
+pub fn parse_setlist_list(value: &Value) -> Vec<LibrarySetlist> {
+    let Some(list) = value.get("setlists").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|entry| {
+            let id = whole_number(entry.get("setlist_id"))?;
+            Some(LibrarySetlist {
+                id: Some(id),
+                title: text_of(entry, "title").unwrap_or_else(|| "a setlist".to_string()),
+                date: date_of(entry, "performance_date"),
+                songs: count_of(entry, "songs").unwrap_or(0),
+            })
+        })
+        .take(MAX_SETLISTS)
+        .collect()
 }
 
 /// A section's time: finite, not negative, at most a day.
@@ -711,7 +769,7 @@ fn without_live_suffix(text: &str) -> &str {
 }
 
 /// A title as compared: lower case, no accents, "&" as "and", no "(Live)" or "- Live" ending, no
-/// apostrophes, every other punctuation mark and run of spaces one space. "A / B" and "A/B" agree.
+/// apostrophes and thousands commas, every other punctuation mark and run of spaces one space. "A / B" and "A/B" agree.
 pub fn normalise_title(title: &str) -> String {
     let lowered: String = title
         .chars()
@@ -733,8 +791,17 @@ pub fn normalise_title(title: &str) -> String {
         *gap = false;
         out.push_str(piece);
     };
-    for c in stripped.chars() {
+    let chars: Vec<char> = stripped.chars().collect();
+    for (at, &c) in chars.iter().enumerate() {
         if ('\u{300}'..='\u{36f}').contains(&c) || matches!(c, '\'' | '’' | '‘' | '`' | '´') {
+            continue;
+        }
+        // "10,000 Reasons" and "10000 Reasons" are one title: a comma between two digits is only a thousands mark.
+        if c == ','
+            && at > 0
+            && chars[at - 1].is_ascii_digit()
+            && chars.get(at + 1).is_some_and(char::is_ascii_digit)
+        {
             continue;
         }
         if c == '&' {
@@ -761,12 +828,104 @@ pub struct PlanTitle {
     pub key: String,
     pub title: String,
     pub seconds: Option<u32>,
+    /// The key the plan names for the song, when it names one.
+    pub key_name: Option<String>,
 }
 
-/// Pairs plan songs with Playback songs by title. A pair needs exactly one song with that title on
-/// each side; otherwise the plan song stays unpaired and says why. Neither list is reordered or
-/// changed: the result has one entry per plan song, in plan order.
-pub fn match_plan(plan: &[PlanTitle], playback: &[LibrarySong]) -> Vec<LibraryPlanSong> {
+/// The words of a title that say which song it is: every bracket group and a "feat." tail are set aside, then the
+/// same rules as `normalise_title`. "Goodness of God (Radio Edit)" and "Goodness of God feat. Someone" both read
+/// "goodness of god".
+pub fn loose_title(title: &str) -> String {
+    let lowered: String = title
+        .chars()
+        .take(MAX_TEXT * 2)
+        .flat_map(char::to_lowercase)
+        .collect();
+    let mut without_groups = String::new();
+    let mut depth = 0usize;
+    for c in lowered.chars() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => without_groups.push(c),
+            _ => {}
+        }
+    }
+    let padded = format!(" {without_groups} ");
+    let cut = [" feat. ", " feat ", " ft. ", " ft ", " featuring "]
+        .iter()
+        .filter_map(|marker| padded.find(marker))
+        .min();
+    let kept = cut.map_or(padded.as_str(), |at| &padded[..at]);
+    let words = normalise_title(kept);
+    let words = words.strip_prefix("the ").unwrap_or(&words).to_string();
+    if words.is_empty() {
+        normalise_title(title)
+    } else {
+        words
+    }
+}
+
+/// Whether two different titles are alike enough to be worth showing as an uncertain pair: one is the other's first
+/// words ("Oceans" and "Oceans Where Feet May Fail"), or they differ by at most two letters (a typo) and are at least
+/// six letters long, or they share most of their words (at least three, and at least 60 % of all words in both).
+fn alike(a: &str, b: &str) -> bool {
+    if a.is_empty() || b.is_empty() || a == b {
+        return false;
+    }
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    if short.len() >= 4
+        && long.starts_with(short)
+        && long.as_bytes().get(short.len()) == Some(&b' ')
+    {
+        return true;
+    }
+    if short.chars().count() >= 6 && edit_distance(a, b) <= 2 {
+        return true;
+    }
+    let words_a: std::collections::HashSet<&str> = a.split(' ').collect();
+    let words_b: std::collections::HashSet<&str> = b.split(' ').collect();
+    let shared = words_a.intersection(&words_b).count();
+    let all = words_a.union(&words_b).count();
+    shared >= 3 && shared * 5 >= all * 3
+}
+
+/// Letters to change, add or take away to turn one text into the other.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (above + 1)
+                .min(row[j] + 1)
+                .min(diagonal + usize::from(ca != cb));
+            diagonal = above;
+        }
+    }
+    row[b.len()]
+}
+
+/// What `match_setlist` found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetlistMatch {
+    /// One entry per plan song, in plan order.
+    pub songs: Vec<LibraryPlanSong>,
+    /// The setlist's songs that go with no plan song (and are nobody's uncertain candidate), in Playback's order.
+    pub playback_only: Vec<LibrarySong>,
+}
+
+/// Pairs plan songs with Playback songs by title, in three steps that only look at what the earlier step left:
+/// 1. exact: exactly one song with the same normalised title on each side;
+/// 2. close: exactly one with the same title once brackets and a "feat." tail are set aside;
+/// 3. uncertain: exactly one alike title (see `alike`) on each side, both ways. Never taken as the song's library.
+///
+/// A title that is on one side more than once is never paired (the status says which side). Neither list is
+/// reordered or changed.
+pub fn match_setlist(plan: &[PlanTitle], playback: &[LibrarySong]) -> SetlistMatch {
     let keys: Vec<String> = plan
         .iter()
         .map(|song| normalise_title(&song.title))
@@ -775,37 +934,128 @@ pub fn match_plan(plan: &[PlanTitle], playback: &[LibrarySong]) -> Vec<LibraryPl
     for key in keys.iter().filter(|k| !k.is_empty()) {
         *in_plan.entry(key.as_str()).or_default() += 1;
     }
-    let mut in_playback: HashMap<String, Vec<usize>> = HashMap::new();
-    for (index, song) in playback.iter().enumerate() {
-        let key = normalise_title(&song.title);
-        if !key.is_empty() {
-            in_playback.entry(key).or_default().push(index);
+    let playback_keys: Vec<String> = playback
+        .iter()
+        .map(|song| normalise_title(&song.title))
+        .collect();
+    let mut in_playback: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, key) in playback_keys
+        .iter()
+        .enumerate()
+        .filter(|(_, k)| !k.is_empty())
+    {
+        in_playback.entry(key.as_str()).or_default().push(index);
+    }
+    let mut status: Vec<PlanMatch> = Vec::with_capacity(plan.len());
+    let mut paired: Vec<Option<(usize, MatchConfidence)>> = vec![None; plan.len()];
+    let mut taken = vec![false; playback.len()];
+    for (index, key) in keys.iter().enumerate() {
+        let found = in_playback.get(key.as_str()).map_or(&[][..], Vec::as_slice);
+        status.push(if key.is_empty() || found.is_empty() {
+            PlanMatch::Missing
+        } else if in_plan.get(key.as_str()).copied().unwrap_or(0) > 1 {
+            PlanMatch::DuplicateInPlan
+        } else if found.len() > 1 {
+            PlanMatch::DuplicateInPlayback
+        } else {
+            paired[index] = Some((found[0], MatchConfidence::Exact));
+            taken[found[0]] = true;
+            PlanMatch::Matched
+        });
+    }
+    // A Playback song whose exact title is in the plan is spoken for (paired, or a duplicate): steps 2 and 3 skip it.
+    let spoken_for = |taken: &[bool], index: usize| {
+        taken[index] || in_plan.contains_key(playback_keys[index].as_str())
+    };
+    // Step 2: close.
+    let loose_plan: Vec<String> = plan.iter().map(|song| loose_title(&song.title)).collect();
+    let loose_playback: Vec<String> = playback
+        .iter()
+        .map(|song| loose_title(&song.title))
+        .collect();
+    let open_plan = |i: usize| status[i] == PlanMatch::Missing && !keys[i].is_empty();
+    for i in (0..plan.len()).filter(|i| open_plan(*i)) {
+        let same_plan = (0..plan.len())
+            .filter(|j| open_plan(*j) && loose_plan[*j] == loose_plan[i])
+            .count();
+        let candidates: Vec<usize> = (0..playback.len())
+            .filter(|k| !spoken_for(&taken, *k) && loose_playback[*k] == loose_plan[i])
+            .collect();
+        if same_plan == 1 && candidates.len() == 1 {
+            paired[i] = Some((candidates[0], MatchConfidence::Close));
+            taken[candidates[0]] = true;
         }
     }
-    plan.iter()
-        .zip(&keys)
+    // Step 3: uncertain, only when the choice is one to one both ways among what is left.
+    let left_plan: Vec<usize> = (0..plan.len())
+        .filter(|i| open_plan(*i) && paired[*i].is_none())
+        .collect();
+    let left_playback: Vec<usize> = (0..playback.len())
+        .filter(|k| !spoken_for(&taken, *k))
+        .collect();
+    let mut candidate_of: Vec<Option<usize>> = vec![None; plan.len()];
+    for &i in &left_plan {
+        let alike_to: Vec<usize> = left_playback
+            .iter()
+            .copied()
+            .filter(|k| alike(&loose_plan[i], &loose_playback[*k]))
+            .collect();
+        if let [only] = alike_to[..] {
+            let back = left_plan
+                .iter()
+                .filter(|j| alike(&loose_plan[**j], &loose_playback[only]))
+                .count();
+            if back == 1 {
+                candidate_of[i] = Some(only);
+            }
+        }
+    }
+    let mut candidate_taken = vec![false; playback.len()];
+    for k in candidate_of.iter().flatten() {
+        candidate_taken[*k] = true;
+    }
+    let songs = plan
+        .iter()
         .enumerate()
-        .map(|(index, (song, key))| {
-            let found = in_playback.get(key.as_str()).map_or(&[][..], Vec::as_slice);
-            let (status, library) = if key.is_empty() || found.is_empty() {
-                (PlanMatch::Missing, None)
-            } else if in_plan.get(key.as_str()).copied().unwrap_or(0) > 1 {
-                (PlanMatch::DuplicateInPlan, None)
-            } else if found.len() > 1 {
-                (PlanMatch::DuplicateInPlayback, None)
-            } else {
-                (PlanMatch::Matched, playback.get(found[0]).cloned())
-            };
-            LibraryPlanSong {
+        .map(|(index, song)| {
+            let mut entry = LibraryPlanSong {
                 key: song.key.clone(),
                 title: song.title.clone(),
                 plan_position: u32::try_from(index + 1).unwrap_or(u32::MAX),
                 plan_seconds: song.seconds,
-                status,
-                library,
+                plan_key: song.key_name.clone(),
+                status: status[index],
+                confidence: None,
+                library: None,
+                candidate: None,
+            };
+            if let Some((k, confidence)) = paired[index] {
+                entry.status = PlanMatch::Matched;
+                entry.confidence = Some(confidence);
+                entry.library = playback.get(k).cloned();
+            } else if let Some(k) = candidate_of[index] {
+                entry.status = PlanMatch::Uncertain;
+                entry.confidence = Some(MatchConfidence::Uncertain);
+                entry.candidate = playback.get(k).cloned();
             }
+            entry
         })
-        .collect()
+        .collect();
+    let playback_only = playback
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| !taken[*k] && !candidate_taken[*k])
+        .map(|(_, song)| song.clone())
+        .collect();
+    SetlistMatch {
+        songs,
+        playback_only,
+    }
+}
+
+/// `match_setlist` for a caller that wants only the plan's side.
+pub fn match_plan(plan: &[PlanTitle], playback: &[LibrarySong]) -> Vec<LibraryPlanSong> {
+    match_setlist(plan, playback).songs
 }
 
 #[cfg(test)]
@@ -876,6 +1126,7 @@ mod tests {
             key: format!("key-{title}"),
             title: title.into(),
             seconds: Some(300),
+            key_name: None,
         }
     }
 
@@ -1450,5 +1701,236 @@ mod tests {
         ] {
             assert_eq!(parse_health(&none).library_revision, None);
         }
+    }
+
+    fn found(
+        songs: &[LibraryPlanSong],
+        index: usize,
+    ) -> (PlanMatch, Option<MatchConfidence>, Option<u32>) {
+        let song = &songs[index];
+        (
+            song.status,
+            song.confidence,
+            song.library
+                .as_ref()
+                .or(song.candidate.as_ref())
+                .map(|l| l.position),
+        )
+    }
+
+    #[test]
+    fn real_titles_that_differ_only_in_punctuation_case_a_thousands_comma_or_live_are_exact() {
+        let plan = [
+            plan_song("HOLY, HOLY, HOLY"),
+            plan_song("10,000 Reasons"),
+            plan_song("Goodness of God (Live)"),
+            plan_song("Oceans (Where Feet May Fail)"),
+        ];
+        let playback = [
+            song("Holy Holy Holy", 1),
+            song("10000 Reasons", 2),
+            song("Goodness Of God", 3),
+            song("Oceans Where Feet May Fail", 4),
+        ];
+        let result = match_setlist(&plan, &playback);
+        for i in 0..4 {
+            assert_eq!(
+                found(&result.songs, i),
+                (
+                    PlanMatch::Matched,
+                    Some(MatchConfidence::Exact),
+                    Some(i as u32 + 1)
+                ),
+                "{i}"
+            );
+        }
+        assert!(result.playback_only.is_empty());
+    }
+
+    #[test]
+    fn a_bracket_or_a_feat_tail_makes_a_close_match() {
+        let plan = [
+            plan_song("Build My Life"),
+            plan_song("Graves Into Gardens (feat. Brandon Lake)"),
+            plan_song("Oceans"),
+            plan_song("Gratitude ft. Someone"),
+            plan_song("The Blessing [Radio Edit]"),
+        ];
+        let playback = [
+            song("Build My Life (Housefires)", 1),
+            song("Graves Into Gardens", 2),
+            song("Oceans (Where Feet May Fail)", 3),
+            song("Gratitude", 4),
+            song("Blessing", 5),
+        ];
+        let result = match_setlist(&plan, &playback);
+        for i in 0..5 {
+            assert_eq!(
+                found(&result.songs, i),
+                (
+                    PlanMatch::Matched,
+                    Some(MatchConfidence::Close),
+                    Some(i as u32 + 1)
+                ),
+                "{i}"
+            );
+            assert!(result.songs[i].library.is_some() && result.songs[i].candidate.is_none());
+        }
+    }
+
+    #[test]
+    fn alike_titles_are_uncertain_and_never_become_the_songs_library() {
+        let plan = [
+            plan_song("Way Maker"),
+            plan_song("Holy Spirit"),
+            plan_song("Great Are You Lord"),
+        ];
+        let playback = [
+            song("Waymaker", 1),
+            song("Holy Spirit Come Down", 2),
+            song("Great Are You, Lord, Tonight", 3),
+        ];
+        let result = match_setlist(&plan, &playback);
+        for i in 0..3 {
+            let (status, confidence, position) = found(&result.songs, i);
+            assert_eq!(
+                (status, confidence),
+                (PlanMatch::Uncertain, Some(MatchConfidence::Uncertain)),
+                "{i}"
+            );
+            assert_eq!(position, Some(i as u32 + 1));
+            assert!(result.songs[i].library.is_none(), "{i}");
+            assert!(result.songs[i].candidate.is_some(), "{i}");
+        }
+        assert!(
+            result.playback_only.is_empty(),
+            "a candidate is not a song that only Playback has"
+        );
+    }
+
+    #[test]
+    fn a_song_only_in_the_plan_or_only_in_playback_is_not_invented_a_partner() {
+        let plan = [
+            plan_song("Song One"),
+            plan_song("Only In Plan Here"),
+            plan_song("Song Three"),
+        ];
+        let playback = [
+            song("Song One", 1),
+            song("Something Else Entirely", 2),
+            song("Song Three", 3),
+            song("Extra Song", 4),
+        ];
+        let result = match_setlist(&plan, &playback);
+        assert_eq!(found(&result.songs, 1), (PlanMatch::Missing, None, None));
+        let only: Vec<&str> = result
+            .playback_only
+            .iter()
+            .map(|s| s.title.as_str())
+            .collect();
+        assert_eq!(only, ["Something Else Entirely", "Extra Song"]);
+    }
+
+    #[test]
+    fn two_plan_songs_alike_to_one_playback_song_stay_unpaired_and_the_same_title_twice_is_never_paired(
+    ) {
+        // Both plan songs are alike to the one Playback song, and it is alike to both: nobody is chosen.
+        let plan = [plan_song("Holy Spirit"), plan_song("Holy Spirit Come")];
+        let playback = [song("Holy Spirit Come Down", 1)];
+        let result = match_setlist(&plan, &playback);
+        assert_eq!(found(&result.songs, 0).0, PlanMatch::Missing);
+        assert_eq!(found(&result.songs, 1).0, PlanMatch::Missing);
+        assert_eq!(result.playback_only.len(), 1);
+        // The same title twice: the exact title is there, so no loose step may pair it with a bracketed one.
+        let plan = [plan_song("Amazing Grace"), plan_song("Amazing Grace")];
+        let playback = [
+            song("Amazing Grace", 1),
+            song("Amazing Grace (My Chains Are Gone)", 2),
+        ];
+        let result = match_setlist(&plan, &playback);
+        assert!(result
+            .songs
+            .iter()
+            .all(|s| s.status == PlanMatch::DuplicateInPlan && s.library.is_none()));
+        assert_eq!(result.playback_only.len(), 2);
+    }
+
+    #[test]
+    fn two_close_candidates_are_not_chosen_between() {
+        let plan = [plan_song("Oceans")];
+        let playback = [
+            song("Oceans (Live)", 1).clone(),
+            song("Oceans (Acoustic)", 2),
+            song("Oceans (Where Feet May Fail)", 3),
+        ];
+        // "Oceans (Live)" is exact; the rest are left to Playback only.
+        let result = match_setlist(&plan, &playback);
+        assert_eq!(
+            found(&result.songs, 0),
+            (PlanMatch::Matched, Some(MatchConfidence::Exact), Some(1))
+        );
+        let plan = [plan_song("Oceans")];
+        let playback = [
+            song("Oceans (Acoustic)", 1),
+            song("Oceans (Where Feet May Fail)", 2),
+        ];
+        let result = match_setlist(&plan, &playback);
+        assert_eq!(found(&result.songs, 0).0, PlanMatch::Missing);
+        assert_eq!(result.playback_only.len(), 2);
+    }
+
+    #[test]
+    fn short_or_unrelated_titles_are_never_alike() {
+        for (a, b) in [
+            ("Hope", "Hopeless Romantic"),
+            ("Joy", "Joyful"),
+            ("Song One", "Song Two"),
+            ("Amen", "Amend"),
+            ("A B C", "A B D"),
+        ] {
+            assert!(!alike(&loose_title(a), &loose_title(b)), "{a:?} vs {b:?}");
+        }
+        assert!(alike("way maker", "waymaker"));
+        assert!(alike("oceans", "oceans where feet may fail"));
+    }
+
+    #[test]
+    fn loose_title_sets_brackets_feat_and_a_leading_the_aside_but_never_leaves_nothing() {
+        assert_eq!(loose_title("The Blessing (Live) [Radio Edit]"), "blessing");
+        assert_eq!(
+            loose_title("Gratitude feat. Brandon Lake & Co"),
+            "gratitude"
+        );
+        assert_eq!(loose_title("Gratitude (feat. Brandon Lake)"), "gratitude");
+        assert_eq!(loose_title("(Live)"), "live");
+        assert_eq!(loose_title("(Intro)"), "intro");
+        assert_eq!(loose_title(""), "");
+        assert_eq!(loose_title("Featuring Love"), "featuring love");
+    }
+
+    #[test]
+    fn a_setlist_list_reads_the_ids_titles_dates_and_counts_and_leaves_out_what_cannot_be_chosen() {
+        let list = parse_setlist_list(&serde_json::json!({"setlists": [
+            {"setlist_id": 12, "title": "Nov 22", "performance_date": "2026-11-22", "songs": 5},
+            {"setlist_id": 11, "title": "Nov 15 night", "performance_date": "2026-11-15", "songs": "five"},
+            {"title": "No number"},
+            {"setlist_id": 9, "performance_date": "someday"},
+        ]}));
+        assert_eq!(list.len(), 3);
+        assert_eq!(
+            (
+                list[0].id,
+                list[0].title.as_str(),
+                list[0].date.as_deref(),
+                list[0].songs
+            ),
+            (Some(12), "Nov 22", Some("2026-11-22"), 5)
+        );
+        assert_eq!(
+            (list[1].songs, list[2].title.as_str(), list[2].date.clone()),
+            (0, "a setlist", None)
+        );
+        assert!(parse_setlist_list(&serde_json::json!({"setlists": "x"})).is_empty());
+        assert!(parse_setlist_list(&serde_json::json!(null)).is_empty());
     }
 }

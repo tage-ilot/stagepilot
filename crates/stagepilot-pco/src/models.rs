@@ -144,6 +144,22 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// A short text attribute that is only read when it is text (a key such as "Ab"); anything else, or a very long text,
+/// is no value rather than a rejected plan.
+fn text_or_nothing<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(text)) => {
+            let text = text.trim();
+            (!text.is_empty() && text.chars().count() <= 12).then(|| text.to_string())
+        }
+        _ => None,
+    })
+}
+
 /// A transport resource whose constraints can be checked after deserialisation.
 pub trait Resource {
     fn resource_id(&self) -> &str;
@@ -274,6 +290,9 @@ pub struct ItemAttributes {
     pub sequence: i64,
     #[serde(default)]
     pub service_position: Option<String>,
+    /// The key the plan names for the song (e.g. "Ab"); read as text only when it is text.
+    #[serde(default, deserialize_with = "text_or_nothing")]
+    pub key_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

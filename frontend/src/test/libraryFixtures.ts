@@ -40,13 +40,13 @@ export const librarySong = (over: Partial<LibrarySong> = {}): LibrarySong => ({
 });
 
 export const librarySongOf = (title: string, position: number, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
-  key: `k${position}`, title, plan_position: position, plan_seconds: 389, status: "matched",
-  library: librarySong({ title, position, setlist_song_id: 2000000 + position }), ...over,
+  key: `k${position}`, title, plan_position: position, plan_seconds: 389, plan_key: null, status: "matched", confidence: "exact",
+  library: librarySong({ title, position, setlist_song_id: 2000000 + position }), candidate: null, ...over,
 });
 
 export const libraryPlan = (songs: LibraryPlanSong[], over: Partial<LibraryPlan> = {}): LibraryPlan => ({
-  enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { title: "Set", date: "2026-11-22", songs: songs.length },
-  newest: null, stale: false, checked_at: null, songs, ...over,
+  enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { id: 1, title: "Set", date: "2026-11-22", songs: songs.length },
+  newest: null, stale: false, checked_at: null, songs, playback_only: [], chosen: false, setlists: [], ...over,
 });
 
 /** A library controller whose helper is in `state` (its plan is only there when the helper is active). */
@@ -54,6 +54,6 @@ export const libraryController = (state: HelperState = "ready", over: Partial<Pl
   const status = libraryStatus(state);
   return {
     target: "10.30.0.141", address: "", status, plan: status.active ? libraryPlan([librarySongOf("Song One", 1)]) : null, error: null, pending: null,
-    saveAddress: vi.fn().mockResolvedValue(true), forget: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
+    saveAddress: vi.fn().mockResolvedValue(true), forget: vi.fn().mockResolvedValue(true), chooseSetlist: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
   };
 };

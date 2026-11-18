@@ -11,6 +11,7 @@ vi.mock("../api", () => ({
   getPlaybackLibraryPlan: vi.fn(),
   updatePlaybackLibrarySettings: vi.fn(),
   forgetPlaybackHelper: vi.fn(),
+  choosePlaybackLibrarySetlist: vi.fn(),
   getSettings: vi.fn(),
 }));
 
@@ -163,5 +164,29 @@ describe("usePlaybackLibrary", () => {
     await act(async () => { await result.current.forget(); });
     expect(result.current.error).toContain("could not remove the key");
     expect(result.current.pending).toBeNull();
+  });
+
+  it("choosing a setlist sends only that, shows the answer, and says why when it fails", async () => {
+    const chosen = libraryPlan([], { chosen: true });
+    vi.mocked(api.choosePlaybackLibrarySetlist).mockResolvedValueOnce(chosen).mockRejectedValueOnce(new Error("No service plan is loaded."));
+    const { result } = renderHook(() => usePlaybackLibrary(true, settings("10.30.0.141"), vi.fn()));
+    await waitFor(() => expect(result.current.plan).not.toBeNull());
+    let done = false;
+    await act(async () => { done = await result.current.chooseSetlist(7); });
+    expect(done).toBe(true);
+    expect(api.choosePlaybackLibrarySetlist).toHaveBeenCalledWith(7);
+    expect(result.current.plan).toBe(chosen);
+    expect(result.current.pending).toBeNull();
+    await act(async () => { done = await result.current.chooseSetlist(null); });
+    expect(done).toBe(false);
+    expect(result.current.error).toBe("No service plan is loaded.");
+  });
+
+  it("does not choose anything when the window may not configure", async () => {
+    const { result } = renderHook(() => usePlaybackLibrary(false, settings("10.30.0.141"), vi.fn()));
+    let done = true;
+    await act(async () => { done = await result.current.chooseSetlist(7); });
+    expect(done).toBe(false);
+    expect(api.choosePlaybackLibrarySetlist).not.toHaveBeenCalled();
   });
 });
