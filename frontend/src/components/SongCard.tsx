@@ -19,8 +19,8 @@ export interface CardLibrary extends ChipLibrary {
   sections: LibrarySection[];
 }
 
-export function cardLibrary(song: LibraryPlanSong | undefined): CardLibrary | null {
-  const chip = chipLibrary(song);
+export function cardLibrary(song: LibraryPlanSong | undefined, now: number): CardLibrary | null {
+  const chip = chipLibrary(song, now);
   if (!song?.library || !chip) return null;
   return { ...chip, cover: songCover(song), bpm: song.library.bpm !== null ? bpmText(song.library.bpm) : null, sections: song.library.sections };
 }

@@ -3064,3 +3064,134 @@ async fn the_setlist_route_chooses_and_changes_nothing_that_is_saved() {
         before
     );
 }
+
+// ---- a key changed in Playback ----------------------------------------------------------------
+
+const TITLES: [&str; 3] = ["Song One", "Song Two", "Song Three"];
+
+/// What the fake says about song `id` once Playback's key for it is `key`.
+fn set_key(helper: &Helper, id: i64, key: &str) {
+    helper.set(|b| {
+        for item in &mut b.items {
+            if item["setlist_song_id"] == json!(id) {
+                item["key"] = json!({"id": 9, "name": key});
+            }
+        }
+    });
+}
+
+fn first_song(plan: &LibraryPlan) -> &stagepilot_playback::library::LibrarySong {
+    plan.songs[0].library.as_ref().expect("song one is paired")
+}
+
+#[tokio::test]
+async fn a_freshly_paired_setlist_has_no_key_change_and_a_changed_key_says_what_it_was() {
+    let helper = Helper::new();
+    set_key(&helper, 11, "G");
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let settings = settings_for(&address);
+    let first = ask(&library, &settings, &TITLES).await;
+    for song in &first.songs {
+        let library = song.library.as_ref().unwrap();
+        assert_eq!((&library.key_was, &library.key_changed_at), (&None, &None));
+    }
+    // Playback changes the key of song one to Ab; the fake answers it on the next read.
+    set_key(&helper, 11, "Ab");
+    let changed = ask(&library, &settings, &TITLES).await;
+    let song = first_song(&changed);
+    assert_eq!(song.key.as_deref(), Some("Ab"));
+    assert_eq!(song.key_was.as_deref(), Some("G"));
+    let at = chrono::DateTime::parse_from_rfc3339(song.key_changed_at.as_deref().unwrap()).unwrap();
+    assert!((chrono::Utc::now().timestamp() - at.timestamp()).abs() < 120);
+    assert!(song.key_changed_at.as_deref().unwrap().ends_with('Z'));
+    // The other songs did not change.
+    assert!(changed.songs[1].library.as_ref().unwrap().key_was.is_none());
+    // It stays recorded, with the same time, while the key stays.
+    let again = ask(&library, &settings, &TITLES).await;
+    assert_eq!(first_song(&again).key_was.as_deref(), Some("G"));
+    assert_eq!(first_song(&again).key_changed_at, song.key_changed_at);
+    // The JSON a window gets says it.
+    let json = serde_json::to_value(&again).unwrap();
+    assert_eq!(json["songs"][0]["library"]["key_was"], json!("G"));
+    assert_eq!(json["songs"][1]["library"]["key_was"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_key_changed_back_is_a_new_change() {
+    let helper = Helper::new();
+    set_key(&helper, 11, "G");
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    let settings = settings_for(&address);
+    let _ = ask(&library, &settings, &TITLES).await;
+    set_key(&helper, 11, "Ab");
+    let _ = ask(&library, &settings, &TITLES).await;
+    set_key(&helper, 11, "G");
+    let back = ask(&library, &settings, &TITLES).await;
+    assert_eq!(first_song(&back).key.as_deref(), Some("G"));
+    assert_eq!(first_song(&back).key_was.as_deref(), Some("Ab"));
+}
+
+#[tokio::test]
+async fn a_restart_keeps_a_key_change_and_an_ordinary_read_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("playback-keys.json");
+    let helper = Helper::new();
+    set_key(&helper, 11, "G");
+    let address = helper.serve().await;
+    let settings = settings_for(&address);
+    let library = PlaybackLibrary::new().with_key_memory_file(&file);
+    let _ = ask(&library, &settings, &TITLES).await;
+    assert!(file.exists(), "the first sight of the songs is saved");
+    set_key(&helper, 11, "Ab");
+    let _ = ask(&library, &settings, &TITLES).await;
+    // Plain reads that see the same keys leave the file alone.
+    std::fs::remove_file(&file).unwrap();
+    let _ = ask(&library, &settings, &TITLES).await;
+    let _ = ask(&library, &settings, &TITLES).await;
+    assert!(!file.exists());
+    drop(library);
+    // Start again from a file with the change in it.
+    let library = PlaybackLibrary::new().with_key_memory_file(&file);
+    set_key(&helper, 11, "G");
+    let _ = ask(&library, &settings, &TITLES).await;
+    set_key(&helper, 11, "Ab");
+    let _ = ask(&library, &settings, &TITLES).await;
+    drop(library);
+    let restarted = PlaybackLibrary::new().with_key_memory_file(&file);
+    let plan = ask(&restarted, &settings, &TITLES).await;
+    assert_eq!(first_song(&plan).key.as_deref(), Some("Ab"));
+    assert_eq!(first_song(&plan).key_was.as_deref(), Some("G"));
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        !text.contains("Song One") && !text.contains("2026-11-22"),
+        "only numbers, keys and times: {text}"
+    );
+}
+
+#[tokio::test]
+async fn a_damaged_key_file_is_ignored_and_a_forgotten_library_records_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("playback-keys.json");
+    std::fs::write(&file, "][ not json").unwrap();
+    let helper = Helper::new();
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new().with_key_memory_file(&file);
+    let first = ask(&library, &settings_for(&address), &TITLES).await;
+    assert_eq!(first.state, LibraryState::Ready);
+    assert!(first_song(&first).key_was.is_none());
+    // Forget the Library Link: nothing is read, and what was remembered goes.
+    library.reset().await;
+    assert!(!file.exists());
+    let forgotten = PlaybackLibrarySettings {
+        enabled: Some(false),
+        address: address.clone(),
+    };
+    let off = library
+        .plan(&forgotten, Some(&plan("2026-11-22", &TITLES)), true)
+        .await;
+    assert_eq!(off.state, LibraryState::Off);
+    assert!(off.songs.is_empty());
+    assert!(!file.exists(), "nothing recorded while it is off");
+}

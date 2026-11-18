@@ -14,7 +14,12 @@ position: number, title: string,
 /**
  * The key it is played in, and the key of the original recording.
  */
-key: string | null, key_original: string | null, bpm: number | null, 
+key: string | null, key_original: string | null, 
+/**
+ * The key it had BEFORE the last change StagePilot noticed in Playback (`key_watch`), with the moment it noticed
+ * (RFC 3339, UTC). Both null when no change was seen. Sent however old: the window decides how long it shows.
+ */
+key_was: string | null, key_changed_at: string | null, bpm: number | null, 
 /**
  * The start of the song's last measure, in seconds, which is where the song goes quiet (the
  * helper's `scan_length_s`, the same number StagePilot's own scan measures). Null for a song

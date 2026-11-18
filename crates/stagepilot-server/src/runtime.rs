@@ -243,9 +243,15 @@ impl Runtime {
             } else {
                 Arc::new(stagepilot_core::settings::KeyringCredentialStore::playback_library())
             };
-        let playback_library = Arc::new(
-            crate::playback_library::PlaybackLibrary::with_credentials(library_credentials),
-        );
+        let mut playback_library =
+            crate::playback_library::PlaybackLibrary::with_credentials(library_credentials);
+        if !options.memory_tokens {
+            // The keys it has seen live beside the settings, so a restart keeps a key change it noticed.
+            playback_library = playback_library.with_key_memory_file(
+                crate::playback_key_watch::default_key_watch_path(settings_service.environ()),
+            );
+        }
+        let playback_library = Arc::new(playback_library);
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
             let demo = Arc::new(
