@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A Lighting computer command asked for while the helper already works no longer stops working within seconds.** The setup session used to end itself as soon as StagePilot saw a current helper, so the link was dead before the other computer used it. It now stays open for its 30 minutes and ends early only when the helper's version changes.
+
 ## [2.44.0-rc.2] - 2026-11-17
 
 ### Added

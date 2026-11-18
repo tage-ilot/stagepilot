@@ -405,9 +405,18 @@ impl HelperInstall {
         if !connected {
             return false;
         }
+        // A session opened for a helper that was already current (a command asked for on purpose, to set up another computer or
+        // this one again) stays open for its 30 minutes: only a changed version ends it.
+        let started_outdated = session.started_connected
+            && session
+                .initial_version
+                .as_deref()
+                .is_none_or(|v| stagepilot_lights::lightkey::helper_is_outdated(Some(v)));
         let done = !session.started_connected
             || session.initial_version.as_deref() != version
-            || version.is_some_and(|v| !stagepilot_lights::lightkey::helper_is_outdated(Some(v)));
+            || (started_outdated
+                && version
+                    .is_some_and(|v| !stagepilot_lights::lightkey::helper_is_outdated(Some(v))));
         if done {
             state.session = None;
         }
@@ -906,6 +915,23 @@ mod tests {
             .unwrap();
         assert!(!svc.observe(true, Some("0.4.9")));
         assert!(svc.observe(true, Some("0.4.10")), "the version changed");
+    }
+
+    #[test]
+    fn a_command_asked_for_while_the_helper_is_current_stays_open_until_it_expires() {
+        let (svc, _) = service();
+        let info = svc
+            .begin(LAN, 8000, None, true, Some("0.5.0".into()))
+            .unwrap();
+        // The helper answers with the same current version again and again: the session is for another computer or a reinstall.
+        assert!(!svc.observe(true, Some("0.5.0")));
+        assert!(!svc.observe(true, Some("0.5.0")));
+        assert!(svc.is_active());
+        assert!(svc.access(Some(PEER), &info.token).is_ok());
+        assert!(
+            svc.observe(true, Some("0.6.0")),
+            "a changed version ends it"
+        );
     }
 
     #[test]
