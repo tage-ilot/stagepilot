@@ -8,13 +8,13 @@
 //! or a settings comparison with the Playback connection. Nothing in this file touches the plugin,
 //! the song order, the scan result, a timer, the lights, ProPresenter or Planning Center.
 //!
-//! The helper is the "network script" on the Playback computer. It answers on any network path, but only to
+//! The helper is the "Library Link" on the Playback computer. It answers on any network path, but only to
 //! a caller that signs each request with the key StagePilot made (`X-PBL-Time` and `X-PBL-Sig`, an HMAC of
 //! `GET\n<path and query>\n<time>`). The key lives in the credential store, is made when the first setup
 //! session is opened, and is never returned, logged or saved in `settings.json`.
 //!
 //! Rules (all kept by `Library`):
-//! * Forgotten means forgotten: after "Forget the network script" (no key, setting `enabled: false`) nothing
+//! * Forgotten means forgotten: after "Forget the Library Link" (no key, setting `enabled: false`) nothing
 //!   is asked, ever, and nothing runs in the background. There is no on/off switch any more: while a
 //!   Playback host is saved the helper is asked, at most once per 30 s (see below), and a helper that is not
 //!   there is not a warning anywhere (`HelperState::NotInstalled`).
@@ -530,7 +530,7 @@ impl PlaybackLibrary {
         Ok(true)
     }
 
-    /// Deletes the key ("Forget the network script"). The helper keeps running but cannot be used.
+    /// Deletes the key ("Forget the Library Link"). The helper keeps running but cannot be used.
     pub fn forget_key(&self) -> Result<(), String> {
         let _one_at_a_time = self.key_gate.lock().unwrap_or_else(|p| p.into_inner());
         self.keys.remove_secret().map_err(|_| {
@@ -675,13 +675,13 @@ impl PlaybackLibrary {
         }
     }
 
-    /// Nothing is asked and nothing is held: the operator forgot the network script (the key is deleted and
+    /// Nothing is asked and nothing is held: the operator forgot the Library Link (the key is deleted and
     /// the setting says so). A new setup session makes a new key, which ends this.
     fn is_forgotten(&self, settings: &PlaybackLibrarySettings) -> bool {
         settings.enabled == Some(false) && self.key().is_none()
     }
 
-    /// What the window is told when the library cannot feed anything: the network script's state and its
+    /// What the window is told when the library cannot feed anything: the Library Link's state and its
     /// plain sentence, and no library data. Only `unreachable` is a problem (a helper that was in use and is
     /// silent now); every other state is quiet.
     fn inactive(
@@ -1523,7 +1523,7 @@ pub fn effective_settings(rt: &Runtime) -> PlaybackLibrarySettings {
 
 /// The first time the helper answers with the key (or answers at all, as an older one) the setting is saved as
 /// "has been in use" (`enabled: true`): that is what lets a later silence be told apart from a computer that
-/// never had the network script. It is the only thing a status check ever writes.
+/// never had the Library Link. It is the only thing a status check ever writes.
 pub async fn note_in_use(rt: &Runtime, active: bool) {
     if !active || rt.settings_service.snapshot().playback_library.enabled == Some(true) {
         return;
@@ -1627,7 +1627,7 @@ async fn settings(State(rt): State<Rt>, body: Bytes) -> Json {
     ok(to_json(&rt.playback_library.status(&settings, false).await))
 }
 
-/// `POST /api/v1/playback-library/forget`: "Forget the network script". Ends a setup session, deletes the
+/// `POST /api/v1/playback-library/forget`: "Forget the Library Link". Ends a setup session, deletes the
 /// key and saves `enabled: false`. The helper keeps running but cannot be used by this StagePilot until a
 /// new setup session pairs again. Nothing is asked of the helper.
 async fn forget(State(rt): State<Rt>) -> Json {

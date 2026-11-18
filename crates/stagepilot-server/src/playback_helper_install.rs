@@ -1,5 +1,5 @@
 //! "Set up the Playback computer": StagePilot hands the Playback helper (`playback-library`, the
-//! "network script") to the Playback Mac itself, with the key it will answer to, so installing it
+//! "Library Link") to the Playback Mac itself, with the key it will answer to, so installing it
 //! needs no internet, no GitHub and no SSH. The same shape as the Lighting computer's install
 //! (`helper_install`), with one difference: the served script carries a secret.
 //!
@@ -116,8 +116,8 @@ impl Assets {
         let names = embedded::FILE_NAMES.join(" ");
         format!(
             r#"#!/bin/sh
-# StagePilot: set up the Playback computer (network script {version}).
-# Downloads the network script from StagePilot at the address below (this local network only, no
+# StagePilot: set up the Playback computer (Library Link {version}).
+# Downloads the Library Link from StagePilot at the address below (this local network only, no
 # internet), checks every file against the checksums written in this script, then runs the script's
 # own installer with the key StagePilot made for it. Run it in Terminal on the Playback computer.
 set -eu
@@ -147,7 +147,7 @@ main() {{
   TMP=$(mktemp -d "${{TMPDIR:-/tmp}}/stagepilot-playback.XXXXXX") || fail "could not make a temporary folder."
   trap 'cd /; rm -rf "$TMP"' EXIT
   trap 'exit 1' HUP INT TERM
-  printf 'Downloading the network script {version} from StagePilot ...\n'
+  printf 'Downloading the Library Link {version} from StagePilot ...\n'
   for name in {names}; do
     case "$name" in
 {wants}    esac

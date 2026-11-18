@@ -1048,7 +1048,7 @@ pub fn clean_playback_library_address(value: &str) -> Result<String, &'static st
 }
 
 /// The optional "Playback library" connection: read-only data about the songs of Playback (key, BPM,
-/// length, arrangement) from a helper (the "network script") on the Playback computer. Left out of the
+/// length, arrangement) from a helper (the "Library Link") on the Playback computer. Left out of the
 /// saved file while it holds nothing, so an older file saves back unchanged. It lives beside, not
 /// inside, `playback_api`: a change there makes the Playback connection restart, and this one must
 /// never touch it.

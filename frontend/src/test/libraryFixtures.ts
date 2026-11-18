@@ -3,12 +3,12 @@ import { vi } from "vitest";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { HelperState, LibraryHelper, LibraryPlan, LibraryPlanSong, LibrarySong, LibraryStatus } from "../types";
 
-/** The network script's state as the backend reports it; the words are the backend's. */
+/** The Library Link's state as the backend reports it; the words are the backend's. */
 export const helperOf = (state: HelperState, over: Partial<LibraryHelper> = {}): LibraryHelper => ({
   state,
   version: state === "ready" ? "0.3.0" : state === "outdated" ? "0.2.0" : null,
   bundled_version: "0.3.0",
-  message: `The network script is ${state}.`,
+  message: `The Library Link is ${state}.`,
   paired: state === "ready" || state === "outdated" || state === "needs_key",
   ...over,
 });
@@ -22,7 +22,7 @@ export const libraryStatus = (state: HelperState = "ready", over: Partial<Librar
     helper: helperOf(state),
     address: "http://10.30.0.141",
     state: active ? "ready" : state === "unreachable" ? "problem" : "off",
-    message: active ? "Playback library 0.3.0 is ready: 12 songs in 3 setlists." : `The network script is ${state}.`,
+    message: active ? "Playback library 0.3.0 is ready: 12 songs in 3 setlists." : `The Library Link is ${state}.`,
     version: active ? "0.3.0" : null,
     songs: active ? 12 : null,
     setlists: active ? 3 : null,

@@ -21,7 +21,7 @@ describe("the Playback API line: the backend's own sentence, with a tone", () =>
   });
 });
 
-describe("the network script line: words for every state, and never a warning for a computer that has none", () => {
+describe("the Library Link line: words for every state, and never a warning for a computer that has none", () => {
   const line = (state: Parameters<typeof libraryStatus>[0], over = {}) => scriptLine(libraryStatus(state, over), true);
 
   it("says each state in the words Hunter asked for", () => {
@@ -66,7 +66,7 @@ describe("the pill: one short word for each of the two statuses", () => {
     expect(pillParts({ good: false, line: line("idle") }, null, false).api).toEqual({ word: "Not connected", tone: "idle" });
   });
 
-  it("names each state of the network script, and needs-setup is amber, never the calm teal of a healthy state", () => {
+  it("names each state of the Library Link, and needs-setup is amber, never the calm teal of a healthy state", () => {
     const word = (state: HelperState) => pillParts({ good: true, line: line("success") }, library(state), true).script;
     expect(word("outdated").word).toBe("Update available");
     expect(word("needs_key")).toEqual({ word: "Needs setup", tone: "warning" });

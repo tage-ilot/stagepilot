@@ -231,7 +231,7 @@ export interface PersistentSettings {
   };
   playback_api?: PlaybackApiSettings;
   /**
-   * The Playback library (the network script). Left out of the file until something is set. `enabled` is no longer a switch: absent = never
+   * The Playback library (the Library Link). Left out of the file until something is set. `enabled` is no longer a switch: absent = never
    * paired, `true` = has been in use, `false` = forgotten. `address` is the optional override of the helper's computer (empty: the saved Playback host).
    * Mirrors the generated `PlaybackLibrarySettings`.
    */
@@ -506,7 +506,7 @@ export interface PlaybackHelperInstall {
   expires_at: string;
   lan_ip: string;
   port: number;
-  /** The network script version StagePilot carries and installs. */
+  /** The Library Link version StagePilot carries and installs. */
   bundled_version: string;
 }
 
@@ -985,7 +985,7 @@ export type PlanMatch = "matched" | "uncertain" | "missing" | "duplicate_in_plan
 /** How sure a title match is: exact (same words), close (same but for a bracket or a "feat." tail), uncertain (alike, not the same). */
 export type MatchConfidence = "exact" | "close" | "uncertain";
 
-/** Where the network script (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
+/** Where the Library Link (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
 export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable" | "forgotten";
 
 export interface LibraryHelper {

@@ -18,7 +18,7 @@ import { Switch } from "./ui/Switch";
 import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
-// (skipped songs) until Save configuration. The scan, the computer chooser and the network script are the first block, PlaybackLiveLink.
+// (skipped songs) until Save configuration. The scan, the computer chooser and the Library Link are the first block, PlaybackLiveLink.
 export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZone = "UTC" }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; plan?: ServicePlan | null; timeZone?: string }) {
   const status = playback?.status;
   const [confirm, setConfirm] = useState(false);

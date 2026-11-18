@@ -42,17 +42,17 @@ describe("PlaybackInstallBox", () => {
   it.each([
     ["not_installed", /optional/],
     ["needs_key", /does not know this StagePilot/],
-    ["unreachable", /cannot reach the network script/],
-    ["forgotten", /forgot the network script/],
+    ["unreachable", /cannot reach the Library Link/],
+    ["forgotten", /forgot the Library Link/],
     ["outdated", /older than the one StagePilot carries/],
   ] as [HelperState, RegExp][])("says why in plain words for a %s script", (state, words) => {
     render(box(libraryController(state)));
     expect(screen.getByTestId("playback-install")).toHaveTextContent(words);
   });
 
-  it("is called Update the network script when the script is outdated", () => {
+  it("is called Update the Library Link when the script is outdated", () => {
     render(box(libraryController("outdated")));
-    expect(screen.getByRole("button", { name: "Update the network script" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Update the Library Link" })).toBeEnabled();
   });
 
   it("shows nothing when the script is ready or has not answered yet", () => {
@@ -71,8 +71,8 @@ describe("PlaybackInstallBox", () => {
     await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
     expect(await screen.findByTestId("playback-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/playback-helper/abc123/install.sh | sh");
     expect(api.startPlaybackHelperInstall).toHaveBeenCalledWith(undefined);
-    expect(screen.getByTestId("playback-install-label")).toHaveTextContent("Network script for the Playback computer:");
-    expect(screen.getByTestId("playback-install-waiting")).toHaveTextContent(/Waiting for the network script… The command works for 30:00 more, on this network only\./);
+    expect(screen.getByTestId("playback-install-label")).toHaveTextContent("Library Link for the Playback computer:");
+    expect(screen.getByTestId("playback-install-waiting")).toHaveTextContent(/Waiting for the Library Link… The command works for 30:00 more, on this network only\./);
     expect(screen.getByTestId("playback-install-ready")).toHaveTextContent(/Terminal/);
     expect(screen.getByTestId("playback-install-ready")).toHaveTextContent(/needs no internet/);
     // The window looks every few seconds while it waits.
@@ -113,7 +113,7 @@ describe("PlaybackInstallBox", () => {
     await screen.findByTestId("playback-install-command");
     rerender(box(libraryController("ready")));
     await waitFor(() => expect(screen.getByTestId("playback-install-done")).toBeInTheDocument());
-    expect(screen.getByTestId("playback-install-live")).toHaveTextContent("The network script is ready.");
+    expect(screen.getByTestId("playback-install-live")).toHaveTextContent("The Library Link is ready.");
     expect(api.endPlaybackHelperInstall).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("playback-install-command")).toBeNull();
   });
@@ -121,7 +121,7 @@ describe("PlaybackInstallBox", () => {
   it("an update ends only when the script is ready again, not while it is still outdated", async () => {
     vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
     const { rerender } = render(box(libraryController("outdated")));
-    await userEvent.setup().click(screen.getByRole("button", { name: "Update the network script" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Update the Library Link" }));
     await screen.findByTestId("playback-install-command");
     rerender(box(libraryController("outdated")));
     expect(screen.getByTestId("playback-install-command")).toBeInTheDocument();

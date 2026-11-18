@@ -14,7 +14,7 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
  * on the right, a join mark between them and a stamp on every row. Songs are never reordered; each side can only skip songs, and
  * the Nth song left on one side pairs with the Nth left on the other. Skips are a held change, saved by Save configuration.
  *
- * Without the Playback library it is the saved scan alone ("Playback song N"). With the library (the network script answering)
+ * Without the Playback library it is the saved scan alone ("Playback song N"). With the library (the Library Link answering)
  * the Playback side has real titles, keys, lengths and arrangements, paired by title with a stated confidence, plus the setlist
  * line and its chooser. The library only adds information: nothing is written to Planning Center or Playback, and a scan that
  * cannot be tied to the setlist leaves the plain scan view in place.
@@ -97,7 +97,7 @@ export function PlaybackArrangement({ status, draft, library }: { status: Playba
           )}
           {notScanOfThisSetlist && <p className="text-sm text-ink-body" data-testid="matchup-scan-note">The saved scan does not match the Playback setlist above, so this is the scan alone. Scan the Playback songs again to compare the two.</p>}
           {mode === "library" && !scan && <p className="text-sm text-ink-body" data-testid="matchup-readonly-note">Scan the Playback songs once to turn on Skip and to see which Playback song will start each timer. Until then this is only a comparison.</p>}
-          {join === "position" && <p className="text-sm text-ink-body" data-testid="matchup-join-note">The saved scan could not be checked against the network script's song numbers, so its songs are lined up with Playback's setlist by place.</p>}
+          {join === "position" && <p className="text-sm text-ink-body" data-testid="matchup-join-note">The saved scan could not be checked against the Library Link's song numbers, so its songs are lined up with Playback's setlist by place.</p>}
           {libraryPlan?.stale && libraryPlan.message && mode === "library" && <p className="text-sm text-ink-muted">{libraryPlan.message}</p>}
           {counts["check-order"] > 0 && (
             <InlineAlert tone="info" className="p-3 text-ink-body" data-testid="matchup-order-note">

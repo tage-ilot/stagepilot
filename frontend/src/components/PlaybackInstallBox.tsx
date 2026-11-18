@@ -13,15 +13,15 @@ import { Input } from "./ui/Input";
 type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
 
 const WHY: Record<Exclude<HelperState, "ready">, string> = {
-  not_installed: "The network script is optional. It lets StagePilot read each song's key, BPM and arrangement from Playback. StagePilot gives you one command to paste into Terminal on the Playback computer. The command runs there and that computer needs no internet.",
-  outdated: "The network script on the Playback computer is older than the one StagePilot carries. It still works. Run one command in Terminal on that computer to update it. No internet needed.",
-  needs_key: "The network script on the Playback computer does not know this StagePilot yet. Run the command again, in Terminal on that computer. No internet needed.",
-  unreachable: "StagePilot cannot reach the network script. Is the Playback computer on and awake? If the network script was set up again from another computer, run the command again here.",
-  forgotten: "StagePilot forgot the network script, so it cannot use it. Run the command in Terminal on the Playback computer to use it again. No internet needed.",
+  not_installed: "The Library Link is optional. It lets StagePilot read each song's key, BPM and arrangement from Playback. StagePilot gives you one command to paste into Terminal on the Playback computer. The command runs there and that computer needs no internet.",
+  outdated: "The Library Link on the Playback computer is older than the one StagePilot carries. It still works. Run one command in Terminal on that computer to update it. No internet needed.",
+  needs_key: "The Library Link on the Playback computer does not know this StagePilot yet. Run the command again, in Terminal on that computer. No internet needed.",
+  unreachable: "StagePilot cannot reach the Library Link. Is the Playback computer on and awake? If the Library Link was set up again from another computer, run the command again here.",
+  forgotten: "StagePilot forgot the Library Link, so it cannot use it. Run the command in Terminal on the Playback computer to use it again. No internet needed.",
 };
 
 /**
- * "Set up the Playback computer", in the Playback Live Link block. Shown while the network script is not ready, and as "Update the network
+ * "Set up the Playback computer", in the Playback Live Link block. Shown while the Library Link is not ready, and as "Update the network
  * script" when the one that answers is older than the one StagePilot carries. StagePilot makes a one-time command; pasted into Terminal on
  * the Playback computer it fetches the matching script from StagePilot itself (this network only, 30 minutes, no internet), together with
  * the key that only this StagePilot can use. The box ends the session by itself when the script answers. The command holds only the
@@ -42,7 +42,7 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
   const [left, setLeft] = useState(0);
   const [copied, setCopied] = useState(false);
   const alive = useRef(true);
-  const heading = state === "outdated" ? "Update the network script" : "Set up the Playback computer";
+  const heading = state === "outdated" ? "Update the Library Link" : "Set up the Playback computer";
   const { watch } = library;
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -114,15 +114,15 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
 
   // The live region stays on screen so the change to "ready" is announced even though the box closes.
   const announcement = phase === "done"
-    ? "The network script is ready."
-    : phase === "ready" ? "Waiting for the network script\u2026" : "";
+    ? "The Library Link is ready."
+    : phase === "ready" ? "Waiting for the Library Link\u2026" : "";
   const live = <p aria-live="polite" className="sr-only" data-testid="playback-install-live" role="status">{announcement}</p>;
 
   if (phase === "done") return <div data-testid="playback-install-done">{live}</div>;
   // Nothing to set up while the script is ready; nothing to say before it has answered once.
   if ((ready || state === null) && phase === "idle") return <div>{live}</div>;
   if (!hasComputer) {
-    return <div>{live}<p className="mt-2 text-type-body-sm text-ink-muted" data-testid="playback-install-need-computer">Choose the Playback computer above, then set up its network script.</p></div>;
+    return <div>{live}<p className="mt-2 text-type-body-sm text-ink-muted" data-testid="playback-install-need-computer">Choose the Playback computer above, then set up its Library Link.</p></div>;
   }
 
   const panel = "mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body";
@@ -147,7 +147,7 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
             <li>
               On the Playback computer, open Terminal and paste this command. It runs there and needs no internet.
               <p className="mt-1.5 font-medium text-ink" data-testid="playback-install-label">
-                Network script for the Playback computer:
+                Library Link for the Playback computer:
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-[1_1_20rem] select-all break-all rounded-ds-lg border border-edge bg-surface-panel-strong px-2.5 py-1.5 font-mono text-[0.8125rem] text-ink" data-testid="playback-install-command" tabIndex={0}>
@@ -161,7 +161,7 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
             <li>Wait here. It connects by itself.</li>
           </ol>
           <p className="mt-1.5 text-ink-muted" data-testid="playback-install-waiting">
-            {`Waiting for the network script\u2026 The command works for ${countdownText(left)} more, on this network only.`}
+            {`Waiting for the Library Link\u2026 The command works for ${countdownText(left)} more, on this network only.`}
           </p>
           <p className="mt-1 text-ink-muted">
             Python comes with Apple&apos;s command-line tools. If Terminal says it is missing, run <code className="font-mono">xcode-select --install</code> first.

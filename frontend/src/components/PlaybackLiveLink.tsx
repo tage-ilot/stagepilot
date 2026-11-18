@@ -25,13 +25,13 @@ const TITLE = "Playback Live Link";
 
 /**
  * The first block of the Playback API panel, built like the Lighting "sACN DMX Live Link" block: a bordered card with a title, a state pill
- * beside it, two status lines (the Playback API and the network script), labelled fields and the same spacing.
+ * beside it, two status lines (the Playback API and the Library Link), labelled fields and the same spacing.
  *
  * It holds the Playback host scan and chooser (Scan Network, progress, Scan again, the macOS permission help, the candidate chooser,
- * Other computer, Connect), moved here whole. Choosing a computer sets the API host AND the network script's address (the helper
+ * Other computer, Connect), moved here whole. Choosing a computer sets the API host AND the Library Link's address (the helper
  * is on the same computer, so its address follows the Playback host; an Advanced override is cleared when another computer is chosen).
  *
- * The network script is optional. Without it nothing here is a warning: the line says "Not installed" in grey and the setup box offers
+ * The Library Link is optional. Without it nothing here is a warning: the line says "Not installed" in grey and the setup box offers
  * one command. Everything the library feeds elsewhere waits for the script to be ready (or outdated, which still works).
  */
 export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackController; library?: PlaybackLibraryController }) {
@@ -71,7 +71,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const scanClickedAt = useRef(0);
   const startScan = () => { scanClickedAt.current = Date.now(); playback?.scan(); };
   const cancelScan = () => { if (Date.now() - scanClickedAt.current < SCAN_CANCEL_GUARD_MS) return; playback?.cancelScan(); };
-  // Choosing a computer sets the Playback API host (saved by the scan) and, with it, the network script's address: the script is asked at
+  // Choosing a computer sets the Playback API host (saved by the scan) and, with it, the Library Link's address: the script is asked at
   // the Playback host unless Advanced names another address, and a name typed for the old computer would be wrong for the new one.
   const choose = (chosen: string) => {
     scanClickedAt.current = Date.now();
@@ -87,7 +87,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const scriptState = library?.status?.helper.state ?? null;
   const needsSetup = scriptState !== "ready" && scriptState !== null;
   const setupShown = setupOpen ?? needsSetup;
-  const setupLabel = scriptState === "outdated" ? "Update the network script" : "Network script setup";
+  const setupLabel = scriptState === "outdated" ? "Update the Library Link" : "Library Link setup";
   const note = scriptNote(library?.status ?? null);
   const paired = Boolean(library?.status?.helper.paired) && library?.status?.helper.state !== "forgotten";
   const overrideChanged = override.trim() !== savedOverride;
@@ -99,7 +99,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       pill={(
         <>
           <LiveLinkPill detail={api.text} name="" testId="playback-api-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />
-          {library && <LiveLinkPill detail={script?.text} name="" testId="network-script-pill" text={`Network script: ${parts.script.word}`} tone={parts.script.tone} />}
+          {library && <LiveLinkPill detail={script?.text} name="" testId="library-link-pill" text={`Library Link: ${parts.script.word}`} tone={parts.script.tone} />}
         </>
       )}
       testId="playback-live-link"
@@ -184,7 +184,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
           {script && (
             <>
               <span aria-hidden="true" className="hidden sm:inline">{" \u00B7 "}</span>
-              <span className="block sm:inline" data-testid="network-script-status" data-tone={script.tone}>Network script: {script.text}.</span>
+              <span className="block sm:inline" data-testid="library-link-status" data-tone={script.tone}>Library Link: {script.text}.</span>
             </>
           )}
         </p>
@@ -198,7 +198,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
 
       {library && (
         <>
-          {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="network-script-note" role="status">{note}</p>}
+          {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="library-link-note" role="status">{note}</p>}
           <div hidden={!setupShown} id={setupId}>
             <PlaybackInstallBox hasComputer={hasComputer} library={library} />
           </div>
@@ -206,16 +206,16 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
           <div className="mt-2 rounded-ds-lg border border-edge bg-surface-900/60 p-3" data-testid="playback-live-link-advanced" hidden={!advancedOpen} id={advancedId}>
             <div className="space-y-3">
               <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void library.saveAddress(override.trim()); }}>
-                <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Network script address">
+                <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Library Link address">
                   <Input className="font-mono" onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
                 </Field>
                 <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
               </form>
-              <p className="text-xs text-ink-muted">Leave this empty: the network script is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
+              <p className="text-xs text-ink-muted">Leave this empty: the Library Link is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
               {paired && (
                 <div>
-                  <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the network script</Button>
-                  <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The script keeps running on the Playback computer but StagePilot can no longer use it.</p>
+                  <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the Library Link</Button>
+                  <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The Library Link keeps running on the Playback computer but StagePilot can no longer use it.</p>
                 </div>
               )}
             </div>
@@ -224,13 +224,13 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
             actions={
               <>
                 <Button autoFocus onClick={() => setForgetOpen(false)} size="touch" tone="playback" variant="tinted">Cancel</Button>
-                <Button onClick={() => { setForgetOpen(false); void library.forget(); }} size="touch" tone="playback" variant="tinted">Forget the network script</Button>
+                <Button onClick={() => { setForgetOpen(false); void library.forget(); }} size="touch" tone="playback" variant="tinted">Forget the Library Link</Button>
               </>
             }
-            description="StagePilot deletes the key it made for the network script. The script keeps running on the Playback computer, but StagePilot can no longer use it. Song details (key, BPM, arrangement) go away until you run the setup command again."
+            description="StagePilot deletes the key it made for the Library Link. The Library Link keeps running on the Playback computer, but StagePilot can no longer use it. Song details (key, BPM, arrangement) go away until you run the setup command again."
             dismissible={false}
             open={forgetOpen}
-            title="Forget the network script?"
+            title="Forget the Library Link?"
           />
         </>
       )}

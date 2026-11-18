@@ -11,7 +11,7 @@ export type LibraryStatus = {
  */
 enabled: boolean, 
 /**
- * The network script's own state (`helper.state` is `ready` or `outdated`): the one gate for library features.
+ * The Library Link's own state (`helper.state` is `ready` or `outdated`): the one gate for library features.
  */
 active: boolean, helper: HelperStatus, 
 /**

@@ -24,7 +24,7 @@ const disconnected = (host: string | null = null, extra = {}) => controller({
   }),
 });
 const block = () => screen.getByTestId("playback-live-link");
-const line = (id: "playback-banner" | "network-script-status") => within(block()).getByTestId(id);
+const line = (id: "playback-banner" | "library-link-status") => within(block()).getByTestId(id);
 
 describe("Playback Live Link: the first block of the Playback API panel", () => {
   it("is titled Playback Live Link, in the bordered Live Link card with two status pills beside the title", () => {
@@ -33,7 +33,7 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     expect(block()).toHaveAttribute("aria-label", "Playback Live Link");
     expect(block()).toHaveClass("live-link", "rounded-ds-xl", "border", "border-edge", "bg-surface-panel-strong");
     expect(screen.getByTestId("playback-api-pill")).toHaveTextContent("Playback API: Connected");
-    expect(screen.getByTestId("network-script-pill")).toHaveTextContent("Network script: Connected");
+    expect(screen.getByTestId("library-link-pill")).toHaveTextContent("Library Link: Connected");
   });
 
   it("is the first thing in the Playback API panel, ahead of the song order", () => {
@@ -45,32 +45,32 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
   it("says each status in its own pill, a dot AND words, and the full sentences in the quiet strip under the fields", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
     const apiPill = screen.getByTestId("playback-api-pill");
-    const scriptPill = screen.getByTestId("network-script-pill");
+    const scriptPill = screen.getByTestId("library-link-pill");
     expect(apiPill).toHaveTextContent("Playback API: Connected");
-    expect(scriptPill).toHaveTextContent("Network script: Connected");
+    expect(scriptPill).toHaveTextContent("Library Link: Connected");
     expect(apiPill).toHaveAttribute("data-tone", "success");
     expect(scriptPill).toHaveAttribute("data-tone", "success");
     expect(apiPill.querySelector("[data-tone]")).not.toBeNull();
     expect(scriptPill.querySelector("[data-tone]")).not.toBeNull();
     expect(apiPill).not.toContainElement(scriptPill);
     expect(line("playback-banner")).toHaveTextContent("Connected to Playback at 10.30.0.141.");
-    expect(line("network-script-status")).toHaveTextContent("Network script: Ready, version 0.3.0");
+    expect(line("library-link-status")).toHaveTextContent("Library Link: Ready, version 0.3.0");
     expect(within(block()).getByTestId("live-link-sub")).toContainElement(line("playback-banner"));
   });
 
   it.each([
-    ["ready", true, "Playback API: Connected", "Network script: Connected"],
-    ["outdated", true, "Playback API: Connected", "Network script: Update available"],
-    ["not_installed", true, "Playback API: Connected", "Network script: Not installed"],
-    ["needs_key", true, "Playback API: Connected", "Network script: Needs setup"],
-    ["ready", false, "Playback API: Not connected", "Network script: Connected"],
-    ["not_installed", false, "Playback API: Not connected", "Network script: Not installed"],
+    ["ready", true, "Playback API: Connected", "Library Link: Connected"],
+    ["outdated", true, "Playback API: Connected", "Library Link: Update available"],
+    ["not_installed", true, "Playback API: Connected", "Library Link: Not installed"],
+    ["needs_key", true, "Playback API: Connected", "Library Link: Needs setup"],
+    ["ready", false, "Playback API: Not connected", "Library Link: Connected"],
+    ["not_installed", false, "Playback API: Not connected", "Library Link: Not installed"],
   ] as [HelperState, boolean, string, string][])("the pills for a %s script with the API %s say the two statuses", (state, api, apiWords, scriptWords) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={api ? controller() : disconnected("10.30.0.141")} />);
     expect(screen.getByTestId("playback-api-pill")).toHaveTextContent(apiWords);
-    expect(screen.getByTestId("network-script-pill")).toHaveTextContent(scriptWords);
+    expect(screen.getByTestId("library-link-pill")).toHaveTextContent(scriptWords);
     expect(screen.getByTestId("playback-api-pill")).toHaveAttribute("aria-label", expect.stringContaining("Playback API:"));
-    expect(screen.getByTestId("network-script-pill")).toHaveAttribute("aria-label", expect.stringContaining("Network script:"));
+    expect(screen.getByTestId("library-link-pill")).toHaveAttribute("aria-label", expect.stringContaining("Library Link:"));
   });
 
   it.each([
@@ -81,14 +81,14 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     ["forgotten", "Forgotten"],
   ] as [HelperState, string][])("a %s script reads %s", (state, words) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
-    expect(line("network-script-status")).toHaveTextContent(`Network script: ${words}`);
+    expect(line("library-link-status")).toHaveTextContent(`Library Link: ${words}`);
   });
 
-  it("a computer with no network script is not a warning anywhere in the block", () => {
+  it("a computer with no Library Link is not a warning anywhere in the block", () => {
     render(<PlaybackLiveLink library={libraryController("not_installed")} playback={controller()} />);
-    expect(line("network-script-status")).toHaveAttribute("data-tone", "idle");
+    expect(line("library-link-status")).toHaveAttribute("data-tone", "idle");
     expect(within(block()).queryByRole("alert")).toBeNull();
-    expect(within(block()).queryByTestId("network-script-note")).toBeNull();
+    expect(within(block()).queryByTestId("library-link-note")).toBeNull();
     expect(block().querySelector(".text-warning-text, .text-danger-text")).toBeNull();
   });
 
@@ -96,20 +96,20 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     const library = libraryController("ready");
     library.status = libraryStatus("ready", { state: "waiting", message: "The Playback library is running but not ready yet: macOS has to be told to allow it." });
     render(<PlaybackLiveLink library={library} playback={controller()} />);
-    expect(screen.getByTestId("network-script-note")).toHaveTextContent("not ready yet");
+    expect(screen.getByTestId("library-link-note")).toHaveTextContent("not ready yet");
   });
 
   it("without a library controller (a window that cannot configure) it is the Playback API block alone", () => {
     render(<PlaybackLiveLink playback={controller()} />);
-    expect(screen.queryByTestId("network-script-status")).toBeNull();
-    expect(screen.queryByTestId("network-script-pill")).toBeNull();
+    expect(screen.queryByTestId("library-link-status")).toBeNull();
+    expect(screen.queryByTestId("library-link-pill")).toBeNull();
     expect(screen.getByTestId("playback-api-pill")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
     expect(screen.queryByTestId("playback-install")).toBeNull();
   });
 });
 
-describe("the network script setup box in the block", () => {
+describe("the Library Link setup box in the block", () => {
   it.each(["not_installed", "needs_key", "unreachable", "forgotten"] as HelperState[])("is offered when the script is %s", (state) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
     expect(screen.getByRole("button", { name: "Set up the Playback computer" })).toBeEnabled();
@@ -118,11 +118,11 @@ describe("the network script setup box in the block", () => {
   it("offers the update when the script is outdated, and nothing when it is ready", () => {
     const { unmount } = render(<PlaybackLiveLink library={libraryController("outdated")} playback={controller()} />);
     // Two buttons carry that name: the strip's opener and the one in the open box that makes the command.
-    expect(within(screen.getByTestId("playback-install")).getByRole("button", { name: "Update the network script" })).toBeEnabled();
+    expect(within(screen.getByTestId("playback-install")).getByRole("button", { name: "Update the Library Link" })).toBeEnabled();
     unmount();
     render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
     expect(screen.queryByTestId("playback-install")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Set up the Playback computer|Update the network script/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Set up the Playback computer|Update the Library Link/ })).toBeNull();
   });
 
   it("waits to be offered until the script has answered once, and asks to choose the computer first when there is none", () => {
@@ -143,7 +143,7 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
     expect(screen.getByLabelText("Playback computer").tagName).toBe("SELECT");
   });
 
-  it("choosing a computer sets the API host and the network script's address: an Advanced override is cleared", async () => {
+  it("choosing a computer sets the API host and the Library Link's address: an Advanced override is cleared", async () => {
     const playback = disconnected(null, { scan: scanOf("found", { candidates: [{ name: "Example Mac", host: "10.30.0.141" }, { name: "Other PC", host: "10.20.0.102" }] }) });
     const library = libraryController("not_installed", { address: "http://10.99.0.5" });
     render(<PlaybackLiveLink library={library} playback={playback} />);
@@ -162,14 +162,14 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
   });
 });
 
-describe("Advanced: the address override and Forget the network script", () => {
+describe("Advanced: the address override and Forget the Library Link", () => {
   const openAdvanced = async () => userEvent.setup().click(screen.getByRole("button", { name: /Advanced/ }));
 
   it("saves an override of the script's address, and shows the saved one without http://", async () => {
     const library = libraryController("ready", { address: "http://10.20.0.102:9000" });
     render(<PlaybackLiveLink library={library} playback={controller()} />);
     await openAdvanced();
-    const input = screen.getByLabelText("Network script address");
+    const input = screen.getByLabelText("Library Link address");
     expect(input).toHaveValue("10.20.0.102:9000");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await userEvent.setup().clear(input);
@@ -183,26 +183,26 @@ describe("Advanced: the address override and Forget the network script", () => {
     render(<PlaybackLiveLink library={library} playback={controller()} />);
     await openAdvanced();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Forget the network script" }));
+    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("Forget the network script?");
+    expect(dialog).toHaveTextContent("Forget the Library Link?");
     expect(dialog).toHaveTextContent("keeps running on the Playback computer");
     expect(library.forget).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(library.forget).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Forget the network script" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Forget the network script" }));
+    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Forget the Library Link" }));
     expect(library.forget).toHaveBeenCalledTimes(1);
   });
 
   it("has nothing to forget when there is no key", async () => {
     render(<PlaybackLiveLink library={libraryController("forgotten")} playback={controller()} />);
     await openAdvanced();
-    expect(screen.queryByRole("button", { name: "Forget the network script" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Forget the Library Link" })).toBeNull();
   });
 });
 
-describe("a computer with no network script looks like a build without the library", () => {
+describe("a computer with no Library Link looks like a build without the library", () => {
   const withoutBlock = (html: HTMLElement) => {
     const copy = html.cloneNode(true) as HTMLElement;
     copy.querySelector("[data-testid='playback-live-link']")?.remove();

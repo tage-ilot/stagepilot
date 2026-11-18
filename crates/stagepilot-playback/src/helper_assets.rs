@@ -1,4 +1,4 @@
-//! The Playback helper (`huntrw6/playback-library`, the "network script") files that ship inside this
+//! The Playback helper (`huntrw6/playback-library`, the "Library Link") files that ship inside this
 //! binary, so the "Set up the Playback computer" box can hand a version-matched installer to the
 //! Playback Mac without internet. They are the three files of a release that the installer needs:
 //! `playback_library.py`, `install.sh` and the `SHA256SUMS` that lists them (it also lists

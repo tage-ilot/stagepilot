@@ -4,7 +4,7 @@ import type { Tone } from "./ui/types";
 
 /**
  * The words and tones of the Playback Live Link block (DESIGN.md: a dot AND words, never colour alone). Two statuses are kept apart on
- * purpose: the Playback API (what StagePilot controls Playback through) and the network script (the helper on the Playback computer that
+ * purpose: the Playback API (what StagePilot controls Playback through) and the Library Link (the helper on the Playback computer that
  * lets StagePilot read each song's key, BPM and arrangement). The script is optional: a computer that has none is "Not installed", a calm
  * grey, never a warning.
  */
@@ -38,7 +38,7 @@ const HELPER_TONE: Record<HelperState, Tone> = {
   unreachable: "warning",
 };
 
-/** The network script line: `Ready, version 0.3.0`, `Not installed`, `Update available`, `Needs the command again`, `Not answering`, `Forgotten`. */
+/** The Library Link line: `Ready, version 0.3.0`, `Not installed`, `Update available`, `Needs the command again`, `Not answering`, `Forgotten`. */
 export function scriptLine(status: LibraryStatus | null, hasComputer: boolean): LiveLinkLine {
   if (!status) return hasComputer ? { tone: "idle", text: "Checking…" } : { tone: "idle", text: "Not installed" };
   const { state, version } = status.helper;
@@ -63,7 +63,7 @@ export interface PillPart {
 }
 
 /**
- * The two statuses in the pill beside the title: "Playback API: Connected - Network script: Connected". One short word each (the long
+ * The two statuses in the pill beside the title: "Playback API: Connected - Library Link: Connected". One short word each (the long
  * sentence rides in the strip under the fields and in the tooltip). The script is "Connected" when it answers with the key, even if a
  * newer one is available (that is said as "Update available").
  */

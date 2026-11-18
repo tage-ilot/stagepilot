@@ -1,13 +1,13 @@
 # Previewing the Playback Live Link without Playback
 
-The Playback Live Link block (Playback API panel) shows two things: the Playback API connection and the optional **network script**
+The Playback Live Link block (Playback API panel) shows two things: the Playback API connection and the optional **Library Link**
 on the Playback computer. To look at it in a browser you need neither Playback nor the real helper. Three small programs on this
 computer stand in for them. All use only the Python standard library, bind to `127.0.0.1` and write nothing.
 
 | Stand-in | File | What it pretends to be |
 |---|---|---|
 | Playback API | `tools/fake_playback_api.py` | Playback's remote connection (heartbeats every second): the "Playback API: Connected" line |
-| Network script | `tools/fake_playback_library.py` | `huntrw6/playback-library` 0.3.0: it checks the HMAC key exactly like the real helper |
+| Library Link | `tools/fake_playback_library.py` | `huntrw6/playback-library` 0.3.0: it checks the HMAC key exactly like the real helper |
 | StagePilot | `cargo run -p stagepilot-server -- --demo` | the demo backend (a demo Planning Center plan, no keychain) |
 
 The demo backend has no Playback API of its own, so the stand-in is a real listener the demo's own Playback connection finds. Nothing in
@@ -29,11 +29,11 @@ Open `http://127.0.0.1:8765`, then the Playback API panel (Configuration).
 # 2. the Playback API: a Playback computer at 127.0.0.1, port 18080 (the default port is 8080: use that with --port 8080 and skip the PUT)
 curl -s -X PUT http://127.0.0.1:8765/api/v1/playback-api/settings -H 'content-type: application/json' \
   -d '{"enabled":true,"host":"127.0.0.1","port":18080,"auto_scan":false,"fast_transport":true}'
-# 3. the network script's address (an override, because the stand-in is on its own port; a real helper is on 8780 and needs none)
+# 3. the Library Link's address (an override, because the stand-in is on its own port; a real helper is on 8780 and needs none)
 curl -s -X PUT http://127.0.0.1:8765/api/v1/playback-library/settings -H 'content-type: application/json' -d '{"address":"127.0.0.1:18780"}'
 ```
 
-The block now reads **Playback API: Connected to Playback on this computer** and **Network script: Update available, version 0.3.0**
+The block now reads **Playback API: Connected to Playback on this computer** and **Library Link: Update available, version 0.3.0**
 (a helper with no key: it works, and the setup is offered). The Songs in Playback chips appear with covers.
 
 ## Pair it, like a real install
@@ -49,9 +49,9 @@ The setup command is for the *Playback computer's* Terminal; for the preview, th
      --pair-from http://192.168.1.20:<port>/playback-helper/<token>/install.sh
    ```
 
-   (Use the address in the command StagePilot shows.) Within a few seconds the box says **The network script is ready.**, closes and the block reads
-   **Network script: Ready, version 0.3.0** with the pill **Connected**.
-3. **Advanced > Forget the network script** asks to confirm, deletes the key and the line reads **Forgotten**; the stand-in still runs but
+   (Use the address in the command StagePilot shows.) Within a few seconds the box says **The Library Link is ready.**, closes and the block reads
+   **Library Link: Ready, version 0.3.0** with the pill **Connected**.
+3. **Advanced > Forget the Library Link** asks to confirm, deletes the key and the line reads **Forgotten**; the stand-in still runs but
    is answered with 401 when it is asked again.
 
 ## Other states to look at

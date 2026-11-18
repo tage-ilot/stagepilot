@@ -6,7 +6,7 @@ import { arrangeSongs, CLOSE_SECONDS, LIKELY_DIFFERENT_SECONDS, secondsApart } f
  * The song matchup (DESIGN.md "Song arrangement"): one row per plan song and per Playback song, in the order a person reads
  * them, each with the plain words for where the two sides disagree. Two sources feed it and both end in the same rows:
  *  - `classicRows`: the saved scan alone (Playback songs are "Playback song N", paired by position after the skips), exactly what
- *    the window did before the network script existed;
+ *    the window did before the Library Link existed;
  *  - `libraryRows`: the Playback library's setlist, paired with the plan by title (the backend says how sure each pair is), with
  *    the saved scan joined on afterwards so the skips and "which song will really start this timer" stay true.
  * Nothing here reorders a song, saves anything or asks anyone.

@@ -622,7 +622,7 @@ async fn forgotten_means_nothing_is_asked_and_no_address_is_a_sentence() {
     let helper = Helper::new();
     let address = helper.serve().await;
     let library = PlaybackLibrary::new();
-    // `enabled: false` with no key is what "Forget the network script" leaves (an old switch that was off reads so).
+    // `enabled: false` with no key is what "Forget the Library Link" leaves (an old switch that was off reads so).
     let forgotten = PlaybackLibrarySettings {
         enabled: Some(false),
         address: address.clone(),

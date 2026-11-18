@@ -6,7 +6,7 @@ import type { LibraryPlan, LibraryStatus, SettingsResponse } from "../types";
 
 /** How often an open window asks again. The backend asks the helper at most this often however many windows there are. */
 export const LIBRARY_REFRESH_MS = 30_000;
-/** While a setup box waits for the network script to answer, the window looks this often (the backend still asks the helper only every few seconds). */
+/** While a setup box waits for the Library Link to answer, the window looks this often (the backend still asks the helper only every few seconds). */
 export const LIBRARY_WATCH_MS = 3_000;
 
 export interface PlaybackLibraryController {
@@ -20,7 +20,7 @@ export interface PlaybackLibraryController {
   pending: "save" | "check" | "forget" | "setlist" | null;
   /** Saves the override of the helper's computer (empty: the Playback host). */
   saveAddress: (address: string) => Promise<boolean>;
-  /** "Forget the network script": the key is deleted; the script keeps running but cannot be used. */
+  /** "Forget the Library Link": the key is deleted; the script keeps running but cannot be used. */
   forget: () => Promise<boolean>;
   /** Chooses which Playback setlist the loaded plan is matched with (null: the one on the plan's date). The backend keeps it in memory for this plan only; nothing is saved or sent to Playback. */
   chooseSetlist: (setlistId: number | null) => Promise<boolean>;
@@ -31,7 +31,7 @@ export interface PlaybackLibraryController {
 }
 
 /**
- * The Playback library (the network script). There is no on/off switch: while a Playback computer is saved (or Advanced names another
+ * The Playback library (the Library Link). There is no on/off switch: while a Playback computer is saved (or Advanced names another
  * address) this hook asks for the status and the plan every 30 s, only while the window is visible. A helper that is not there is a quiet
  * state, not an error, and the backend never asks a forgotten one at all. Read-only: the only things it can write are its own address
  * override and "forget".
@@ -58,7 +58,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
       setPlan(nextPlan);
       if (errorFrom.current !== "action") { errorFrom.current = null; setError(null); }
     } catch (cause) {
-      if (generation.current === current && errorFrom.current !== "action") { errorFrom.current = "read"; setError(describeError(cause, "The network script could not be read.")); }
+      if (generation.current === current && errorFrom.current !== "action") { errorFrom.current = "read"; setError(describeError(cause, "The Library Link could not be read.")); }
     }
   }, []);
 
@@ -98,7 +98,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
       return true;
     } catch (cause) {
       errorFrom.current = "action";
-      setError(describeError(cause, "The network script's address could not be saved."));
+      setError(describeError(cause, "The Library Link's address could not be saved."));
       return false;
     } finally {
       setPending(null);
@@ -118,7 +118,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
       return true;
     } catch (cause) {
       errorFrom.current = "action";
-      setError(describeError(cause, "StagePilot could not forget the network script."));
+      setError(describeError(cause, "StagePilot could not forget the Library Link."));
       return false;
     } finally {
       setPending(null);

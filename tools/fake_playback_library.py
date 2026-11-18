@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A stand-in for the Playback helper (the "network script"), for looking at StagePilot's Playback Live Link in a
+"""A stand-in for the Playback helper (the "Library Link"), for looking at StagePilot's Playback Live Link in a
 browser. Standard library only. It is NOT the real helper: it has no Playback database and no Playback.
 
 It speaks the helper's HTTP protocol (version 0.3.0) well enough for StagePilot, and it checks the key the same

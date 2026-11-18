@@ -31,7 +31,7 @@ pub const SETTINGS_SCHEMA_VERSION: u8 = 2;
 pub const KEYRING_SERVICE: &str = "StagePilot";
 pub const KEYRING_ACCOUNT: &str = "planning-center-secret";
 pub const KEYRING_ACCOUNT_OAUTH: &str = "planning-center-oauth";
-/// The key StagePilot made for the Playback helper (the "network script"). Never in `settings.json`.
+/// The key StagePilot made for the Playback helper (the "Library Link"). Never in `settings.json`.
 pub const KEYRING_ACCOUNT_PLAYBACK_LIBRARY: &str = "playback-library-key";
 /// The application version, injected by `build.rs` from `tauri.conf.json` (or `STAGEPILOT_VERSION`).
 pub const APP_VERSION: &str = env!("STAGEPILOT_VERSION");

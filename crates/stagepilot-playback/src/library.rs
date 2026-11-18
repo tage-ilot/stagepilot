@@ -36,7 +36,7 @@ pub enum LibraryState {
     Problem,
 }
 
-/// Where the helper on the Playback computer (the "network script") stands. Only `ready` and
+/// Where the helper on the Playback computer (the "Library Link") stands. Only `ready` and
 /// `outdated` let the library feed anything; every other state is quiet (no notice anywhere),
 /// except that a helper that was ready and has gone silent (`unreachable`) may say so in the
 /// header pill.
@@ -86,7 +86,7 @@ pub struct HelperStatus {
 pub struct LibraryStatus {
     /// The library is in use: the helper is `ready` or `outdated`, or was and is silent now.
     pub enabled: bool,
-    /// The network script's own state (`helper.state` is `ready` or `outdated`): the one gate for library features.
+    /// The Library Link's own state (`helper.state` is `ready` or `outdated`): the one gate for library features.
     pub active: bool,
     pub helper: HelperStatus,
     /// As saved (`http://host[:port]`), empty when none.
@@ -443,19 +443,19 @@ pub fn helper_words(state: HelperState, version: Option<&str>) -> String {
         .map_or(String::new(), |v| format!(" (version {v})"));
     match state {
         HelperState::NotInstalled => {
-            "The network script is not installed on the Playback computer.".to_string()
+            "The Library Link is not installed on the Playback computer.".to_string()
         }
         HelperState::NeedsKey => {
-            "The network script does not know this StagePilot yet. Run the setup command again."
+            "The Library Link does not know this StagePilot yet. Run the setup command again."
                 .to_string()
         }
         HelperState::Outdated => format!(
-            "The network script{version} can be updated. It still works; run the setup command to update it."
+            "The Library Link{version} can be updated. It still works; run the setup command to update it."
         ),
-        HelperState::Ready => format!("The network script{version} is ready."),
-        HelperState::Unreachable => "The network script did not answer.".to_string(),
+        HelperState::Ready => format!("The Library Link{version} is ready."),
+        HelperState::Unreachable => "The Library Link did not answer.".to_string(),
         HelperState::Forgotten => {
-            "StagePilot forgot the network script. Run the setup command to use it again."
+            "StagePilot forgot the Library Link. Run the setup command to use it again."
                 .to_string()
         }
     }

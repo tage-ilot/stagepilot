@@ -49,15 +49,15 @@ function SongChip({ song }: { song: LibraryPlanSong }) {
 }
 
 /**
- * What the Playback library (the network script) knows about the plan's songs, in the Playback API panel: one chip per plan song (a 28 px
+ * What the Playback library (the Library Link) knows about the plan's songs, in the Playback API panel: one chip per plan song (a 28 px
  * cover, key, BPM, countdown length and a thin arrangement bar) and the notices (a song missing from Playback, a different order, a rental
  * that ends, another date). StagePilot only READS it: nothing here changes Playback, the plan, the saved scan, a timer or a light.
  *
- * It draws NOTHING unless the network script is ready (or outdated, which still works): a computer without the script looks exactly like
+ * It draws NOTHING unless the Library Link is ready (or outdated, which still works): a computer without the script looks exactly like
  * a build without the library. The notices that need action also go in the header pill; the length difference is information only.
  */
 export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: PlaybackLibraryController; plan: ServicePlan | null; timeZone: string }) {
-  // The backend answers `ready` only while the network script is ready or outdated, so this one gate is the whole rule.
+  // The backend answers `ready` only while the Library Link is ready or outdated, so this one gate is the whole rule.
   const notices = libraryNotices(library.plan, plan, timeZone);
   const songs = library.plan?.enabled && library.plan.state === "ready" ? library.plan.songs : [];
   if (!songs.length && !notices.length) return null;

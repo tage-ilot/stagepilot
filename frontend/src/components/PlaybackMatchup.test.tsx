@@ -60,7 +60,7 @@ describe("the matchup without the library", () => {
     expect(skip("Skip One Thing Remains")).toBeInTheDocument();
   });
 
-  it("is the same when the network script is not installed, forgotten or not answering, even with a plan the library once held", () => {
+  it("is the same when the Library Link is not installed, forgotten or not answering, even with a plan the library once held", () => {
     for (const state of ["not_installed", "needs_key", "forgotten", "unreachable"] as const) {
       const { unmount } = render(<Host initial={{ song_order: [900, 17, 42, 55, 70] }} library={libraryController(state, { plan: sampleLibrary() })} />);
       expect(screen.queryByTestId("playback-setlist")).not.toBeInTheDocument();
@@ -201,7 +201,7 @@ describe("the matchup with the library", () => {
     expect(rows()[0]).toHaveTextContent("Playback song 1");
   });
 
-  it("does not use the network script for anything while it is not active, whatever the plan answer holds", () => {
+  it("does not use the Library Link for anything while it is not active, whatever the plan answer holds", () => {
     const library = libraryController("ready", { plan: sampleLibrary() });
     library.status = { ...library.status!, active: false };
     render(<Host library={library} />);
