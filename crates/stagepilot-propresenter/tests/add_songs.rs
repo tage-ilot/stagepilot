@@ -699,7 +699,9 @@ async fn apply_imports_copies_and_writes_the_playlist_once_keeping_every_other_i
     // The backup holds the playlist as it was before.
     let backup = report.backup.clone().unwrap();
     assert!(
-        backup.contains("propresenter-playlist-backups/Sunday-20270115-"),
+        backup
+            .replace('\\', "/")
+            .contains("propresenter-playlist-backups/Sunday-20270115-"),
         "{backup}"
     );
     let saved: Value = serde_json::from_slice(&std::fs::read(&backup).unwrap()).unwrap();
