@@ -97,6 +97,8 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::playback_helper_install::api_routes())
         // The ProPresenter Link: how the ProPresenter computer is reached, and its setup session (LAN only, with the key inside).
         .merge(crate::propresenter_link::routes())
+        // Adding the songs Playback plays to a ProPresenter playlist (preview, apply, jobs): behind the same PIN, origin and remote rules.
+        .merge(crate::propresenter_add_songs::routes())
         .merge(crate::propresenter_helper_install::api_routes())
         .merge(crate::propresenter_helper_install::served_routes(
             runtime.propresenter_helper_install.clone(),

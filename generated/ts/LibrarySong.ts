@@ -8,6 +8,11 @@ import type { LibrarySection } from "./LibrarySection";
  */
 export type LibrarySong = { setlist_song_id: number | null, 
 /**
+ * The song's MultiTracks number (the helper's `content_id`), which is also the number inside the song file ProPresenter
+ * has; null when the helper gave none. The ProPresenter Link finds the song in ProPresenter by it.
+ */
+content_id: number | null, 
+/**
  * Place in the Playback setlist, from 1.
  */
 position: number, title: string, 

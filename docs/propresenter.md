@@ -51,8 +51,8 @@ disconnect.
 
 The ProPresenter Link is how StagePilot reaches the **files and the screen of the ProPresenter computer**: it reads the
 song files (to find which MultiTracks song each one is), adds new files to a library named `Playback`, and, on a Mac, drives
-ProPresenter's own Search window to import a song. This version only builds the connection, its status, the helper and the
-setup; nothing in ProPresenter is changed by it yet. It is optional: with no ProPresenter Link StagePilot works as before.
+ProPresenter's own Search window to import a song. What it is used for is [Adding Playback songs to a playlist](#adding-playback-songs-to-a-playlist)
+below. It is optional: with no ProPresenter Link StagePilot works as before.
 
 **Which connection (no switch, the saved ProPresenter computer decides).** The link is used while the ProPresenter output is
 in use and a ProPresenter host is saved (`propresenter.host`). If that host is this computer (`127.0.0.1`, `localhost`, `::1`,
@@ -99,6 +99,87 @@ code and key; the two helpers are independent. Without a Mac or the Accessibilit
 To try it without ProPresenter: `python3 tools/fake_propresenter_link.py --port 18790 --key-file key.txt --allow-client 127.0.0.1 --allow-loopback`
 runs the real helper on a temporary folder with the screen replaced; `tools/fake_propresenter_api.py` stands in for ProPresenter's
 own HTTP API (libraries and playlists) for the later arrangement work.
+
+## Adding Playback songs to a playlist
+
+StagePilot can put the songs Playback plays into one ProPresenter playlist, in setlist order, at a place you choose, each one
+**with the arrangement and the key Playback plays it in**. It needs the Playback Library Link (for the songs, their sections,
+their keys and their MultiTracks numbers), the ProPresenter Link (for the files; **Ready**) and ProPresenter's own network
+setting (its API, port 1025). Nothing happens unless a person asks for a **preview** and then presses the button for exactly
+what the preview showed.
+
+**What happens, song by song.**
+
+1. The song is found in ProPresenter by its **MultiTracks number** (Playback's `content_id`, which is also the number inside the
+   song file ProPresenter has), never by its title.
+2. When ProPresenter does not have it, it is **imported through ProPresenter's own Search** (Mac with Accessibility permission;
+   the song is named after its title without dots and slashes, because ProPresenter cuts a name at the first dot). The import is
+   asked not to touch any playlist; StagePilot does the playlist itself. After it, StagePilot checks that the new file really is
+   the song that was asked for; if not it stops with `wrong_song` and adds nothing for that song.
+3. A **copy** is made in the library named **Playback** (made when it is not there): `<Song> (n).pro`, with the lowest `n` from 1
+   that no file in any library has, so a name is never reused (ProPresenter ignores a file replaced under the same name). The
+   copy keeps **all of the song's own arrangements** (the people running ProPresenter can still change the section order by
+   hand), adds one named `Playback` made from the sections Playback plays (repeats stay separate entries; "Count Off" is the
+   song's blank-named group) and selects it. A section is matched to a group first by laying the names alongside the song's own
+   `Full` arrangement, then by the one group with that name; several groups of one name only when they say the same thing.
+   **A section no group matches (or two different groups match) blocks that song; nothing is guessed.** Every id inside the
+   copy is new (consistently), its dates are now, its name is unchanged and everything StagePilot does not know about in the
+   file is copied as it was, byte for byte.
+4. If a copy that **already plays what Playback plays now, in the same key** is in the Playback library, it is used and nothing
+   new is made. When several files in `Songs` carry the number, the one with a `Full` arrangement whose groups match is used;
+   when more than one qualifies the song is `needs_choice` and is never guessed.
+5. ProPresenter loads a new file **lazily**: StagePilot waits up to 30 seconds (looking every 2) for the copy to get an id in
+   ProPresenter's Playback library, selects that library on screen once after 10 seconds (Mac), and if the id is still missing
+   answers `needs_library_open`: **Open the Playback library in ProPresenter once, then press Try again.** Nothing is written to
+   the playlist in that case. Try again is a new preview and apply: files made before are reused, so it is safe to repeat.
+6. Then the playlist is written **once**, as a whole: every item that was there is sent back exactly as it was read (id, name,
+   kind, hidden and PCO flags, header colour, duration), the new songs are inserted at the place, the indexes renumbered. A
+   song item names the Playback-library entry (its id twice, its name without ` - [ Playback ]`) and `Playback` as the
+   arrangement. About 10 seconds later the playlist is read back and every difference from the plan (order, names, kinds,
+   durations, the arrangement of each new song) is listed. A song whose copy is already in the playlist is not added twice.
+
+**Where.** `after_header: "<name>"` is the end of that header's section (before the next header, or the end of the list); `end`
+is after the last item. A header that does not exist, or that appears twice, blocks the change.
+
+**The key.** Playback's key is written into the copy (`music.user` and its text) as ordinary data. **ProPresenter does not show
+a key for these songs, so nobody should expect to see it there**; StagePilot shows Playback's key in its own window. A key
+whose text StagePilot does not know (`Eb`, `F#`, `Bb`, `Am`, `C♯ minor` are known) leaves the song's own key alone and the
+preview says so.
+
+**What it never does.** It never deletes, renames or overwrites a file or a playlist item; it never edits a file in `Songs`
+(only ProPresenter's own import adds one there); it touches only the Playback library folder, the Songs library (through
+ProPresenter's import) and **one** named playlist. It does not delete playlists (ProPresenter has no such call). When the
+playlist write is refused (a `404` makes ProPresenter drop the whole write), nothing in the playlist changed and the answer
+says so and names the backup.
+
+**Safety conditions** (checked again when the change is applied): the ProPresenter Link is Ready; no song is playing in
+StagePilot (Playback says playing, or StagePilot's countdown runs), checked before anything starts and again before every song
+and before the playlist is written (`409 song_playing`); ProPresenter's API answers (its version from `GET /version` is part of
+the answer); the preview is still true (`409 plan_changed` when ProPresenter, the playlist or Playback's arrangement changed
+since); every song that cannot be added was left out by name (`skip`); only one job runs at a time (`409 busy`). Before the
+playlist is touched it is saved as JSON in `propresenter-playlist-backups/<playlist>-<time>.json` beside the settings file; the
+newest 20 are kept.
+
+**Routes** (`/api/v1/propresenter-link/`, behind the same dashboard PIN, origin check and remote-access rules as every other
+write route; a remote viewer cannot use them; ids are numbers or plain text, never a path; unknown fields are refused; errors are
+`{detail, code}`):
+
+- `GET playlists` → `{playlists: [{id, name, folder?, headers: [...]}]}`, folders flattened, kept for 10 seconds.
+- `POST add-songs/preview {setlist_song_ids: [...] | content_ids: [...], playlist_id, after_header: "<name>" | place: "end"}` → the plan:
+  `plan_id`, `playlist {name, place, insert_at, before, after, untouched, blocked?}`, `songs [{ref_id, title, position, action, file, source,
+  import_as, reason, choices, notes, mapping [{section, group, how, line?}], already_in_playlist}]`, `to_add`, `stuck`, `can_apply`,
+  `propresenter`, `warnings`. `action` is `reuse`, `copy`, `import_then_copy`, `needs_choice` or `blocked`. Nothing is written.
+- `POST add-songs/apply {plan_id, skip: [ref_id, ...]}` → `202 {job_id}`. Refusals come at once, before anything is touched:
+  `404 unknown_plan`, `409 plan_changed | songs_blocked | song_playing | busy | nothing_to_add | link_not_ready | place_blocked`.
+- `GET add-songs/jobs/<id>` → `{state: running | done | failed, steps, songs [{ref_id, title, steps, result}], events, report}`; the
+  report has `outcome` (`done`, `done_with_differences`, `needs_library_open`, `stopped`, `song_playing`, `playlist_refused`,
+  `playlist_failed`, `backup_failed`, `not_reachable`, `nothing_to_do`), `message`, `version`, `backup`, `differences` and one
+  result per song.
+
+To try it without ProPresenter: `tools/fake_propresenter_api.py --folder <the fake helper's folder> --lazy select` is
+ProPresenter's API reading the same folder as `tools/fake_propresenter_link.py` (a new file gets its id only after the library
+was selected, like the real lazy loading; a song item reads back the arrangement its file has selected; a wrong name or id makes
+the whole write `404`).
 
 ## Timer sequence
 

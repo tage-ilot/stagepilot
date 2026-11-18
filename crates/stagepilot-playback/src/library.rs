@@ -198,6 +198,10 @@ pub struct LibrarySection {
 pub struct LibrarySong {
     #[ts(type = "number | null")]
     pub setlist_song_id: Option<i64>,
+    /// The song's MultiTracks number (the helper's `content_id`), which is also the number inside the song file ProPresenter
+    /// has; null when the helper gave none. The ProPresenter Link finds the song in ProPresenter by it.
+    #[ts(type = "number | null")]
+    pub content_id: Option<u64>,
     /// Place in the Playback setlist, from 1.
     pub position: u32,
     pub title: String,
@@ -555,6 +559,8 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
     let resolved = countdown_length(scan_length_s, number_in(item, "length_s", 86_400.0));
     Some(LibrarySong {
         setlist_song_id: whole_number(item.get("setlist_song_id")),
+        content_id: whole_number(item.get("content_id"))
+            .and_then(|n| u64::try_from(n).ok().filter(|n| *n > 0)),
         position: count_of(item, "order")
             .filter(|n| *n > 0)
             .unwrap_or_else(|| u32::try_from(index + 1).unwrap_or(u32::MAX)),
@@ -1126,6 +1132,7 @@ mod tests {
     fn song(title: &str, order: u32) -> LibrarySong {
         LibrarySong {
             setlist_song_id: Some(i64::from(order) + 100),
+            content_id: None,
             position: order,
             title: title.into(),
             key: Some("G".into()),
@@ -1335,7 +1342,7 @@ mod tests {
         let answer = json!({
             "title": "November 22nd", "performance_date": "2026-11-22",
             "items": [
-                {"setlist_song_id": 2000001, "order": 1, "title": "Song One", "artist": "x",
+                {"setlist_song_id": 2000001, "order": 1, "title": "Song One", "artist": "x", "content_id": 5551234,
                  "key": {"id": 3, "name": "Ab"}, "key_original": {"name": "C"}, "bpm": 65.0,
                  "length_s": 392.9, "scan_length_s": 388.64, "arrangement": "Default",
                  "rental_expires_utc": "2026-11-24T01:36:00+00:00"},
@@ -1351,6 +1358,8 @@ mod tests {
         assert_eq!(parsed.songs.len(), 2);
         let one = &parsed.songs[0];
         assert_eq!(one.setlist_song_id, Some(2000001));
+        assert_eq!(one.content_id, Some(5_551_234));
+        assert_eq!(parsed.songs[1].content_id, None);
         assert_eq!(one.key.as_deref(), Some("Ab"));
         assert_eq!(one.key_original.as_deref(), Some("C"));
         assert_eq!(one.bpm, Some(65.0));

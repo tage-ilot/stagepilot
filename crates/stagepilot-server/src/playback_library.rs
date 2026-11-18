@@ -953,6 +953,7 @@ impl PlaybackLibrary {
             .ok()?;
         let mut scratch = stagepilot_playback::library::LibrarySong {
             setlist_song_id: Some(id),
+            content_id: None,
             position: 1,
             title: String::new(),
             key: None,

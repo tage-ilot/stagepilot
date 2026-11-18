@@ -8,7 +8,7 @@ const TZ = "America/Los_Angeles";
 const plan = { date: "2026-11-22", service_times: ["10:00"] };
 
 const playback = (over: Partial<LibrarySong> = {}): LibrarySong => ({
-  setlist_song_id: 1, position: 1, title: "Song One", key: "G", key_original: "G", key_was: null, key_changed_at: null, bpm: 72, scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure",
+  setlist_song_id: 1, content_id: null, position: 1, title: "Song One", key: "G", key_original: "G", key_was: null, key_changed_at: null, bpm: 72, scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure",
   arrangement: "Default", section_count: 6, sections: [], artwork: null, rental_expires_utc: null, ...over,
 });
 const song = (title: string, position: number, library: Partial<LibrarySong> | null, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({

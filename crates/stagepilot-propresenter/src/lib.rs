@@ -16,3 +16,4 @@ pub use plugin::{ClientFactory, ProPresenterPlugin};
 pub use snapshot::*;
 pub mod helper_assets;
 pub mod link;
+pub mod pro_file;

@@ -25,6 +25,7 @@ struct State {
     blocker: Option<String>,
     /// What an import writes: the bytes of the new file (default: a few bytes).
     import_bytes: Vec<u8>,
+    import_by_id: BTreeMap<String, Vec<u8>>,
     imports: Vec<(String, String, Option<String>)>,
     selected: Vec<String>,
     select_tries: bool,
@@ -92,6 +93,14 @@ impl FakeHost {
         self.lock().import_bytes = bytes.to_vec();
     }
 
+    /// What the import of ONE song number writes (a made-up `.pro` that carries that number); other numbers still write
+    /// [`Self::set_import_bytes`].
+    pub fn set_import_song(&self, multitracks_id: u64, bytes: &[u8]) {
+        self.lock()
+            .import_by_id
+            .insert(multitracks_id.to_string(), bytes.to_vec());
+    }
+
     /// The next call (whatever it is) fails with this error.
     pub fn fail_next(&self, error: LinkError) {
         self.lock().fail_next = Some(error);
@@ -120,6 +129,20 @@ impl FakeHost {
     /// A file's bytes, for a test to look at.
     pub fn file(&self, library: &str, file: &str) -> Option<Vec<u8>> {
         self.lock().libraries.get(library)?.get(file).cloned()
+    }
+
+    /// The names of the libraries (folders), without a call being counted.
+    pub fn library_names(&self) -> Vec<String> {
+        self.lock().libraries.keys().cloned().collect()
+    }
+
+    /// The files of a library with their bytes, without a call being counted (what ProPresenter itself would see on disk).
+    pub fn files_of(&self, library: &str) -> Vec<(String, Vec<u8>)> {
+        self.lock()
+            .libraries
+            .get(library)
+            .map(|l| l.iter().map(|(n, b)| (n.clone(), b.clone())).collect())
+            .unwrap_or_default()
     }
 
     fn begin(&self, call: String) -> Result<std::sync::MutexGuard<'_, State>, LinkError> {
@@ -262,7 +285,11 @@ impl ProPresenterHost for FakeHost {
             )));
         }
         let file = format!("{name}.pro");
-        let bytes = s.import_bytes.clone();
+        let bytes = s
+            .import_by_id
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| s.import_bytes.clone());
         let songs = s.libraries.entry(SONGS_LIBRARY.to_string()).or_default();
         if songs.contains_key(&file) {
             return Err(LinkError::AlreadyExists(

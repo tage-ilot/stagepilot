@@ -1048,6 +1048,8 @@ export type LengthSource = "last_measure" | "song_end_no_grid" | "song_end_long_
 
 export interface LibrarySong {
   setlist_song_id: number | null;
+  /** The song's MultiTracks number (the same number is inside the song file ProPresenter has); null when Playback gave none. */
+  content_id: number | null;
   /** Place in the Playback setlist, from 1. */
   position: number;
   title: string;
