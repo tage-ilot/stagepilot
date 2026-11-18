@@ -1,7 +1,7 @@
 //! The helpers update themselves when StagePilot starts.
 //!
-//! StagePilot carries a copy of the Playback "Library Link" and of the Lightkey helper (`stagepilot-playback` and `stagepilot-lights`
-//! assets). When StagePilot starts, and again whenever a helper that was silent answers, this module looks at each helper and, when it
+//! StagePilot carries a copy of the Playback "Library Link", of the Lightkey helper and of the ProPresenter Link (`stagepilot-playback`,
+//! `stagepilot-lights` and `stagepilot-propresenter` assets). When StagePilot starts, and again whenever a helper that was silent answers, this module looks at each helper and, when it
 //! is older than the copy StagePilot carries, sends the new files to it (`POST /update`). The helper installs them only when the
 //! StagePilot project signed them; the key that signs ordinary requests is not enough, so a stolen key cannot put code on the Mac.
 //!
@@ -24,6 +24,7 @@
 
 use crate::helper_install::is_private;
 use crate::playback_library::{base_url, settings_from, Failure, PlaybackLibrary};
+use crate::propresenter_link::ProPresenterLink;
 use async_trait::async_trait;
 use serde_json::Value;
 use stagepilot_core::config::PlaybackLibrarySettings;
@@ -37,6 +38,8 @@ use stagepilot_core::store::StateStore;
 use stagepilot_lights::lightkey::{LightkeyHelper, LightkeyLink, LightkeyStatus};
 use stagepilot_playback::library::{helper_state_for, HelperState, HelperStatus};
 use stagepilot_playback::plugin::PlaybackPlugin;
+use stagepilot_propresenter::link::status::{LinkMode, LinkState, LinkStatus};
+use stagepilot_propresenter::link::LinkError;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
@@ -49,6 +52,8 @@ pub enum HelperKind {
     LibraryLink,
     /// The Lightkey helper on the Lighting computer.
     Lightkey,
+    /// The ProPresenter Link helper on the ProPresenter computer (when it is another computer).
+    ProPresenterLink,
 }
 
 impl HelperKind {
@@ -57,6 +62,7 @@ impl HelperKind {
         match self {
             Self::LibraryLink => "the Library Link",
             Self::Lightkey => "the helper",
+            Self::ProPresenterLink => "the ProPresenter Link",
         }
     }
 
@@ -64,6 +70,7 @@ impl HelperKind {
         match self {
             Self::LibraryLink => "Playback computer",
             Self::Lightkey => "Lighting computer",
+            Self::ProPresenterLink => "ProPresenter computer",
         }
     }
 
@@ -71,6 +78,7 @@ impl HelperKind {
         match self {
             Self::LibraryLink => "library_link",
             Self::Lightkey => "lightkey_helper",
+            Self::ProPresenterLink => "propresenter_link",
         }
     }
 }
@@ -282,6 +290,7 @@ struct KindState {
 struct Kinds {
     library: KindState,
     lightkey: KindState,
+    propresenter: KindState,
 }
 
 impl Kinds {
@@ -289,6 +298,7 @@ impl Kinds {
         match kind {
             HelperKind::LibraryLink => &mut self.library,
             HelperKind::Lightkey => &mut self.lightkey,
+            HelperKind::ProPresenterLink => &mut self.propresenter,
         }
     }
 }
@@ -303,6 +313,10 @@ pub struct HelperUpdater {
     lightkey_bundle: UpdateBundle,
     library_signed: bool,
     lightkey_signed: bool,
+    /// The ProPresenter Link: asked about only when one is given (`with_propresenter_link`).
+    propresenter: Option<Arc<ProPresenterLink>>,
+    propresenter_bundle: UpdateBundle,
+    propresenter_signed: bool,
     state: Mutex<Kinds>,
 }
 
@@ -334,6 +348,7 @@ impl HelperUpdater {
         key: &[u8; 32],
         config: UpdaterConfig,
     ) -> Self {
+        let propresenter_bundle = stagepilot_propresenter::helper_assets::update_bundle();
         // The same proxy-free, redirect-free client every other helper call uses.
         let _ = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
@@ -352,14 +367,44 @@ impl HelperUpdater {
             lightkey_signed: signature_valid(&lightkey_bundle, key),
             library_bundle,
             lightkey_bundle,
+            propresenter: None,
+            propresenter_signed: signature_valid(&propresenter_bundle, key),
+            propresenter_bundle,
             state: Mutex::new(Kinds::default()),
         }
+    }
+
+    /// Adds the ProPresenter Link, with the bundle inside this build and the project's key (the product).
+    #[must_use]
+    pub fn with_propresenter_link(self, link: Arc<ProPresenterLink>) -> Self {
+        let key = public_key_bytes(HELPER_SIGNING_PUBLIC_KEY).unwrap_or([0; 32]);
+        self.with_propresenter_parts(
+            link,
+            stagepilot_propresenter::helper_assets::update_bundle(),
+            &key,
+        )
+    }
+
+    /// The same with the bundle and the key given (tests).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_propresenter_parts(
+        mut self,
+        link: Arc<ProPresenterLink>,
+        bundle: UpdateBundle,
+        key: &[u8; 32],
+    ) -> Self {
+        self.propresenter_signed = signature_valid(&bundle, key);
+        self.propresenter_bundle = bundle;
+        self.propresenter = Some(link);
+        self
     }
 
     fn bundle(&self, kind: HelperKind) -> &UpdateBundle {
         match kind {
             HelperKind::LibraryLink => &self.library_bundle,
             HelperKind::Lightkey => &self.lightkey_bundle,
+            HelperKind::ProPresenterLink => &self.propresenter_bundle,
         }
     }
 
@@ -367,6 +412,7 @@ impl HelperUpdater {
         match kind {
             HelperKind::LibraryLink => self.library_signed,
             HelperKind::Lightkey => self.lightkey_signed,
+            HelperKind::ProPresenterLink => self.propresenter_signed,
         }
     }
 
@@ -381,6 +427,21 @@ impl HelperUpdater {
             HelperKind::LibraryLink,
             helper.version.as_deref(),
             helper.updater,
+        )
+    }
+
+    /// What the ProPresenter Link status says about the update, for a helper in this state. `None`: nothing to say (also for the
+    /// Local connection, which has no helper).
+    pub fn propresenter_view(&self, status: &LinkStatus) -> Option<HelperUpdateStatus> {
+        if status.mode != Some(LinkMode::Helper)
+            || !matches!(status.state, LinkState::Ready | LinkState::Outdated)
+        {
+            return None;
+        }
+        self.view(
+            HelperKind::ProPresenterLink,
+            status.version.as_deref(),
+            status.updater,
         )
     }
 
@@ -544,6 +605,85 @@ impl HelperUpdater {
                     kind,
                     &bundle.version,
                     "The Library Link did not come back with the new version in time.".into(),
+                );
+            }
+        }
+    }
+
+    /// Looks at the ProPresenter Link and, when every condition holds, updates it. Nothing is sent otherwise. The Local connection
+    /// has no helper: nothing is looked at.
+    pub async fn evaluate_propresenter(&self) -> Outcome {
+        let kind = HelperKind::ProPresenterLink;
+        let Some(link) = self.propresenter.clone() else {
+            return Outcome::Unreachable;
+        };
+        if !self.env.auto_update() {
+            return Outcome::Off;
+        }
+        let bundle = self.bundle(kind).clone();
+        if let Some(stop) = self.blocked(kind, &bundle) {
+            return stop;
+        }
+        let Some(base) = link.helper_base().await else {
+            return Outcome::Unreachable;
+        };
+        // Everything below goes to the address that was checked here, and to no other.
+        let target = match lan_target(&base).await {
+            Ok(target) => target,
+            Err(why) => return Outcome::Refused(why),
+        };
+        let health = match link.fresh_health(&target.url, &target.host).await {
+            Ok(health) => health,
+            Err(_) => return Outcome::Unreachable,
+        };
+        if health.auth.as_deref() != Some("key") {
+            // It answers, but not to our key: there is nothing this StagePilot may do to it.
+            return Outcome::Unreachable;
+        }
+        if !version_is_older(health.version.as_deref(), &bundle.version) {
+            return Outcome::Current;
+        }
+        if health.updater.is_none_or(|level| level < 1) {
+            return Outcome::NotCapable;
+        }
+        if self.env.song_playing() {
+            return Outcome::NotQuiet("a song is playing");
+        }
+        if self.env.timer_running() {
+            return Outcome::NotQuiet("the song timer is running");
+        }
+        let Some(body) = bundle.request_body() else {
+            return Outcome::Unsigned;
+        };
+        self.begin(kind, &bundle.version);
+        let sent = match link.post_update(&target.url, &target.host, body).await {
+            Ok((200, answer)) if answer.get("updating") == Some(&Value::Bool(true)) => Ok(()),
+            Ok((_, answer)) => Err(error_text(&answer)),
+            Err(LinkError::NoAnswer) => Err("The ProPresenter Link did not answer.".to_string()),
+            Err(_) => Err(
+                "The ProPresenter Link answered in a way StagePilot does not understand."
+                    .to_string(),
+            ),
+        };
+        if let Err(message) = sent {
+            return self.failed(kind, &bundle.version, message);
+        }
+        let deadline = Instant::now() + self.config.wait_for_new_version;
+        loop {
+            tokio::time::sleep(self.config.poll).await;
+            if let Ok(now) = link.fresh_health(&target.url, &target.host).await {
+                if let Some(problem) = now.last_update_error.clone() {
+                    return self.failed(kind, &bundle.version, problem);
+                }
+                if now.version.as_deref() == Some(bundle.version.as_str()) {
+                    return self.succeeded(kind, &bundle.version);
+                }
+            }
+            if Instant::now() >= deadline {
+                return self.failed(
+                    kind,
+                    &bundle.version,
+                    "The ProPresenter Link did not come back with the new version in time.".into(),
                 );
             }
         }
@@ -749,14 +889,23 @@ impl HelperUpdater {
 
     /// One pass of the scheduler, at `now`: notices a helper that came back, and looks at each helper whose turn it is.
     pub async fn tick(&self, now: Instant) {
-        for kind in [HelperKind::LibraryLink, HelperKind::Lightkey] {
+        for kind in self.kinds() {
             self.tick_one(kind, now).await;
         }
     }
 
+    /// The helpers this updater looks after: the ProPresenter Link only when one was given.
+    fn kinds(&self) -> Vec<HelperKind> {
+        let mut kinds = vec![HelperKind::LibraryLink, HelperKind::Lightkey];
+        if self.propresenter.is_some() {
+            kinds.push(HelperKind::ProPresenterLink);
+        }
+        kinds
+    }
+
     /// Opens a window for both helpers: StagePilot has just started.
     pub fn open_windows(&self, now: Instant) {
-        for kind in [HelperKind::LibraryLink, HelperKind::Lightkey] {
+        for kind in self.kinds() {
             self.open_window(kind, now);
         }
     }
@@ -772,6 +921,10 @@ impl HelperUpdater {
     async fn observed(&self, kind: HelperKind) -> Option<bool> {
         match kind {
             HelperKind::LibraryLink => self.library.last_health_reachable(),
+            HelperKind::ProPresenterLink => self
+                .propresenter
+                .as_ref()
+                .and_then(|link| link.last_health_reachable()),
             HelperKind::Lightkey => self
                 .env
                 .lightkey()
@@ -803,6 +956,7 @@ impl HelperUpdater {
         let outcome = match kind {
             HelperKind::LibraryLink => self.evaluate_playback().await,
             HelperKind::Lightkey => self.evaluate_lightkey().await,
+            HelperKind::ProPresenterLink => self.evaluate_propresenter().await,
         };
         let mut kinds = lock(&self.state);
         let st = kinds.of(kind);

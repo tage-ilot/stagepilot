@@ -12,6 +12,10 @@ workspace = true
 [dependencies]
 stagepilot-core = { path = "../stagepilot-core" }
 async-trait = "0.1.89"
+# The ProPresenter Link: signed requests to the helper (HMAC-SHA256), file checksums, and the same hex/hmac/sha2 the Library Link uses.
+hex = "0.4"
+hmac = "0.12.1"
+sha2 = "0.10.9"
 chrono = { version = "0.4.42", default-features = false, features = ["std", "clock", "serde"] }
 # Plain HTTP only (ProPresenter's local API): no TLS stack, so nothing extra to build per OS.
 reqwest = { version = "0.13.4", default-features = false }
@@ -20,10 +24,12 @@ reqwest = { version = "0.13.4", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tokio = { version = "1.53.3", features = ["rt", "macros", "time", "sync"] }
+tokio = { version = "1.53.3", features = ["rt", "macros", "time", "sync", "process", "net"] }
 tracing = "0.1.41"
+url = "2"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
 
 [dev-dependencies]
+tempfile = "3.23.1"
 axum = "0.8.9"
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }

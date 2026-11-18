@@ -33,6 +33,8 @@ pub const KEYRING_ACCOUNT: &str = "planning-center-secret";
 pub const KEYRING_ACCOUNT_OAUTH: &str = "planning-center-oauth";
 /// The key StagePilot made for the Playback helper (the "Library Link"). Never in `settings.json`.
 pub const KEYRING_ACCOUNT_PLAYBACK_LIBRARY: &str = "playback-library-key";
+/// The key StagePilot made for the ProPresenter Link helper. Never in `settings.json`.
+pub const KEYRING_ACCOUNT_PROPRESENTER_LINK: &str = "propresenter-link-key";
 /// The application version, injected by `build.rs` from `tauri.conf.json` (or `STAGEPILOT_VERSION`).
 pub const APP_VERSION: &str = env!("STAGEPILOT_VERSION");
 pub const BACKUP_SUFFIX: &str = "pre-rust.bak";
@@ -1030,6 +1032,9 @@ impl KeyringCredentialStore {
     }
     pub fn playback_library() -> Self {
         Self::new(KEYRING_ACCOUNT_PLAYBACK_LIBRARY)
+    }
+    pub fn propresenter_link() -> Self {
+        Self::new(KEYRING_ACCOUNT_PROPRESENTER_LINK)
     }
 }
 

@@ -1,4 +1,4 @@
-// Signing of the helper bundles that ship inside StagePilot (the Playback "Library Link" and the Lightkey helper).
+// Signing of the helper bundles that ship inside StagePilot (the Playback "Library Link", the Lightkey helper and the ProPresenter Link).
 //
 // Each helper's folder holds the files of its release plus SHA256SUMS (every file in the folder, one line each) and
 // SHA256SUMS.sig (the base64 of the 64-byte Ed25519 signature of the exact bytes of SHA256SUMS). StagePilot sends a bundle to a
@@ -16,6 +16,7 @@ export const SIG = "SHA256SUMS.sig";
 export const HELPERS = [
   { name: "Library Link (Playback helper)", dir: "crates/stagepilot-playback/assets/playback-helper" },
   { name: "Lightkey helper", dir: "crates/stagepilot-lights/assets/lightkey-helper" },
+  { name: "ProPresenter Link (ProPresenter helper)", dir: "crates/stagepilot-propresenter/assets/propresenter-link" },
 ];
 
 const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");

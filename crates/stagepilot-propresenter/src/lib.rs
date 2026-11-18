@@ -14,3 +14,5 @@ pub use errors::PpError;
 pub use models::{Countdown, Identifier, Look, Timer};
 pub use plugin::{ClientFactory, ProPresenterPlugin};
 pub use snapshot::*;
+pub mod helper_assets;
+pub mod link;

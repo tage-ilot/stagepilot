@@ -8,9 +8,10 @@
 //   1. rewrites SHA256SUMS: `<sha256>  <name>` for every file in the folder, sorted by name (so the version constant or VERSION file
 //      is covered), and
 //   2. writes SHA256SUMS.sig next to it: the base64 of the 64-byte Ed25519 signature of the exact bytes of SHA256SUMS.
-// Commit the six changed files:
+// Commit the changed files:
 //   crates/stagepilot-playback/assets/playback-helper/{SHA256SUMS,SHA256SUMS.sig}
 //   crates/stagepilot-lights/assets/lightkey-helper/{SHA256SUMS,SHA256SUMS.sig}
+//   crates/stagepilot-propresenter/assets/propresenter-link/{SHA256SUMS,SHA256SUMS.sig}
 // Nothing is written unless the key is an Ed25519 private key whose public half is the project's pinned key (HELPER_PUBLIC_KEY in
 // scripts/helper_signing.mjs, in StagePilot and in both helpers). The private key is only read, never copied, printed or kept.
 //
@@ -48,7 +49,7 @@ export function run(argv, log = console.log) {
   const options = parseArgs(argv);
   if (options.verify) {
     assertSignedBundles(options.root, options.publicKey);
-    log("Both helper bundles are signed by the project's key.");
+    log("All helper bundles are signed by the project's key.");
     return;
   }
   if (options.sumsOnly) {

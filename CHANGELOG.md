@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ProPresenter Link: a connection to the files and the screen of the ProPresenter computer (no feature uses it yet).** StagePilot can now read the ProPresenter song files, add new files to a library named `Playback`, and (on a Mac with the Accessibility permission) drive ProPresenter's own Search window to import a song. If the saved ProPresenter computer is the computer StagePilot runs on, nothing needs installing. For another computer, **Set up the ProPresenter computer** gives one command to paste into Terminal there, exactly like the Library Link's; a small signed helper (port 8790) then answers only this StagePilot, never replaces, renames or deletes a file, and updates itself like the other helpers. `GET /api/v1/propresenter-link/status` says which connection is used and whether it is ready, not installed, can be updated, needs the command again or is not answering. A new optional setting, `propresenter.link.data_folder`, points to a ProPresenter folder that is not `~/Documents/ProPresenter`. With no ProPresenter computer saved nothing is asked, and nothing changes in ProPresenter. Details: `docs/propresenter.md`.
+
 ### Fixed
 
 - **A Lighting computer command asked for while the helper already works no longer stops working within seconds.** The setup session used to end itself as soon as StagePilot saw a current helper, so the link was dead before the other computer used it. It now stays open for its 30 minutes and ends early only when the helper's version changes.

@@ -234,6 +234,8 @@ pub async fn log_server_errors(request: Request, next: Next) -> Response {
             "/lightkey-helper/...".to_string()
         } else if path.starts_with("/playback-helper") {
             "/playback-helper/...".to_string()
+        } else if path.starts_with("/propresenter-helper") {
+            "/propresenter-helper/...".to_string()
         } else {
             path
         };
