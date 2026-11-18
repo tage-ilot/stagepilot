@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { parseSums, verifyAll } from "./vendor-lightkey-helper.mjs";
+import { assertSelfUpdating, parseSums, verifyAll } from "./vendor-lightkey-helper.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const dir = path.join(root, "crates/stagepilot-lights/assets/lightkey-helper");
@@ -25,4 +25,15 @@ test("a changed file or a missing checksum line is refused", () => {
   files.set("install.sh", Buffer.from("# changed\n"));
   assert.throws(() => verifyAll(files, parseSums(lines.join("\n"))), /install\.sh: checksum mismatch/);
   assert.throws(() => verifyAll(files, parseSums(lines.slice(1).join("\n"))), /not listed/);
+});
+
+test("the vendored helper can update itself, and a release that cannot is refused", () => {
+  const files = new Map(names.map((n) => [n, fs.readFileSync(path.join(dir, n))]));
+  assertSelfUpdating(files);
+  const old = new Map(files);
+  old.set("lightkey_api.py", Buffer.from('__version__ = "0.5.0"\n'));
+  assert.throws(() => assertSelfUpdating(old), /cannot update itself/);
+  const noLauncher = new Map(files);
+  noLauncher.set("install.sh", Buffer.from("#!/bin/sh\n"));
+  assert.throws(() => assertSelfUpdating(noLauncher), /launcher/);
 });

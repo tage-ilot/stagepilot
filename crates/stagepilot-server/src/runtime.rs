@@ -60,10 +60,13 @@ pub struct Runtime {
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
     pub helper_install: Arc<crate::helper_install::HelperInstall>,
-    /// The optional Playback library (read-only; asks only while a window asks, and not at all once forgotten).
+    /// The optional Playback library (read-only; asks only while a window asks).
     pub playback_library: Arc<crate::playback_library::PlaybackLibrary>,
     /// The one-time "Set up the Playback computer" session (token, expiry, optional listener).
     pub playback_helper_install: Arc<crate::playback_helper_install::PlaybackHelperInstall>,
+    /// The helpers update themselves when StagePilot starts (signed bundles only, only while nothing is playing).
+    pub helper_updater: Arc<crate::helper_update::HelperUpdater>,
+    helper_update_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 /// How often a keychain that has not answered is asked again.
@@ -281,6 +284,15 @@ impl Runtime {
             &pco,
             &playback,
         ));
+        let helper_updater = Arc::new(crate::helper_update::HelperUpdater::new(
+            Arc::new(crate::helper_update::LiveEnvironment {
+                settings: settings_service.clone(),
+                store: store.clone(),
+                playback: playback.clone(),
+                outputs: outputs.clone(),
+            }),
+            playback_library.clone(),
+        ));
         let runtime = Arc::new(Self {
             settings,
             bus,
@@ -312,6 +324,8 @@ impl Runtime {
                 ),
             ),
             playback_library,
+            helper_updater,
+            helper_update_task: Mutex::new(None),
         });
         runtime.note_keychain_state();
         runtime
@@ -509,6 +523,11 @@ impl Runtime {
             *self.activation.lock().unwrap_or_else(|p| p.into_inner()) = Some(tokio::spawn(
                 crate::startup_activation::run_after_settle(targets),
             ));
+            // The helpers are looked at once StagePilot is up and the saved settings are read; production only, like the activation.
+            *self
+                .helper_update_task
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = Some(self.helper_updater.spawn());
         }
         self.store
             .mutate(|s| s.application_status = ApplicationStatus::Running);
@@ -529,6 +548,14 @@ impl Runtime {
             let _ = task.await;
         }
         let _ = self.oauth_stop.send(true);
+        if let Some(task) = self
+            .helper_update_task
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            task.abort();
+        }
         if let Some(task) = self
             .keychain_watch
             .lock()

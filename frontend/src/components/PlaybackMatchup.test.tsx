@@ -60,8 +60,8 @@ describe("the matchup without the library", () => {
     expect(skip("Skip One Thing Remains")).toBeInTheDocument();
   });
 
-  it("is the same when the Library Link is not installed, forgotten or not answering, even with a plan the library once held", () => {
-    for (const state of ["not_installed", "needs_key", "forgotten", "unreachable"] as const) {
+  it("is the same when the Library Link is not installed, needs its command or is not answering, even with a plan the library once held", () => {
+    for (const state of ["not_installed", "needs_key", "unreachable"] as const) {
       const { unmount } = render(<Host initial={{ song_order: [900, 17, 42, 55, 70] }} library={libraryController(state, { plan: sampleLibrary() })} />);
       expect(screen.queryByTestId("playback-setlist")).not.toBeInTheDocument();
       expect(rows()[0]).toHaveTextContent("Playback song 1");

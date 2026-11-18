@@ -43,6 +43,35 @@ jobs:
       - name: Build frontend
         run: npm --prefix frontend run build
 
+  helper-update:
+    name: Helper self-update — Python ${{ matrix.python }}, Node 22
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is what the macOS command-line tools ship, and what the helpers run on at the church.
+        python: ["3.9", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Lightkey helper update tests (signature check, refusals, swap, wrapper)
+        run: python -m unittest discover -s scripts/lightkey-helper-tests -v
+
+      - name: Helper signing script tests
+        run: node --test scripts/helper_signing.test.mjs
+
   multitracks-cues:
     name: MultiTracks cues — Node 22
     runs-on: ubuntu-24.04

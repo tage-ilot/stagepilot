@@ -463,8 +463,6 @@ export const updatePlaybackLibrarySettings = (address: string) =>
   requestJson<LibraryStatus>("/api/v1/playback-library/settings", {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }),
   });
-/** "Forget the Library Link": deletes the key StagePilot made. The script keeps running on the Playback computer but cannot be used. */
-export const forgetPlaybackHelper = () => requestJson<LibraryStatus>("/api/v1/playback-library/forget", { method: "POST" });
 /** Opens (or extends) the one-time setup session for the Playback computer; `address` is THIS computer's address there, when StagePilot cannot find it. */
 export const startPlaybackHelperInstall = (address?: string) =>
   requestJson<PlaybackHelperInstall>("/api/v1/playback-library/helper-install", {

@@ -1057,8 +1057,9 @@ pub fn clean_playback_library_address(value: &str) -> Result<String, &'static st
 /// old `enabled` field is kept, with a new meaning that older files read the same way:
 /// * absent: the helper was never paired;
 /// * `true`: the helper answered with the key (it has been in use);
-/// * `false`: the operator forgot it (or an old file had the switch off): the library stays off
-///   until a new install pairs. Older builds read all three as the switch they know.
+/// * `false`: only an older file has it (an off switch, or a "forget" that no longer exists). It
+///   loads without error and means nothing: the Library Link's state comes from the helper's
+///   `/health` like on any file, and the field becomes `true` the next time the helper answers.
 ///
 /// `address` is an optional override of the helper's computer; empty means the saved Playback host.
 /// The helper's key is NOT here: it lives in the credential store.

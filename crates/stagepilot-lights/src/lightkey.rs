@@ -124,6 +124,26 @@ pub struct LightkeyHelper {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<String>")]
     pub watch_detail: Option<String>,
+    /// `"updater": 1` from helper 0.6.0: it can install a signed update that StagePilot sends. Left out on an older helper (which is
+    /// updated once by hand, with the setup command).
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub updater: bool,
+    /// The helper's own sentence about why the last update was undone (`last_update_error`), when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<String>")]
+    pub last_update_error: Option<String>,
+    /// What StagePilot is doing about an older helper (added by the route; left out when there is nothing to say).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(
+        optional,
+        as = "Option<stagepilot_core::helper_update::HelperUpdateStatus>"
+    )]
+    pub update: Option<stagepilot_core::helper_update::HelperUpdateStatus>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// The current song was captured under another Lightkey project than the one open now

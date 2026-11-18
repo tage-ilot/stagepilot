@@ -5,12 +5,12 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40 } from "./liveLink";
+import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { DisclosureButton, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
 import { scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 import { Button } from "./ui/Button";
-import { Dialog } from "./ui/Dialog";
 import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
@@ -39,12 +39,10 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
   const [copied, setCopied] = useState(false);
-  const [forgetOpen, setForgetOpen] = useState(false);
   const [override, setOverride] = useState("");
   // The two quiet boxes under the strip, opened by its buttons (null = the default: the setup box is open while the script is not ready).
   const [setupOpen, setSetupOpen] = useState<boolean | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const forgetId = useId();
   const setupId = useId();
   const advancedId = useId();
   useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
@@ -85,11 +83,13 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const script = library ? scriptLine(library.status, hasComputer) : null;
   const parts = pillParts({ good: apiGood(status), line: api }, library?.status ?? null, hasComputer);
   const scriptState = library?.status?.helper.state ?? null;
-  const needsSetup = scriptState !== "ready" && scriptState !== null;
+  // A script that is behind and can update itself is updated by StagePilot: its setup box stays closed, with only a line to read.
+  const updatesBySelf = scriptState === "outdated" && updatesItself(library?.status?.helper.update);
+  const needsSetup = scriptState !== "ready" && scriptState !== null && !updatesBySelf;
   const setupShown = setupOpen ?? needsSetup;
-  const setupLabel = scriptState === "outdated" ? "Update the Library Link" : "Library Link setup";
+  const setupLabel = scriptState === "outdated" && !updatesBySelf ? "Update the Library Link" : "Library Link setup";
+  const updateLine = helperUpdateLine(library?.status?.helper.update);
   const note = scriptNote(library?.status ?? null);
-  const paired = Boolean(library?.status?.helper.paired) && library?.status?.helper.state !== "forgotten";
   const overrideChanged = override.trim() !== savedOverride;
   const busy = library?.pending != null;
 
@@ -199,6 +199,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       {library && (
         <>
           {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="library-link-note" role="status">{note}</p>}
+          {updateLine && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="library-link-update" role="status">{updateLine}</p>}
           <div hidden={!setupShown} id={setupId}>
             <PlaybackInstallBox hasComputer={hasComputer} library={library} />
           </div>
@@ -212,26 +213,8 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
                 <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
               </form>
               <p className="text-xs text-ink-muted">Leave this empty: the Library Link is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
-              {paired && (
-                <div>
-                  <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the Library Link</Button>
-                  <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The Library Link keeps running on the Playback computer but StagePilot can no longer use it.</p>
-                </div>
-              )}
             </div>
           </div>
-          <Dialog
-            actions={
-              <>
-                <Button autoFocus onClick={() => setForgetOpen(false)} size="touch" tone="playback" variant="tinted">Cancel</Button>
-                <Button onClick={() => { setForgetOpen(false); void library.forget(); }} size="touch" tone="playback" variant="tinted">Forget the Library Link</Button>
-              </>
-            }
-            description="StagePilot deletes the key it made for the Library Link. The Library Link keeps running on the Playback computer, but StagePilot can no longer use it. Song details (key, BPM, arrangement) go away until you run the setup command again."
-            dismissible={false}
-            open={forgetOpen}
-            title="Forget the Library Link?"
-          />
         </>
       )}
     </LiveLinkShell>

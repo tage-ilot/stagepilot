@@ -37,7 +37,7 @@ pub const SESSION_MS: u64 = 30 * 60 * 1000;
 /// Requests one token may make. The wrapper makes six; the rest is room for a retry.
 pub const MAX_REQUESTS: u32 = 30;
 /// Shown when no LAN address that routes to the Lighting host can be found.
-pub const NO_ADDRESS: &str = "Could not find this computer's address on the Lighting network";
+pub const NO_ADDRESS: &str = "Could not find this computer's address on the Lighting network. StagePilot found no route to that computer from here, so type this computer's address below.";
 /// The URL prefix. Keep it off the remote allow-list (`remote_ingress`).
 pub const PREFIX: &str = "/lightkey-helper";
 
@@ -472,14 +472,24 @@ pub fn local_address_toward(target: SocketAddr) -> Option<Ipv4Addr> {
     }
 }
 
-/// Resolve `host` (an address or a name) and find the local address that routes to it.
+/// Resolve `host` (an address or a name) and find the local address that routes to it. When the computer is this one (the name or
+/// address is loopback: `127.0.0.1`, `localhost`, `::1`) the answer is `127.0.0.1`: the installer is then served on loopback (or by the
+/// main listener) and the setup command, run on this same computer, reaches it there; nobody is asked for an address. `None` only when
+/// a computer on the network has no route from here (or the name does not resolve), which is when the box asks for the address.
 pub async fn detect_lan_ip(host: &str, port: u16) -> Option<Ipv4Addr> {
     // An empty name must not reach the resolver: Windows answers it with this computer's own addresses.
     if host.trim().is_empty() {
         return None;
     }
-    let found = tokio::net::lookup_host((host.trim(), port)).await.ok()?;
+    let found: Vec<SocketAddr> = tokio::net::lookup_host((host.trim(), port))
+        .await
+        .ok()?
+        .collect();
+    if found.iter().any(|address| address.ip().is_loopback()) {
+        return Some(Ipv4Addr::LOCALHOST);
+    }
     found
+        .into_iter()
         .filter(SocketAddr::is_ipv4)
         .find_map(local_address_toward)
 }
@@ -1090,7 +1100,7 @@ mod tests {
     }
 
     #[test]
-    fn the_address_toward_loopback_or_an_unresolvable_name_is_not_found() {
+    fn the_route_toward_loopback_or_an_unresolvable_name_is_not_found() {
         assert_eq!(
             local_address_toward("127.0.0.1:8770".parse().unwrap()),
             None
@@ -1108,8 +1118,23 @@ mod tests {
             rt.block_on(detect_lan_ip("lighting-mac.invalid", 8770)),
             None
         );
-        assert_eq!(rt.block_on(detect_lan_ip("localhost", 8770)), None);
         assert_eq!(rt.block_on(detect_lan_ip("", 8770)), None);
+        assert_eq!(rt.block_on(detect_lan_ip("0.0.0.0", 8770)), None);
+    }
+
+    #[test]
+    fn this_computer_is_found_without_asking_when_the_target_is_loopback() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        for host in ["127.0.0.1", "127.8.9.10", "localhost", "::1"] {
+            assert_eq!(
+                rt.block_on(detect_lan_ip(host, 8770)),
+                Some(Ipv4Addr::LOCALHOST),
+                "{host}"
+            );
+        }
     }
 
     #[test]

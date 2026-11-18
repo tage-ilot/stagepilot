@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import { libraryController, libraryPlan, librarySongOf, libraryStatus } from "../test/libraryFixtures";
+import { helperOf, libraryController, libraryPlan, librarySongOf, libraryStatus } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
-import type { HelperState } from "../types";
+import type { HelperState, LibraryStatus } from "../types";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { PlaybackLiveLink } from "./PlaybackLiveLink";
 
@@ -78,7 +78,6 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     ["outdated", "Update available, version 0.2.0"],
     ["needs_key", "Needs the command again"],
     ["unreachable", "Not answering"],
-    ["forgotten", "Forgotten"],
   ] as [HelperState, string][])("a %s script reads %s", (state, words) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
     expect(line("library-link-status")).toHaveTextContent(`Library Link: ${words}`);
@@ -110,7 +109,7 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
 });
 
 describe("the Library Link setup box in the block", () => {
-  it.each(["not_installed", "needs_key", "unreachable", "forgotten"] as HelperState[])("is offered when the script is %s", (state) => {
+  it.each(["not_installed", "needs_key", "unreachable"] as HelperState[])("is offered when the script is %s", (state) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
     expect(screen.getByRole("button", { name: "Set up the Playback computer" })).toBeEnabled();
   });
@@ -123,6 +122,25 @@ describe("the Library Link setup box in the block", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
     expect(screen.queryByTestId("playback-install")).toBeNull();
     expect(screen.queryByRole("button", { name: /Set up the Playback computer|Update the Library Link/ })).toBeNull();
+  });
+
+  it("says in one line that StagePilot updates an older script by itself, keeps the setup box closed, and says once that it did", () => {
+    const base = libraryController("outdated");
+    const make = (state: HelperState, update: NonNullable<LibraryStatus["helper"]["update"]>) => libraryController(state, {
+      status: { ...(base.status as LibraryStatus), helper: helperOf(state, { updater: true, update }) },
+    });
+    const { unmount } = render(<PlaybackLiveLink library={make("outdated", { mode: "automatic", version: "0.4.0", message: "A newer version is ready. StagePilot will update the Library Link by itself when nothing is playing." })} playback={controller()} />);
+    expect(screen.getByTestId("library-link-update")).toHaveTextContent("StagePilot will update the Library Link by itself when nothing is playing.");
+    expect(screen.queryByRole("button", { name: "Update the Library Link" })).toBeNull();
+    expect(screen.getByTestId("library-link-pill")).toHaveTextContent("Library Link: Update available");
+    unmount();
+    render(<PlaybackLiveLink library={make("ready", { mode: "updated", version: "0.4.0", message: "Updated to 0.4.0 automatically." })} playback={controller()} />);
+    expect(screen.getByTestId("library-link-update")).toHaveTextContent("Updated to 0.4.0 automatically.");
+  });
+
+  it("says nothing about updates for a script that is up to date", () => {
+    render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
+    expect(screen.queryByTestId("library-link-update")).toBeNull();
   });
 
   it("waits to be offered until the script has answered once, and asks to choose the computer first when there is none", () => {
@@ -162,7 +180,7 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
   });
 });
 
-describe("Advanced: the address override and Forget the Library Link", () => {
+describe("Advanced: the address override", () => {
   const openAdvanced = async () => userEvent.setup().click(screen.getByRole("button", { name: /Advanced/ }));
 
   it("saves an override of the script's address, and shows the saved one without http://", async () => {
@@ -178,27 +196,15 @@ describe("Advanced: the address override and Forget the Library Link", () => {
     expect(library.saveAddress).toHaveBeenCalledWith("10.20.0.102");
   });
 
-  it("asks before forgetting, says what it does, and forgets only on the confirm", async () => {
-    const library = libraryController("ready");
-    render(<PlaybackLiveLink library={library} playback={controller()} />);
-    await openAdvanced();
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("Forget the Library Link?");
-    expect(dialog).toHaveTextContent("keeps running on the Playback computer");
-    expect(library.forget).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(library.forget).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Forget the Library Link" }));
-    expect(library.forget).toHaveBeenCalledTimes(1);
-  });
-
-  it("has nothing to forget when there is no key", async () => {
-    render(<PlaybackLiveLink library={libraryController("forgotten")} playback={controller()} />);
-    await openAdvanced();
-    expect(screen.queryByRole("button", { name: "Forget the Library Link" })).toBeNull();
+  it("has no way to forget the key, whatever the state: the key is made once and kept", async () => {
+    for (const state of ["ready", "outdated", "needs_key", "not_installed", "unreachable"] as HelperState[]) {
+      const { unmount } = render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
+      await openAdvanced();
+      expect(screen.queryByRole("button", { name: /forget/i })).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.body.textContent ?? "").not.toMatch(/forget the library link|forgotten/i);
+      unmount();
+    }
   });
 });
 
@@ -211,7 +217,7 @@ describe("a computer with no Library Link looks like a build without the library
   };
   const panel = (library?: PlaybackLibraryController) => render(<PlaybackApiPanel library={library} playback={controller()} plan={null} />).container;
 
-  it.each(["not_installed", "needs_key", "unreachable", "forgotten"] as HelperState[])("%s: everything outside the new block is the same", (state) => {
+  it.each(["not_installed", "needs_key", "unreachable"] as HelperState[])("%s: everything outside the new block is the same", (state) => {
     const plain = withoutBlock(panel(undefined));
     document.body.innerHTML = "";
     const other = withoutBlock(panel(libraryController(state)));

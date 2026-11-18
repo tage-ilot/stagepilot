@@ -14,10 +14,9 @@
 //! session is opened, and is never returned, logged or saved in `settings.json`.
 //!
 //! Rules (all kept by `Library`):
-//! * Forgotten means forgotten: after "Forget the Library Link" (no key, setting `enabled: false`) nothing
-//!   is asked, ever, and nothing runs in the background. There is no on/off switch any more: while a
-//!   Playback host is saved the helper is asked, at most once per 30 s (see below), and a helper that is not
-//!   there is not a warning anywhere (`HelperState::NotInstalled`).
+//! * There is no on/off switch and nothing to forget: while a Playback host is saved the helper is asked, at
+//!   most once per 30 s (see below), and a helper that is not there is not a warning anywhere
+//!   (`HelperState::NotInstalled`). The key is made once and kept; running the setup command again reuses it.
 //! * Nothing is polled. A window asking (`GET /status`, `GET /plan`) is the only thing that causes a
 //!   request, and the helper is asked at most once per 30 s however many windows ask; the Check
 //!   button (`?check=1`) may ask again after 2 s. Failures are remembered for the same time, so a
@@ -45,7 +44,7 @@ use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{get, put};
 use axum::Router;
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::StreamExt;
@@ -56,7 +55,7 @@ use stagepilot_core::config::{
     clean_playback_library_address, PlaybackLibrarySettings, DEFAULT_PLAYBACK_LIBRARY_PORT,
 };
 use stagepilot_core::credential_guard::GuardedCredentialStore;
-use stagepilot_core::settings::{CredentialStore, MemoryCredentialStore};
+use stagepilot_core::settings::{CredentialStore, MemoryCredentialStore, SettingsService};
 use stagepilot_core::state::ServicePlan;
 use stagepilot_playback::helper_assets::BUNDLED_HELPER_VERSION;
 use stagepilot_playback::library::{
@@ -80,6 +79,8 @@ pub const MIN_CHECK: Duration = Duration::from_secs(2);
 /// How long the last good answer may stand in for a helper that does not answer.
 pub const KEEP_GOOD: Duration = Duration::from_secs(60);
 const HEALTH_CAP: usize = 16 * 1024;
+/// One update request: the whole bundle (a few hundred KB at most) goes to the helper, which checks it before it answers.
+const UPDATE_TIMEOUT: Duration = Duration::from_secs(20);
 const BODY_CAP: usize = 256 * 1024;
 /// Songs whose own answer (section count) is read for one setlist, and how many are read at once.
 const DETAIL_SONGS: usize = 30;
@@ -177,6 +178,16 @@ pub fn hmac_sha256_hex(key: &[u8], message: &[u8]) -> String {
 /// bytes the helper checks.
 pub fn sign(key: &str, target: &str, time: u64) -> String {
     hmac_sha256_hex(key.as_bytes(), format!("GET\n{target}\n{time}").as_bytes())
+}
+
+/// The signature of a request with a body (`POST /update`): `hex(HMAC-SHA256(key, "POST\n" + target + "\n" + time + "\n" +
+/// hex(SHA-256(body))))`, so the body cannot be swapped under a good signature. The same bytes the helper checks.
+pub fn sign_post(key: &str, target: &str, time: u64, body: &[u8]) -> String {
+    let digest = hex::encode(Sha256::digest(body));
+    hmac_sha256_hex(
+        key.as_bytes(),
+        format!("POST\n{target}\n{time}\n{digest}").as_bytes(),
+    )
 }
 
 /// Bytes as base64url without padding (`A-Za-z0-9-_`).
@@ -512,7 +523,7 @@ impl PlaybackLibrary {
             .filter(|key| usable_key(key))
     }
 
-    /// A key exists: StagePilot made one (a setup session was opened) and has not forgotten it.
+    /// A key exists: StagePilot made one (a setup session was opened).
     pub fn is_paired(&self) -> bool {
         self.key().is_some()
     }
@@ -528,14 +539,6 @@ impl PlaybackLibrary {
             "StagePilot could not save the key in the secure credential store.".to_string()
         })?;
         Ok(true)
-    }
-
-    /// Deletes the key ("Forget the Library Link"). The helper keeps running but cannot be used.
-    pub fn forget_key(&self) -> Result<(), String> {
-        let _one_at_a_time = self.key_gate.lock().unwrap_or_else(|p| p.into_inner());
-        self.keys.remove_secret().map_err(|_| {
-            "StagePilot could not remove the key from the secure credential store.".to_string()
-        })
     }
 
     /// The key for the installer StagePilot serves to the Playback computer, and for nothing else.
@@ -574,9 +577,9 @@ impl PlaybackLibrary {
         }
     }
 
-    /// Drops every answer held, so the next ask starts from nothing (a new key, or a forgotten one).
+    /// Drops every answer held, so the next ask starts from nothing (a new key, or another address).
     pub async fn reset(&self) {
-        self.forget();
+        self.clear_held();
         *self.inner.lock().await = Inner::default();
         *self.choice.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
@@ -623,8 +626,8 @@ impl PlaybackLibrary {
         self.waves.lock().map_or(0, |waves| waves.songs.len())
     }
 
-    /// The setting is off: forget everything held (so switching it on starts from nothing).
-    fn forget(&self) {
+    /// Lets go of everything held in memory (answers, pictures, waveforms).
+    fn clear_held(&self) {
         if let Ok(mut waves) = self.waves.lock() {
             *waves = WaveCache::default();
         }
@@ -636,6 +639,89 @@ impl PlaybackLibrary {
         if let Ok(mut art) = self.art.lock() {
             *art = ArtCache::default();
         }
+    }
+
+    /// Whether the last ask of `/health` was answered: `Some(true)` it was (the helper answered, with or without our key), `Some(false)`
+    /// it was not (nothing there), `None` nothing was asked yet or the answer is being read right now. Asks nothing; the automatic
+    /// update uses it to notice that a helper that was silent is there again.
+    pub fn last_health_reachable(&self) -> Option<bool> {
+        let inner = self.inner.try_lock().ok()?;
+        match &inner.health.last {
+            Some(Ok(_)) => Some(true),
+            Some(Err(Failure::NoAnswer)) => Some(false),
+            Some(Err(_)) => Some(true),
+            None => None,
+        }
+    }
+
+    /// One signed `GET /health` now, whatever the throttle says (the automatic update asks at its own pace, never more than once a
+    /// second): the helper's answer parsed, or why there was none.
+    pub(crate) async fn fresh_health(
+        &self,
+        connect_base: &str,
+        host: &str,
+    ) -> Result<stagepilot_playback::library::Health, Failure> {
+        let mut response = self
+            .signed(
+                self.http
+                    .get(format!("{connect_base}/health"))
+                    .header(header::HOST, host)
+                    .header("accept", "application/json"),
+                "/health",
+            )
+            .send()
+            .await
+            .map_err(|_| Failure::NoAnswer)?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            return Err(Failure::Status(status));
+        }
+        let mut body: Vec<u8> = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| Failure::NoAnswer)? {
+            if body.len() + chunk.len() > HEALTH_CAP {
+                return Err(Failure::Unreadable);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        let value: Value = serde_json::from_slice(&body).map_err(|_| Failure::Unreadable)?;
+        Ok(parse_health(&value))
+    }
+
+    /// `POST /update` to a helper that can update itself: the body is signed with the key like every request, plus its SHA-256, and
+    /// goes to `connect_base` (an `http://<address>:<port>` the caller has checked is on the local network) with `host` as its `Host`.
+    /// Without a usable key nothing is sent. Returns the helper's status and its JSON answer (at most 16 KiB).
+    pub(crate) async fn post_update(
+        &self,
+        connect_base: &str,
+        host: &str,
+        body: Vec<u8>,
+    ) -> Result<(u16, Value), Failure> {
+        let key = self.key().ok_or(Failure::NoAnswer)?;
+        let time = self.wall_seconds();
+        let mut response = self
+            .http
+            .post(format!("{connect_base}/update"))
+            .header(header::HOST, host)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("X-PBL-Time", time.to_string())
+            .header("X-PBL-Sig", sign_post(&key, "/update", time, &body))
+            .timeout(UPDATE_TIMEOUT)
+            .body(body)
+            .send()
+            .await
+            .map_err(|_| Failure::NoAnswer)?;
+        let status = response.status().as_u16();
+        let mut answer: Vec<u8> = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| Failure::NoAnswer)? {
+            if answer.len() + chunk.len() > HEALTH_CAP {
+                return Err(Failure::Unreadable);
+            }
+            answer.extend_from_slice(&chunk);
+        }
+        Ok((
+            status,
+            serde_json::from_slice(&answer).unwrap_or(Value::Null),
+        ))
     }
 
     /// `GET base+path`, JSON, at most `cap` bytes, 3 s in all. Only a 200 is an answer.
@@ -675,12 +761,6 @@ impl PlaybackLibrary {
         }
     }
 
-    /// Nothing is asked and nothing is held: the operator forgot the Library Link (the key is deleted and
-    /// the setting says so). A new setup session makes a new key, which ends this.
-    fn is_forgotten(&self, settings: &PlaybackLibrarySettings) -> bool {
-        settings.enabled == Some(false) && self.key().is_none()
-    }
-
     /// What the window is told when the library cannot feed anything: the Library Link's state and its
     /// plain sentence, and no library data. Only `unreachable` is a problem (a helper that was in use and is
     /// silent now); every other state is quiet.
@@ -702,6 +782,9 @@ impl PlaybackLibrary {
                 bundled_version: BUNDLED_HELPER_VERSION.to_string(),
                 message: words.clone(),
                 paired: self.key().is_some(),
+                updater: false,
+                last_update_error: None,
+                update: None,
             },
             address: settings.address.clone(),
             state: if unreachable {
@@ -718,13 +801,9 @@ impl PlaybackLibrary {
         }
     }
 
-    /// Where the helper stands, from `/health`. When it was forgotten nothing is asked. `check` is the
-    /// Check button: it may ask again 2 s after the last ask instead of 30 s.
+    /// Where the helper stands, from `/health`. `check` is the Check button: it may ask again 2 s after
+    /// the last ask instead of 30 s.
     pub async fn status(&self, settings: &PlaybackLibrarySettings, check: bool) -> LibraryStatus {
-        if self.is_forgotten(settings) {
-            self.forget();
-            return self.inactive(settings, HelperState::Forgotten, None, None);
-        }
         let Some(base) = base_url(&settings.address) else {
             return self.inactive(settings, HelperState::NotInstalled, None, Some(NO_ADDRESS));
         };
@@ -779,6 +858,9 @@ impl PlaybackLibrary {
                         bundled_version: BUNDLED_HELPER_VERSION.to_string(),
                         message: helper_words(helper_state, health.version.as_deref()),
                         paired: self.key().is_some(),
+                        updater: health.updater.is_some_and(|level| level >= 1),
+                        last_update_error: health.last_update_error.clone(),
+                        update: None,
                     },
                     address: settings.address.clone(),
                     state,
@@ -968,7 +1050,7 @@ impl PlaybackLibrary {
         check: bool,
     ) -> LibraryPlan {
         let date = plan.map(|p| p.date.format("%Y-%m-%d").to_string());
-        // `enabled` says the library is in use. Where nothing is asked (no plan, no address, forgotten) it is what
+        // `enabled` says the library is in use. Where nothing is asked (no plan, no address) it is what
         // the saved setting says; once the helper has been asked it is what the helper's state says.
         let in_use = AtomicBool::new(settings.enabled == Some(true));
         let empty = |state: LibraryState, message: Option<String>| LibraryPlan {
@@ -985,14 +1067,6 @@ impl PlaybackLibrary {
             stale: false,
             checked_at: None,
         };
-        if self.is_forgotten(settings) {
-            self.forget();
-            in_use.store(false, Ordering::Relaxed);
-            return empty(
-                LibraryState::Off,
-                Some(helper_words(HelperState::Forgotten, None)),
-            );
-        }
         let Some(base) = base_url(&settings.address) else {
             in_use.store(false, Ordering::Relaxed);
             return empty(LibraryState::Off, Some(NO_ADDRESS.to_string()));
@@ -1255,9 +1329,6 @@ impl PlaybackLibrary {
         id: u64,
         expected: &LibraryArtwork,
     ) -> Result<Picture, ArtworkFailure> {
-        if self.is_forgotten(settings) {
-            return Err(ArtworkFailure::NoPicture);
-        }
         let base = base_url(&settings.address).ok_or(ArtworkFailure::NoPicture)?;
         let key = (base.clone(), id);
         let held = {
@@ -1406,9 +1477,6 @@ impl PlaybackLibrary {
         settings: &PlaybackLibrarySettings,
         id: u64,
     ) -> Result<Waveform, WaveformFailure> {
-        if self.is_forgotten(settings) {
-            return Err(WaveformFailure::NoWaveform);
-        }
         let base = base_url(&settings.address).ok_or(WaveformFailure::NoWaveform)?;
         let key = (base.clone(), id);
         let revision = self.read_revision().await;
@@ -1492,18 +1560,28 @@ pub fn routes() -> Router<Rt> {
         )
         .route("/api/v1/playback-library/setlist", put(choose_setlist))
         .route("/api/v1/playback-library/settings", put(settings))
-        .route("/api/v1/playback-library/forget", post(forget))
 }
 
 fn to_json<T: serde::Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap_or(Value::Null)
 }
 
+/// The status as the window gets it: the helper's part also says what StagePilot is doing about an older Library Link.
+fn status_json(rt: &Runtime, mut status: LibraryStatus) -> Value {
+    status.helper.update = rt.helper_updater.playback_view(&status.helper);
+    to_json(&status)
+}
+
 /// The settings the library works from. The helper is on the Playback computer, so unless the operator
 /// typed another address under Advanced (the saved override) it is the saved Playback host, at the
 /// helper's own port: when the Playback API works on a computer, so does the library.
 pub fn effective_settings(rt: &Runtime) -> PlaybackLibrarySettings {
-    let saved = rt.settings_service.snapshot();
+    settings_from(&rt.settings_service)
+}
+
+/// The same from the settings service alone (the automatic update reads it without a `Runtime`).
+pub fn settings_from(settings_service: &SettingsService) -> PlaybackLibrarySettings {
+    let saved = settings_service.snapshot();
     let mut library = saved.playback_library;
     if library.address.is_empty() {
         if let Some(host) = saved
@@ -1543,7 +1621,7 @@ async fn status(State(rt): State<Rt>, Query(ask): Query<Ask>) -> Json {
     let settings = effective_settings(&rt);
     let status = rt.playback_library.status(&settings, ask.check()).await;
     note_in_use(&rt, status.active).await;
-    ok(to_json(&status))
+    ok(status_json(&rt, status))
 }
 
 async fn plan(State(rt): State<Rt>, Query(ask): Query<Ask>) -> Json {
@@ -1624,28 +1702,8 @@ async fn settings(State(rt): State<Rt>, body: Bytes) -> Json {
     // Another address is another helper: nothing held for the old one stands.
     rt.playback_library.reset().await;
     let settings = effective_settings(&rt);
-    ok(to_json(&rt.playback_library.status(&settings, false).await))
-}
-
-/// `POST /api/v1/playback-library/forget`: "Forget the Library Link". Ends a setup session, deletes the
-/// key and saves `enabled: false`. The helper keeps running but cannot be used by this StagePilot until a
-/// new setup session pairs again. Nothing is asked of the helper.
-async fn forget(State(rt): State<Rt>) -> Json {
-    rt.playback_helper_install.end();
-    if let Err(message) = rt.playback_library.forget_key() {
-        return http_error(503, &message);
-    }
-    {
-        let _serialised = rt.reconcile.lock().await;
-        let mut next = rt.settings_service.snapshot();
-        next.playback_library.enabled = Some(false);
-        if let Err(error) = rt.settings_service.save(next) {
-            return http_error(503, &error.0);
-        }
-    }
-    rt.playback_library.reset().await;
-    let settings = effective_settings(&rt);
-    ok(to_json(&rt.playback_library.status(&settings, false).await))
+    let status = rt.playback_library.status(&settings, false).await;
+    ok(status_json(&rt, status))
 }
 
 /// The cover of one song of the current paired plan, for the window. The window never calls the
@@ -1862,23 +1920,20 @@ mod key_tests {
     }
 
     #[test]
-    fn the_key_is_made_once_kept_and_forgotten_on_request() {
+    fn the_key_is_made_once_and_kept() {
         let library = PlaybackLibrary::new();
         assert!(!library.is_paired());
         assert_eq!(library.ensure_key(), Ok(true), "the first session makes it");
         let first = library.key_for_installer().unwrap();
         assert_eq!(library.ensure_key(), Ok(false), "the next one keeps it");
         assert_eq!(library.key_for_installer().unwrap(), first);
-        assert!(library.is_paired());
-        library.forget_key().unwrap();
-        assert!(!library.is_paired());
-        assert_eq!(library.key_for_installer(), None);
-        assert_eq!(library.ensure_key(), Ok(true));
-        assert_ne!(
-            library.key_for_installer().unwrap(),
-            first,
-            "a forgotten key is gone for good: pairing again makes a new one"
+        assert_eq!(
+            library.ensure_key(),
+            Ok(false),
+            "running the setup command again reuses the key"
         );
+        assert_eq!(library.key_for_installer().unwrap(), first);
+        assert!(library.is_paired());
     }
 
     #[test]

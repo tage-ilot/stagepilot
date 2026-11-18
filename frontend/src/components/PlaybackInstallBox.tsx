@@ -6,7 +6,7 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { HelperState, PlaybackHelperInstall } from "../types";
 import { CONTROL_34 } from "./compactControl";
 import { LiveLinkField } from "./LightingOscParts";
-import { countdownText } from "./lightkeyProject";
+import { countdownText, updatesItself } from "./lightkeyProject";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
@@ -17,7 +17,6 @@ const WHY: Record<Exclude<HelperState, "ready">, string> = {
   outdated: "The Library Link on the Playback computer is older than the one StagePilot carries. It still works. Run one command in Terminal on that computer to update it. No internet needed.",
   needs_key: "The Library Link on the Playback computer does not know this StagePilot yet. Run the command again, in Terminal on that computer. No internet needed.",
   unreachable: "StagePilot cannot reach the Library Link. Is the Playback computer on and awake? If the Library Link was set up again from another computer, run the command again here.",
-  forgotten: "StagePilot forgot the Library Link, so it cannot use it. Run the command in Terminal on the Playback computer to use it again. No internet needed.",
 };
 
 /**
@@ -119,14 +118,18 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
   const live = <p aria-live="polite" className="sr-only" data-testid="playback-install-live" role="status">{announcement}</p>;
 
   if (phase === "done") return <div data-testid="playback-install-done">{live}</div>;
-  // Nothing to set up while the script is ready; nothing to say before it has answered once.
-  if ((ready || state === null) && phase === "idle") return <div>{live}</div>;
+  // Nothing to set up while the script is ready; nothing to say before it has answered once. A script that is behind the one StagePilot
+  // carries, and can update itself, is updated by StagePilot when nothing is playing: no command (the block says so in one line).
+  const update = library.status?.helper.update;
+  if ((ready || state === null || (state === "outdated" && updatesItself(update))) && phase === "idle") return <div>{live}</div>;
   if (!hasComputer) {
     return <div>{live}<p className="mt-2 text-type-body-sm text-ink-muted" data-testid="playback-install-need-computer">Choose the Playback computer above, then set up its Library Link.</p></div>;
   }
 
   const panel = "mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body";
   const why = WHY[(state && state !== "ready" ? state : "not_installed") as Exclude<HelperState, "ready">];
+  // StagePilot tried and could not, or the helper undid the update: say so in one sentence, then the command.
+  const manualSentence = state === "outdated" && update?.mode === "manual" ? update.message : undefined;
   return (
     <section aria-label={heading} className={panel} data-testid="playback-install">
       {live}
@@ -134,7 +137,7 @@ export function PlaybackInstallBox({ library, hasComputer }: { library: Playback
 
       {(phase === "idle" || phase === "starting") && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <p className="min-w-0 flex-[1_1_16rem] text-ink-muted">{why}</p>
+          <p className="min-w-0 flex-[1_1_16rem] text-ink-muted" data-testid="playback-install-why">{manualSentence ? `${manualSentence} ` : ""}{why}</p>
           <Button className={CONTROL_34} loading={phase === "starting"} loadingLabel={"Making the command\u2026"} onClick={() => void start()} variant="secondary" tone="playback">
             {heading}
           </Button>

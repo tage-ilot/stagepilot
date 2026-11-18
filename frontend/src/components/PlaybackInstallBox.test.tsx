@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import { libraryController } from "../test/libraryFixtures";
-import type { HelperState, PlaybackHelperInstall } from "../types";
+import { helperOf, libraryController } from "../test/libraryFixtures";
+import type { HelperState, LibraryStatus, PlaybackHelperInstall } from "../types";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
 
 vi.mock("../api", async (original) => ({
@@ -43,7 +43,6 @@ describe("PlaybackInstallBox", () => {
     ["not_installed", /optional/],
     ["needs_key", /does not know this StagePilot/],
     ["unreachable", /cannot reach the Library Link/],
-    ["forgotten", /forgot the Library Link/],
     ["outdated", /older than the one StagePilot carries/],
   ] as [HelperState, RegExp][])("says why in plain words for a %s script", (state, words) => {
     render(box(libraryController(state)));
@@ -53,6 +52,22 @@ describe("PlaybackInstallBox", () => {
   it("is called Update the Library Link when the script is outdated", () => {
     render(box(libraryController("outdated")));
     expect(screen.getByRole("button", { name: "Update the Library Link" })).toBeEnabled();
+  });
+
+  it("offers no command for an older script that StagePilot updates by itself, and offers it when StagePilot cannot", () => {
+    const withUpdate = (update: NonNullable<LibraryStatus["helper"]["update"]>) => {
+      const library = libraryController("outdated");
+      return libraryController("outdated", { status: { ...library.status as LibraryStatus, helper: helperOf("outdated", { updater: true, update }) } });
+    };
+    for (const mode of ["automatic", "updating"] as const) {
+      const { unmount } = render(box(withUpdate({ mode, version: "0.4.0", message: "StagePilot updates it." })));
+      expect(screen.queryByTestId("playback-install")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Update the Library Link" })).toBeNull();
+      unmount();
+    }
+    render(box(withUpdate({ mode: "manual", version: "0.4.0", message: "The Library Link could not update itself. Run the setup command on the Playback computer to update it." })));
+    expect(screen.getByRole("button", { name: "Update the Library Link" })).toBeEnabled();
+    expect(screen.getByTestId("playback-install-why")).toHaveTextContent(/could not update itself.*older than the one StagePilot carries/);
   });
 
   it("shows nothing when the script is ready or has not answered yet", () => {

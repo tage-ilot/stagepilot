@@ -59,8 +59,37 @@ either secret is absent. The private key is never passed to frontend code.
    (`node scripts/vendor-lightkey-helper.mjs vX.Y.Z`; it verifies every file against the release's
    `SHA256SUMS` and rewrites `crates/stagepilot-lights/assets/lightkey-helper/`). The Lighting
    section's install box serves exactly those files, so the vendored version is the helper version
-   every Lighting Mac set up from this build gets. Commit the changed files.
-3. Run:
+   every Lighting Mac set up from this build gets. Commit the changed files. (The script refuses a helper
+   release that cannot update itself: the bundled helper carries the self-update code, so the release
+   to vendor has to carry it too. Port `lightkey_api.py`'s update block to `huntrw6/lightkey-api` first.)
+3. **Sign the helpers (release machine only).** StagePilot sends its bundled helpers to Macs that run an
+   older one, and a helper installs only what the project signed. In the release clone, before
+   validating:
+
+   ```sh
+   node scripts/sign_helpers.mjs --key ~/.config/stagepilot-signing/helper-signing.pem
+   ```
+
+   It refuses any key whose public half is not the pinned one (`Evky97ydM5zWJ02p6Wc7RguEHMglX3WRxiPrege4Op8=`),
+   rewrites `SHA256SUMS` for each helper folder (every file in it, so the version is covered) and writes
+   `SHA256SUMS.sig` (base64 of the 64-byte Ed25519 signature of those exact bytes) next to it. The four files:
+
+   ```text
+   crates/stagepilot-playback/assets/playback-helper/SHA256SUMS
+   crates/stagepilot-playback/assets/playback-helper/SHA256SUMS.sig
+   crates/stagepilot-lights/assets/lightkey-helper/SHA256SUMS
+   crates/stagepilot-lights/assets/lightkey-helper/SHA256SUMS.sig
+   ```
+
+   Commit them in the release commit. A signature is deterministic, so a release whose helper files did
+   not change leaves these four files as they were. `node scripts/sign_helpers.mjs --verify` checks the
+   committed bundles (no private key needed); step 4's `validate_versions.mjs vX.Y.Z` runs the same
+   check and refuses a release whose helpers are unsigned, signed by another key, or changed after
+   they were signed. Pull-request CI does not need the private key and does not check signatures
+   (`SHA256SUMS.sig` is empty in a working tree). A contributor who changes a helper file runs
+   `node scripts/sign_helpers.mjs --sums-only` to refresh `SHA256SUMS`; a test fails while it is stale.
+   The private key never leaves the release machine and is never committed.
+4. Run:
 
    ```powershell
    node scripts/validate_versions.mjs vX.Y.Z
@@ -74,8 +103,8 @@ either secret is absent. The private key is never passed to frontend code.
    cargo check --manifest-path desktop/src-tauri/Cargo.toml
    ```
 
-4. Commit and push reviewed source.
-5. Tag the exact version and push it:
+5. Commit and push reviewed source.
+6. Tag the exact version and push it:
 
    ```powershell
    git tag -a vX.Y.Z -m "StagePilot X.Y.Z"
@@ -83,7 +112,7 @@ either secret is absent. The private key is never passed to frontend code.
    git push origin vX.Y.Z
    ```
 
-6. Watch **Release StagePilot**. It validates configuration and tests, builds
+7. Watch **Release StagePilot**. It validates configuration and tests, builds
    native `darwin-aarch64`, `darwin-x86_64`, and `windows-x86_64` artifacts,
    verifies the final `.app`, DMG, and updater archive by starting their packaged
    backends, keeps the release draft, generates and validates `latest.json`,

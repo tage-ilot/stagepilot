@@ -65,6 +65,20 @@ describe("LightkeyInstallBox", () => {
     }
   });
 
+  it("says in one line what StagePilot does about a helper that is behind the bundled one, with no command", () => {
+    for (const [mode, message] of [["automatic", "A newer version is ready."], ["updating", "Updating the helper to 0.6.0\u2026"], ["updated", "Updated to 0.6.0 automatically."]] as const) {
+      const helper = { outdated: false, version: "0.5.0", updater: true, update: { mode, version: "0.6.0", message } } as LightkeyStatus["helper"];
+      const { unmount } = render(<LightkeyInstallBox status={connected({ helper })} />);
+      expect(screen.getByTestId("lightkey-update-line")).toHaveTextContent(message);
+      expect(screen.queryByTestId("lightkey-install")).not.toBeInTheDocument();
+      unmount();
+    }
+    const gaveUp = { outdated: false, version: "0.5.0", update: { mode: "manual", version: "0.6.0", message: "The helper could not update itself. Run the setup command on the Lighting computer to update it." } } as LightkeyStatus["helper"];
+    render(<LightkeyInstallBox status={connected({ helper: gaveUp })} />);
+    expect(screen.getByTestId("lightkey-update-note")).toHaveTextContent("could not update itself");
+    expect(screen.queryByTestId("lightkey-update-line")).not.toBeInTheDocument();
+  });
+
   it("makes the command and shows the numbered steps, the command, a countdown and the waiting line", async () => {
     vi.mocked(api.startLightkeyHelperInstall).mockResolvedValue(made());
     render(<LightkeyInstallBox status={status()} />);

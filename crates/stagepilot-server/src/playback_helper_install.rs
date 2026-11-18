@@ -47,7 +47,7 @@ use std::time::Duration;
 use subtle::ConstantTimeEq;
 
 /// Shown when no LAN address that routes to the Playback computer can be found.
-pub const NO_ADDRESS: &str = "Could not find this computer's address on the Playback network";
+pub const NO_ADDRESS: &str = "Could not find this computer's address on the Playback network. StagePilot found no route to that computer from here, so type this computer's address below.";
 /// Shown when no Playback computer is chosen yet.
 pub const NO_PLAYBACK_COMPUTER: &str = "Choose the Playback computer first.";
 /// The URL prefix. Keep it off the remote allow-list (`remote_ingress`) and out of the logs (`security`).
@@ -424,7 +424,7 @@ async fn dispatch(
                     "text/x-shellscript; charset=utf-8",
                     svc.assets.wrapper(&info.base_url(), &key).into_bytes(),
                 ),
-                // The key was forgotten while the session was open: there is nothing to install.
+                // The key cannot be read (the credential store failed): there is nothing to install.
                 None => empty(StatusCode::NOT_FOUND),
             },
             Err(reason) => denied(reason),
@@ -540,7 +540,7 @@ pub async fn create(State(rt): State<Arc<Runtime>>, raw: Bytes) -> Json {
             }
         }
     };
-    // The key is made once, the first time a session is opened, and kept until it is forgotten.
+    // The key is made once, the first time a session is opened, and kept: the next session reuses it.
     match rt.playback_library.ensure_key() {
         Ok(true) => rt.playback_library.reset().await,
         Ok(false) => {}
@@ -654,7 +654,6 @@ mod tests {
             HelperState::NeedsKey,
             HelperState::Outdated,
             HelperState::Unreachable,
-            HelperState::Forgotten,
         ] {
             assert!(!svc.observe(waiting), "{waiting:?} keeps the session open");
             assert!(svc.is_active());

@@ -1340,11 +1340,18 @@ async fn lights_test_osc(State(rt): State<Rt>, raw: Bytes) -> Json {
 
 // ---- Lightkey ----------------------------------------------------------------------------------
 
+/// The Lightkey status as the window gets it: the helper's part also says what StagePilot is doing about an older helper.
+async fn lightkey_status_for_window(rt: &Runtime) -> stagepilot_lights::lightkey::LightkeyStatus {
+    let mut status = rt.outputs.lights.lightkey_status().await;
+    rt.helper_updater.annotate_lightkey(&mut status);
+    status
+}
+
 async fn lightkey_response(rt: &Runtime, accepted: bool, message: String) -> Json {
     ok(to_value(&LightkeyActionResponse {
         accepted,
         message,
-        lightkey: rt.outputs.lights.lightkey_status().await,
+        lightkey: lightkey_status_for_window(rt).await,
     }))
 }
 
@@ -1354,7 +1361,7 @@ async fn lightkey_status(State(rt): State<Rt>) -> Json {
     // means a recording (or any other save nobody asked this window for) finished and the window
     // loads them again. Read before the status, so the window never believes it is more current.
     let settings_revision = rt.settings_service.revision();
-    let mut body = to_value(&rt.outputs.lights.lightkey_status().await);
+    let mut body = to_value(&lightkey_status_for_window(&rt).await);
     body["settings_revision"] = json!(settings_revision);
     ok(body)
 }

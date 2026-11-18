@@ -1,6 +1,6 @@
 //! The optional Playback library, against a fake helper (an axum server on a loopback port): every
-//! state the real helper can be in, the key it is asked with, the request rules (forgotten means nothing
-//! is asked, at most one ask per 30 s, 3 s, size cap, no redirect, no waveform) and the routes. No real
+//! state the real helper can be in, the key it is asked with, the request rules (at most one ask per 30 s,
+//! 3 s, size cap, no redirect, no waveform) and the routes. No real
 //! helper, no rig.
 
 use axum::body::Body;
@@ -23,6 +23,9 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tower::ServiceExt;
+
+/// The helper version this StagePilot carries: a stand-in at this version is `ready`; an older one is `outdated`.
+const BUNDLED: &str = stagepilot_playback::helper_assets::BUNDLED_HELPER_VERSION;
 
 #[derive(Clone, Default)]
 struct Helper {
@@ -618,24 +621,10 @@ async fn a_plan_with_no_songs_and_no_plan_ask_nothing() {
 }
 
 #[tokio::test]
-async fn forgotten_means_nothing_is_asked_and_no_address_is_a_sentence() {
+async fn no_address_is_a_sentence_and_nothing_is_asked() {
     let helper = Helper::new();
-    let address = helper.serve().await;
+    let _address = helper.serve().await;
     let library = PlaybackLibrary::new();
-    // `enabled: false` with no key is what "Forget the Library Link" leaves (an old switch that was off reads so).
-    let forgotten = PlaybackLibrarySettings {
-        enabled: Some(false),
-        address: address.clone(),
-    };
-    let status = library.status(&forgotten, true).await;
-    assert_eq!((status.enabled, status.state), (false, LibraryState::Off));
-    assert_eq!(status.helper.state, HelperState::Forgotten);
-    assert!(!status.active);
-    let result = library
-        .plan(&forgotten, Some(&plan("2026-11-22", &["Song One"])), true)
-        .await;
-    assert_eq!(result.state, LibraryState::Off);
-    assert!(result.songs.is_empty());
     let blank = PlaybackLibrarySettings {
         enabled: None,
         address: String::new(),
@@ -643,6 +632,11 @@ async fn forgotten_means_nothing_is_asked_and_no_address_is_a_sentence() {
     let status = library.status(&blank, false).await;
     assert_eq!(status.message, "Choose the Playback computer first.");
     assert_eq!(status.helper.state, HelperState::NotInstalled);
+    let result = library
+        .plan(&blank, Some(&plan("2026-11-22", &["Song One"])), true)
+        .await;
+    assert_eq!(result.state, LibraryState::Off);
+    assert!(result.songs.is_empty());
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
 }
@@ -1420,12 +1414,8 @@ async fn a_different_plan_or_a_different_address_reads_everything_again() {
         .plan(&renamed, Some(&plan("2026-11-22", &["Song One"])), false)
         .await;
     assert_eq!(helper.count("/setlists/2026-11-22"), 3);
-    // Switched off and on again: nothing is remembered.
-    let off = PlaybackLibrarySettings {
-        enabled: Some(false),
-        ..renamed.clone()
-    };
-    let _ = library.status(&off, false).await;
+    // A new key (or another helper) resets the library: nothing is remembered.
+    library.reset().await;
     let hits = helper.hits().len();
     library
         .plan(&renamed, Some(&plan("2026-11-22", &["Song One"])), false)
@@ -1792,7 +1782,7 @@ async fn only_a_paired_song_of_the_current_plan_has_a_cover_route() {
 }
 
 #[tokio::test]
-async fn once_forgotten_the_cover_route_is_a_404_and_the_helper_sees_nothing() {
+async fn without_a_computer_the_cover_route_is_a_404_and_the_helper_sees_nothing() {
     let helper = Helper::new();
     helper.set(|b| {
         b.art = Some(art("image/jpeg", ETAG_A, jpeg(300)));
@@ -1802,36 +1792,18 @@ async fn once_forgotten_the_cover_route_is_a_404_and_the_helper_sees_nothing() {
             song
         }];
     });
-    let address = helper.serve().await;
+    let _address = helper.serve().await;
     let (router, runtime) = app().await;
     runtime
         .store
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
     // No Playback computer chosen: nothing to ask.
-    assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
-    // A saved address, then forgotten.
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"address": address})),
-    )
-    .await;
-    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    // (Saving the address asked once, before it was forgotten.)
-    helper.set(|b| b.hits.clear());
     assert_eq!(
         raw(&router, COVER_ONE, Some(ETAG_A)).await.0,
         StatusCode::NOT_FOUND
     );
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
-    // Set up again (a new key), a picture held, then forgotten again: the picture is let go.
-    runtime.playback_library.ensure_key().unwrap();
-    assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::OK);
-    assert_eq!(runtime.playback_library.artwork_held().0, 1);
-    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(runtime.playback_library.artwork_held(), (0, 0));
 }
 
@@ -2200,39 +2172,21 @@ async fn only_a_paired_song_of_the_current_plan_has_a_waveform_route() {
 }
 
 #[tokio::test]
-async fn once_forgotten_the_waveform_route_is_a_404_and_the_helper_sees_nothing() {
+async fn without_a_computer_the_waveform_route_is_a_404_and_the_helper_sees_nothing() {
     let helper = Helper::new();
     helper.set(|b| b.waveform = Some(helper_wave(0.25, &[0.5, 0.7])));
-    let address = helper.serve().await;
+    let _address = helper.serve().await;
     let (router, runtime) = app().await;
     runtime
         .store
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
     // No Playback computer chosen: nothing to ask.
-    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
-    // A saved address, then forgotten.
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"address": address})),
-    )
-    .await;
-    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    // (Saving the address asked once, before it was forgotten.)
-    helper.set(|b| b.hits.clear());
     assert_eq!(
         raw(&router, WAVE_ONE, Some("\"x\"")).await.0,
         StatusCode::NOT_FOUND
     );
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
-    // Set up again (a new key), a waveform held, then forgotten again: it is let go.
-    runtime.playback_library.ensure_key().unwrap();
-    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
-    assert_eq!(runtime.playback_library.waveforms_held(), 1);
-    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(runtime.playback_library.waveforms_held(), 0);
 }
 
@@ -2422,7 +2376,7 @@ async fn keyed(version: &str) -> (Helper, String, PlaybackLibrary) {
 
 #[tokio::test]
 async fn every_ask_carries_the_time_and_the_signature_of_the_key_and_never_the_key() {
-    let (helper, address, library) = keyed("0.3.0").await;
+    let (helper, address, library) = keyed(BUNDLED).await;
     helper.set(|b| b.waveform = Some(helper_wave(0.25, &[0.5, 1.0])));
     helper.set(|b| {
         b.art = Some(art("image/jpeg", "\"a\"", jpeg(64)));
@@ -2477,12 +2431,12 @@ async fn every_ask_carries_the_time_and_the_signature_of_the_key_and_never_the_k
 
 #[tokio::test]
 async fn a_helper_that_answers_to_the_key_is_ready_and_an_older_one_is_outdated() {
-    let (_, address, library) = keyed("0.3.0").await;
+    let (_, address, library) = keyed(BUNDLED).await;
     let status = library.status(&settings_for(&address), false).await;
     assert_eq!(status.helper.state, HelperState::Ready);
     assert!(status.active && status.enabled);
-    assert_eq!(status.helper.version.as_deref(), Some("0.3.0"));
-    assert_eq!(status.helper.bundled_version, "0.3.0");
+    assert_eq!(status.helper.version.as_deref(), Some(BUNDLED));
+    assert_eq!(status.helper.bundled_version, BUNDLED);
     assert!(status.helper.paired);
     assert_eq!(status.state, LibraryState::Ready);
 
@@ -2518,7 +2472,7 @@ async fn a_helper_without_a_key_works_but_offers_the_update() {
 async fn a_helper_that_refuses_the_key_or_the_time_needs_the_command_again_and_says_nothing_louder()
 {
     // Another key.
-    let (helper, address, library) = keyed("0.3.0").await;
+    let (helper, address, library) = keyed(BUNDLED).await;
     library.set_key_for_test("ANOTHER-key-ANOTHER-key-ANOTHER-key-0123");
     let status = library.status(&settings_for(&address), false).await;
     assert_eq!(status.helper.state, HelperState::NeedsKey);
@@ -2542,13 +2496,13 @@ async fn a_helper_that_refuses_the_key_or_the_time_needs_the_command_again_and_s
         (LibraryState::Off, false, 0)
     );
     // The right key but a clock that is more than two minutes off.
-    let (helper2, address2, library2) = keyed("0.3.0").await;
+    let (helper2, address2, library2) = keyed(BUNDLED).await;
     helper2.set(|b| b.clock = NOW + 500);
     let status = library2.status(&settings_for(&address2), false).await;
     assert_eq!(status.helper.state, HelperState::NeedsKey);
     drop(helper);
     // No key at all against a keyed helper: its bare answer says a key is required.
-    let (_, address3, _) = keyed("0.3.0").await;
+    let (_, address3, _) = keyed(BUNDLED).await;
     let bare = PlaybackLibrary::new();
     let status = bare.status(&settings_for(&address3), false).await;
     assert_eq!(status.helper.state, HelperState::NeedsKey);
@@ -2557,7 +2511,7 @@ async fn a_helper_that_refuses_the_key_or_the_time_needs_the_command_again_and_s
 
 #[tokio::test]
 async fn a_helper_that_refused_is_not_pressed_with_more_bad_signatures() {
-    let (helper, address, library) = keyed("0.3.0").await;
+    let (helper, address, library) = keyed(BUNDLED).await;
     library.set_key_for_test("ANOTHER-key-ANOTHER-key-ANOTHER-key-0123");
     let settings = settings_for(&address);
     let _ = library.status(&settings, true).await;
@@ -2580,24 +2534,80 @@ async fn a_helper_that_refused_is_not_pressed_with_more_bad_signatures() {
     assert_eq!(status.helper.state, HelperState::Ready);
 }
 
+/// An older settings.json may hold `playback_library.enabled: false` (an off switch, or the "Forget the Library Link" that no
+/// longer exists). It changes nothing: the state is what the helper's `/health` says, as with a file that has no such field.
 #[tokio::test]
-async fn a_forgotten_key_asks_nothing_and_a_new_one_asks_again() {
-    let (helper, address, library) = keyed("0.3.0").await;
-    let forgotten = PlaybackLibrarySettings {
+async fn an_old_file_with_the_switch_off_behaves_like_one_without_it() {
+    let off = |address: &str| PlaybackLibrarySettings {
         enabled: Some(false),
-        address: address.clone(),
+        address: address.to_string(),
     };
-    library.forget_key().unwrap();
+    // 1. A helper that is not installed: not installed, and no error.
+    let nothing = PlaybackLibrary::new();
+    let status = nothing.status(&off("http://127.0.0.1:9"), true).await;
+    assert_eq!(status.helper.state, HelperState::NotInstalled);
     assert_eq!(
-        library.status(&forgotten, true).await.helper.state,
-        HelperState::Forgotten
+        status.helper.message,
+        "The Library Link is not installed on the Playback computer."
     );
-    assert!(helper.hits().is_empty());
-    // A new setup session makes a new key; the saved `enabled: false` stays until the helper answers it.
-    library.ensure_key().unwrap();
-    let status = library.status(&forgotten, true).await;
-    assert!(!helper.hits().is_empty(), "asked again");
-    assert_ne!(status.helper.state, HelperState::Forgotten);
+    // 2. A keyed helper that does not know this StagePilot (no key): it says so, like for any file.
+    let (helper, address, _) = keyed(BUNDLED).await;
+    let no_key = PlaybackLibrary::new();
+    let status = no_key.status(&off(&address), true).await;
+    assert_eq!(status.helper.state, HelperState::NeedsKey);
+    assert!(!status.active);
+    // 3. The key it was set up with: ready, and the saved `enabled: false` makes no difference to the answer.
+    let (_, address, library) = keyed(BUNDLED).await;
+    let with_off = library.status(&off(&address), true).await;
+    let plain = PlaybackLibrary::new();
+    plain.set_key_for_test(KEY);
+    plain.set_wall_clock(Box::new(|| NOW));
+    let without = plain.status(&settings_for(&address), true).await;
+    assert_eq!(with_off.helper.state, HelperState::Ready);
+    assert_eq!(with_off.helper, without.helper);
+    assert_eq!(
+        (with_off.active, with_off.state),
+        (without.active, without.state)
+    );
+    assert!(!helper.hits().is_empty());
+}
+
+/// The same through the real routes: a settings.json from a version that could forget the key loads, and the Library Link
+/// answers from `/health`.
+#[tokio::test]
+async fn a_settings_file_that_once_forgot_the_key_loads_and_reads_the_helper() {
+    let (_, address, _) = keyed(BUNDLED).await;
+    let file = json!({
+        "schema_version": 2,
+        "playback_library": {"enabled": false, "address": format!("http://{address}")},
+    });
+    let (settings, _) = PersistentSettings::from_value(file).expect("the old file loads");
+    let service = SettingsService::ephemeral_persistent(settings);
+    let runtime = Runtime::with_backends(Arc::new(service), false, OutputBackends::fake_midi());
+    runtime.start().await;
+    let router = build_app(runtime.clone(), AppOptions { web_root: None });
+    // A key StagePilot has not made yet: the helper is there but does not know this StagePilot.
+    let (status, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["helper"]["state"], json!("needs_key"));
+    assert_eq!(body["helper"]["paired"], json!(false));
+    // The setup command makes the key (and reuses it every time after); the helper then answers to it.
+    runtime.playback_library.set_key_for_test(KEY);
+    runtime.playback_library.set_wall_clock(Box::new(|| NOW));
+    runtime.playback_library.reset().await;
+    let (_, body) = call(
+        &router,
+        "GET",
+        "/api/v1/playback-library/status?check=1",
+        None,
+    )
+    .await;
+    assert_eq!(body["helper"]["state"], json!("ready"));
+    assert_eq!(body["helper"]["paired"], json!(true));
+    // There is no way to forget the key any more.
+    let (status, _) = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
+    assert!(status.is_client_error(), "{status}");
+    assert!(runtime.playback_library.is_paired());
 }
 
 fn route_helper_settings(runtime: &Runtime, host: Option<&str>, address: &str) {
@@ -2637,7 +2647,7 @@ async fn the_helper_is_asked_at_the_saved_playback_computer_unless_advanced_name
 
 #[tokio::test]
 async fn the_status_route_remembers_the_helper_was_in_use_and_a_later_silence_is_said() {
-    let (helper, address, library) = keyed("0.3.0").await;
+    let (helper, address, library) = keyed(BUNDLED).await;
     let (router, runtime) = app().await;
     runtime.playback_library.set_key_for_test(KEY);
     runtime.playback_library.set_wall_clock(Box::new(|| NOW));
@@ -2645,8 +2655,8 @@ async fn the_status_route_remembers_the_helper_was_in_use_and_a_later_silence_is
     route_helper_settings(&runtime, None, &format!("http://{address}"));
     let (_, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
     assert_eq!(body["helper"]["state"], json!("ready"), "{body}");
-    assert_eq!(body["helper"]["version"], json!("0.3.0"));
-    assert_eq!(body["helper"]["bundled_version"], json!("0.3.0"));
+    assert_eq!(body["helper"]["version"], json!(BUNDLED));
+    assert_eq!(body["helper"]["bundled_version"], json!(BUNDLED));
     assert_eq!(body["helper"]["paired"], json!(true));
     assert_eq!(body["active"], json!(true));
     assert_eq!(
@@ -2706,45 +2716,8 @@ async fn a_helper_that_was_never_there_says_nothing_anywhere() {
 }
 
 #[tokio::test]
-async fn forgetting_deletes_the_key_saves_it_and_keeps_the_address() {
-    let (helper, address, _) = keyed("0.3.0").await;
-    let (router, runtime) = app().await;
-    runtime.playback_library.set_key_for_test(KEY);
-    runtime.playback_library.set_wall_clock(Box::new(|| NOW));
-    route_helper_settings(&runtime, None, &format!("http://{address}"));
-    let (_, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
-    assert_eq!(body["helper"]["state"], json!("ready"));
-    helper.set(|b| b.hits.clear());
-    let (status, body) = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["helper"]["state"], json!("forgotten"));
-    assert_eq!(body["helper"]["paired"], json!(false));
-    assert!(!runtime.playback_library.is_paired());
-    let saved = runtime.settings_service.snapshot().playback_library;
-    assert_eq!(saved.enabled, Some(false));
-    assert_eq!(
-        saved.address,
-        format!("http://{address}"),
-        "the address override is kept"
-    );
-    let (_, body) = call(
-        &router,
-        "GET",
-        "/api/v1/playback-library/status?check=1",
-        None,
-    )
-    .await;
-    assert_eq!(body["helper"]["state"], json!("forgotten"));
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(helper.hits().is_empty(), "{:?}", helper.hits());
-    // Forgetting twice is harmless.
-    let (status, _) = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
-    assert_eq!(status, StatusCode::OK);
-}
-
-#[tokio::test]
 async fn the_key_is_in_no_answer_no_setting_and_no_log_line() {
-    let (_, address, _) = keyed("0.3.0").await;
+    let (_, address, _) = keyed(BUNDLED).await;
     let (router, runtime) = app().await;
     runtime.playback_library.set_key_for_test(KEY);
     runtime.playback_library.set_wall_clock(Box::new(|| NOW));
@@ -2760,7 +2733,6 @@ async fn the_key_is_in_no_answer_no_setting_and_no_log_line() {
         ("GET", "/api/v1/state"),
         ("GET", "/api/v1/health"),
         ("PUT", "/api/v1/playback-library/settings"),
-        ("POST", "/api/v1/playback-library/forget"),
     ] {
         let body = (method == "PUT").then(|| json!({"address": format!("http://{address}")}));
         let (_, answer) = call(&router, method, path, body).await;

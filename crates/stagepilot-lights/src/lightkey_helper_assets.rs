@@ -2,6 +2,8 @@
 //! "Set up the Lighting computer" box can hand a version-matched installer to the Lighting Mac
 //! without internet. Refresh them with `node scripts/vendor-lightkey-helper.mjs <tag>`.
 
+use stagepilot_core::helper_update::UpdateBundle;
+
 /// The five files the install box serves, and nothing else. Order is the order the wrapper
 /// downloads them in.
 pub const FILE_NAMES: [&str; 5] = [
@@ -18,6 +20,25 @@ const LIGHTKEY_CUES_PY: &[u8] = include_bytes!("../assets/lightkey-helper/lightk
 const UNINSTALL_SH: &[u8] = include_bytes!("../assets/lightkey-helper/uninstall.sh");
 const SHA256SUMS: &[u8] = include_bytes!("../assets/lightkey-helper/SHA256SUMS");
 const VERSION: &str = include_str!("../assets/lightkey-helper/VERSION");
+const SHA256SUMS_SIG: &[u8] = include_bytes!("../assets/lightkey-helper/SHA256SUMS.sig");
+
+/// The files an update replaces on the Lighting computer. The helper takes exactly these names; it writes the cue reader only where it
+/// is installed. The installer, the uninstaller and the wrapper are not updated this way.
+pub const UPDATE_FILE_NAMES: [&str; 2] = ["lightkey_api.py", "lightkey_cues.py"];
+
+/// What StagePilot sends to an older helper that can update itself: the two scripts, `SHA256SUMS` and the project's signature of it
+/// (`SHA256SUMS.sig`, written on the release machine by `node scripts/sign_helpers.mjs --key <pem>`; empty in a working tree).
+pub fn update_bundle() -> UpdateBundle {
+    UpdateBundle {
+        version: bundled_version().to_string(),
+        files: vec![
+            ("lightkey_api.py", LIGHTKEY_API_PY),
+            ("lightkey_cues.py", LIGHTKEY_CUES_PY),
+        ],
+        sums: SHA256SUMS,
+        signature: SHA256SUMS_SIG,
+    }
+}
 
 /// The bytes of a served file, by exact name.
 pub fn file(name: &str) -> Option<&'static [u8]> {
@@ -91,7 +112,44 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} is not in SHA256SUMS"));
             assert_eq!(sha256(file(name).unwrap()), want.0, "{name}");
         }
-        assert_eq!(sums.len(), 4, "SHA256SUMS lists exactly the four files");
+        assert_eq!(
+            sums.len(),
+            5,
+            "SHA256SUMS lists the four files and VERSION (so the version is signed too)"
+        );
+        let mut names: Vec<&str> = sums.iter().map(|(_, n)| n.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "VERSION",
+                "install.sh",
+                "lightkey_api.py",
+                "lightkey_cues.py",
+                "uninstall.sh"
+            ]
+        );
+        assert_eq!(
+            sha256(VERSION.as_bytes()),
+            sums.iter().find(|(_, n)| n == "VERSION").unwrap().0
+        );
+    }
+
+    #[test]
+    fn the_update_bundle_is_the_two_scripts_and_the_list_that_covers_them() {
+        let bundle = update_bundle();
+        assert_eq!(bundle.version, bundled_version());
+        let names: Vec<&str> = bundle.files.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, UPDATE_FILE_NAMES);
+        let listed = bundle.listed();
+        for (name, bytes) in &bundle.files {
+            let want = listed.iter().find(|(_, n)| n == name).expect("listed");
+            assert_eq!(sha256(bytes), want.0, "{name}");
+        }
+        assert_eq!(
+            bundle.sums, SHA256SUMS,
+            "the exact bytes the signature covers"
+        );
     }
 
     #[test]

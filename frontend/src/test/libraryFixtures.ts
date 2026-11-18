@@ -54,6 +54,6 @@ export const libraryController = (state: HelperState = "ready", over: Partial<Pl
   const status = libraryStatus(state);
   return {
     target: "10.30.0.141", address: "", status, plan: status.active ? libraryPlan([librarySongOf("Song One", 1)]) : null, error: null, pending: null,
-    saveAddress: vi.fn().mockResolvedValue(true), forget: vi.fn().mockResolvedValue(true), chooseSetlist: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
+    saveAddress: vi.fn().mockResolvedValue(true), chooseSetlist: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
   };
 };

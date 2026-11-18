@@ -1,4 +1,4 @@
-import type { LightkeyStatus } from "../types";
+import type { HelperUpdateStatus, LightkeyStatus } from "../types";
 
 /** Shown on the disabled Read fixtures button when the helper is older than 0.5.0. */
 export const UPDATE_HELPER_TIP = "Update the helper to use this.";
@@ -22,6 +22,15 @@ export function projectMismatchText(captured: string | null | undefined, current
 
 /** The helper reports a version older than 0.5.0 (a helper that reports none counts as older). */
 export const helperIsOutdated = (status: LightkeyStatus): boolean => status.helper?.outdated === true;
+
+/** The update line for a helper that StagePilot updates by itself: said while it will, while it does, and once when it did. */
+export function helperUpdateLine(update: HelperUpdateStatus | undefined): string | null {
+  if (!update || update.mode === "manual") return null;
+  return update.message ?? null;
+}
+
+/** StagePilot will send the update by itself (so no setup command is needed). */
+export const updatesItself = (update: HelperUpdateStatus | undefined): boolean => update?.mode === "automatic" || update?.mode === "updating";
 
 /** The countdown as `m:ss`. */
 export function countdownText(ms: number): string {

@@ -16,4 +16,10 @@ export type PersistentSettings = { planning_center_length_undo: Array<PlanningCe
  * The optional Playback library connection (see `PlaybackLibrarySettings`). Left out of the
  * saved file while it is off, so an older file saves back unchanged.
  */
-playback_library?: PlaybackLibrarySettings, network_midi: NetworkMidiSettings, lights: LightsSettings, propresenter: ProPresenterSettings, };
+playback_library?: PlaybackLibrarySettings, 
+/**
+ * File only, no screen: whether StagePilot installs a newer Library Link / Lightkey helper by itself when it starts (see
+ * `docs/configuration.md`). On unless the file says `false`; left out of the saved file while it is on, so an older file saves back
+ * unchanged.
+ */
+helper_auto_update?: boolean, network_midi: NetworkMidiSettings, lights: LightsSettings, propresenter: ProPresenterSettings, };

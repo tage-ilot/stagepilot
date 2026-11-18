@@ -2923,6 +2923,7 @@ version = "0.0.0"
 dependencies = [
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "futures-util",
@@ -2934,6 +2935,7 @@ dependencies = [
  "md-5",
  "percent-encoding",
  "reqwest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",

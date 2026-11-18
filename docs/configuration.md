@@ -391,6 +391,13 @@ public internet address belongs to, and reports only that city text (for example
 StagePilot. There is no setting for this. To turn it off, start StagePilot with
 `STAGEPILOT_DISABLE_IP_LOOKUP=1`.
 
+## Helper updates
+
+`helper_auto_update` in `settings.json` (a boolean, **on** unless the file says `false`) lets StagePilot send its bundled Library Link
+and Lightkey helper to a helper on the local network that is older, can update itself and is idle (see `docs/playback-api.md`,
+"Automatic updates"). There is no control for it in the window; it is left out of the saved file while it is on, and StagePilot keeps
+the value you wrote when it saves other settings.
+
 ## Local files
 
 The following patterns are ignored because they can contain secrets or

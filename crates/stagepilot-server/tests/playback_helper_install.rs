@@ -285,8 +285,8 @@ async fn the_served_wrapper_names_the_session_url_the_checksums_and_carries_the_
         script.contains(KEY),
         "the key rides inside the served script"
     );
-    // The key was forgotten while the session was open: there is nothing to install any more.
-    rt.playback_library.forget_key().unwrap();
+    // The stored key became unusable while the session was open: there is nothing to install any more.
+    rt.playback_library.set_key_for_test("short");
     let again = send(
         &app,
         "GET",
@@ -326,8 +326,25 @@ async fn a_bad_address_is_refused_and_a_missing_playback_computer_gets_its_own_s
     assert_eq!(none.status, StatusCode::CONFLICT);
     assert_eq!(none.json()["detail"], NO_PLAYBACK_COMPUTER);
     assert_eq!(none.json()["code"], "no_playback_computer");
-    // The saved Playback computer is this computer: there is no LAN address toward it.
+    // The saved Playback computer is this computer: nobody is asked for an address; the session is on loopback.
     save_playback_host(&rt, "127.0.0.1", "");
+    let here = send(
+        &app,
+        "POST",
+        "/api/v1/playback-library/helper-install",
+        None,
+        "127.0.0.1",
+    )
+    .await;
+    assert_eq!(here.status, StatusCode::OK, "{:?}", here.json());
+    assert_eq!(here.json()["lan_ip"], "127.0.0.1");
+    assert!(here.json()["command"]
+        .as_str()
+        .unwrap()
+        .contains("http://127.0.0.1:"));
+    let _ = rt.playback_helper_install.end();
+    // A computer with no route is the one case that asks: a name that does not resolve.
+    save_playback_host(&rt, "playback-mac.invalid", "");
     let no_lan = send(
         &app,
         "POST",
@@ -339,10 +356,6 @@ async fn a_bad_address_is_refused_and_a_missing_playback_computer_gets_its_own_s
     assert_eq!(no_lan.status, StatusCode::CONFLICT);
     assert_eq!(no_lan.json()["detail"], NO_ADDRESS);
     assert_eq!(no_lan.json()["code"], "no_lan_address");
-    assert!(
-        !rt.playback_library.is_paired(),
-        "a refused session makes no key"
-    );
 }
 
 /// This computer's own private address, as the system would pick it toward the internet.
@@ -535,7 +548,7 @@ async fn keyed_helper() -> String {
             return (
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, "application/json")],
-                json!({"ok": true, "version": "0.3.0", "auth": "key", "database": "ok", "songs": 1, "setlists": 1}).to_string(),
+                json!({"ok": true, "version": bundled::BUNDLED_HELPER_VERSION, "auth": "key", "database": "ok", "songs": 1, "setlists": 1}).to_string(),
             )
                 .into_response();
         }

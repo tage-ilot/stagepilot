@@ -10,7 +10,6 @@ vi.mock("../api", () => ({
   getPlaybackLibraryStatus: vi.fn(),
   getPlaybackLibraryPlan: vi.fn(),
   updatePlaybackLibrarySettings: vi.fn(),
-  forgetPlaybackHelper: vi.fn(),
   choosePlaybackLibrarySetlist: vi.fn(),
   getSettings: vi.fn(),
 }));
@@ -51,7 +50,7 @@ describe("usePlaybackLibrary", () => {
     expect(api.getPlaybackLibraryStatus).toHaveBeenCalledTimes(2);
   });
 
-  it("an old file whose switch was off still reads: the backend says forgotten, the window just asks", async () => {
+  it("an old file whose switch was off still reads like any other: the window just asks and the backend says what the helper says", async () => {
     vi.useFakeTimers();
     renderHook(() => usePlaybackLibrary(true, settings("10.20.0.102", { enabled: false, address: "" }), vi.fn()));
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
@@ -140,30 +139,6 @@ describe("usePlaybackLibrary", () => {
     const { result } = renderHook(() => usePlaybackLibrary(true, settings("10.30.0.141"), vi.fn()));
     await act(async () => { await result.current.saveAddress("10.0.0.5/x"); });
     expect(result.current.error).toContain("host or host:port");
-  });
-
-  it("forgetting asks the backend to delete the key, keeps the plan empty and reloads the settings", async () => {
-    vi.mocked(api.forgetPlaybackHelper).mockResolvedValue(libraryStatus("forgotten"));
-    const fresh = settings("10.30.0.141", { enabled: false, address: "" });
-    vi.mocked(api.getSettings).mockResolvedValue(fresh);
-    const onSettings = vi.fn();
-    const { result } = renderHook(() => usePlaybackLibrary(true, settings("10.30.0.141"), onSettings));
-    await waitFor(() => expect(result.current.plan).not.toBeNull());
-    let done = false;
-    await act(async () => { done = await result.current.forget(); });
-    expect(done).toBe(true);
-    expect(api.forgetPlaybackHelper).toHaveBeenCalledTimes(1);
-    expect(result.current.status?.helper.state).toBe("forgotten");
-    expect(result.current.plan).toBeNull();
-    expect(onSettings).toHaveBeenCalledWith(fresh);
-  });
-
-  it("says plainly when forgetting failed", async () => {
-    vi.mocked(api.forgetPlaybackHelper).mockRejectedValue(new Error("StagePilot could not remove the key from the secure credential store."));
-    const { result } = renderHook(() => usePlaybackLibrary(true, settings("10.30.0.141"), vi.fn()));
-    await act(async () => { await result.current.forget(); });
-    expect(result.current.error).toContain("could not remove the key");
-    expect(result.current.pending).toBeNull();
   });
 
   it("choosing a setlist sends only that, shows the answer, and says why when it fails", async () => {

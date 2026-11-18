@@ -34,11 +34,10 @@ const HELPER_TONE: Record<HelperState, Tone> = {
   outdated: "info",
   needs_key: "warning",
   not_installed: "idle",
-  forgotten: "idle",
   unreachable: "warning",
 };
 
-/** The Library Link line: `Ready, version 0.3.0`, `Not installed`, `Update available`, `Needs the command again`, `Not answering`, `Forgotten`. */
+/** The Library Link line: `Ready, version 0.3.0`, `Not installed`, `Update available`, `Needs the command again`, `Not answering`. */
 export function scriptLine(status: LibraryStatus | null, hasComputer: boolean): LiveLinkLine {
   if (!status) return hasComputer ? { tone: "idle", text: "Checking…" } : { tone: "idle", text: "Not installed" };
   const { state, version } = status.helper;
@@ -48,7 +47,6 @@ export function scriptLine(status: LibraryStatus | null, hasComputer: boolean): 
     case "outdated": return { tone: HELPER_TONE.outdated, text: `Update available${withVersion}` };
     case "needs_key": return { tone: HELPER_TONE.needs_key, text: "Needs the command again" };
     case "unreachable": return { tone: HELPER_TONE.unreachable, text: "Not answering" };
-    case "forgotten": return { tone: HELPER_TONE.forgotten, text: "Forgotten" };
     default: return { tone: HELPER_TONE.not_installed, text: "Not installed" };
   }
 }
@@ -78,8 +76,7 @@ export function pillParts(api: { good: boolean; line: LiveLinkLine }, status: Li
       : state === "outdated" ? { word: "Update available", tone: HELPER_TONE.outdated }
         : state === "needs_key" ? { word: "Needs setup", tone: HELPER_TONE.needs_key }
           : state === "unreachable" ? { word: "Not answering", tone: HELPER_TONE.unreachable }
-            : state === "forgotten" ? { word: "Forgotten", tone: HELPER_TONE.forgotten }
-              : { word: "Not installed", tone: HELPER_TONE.not_installed };
+            : { word: "Not installed", tone: HELPER_TONE.not_installed };
   return { api: apiPart, script };
 }
 

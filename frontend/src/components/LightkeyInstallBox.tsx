@@ -3,13 +3,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, endLightkeyHelperInstall, startLightkeyHelperInstall } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyHelperInstall, LightkeyStatus } from "../types";
-import { countdownText, helperIsOutdated } from "./lightkeyProject";
+import { countdownText, helperIsOutdated, helperUpdateLine } from "./lightkeyProject";
 import { CONTROL_34 } from "./compactControl";
 import { LiveLinkField } from "./LightingOscParts";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
 type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
+
+/** The helper's own sentence that an update was undone, or StagePilot's that it gave up: the setup command is how to update it then. */
+function manualNote(status: LightkeyStatus) {
+  const update = status.helper?.update;
+  const text = update?.mode === "manual" ? update.message : undefined;
+  if (!text) return null;
+  return <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-update-note" role="status">{text}</p>;
+}
 
 /**
  * "Set up the Lighting computer", in the Lightkey strip. Shown while there is no connected Lighting
@@ -104,7 +112,11 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
   if (phase === "done") {
     return <div data-testid="lightkey-install-done">{live}</div>;
   }
-  if (connected && !outdated && phase === "idle") return <div>{live}</div>;
+  if (connected && !outdated && phase === "idle") {
+    // A helper that is behind the one StagePilot carries, and can update itself: StagePilot does it, so there is only a line to read.
+    const update = helperUpdateLine(status.helper?.update);
+    return <div>{live}{update && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="lightkey-update-line" role="status">{update}</p>}{manualNote(status)}</div>;
+  }
   if (status.link === "off" && phase === "idle") return <div>{live}</div>;
 
   const panel = "mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body";
