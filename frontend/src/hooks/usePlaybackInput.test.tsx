@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 import { playbackSettings, playbackStatus } from "../test/playbackFixtures";
-import { usePlaybackInput } from "./usePlaybackInput";
+import { LIBRARY_READ_MIN_MS, usePlaybackInput } from "./usePlaybackInput";
 
 vi.mock("../api", () => ({
   getPlaybackStatus: vi.fn(), getPlaybackEvents: vi.fn(), getSettings: vi.fn(),
-  updateSettings: vi.fn(), updatePlaybackSettings: vi.fn(), findPlayback: vi.fn(), cancelPlaybackScan: vi.fn(), discoverPlaybackSongOrder: vi.fn(),
+  updateSettings: vi.fn(), updatePlaybackSettings: vi.fn(), findPlayback: vi.fn(), cancelPlaybackScan: vi.fn(), discoverPlaybackSongOrder: vi.fn(), refreshPlaybackSongOrderFromLibrary: vi.fn(),
 }));
 const tick = async (ms = 0) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 const deferred = <T,>() => {
@@ -181,5 +181,63 @@ describe("usePlaybackInput", () => {
     await act(async () => save.resolve(playbackStatus()));
     expect(result.current.status).toBeNull();
     expect(onSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePlaybackInput.refreshFromLibrary (T9)", () => {
+  const fromLibrary = (extra = {}) => playbackStatus({ order_source: "library", order_library_note: null, song_order: [101, 202], ...extra });
+
+  it("is pending while the call waits, never steps through Playback, and gives the count once the answer is in", async () => {
+    const answer = deferred<ReturnType<typeof playbackStatus>>();
+    vi.mocked(api.refreshPlaybackSongOrderFromLibrary).mockReturnValue(answer.promise);
+    const { result } = renderHook(() => usePlaybackInput(true, vi.fn()));
+    await tick();
+    act(() => { result.current.refreshFromLibrary?.(); });
+    expect(result.current.pending).toBe("library");
+    await tick(2000);
+    expect(result.current.pending).toBe("library");
+    expect(result.current.libraryRead).toBeNull();
+    await act(async () => answer.resolve(fromLibrary()));
+    await tick(LIBRARY_READ_MIN_MS);
+    expect(result.current.pending).toBeNull();
+    expect(result.current.libraryRead).toBe(2);
+    expect(api.discoverPlaybackSongOrder).not.toHaveBeenCalled();
+  });
+
+  it("a fast answer is still seen: pending lasts at least 700 ms, and the count comes only after", async () => {
+    vi.mocked(api.refreshPlaybackSongOrderFromLibrary).mockResolvedValue(fromLibrary());
+    const { result } = renderHook(() => usePlaybackInput(true, vi.fn()));
+    await tick();
+    act(() => { result.current.refreshFromLibrary?.(); });
+    await tick(0);
+    expect(result.current.pending).toBe("library");
+    await tick(LIBRARY_READ_MIN_MS - 100);
+    expect(result.current.pending).toBe("library");
+    expect(result.current.libraryRead).toBeNull();
+    await tick(100);
+    expect(result.current.pending).toBeNull();
+    expect(result.current.libraryRead).toBe(2);
+  });
+
+  it("a failed call drops pending at once and shows the plain reason", async () => {
+    vi.mocked(api.refreshPlaybackSongOrderFromLibrary).mockRejectedValue(new Error("The Library Link is not ready, so the song order cannot be read from it."));
+    const { result } = renderHook(() => usePlaybackInput(true, vi.fn()));
+    await tick();
+    act(() => { result.current.refreshFromLibrary?.(); });
+    await tick(0);
+    expect(result.current.pending).toBeNull();
+    expect(result.current.error).toBe("The Library Link is not ready, so the song order cannot be read from it.");
+    expect(result.current.libraryRead).toBeNull();
+  });
+
+  it("a condition that fails (its line is in the status) drops pending at once and reads nothing", async () => {
+    vi.mocked(api.refreshPlaybackSongOrderFromLibrary).mockResolvedValue(playbackStatus({ order_source: "none", order_library_note: "Not using the Library Link's order: Faithfulness is not in Playback's setlist." }));
+    const { result } = renderHook(() => usePlaybackInput(true, vi.fn()));
+    await tick();
+    act(() => { result.current.refreshFromLibrary?.(); });
+    await tick(0);
+    expect(result.current.pending).toBeNull();
+    expect(result.current.libraryRead).toBeNull();
+    expect(result.current.status?.order_library_note).toContain("Faithfulness");
   });
 });

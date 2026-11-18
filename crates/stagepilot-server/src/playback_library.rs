@@ -18,10 +18,15 @@
 //!   is asked, ever, and nothing runs in the background. There is no on/off switch any more: while a
 //!   Playback host is saved the helper is asked, at most once per 30 s (see below), and a helper that is not
 //!   there is not a warning anywhere (`HelperState::NotInstalled`).
-//! * Nothing is polled. A window asking (`GET /status`, `GET /plan`) is the only thing that causes a
-//!   request, and the helper is asked at most once per 30 s however many windows ask; the Check
-//!   button (`?check=1`) may ask again after 2 s. Failures are remembered for the same time, so a
-//!   computer that does not answer is not asked again and again.
+//! * The helper is asked on a few occasions only. A window asking (`GET /status`, `GET /plan`). The look the
+//!   runtime makes by itself when it starts (health, then the open setlist and its songs, read fresh), when
+//!   a key is paired: if the helper is silent it is tried again after 2 s, 5 s, 15 s and then every 30 s,
+//!   until it has answered once. The watcher's look every few seconds once the Library Link has been in use
+//!   (`playback_order`). And the "Scan Playback Songs" button when the Library Link works (a fresh read).
+//!   A computer that never had a Library Link set up (no key) is never asked in the background. Apart from
+//!   the fresh reads, the helper is asked at most once per 30 s however many ask; the Check button
+//!   (`?check=1`) may ask again after 2 s. Failures are remembered for the same time, so a computer that
+//!   does not answer is not asked again and again.
 //! * One request is 3 s at most (connect, answer and body together), a redirect is never followed,
 //!   and an answer larger than its cap (16 KiB health, 256 KiB setlist or song) is refused. The
 //!   waveform is never asked for.
@@ -1000,6 +1005,22 @@ impl PlaybackLibrary {
     /// when the helper's `library_revision` is new or 10 minutes have passed (a helper that sends no
     /// revision is read each time). Nothing is asked when the Library Link was forgotten or has no address.
     pub async fn open_setlist(&self, settings: &PlaybackLibrarySettings) -> OpenSetlist {
+        self.open_setlist_inner(settings, false).await
+    }
+
+    /// The same, read fresh: the health, the open setlist and its songs are asked now, whatever the
+    /// 30 s gap or an unchanged `library_revision` would have said. This is what a person's press on
+    /// "Scan Playback Songs" and the connection made at start-up cause. The next window that asks
+    /// for the plan reads it in full too.
+    pub async fn open_setlist_fresh(&self, settings: &PlaybackLibrarySettings) -> OpenSetlist {
+        self.open_setlist_inner(settings, true).await
+    }
+
+    async fn open_setlist_inner(
+        &self,
+        settings: &PlaybackLibrarySettings,
+        fresh: bool,
+    ) -> OpenSetlist {
         let none = OpenSetlist {
             in_use: false,
             current: false,
@@ -1013,6 +1034,14 @@ impl PlaybackLibrary {
             return none;
         };
         let mut inner = self.inner.lock().await;
+        if fresh {
+            // Forget when anything was last asked: every answer below is read again.
+            inner.health.asked = None;
+            inner.open.asked = None;
+            inner.open_read = None;
+            inner.setlist.asked = None;
+            inner.read = None;
+        }
         let status = self.status_locked(&mut inner, settings, &base, false).await;
         if !status.active {
             return none;

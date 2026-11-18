@@ -15,7 +15,7 @@ import { Disclosure } from "./ui/Disclosure";
 import { cx } from "./ui/cx";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { Switch } from "./ui/Switch";
-import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
+import { LIBRARY_BUTTON_HELP, LIBRARY_ORDER_HELP, SCAN_PLAYBACK_SONGS, SCAN_WITH_PLAYBACK_INSTEAD, readFromLibraryText, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
 // (skipped songs) until Save configuration. The scan, the computer chooser and the Library Link are the first block, PlaybackLiveLink.
@@ -28,13 +28,21 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
   const [learnDraft, setLearnDraft] = useState<boolean | null>(null);
 
   const running = status?.discovery === "running" || playback?.pending === "discover";
+  // The Library Link answers (ready or outdated) with data that is not an old copy: the button reads it instead of stepping through Playback.
+  const libraryUsable = Boolean(library?.status?.active) && !library?.status?.stale && Boolean(playback?.refreshFromLibrary);
+  const reading = playback?.pending === "library";
+  // A condition of the Library Link's order failed: its plain line is shown, and the stepping scan is offered quietly as the backup.
+  const libraryNote = libraryUsable ? status?.order_library_note ?? null : null;
   const apiConnected = status?.sources.playback_api.connected ?? false;
   const orderSaved = Boolean(status?.song_order.length) && !status?.stale && !status?.plan_changed;
+  const libraryRead = playback?.libraryRead ?? null;
   const notice = status ? playbackOrderNotice(status) : null;
   const mismatch = status && orderSaved ? playbackSongCountMismatch(status) : null;
   // A dialog never outlives the state that allowed it (e.g. Playback started playing).
-  const canDiscover = apiConnected && !status?.playing && !running;
-  useEffect(() => { if (!canDiscover) setConfirm(false); }, [canDiscover]);
+  // Reading the Library Link touches nothing in Playback, so it works while a song plays; stepping through the songs does not.
+  const canStep = apiConnected && !status?.playing && !running && !reading;
+  const canDiscover = libraryUsable ? apiConnected && !running : canStep;
+  useEffect(() => { if (!canStep) setConfirm(false); }, [canStep]);
 
   const learnSaved = status?.settings.learn_order !== false;
   const learnOn = learnDraft ?? learnSaved;
@@ -66,12 +74,14 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
               <h3 id="song-order-heading" className="shrink-0 font-bold text-ink">Song order</h3>
               <span className="min-w-0 truncate text-sm text-ink-body" data-part="summary" data-testid="song-order-summary">{songOrderSummary(status, running)}</span>
             </button>
-            {canDiscover && <Button onClick={() => setConfirm(true)} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"}>{SCAN_PLAYBACK_SONGS}</Button>}
+            {canDiscover && <Button loading={reading} onClick={() => libraryUsable ? playback?.refreshFromLibrary?.() : setConfirm(true)} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"}>{SCAN_PLAYBACK_SONGS}</Button>}
+            {libraryNote && canStep && <Button onClick={() => setConfirm(true)} size="control" tone="playback" variant="secondary">{SCAN_WITH_PLAYBACK_INSTEAD}</Button>}
           </div>
           <div className={cx("grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none", orderOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")} data-part="region" data-state={orderOpen ? "open" : "closed"} id={orderBodyId}>
           <div className="min-h-0 space-y-2 overflow-hidden" inert={!orderOpen}>
           <p className="text-sm font-semibold text-integration-playback-text" data-testid="order-mode">{playbackOrderModeText(status)}</p>
           {status.order_library_note && <p className="text-sm text-ink-body" data-testid="order-library-note">{status.order_library_note}</p>}
+          <p aria-live="polite" className="text-sm font-semibold text-integration-playback-text empty:hidden" data-testid="library-read-line" role="status">{libraryRead !== null && libraryRead !== undefined && !reading && status.order_source === "library" ? readFromLibraryText(libraryRead) : null}</p>
           {playbackOrderMode(status) !== "scanned" && status.order_note && <p className="text-sm text-warning-text">{status.order_note}</p>}
           {playbackHasDoubtfulSong(status) && <p className="text-sm text-warning-text">{DOUBTFUL_ORDER_HINT}</p>}
           <div>
@@ -81,6 +91,11 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>
           {!apiConnected ? <p className="text-sm text-ink-body">Connect to Playback first.</p>
+              : libraryUsable ? <>
+                  {orderSaved ? <p className="text-sm text-integration-playback-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
+                    : notice && <p className="text-sm text-warning-text">{notice}</p>}
+                  <p className="text-sm text-ink-body" data-testid="order-help">{status.order_source === "library" && !status.order_library_note ? LIBRARY_ORDER_HELP : LIBRARY_BUTTON_HELP}</p>
+                </>
               : status.playing ? <p className="text-sm text-warning-text">Stop Playback to scan Playback songs.</p>
                 : <>
                   {orderSaved ? <p className="text-sm text-integration-playback-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>

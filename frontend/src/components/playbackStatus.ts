@@ -103,6 +103,11 @@ export function scanSummary(scan: PlaybackScanResult): string {
 
 export const SONG_ORDER_OPEN_KEY = "stagepilot.playback.song-order-open";
 export const SCAN_PLAYBACK_SONGS = "Scan Playback Songs";
+export const SCAN_WITH_PLAYBACK_INSTEAD = "Scan with Playback instead";
+/** The help line when the button reads the Library Link (the order already comes from it / it does not yet). */
+export const LIBRARY_ORDER_HELP = "The song order comes from the Library Link. The button reads it again now; Playback is not touched.";
+export const LIBRARY_BUTTON_HELP = "The button reads the song order from the Library Link. Playback is not touched and can keep playing.";
+export const readFromLibraryText = (songs: number): string => `Read ${songs} ${songs === 1 ? "song" : "songs"} from the Library Link`;
 
 /** One line for the Song order header, so it still says something while the section is folded. */
 export function songOrderSummary(status: PlaybackStatusResponse, running: boolean): string {

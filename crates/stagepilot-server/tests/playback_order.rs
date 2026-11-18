@@ -14,17 +14,19 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use stagepilot_core::config::{clean_playback_library_address, MidiSource};
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_playback::plugin::PluginOptions;
 use stagepilot_playback::testkit::FakePlayback;
 use stagepilot_server::playback_library::note_in_use;
-use stagepilot_server::playback_order::refresh;
+use stagepilot_server::playback_order::{refresh, start_wait};
 use stagepilot_server::{build_app, AppOptions, Runtime};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tower::ServiceExt;
 
+const KEY: &str = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE";
 const STEP: Duration = Duration::from_millis(10);
 const LIMIT: usize = 1500; // 15 s
 
@@ -88,6 +90,22 @@ impl Helper {
 
     fn hits(&self) -> Vec<String> {
         self.0.lock().unwrap().hits.clone()
+    }
+
+    /// A loopback address nobody listens on yet (the helper is "down"); `serve_at` brings it up.
+    async fn reserve() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        format!("127.0.0.1:{port}")
+    }
+
+    async fn serve_at(&self, address: &str) {
+        let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        let app = Router::new().fallback(answer).with_state(self.clone());
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
     }
 
     async fn serve(&self) -> String {
@@ -626,4 +644,312 @@ async fn a_plan_in_another_order_than_playbacks_is_not_used_because_the_countdow
     assert_eq!(scanned["song_order"], json!([101, 102, 103, 104]));
     assert_eq!(scanned["order_source"], "scan");
     r.runtime.stop().await;
+}
+
+// ---- "Scan Playback Songs" with the Library Link working ----------------------------------------------
+
+const REFRESH: &str = "/api/v1/playback-api/song-order/refresh-from-library";
+
+impl Rig {
+    /// The Library Link is paired (a key is kept) and has been seen working.
+    async fn paired_and_in_use(&self) {
+        self.runtime.playback_library.set_key_for_test(KEY);
+        self.library_in_use().await;
+    }
+
+    async fn press(&self) -> (StatusCode, Value) {
+        self.call("POST", REFRESH, None).await
+    }
+
+    /// What was sent to Playback so far that is not a plain look (every command is a transport command).
+    fn sent_to_playback(&self) -> Vec<String> {
+        self.fake.received_kinds()
+    }
+}
+
+#[tokio::test]
+async fn the_button_reads_the_helper_fresh_and_never_touches_playback() {
+    let r = rig(&IN_ORDER).await;
+    r.paired_and_in_use().await;
+    assert!(r.look().await);
+    let before = r.status().await;
+    assert_eq!(before["song_lengths"], json!([280.0, 290.0, 300.0, 310.0]));
+    let sent = r.sent_to_playback();
+
+    // The helper's data changes but its revision does not move: no ordinary look would read it again, and
+    // the helper is not asked inside 30 s anyway. The button reads it now.
+    let mut list = setlist(&IN_ORDER);
+    list["items"][2]["scan_length_s"] = json!(241.0);
+    list["items"][2]["length_s"] = json!(244.0);
+    r.helper.set(|b| b.current = Some(list));
+    let asked = r.helper.hits().len();
+    assert!(
+        !refresh(&r.runtime).await,
+        "a look inside the gap asks nothing"
+    );
+    assert_eq!(r.helper.hits().len(), asked);
+
+    let (code, status) = r.press().await;
+    assert_eq!(code, StatusCode::OK, "{status}");
+    assert_eq!(status["order_source"], "library");
+    assert_eq!(status["order_library_note"], Value::Null);
+    assert_eq!(status["song_order"], json!([101, 102, 103, 104]));
+    assert_eq!(status["song_lengths"], json!([280.0, 290.0, 241.0, 310.0]));
+    let hits = r.helper.hits();
+    assert!(
+        hits[asked..].iter().any(|h| h == "/health")
+            && hits[asked..].iter().any(|h| h == "/setlists/current"),
+        "{hits:?}"
+    );
+    // Nothing was selected, sought, played or stepped in Playback.
+    assert_eq!(r.sent_to_playback(), sent);
+    assert_eq!(r.fake.state.lock().unwrap().song, 101);
+    // The same press again changes nothing and still answers.
+    let (code, again) = r.press().await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(again["captured_at"], status["captured_at"]);
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn the_button_replaces_an_older_scan_order_with_the_library_order() {
+    let r = rig(&IN_ORDER).await;
+    r.paired_and_in_use().await;
+    assert!(r.look().await);
+    let scanned = r.scan().await;
+    assert_eq!(scanned["order_source"], "scan");
+    r.until("valid", |s| s["stale"] == false).await;
+    assert!(!r.look().await, "the watcher leaves a person's scan alone");
+    assert_eq!(r.status().await["order_source"], "scan");
+
+    let (code, status) = r.press().await;
+    assert_eq!(code, StatusCode::OK, "{status}");
+    assert_eq!(status["order_source"], "library");
+    assert_eq!(status["order_mode"], "scanned");
+    assert_eq!(status["song_order"], scanned["song_order"]);
+    assert_eq!(status["order_library_note"], Value::Null);
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn the_button_works_while_playback_is_playing_because_it_only_reads_the_helper() {
+    let r = rig(&IN_ORDER).await;
+    r.paired_and_in_use().await;
+    r.fake.state.lock().unwrap().playing = true;
+    r.until("playing", |s| s["playing"] == true).await;
+    let sent = r.sent_to_playback();
+    let (code, status) = r.press().await;
+    assert_eq!(code, StatusCode::OK, "{status}");
+    assert_eq!(status["order_source"], "library");
+    assert_eq!(status["song_order"], json!([101, 102, 103, 104]));
+    assert_eq!(r.sent_to_playback(), sent);
+    assert_eq!(status["playing"], true);
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn a_failing_condition_says_why_steps_through_nothing_and_leaves_the_scan_as_the_backup() {
+    let r = rig(&IN_ORDER).await;
+    r.paired_and_in_use().await;
+    r.set_plan(
+        "plan-a",
+        &[
+            "Battle Belongs",
+            "Faithfulness",
+            "Gratitude",
+            "Firm Foundation",
+        ],
+    );
+    let sent = r.sent_to_playback();
+    let (code, status) = r.press().await;
+    assert_eq!(code, StatusCode::OK, "{status}");
+    assert_eq!(
+        note(&status),
+        "Not using the Library Link's order: Faithfulness is not in Playback's setlist."
+    );
+    assert_eq!(status["order_source"], "none");
+    assert_eq!(status["song_order"], json!([]));
+    assert_eq!(status["discovery"], "idle");
+    assert_eq!(r.sent_to_playback(), sent, "nothing was stepped");
+
+    // "Scan with Playback instead" is today's scan, unchanged.
+    let scanned = r.scan().await;
+    assert_eq!(scanned["order_source"], "scan");
+    assert_eq!(scanned["song_order"], json!([101, 102, 103, 104]));
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn without_a_key_or_with_a_silent_helper_the_button_cannot_read_and_says_so() {
+    // No key paired.
+    let r = rig(&IN_ORDER).await;
+    r.library_in_use().await;
+    let asked = r.helper.hits().len();
+    let (code, body) = r.press().await;
+    assert_eq!(code, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        r.helper.hits().len(),
+        asked,
+        "nothing is asked of a Library Link that was never set up"
+    );
+    // The stepping scan is what is left, and it works as it always did.
+    assert_eq!(r.scan().await["order_source"], "scan");
+
+    // A key, and a helper that does not answer.
+    r.runtime.playback_library.set_key_for_test(KEY);
+    r.helper.set(|b| b.broken = Some(500));
+    r.runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(120));
+    let (code, body) = r.press().await;
+    assert_eq!(code, StatusCode::CONFLICT, "{body}");
+    assert!(
+        body["detail"].as_str().is_some_and(|d| !d.contains(KEY)),
+        "{body}"
+    );
+    r.runtime.stop().await;
+}
+
+// ---- StagePilot connects to the Library Link by itself at start ---------------------------------------
+
+/// A runtime whose settings already name Playback, the Library Link's computer and (when `key`) a paired key,
+/// started with no window open. The helper is served at `address` only when the test says so.
+async fn started(
+    songs: &[(i64, &str)],
+    helper: Helper,
+    address: &str,
+    key: bool,
+) -> (Rig, std::time::Duration) {
+    let fake = FakePlayback::start().await;
+    fake.auto_beat(Duration::from_millis(100));
+    {
+        let mut s = fake.state.lock().unwrap();
+        s.songs = songs.iter().map(|(id, _)| *id).collect();
+        s.song = songs[0].0;
+    }
+    let service = SettingsService::ephemeral(RuntimeSettings::demo());
+    let mut saved = service.snapshot();
+    saved.integration_modes.midi_source = MidiSource::PlaybackApi;
+    saved.playback_api.enabled = true;
+    saved.playback_api.host = Some("127.0.0.1".into());
+    saved.playback_api.port = fake.port;
+    saved.playback_api.auto_scan = false;
+    saved.playback_library.address = clean_playback_library_address(address).unwrap();
+    service.save(saved).unwrap();
+    let runtime =
+        Runtime::with_playback_options(Arc::new(service), false, PluginOptions::default());
+    if key {
+        runtime.playback_library.set_key_for_test(KEY);
+    }
+    let router = build_app(runtime.clone(), AppOptions { web_root: None });
+    let began = std::time::Instant::now();
+    runtime.start().await;
+    let took = began.elapsed();
+    (
+        Rig {
+            router,
+            runtime,
+            fake,
+            helper,
+        },
+        took,
+    )
+}
+
+#[test]
+fn the_waits_between_start_up_tries_are_2_5_15_then_30_seconds() {
+    let waits: Vec<u64> = (1..=6).map(|n| start_wait(n).as_secs()).collect();
+    assert_eq!(waits, vec![2, 5, 15, 30, 30, 30]);
+}
+
+#[tokio::test]
+async fn at_start_the_library_link_is_read_and_the_order_saved_with_no_window_asking() {
+    let helper = Helper::new(setlist(&IN_ORDER));
+    let address = helper.serve().await;
+    let began = std::time::Instant::now();
+    let (r, took) = started(&IN_ORDER, helper, &address, true).await;
+    assert!(took < Duration::from_secs(2), "start-up took {took:?}");
+    // No window asked (no `/status`, no `/plan` of the Library Link was called): the runtime's own task
+    // asked the helper, health first and then the open setlist, and the order is saved.
+    let status = r
+        .until("the order is saved from the Library Link", |s| {
+            s["order_source"] == "library"
+        })
+        .await;
+    assert_eq!(status["song_order"], json!([101, 102, 103, 104]));
+    assert_eq!(status["order_library_note"], Value::Null);
+    let hits = r.helper.hits();
+    assert_eq!(hits[0], "/health", "{hits:?}");
+    assert!(hits.iter().any(|h| h == "/setlists/current"), "{hits:?}");
+    // The helper had been asked long before the watcher's first look (5 s), and the Library Link is now
+    // marked in use so the watcher carries on.
+    assert!(
+        began.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        began.elapsed()
+    );
+    assert_eq!(
+        r.runtime
+            .settings_service
+            .snapshot()
+            .playback_library
+            .enabled,
+        Some(true)
+    );
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn at_start_a_helper_that_is_down_is_connected_as_soon_as_it_comes_up() {
+    let helper = Helper::new(setlist(&IN_ORDER));
+    let address = Helper::reserve().await;
+    let (r, took) = started(&IN_ORDER, helper, &address, true).await;
+    assert!(took < Duration::from_secs(2), "start-up took {took:?}");
+    // Down for the first try (at 0 s). It comes up before the second one (after 2 s).
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(r.helper.hits().is_empty());
+    r.helper.serve_at(&address).await;
+    let came_up = std::time::Instant::now();
+    let status = r
+        .until("connected within the back-off", |s| {
+            s["order_source"] == "library"
+        })
+        .await;
+    assert_eq!(status["song_order"], json!([101, 102, 103, 104]));
+    assert!(
+        came_up.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        came_up.elapsed()
+    );
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn at_start_a_library_link_that_was_never_set_up_is_not_asked_at_all() {
+    let helper = Helper::new(setlist(&IN_ORDER));
+    let address = helper.serve().await;
+    let (r, _) = started(&IN_ORDER, helper, &address, false).await;
+    // Past the first retry (2 s) and the watcher's first look (5 s).
+    tokio::time::sleep(Duration::from_millis(5500)).await;
+    assert!(r.helper.hits().is_empty(), "{:?}", r.helper.hits());
+    let status = r.status().await;
+    assert_eq!(status["order_source"], "none");
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn start_up_does_not_wait_for_a_helper_that_never_answers() {
+    // A computer that takes the connection and says nothing.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let held = tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((socket, _)) = listener.accept().await {
+            held.push(socket);
+        }
+    });
+    let (r, took) = started(&IN_ORDER, Helper::new(setlist(&IN_ORDER)), &address, true).await;
+    assert!(took < Duration::from_secs(1), "start-up waited {took:?}");
+    r.runtime.stop().await;
+    held.abort();
 }

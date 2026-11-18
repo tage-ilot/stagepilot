@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { cancelPlaybackScan, discoverPlaybackSongOrder, updatePlaybackArrangement, findPlayback, getPlaybackEvents, getPlaybackStatus, getSettings, updatePlaybackSettings, updateSettings } from "../api";
+import { cancelPlaybackScan, discoverPlaybackSongOrder, refreshPlaybackSongOrderFromLibrary, updatePlaybackArrangement, findPlayback, getPlaybackEvents, getPlaybackStatus, getSettings, updatePlaybackSettings, updateSettings } from "../api";
 import { describeError } from "../errorText";
 import type { PlaybackMonitorEntry, PlaybackSettingsInput, PlaybackStatusResponse, SettingsResponse } from "../types";
 
-export type PlaybackOperation = "save" | "source" | "scan" | "discover" | null;
+export type PlaybackOperation = "save" | "source" | "scan" | "discover" | "library" | null;
+
+/** A fast answer from the Library Link is still seen: the button's loading animation lasts at least this long. */
+export const LIBRARY_READ_MIN_MS = 700;
 export interface PlaybackController {
   status: PlaybackStatusResponse | null;
   events: PlaybackMonitorEntry[];
@@ -17,6 +20,10 @@ export interface PlaybackController {
   scan: (host?: string) => void;
   cancelScan: () => void;
   discover: () => void;
+  /** "Scan Playback Songs" while the Library Link works: reads the Library Link fresh, steps through nothing. */
+  refreshFromLibrary?: () => void;
+  /** How many songs the last press read from the Library Link, once the answer is in and confirmed; null otherwise. */
+  libraryRead?: number | null;
   acceptStatus?: (status: PlaybackStatusResponse) => void;
 }
 
@@ -27,6 +34,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
   const [statusError, setStatusError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<PlaybackOperation>(null);
+  const [libraryRead, setLibraryRead] = useState<number | null>(null);
   const generation = useRef(0);
   const statusRevision = useRef(0);
   const operation = useRef<PlaybackOperation>(null);
@@ -44,6 +52,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
     setError(null);
     setStatusError(null);
     setMessage(null);
+    setLibraryRead(null);
     if (!canConfigure) return;
     const poll = async () => {
       const revision = statusRevision.current;
@@ -202,7 +211,30 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
     });
   }, [onSettings, run]);
 
+  const refreshFromLibrary = useCallback(() => {
+    const current = generation.current;
+    void run("library", async () => {
+      setLibraryRead(null);
+      const startedAt = Date.now();
+      const next = await refreshPlaybackSongOrderFromLibrary();
+      if (generation.current !== current) return;
+      ++statusRevision.current;
+      setStatus(next);
+      const read = next.order_source === "library" && !next.order_library_note;
+      if (read) {
+        // The confirmation is shown after the animation has been seen, never before.
+        const left = LIBRARY_READ_MIN_MS - (Date.now() - startedAt);
+        if (left > 0) await new Promise((resolve) => window.setTimeout(resolve, left));
+        if (generation.current !== current) return;
+      }
+      const saved = await getSettings();
+      if (generation.current !== current) return;
+      onSettings(saved);
+      if (read) setLibraryRead(next.song_order.length);
+    });
+  }, [onSettings, run]);
+
   const acceptStatus = useCallback((next: PlaybackStatusResponse) => { ++statusRevision.current; setStatus(next); void getSettings().then(onSettings).catch(() => undefined); }, [onSettings]);
 
-  return { acceptStatus, status, events, error: error ?? statusError, message, pending, save, saveArrangement, selectSource, scan, cancelScan, discover };
+  return { acceptStatus, status, events, error: error ?? statusError, message, pending, save, saveArrangement, selectSource, scan, cancelScan, discover, refreshFromLibrary, libraryRead };
 }

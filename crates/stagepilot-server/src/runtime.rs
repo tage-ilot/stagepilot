@@ -60,6 +60,8 @@ pub struct Runtime {
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Looks every few seconds whether the Library Link's song order can be used (`playback_order`).
     order_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// The connection to the Library Link made once at start-up (`playback_order::connect_at_start`).
+    order_connect: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
     pub helper_install: Arc<crate::helper_install::HelperInstall>,
     /// The optional Playback library (read-only; asks only while a window asks, and not at all once forgotten).
@@ -308,6 +310,7 @@ impl Runtime {
             keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
             keychain_watch: Mutex::new(None),
             order_watch: Mutex::new(None),
+            order_connect: Mutex::new(None),
             helper_install: Arc::new(crate::helper_install::HelperInstall::new()),
             playback_helper_install: Arc::new(
                 crate::playback_helper_install::PlaybackHelperInstall::new(
@@ -491,6 +494,11 @@ impl Runtime {
         self.spawn_keychain_watch();
         *self.order_watch.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(crate::playback_order::watch(Arc::downgrade(self)));
+        // Connects to the Library Link by itself, without a window and without waiting for the watcher.
+        // A task of its own: start-up never waits on the helper.
+        *self.order_connect.lock().unwrap_or_else(|p| p.into_inner()) = Some(
+            crate::playback_order::connect_at_start(Arc::downgrade(self)),
+        );
         self.plugins.start_all().await;
         // Proactive OAuth refresh: one lifespan-owned task polling a stop signal.
         let _ = self.oauth_stop.send(false);
@@ -544,6 +552,14 @@ impl Runtime {
         }
         if let Some(task) = self
             .order_watch
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            task.abort();
+        }
+        if let Some(task) = self
+            .order_connect
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .take()

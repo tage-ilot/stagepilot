@@ -930,19 +930,39 @@ impl PlaybackPlugin {
     ///   scan was made for;
     /// * the order, lengths, version, plan and setlist already saved are exactly these.
     pub async fn apply_library_order(&self, wanted: &LibraryOrder) -> Result<bool, PlaybackError> {
+        Ok(self.save_library_order(wanted, false).await? == LibrarySave::Written)
+    }
+
+    /// A person pressed "Scan Playback Songs" and the Library Link works: the same save as
+    /// `apply_library_order`, except that it also replaces an order a scan made (the press asks for exactly
+    /// this) and that it does not wait for Playback to stop: nothing is stepped, so a song that is playing is
+    /// not disturbed. The order, lengths and version of a song order that already is the library's are not
+    /// written again.
+    pub async fn apply_library_order_on_request(
+        &self,
+        wanted: &LibraryOrder,
+    ) -> Result<LibrarySave, PlaybackError> {
+        self.save_library_order(wanted, true).await
+    }
+
+    async fn save_library_order(
+        &self,
+        wanted: &LibraryOrder,
+        on_request: bool,
+    ) -> Result<LibrarySave, PlaybackError> {
         let inner = &self.inner;
         let _life = inner.lifecycle.lock().await;
         if inner.check_idle().is_err() {
-            return Ok(false);
+            return Ok(LibrarySave::Declined);
         }
         let heartbeat = lock(&inner.shared).heartbeat;
         let still_true = heartbeat.is_some_and(|h| {
-            !h.playing
+            (on_request || !h.playing)
                 && h.setlist_version == Some(wanted.version)
                 && wanted.order.contains(&h.song_id)
         });
         if !still_true || wanted.order.len() != wanted.lengths.len() {
-            return Ok(false);
+            return Ok(LibrarySave::Declined);
         }
         let plan = inner.store.snapshot().plan;
         let key = inner.scan_key(plan.as_ref());
@@ -955,8 +975,8 @@ impl PlaybackPlugin {
                 _ => true,
             };
             let same_version = config.captured_version == Some(wanted.version);
-            if source == OrderSource::Scan && same_plan && same_version {
-                return Ok(false);
+            if !on_request && source == OrderSource::Scan && same_plan && same_version {
+                return Ok(LibrarySave::Declined);
             }
             if source == OrderSource::Library
                 && same_plan
@@ -965,7 +985,7 @@ impl PlaybackPlugin {
                 && config.song_lengths == wanted.lengths
                 && config.setlist_id == setlist_id
             {
-                return Ok(false);
+                return Ok(LibrarySave::AlreadySaved);
             }
         }
         inner
@@ -977,7 +997,7 @@ impl PlaybackPlugin {
                 duration: None,
             })
             .map_err(PlaybackError::Save)?;
-        Ok(true)
+        Ok(LibrarySave::Written)
     }
 
     // ---- scanning ---------------------------------------------------------------------------
@@ -1847,6 +1867,18 @@ impl Inner {
         s.mapper.observe(heartbeat, &[], None);
         Ok(())
     }
+}
+
+/// What saving the Library Link's order came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibrarySave {
+    /// The order was written.
+    Written,
+    /// The saved order is already exactly this one; nothing was written.
+    AlreadySaved,
+    /// Not written: a scan or an update is running, the API no longer says what the order was decided from,
+    /// or a person's own scan still stands.
+    Declined,
 }
 
 /// A song order on its way to being saved.
