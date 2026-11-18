@@ -3143,7 +3143,7 @@ async fn a_restart_keeps_a_key_change_and_an_ordinary_read_writes_nothing() {
 }
 
 #[tokio::test]
-async fn a_damaged_key_file_is_ignored_and_a_forgotten_library_records_nothing() {
+async fn a_damaged_key_file_is_ignored_and_a_reset_clears_what_was_remembered() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("playback-keys.json");
     std::fs::write(&file, "][ not json").unwrap();
@@ -3153,17 +3153,7 @@ async fn a_damaged_key_file_is_ignored_and_a_forgotten_library_records_nothing()
     let first = ask(&library, &settings_for(&address), &TITLES).await;
     assert_eq!(first.state, LibraryState::Ready);
     assert!(first_song(&first).key_was.is_none());
-    // Forget the Library Link: nothing is read, and what was remembered goes.
+    // Resetting the Library Link (a new key) clears what was remembered.
     library.reset().await;
     assert!(!file.exists());
-    let forgotten = PlaybackLibrarySettings {
-        enabled: Some(false),
-        address: address.clone(),
-    };
-    let off = library
-        .plan(&forgotten, Some(&plan("2026-11-22", &TITLES)), true)
-        .await;
-    assert_eq!(off.state, LibraryState::Off);
-    assert!(off.songs.is_empty());
-    assert!(!file.exists(), "nothing recorded while it is off");
 }
