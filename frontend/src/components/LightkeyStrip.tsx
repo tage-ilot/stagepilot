@@ -336,11 +336,11 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
         </LiveLinkField>
         {connection && (
           <LiveLinkField caption="OSC UDP">
-            <Input aria-label="OSC UDP port" className={`${smallBox} ${CONTROL_40} ${connection.held.port ? "!border-warning" : ""}`} error={Boolean(udpError)} inputMode="numeric" onChange={(event) => connection.onPort(event.target.value)} value={connection.oscPort} />
+            <Input aria-label="OSC UDP port" className={`${smallBox} font-mono ${CONTROL_40} ${connection.held.port ? "!border-warning" : ""}`} error={Boolean(udpError)} inputMode="numeric" onChange={(event) => connection.onPort(event.target.value)} value={connection.oscPort} />
           </LiveLinkField>
         )}
         <LiveLinkField caption="API">
-          <Input aria-label="API port" className={`${smallBox} ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
+          <Input aria-label="API port" className={`${smallBox} font-mono ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
         </LiveLinkField>
         {/* The Lighting primary, never dimmed unless the panel itself is off; while a request is in flight it shows a busy state. */}
         <Button

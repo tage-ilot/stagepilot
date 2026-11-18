@@ -84,7 +84,6 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const hasComputer = Boolean(library?.target || savedHost);
   const script = library ? scriptLine(library.status, hasComputer) : null;
   const parts = pillParts({ good: apiGood(status), line: api }, library?.status ?? null, hasComputer);
-  const pillDetail = [`Playback API: ${api.text}`, script ? `Network script: ${script.text}` : null].filter(Boolean).join(". ");
   const scriptState = library?.status?.helper.state ?? null;
   const needsSetup = scriptState !== "ready" && scriptState !== null;
   const setupShown = setupOpen ?? needsSetup;
@@ -97,7 +96,12 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   return (
     <LiveLinkShell
       className="!mt-0"
-      pill={<LiveLinkPill detail={pillDetail} name={TITLE} second={library ? { text: `Network script: ${parts.script.word}`, tone: parts.script.tone } : undefined} testId="playback-live-link-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />}
+      pill={(
+        <>
+          <LiveLinkPill detail={api.text} name="" testId="playback-api-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />
+          {library && <LiveLinkPill detail={script?.text} name="" testId="network-script-pill" text={`Network script: ${parts.script.word}`} tone={parts.script.tone} />}
+        </>
+      )}
       testId="playback-live-link"
       title={TITLE}
     >

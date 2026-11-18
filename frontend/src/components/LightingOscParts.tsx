@@ -47,24 +47,14 @@ export function LiveLinkField({ caption, className, children }: { caption: strin
  * THE one place the connection state is written down on the Live Link block: a dot AND words (never colour alone), announced
  * politely when it changes. `detail` (why it is not connected) rides in the tooltip and the accessible name, not in extra paragraphs.
  */
-export function LiveLinkPill({ text, tone, detail, name = "sACN DMX Live Link", testId = "lightkey-link", second }: { text: string; tone: Tone; detail?: string | null; name?: string; testId?: string; second?: { text: string; tone: Tone } }) {
-  const said = second ? `${text}, ${second.text}` : text;
-  const full = detail ? `${name}: ${said}. ${detail}` : `${name}: ${said}`;
+export function LiveLinkPill({ text, tone, detail, name = "sACN DMX Live Link", testId = "lightkey-link" }: { text: string; tone: Tone; detail?: string | null; name?: string; testId?: string }) {
+  // `name` is empty when the visible words already say what the pill is about ("Playback API: Connected").
+  const said = name ? `${name}: ${text}` : text;
+  const full = detail ? `${said}. ${detail}` : said;
   return (
-    <span aria-label={full} aria-live="polite" className={`live-link-pill inline-flex items-center gap-[7px] ${second ? "flex-col items-start rounded-ds-xl sm:flex-row sm:items-center" : "whitespace-nowrap rounded-ds-full"} border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink`} data-testid={testId} data-tone={tone} role="status" title={full}>
-      <span className="inline-flex items-center gap-[7px]">
-        <StatusDot ignoreAccent tone={tone} />
-        <span>{text}</span>
-      </span>
-      {second && (
-        <>
-          <span aria-hidden="true" className="mx-0.5 hidden text-ink-muted sm:inline">&ndash;</span>
-          <span className="inline-flex items-center gap-[7px]">
-            <StatusDot ignoreAccent tone={second.tone} />
-            <span>{second.text}</span>
-          </span>
-        </>
-      )}
+    <span aria-label={full} aria-live="polite" className="live-link-pill inline-flex items-center gap-[7px] whitespace-nowrap rounded-ds-full border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink" data-testid={testId} data-tone={tone} role="status" title={full}>
+      <StatusDot ignoreAccent tone={tone} />
+      <span>{text}</span>
     </span>
   );
 }
@@ -158,7 +148,7 @@ export function OscConnectionFields({
           <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
         </LiveLinkField>
         <LiveLinkField caption="OSC UDP">
-          <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
+          <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center font-mono tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
         </LiveLinkField>
       </div>
       {(hostError || portError) && <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, portError].filter(Boolean).join(" ")}</p>}

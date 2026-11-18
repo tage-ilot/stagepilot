@@ -27,13 +27,13 @@ const block = () => screen.getByTestId("playback-live-link");
 const line = (id: "playback-banner" | "network-script-status") => within(block()).getByTestId(id);
 
 describe("Playback Live Link: the first block of the Playback API panel", () => {
-  it("is titled Playback Live Link, in the bordered Live Link card with a state pill beside the title", () => {
+  it("is titled Playback Live Link, in the bordered Live Link card with two status pills beside the title", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
     expect(screen.getByRole("heading", { name: "Playback Live Link" })).toBeInTheDocument();
     expect(block()).toHaveAttribute("aria-label", "Playback Live Link");
     expect(block()).toHaveClass("live-link", "rounded-ds-xl", "border", "border-edge", "bg-surface-panel-strong");
-    expect(screen.getByTestId("playback-live-link-pill")).toHaveTextContent("Playback API: Connected");
-    expect(screen.getByTestId("playback-live-link-pill")).toHaveTextContent("Network script: Connected");
+    expect(screen.getByTestId("playback-api-pill")).toHaveTextContent("Playback API: Connected");
+    expect(screen.getByTestId("network-script-pill")).toHaveTextContent("Network script: Connected");
   });
 
   it("is the first thing in the Playback API panel, ahead of the song order", () => {
@@ -42,12 +42,17 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     expect(block().compareDocumentPosition(document.getElementById("song-order-heading")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("says both statuses in the pill, each a dot AND words, and the full sentences in the quiet strip under the fields", () => {
+  it("says each status in its own pill, a dot AND words, and the full sentences in the quiet strip under the fields", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
-    const pill = screen.getByTestId("playback-live-link-pill");
-    expect(pill).toHaveTextContent("Playback API: Connected");
-    expect(pill).toHaveTextContent("Network script: Connected");
-    expect(pill.querySelectorAll("[data-tone]").length).toBeGreaterThanOrEqual(2);
+    const apiPill = screen.getByTestId("playback-api-pill");
+    const scriptPill = screen.getByTestId("network-script-pill");
+    expect(apiPill).toHaveTextContent("Playback API: Connected");
+    expect(scriptPill).toHaveTextContent("Network script: Connected");
+    expect(apiPill).toHaveAttribute("data-tone", "success");
+    expect(scriptPill).toHaveAttribute("data-tone", "success");
+    expect(apiPill.querySelector("[data-tone]")).not.toBeNull();
+    expect(scriptPill.querySelector("[data-tone]")).not.toBeNull();
+    expect(apiPill).not.toContainElement(scriptPill);
     expect(line("playback-banner")).toHaveTextContent("Connected to Playback at 10.30.0.141.");
     expect(line("network-script-status")).toHaveTextContent("Network script: Ready, version 0.3.0");
     expect(within(block()).getByTestId("live-link-sub")).toContainElement(line("playback-banner"));
@@ -60,11 +65,12 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     ["needs_key", true, "Playback API: Connected", "Network script: Needs setup"],
     ["ready", false, "Playback API: Not connected", "Network script: Connected"],
     ["not_installed", false, "Playback API: Not connected", "Network script: Not installed"],
-  ] as [HelperState, boolean, string, string][])("the pill for a %s script with the API %s says its two statuses", (state, api, apiWords, scriptWords) => {
+  ] as [HelperState, boolean, string, string][])("the pills for a %s script with the API %s say the two statuses", (state, api, apiWords, scriptWords) => {
     render(<PlaybackLiveLink library={libraryController(state)} playback={api ? controller() : disconnected("10.30.0.141")} />);
-    expect(screen.getByTestId("playback-live-link-pill")).toHaveTextContent(apiWords);
-    expect(screen.getByTestId("playback-live-link-pill")).toHaveTextContent(scriptWords);
-    expect(screen.getByTestId("playback-live-link-pill")).toHaveAttribute("aria-label", expect.stringContaining("Playback API:"));
+    expect(screen.getByTestId("playback-api-pill")).toHaveTextContent(apiWords);
+    expect(screen.getByTestId("network-script-pill")).toHaveTextContent(scriptWords);
+    expect(screen.getByTestId("playback-api-pill")).toHaveAttribute("aria-label", expect.stringContaining("Playback API:"));
+    expect(screen.getByTestId("network-script-pill")).toHaveAttribute("aria-label", expect.stringContaining("Network script:"));
   });
 
   it.each([
@@ -96,6 +102,8 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
   it("without a library controller (a window that cannot configure) it is the Playback API block alone", () => {
     render(<PlaybackLiveLink playback={controller()} />);
     expect(screen.queryByTestId("network-script-status")).toBeNull();
+    expect(screen.queryByTestId("network-script-pill")).toBeNull();
+    expect(screen.getByTestId("playback-api-pill")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
     expect(screen.queryByTestId("playback-install")).toBeNull();
   });
