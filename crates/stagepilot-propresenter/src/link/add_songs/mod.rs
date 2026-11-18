@@ -11,7 +11,8 @@
 //!   with every item that was there exactly as it was read. It reads the playlist back and reports every difference.
 //!
 //! Nothing is ever deleted or overwritten in ProPresenter, no file in `Songs` is edited (only ProPresenter's own import adds
-//! one), and no song is guessed: a section with no single matching group blocks that song until the person leaves it out.
+//! one). A section that fits more than one group of a song is guessed (see `pro_file::resolve`) and the guess is named in the
+//! preview and in the result; a section no group has blocks that song until the person leaves it out.
 
 mod apply;
 mod plan;
@@ -94,6 +95,51 @@ impl SongAction {
     }
 }
 
+/// A section that fits more than one group of the song and was given one of them. It never blocks; the person checks it in
+/// ProPresenter after the import.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export, rename = "AddSongsGuess")]
+pub struct SongGuess {
+    /// The section as Playback names it.
+    pub section: String,
+    /// Which use of this name in Playback's list it is, from 1.
+    pub position: u32,
+    /// How many times Playback uses the name.
+    pub uses: u32,
+    /// The group's name in the song (blank for Count Off).
+    pub group_name: String,
+    /// Which of the song's groups with that name was taken, from 1.
+    pub group_index: u32,
+    /// How many groups of the song have that name.
+    pub groups: u32,
+    /// The rule that picked it: `in_order`, `last_reused` or `repeat_in_turn`.
+    pub rule: String,
+    /// The plain sentence: `Interlude (3rd use) uses the 2nd "Interlude" group: check it in ProPresenter. ...`.
+    pub text: String,
+}
+
+/// The guesses of a mapping, in playing order.
+pub fn guesses_of(mapping: &[crate::pro_file::Mapped]) -> Vec<SongGuess> {
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    mapping
+        .iter()
+        .filter_map(|m| {
+            let guess = m.guess.as_ref()?;
+            let group_name = m.group_name.clone().unwrap_or_default();
+            Some(SongGuess {
+                section: m.section.clone(),
+                position: count(guess.position),
+                uses: count(guess.uses),
+                group_index: count(guess.group_index),
+                groups: count(guess.groups),
+                rule: guess.rule.word().to_string(),
+                text: guess.words(&m.section, &group_name),
+                group_name,
+            })
+        })
+        .collect()
+}
+
 /// How one section was matched to a group of the song.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export, rename = "AddSongsMapping")]
@@ -101,7 +147,7 @@ pub struct MappingLine {
     pub section: String,
     /// The group's name in the song (blank for Count Off).
     pub group: Option<String>,
-    /// `full`, `only`, `identical`, `ambiguous` or `missing`.
+    /// `full`, `only`, `identical`, `guessed` or `missing`.
     pub how: String,
     /// A plain sentence when the match is not the exact one.
     pub line: Option<String>,
@@ -132,6 +178,8 @@ pub struct SongPlan {
     /// Plain lines about this song: how sections were matched, what happens to the key.
     pub notes: Vec<String>,
     pub mapping: Vec<MappingLine>,
+    /// Sections that fit more than one group and were given one: check them in ProPresenter. Never blocks.
+    pub guesses: Vec<SongGuess>,
     pub sections: u32,
     pub key: Option<String>,
     /// The song's copy is already an item of the playlist: it is not added a second time.

@@ -1,8 +1,8 @@
 //! The preview: what would be done, decided from what ProPresenter has now. Reads only.
 
 use super::{
-    AddSongs, MappingLine, Place, Plan, PlanRequest, PlaylistPlan, SongAction, SongPlan,
-    WantedSong, MAX_SONGS,
+    guesses_of, AddSongs, MappingLine, Place, Plan, PlanRequest, PlaylistPlan, SongAction,
+    SongPlan, WantedSong, MAX_SONGS,
 };
 use crate::link::api::{ApiError, LibraryEntry, PlaylistRef};
 use crate::link::{HostInfo, IndexEntry, LibraryFile, LinkError, PLAYBACK_LIBRARY, SONGS_LIBRARY};
@@ -372,6 +372,7 @@ impl AddSongs {
             choices: Vec::new(),
             notes: Vec::new(),
             mapping: Vec::new(),
+            guesses: Vec::new(),
             sections: u32::try_from(wanted.sections.len()).unwrap_or(u32::MAX),
             key: wanted.key.clone(),
             already_in_playlist: false,
@@ -521,7 +522,7 @@ impl AddSongs {
         plan.file = Some(copy);
         // The sections cannot be checked before the song is there: said plainly.
         plan.notes.push(
-            "The sections can only be matched after the song is imported; if one does not match, nothing is added for this song."
+            "The sections can only be matched after the song is imported; if one has no group with that name, nothing is added for this song. Sections that fit more than one group are guessed and listed after the import."
                 .into(),
         );
         plan
@@ -598,13 +599,19 @@ impl AddSongs {
             .collect();
         if !mapped(chosen) {
             plan.reason = Some(format!(
-                "These sections have no single matching group in the song: {}. Nothing is made for this song.",
+                "These sections have no group with that name in the song: {}. Nothing is made for this song.",
                 unmapped_names(&chosen.mapping).join(", ")
             ));
             return plan;
         }
-        plan.notes
-            .extend(plan.mapping.iter().filter_map(|m| m.line.clone()));
+        plan.guesses = guesses_of(&chosen.mapping);
+        // The guesses are listed on their own (`guesses`); the other lines are notes.
+        plan.notes.extend(
+            plan.mapping
+                .iter()
+                .filter(|m| m.how != "guessed")
+                .filter_map(|m| m.line.clone()),
+        );
         let source_stem = stem(&chosen.entry.file);
         let base = if from_copy || chosen.entry.library == PLAYBACK_LIBRARY {
             strip_copy_suffix(source_stem)
@@ -624,7 +631,7 @@ pub(crate) fn how_word(how: How) -> &'static str {
         How::Full => "full",
         How::Only => "only",
         How::Identical => "identical",
-        How::Ambiguous => "ambiguous",
+        How::Guessed => "guessed",
         How::Missing => "missing",
     }
 }
@@ -647,10 +654,10 @@ fn confidence_line(m: &Mapped) -> Option<String> {
             "\"{}\": the song has several groups with that name and the same words; the one in turn ({shown}) is used.",
             m.section
         )),
-        How::Ambiguous => Some(format!(
-            "\"{}\": several groups have that name and they differ.",
-            m.section
-        )),
+        How::Guessed => m
+            .guess
+            .as_ref()
+            .map(|g| g.words(&m.section, m.group_name.as_deref().unwrap_or_default())),
         How::Missing => Some(format!("\"{}\": no group has that name.", m.section)),
     }
 }

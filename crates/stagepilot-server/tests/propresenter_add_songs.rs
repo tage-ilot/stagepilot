@@ -16,7 +16,7 @@ use stagepilot_playback::library::{
 };
 use stagepilot_propresenter::link::add_songs::Timing;
 use stagepilot_propresenter::link::api::fake::{entry_uuid, FakeApi, Loading};
-use stagepilot_propresenter::link::api::ApiError;
+use stagepilot_propresenter::link::api::{ApiError, Layers};
 use stagepilot_propresenter::link::fake::FakeHost;
 use stagepilot_propresenter::pro_file::synthetic::SyntheticSong;
 use stagepilot_propresenter::pro_file::Song;
@@ -897,4 +897,107 @@ async fn the_pin_and_the_origin_rules_of_the_other_write_routes_apply() {
         w.host.calls().is_empty(),
         "nothing was asked of ProPresenter's computer"
     );
+}
+
+// ---- guesses and the screen, through the routes ------------------------------------------------------------------------------
+
+/// A song with two different blank groups (Count Off) and two different Interludes.
+fn gamma() -> Vec<u8> {
+    SyntheticSong::new("Gamma")
+        .id(3003)
+        .seed(0xC3000000)
+        .group("", &["count a"])
+        .group("", &["count b"])
+        .group("Intro", &["intro"])
+        .group("Verse 1", &["verse"])
+        .group("Interlude", &["interlude x"])
+        .group("Interlude", &["interlude y"])
+        .arrangement("Full", &[2, 3, 4, 5])
+        .selected(0)
+        .build()
+}
+
+async fn run_job(w: &World, ids: &[i64]) -> Value {
+    let (status, plan) = call(&w.app, "POST", PREVIEW, Some(ask(w, ids, worship()))).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    let (status, started) = call(
+        &w.app,
+        "POST",
+        APPLY,
+        Some(json!({"plan_id": plan["plan_id"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{started}");
+    finished(&w.app, started["job_id"].as_str().unwrap()).await
+}
+
+#[tokio::test]
+async fn guessed_sections_are_listed_in_the_preview_and_in_the_result_and_never_block() {
+    let w = world(Loading::Immediately).await;
+    w.host.set_import_song(3003, &gamma());
+    let sections = [
+        "Count Off",
+        "Intro",
+        "Verse 1",
+        "Interlude",
+        "Interlude",
+        "Interlude",
+    ];
+    w.rt.propresenter_add_songs
+        .set_plan_for_test(Some(lib_plan(vec![
+            lib_song(21, Some(3003), 1, "Gamma", &sections),
+            lib_song(11, Some(1001), 2, "Alpha", &["Intro", "Verse 1"]),
+        ])));
+    // Before the import the sections cannot be matched: the preview says so and has no guesses yet.
+    let (_, plan) = call(&w.app, "POST", PREVIEW, Some(ask(&w, &[21], worship()))).await;
+    assert_eq!(plan["songs"][0]["action"], "import_then_copy");
+    assert_eq!(plan["songs"][0]["guesses"], json!([]));
+    assert_eq!(plan["can_apply"], true);
+    let job = run_job(&w, &[21]).await;
+    assert_eq!(job["report"]["outcome"], "done", "{job}");
+    let guesses = &job["report"]["songs"][0]["guesses"];
+    assert_eq!(guesses.as_array().unwrap().len(), 2, "{guesses}");
+    assert_eq!(guesses[0]["section"], "Count Off");
+    assert_eq!(guesses[0]["group_name"], "");
+    assert_eq!(guesses[1]["section"], "Interlude");
+    assert_eq!(guesses[1]["position"], 3);
+    assert_eq!(guesses[1]["group_index"], 2);
+    assert_eq!(guesses[1]["rule"], "last_reused");
+    assert!(guesses[1]["text"].as_str().unwrap().starts_with(
+        "Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter."
+    ));
+    assert_eq!(job["songs"][0]["result"]["guesses"], *guesses);
+}
+
+#[tokio::test]
+async fn nothing_on_screen_is_touched_while_propresenter_shows_something_and_try_again_works() {
+    let w = world(Loading::Immediately).await;
+    w.api.set_layers(Layers {
+        video_input: true,
+        slide: true,
+        ..Layers::default()
+    });
+    let job = run_job(&w, &[12]).await;
+    let report = &job["report"];
+    assert_eq!(report["outcome"], "live_on_screen", "{job}");
+    assert!(report["message"]
+        .as_str()
+        .unwrap()
+        .contains("ProPresenter is showing something on screen (slides). Clear it or wait, then press Try again."));
+    assert_eq!(report["songs"][0]["code"], "live_on_screen");
+    assert_eq!(report["playlist_changed"], false);
+    assert!(w
+        .host
+        .calls()
+        .iter()
+        .all(|c| !c.starts_with("search_import") && !c.starts_with("select_library")));
+    assert!(w.api.puts().is_empty());
+    // The slides are cleared (a camera input stays on): Try again.
+    w.api.set_layers(Layers {
+        video_input: true,
+        ..Layers::default()
+    });
+    let job = run_job(&w, &[12]).await;
+    assert_eq!(job["report"]["outcome"], "done", "{job}");
+    assert_eq!(w.host.imports().len(), 1);
 }

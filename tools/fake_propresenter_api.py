@@ -17,6 +17,9 @@ ProPresenter 19.0.1 (docs/propresenter.md, "ProPresenter Link"), so a client tha
 * `arrangement_name` that is sent is IGNORED: what comes back is the arrangement the song FILE has selected (read from the
   `.pro` itself in `--folder` mode; a per-song table, `--arrangement "Song Name=Playback"`, in memory mode).
 * An item's `duration` is returned as it was last sent (a client must send the values it read back).
+* `GET /v1/status/layers`            -> `{"video_input": true, "media": false, "slide": false, "announcements": false,
+  "props": false, "messages": false, "audio": false}` (the answer on the real rig); what is on screen is set with
+  `State.set_layers(slide=True, ...)`, and `State.set_layers_unreadable(True)` makes it answer something that is not that shape.
 * A wrong playlist id answers 404.
 
     python3 tools/fake_propresenter_api.py --port 11025 --song "Amazing Grace" --song "How Great" --playlist Sunday
@@ -107,6 +110,10 @@ def selected_arrangement(data):
         return ""
 
 
+# What the real rig answers when nothing is shown: a camera input is often on, which is no reason to stay away from the screen.
+LAYERS_QUIET = {"video_input": True, "media": False, "slide": False, "announcements": False, "props": False, "messages": False, "audio": False}
+
+
 class State:
     def __init__(self, libraries=None, playlists=None, arrangements=None, folder=None, lazy="now"):
         self.lock = threading.Lock()
@@ -116,6 +123,9 @@ class State:
         self.memory = []          # memory mode: [{"id": {...}, "songs": [{"id": {...}}]}]
         self.playlists = []       # [{"id": {...}, "items": [...], "folder": "A" | None}]
         self.known = set()        # folder mode: (library, file) there at the start
+        self.layers = dict(LAYERS_QUIET)
+        self.layers_unreadable = False
+        self.layer_reads = 0
         if folder:
             for library, files in self._scan():
                 self.known.update((library, f) for f in files)
@@ -124,6 +134,22 @@ class State:
                 self.add_library(name, songs)
         for name in playlists or []:
             self.add_playlist(name)
+
+    # -- what is on screen
+    def set_layers(self, **flags):
+        """Set layers (`slide=True`, `video_input=False`, ...); with no flag, back to nothing on screen (a camera input only)."""
+        unknown = set(flags) - set(LAYERS_QUIET)
+        if unknown:
+            raise ValueError("unknown layer: %s" % ", ".join(sorted(unknown)))
+        with self.lock:
+            if not flags:
+                self.layers = dict(LAYERS_QUIET)
+                self.layers_unreadable = False
+            self.layers.update({k: bool(v) for k, v in flags.items()})
+
+    def set_layers_unreadable(self, on=True):
+        with self.lock:
+            self.layers_unreadable = bool(on)
 
     # -- libraries
     def _scan(self):
@@ -298,6 +324,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/version":
                 return self._send(200, {"name": "fake ProPresenter", "platform": "mac", "os_version": "14.0",
                                         "host_description": "ProPresenter 19.0.1", "api_version": "v1"})
+            if path == "/v1/status/layers":
+                st.layer_reads += 1
+                return self._send(200, {"unexpected": "not the layers"} if st.layers_unreadable else dict(st.layers))
             if path == "/v1/libraries":
                 return self._send(200, [{"id": l["id"]} for l in st.libraries()])
             m = re.fullmatch(r"/v1/library/([^/]+)", path)

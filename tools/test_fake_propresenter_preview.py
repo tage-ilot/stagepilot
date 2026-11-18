@@ -172,7 +172,7 @@ class PreviewTests(unittest.TestCase):
             status, _, body = self.rig.call("GET", "/api/v1/propresenter-link/status")
             said = json.loads(body)
             self.assertEqual((said["mode"], said["state"]), ("helper", over["state"]), key)
-            self.assertEqual(said["bundled_version"], "0.1.0")
+            self.assertEqual(said["bundled_version"], "0.1.1")
             self.assertTrue(said["message"])
             if said["state"] in ("not_installed", "not_answering", "needs_command"):
                 self.assertFalse(said["can_import"])
@@ -203,7 +203,7 @@ class PreviewTests(unittest.TestCase):
         self.assertTrue(made["command"].startswith("curl -fsS http://192.168.1.20:"))
         self.assertIn("/propresenter-helper/", made["command"])
         self.assertTrue(made["expires_at"].endswith("Z"))
-        self.assertEqual(made["bundled_version"], "0.1.0")
+        self.assertEqual(made["bundled_version"], "0.1.1")
         status, _, body = self.rig.call("DELETE", "/api/v1/propresenter-link/helper-install")
         self.assertEqual(json.loads(body), {"ended": True})
         # Nothing of it reached the backend.
@@ -232,6 +232,26 @@ class PreviewTests(unittest.TestCase):
         self.assertFalse(os.path.exists(marker))
         self.rig.call("POST", "/__preview/select")
         self.assertTrue(os.path.exists(marker))
+
+    def test_pretend_slides_are_on_screen_and_clear_them_again(self):
+        page = self.rig.call("GET", "/__preview/")[2].decode()
+        self.assertIn("Pretend ProPresenter is showing slides", page)
+        self.assertIn("nothing (a camera input and audio do not count)", page)
+        self.assertEqual(self.rig.call("POST", "/__preview/slides")[0], 303)
+        self.assertTrue(self.rig.state.layers["slide"])
+        self.assertIn("<b>slide</b>", self.rig.call("GET", "/__preview/")[2].decode())
+        self.assertEqual(self.rig.call("POST", "/__preview/clear")[0], 303)
+        self.assertFalse(self.rig.state.layers["slide"])
+        self.assertTrue(self.rig.state.layers["video_input"])
+
+    def test_a_made_up_song_has_two_different_count_off_groups_so_the_preview_shows_a_guess(self):
+        songs = os.path.join(self.rig.args.folder, "Libraries", "Songs")
+        with open(os.path.join(songs, "Gratitude.pro"), "rb") as handle:
+            gratitude = handle.read()
+        with open(os.path.join(songs, "Holy Forever.pro"), "rb") as handle:
+            holy = handle.read()
+        self.assertIn(b"count off, take 2", gratitude)
+        self.assertNotIn(b"count off, take 2", holy)
 
 
 if __name__ == "__main__":

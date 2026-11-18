@@ -108,6 +108,11 @@ their keys and their MultiTracks numbers), the ProPresenter Link (for the files;
 setting (its API, port 1025). Nothing happens unless a person asks for a **preview** and then presses the button for exactly
 what the preview showed.
 
+**What pressing Add songs does, in the window's words:** *This imports songs, arrangements and keys into <playlist>. The
+playlist's contents are replaced with what the preview shows.* The playlist is written whole, so what is in it afterwards is what
+the preview showed; that is expected and the window does not warn about it. *Nothing in ProPresenter changes until you press Add
+songs.* stays as it was.
+
 **What happens, song by song.**
 
 1. The song is found in ProPresenter by its **MultiTracks number** (Playback's `content_id`, which is also the number inside the
@@ -115,24 +120,47 @@ what the preview showed.
 2. When ProPresenter does not have it, it is **imported through ProPresenter's own Search** (Mac with Accessibility permission;
    the song is named after its title without dots and slashes, because ProPresenter cuts a name at the first dot). The import is
    asked not to touch any playlist; StagePilot does the playlist itself. After it, StagePilot checks that the new file really is
-   the song that was asked for; if not it stops with `wrong_song` and adds nothing for that song.
+   the song that was asked for; if not it stops with `wrong_song` and adds nothing for that song. **Nothing is typed blind:** the
+   screen script checks, before every key it sends, that ProPresenter is the front app and that the field meant to get the key
+   has the keyboard; after typing the song number it reads the Search field back and after typing the name it reads the Name
+   field back, and each must hold exactly what was typed (the Import dialog's other fields must still hold what they held, and
+   its Library must still read Songs). Anything else stops the script with `ERR|type the song number|...` (at most 40 characters
+   of what the field held), Cancel is pressed, the panel is closed and nothing more is typed. StagePilot also reads the playlist
+   before and after the import step: the song is imported with Playlist "None", so its item count must be the same, and a
+   difference is listed in the result.
 3. A **copy** is made in the library named **Playback** (made when it is not there): `<Song> (n).pro`, with the lowest `n` from 1
    that no file in any library has, so a name is never reused (ProPresenter ignores a file replaced under the same name). The
    copy keeps **all of the song's own arrangements** (the people running ProPresenter can still change the section order by
    hand), adds one named `Playback` made from the sections Playback plays (repeats stay separate entries; "Count Off" is the
    song's blank-named group) and selects it. A section is matched to a group first by laying the names alongside the song's own
-   `Full` arrangement, then by the one group with that name; several groups of one name only when they say the same thing.
-   **A section no group matches (or two different groups match) blocks that song; nothing is guessed.** Every id inside the
-   copy is new (consistently), its dates are now, its name is unchanged and everything StagePilot does not know about in the
+   `Full` arrangement, then by the one group with that name; several groups of one name when they say the same thing.
+   **A section no group has blocks that song. A section that fits more than one group (which Interlude is repeated, which blank
+   "Count Off" group) is guessed and the song goes on**: the Nth use of a name (counting every use in Playback's list, from the
+   first) takes the Nth group of that name, taken in the order the song's own `Full` arrangement first plays them when `Full`
+   plays every one of them, else in the song's group order. When Playback uses the name more often than the song has groups:
+   with exactly **one** use too many the extra use takes the **last** group again (A, B, B); with **two or more** too many the
+   groups go **round and round** (A, B, A, B, A, like "Bridge 1, Bridge 2, Bridge 1, Bridge 2"). Every guess is listed, with the
+   rule that picked it (`guessed`, `guesses` in the preview and in the result) as *Interlude (3rd use) uses the 2nd "Interlude"
+   group: check it in ProPresenter.* and, after the import, as a short *Check in ProPresenter:* note under the song. A guess
+   never blocks, needs no tick and does not turn **Add songs** off; if it is wrong the person fixes the arrangement in
+   ProPresenter by hand. Every id inside the copy is new (consistently), its dates are now, its name is unchanged and everything StagePilot does not know about in the
    file is copied as it was, byte for byte.
 4. If a copy that **already plays what Playback plays now, in the same key** is in the Playback library, it is used and nothing
    new is made. When several files in `Songs` carry the number, the one with a `Full` arrangement whose groups match is used;
    when more than one qualifies the song is `needs_choice` and is never guessed.
-5. ProPresenter loads a new file **lazily**: StagePilot waits up to 30 seconds (looking every 2) for the copy to get an id in
+5. **Screen steps never run while ProPresenter is showing something.** Before any step that types or clicks in ProPresenter (the
+   import through Search, selecting the Playback library) and again right before each one, StagePilot asks ProPresenter's
+   `GET /v1/status/layers`. If `slide`, `media`, `announcements`, `props` or `messages` is on, nothing is typed or clicked: the
+   job stops with `live_on_screen` (*ProPresenter is showing something on screen (slides). Clear it or wait, then press Try
+   again.*, naming the layers), the playlist is not written, files already made are kept and **Try again** is safe. A camera
+   input (`video_input`) and `audio` are ignored (a camera is often on). `GET /v1/presentation/active` is not used: it stays set
+   after a Clear. An answer that cannot be read counts as live, and the message says so. The check is in the engine, so the same
+   code protects this computer and another computer's helper.
+6. ProPresenter loads a new file **lazily**: StagePilot waits up to 30 seconds (looking every 2) for the copy to get an id in
    ProPresenter's Playback library, selects that library on screen once after 10 seconds (Mac), and if the id is still missing
    answers `needs_library_open`: **Open the Playback library in ProPresenter once, then press Try again.** Nothing is written to
    the playlist in that case. Try again is a new preview and apply: files made before are reused, so it is safe to repeat.
-6. Then the playlist is written **once**, as a whole: every item that was there is sent back exactly as it was read (id, name,
+7. Then the playlist is written **once**, as a whole: every item that was there is sent back exactly as it was read (id, name,
    kind, hidden and PCO flags, header colour, duration), the new songs are inserted at the place, the indexes renumbered. A
    song item names the Playback-library entry (its id twice, its name without ` - [ Playback ]`) and `Playback` as the
    arrangement. About 10 seconds later the playlist is read back and every difference from the plan (order, names, kinds,
@@ -154,7 +182,7 @@ says so and names the backup.
 
 **Safety conditions** (checked again when the change is applied): the ProPresenter Link is Ready; no song is playing in
 StagePilot (Playback says playing, or StagePilot's countdown runs), checked before anything starts and again before every song
-and before the playlist is written (`409 song_playing`); ProPresenter's API answers (its version from `GET /version` is part of
+and before the playlist is written (`409 song_playing`) and, before any screen step, nothing is shown on screen (`live_on_screen`, above); ProPresenter's API answers (its version from `GET /version` is part of
 the answer); the preview is still true (`409 plan_changed` when ProPresenter, the playlist or Playback's arrangement changed
 since); every song that cannot be added was left out by name (`skip`); only one job runs at a time (`409 busy`). Before the
 playlist is touched it is saved as JSON in `propresenter-playlist-backups/<playlist>-<time>.json` beside the settings file; the
@@ -167,14 +195,16 @@ write route; a remote viewer cannot use them; ids are numbers or plain text, nev
 - `GET playlists` → `{playlists: [{id, name, folder?, headers: [...]}]}`, folders flattened, kept for 10 seconds.
 - `POST add-songs/preview {setlist_song_ids: [...] | content_ids: [...], playlist_id, after_header: "<name>" | place: "end"}` → the plan:
   `plan_id`, `playlist {name, place, insert_at, before, after, untouched, blocked?}`, `songs [{ref_id, title, position, action, file, source,
-  import_as, reason, choices, notes, mapping [{section, group, how, line?}], already_in_playlist}]`, `to_add`, `stuck`, `can_apply`,
+  import_as, reason, choices, notes, mapping [{section, group, how, line?}], guesses [{section, position, uses, group_name, group_index, groups, rule, text}],
+  already_in_playlist}]` (`how` is `full`, `only`, `identical`, `guessed` or `missing`; `rule` is `in_order`, `last_reused` or
+  `repeat_in_turn`), `to_add`, `stuck`, `can_apply`,
   `propresenter`, `warnings`. `action` is `reuse`, `copy`, `import_then_copy`, `needs_choice` or `blocked`. Nothing is written.
 - `POST add-songs/apply {plan_id, skip: [ref_id, ...]}` → `202 {job_id}`. Refusals come at once, before anything is touched:
   `404 unknown_plan`, `409 plan_changed | songs_blocked | song_playing | busy | nothing_to_add | link_not_ready | place_blocked`.
 - `GET add-songs/jobs/<id>` → `{state: running | done | failed, steps, songs [{ref_id, title, steps, result}], events, report}`; the
   report has `outcome` (`done`, `done_with_differences`, `needs_library_open`, `stopped`, `song_playing`, `playlist_refused`,
-  `playlist_failed`, `backup_failed`, `not_reachable`, `nothing_to_do`), `message`, `version`, `backup`, `differences` and one
-  result per song.
+  `playlist_failed`, `backup_failed`, `not_reachable`, `nothing_to_do`, `live_on_screen`), `message`, `version`, `backup`,
+  `differences` and one result per song (with its `guesses`, also for a song that was imported first).
 
 To try it without ProPresenter: `tools/fake_propresenter_api.py --folder <the fake helper's folder> --lazy select` is
 ProPresenter's API reading the same folder as `tools/fake_propresenter_link.py` (a new file gets its id only after the library
@@ -193,7 +223,7 @@ colour alone.
 |---|---|---|
 | `ProPresenter: Connected to ProPresenter at <host>` | the connection the timer and Looks use (the existing status) | nothing |
 | `ProPresenter Link: Ready, on this computer` | ProPresenter runs on the computer StagePilot runs on | nothing, there is nothing to set up |
-| `ProPresenter Link: Ready, version 0.1.0` | the helper on the other ProPresenter computer answers | nothing |
+| `ProPresenter Link: Ready, version 0.1.1` | the helper on the other ProPresenter computer answers | nothing |
 | `Can add songs, cannot import missing songs (macOS Accessibility not allowed)` | the Link works, but cannot drive ProPresenter's own Search to load a missing song | the sentence under the lines says how: allow it in System Settings > Privacy & Security > Accessibility |
 | `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the ProPresenter Link** and run the command |
 | `Needs the command again` | the helper does not know this StagePilot's key | press **Set up the ProPresenter computer** and run the command again |
@@ -217,14 +247,17 @@ Link answers with fresh data, and the loaded plan is paired with a Playback setl
 2. **Playlist** and **Place** (`After "Worship"` for each header of that playlist, or `At the end`). The last choice is kept in this
    browser only.
 3. **Preview** (a button; nothing is written): one line per song with a stamp (`Already there`, `New copy`, `Load first`, `Needs a choice`,
-   `Blocked`), what will happen in a sentence, how well Playback's sections matched the song's groups, and *Nothing in ProPresenter changes until you
-   press Add songs.* and *Adds 4 songs after Worship in Sunday Morning Service. Other items stay as they are.* On a wide screen the preview
+   `Blocked`), what will happen in a sentence, how well Playback's sections matched the song's groups (guessed ones are listed, never blocking),
+   *This imports songs, arrangements and keys into <playlist>. The playlist's contents are replaced with what the preview shows.* (also beside
+   the buttons, before and after the preview) and *Nothing in ProPresenter changes until you press Add songs.* and *Adds 4 songs after Worship in Sunday Morning Service. Other items stay as they are.* On a wide screen the preview
    is beside the choice; on a phone it is below, and the window's buttons stay at the bottom edge.
 4. **Add songs**: off, with its reason in words beside the buttons, until the preview is current (changing a song, the playlist or the place
    makes it stale), nothing is blocked (or **Skip blocked songs** is ticked), nothing plays (a song is playing, or the countdown runs), and the
    Link is ready. While it runs, each song and each step shows a word and a mark (`Done`, `Working`, `Failed`), the newest thing said is
    announced politely, and the window cannot be closed. The end is a result: what was added, anything ProPresenter shows differently from the
-   plan, and the name of the playlist backup.
+   plan, the name of the playlist backup and, under a song whose sections were guessed, a short *Check in ProPresenter:* note (information
+   only). When ProPresenter is showing slides, media, announcements, props or messages the job stops before touching the screen:
+   *Stopped: ProPresenter is showing something on screen*, with **Try again** once it is clear.
 
 ### One page
 
@@ -234,7 +267,15 @@ from ProPresenter, allow ProPresenter Link (or StagePilot, when it is the same M
 In ProPresenter, Settings > Network must have the API on.
 
 **Add the songs.** Playback panel > **Add to ProPresenter** > tick the songs > choose the playlist and the place > **Preview** > read it >
-**Add songs**. Do it before the service, not while a song plays.
+**Add songs**. It imports songs, arrangements and keys into the playlist, and the playlist's contents are replaced with what the preview
+shows. Do it before the service, not while a song plays and not while ProPresenter shows slides.
+
+**"Check in ProPresenter".** When a section of Playback's arrangement fits more than one group of a song (a repeated Interlude, several blank
+Count Off groups), StagePilot picks one and goes on, then lists the pick under the song. Open the song in ProPresenter and change that
+section by hand if the pick is wrong.
+
+**"ProPresenter is showing something on screen. Clear it or wait, then press Try again."** StagePilot does not click or type in ProPresenter
+while slides, media, announcements, props or messages are on screen. Clear the output (a camera input does not count), then press **Try again**.
 
 **"Open the Playback library in ProPresenter once, then press Try again."** ProPresenter loads a new song file only when it looks at its
 library. In ProPresenter, click the library **Playback** in the left list once, then press **Try again** (it makes a new preview, then press
@@ -243,7 +284,7 @@ library. In ProPresenter, click the library **Playback** in the left list once, 
 **What the Link never does.** It never edits, renames or deletes a song or a playlist item; it never edits a file in `Songs`; it never
 deletes a playlist; it never touches more than the `Playback` library folder, ProPresenter's own import into `Songs`, and **one** named
 playlist (saved as a backup first, read back after); it never changes anything until you pressed Add songs after a preview; never while a
-song plays; it never shows or sends the helper's key; it never quits or restarts ProPresenter; and ProPresenter itself does not show the key
+song plays; never clicks or types in ProPresenter while it shows something on screen; it never shows or sends the helper's key; it never quits or restarts ProPresenter; and ProPresenter itself does not show the key
 Playback plays a song in.
 
 To look at all of this without ProPresenter, see `docs/preview-live-link.md` ("The ProPresenter Link").

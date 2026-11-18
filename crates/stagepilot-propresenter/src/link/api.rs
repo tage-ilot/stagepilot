@@ -97,6 +97,55 @@ impl LibraryEntry {
     }
 }
 
+/// What ProPresenter says is on its outputs (`GET /v1/status/layers`).
+///
+/// On the real rig the answer is `{"video_input":true,"media":false,"slide":false,"announcements":false,"props":false,
+/// "messages":false,"audio":false}`. A camera input (`video_input`) is often on and `audio` only says something plays, so
+/// neither counts as "something on screen" ([`Layers::on_screen`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Layers {
+    pub video_input: bool,
+    pub media: bool,
+    pub slide: bool,
+    pub announcements: bool,
+    pub props: bool,
+    pub messages: bool,
+    pub audio: bool,
+}
+
+impl Layers {
+    /// The layers that show something to the people in the room, in plain words (`slides`, `media`, ...).
+    pub fn on_screen(&self) -> Vec<&'static str> {
+        [
+            (self.slide, "slides"),
+            (self.media, "media"),
+            (self.announcements, "announcements"),
+            (self.props, "props"),
+            (self.messages, "messages"),
+        ]
+        .into_iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, name)| name)
+        .collect()
+    }
+}
+
+/// Reads `GET /v1/status/layers`. The five layers that count must all be there as true or false; anything else is `None`
+/// (and so treated as live). `video_input` and `audio` are read when present and never decide anything.
+pub fn parse_layers(value: &Value) -> Option<Layers> {
+    let object = value.as_object()?;
+    let flag = |name: &str| object.get(name).and_then(Value::as_bool);
+    Some(Layers {
+        video_input: flag("video_input").unwrap_or(false),
+        media: flag("media")?,
+        slide: flag("slide")?,
+        announcements: flag("announcements")?,
+        props: flag("props")?,
+        messages: flag("messages")?,
+        audio: flag("audio").unwrap_or(false),
+    })
+}
+
 /// An id that is safe to put in a path.
 pub fn plain_id(id: &str) -> Result<&str, ApiError> {
     if id.is_empty() || id.len() > 80 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
@@ -121,6 +170,8 @@ pub trait ProPresenterApi: Send + Sync {
     async fn libraries(&self) -> Result<Vec<LibraryRef>, ApiError>;
     /// `GET /v1/library/{id}`.
     async fn library(&self, id: &str) -> Result<Vec<LibraryEntry>, ApiError>;
+    /// `GET /v1/status/layers`: what is on ProPresenter's outputs right now.
+    async fn layers(&self) -> Result<Layers, ApiError>;
 }
 
 fn text(value: &Value, name: &str) -> Option<String> {
@@ -339,6 +390,10 @@ impl ProPresenterApi for HttpApi {
         parse_library(&self.get(&format!("/v1/library/{}", plain_id(id)?)).await?)
             .ok_or(ApiError::Unreadable)
     }
+
+    async fn layers(&self) -> Result<Layers, ApiError> {
+        parse_layers(&self.get("/v1/status/layers").await?).ok_or(ApiError::Unreadable)
+    }
 }
 
 pub mod fake;
@@ -394,6 +449,42 @@ mod tests {
         let libraries =
             parse_libraries(&json!([{"id": {"uuid": "L1", "name": "Songs", "index": 0}}])).unwrap();
         assert_eq!(libraries[0].name, "Songs");
+    }
+
+    #[test]
+    fn layers_are_read_as_on_screen_or_not() {
+        let rig = json!({"video_input": true, "media": false, "slide": false, "announcements": false,
+            "props": false, "messages": false, "audio": true});
+        let layers = parse_layers(&rig).unwrap();
+        assert!(layers.video_input && layers.audio);
+        // A camera input and audio alone are not "something on screen".
+        assert!(layers.on_screen().is_empty());
+        for (layer, word) in [
+            ("slide", "slides"),
+            ("media", "media"),
+            ("announcements", "announcements"),
+            ("props", "props"),
+            ("messages", "messages"),
+        ] {
+            let mut live = rig.clone();
+            live[layer] = json!(true);
+            assert_eq!(parse_layers(&live).unwrap().on_screen(), [word]);
+        }
+        let mut two = rig.clone();
+        two["slide"] = json!(true);
+        two["props"] = json!(true);
+        assert_eq!(parse_layers(&two).unwrap().on_screen(), ["slides", "props"]);
+        // A missing or non-boolean layer that counts, or a non-object, cannot be read.
+        for bad in [
+            json!([]),
+            json!("slide"),
+            json!({}),
+            json!({"video_input": true, "audio": false}),
+            json!({"media": false, "slide": "no", "announcements": false, "props": false, "messages": false}),
+            json!({"media": false, "slide": null, "announcements": false, "props": false, "messages": false}),
+        ] {
+            assert_eq!(parse_layers(&bad), None, "{bad}");
+        }
     }
 
     #[test]

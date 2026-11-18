@@ -9,6 +9,7 @@ import type { AddSongsStepState } from "../../generated/ts/AddSongsStepState";
 
 export type { AddSongsAction } from "../../generated/ts/AddSongsAction";
 export type { AddSongsEvent } from "../../generated/ts/AddSongsEvent";
+export type { AddSongsGuess } from "../../generated/ts/AddSongsGuess";
 export type { AddSongsMapping } from "../../generated/ts/AddSongsMapping";
 export type { AddSongsOutcome } from "../../generated/ts/AddSongsOutcome";
 export type { AddSongsPlan } from "../../generated/ts/AddSongsPlan";

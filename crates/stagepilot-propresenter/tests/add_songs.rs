@@ -7,9 +7,11 @@ use stagepilot_propresenter::link::add_songs::{
     SongStatus, Timing, WantedSong,
 };
 use stagepilot_propresenter::link::api::fake::{FakeApi, Loading};
-use stagepilot_propresenter::link::api::{ApiError, ProPresenterApi};
+use stagepilot_propresenter::link::api::{ApiError, Layers, ProPresenterApi};
 use stagepilot_propresenter::link::fake::FakeHost;
-use stagepilot_propresenter::link::LinkError;
+use stagepilot_propresenter::link::{
+    HostInfo, IndexEntry, LibraryFile, LinkError, ProPresenterHost, SelectOutcome,
+};
 use stagepilot_propresenter::pro_file::synthetic::SyntheticSong;
 use stagepilot_propresenter::pro_file::{KeyScale, Song};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -1300,4 +1302,515 @@ async fn nothing_answering_is_reported_before_anything_changes() {
     // The ProPresenter computer's files fail.
     rig.host.fail_next(LinkError::NoAnswer);
     assert!(rig.engine.preview(&req).await.is_err());
+}
+
+// ---- guesses ----------------------------------------------------------------------------------------------------------
+
+/// The shape of two real songs: four blank-named groups (Count Off) that differ, and two Interludes that differ.
+fn guessable() -> Vec<u8> {
+    // groups: 0-3 blank, 4 Intro, 5 Verse 1, 6 Interlude (x), 7 Interlude (y)
+    SyntheticSong::new("Gamma")
+        .id(3003)
+        .seed(0xC3000000)
+        .group("", &["count a"])
+        .group("", &["count b"])
+        .group("", &["count c"])
+        .group("", &["count d"])
+        .group("Intro", &["intro words"])
+        .group("Verse 1", &["verse words"])
+        .group("Interlude", &["interlude x"])
+        .group("Interlude", &["interlude y"])
+        .arrangement("Full", &[4, 5, 6, 7])
+        .selected(0)
+        .build()
+}
+
+fn gamma_rig() -> Rig {
+    let host = Arc::new(
+        FakeHost::new()
+            .with_file("Songs", "Alpha.pro", &alpha())
+            .with_file("Songs", "Gamma.pro", &guessable()),
+    );
+    rig_from(host, Loading::Immediately)
+}
+
+const GAMMA_SECTIONS: [&str; 6] = [
+    "Count Off",
+    "Intro",
+    "Verse 1",
+    "Interlude",
+    "Interlude",
+    "Interlude",
+];
+
+#[tokio::test]
+async fn sections_that_fit_several_groups_are_guessed_named_and_never_block() {
+    let rig = gamma_rig();
+    let req = request(
+        &rig,
+        vec![wanted("1", "Gamma", 1, Some(3003), &GAMMA_SECTIONS)],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::Copy, "{song:#?}");
+    assert!(plan.can_apply, "guesses do not stop the Apply button");
+    assert_eq!(plan.stuck, 0);
+    assert_eq!(song.reason, None);
+    let texts: Vec<&str> = song.guesses.iter().map(|g| g.text.as_str()).collect();
+    assert_eq!(song.guesses.len(), 2, "{texts:#?}");
+    assert_eq!(song.guesses[0].section, "Count Off");
+    assert_eq!(song.guesses[0].group_name, "");
+    assert_eq!(
+        (
+            song.guesses[0].position,
+            song.guesses[0].group_index,
+            song.guesses[0].groups
+        ),
+        (1, 1, 4)
+    );
+    assert_eq!(song.guesses[0].rule, "in_order");
+    assert_eq!(song.guesses[1].section, "Interlude");
+    assert_eq!(
+        (
+            song.guesses[1].position,
+            song.guesses[1].uses,
+            song.guesses[1].group_index
+        ),
+        (3, 3, 2)
+    );
+    assert_eq!(song.guesses[1].rule, "last_reused");
+    assert!(
+        song.guesses[1].text.starts_with(
+            "Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter."
+        ),
+        "{}",
+        song.guesses[1].text
+    );
+    assert!(song.guesses[0].text.contains("1st blank-named group"));
+    assert!(song
+        .mapping
+        .iter()
+        .any(|m| m.how == "guessed" && m.line.is_some()));
+    // The guesses are listed on their own, not twice.
+    assert!(!song
+        .notes
+        .iter()
+        .any(|n| n.contains("check it in ProPresenter")));
+    // They are part of what the plan is.
+    let again = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(again.plan_id, plan.plan_id);
+
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert_eq!(report.songs[0].status, SongStatus::Added);
+    assert_eq!(report.songs[0].guesses, song.guesses);
+    // The copy plays: Count Off, Intro, Verse 1, Interlude (1st), Interlude (2nd), Interlude (2nd again).
+    let bytes = rig.host.file("Playback", "Gamma (1).pro").unwrap();
+    let made = Song::read(&bytes).unwrap();
+    let playback = made
+        .arrangements
+        .iter()
+        .find(|a| a.name == "Playback")
+        .unwrap();
+    let names = made.arrangement_group_names(playback);
+    assert_eq!(
+        names,
+        [
+            "",
+            "Intro",
+            "Verse 1",
+            "Interlude",
+            "Interlude",
+            "Interlude"
+        ]
+    );
+    assert_eq!(
+        playback.group_ids[4], playback.group_ids[5],
+        "the extra use reuses the last group"
+    );
+    assert_ne!(playback.group_ids[3], playback.group_ids[4]);
+}
+
+#[tokio::test]
+async fn a_section_no_group_has_still_blocks_while_guesses_do_not() {
+    let rig = gamma_rig();
+    let mut names = GAMMA_SECTIONS.to_vec();
+    names.push("Tag");
+    let req = request(
+        &rig,
+        vec![wanted("1", "Gamma", 1, Some(3003), &names)],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::Blocked);
+    assert!(plan.songs[0]
+        .reason
+        .as_deref()
+        .unwrap()
+        .contains("Tag (no group has that name)"));
+    assert!(!plan.can_apply);
+    assert_eq!(plan.stuck, 1);
+}
+
+#[tokio::test]
+async fn a_song_imported_first_reports_its_guesses_in_the_result() {
+    let rig = rig(Loading::Immediately);
+    rig.host.set_import_song(3003, &guessable());
+    let req = request(
+        &rig,
+        vec![wanted("1", "Gamma", 1, Some(3003), &GAMMA_SECTIONS)],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::ImportThenCopy);
+    assert!(
+        plan.songs[0].guesses.is_empty(),
+        "known only after the import"
+    );
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert_eq!(report.songs[0].guesses.len(), 2);
+    assert_eq!(report.songs[0].guesses[1].rule, "last_reused");
+}
+
+// ---- no screen steps while ProPresenter is live -------------------------------------------------------------------------
+
+fn showing(f: impl FnOnce(&mut Layers)) -> Layers {
+    let mut layers = Layers {
+        video_input: true,
+        ..Layers::default()
+    };
+    f(&mut layers);
+    layers
+}
+
+/// A song that needs the import, so the screen is wanted.
+fn import_request(rig: &Rig) -> PlanRequest {
+    import_returns(rig, 2002, "Delta", 0xD4000000);
+    request(
+        rig,
+        vec![wanted("1", "Delta", 1, Some(2002), &["Intro", "Chorus"])],
+        Place::End,
+    )
+}
+
+fn screen_calls(host: &FakeHost) -> Vec<String> {
+    host.calls()
+        .into_iter()
+        .filter(|c| c.starts_with("search_import") || c.starts_with("select_library"))
+        .collect()
+}
+
+#[tokio::test]
+async fn each_layer_that_shows_something_stops_the_import_before_anything_is_typed() {
+    type Set = fn(&mut Layers);
+    let cases: [(&str, Set); 5] = [
+        ("slides", |l| l.slide = true),
+        ("media", |l| l.media = true),
+        ("announcements", |l| l.announcements = true),
+        ("props", |l| l.props = true),
+        ("messages", |l| l.messages = true),
+    ];
+    for (word, set) in cases {
+        let rig = rig(Loading::Immediately);
+        let req = import_request(&rig);
+        let plan = rig.engine.preview(&req).await.unwrap();
+        rig.api.set_layers(showing(set));
+        let report = rig
+            .engine
+            .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            report.outcome,
+            ApplyOutcome::LiveOnScreen,
+            "{word}: {report:#?}"
+        );
+        assert!(
+            report.message.contains(&format!(
+                "ProPresenter is showing something on screen ({word}). Clear it or wait, then press Try again."
+            )),
+            "{}",
+            report.message
+        );
+        assert_eq!(report.songs[0].code.as_deref(), Some("live_on_screen"));
+        assert_eq!(report.songs[0].status, SongStatus::NotTried);
+        assert!(!report.playlist_changed);
+        assert!(rig.api.puts().is_empty());
+        assert_eq!(
+            screen_calls(&rig.host),
+            Vec::<String>::new(),
+            "{word}: nothing was typed or clicked"
+        );
+        assert!(rig.host.files_of("Playback").is_empty());
+    }
+}
+
+#[tokio::test]
+async fn several_layers_are_all_named() {
+    let rig = rig(Loading::Immediately);
+    let req = import_request(&rig);
+    let plan = rig.engine.preview(&req).await.unwrap();
+    rig.api.set_layers(showing(|l| {
+        l.slide = true;
+        l.props = true;
+    }));
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert!(
+        report.message.contains("(slides, props)"),
+        "{}",
+        report.message
+    );
+}
+
+#[tokio::test]
+async fn a_camera_input_and_audio_alone_do_not_stop_anything() {
+    let rig = rig(Loading::Immediately);
+    let req = import_request(&rig);
+    let plan = rig.engine.preview(&req).await.unwrap();
+    rig.api.set_layers(Layers {
+        video_input: true,
+        audio: true,
+        ..Layers::default()
+    });
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert_eq!(screen_calls(&rig.host).len(), 1, "the import ran");
+}
+
+#[tokio::test]
+async fn an_answer_that_cannot_be_read_counts_as_live_and_says_so() {
+    let rig = rig(Loading::Immediately);
+    let req = import_request(&rig);
+    let plan = rig.engine.preview(&req).await.unwrap();
+    rig.api.set_layers_unreadable();
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::LiveOnScreen, "{report:#?}");
+    assert!(
+        report
+            .message
+            .contains("could not read what ProPresenter is showing"),
+        "{}",
+        report.message
+    );
+    assert!(report.message.contains("press Try again"));
+    assert_eq!(screen_calls(&rig.host), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn it_is_asked_again_right_before_the_import_and_files_already_made_are_kept() {
+    let rig = rig(Loading::Immediately);
+    import_returns(&rig, 2002, "Delta", 0xD4000000);
+    let req = request(
+        &rig,
+        vec![
+            wanted("1", "Alpha", 1, Some(1001), &["Intro", "Verse 1"]),
+            wanted("2", "Delta", 2, Some(2002), &["Intro", "Chorus"]),
+        ],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    // The start says all clear; right before the import something is on screen.
+    rig.api
+        .queue_layers(vec![Ok(showing(|_| {})), Ok(showing(|l| l.slide = true))]);
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::LiveOnScreen, "{report:#?}");
+    assert_eq!(report.songs[1].code.as_deref(), Some("live_on_screen"));
+    assert_eq!(screen_calls(&rig.host), Vec::<String>::new());
+    assert!(rig.api.puts().is_empty(), "the playlist was not written");
+    assert_eq!(
+        rig.host.files_of("Playback").len(),
+        1,
+        "the copy made before is kept"
+    );
+    // Clear: try again. The copy that was made is used, the import runs, the playlist is written once.
+    rig.api.queue_layers(Vec::new());
+    let plan2 = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &plan2.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert_eq!(screen_calls(&rig.host).len(), 1);
+    assert_eq!(rig.api.puts().len(), 1);
+}
+
+#[tokio::test]
+async fn selecting_the_library_is_refused_too_and_try_again_works_once_it_is_clear() {
+    let rig = rig(Loading::AfterSelect);
+    let req = request(
+        &rig,
+        vec![wanted("1", "Alpha", 1, Some(1001), &["Intro"])],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    // No import is planned, so only the later "select the library" step could touch the screen.
+    rig.api.set_layers(showing(|l| l.media = true));
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::LiveOnScreen, "{report:#?}");
+    assert!(report.message.contains("(media)"), "{}", report.message);
+    assert!(report.message.contains("were made are kept"));
+    assert!(
+        rig.host.selected().is_empty(),
+        "the screen was never touched"
+    );
+    assert_eq!(screen_calls(&rig.host), Vec::<String>::new());
+    assert!(rig.api.puts().is_empty());
+    assert_eq!(rig.host.files_of("Playback").len(), 1);
+    // The media is cleared: Try again selects the library and finishes.
+    rig.api.set_layers(showing(|_| {}));
+    let plan2 = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &plan2.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert_eq!(rig.host.selected(), ["Playback"]);
+}
+
+// ---- the import step must leave the playlist alone ----------------------------------------------------------------------
+
+/// A host whose import, wrongly, also adds an item to the playlist (what a stray key press in ProPresenter could do).
+struct Meddling {
+    inner: Arc<FakeHost>,
+    api: Arc<FakeApi>,
+    playlist: String,
+}
+
+#[async_trait::async_trait]
+impl ProPresenterHost for Meddling {
+    async fn info(&self) -> Result<HostInfo, LinkError> {
+        self.inner.info().await
+    }
+    async fn list_library(&self, name: &str) -> Result<Vec<LibraryFile>, LinkError> {
+        self.inner.list_library(name).await
+    }
+    async fn read_file(&self, library: &str, file: &str) -> Result<Vec<u8>, LinkError> {
+        self.inner.read_file(library, file).await
+    }
+    async fn ensure_library(&self, name: &str) -> Result<bool, LinkError> {
+        self.inner.ensure_library(name).await
+    }
+    async fn create_file(
+        &self,
+        library: &str,
+        file: &str,
+        bytes: &[u8],
+        sha256: &str,
+    ) -> Result<(), LinkError> {
+        self.inner.create_file(library, file, bytes, sha256).await
+    }
+    async fn song_index(&self) -> Result<Vec<IndexEntry>, LinkError> {
+        self.inner.song_index().await
+    }
+    async fn search_import(
+        &self,
+        multitracks_id: &str,
+        name: &str,
+        playlist: Option<String>,
+    ) -> Result<String, LinkError> {
+        let made = self
+            .inner
+            .search_import(multitracks_id, name, playlist)
+            .await?;
+        let mut items = self.api.stored(&self.playlist);
+        items.push(FakeApi::header_item("Stray", 0.5));
+        self.api.put_playlist(&self.playlist, &items).await.unwrap();
+        Ok(made)
+    }
+    async fn select_library(&self, name: &str) -> Result<SelectOutcome, LinkError> {
+        self.inner.select_library(name).await
+    }
+}
+
+#[tokio::test]
+async fn a_playlist_that_changed_during_the_import_is_reported_as_a_difference() {
+    let rig = rig(Loading::Immediately);
+    import_returns(&rig, 2002, "Delta", 0xD4000000);
+    let meddling = Arc::new(Meddling {
+        inner: rig.host.clone(),
+        api: rig.api.clone(),
+        playlist: rig.playlist.clone(),
+    });
+    let engine = AddSongs::new(
+        meddling,
+        rig.api.clone(),
+        rig.backups.path().join("propresenter-playlist-backups"),
+        Arc::new(|| NOW),
+        counter(),
+    )
+    .with_timing(Timing::quick());
+    let req = request(
+        &rig,
+        vec![wanted("1", "Delta", 1, Some(2002), &["Intro", "Chorus"])],
+        Place::End,
+    );
+    let plan = engine.preview(&req).await.unwrap();
+    let log = Log::default();
+    let report = engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &log)
+        .await
+        .unwrap();
+    assert_eq!(
+        report.outcome,
+        ApplyOutcome::DoneWithDifferences,
+        "{report:#?}"
+    );
+    assert!(
+        report
+            .differences
+            .iter()
+            .any(|d| d.contains("had 6 item(s) before the import and has 7 now")),
+        "{:?}",
+        report.differences
+    );
+    assert!(log
+        .texts()
+        .iter()
+        .any(|t| t.contains("meant to leave the playlist alone")));
+}
+
+#[tokio::test]
+async fn an_import_that_leaves_the_playlist_alone_reports_no_difference() {
+    let rig = rig(Loading::Immediately);
+    let req = import_request(&rig);
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert!(report.differences.is_empty());
 }

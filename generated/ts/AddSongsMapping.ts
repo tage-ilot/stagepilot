@@ -9,7 +9,7 @@ export type AddSongsMapping = { section: string,
  */
 group: string | null, 
 /**
- * `full`, `only`, `identical`, `ambiguous` or `missing`.
+ * `full`, `only`, `identical`, `guessed` or `missing`.
  */
 how: string, 
 /**

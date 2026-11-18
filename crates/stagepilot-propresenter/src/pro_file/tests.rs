@@ -262,7 +262,7 @@ fn a_section_no_group_has_is_missing_and_the_copy_is_not_made() {
 }
 
 #[test]
-fn groups_of_one_name_are_fine_when_identical_and_ambiguous_when_not() {
+fn groups_of_one_name_are_fine_when_identical_and_guessed_when_not() {
     let identical = SyntheticSong::new("Twins")
         .group("Chorus", &["same words"])
         .group("Chorus", &["same words"])
@@ -293,12 +293,21 @@ fn groups_of_one_name_are_fine_when_identical_and_ambiguous_when_not() {
         .build();
     let song = Song::read(&different).unwrap();
     let map = resolve(&song, &s(&["Verse", "Chorus"]));
-    assert_eq!(map[1].how, How::Ambiguous);
-    assert_eq!(map[1].group_uuid, None);
+    // Groups that differ are not refused: one is guessed, counted as mapped, and named.
+    assert_eq!(map[1].how, How::Guessed);
+    assert!(map[1].is_mapped());
     assert_eq!(
-        unmapped_names(&map),
-        ["Chorus (more than one group has that name)".to_string()]
+        map[1].group_uuid.as_deref(),
+        Some(song.groups[0].uuid.as_str())
     );
+    assert!(unmapped_names(&map).is_empty());
+    let guess = map[1].guess.as_ref().unwrap();
+    assert_eq!(
+        (guess.position, guess.uses, guess.group_index, guess.groups),
+        (1, 1, 1, 2)
+    );
+    assert_eq!(guess.rule, GuessRule::InOrder);
+    assert_eq!(map[0].guess, None);
     // When Full says where the chorus goes, the song's own arrangement settles it.
     let with_full = SyntheticSong::new("Different")
         .group("Chorus", &["first words"])
@@ -728,5 +737,224 @@ fn only_a_whole_uuid_message_is_replaced_never_text_that_looks_like_one() {
     assert_eq!(
         text.matches("BBBBBBBB-0000-4000-8000-000000000001").count(),
         2
+    );
+}
+
+// ---- guessing among groups of one name -------------------------------------------------------------------------------
+
+/// A song whose `Interlude` groups all say different things, and a `Verse` that `Full` plays (so no section lines up with
+/// `Full` unless a test wants it to).
+fn interlude_song(interludes: usize) -> Vec<u8> {
+    let mut song = SyntheticSong::new("Interludes").group("Verse", &["v"]);
+    for n in 0..interludes {
+        song = song.group("Interlude", &[&format!("interlude words {n}")]);
+    }
+    song.arrangement("Full", &[0]).selected(0).build()
+}
+
+fn group_numbers(song: &Song, map: &[Mapped]) -> Vec<usize> {
+    // 1 for the first Interlude group of the song, 2 for the second, ...
+    map.iter()
+        .map(|m| {
+            song.groups
+                .iter()
+                .filter(|g| g.name == "Interlude")
+                .position(|g| Some(&g.uuid) == m.group_uuid.as_ref())
+                .map_or(0, |p| p + 1)
+        })
+        .collect()
+}
+
+fn rules(map: &[Mapped]) -> Vec<GuessRule> {
+    map.iter()
+        .filter_map(|m| m.guess.as_ref())
+        .map(|g| g.rule)
+        .collect()
+}
+
+#[test]
+fn as_many_uses_as_groups_take_the_groups_in_order() {
+    let song = Song::read(&interlude_song(2)).unwrap();
+    let map = resolve(&song, &s(&["Interlude", "Interlude"]));
+    assert!(map.iter().all(|m| m.how == How::Guessed), "{map:?}");
+    assert_eq!(group_numbers(&song, &map), [1, 2]);
+    assert_eq!(rules(&map), [GuessRule::InOrder; 2]);
+}
+
+#[test]
+fn one_extra_use_takes_the_last_group_again() {
+    // How Awesome: three Interludes in Playback, two in the song.
+    let song = Song::read(&interlude_song(2)).unwrap();
+    let map = resolve(&song, &s(&["Interlude", "Interlude", "Interlude"]));
+    assert!(map.iter().all(Mapped::is_mapped));
+    assert_eq!(group_numbers(&song, &map), [1, 2, 2]);
+    assert_eq!(
+        rules(&map),
+        [
+            GuessRule::InOrder,
+            GuessRule::InOrder,
+            GuessRule::LastReused
+        ]
+    );
+    let third = map[2].guess.as_ref().unwrap();
+    assert_eq!(
+        (third.position, third.uses, third.group_index, third.groups),
+        (3, 3, 2, 2)
+    );
+    assert_eq!(
+        third.words("Interlude", "Interlude"),
+        "Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter. \
+         Playback uses the name once more than the song has groups, so the last group is used again."
+    );
+}
+
+#[test]
+fn two_extra_uses_or_more_go_round_and_round() {
+    let song = Song::read(&interlude_song(2)).unwrap();
+    let four = resolve(&song, &s(&["Interlude"; 4]));
+    assert_eq!(group_numbers(&song, &four), [1, 2, 1, 2]);
+    assert_eq!(rules(&four), [GuessRule::RepeatInTurn; 4]);
+    let five = resolve(&song, &s(&["Interlude"; 5]));
+    assert_eq!(group_numbers(&song, &five), [1, 2, 1, 2, 1]);
+    assert_eq!(rules(&five), [GuessRule::RepeatInTurn; 5]);
+    // Three groups, five uses: one, two, three, one, two.
+    let song = Song::read(&interlude_song(3)).unwrap();
+    let map = resolve(&song, &s(&["Interlude"; 5]));
+    assert_eq!(group_numbers(&song, &map), [1, 2, 3, 1, 2]);
+}
+
+#[test]
+fn one_group_with_several_uses_is_simply_used_each_time() {
+    let song = Song::read(&interlude_song(1)).unwrap();
+    let map = resolve(&song, &s(&["Interlude"; 4]));
+    assert!(map.iter().all(|m| m.how == How::Only), "{map:?}");
+    assert!(map.iter().all(|m| m.guess.is_none()));
+    assert_eq!(group_numbers(&song, &map), [1, 1, 1, 1]);
+}
+
+#[test]
+fn four_blank_count_off_groups_are_guessed_not_refused() {
+    // Thank God I'm Free: four blank-named groups.
+    let mut song = SyntheticSong::new("Count Offs").group("Verse", &["v"]);
+    for n in 0..4 {
+        song = song.group("", &[&format!("count {n}")]);
+    }
+    let source = song.arrangement("Full", &[0]).selected(0).build();
+    let parsed = Song::read(&source).unwrap();
+    let sections = s(&["Count Off", "Verse"]);
+    let map = resolve(&parsed, &sections);
+    assert_eq!(map[0].how, How::Guessed);
+    assert_eq!(map[0].group_name.as_deref(), Some(""));
+    assert_eq!(
+        map[0].group_uuid.as_deref(),
+        Some(parsed.groups[1].uuid.as_str())
+    );
+    assert_eq!(map[1].how, How::Full);
+    assert_eq!(
+        map[0].guess.as_ref().unwrap().words("Count Off", ""),
+        "Count Off (1st use) uses the 1st blank-named group: check it in ProPresenter. \
+         The song's groups with that name are used in the order the song has them."
+    );
+    let request = CopyRequest {
+        sections: &sections,
+        key: None,
+        arrangement_name: "Playback",
+        now: 1,
+    };
+    let copy =
+        build_copy(&source, &request, &mut ids()).expect("a song with four blank groups builds");
+    assert_eq!(copy.mapping[0].how, How::Guessed);
+}
+
+#[test]
+fn the_guess_follows_the_songs_own_full_order_when_full_has_every_group() {
+    // Interludes X (group 1) and Y (group 2); Full plays Y before X.
+    let build = |full: &[usize]| {
+        let bytes = SyntheticSong::new("Order")
+            .group("Verse", &["v"])
+            .group("Interlude", &["x words"])
+            .group("Interlude", &["y words"])
+            .arrangement("Full", full)
+            .selected(0)
+            .build();
+        Song::read(&bytes).unwrap()
+    };
+    let sections = s(&["Interlude", "Interlude", "Interlude"]);
+    // Full = Verse, Y, X: the first two uses line up with Y then X; the third is guessed and, being one extra, takes the last of
+    // the order Full gives (X).
+    let song = build(&[0, 2, 1]);
+    let map = resolve(&song, &sections);
+    assert_eq!(
+        map.iter().map(|m| m.how).collect::<Vec<_>>(),
+        [How::Full, How::Full, How::Guessed]
+    );
+    assert_eq!(
+        map[2].group_uuid.as_deref(),
+        Some(song.groups[1].uuid.as_str())
+    );
+    assert_eq!(map[2].guess.as_ref().unwrap().rule, GuessRule::LastReused);
+    // Full lacks Y: the song's own group order (X, Y) is used instead, so the last group is Y.
+    let song = build(&[0, 1]);
+    let map = resolve(&song, &sections);
+    assert_eq!(map[2].how, How::Guessed);
+    assert_eq!(
+        map[2].group_uuid.as_deref(),
+        Some(song.groups[2].uuid.as_str())
+    );
+    // Four Interlude uses, two groups, Full has both (order Y, X).
+    let song = build(&[0, 2, 1]);
+    let map = resolve(
+        &song,
+        &s(&["Verse", "Interlude", "Interlude", "Interlude", "Interlude"]),
+    );
+    // Verse and the first two Interludes line up with Full (Verse, Y, X); the 3rd and 4th Interlude uses are guessed.
+    assert_eq!(map[3].how, How::Guessed);
+    assert_eq!(map[4].how, How::Guessed);
+    // Four uses, two extra: round and round in Full's order (Y, X, Y, X): the 3rd use is Y, the 4th X.
+    assert_eq!(
+        map[3].group_uuid.as_deref(),
+        Some(song.groups[2].uuid.as_str())
+    );
+    assert_eq!(
+        map[4].group_uuid.as_deref(),
+        Some(song.groups[1].uuid.as_str())
+    );
+}
+
+#[test]
+fn a_section_with_no_group_of_that_name_still_blocks_and_guesses_never_hide_it() {
+    let source = interlude_song(2);
+    let song = Song::read(&source).unwrap();
+    let map = resolve(&song, &s(&["Interlude", "Tag", "Interlude", "Interlude"]));
+    assert_eq!(map[1].how, How::Missing);
+    assert!(!map[1].is_mapped());
+    assert_eq!(
+        unmapped_names(&map),
+        ["Tag (no group has that name)".to_string()]
+    );
+    let request = CopyRequest {
+        sections: &s(&["Interlude", "Tag"]),
+        key: None,
+        arrangement_name: "Playback",
+        now: 1,
+    };
+    assert!(matches!(
+        build_copy(&source, &request, &mut ids()),
+        Err(ProError::Unmapped(_))
+    ));
+}
+
+#[test]
+fn ordinals_read_naturally() {
+    let shown: Vec<String> = [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111]
+        .into_iter()
+        .map(ordinal)
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st",
+            "111th"
+        ]
     );
 }

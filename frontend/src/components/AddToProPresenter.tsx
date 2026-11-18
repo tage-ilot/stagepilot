@@ -4,7 +4,7 @@ import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { useAddSongs } from "../hooks/useAddSongs";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import { addSongsRows, addToProPresenterAvailable, type AddSongsRow } from "./addSongsSongs";
-import { ADD_TO_PROPRESENTER, canTryAgain, NOTHING_CHANGES } from "./addSongsWording";
+import { ADD_TO_PROPRESENTER, canTryAgain, importsSentence, NOTHING_CHANGES } from "./addSongsWording";
 import { PlaylistPicker, PreviewBody, Progress, Reason, Result, SongPicker } from "./AddSongsParts";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
@@ -71,7 +71,7 @@ export function AddToProPresenterDialog({ rows, link, playing, onClose }: { rows
     <Dialog
       actions={(
         <>
-          {reason && <Reason id={ids.reason}>{reason}</Reason>}
+          {(reason || (!running && !finished)) && <Reason id={ids.reason} note={!running && !finished ? importsSentence(add.playlist?.name ?? null) : undefined}>{reason}</Reason>}
           {!running && <Button onClick={onClose} size="touch" variant="secondary">Close</Button>}
           {finished && report && canTryAgain(report.outcome) && <Button onClick={add.tryAgain} size="touch" tone="presentation" variant="tinted">Try again</Button>}
           {!running && !finished && (

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 import { ADD_SONGS_CHOICE_KEY, JOB_POLL_MS } from "../hooks/useAddSongs";
-import { helperStatus, jobOf, linkController, localStatus, noComputerStatus, playlists, report, result, step } from "../test/propresenterLinkFixtures";
+import { guess, helperStatus, jobOf, linkController, localStatus, noComputerStatus, playlists, report, result, step } from "../test/propresenterLinkFixtures";
 import { addPlan, addSong } from "../test/propresenterLinkFixtures";
 import { libraryController, libraryPlan, librarySong, librarySongOf, libraryStatus } from "../test/libraryFixtures";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
@@ -234,6 +234,42 @@ describe("Preview", () => {
     expect(dialogButton("Preview")).toBeDisabled();
     expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Tick at least one song.");
     expect(dialogButton("Preview")).toHaveAccessibleDescription("Tick at least one song.");
+  });
+
+  it("says what pressing Add songs does, beside the buttons and in the preview, with the playlist's name", async () => {
+    view();
+    const user = await open();
+    const sentence = "This imports songs, arrangements and keys into";
+    // Before a playlist is chosen: the plain words, beside the buttons.
+    expect(screen.getByTestId("add-songs-what-it-does")).toHaveTextContent(`${sentence} the playlist. The playlist's contents are replaced with what the preview shows.`);
+    await choose(user, "PL-SUNDAY", "Worship");
+    expect(screen.getByTestId("add-songs-what-it-does")).toHaveTextContent(`${sentence} Sunday Morning Service. The playlist's contents are replaced with what the preview shows.`);
+    await preview(user, copyPlan());
+    expect(screen.getByTestId("add-songs-imports")).toHaveTextContent(`${sentence} Sunday Morning Service. The playlist's contents are replaced with what the preview shows.`);
+    expect(screen.getByTestId("add-songs-nothing-changes")).toHaveTextContent("Nothing in ProPresenter changes until you press Add songs.");
+    // Nothing about hand-chosen arrangements is added.
+    expect(screen.getByTestId("add-songs-window").textContent).not.toMatch(/hand-?(chosen|picked)|reset/i);
+  });
+
+  it("lists the guesses in the preview and still lets the songs be added", async () => {
+    view();
+    const user = await open();
+    await choose(user, "PL-SUNDAY", "Worship");
+    const song = addSong({
+      ref_id: REF[0]!, title: "How Awesome", file: "How Awesome (1)", guesses: [guess()],
+      mapping: [
+        { section: "Verse 1", group: "Verse 1", how: "full", line: null },
+        { section: "Interlude", group: "Interlude", how: "guessed", line: guess().text },
+      ],
+    });
+    await preview(user, addPlan([song]));
+    const lines = screen.getByTestId("add-songs-mapping");
+    expect(lines).toHaveTextContent("1 of 2 sections matched exactly, 1 guessed (check it in ProPresenter).");
+    expect(lines).toHaveTextContent("Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter.");
+    // A guess is no block: no skip box, no extra tick, and Add songs is on.
+    expect(screen.queryByTestId("add-songs-skip")).toBeNull();
+    expect(dialogButton("Add songs")).toBeEnabled();
+    expect(screen.queryByTestId("add-songs-reason")).toBeNull();
   });
 
   it("asks for the ticked songs by Playback's numbers, in setlist order, after the chosen header", async () => {
@@ -557,6 +593,30 @@ describe("Add songs: the job, step by step", () => {
     expect(vi.mocked(api.getAddSongsJob).mock.calls.length).toBe(looks);
   });
 
+  it("lists, after the import, what was guessed for a song: 'Check in ProPresenter:' and nothing to tick", async () => {
+    const user = await start();
+    const how = { ...result(REF[0]!, "How Awesome", "added"), guesses: [guess(), guess({ section: "Count Off", position: 1, group_name: "", group_index: 1, rule: "in_order", text: "x" })] };
+    vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({
+      state: "done",
+      songs: [{ ref_id: REF[0]!, title: "How Awesome", steps: [], result: how }],
+      report: report({ songs: [how, result(REF[1]!, "Plain Song", "added")] }),
+    }));
+    await user.click(dialogButton("Add songs"));
+    await tick(5);
+    const done = await screen.findByTestId("add-songs-result");
+    const notes = within(done).getAllByTestId("add-songs-guess-note");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toHaveTextContent("Check in ProPresenter:");
+    expect(within(notes[0]!).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Interlude (3rd use) uses the 2nd \u201CInterlude\u201D group (Playback uses it once more than the song has groups, so the last group is used again)",
+      "Count Off (1st use) uses the 1st blank-named group",
+    ]);
+    expect(within(done).queryByRole("checkbox")).toBeNull();
+    expect(done).toHaveAttribute("data-outcome", "done");
+    expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/Check in ProPresenter: How Awesome: Interlude \(3rd use\)/);
+    expect(within(screen.getAllByTestId("add-songs-result-song")[1]!).queryByTestId("add-songs-guess-note")).toBeNull();
+  });
+
   it("lists what ProPresenter shows differently from the plan", async () => {
     const user = await start();
     vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({
@@ -602,6 +662,7 @@ describe("Add songs: the job, step by step", () => {
   it.each([
     ["stopped", "Stopped"],
     ["song_playing", "Stopped: a song is playing"],
+    ["live_on_screen", "Stopped: ProPresenter is showing something on screen"],
     ["playlist_refused", "ProPresenter did not accept the change"],
     ["playlist_failed", "The playlist could not be changed"],
     ["backup_failed", "Nothing was changed: the playlist could not be saved first"],

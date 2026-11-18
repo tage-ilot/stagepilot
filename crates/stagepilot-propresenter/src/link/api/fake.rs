@@ -10,13 +10,13 @@
 //!
 //! Everything can be made to fail on purpose (`set_down`, `fail_put`, `corrupt_reads`).
 
-use super::{ApiError, LibraryEntry, LibraryRef, PlaylistRef, ProPresenterApi};
+use super::{ApiError, Layers, LibraryEntry, LibraryRef, PlaylistRef, ProPresenterApi};
 use crate::link::fake::FakeHost;
 use crate::pro_file::Song;
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 /// When ProPresenter gives a newly placed file its id.
@@ -52,6 +52,10 @@ struct State {
     calls: Vec<String>,
     puts: Vec<Vec<Value>>,
     version: String,
+    /// What `GET /v1/status/layers` says now (a camera input on, as on the real rig, nothing on screen).
+    layers: Result<Layers, ApiError>,
+    /// Answers that are given first, one per call, before `layers` is.
+    layers_next: VecDeque<Result<Layers, ApiError>>,
 }
 
 pub struct FakeApi {
@@ -95,6 +99,11 @@ impl FakeApi {
                 calls: Vec::new(),
                 puts: Vec::new(),
                 version: "ProPresenter 19.0.1 (API v1)".to_string(),
+                layers: Ok(Layers {
+                    video_input: true,
+                    ..Layers::default()
+                }),
+                layers_next: VecDeque::new(),
             }),
         }
     }
@@ -129,6 +138,21 @@ impl FakeApi {
     /// Every playlist read AFTER a playlist write passes its items through `f` first (what ProPresenter would show differently).
     pub fn corrupt_reads(&self, f: Option<Corrupt>) {
         self.lock().corrupt = f;
+    }
+
+    /// What `/v1/status/layers` says from now on.
+    pub fn set_layers(&self, layers: Layers) {
+        self.lock().layers = Ok(layers);
+    }
+
+    /// `/v1/status/layers` answers, from now on, with something that is not the expected shape.
+    pub fn set_layers_unreadable(&self) {
+        self.lock().layers = Err(ApiError::Unreadable);
+    }
+
+    /// The next calls to `/v1/status/layers` answer with these, one each, before the standing answer is used again.
+    pub fn queue_layers(&self, answers: Vec<Result<Layers, ApiError>>) {
+        self.lock().layers_next.extend(answers);
     }
 
     pub fn set_loading(&self, loading: Loading) {
@@ -363,5 +387,13 @@ impl ProPresenterApi for FakeApi {
                 ),
             })
             .collect())
+    }
+
+    async fn layers(&self) -> Result<Layers, ApiError> {
+        let mut s = self.up("layers".into())?;
+        match s.layers_next.pop_front() {
+            Some(answer) => answer,
+            None => s.layers.clone(),
+        }
     }
 }

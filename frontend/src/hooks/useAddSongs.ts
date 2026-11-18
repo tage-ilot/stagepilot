@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { applyAddSongs, getAddSongsJob, getProPresenterPlaylists, previewAddSongs } from "../api";
 import type { AddSongsRow } from "../components/addSongsSongs";
-import { isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS } from "../components/addSongsWording";
+import { guessAnnouncement, isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
@@ -217,7 +217,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       const title = last.song ? job?.songs.find((song) => song.ref_id === last.song)?.title ?? null : null;
       return liveText(title, last.text);
     }
-    if (phase === "finished") return report ? `${OUTCOME[report.outcome].heading}. ${report.message}` : job?.error ?? "The job stopped.";
+    if (phase === "finished") return report ? [`${OUTCOME[report.outcome].heading}. ${report.message}`, guessAnnouncement(report)].filter(Boolean).join(" ") : job?.error ?? "The job stopped.";
     return "";
   }, [phase, plan, stale, job, report]);
 
