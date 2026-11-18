@@ -2,7 +2,8 @@ import { playbackLibraryArtworkUrl } from "../api";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { LibraryPlanSong, ServicePlan } from "../types";
 import { ArrangementBar } from "./ArrangementBar";
-import { chipLibrary, libraryNotices, songFaceFacts } from "./playbackLibrary";
+import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
+import { anyKeyWas, chipLibrary, libraryNotices, songFaceFacts } from "./playbackLibrary";
 
 /** What a chip says for a song Playback cannot be paired with (no cover, no bar). */
 const unpaired = (song: LibraryPlanSong) =>
@@ -14,16 +15,16 @@ const unpaired = (song: LibraryPlanSong) =>
  * One plan song as a chip: a 28 px cover (only when Playback has a picture), the title, key, BPM and countdown length, and under both a
  * thin bar of the arrangement. A song Playback is missing or cannot tell apart keeps its words, as a chip of the same shape.
  */
-function SongChip({ song }: { song: LibraryPlanSong }) {
+function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
   const library = song.library;
   const cover = library?.artwork && library.setlist_song_id !== null ? playbackLibraryArtworkUrl(library.setlist_song_id, library.artwork.etag) : null;
-  const facts = library ? songFaceFacts(library).join(" · ") || "no details" : unpaired(song);
+  const facts = library ? songFaceFacts(library, now).join(" · ") || "no details" : unpaired(song);
   return (
     <li
       className="flex min-w-0 flex-col rounded-ds-xl border border-edge-medium bg-surface-panel px-3 py-2 text-sm"
       data-song={song.key}
       data-status={song.status}
-      title={library ? chipLibrary(song)?.title : undefined}
+      title={library ? chipLibrary(song, now)?.title : undefined}
     >
       <div className="flex min-w-0 items-center gap-2.5">
         {cover && (
@@ -59,6 +60,8 @@ function SongChip({ song }: { song: LibraryPlanSong }) {
 export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: PlaybackLibraryController; plan: ServicePlan | null; timeZone: string }) {
   // The backend answers `ready` only while the Library Link is ready or outdated, so this one gate is the whole rule.
   const notices = libraryNotices(library.plan, plan, timeZone);
+  // "(was X)" on a key lasts a day: while one shows, the cards look again every minute so it goes away by itself.
+  const now = useKeyChangeClock((at) => anyKeyWas(library.plan, at));
   const songs = library.plan?.enabled && library.plan.state === "ready" ? library.plan.songs : [];
   if (!songs.length && !notices.length) return null;
   return (
@@ -66,7 +69,7 @@ export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: Pla
       <h3 className="font-bold text-ink" id="playback-library-heading">Songs in Playback</h3>
       {songs.length > 0 && (
         <ul aria-label="Songs in Playback" className="grid gap-[10px] [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]" data-testid="library-songs">
-          {songs.map((song) => <SongChip key={`${song.key}-${song.plan_position}`} song={song} />)}
+          {songs.map((song) => <SongChip key={`${song.key}-${song.plan_position}`} now={now} song={song} />)}
         </ul>
       )}
       {notices.length > 0 && (

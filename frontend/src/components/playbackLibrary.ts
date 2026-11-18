@@ -43,18 +43,39 @@ export function lengthSourceTitle(song: LibrarySong): string | null {
 
 export const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
 
-/** The face of a song: key (and "was X" when it differs), BPM and the countdown length m:ss; only what the helper gave. */
-export function songFaceFacts(song: LibrarySong): string[] {
+/** A key change is said next to the key for this long after StagePilot noticed it. */
+export const KEY_CHANGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The key the song had BEFORE a change made in Playback, for as long as that change is less than a day old (`now`, in ms, is the
+ * caller's clock so a test can set it); null when no change was seen, it is older, or the two keys are the same. The backend sends
+ * `key_was` and `key_changed_at` for as long as it remembers the change, so the window is decided here, where the clock is.
+ */
+export function keyWas(song: LibrarySong, now: number): string | null {
+  if (!song.key || !song.key_was || !song.key_changed_at || song.key_was === song.key) return null;
+  const changedAt = Date.parse(song.key_changed_at);
+  if (!Number.isFinite(changedAt)) return null;
+  return now - changedAt < KEY_CHANGE_WINDOW_MS ? song.key_was : null;
+}
+
+/** Whether any song of the plan shows "(was X)" at `now`: the cards need a clock tick only while one does. */
+export function anyKeyWas(library: LibraryPlan | null | undefined, now: number): boolean {
+  return library?.state === "ready" && library.songs.some((song) => song.library !== null && keyWas(song.library, now) !== null);
+}
+
+/** The face of a song: its key (with "was X" only for a key changed in Playback in the last day), BPM and the countdown length m:ss; only what the helper gave. */
+export function songFaceFacts(song: LibrarySong, now: number): string[] {
   const facts: string[] = [];
-  if (song.key) facts.push(song.key_original && song.key_original !== song.key ? `${song.key} (was ${song.key_original})` : song.key);
+  const was = keyWas(song, now);
+  if (song.key) facts.push(was ? `${song.key} (was ${was})` : song.key);
   if (song.bpm !== null) facts.push(`${Number.isInteger(song.bpm) ? song.bpm : Math.round(song.bpm * 10) / 10} BPM`);
   if (song.countdown_length_s !== null) facts.push(formatLength(song.countdown_length_s));
   return facts;
 }
 
-/** "Ab (was C) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
-export function songFacts(song: LibrarySong): string[] {
-  const facts = songFaceFacts(song);
+/** "Ab (was G) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
+export function songFacts(song: LibrarySong, now: number): string[] {
+  const facts = songFaceFacts(song, now);
   if (song.section_count !== null) facts.push(sectionWord(song.section_count));
   if (song.arrangement) facts.push(song.arrangement);
   return facts;
@@ -75,9 +96,9 @@ export interface ChipLibrary {
   title: string;
 }
 
-export function chipLibrary(song: LibraryPlanSong | undefined): ChipLibrary | null {
+export function chipLibrary(song: LibraryPlanSong | undefined, now: number): ChipLibrary | null {
   if (!song?.library) return null;
-  const facts = songFacts(song.library);
+  const facts = songFacts(song.library, now);
   const different = lengthDifference(song);
   if (different) {
     // The length is the one fact that can disagree: say where, next to it.
@@ -89,6 +110,8 @@ export function chipLibrary(song: LibraryPlanSong | undefined): ChipLibrary | nu
   if (different) title.push(`Playback counts this song down to ${different.playback}; the plan says ${different.plan}.`);
   const why = song.library.countdown_length_s !== null && song.library.length_source ? LENGTH_SOURCE_WORDS[song.library.length_source] : null;
   if (why) title.push(why);
+  const was = keyWas(song.library, now);
+  if (was) title.push(`Key changed in Playback from ${was} to ${song.library.key} in the last day`);
   return { text: facts.join(" · "), title: title.join(". ") };
 }
 

@@ -993,7 +993,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
 
 describe("the song map on the panel's timeline (the Playback library's arrangement and waveform)", () => {
   const libSong = (over: Record<string, unknown> = {}) => ({
-    setlist_song_id: 2000001, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", bpm: 65, scan_length_s: 330, countdown_length_s: 330,
+    setlist_song_id: 2000001, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
     length_source: "last_measure", arrangement: "Default", section_count: 3,
     sections: [{ name: "Count Off", start: 0, end: 4 }, { name: "Verse 1", start: 4, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
     artwork: null, rental_expires_utc: null, ...over,

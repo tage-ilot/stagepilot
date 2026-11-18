@@ -192,6 +192,10 @@ pub struct LibrarySong {
     /// The key it is played in, and the key of the original recording.
     pub key: Option<String>,
     pub key_original: Option<String>,
+    /// The key it had BEFORE the last change StagePilot noticed in Playback (`key_watch`), with the moment it noticed
+    /// (RFC 3339, UTC). Both null when no change was seen. Sent however old: the window decides how long it shows.
+    pub key_was: Option<String>,
+    pub key_changed_at: Option<String>,
     pub bpm: Option<f64>,
     /// The start of the song's last measure, in seconds, which is where the song goes quiet (the
     /// helper's `scan_length_s`, the same number StagePilot's own scan measures). Null for a song
@@ -542,6 +546,8 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         title,
         key: key_name(item, "key"),
         key_original: key_name(item, "key_original"),
+        key_was: None,
+        key_changed_at: None,
         bpm: number_in(item, "bpm", 1000.0),
         scan_length_s,
         countdown_length_s: resolved.map(|(seconds, _)| seconds),
@@ -1109,6 +1115,8 @@ mod tests {
             title: title.into(),
             key: Some("G".into()),
             key_original: Some("G".into()),
+            key_was: None,
+            key_changed_at: None,
             bpm: Some(72.0),
             scan_length_s: Some(300.0),
             countdown_length_s: Some(300.0),
@@ -1268,6 +1276,35 @@ mod tests {
             .iter()
             .all(|m| m.status == PlanMatch::DuplicateInPlan));
         assert!(result.iter().all(|m| m.library.is_none()));
+    }
+
+    #[test]
+    fn a_song_says_which_key_it_had_before_a_change_only_when_one_was_seen() {
+        let plain = serde_json::to_value(song("Song One", 1)).unwrap();
+        assert_eq!(plain["key_was"], Value::Null);
+        assert_eq!(plain["key_changed_at"], Value::Null);
+        assert_eq!(
+            plain["key_original"],
+            json!("G"),
+            "the original key is still sent"
+        );
+        let mut changed = song("Song One", 1);
+        changed.key = Some("Ab".into());
+        changed.key_was = Some("G".into());
+        changed.key_changed_at = Some("2026-11-20T03:00:00Z".into());
+        let value = serde_json::to_value(changed).unwrap();
+        assert_eq!(value["key"], json!("Ab"));
+        assert_eq!(value["key_was"], json!("G"));
+        assert_eq!(value["key_changed_at"], json!("2026-11-20T03:00:00Z"));
+        // The helper never says it: reading a setlist never makes it up.
+        let parsed = parse_setlist(&json!({"items": [{"title": "Song One", "key": {"name": "Ab"}, "key_was": {"name": "C"}}]})).unwrap();
+        assert_eq!(
+            (
+                parsed.songs[0].key_was.clone(),
+                parsed.songs[0].key_changed_at.clone()
+            ),
+            (None, None)
+        );
     }
 
     #[test]

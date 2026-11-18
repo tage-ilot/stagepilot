@@ -59,7 +59,8 @@ import { useSongWaveform } from "../hooks/useSongWaveform";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { SongsStrip, type SongChip } from "./SongsStrip";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import { chipLibrary } from "./playbackLibrary";
+import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
+import { anyKeyWas, chipLibrary } from "./playbackLibrary";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40, shortLightingMessage } from "./liveLink";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
@@ -515,9 +516,11 @@ export function LightingSetupPanel({
     setPendingClear(clearSongRequest(song.title, counts, () => saveEmpty(song, method, cueMaps?.[key]?.effects)));
   };
   // What the optional Playback library says about each plan song (nothing while it is off or has not answered).
+  // A key changed in Playback is said for a day ("Ab (was G)"): while one shows, the chips are made again every minute.
+  const keyClock = useKeyChangeClock((at) => anyKeyWas(library?.plan, at));
   const libraryChips = useMemo(
-    () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = chipLibrary(song); return chip ? [[song.key, chip] as const] : []; })),
-    [library?.plan],
+    () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = chipLibrary(song, keyClock); return chip ? [[song.key, chip] as const] : []; })),
+    [library?.plan, keyClock],
   );
   // The selected song's arrangement and waveform from the Playback library, for the timeline's song map: only a song that is paired
   // (same key as the Songs strip) with current data. The waveform is asked for only while the song map is switched on.

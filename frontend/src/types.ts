@@ -1025,6 +1025,9 @@ export interface LibrarySong {
   title: string;
   key: string | null;
   key_original: string | null;
+  /** The key it had BEFORE the last change StagePilot noticed in Playback, and when it noticed (RFC 3339, UTC); null when none was seen. Sent however old: the window shows it for a day only. */
+  key_was: string | null;
+  key_changed_at: string | null;
   bpm: number | null;
   /** The start of the song's last measure (the helper's `scan_length_s`). Null: no beat grid. */
   scan_length_s: number | null;

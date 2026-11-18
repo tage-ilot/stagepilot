@@ -39,6 +39,7 @@
 //! * Every failure is one short plain sentence.
 //! * Library data is held in memory only.
 
+use crate::playback_key_watch::KeyWatchStore;
 use crate::runtime::Runtime;
 use crate::validation::{http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
@@ -462,6 +463,8 @@ pub struct PlaybackLibrary {
     /// The setlist the operator chose for one plan (the plan's id, Playback's setlist number). In memory only: it
     /// ends with the program, and it belongs to that plan alone (another plan, or none, ignores it).
     choice: std::sync::Mutex<Option<(String, i64)>>,
+    /// The keys last seen for Playback's setlist songs, to tell when one was changed (`playback-keys.json`).
+    keys_seen: std::sync::Mutex<KeyWatchStore>,
 }
 
 impl Default for PlaybackLibrary {
@@ -500,7 +503,15 @@ impl PlaybackLibrary {
             key_gate: std::sync::Mutex::new(()),
             wall: std::sync::Mutex::new(Box::new(system_seconds)),
             choice: std::sync::Mutex::new(None),
+            keys_seen: std::sync::Mutex::new(KeyWatchStore::in_memory()),
         }
+    }
+
+    /// Keeps the keys it has seen in `path`, so a restart does not forget a change (the product; tests and the demo
+    /// hold them in memory only).
+    pub fn with_key_memory_file(self, path: impl Into<std::path::PathBuf>) -> Self {
+        *self.keys_seen.lock().unwrap_or_else(|p| p.into_inner()) = KeyWatchStore::file(path);
+        self
     }
 
     /// The key, when there is one that is fit to use. Never logged, never returned by a route.
@@ -579,6 +590,11 @@ impl PlaybackLibrary {
         self.forget();
         *self.inner.lock().await = Inner::default();
         *self.choice.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        // Another computer (or none) is another Playback: its song numbers mean other songs.
+        self.keys_seen
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
     }
 
     /// The setlist the operator chose for this plan, if any.
@@ -822,6 +838,8 @@ impl PlaybackLibrary {
             title: String::new(),
             key: None,
             key_original: None,
+            key_was: None,
+            key_changed_at: None,
             bpm: None,
             scan_length_s: None,
             countdown_length_s: None,
@@ -877,6 +895,8 @@ impl PlaybackLibrary {
                     }
                 }
                 self.read_song_details(base, &mut parsed).await;
+                // The setlist was read in full just now: the one place the keys are compared with the last time.
+                self.note_keys(&mut parsed);
                 let others = match ask {
                     SetlistAsk::Id(_) => self.recent_setlists(base).await,
                     SetlistAsk::Date(_) => Vec::new(),
@@ -894,6 +914,19 @@ impl PlaybackLibrary {
             503 => Ok(Fetched::Waiting),
             other => Err(Failure::Status(other)),
         }
+    }
+
+    /// Compares each song's key with the one seen the time before (no request: the setlist is already read) and puts
+    /// `key_was` and `key_changed_at` on the songs whose key was changed.
+    fn note_keys(&self, setlist: &mut ParsedSetlist) {
+        let now = Utc::now()
+            + chrono::Duration::milliseconds(
+                i64::try_from(self.skew_ms.load(Ordering::Relaxed)).unwrap_or(0),
+            );
+        self.keys_seen
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .observe(&mut setlist.songs, now);
     }
 
     async fn read_song_details(&self, base: &str, setlist: &mut ParsedSetlist) {

@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { LibraryPlan, LibrarySection, LibrarySong } from "../types";
@@ -21,9 +21,9 @@ const chips = () => within(screen.getByTestId("library-songs")).getAllByRole("li
 
 describe("the song chips in the Playback config", () => {
   it("shows one chip per plan song, in plan order, with the title and key, BPM and length under it", () => {
-    mount(planOf([planSong("Song Two", 1), planSong("Song One", 2, { library: library({ key: "G", key_original: "G", bpm: 72.4, countdown_length_s: 300 }) })]));
+    mount(planOf([planSong("Song Two", 1), planSong("Song One", 2, { library: library({ key: "G", key_original: "G", key_was: null, key_changed_at: null, bpm: 72.4, countdown_length_s: 300 }) })]));
     const [first, second] = chips();
-    expect(first).toHaveTextContent("Song TwoAb (was C) · 65 BPM · 6:29");
+    expect(first).toHaveTextContent("Song TwoAb · 65 BPM · 6:29");
     expect(second).toHaveTextContent("Song OneG · 72.4 BPM · 5:00");
     expect(chips().map((chip) => chip.dataset.song)).toEqual(["k1", "k2"]);
   });
@@ -57,7 +57,7 @@ describe("the song chips in the Playback config", () => {
   it("shows no cover box at all for a song with no picture (an old helper, or none stored)", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ artwork: null }) })]));
     expect(chips()[0]!.querySelector("img")).toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb · 65 BPM · 6:29");
   });
 
   it("draws the arrangement as one block per section, in order, as wide as the time it plays, tinted like Playback", () => {
@@ -108,7 +108,7 @@ describe("the song chips in the Playback config", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ sections: [], section_count: null }) })]));
     expect(within(chips()[0]!).queryByRole("img")).toBeNull();
     expect(chips()[0]!.querySelector("img")).not.toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb · 65 BPM · 6:29");
   });
 
   it("says an uncertain pair is only a maybe: the Playback title, no cover, no bar, nothing taken from it", () => {
@@ -154,5 +154,47 @@ describe("the song chips in the Playback config", () => {
   it("keeps showing the chips (marked old by the status) while Playback does not answer for a moment", () => {
     mount(planOf([planSong("Song One", 1)], { stale: true, message: "Playback did not answer just now; this is what it said a moment ago." }));
     expect(chips()).toHaveLength(1);
+  });
+});
+
+describe("a key changed in Playback on the song chips", () => {
+  const changedAt = "2026-11-20T03:00:00Z";
+  const changed = () => planOf([planSong("Song One", 1, { library: library({ key: "Ab", key_was: "G", key_changed_at: changedAt }) })]);
+  const clockAt = (iso: string) => { vi.useFakeTimers(); vi.setSystemTime(new Date(iso)); };
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("shows the plain key when the key was never seen to change", () => {
+    clockAt("2026-11-20T04:00:00Z");
+    mount(planOf([planSong("Song One", 1)]));
+    expect(chips()[0]).toHaveTextContent("Song OneAb · 65 BPM · 6:29");
+    expect(chips()[0]).not.toHaveTextContent("was");
+    expect(chips()[0]!.getAttribute("title")).not.toContain("Key changed");
+  });
+
+  it("shows Ab (was G) for a change made a moment ago, with the words in the hover", () => {
+    clockAt("2026-11-20T03:10:00Z");
+    mount(changed());
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 65 BPM · 6:29");
+    expect(chips()[0]).toHaveAttribute("title", expect.stringContaining("Key changed in Playback from G to Ab in the last day"));
+  });
+
+  it("goes back to Ab by itself when the day is over, with no reload", () => {
+    clockAt("2026-11-21T02:30:00Z");
+    mount(changed());
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 65 BPM");
+    act(() => { vi.advanceTimersByTime(29 * 60_000); });
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 65 BPM");
+    act(() => { vi.advanceTimersByTime(2 * 60_000); });
+    expect(chips()[0]).toHaveTextContent("Song OneAb · 65 BPM · 6:29");
+    expect(chips()[0]).not.toHaveTextContent("was");
+    expect(chips()[0]!.getAttribute("title")).not.toContain("Key changed");
+  });
+
+  it("is already plain for a change older than a day, and runs no timer for it", () => {
+    clockAt("2026-11-21T03:01:00Z");
+    const timers = vi.getTimerCount();
+    mount(changed());
+    expect(chips()[0]).toHaveTextContent("Song OneAb · 65 BPM · 6:29");
+    expect(vi.getTimerCount()).toBe(timers);
   });
 });
