@@ -47,22 +47,34 @@ export function LiveLinkField({ caption, className, children }: { caption: strin
  * THE one place the connection state is written down on the Live Link block: a dot AND words (never colour alone), announced
  * politely when it changes. `detail` (why it is not connected) rides in the tooltip and the accessible name, not in extra paragraphs.
  */
-export function LiveLinkPill({ text, tone, detail }: { text: string; tone: Tone; detail?: string | null }) {
-  const full = detail ? `sACN DMX Live Link: ${text}. ${detail}` : `sACN DMX Live Link: ${text}`;
+export function LiveLinkPill({ text, tone, detail, name = "sACN DMX Live Link", testId = "lightkey-link", second }: { text: string; tone: Tone; detail?: string | null; name?: string; testId?: string; second?: { text: string; tone: Tone } }) {
+  const said = second ? `${text}, ${second.text}` : text;
+  const full = detail ? `${name}: ${said}. ${detail}` : `${name}: ${said}`;
   return (
-    <span aria-label={full} aria-live="polite" className="live-link-pill inline-flex items-center gap-[7px] whitespace-nowrap rounded-ds-full border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink" data-testid="lightkey-link" data-tone={tone} role="status" title={full}>
-      <StatusDot ignoreAccent tone={tone} />
-      <span>{text}</span>
+    <span aria-label={full} aria-live="polite" className={`live-link-pill inline-flex items-center gap-[7px] ${second ? "flex-col items-start rounded-ds-xl sm:flex-row sm:items-center" : "whitespace-nowrap rounded-ds-full"} border border-edge bg-surface-950 px-3 py-[5px] text-[0.8125rem] leading-[1.45] text-ink`} data-testid={testId} data-tone={tone} role="status" title={full}>
+      <span className="inline-flex items-center gap-[7px]">
+        <StatusDot ignoreAccent tone={tone} />
+        <span>{text}</span>
+      </span>
+      {second && (
+        <>
+          <span aria-hidden="true" className="mx-0.5 hidden text-ink-muted sm:inline">&ndash;</span>
+          <span className="inline-flex items-center gap-[7px]">
+            <StatusDot ignoreAccent tone={second.tone} />
+            <span>{second.text}</span>
+          </span>
+        </>
+      )}
     </span>
   );
 }
 
-/** The bordered Live Link block: title, the state pill beside it, then whatever the caller lays out. */
-export function LiveLinkShell({ pill, className, testId, children }: { pill?: ReactNode; className?: string; testId?: string; children: ReactNode }) {
+/** The bordered Live Link block: title, the state pill beside it, then whatever the caller lays out. The Playback panel's block gives its own title. */
+export function LiveLinkShell({ pill, className, testId, title = "sACN DMX Live Link", children }: { pill?: ReactNode; className?: string; testId?: string; title?: string; children: ReactNode }) {
   return (
-    <section aria-label="sACN DMX Live Link" className={`live-link mt-6 rounded-ds-xl border border-edge bg-surface-panel-strong px-3 py-2.5 ${className ?? ""}`} data-testid={testId}>
+    <section aria-label={title} className={`live-link mt-6 rounded-ds-xl border border-edge bg-surface-panel-strong px-3 py-2.5 ${className ?? ""}`} data-testid={testId}>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <h3 className="text-base font-semibold text-ink">sACN DMX Live Link</h3>
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
         {pill}
       </div>
       {children}
@@ -72,7 +84,7 @@ export function LiveLinkShell({ pill, className, testId, children }: { pill?: Re
 
 const subButton = "!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]";
 
-function DisclosureButton({ open, controls, onToggle, children }: { open: boolean; controls: string; onToggle: () => void; children: ReactNode }) {
+export function DisclosureButton({ open, controls, onToggle, children }: { open: boolean; controls: string; onToggle: () => void; children: ReactNode }) {
   return (
     <Button aria-controls={controls} aria-expanded={open} className={subButton} onClick={onToggle} variant="secondary">
       {children}

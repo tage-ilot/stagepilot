@@ -5,6 +5,7 @@ pub mod arrangement;
 pub mod client;
 pub mod discovery;
 pub mod find;
+pub mod helper_assets;
 pub mod lengths;
 pub mod library;
 pub mod mapping;

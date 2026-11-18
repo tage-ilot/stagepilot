@@ -190,7 +190,7 @@ main
 // ---- the session -------------------------------------------------------------------------------
 
 /// Closing the extra listener when the session ends.
-pub struct ListenerGuard(tokio::task::JoinHandle<()>);
+pub struct ListenerGuard(pub(crate) tokio::task::JoinHandle<()>);
 
 impl Drop for ListenerGuard {
     fn drop(&mut self) {
@@ -433,7 +433,7 @@ impl HelperInstall {
     }
 }
 
-fn new_token() -> Result<String, String> {
+pub(crate) fn new_token() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|_| "The system could not make a random token.")?;
     Ok(hex::encode(bytes))
@@ -506,7 +506,7 @@ fn lighting_ipv4(rt: &Runtime) -> Option<Ipv4Addr> {
 
 // ---- serving -----------------------------------------------------------------------------------
 
-fn empty(status: StatusCode) -> Response {
+pub(crate) fn empty(status: StatusCode) -> Response {
     let mut response = status.into_response();
     response
         .headers_mut()
@@ -514,14 +514,14 @@ fn empty(status: StatusCode) -> Response {
     response
 }
 
-fn denied(reason: Denied) -> Response {
+pub(crate) fn denied(reason: Denied) -> Response {
     match reason {
         Denied::Forbidden => empty(StatusCode::FORBIDDEN),
         Denied::NotFound => empty(StatusCode::NOT_FOUND),
     }
 }
 
-fn body(content_type: &'static str, bytes: Vec<u8>) -> Response {
+pub(crate) fn body(content_type: &'static str, bytes: Vec<u8>) -> Response {
     let mut response = (StatusCode::OK, bytes).into_response();
     let headers = response.headers_mut();
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
@@ -534,6 +534,13 @@ fn body(content_type: &'static str, bytes: Vec<u8>) -> Response {
 }
 
 /// The check every served request goes through.
+pub(crate) fn peer_of(request: &Request) -> Option<IpAddr> {
+    request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip())
+}
+
 fn admit(svc: &HelperInstall, request: &Request, token: &str) -> Result<SessionInfo, Denied> {
     // Never through the remote tunnel: only the trusted ingress sets this.
     if request.extensions().get::<RemoteContext>().is_some() {
@@ -597,7 +604,7 @@ async fn dispatch(
     }
 }
 
-async fn nothing_here() -> Response {
+pub(crate) async fn nothing_here() -> Response {
     empty(StatusCode::NOT_FOUND)
 }
 
@@ -638,7 +645,7 @@ async fn open_listener(
 
 // ---- the routes the dashboard calls ------------------------------------------------------------------
 
-fn failure(status: u16, code: &str, detail: &str) -> Json {
+pub(crate) fn failure(status: u16, code: &str, detail: &str) -> Json {
     Json(
         StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
         json!({ "detail": detail, "code": code }),
@@ -646,14 +653,14 @@ fn failure(status: u16, code: &str, detail: &str) -> Json {
 }
 
 /// The main listener already reaches the LAN (LAN access on).
-fn main_listener_is_lan(rt: &Runtime, lan_ip: Ipv4Addr) -> bool {
+pub(crate) fn main_listener_is_lan(rt: &Runtime, lan_ip: Ipv4Addr) -> bool {
     match rt.settings.bind_host.parse::<IpAddr>() {
         Ok(ip) => ip.is_unspecified() || ip == IpAddr::V4(lan_ip),
         Err(_) => false,
     }
 }
 
-fn expires_text(ms: u64) -> String {
+pub(crate) fn expires_text(ms: u64) -> String {
     chrono::DateTime::from_timestamp_millis(ms as i64)
         .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
         .unwrap_or_default()
@@ -724,7 +731,7 @@ pub async fn delete(State(rt): State<Arc<Runtime>>) -> Json {
     ok(json!({ "ended": rt.helper_install.end() }))
 }
 
-fn parse_address(raw: &[u8]) -> Result<Option<Ipv4Addr>, Json> {
+pub(crate) fn parse_address(raw: &[u8]) -> Result<Option<Ipv4Addr>, Json> {
     if raw.iter().all(u8::is_ascii_whitespace) {
         return Ok(None);
     }

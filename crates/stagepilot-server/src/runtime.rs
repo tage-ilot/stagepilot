@@ -60,8 +60,10 @@ pub struct Runtime {
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
     pub helper_install: Arc<crate::helper_install::HelperInstall>,
-    /// The optional Playback library (read-only; asks only while a window asks, and only when on).
+    /// The optional Playback library (read-only; asks only while a window asks, and not at all once forgotten).
     pub playback_library: Arc<crate::playback_library::PlaybackLibrary>,
+    /// The one-time "Set up the Playback computer" session (token, expiry, optional listener).
+    pub playback_helper_install: Arc<crate::playback_helper_install::PlaybackHelperInstall>,
 }
 
 /// How often a keychain that has not answered is asked again.
@@ -233,6 +235,17 @@ impl Runtime {
         // Registration order is the health order Python reports: lights, services, the Playback
         // input (real MIDI or the Playback API), then ProPresenter.
         register(&plugins, outputs.lights.clone() as Arc<dyn Plugin>);
+        // The key StagePilot makes for the Playback helper: the OS keychain in the product, memory for demo and tests
+        // (the same choice as the Planning Center tokens).
+        let library_credentials: Arc<dyn stagepilot_core::settings::CredentialStore> =
+            if options.memory_tokens {
+                Arc::new(stagepilot_core::settings::MemoryCredentialStore::default())
+            } else {
+                Arc::new(stagepilot_core::settings::KeyringCredentialStore::playback_library())
+            };
+        let playback_library = Arc::new(
+            crate::playback_library::PlaybackLibrary::with_credentials(library_credentials),
+        );
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
             let demo = Arc::new(
@@ -293,7 +306,12 @@ impl Runtime {
             keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
             keychain_watch: Mutex::new(None),
             helper_install: Arc::new(crate::helper_install::HelperInstall::new()),
-            playback_library: Arc::new(crate::playback_library::PlaybackLibrary::new()),
+            playback_helper_install: Arc::new(
+                crate::playback_helper_install::PlaybackHelperInstall::new(
+                    playback_library.clone(),
+                ),
+            ),
+            playback_library,
         });
         runtime.note_keychain_state();
         runtime

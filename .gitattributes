@@ -1,2 +1,4 @@
 # The vendored Lightkey helper is hashed byte for byte: never convert line endings.
 crates/stagepilot-lights/assets/lightkey-helper/* -text
+# The vendored Playback helper is hashed byte for byte: never convert line endings.
+crates/stagepilot-playback/assets/playback-helper/* -text

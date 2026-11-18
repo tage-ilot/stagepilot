@@ -228,8 +228,12 @@ export interface PersistentSettings {
     debounce_ms: number;
   };
   playback_api?: PlaybackApiSettings;
-  /** The optional Playback library; left out of the file while it is off (mirrors the generated `PlaybackLibrarySettings`). */
-  playback_library?: { enabled: boolean; address: string };
+  /**
+   * The Playback library (the network script). Left out of the file until something is set. `enabled` is no longer a switch: absent = never
+   * paired, `true` = has been in use, `false` = forgotten. `address` is the optional override of the helper's computer (empty: the saved Playback host).
+   * Mirrors the generated `PlaybackLibrarySettings`.
+   */
+  playback_library?: { enabled?: boolean | null; address: string };
   lights: LightsSettings;
   propresenter: {
     enabled: boolean;
@@ -489,6 +493,18 @@ export interface LightkeyHelperInstall {
   lan_ip: string;
   port: number;
   /** The helper version StagePilot carries and installs. */
+  bundled_version: string;
+}
+
+/** POST /api/v1/playback-library/helper-install: the one command that sets up the Playback computer. It holds the one-time address only. */
+export interface PlaybackHelperInstall {
+  command: string;
+  url: string;
+  /** ISO time the command stops working (30 minutes after it was made or last extended). */
+  expires_at: string;
+  lan_ip: string;
+  port: number;
+  /** The network script version StagePilot carries and installs. */
   bundled_version: string;
 }
 
@@ -965,8 +981,26 @@ export interface DashboardAccess {
 export type LibraryState = "off" | "ready" | "waiting" | "no_setlist" | "problem";
 export type PlanMatch = "matched" | "missing" | "duplicate_in_plan" | "duplicate_in_playback";
 
+/** Where the network script (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
+export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable" | "forgotten";
+
+export interface LibraryHelper {
+  state: HelperState;
+  /** The version it reported, when it answered. */
+  version: string | null;
+  /** The version carried inside this StagePilot (what the setup command installs). */
+  bundled_version: string;
+  message: string;
+  /** A key exists (made when the first setup session was opened). The key itself is never sent to the window. */
+  paired: boolean;
+}
+
 export interface LibraryStatus {
+  /** The library is in use: the script is ready or outdated, or was and is silent now. */
   enabled: boolean;
+  /** `helper.state` is ready or outdated: the one gate for every library feature. */
+  active: boolean;
+  helper: LibraryHelper;
   address: string;
   state: LibraryState;
   message: string;

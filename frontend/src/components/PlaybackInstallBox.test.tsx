@@ -1,0 +1,175 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as api from "../api";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import { libraryController } from "../test/libraryFixtures";
+import type { HelperState, PlaybackHelperInstall } from "../types";
+import { PlaybackInstallBox } from "./PlaybackInstallBox";
+
+vi.mock("../api", async (original) => ({
+  ...(await original<typeof import("../api")>()),
+  startPlaybackHelperInstall: vi.fn(),
+  endPlaybackHelperInstall: vi.fn(),
+}));
+
+const made = (minutes = 30): PlaybackHelperInstall => ({
+  command: "curl -fsS http://192.168.1.20:8000/playback-helper/abc123/install.sh | sh",
+  url: "http://192.168.1.20:8000/playback-helper/abc123/install.sh",
+  expires_at: new Date(Date.now() + minutes * 60_000).toISOString(),
+  lan_ip: "192.168.1.20",
+  port: 8000,
+  bundled_version: "0.3.0",
+});
+const box = (library: PlaybackLibraryController, hasComputer = true) => <PlaybackInstallBox hasComputer={hasComputer} library={library} />;
+
+beforeEach(() => {
+  vi.mocked(api.endPlaybackHelperInstall).mockResolvedValue({ ended: true });
+});
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
+
+describe("PlaybackInstallBox", () => {
+  it("offers the setup button while the script is not ready, and says it runs on the Playback computer without internet", () => {
+    render(box(libraryController("not_installed")));
+    expect(screen.getByRole("region", { name: "Set up the Playback computer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set up the Playback computer" })).toBeEnabled();
+    expect(screen.getByTestId("playback-install")).toHaveTextContent(/Terminal on the Playback computer/);
+    expect(screen.getByTestId("playback-install")).toHaveTextContent(/no internet/);
+    expect(api.startPlaybackHelperInstall).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not_installed", /optional/],
+    ["needs_key", /does not know this StagePilot/],
+    ["unreachable", /cannot reach the network script/],
+    ["forgotten", /forgot the network script/],
+    ["outdated", /older than the one StagePilot carries/],
+  ] as [HelperState, RegExp][])("says why in plain words for a %s script", (state, words) => {
+    render(box(libraryController(state)));
+    expect(screen.getByTestId("playback-install")).toHaveTextContent(words);
+  });
+
+  it("is called Update the network script when the script is outdated", () => {
+    render(box(libraryController("outdated")));
+    expect(screen.getByRole("button", { name: "Update the network script" })).toBeEnabled();
+  });
+
+  it("shows nothing when the script is ready or has not answered yet", () => {
+    for (const library of [libraryController("ready"), libraryController("not_installed", { status: null })]) {
+      const { unmount } = render(box(library));
+      expect(screen.queryByTestId("playback-install")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("makes the command, shows only its one-time address, copies it, and counts down", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    const library = libraryController("not_installed");
+    render(box(library));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    expect(await screen.findByTestId("playback-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/playback-helper/abc123/install.sh | sh");
+    expect(api.startPlaybackHelperInstall).toHaveBeenCalledWith(undefined);
+    expect(screen.getByTestId("playback-install-label")).toHaveTextContent("Network script for the Playback computer:");
+    expect(screen.getByTestId("playback-install-waiting")).toHaveTextContent(/Waiting for the network script… The command works for 30:00 more, on this network only\./);
+    expect(screen.getByTestId("playback-install-ready")).toHaveTextContent(/Terminal/);
+    expect(screen.getByTestId("playback-install-ready")).toHaveTextContent(/needs no internet/);
+    // The window looks every few seconds while it waits.
+    expect(library.watch).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(made().command);
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("never shows a key: nothing on screen is the length of one", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    render(box(libraryController("not_installed")));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    await screen.findByTestId("playback-install-command");
+    // A key is 43 characters of base64url with no spaces; the command's own words have none that long except the URL.
+    const long = (document.body.textContent ?? "").split(/\s+/).filter((word) => /^[A-Za-z0-9_-]{43}$/.test(word));
+    expect(long).toEqual([]);
+  });
+
+  it("Cancel ends the session at once and goes back to the button", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    const library = libraryController("not_installed");
+    render(box(library));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    await screen.findByTestId("playback-install-command");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.endPlaybackHelperInstall).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("playback-install-command")).toBeNull();
+    expect(screen.getByRole("button", { name: "Set up the Playback computer" })).toBeInTheDocument();
+    expect(library.watch).toHaveBeenLastCalledWith(false);
+  });
+
+  it("ends itself when the script answers: it announces that, closes the box and ends the session", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    const { rerender } = render(box(libraryController("not_installed")));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    await screen.findByTestId("playback-install-command");
+    rerender(box(libraryController("ready")));
+    await waitFor(() => expect(screen.getByTestId("playback-install-done")).toBeInTheDocument());
+    expect(screen.getByTestId("playback-install-live")).toHaveTextContent("The network script is ready.");
+    expect(api.endPlaybackHelperInstall).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("playback-install-command")).toBeNull();
+  });
+
+  it("an update ends only when the script is ready again, not while it is still outdated", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    const { rerender } = render(box(libraryController("outdated")));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Update the network script" }));
+    await screen.findByTestId("playback-install-command");
+    rerender(box(libraryController("outdated")));
+    expect(screen.getByTestId("playback-install-command")).toBeInTheDocument();
+    rerender(box(libraryController("ready")));
+    await waitFor(() => expect(screen.getByTestId("playback-install-done")).toBeInTheDocument());
+  });
+
+  it("says when the command has expired and makes a new one", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValueOnce(made(1)).mockResolvedValueOnce(made());
+    render(box(libraryController("not_installed")));
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    await screen.findByTestId("playback-install-command");
+    await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
+    expect(screen.getByRole("alert")).toHaveTextContent("That command has expired. Make a new one.");
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole("button", { name: "Make a new command" }));
+    expect(await screen.findByTestId("playback-install-command")).toBeInTheDocument();
+  });
+
+  it("asks for this computer's address on the Playback network when StagePilot cannot find it (409), then uses it", async () => {
+    vi.mocked(api.startPlaybackHelperInstall)
+      .mockRejectedValueOnce(new api.ApiError("Could not find this computer's address on the Playback network", 409))
+      .mockResolvedValueOnce(made());
+    render(box(libraryController("not_installed")));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not find this computer's address on the Playback network");
+    expect(screen.getByText("This computer's address on the Playback network")).toBeInTheDocument();
+    const use = screen.getByRole("button", { name: "Use this address" });
+    expect(use).toBeDisabled();
+    await user.type(screen.getByLabelText("This computer's address"), " 192.168.1.20 ");
+    await user.click(use);
+    expect(api.startPlaybackHelperInstall).toHaveBeenLastCalledWith("192.168.1.20");
+    expect(await screen.findByTestId("playback-install-command")).toBeInTheDocument();
+  });
+
+  it("another failure is one plain sentence with Try again, and no address field", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockRejectedValueOnce(new api.ApiError("The secure credential store is not answering.", 503));
+    render(box(libraryController("not_installed")));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Set up the Playback computer" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByLabelText("This computer's address")).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
+  it("with no Playback computer chosen it asks for that first instead of offering a command", () => {
+    render(box(libraryController("not_installed", { target: "" }), false));
+    expect(screen.getByTestId("playback-install-need-computer")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set up the Playback computer" })).toBeNull();
+  });
+});

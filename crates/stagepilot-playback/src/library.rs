@@ -36,11 +36,59 @@ pub enum LibraryState {
     Problem,
 }
 
+/// Where the helper on the Playback computer (the "network script") stands. Only `ready` and
+/// `outdated` let the library feed anything; every other state is quiet (no notice anywhere),
+/// except that a helper that was ready and has gone silent (`unreachable`) may say so in the
+/// header pill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum HelperState {
+    /// Nothing answers at the helper's address and it was never paired.
+    NotInstalled,
+    /// It answers but refuses this StagePilot (no key, a different key, or a limit from an old install).
+    NeedsKey,
+    /// It answers and works but is older than the one bundled in StagePilot, or has no key set.
+    Outdated,
+    /// It answers to StagePilot's key and is the bundled version or newer.
+    Ready,
+    /// It was in use and does not answer now.
+    Unreachable,
+    /// The operator forgot it: the key was deleted, so it cannot be used.
+    Forgotten,
+}
+
+impl HelperState {
+    /// The library is used (chips, arrangement, notices, the timeline song map) only in these.
+    pub fn is_active(self) -> bool {
+        matches!(self, HelperState::Ready | HelperState::Outdated)
+    }
+}
+
+/// The helper's state in `GET /api/v1/playback-library/status`. The key is never part of it.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct HelperStatus {
+    pub state: HelperState,
+    /// The version the helper reported, when it answered.
+    pub version: Option<String>,
+    /// The version bundled in this StagePilot (what the install command installs).
+    pub bundled_version: String,
+    /// One plain sentence for the operator, never empty.
+    pub message: String,
+    /// A key exists (StagePilot made one when a setup session was first opened).
+    pub paired: bool,
+}
+
 /// What `GET /api/v1/playback-library/status` says.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct LibraryStatus {
+    /// The library is in use: the helper is `ready` or `outdated`, or was and is silent now.
     pub enabled: bool,
+    /// The network script's own state (`helper.state` is `ready` or `outdated`): the one gate for library features.
+    pub active: bool,
+    pub helper: HelperStatus,
     /// As saved (`http://host[:port]`), empty when none.
     pub address: String,
     pub state: LibraryState,
@@ -309,6 +357,10 @@ pub struct Health {
     /// The helper's `library_revision`: an opaque token that differs whenever Playback's database
     /// changed. Compared for equality only. Absent on helper 0.1.x, and then "not available".
     pub library_revision: Option<String>,
+    /// What the helper says about authentication: `key` (this answer was signed and accepted), `none`
+    /// (no key is set: anyone may ask), `required` (the bare answer of a keyed helper), `key_too_short`.
+    /// Absent on helper 0.2.0 and older.
+    pub auth: Option<String>,
 }
 
 /// Reads `GET /health`. Anything odd gives `Database::Unknown`, never a panic.
@@ -329,6 +381,51 @@ pub fn parse_health(value: &Value) -> Health {
         songs: count_of(value, "songs"),
         setlists: count_of(value, "setlists"),
         library_revision: text_of(value, "library_revision").map(|v| v.chars().take(64).collect()),
+        auth: text_of(value, "auth").map(|v| v.chars().take(20).collect()),
+    }
+}
+
+/// Which state an answer of `GET /health` puts the helper in. The question was signed when StagePilot
+/// has a key, so `auth: "key"` is the one answer that proves the key works.
+pub fn helper_state_for(health: &Health) -> HelperState {
+    match health.auth.as_deref() {
+        Some("key") => {
+            if crate::helper_assets::is_older_than_bundled(health.version.as_deref()) {
+                HelperState::Outdated
+            } else {
+                HelperState::Ready
+            }
+        }
+        // The bare answer of a keyed helper (we sent no valid signature) or a key it cannot use.
+        Some("required") | Some("key_too_short") => HelperState::NeedsKey,
+        // `none` (0.3.0 with no key set) and no field at all (0.2.0): it answers anyone, and it is not the
+        // keyed helper this StagePilot installs, so the update is offered; it keeps working meanwhile.
+        _ => HelperState::Outdated,
+    }
+}
+
+/// The one plain sentence for a helper state.
+pub fn helper_words(state: HelperState, version: Option<&str>) -> String {
+    let version = version
+        .filter(|v| !v.is_empty())
+        .map_or(String::new(), |v| format!(" (version {v})"));
+    match state {
+        HelperState::NotInstalled => {
+            "The network script is not installed on the Playback computer.".to_string()
+        }
+        HelperState::NeedsKey => {
+            "The network script does not know this StagePilot yet. Run the setup command again."
+                .to_string()
+        }
+        HelperState::Outdated => format!(
+            "The network script{version} can be updated. It still works; run the setup command to update it."
+        ),
+        HelperState::Ready => format!("The network script{version} is ready."),
+        HelperState::Unreachable => "The network script did not answer.".to_string(),
+        HelperState::Forgotten => {
+            "StagePilot forgot the network script. Run the setup command to use it again."
+                .to_string()
+        }
     }
 }
 
@@ -715,6 +812,45 @@ pub fn match_plan(plan: &[PlanTitle], playback: &[LibrarySong]) -> Vec<LibraryPl
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn what_the_helper_says_about_authentication_decides_its_state() {
+        let state = |auth: Option<&str>, version: &str| {
+            helper_state_for(&parse_health(&json!({
+                "ok": true, "version": version, "database": "ok", "auth": auth
+            })))
+        };
+        assert_eq!(state(Some("key"), "0.3.0"), HelperState::Ready);
+        assert_eq!(state(Some("key"), "0.10.0"), HelperState::Ready);
+        assert_eq!(
+            state(Some("key"), "0.2.9"),
+            HelperState::Outdated,
+            "older than the bundled one"
+        );
+        assert_eq!(
+            state(Some("none"), "0.3.0"),
+            HelperState::Outdated,
+            "no key set on the helper"
+        );
+        assert_eq!(
+            state(None, "0.2.0"),
+            HelperState::Outdated,
+            "0.2.0 has no auth field at all"
+        );
+        assert_eq!(state(Some("required"), "0.3.0"), HelperState::NeedsKey);
+        assert_eq!(state(Some("key_too_short"), "0.3.0"), HelperState::NeedsKey);
+        assert!(HelperState::Ready.is_active() && HelperState::Outdated.is_active());
+        for quiet in [
+            HelperState::NotInstalled,
+            HelperState::NeedsKey,
+            HelperState::Unreachable,
+            HelperState::Forgotten,
+        ] {
+            assert!(!quiet.is_active(), "{quiet:?}");
+            assert!(!helper_words(quiet, None).is_empty());
+        }
+        assert!(helper_words(HelperState::Ready, Some("0.3.0")).contains("0.3.0"));
+    }
 
     fn song(title: &str, order: u32) -> LibrarySong {
         LibrarySong {

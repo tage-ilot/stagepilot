@@ -1,6 +1,7 @@
 //! The optional Playback library, against a fake helper (an axum server on a loopback port): every
-//! state the real helper can be in, the request rules (off means off, at most one ask per 30 s, 3 s,
-//! size cap, no redirect, no waveform) and the routes. No real helper, no rig.
+//! state the real helper can be in, the key it is asked with, the request rules (forgotten means nothing
+//! is asked, at most one ask per 30 s, 3 s, size cap, no redirect, no waveform) and the routes. No real
+//! helper, no rig.
 
 use axum::body::Body;
 use axum::extract::{ConnectInfo, State};
@@ -13,8 +14,10 @@ use serde_json::{json, Value};
 use stagepilot_core::config::PlaybackLibrarySettings;
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
 use stagepilot_core::state::{ServicePlan, Song};
-use stagepilot_playback::library::{LengthSource, LibraryPlan, LibraryState, PlanMatch};
-use stagepilot_server::playback_library::{base_url, PlaybackLibrary};
+use stagepilot_playback::library::{
+    HelperState, LengthSource, LibraryPlan, LibraryState, PlanMatch,
+};
+use stagepilot_server::playback_library::{base_url, sign, PlaybackLibrary};
 use stagepilot_server::{build_app, AppOptions, OutputBackends, Runtime};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -57,6 +60,13 @@ struct Behaviour {
     wave_delay: Duration,
     /// The query string of each waveform ask.
     wave_queries: Vec<String>,
+    /// The helper's key: when set it answers the way helper 0.3.0 does (a signed request, or 401; the bare
+    /// `/health` answers the minimal body).
+    key: Option<String>,
+    /// The time the helper believes it is, seconds since the epoch.
+    clock: u64,
+    /// Each request's `X-PBL-Time`, `X-PBL-Sig` and request target (path and query) as the helper saw them.
+    signed: Vec<(Option<String>, Option<String>, String)>,
 }
 
 #[derive(Clone)]
@@ -152,6 +162,17 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
     let (delay, broken, redirect) = {
         let mut b = helper.inner.lock().unwrap();
         b.hits.push(uri.path().to_string());
+        let text = |name: &str| {
+            headers
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string)
+        };
+        let target = uri
+            .path_and_query()
+            .map_or(uri.path().to_string(), |t| t.as_str().to_string());
+        b.signed
+            .push((text("x-pbl-time"), text("x-pbl-sig"), target));
         let mut delay_extra = Duration::ZERO;
         if uri.path().ends_with("/waveform") {
             b.wave_queries
@@ -187,6 +208,28 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
     }
     let b = helper.inner.lock().unwrap();
     let path = uri.path();
+    let mut authenticated = false;
+    if let Some(key) = &b.key {
+        let (stamp, sig, target) = b.signed.last().cloned().unwrap();
+        let valid = match (&stamp, &sig) {
+            (Some(stamp), Some(sig)) => stamp.parse::<u64>().is_ok_and(|time| {
+                time.abs_diff(b.clock) <= 120 && sign(key, &target, time) == *sig
+            }),
+            _ => false,
+        };
+        if !valid {
+            if path == "/health" && stamp.is_none() && sig.is_none() {
+                return (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    json!({"ok": true, "name": "playback-library", "version": "0.3.0", "auth": "required"}).to_string(),
+                )
+                    .into_response();
+            }
+            return (StatusCode::UNAUTHORIZED, "{\"error\": \"key required\"}").into_response();
+        }
+        authenticated = true;
+    }
     let json_ok = |v: Value| {
         (
             StatusCode::OK,
@@ -199,7 +242,11 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
         if b.huge_health {
             return (StatusCode::OK, "x".repeat(300 * 1024)).into_response();
         }
-        return json_ok(b.health.clone().unwrap());
+        let mut health = b.health.clone().unwrap();
+        if authenticated {
+            health["auth"] = json!("key");
+        }
+        return json_ok(health);
     }
     if let Some(date) = path.strip_prefix("/setlists/") {
         let setlist = |performance_date: &str| json!({"setlist_id": 1, "title": "Set For Test", "performance_date": performance_date, "items": b.items});
@@ -273,8 +320,16 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
 
 fn settings_for(address: &str) -> PlaybackLibrarySettings {
     PlaybackLibrarySettings {
-        enabled: true,
+        enabled: None,
         address: address.to_string(),
+    }
+}
+
+/// The same settings once the helper has been in use (`enabled: true` is saved the first time it answers).
+fn in_use(settings: &PlaybackLibrarySettings) -> PlaybackLibrarySettings {
+    PlaybackLibrarySettings {
+        enabled: Some(true),
+        ..settings.clone()
     }
 }
 
@@ -416,12 +471,25 @@ async fn a_computer_that_is_not_there_is_one_sentence() {
         l.local_addr().unwrap().port()
     };
     let library = PlaybackLibrary::new();
+    // Never in use: nothing is installed there, and that is not a warning anywhere.
     let settings = settings_for(&format!("127.0.0.1:{closed}"));
     let status = library.status(&settings, false).await;
+    assert_eq!(status.helper.state, HelperState::NotInstalled);
+    assert_eq!((status.enabled, status.active), (false, false));
+    assert_eq!(status.state, LibraryState::Off);
+    let result = library
+        .plan(&settings, Some(&plan("2026-11-22", &["Song One"])), false)
+        .await;
+    assert_eq!((result.state, result.enabled), (LibraryState::Off, false));
+    // It was in use: now it has gone quiet, which is the one thing that may be said.
+    let library = PlaybackLibrary::new();
+    let in_use = in_use(&settings);
+    let status = library.status(&in_use, false).await;
+    assert_eq!(status.helper.state, HelperState::Unreachable);
     assert_eq!(status.state, LibraryState::Problem);
     assert_eq!(status.message, "The Playback computer did not answer.");
     let result = library
-        .plan(&settings, Some(&plan("2026-11-22", &["Song One"])), false)
+        .plan(&in_use, Some(&plan("2026-11-22", &["Song One"])), false)
         .await;
     assert_eq!(result.state, LibraryState::Problem);
     assert_eq!(
@@ -437,7 +505,9 @@ async fn a_helper_that_never_answers_is_given_up_on_after_about_three_seconds() 
     let address = helper.serve().await;
     let library = PlaybackLibrary::new();
     let started = Instant::now();
-    let status = library.status(&settings_for(&address), false).await;
+    let status = library
+        .status(&in_use(&settings_for(&address)), false)
+        .await;
     let took = started.elapsed();
     assert_eq!(status.message, "The Playback computer did not answer.");
     assert!(
@@ -528,29 +598,31 @@ async fn a_plan_with_no_songs_and_no_plan_ask_nothing() {
 }
 
 #[tokio::test]
-async fn off_means_nothing_is_asked_and_no_address_is_a_sentence() {
+async fn forgotten_means_nothing_is_asked_and_no_address_is_a_sentence() {
     let helper = Helper::new();
     let address = helper.serve().await;
     let library = PlaybackLibrary::new();
-    let off = PlaybackLibrarySettings {
-        enabled: false,
+    // `enabled: false` with no key is what "Forget the network script" leaves (an old switch that was off reads so).
+    let forgotten = PlaybackLibrarySettings {
+        enabled: Some(false),
         address: address.clone(),
     };
-    let status = library.status(&off, true).await;
+    let status = library.status(&forgotten, true).await;
     assert_eq!((status.enabled, status.state), (false, LibraryState::Off));
+    assert_eq!(status.helper.state, HelperState::Forgotten);
+    assert!(!status.active);
     let result = library
-        .plan(&off, Some(&plan("2026-11-22", &["Song One"])), true)
+        .plan(&forgotten, Some(&plan("2026-11-22", &["Song One"])), true)
         .await;
     assert_eq!(result.state, LibraryState::Off);
     assert!(result.songs.is_empty());
     let blank = PlaybackLibrarySettings {
-        enabled: true,
+        enabled: None,
         address: String::new(),
     };
-    assert_eq!(
-        library.status(&blank, false).await.message,
-        "Enter the address of the Playback computer."
-    );
+    let status = library.status(&blank, false).await;
+    assert_eq!(status.message, "Choose the Playback computer first.");
+    assert_eq!(status.helper.state, HelperState::NotInstalled);
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
 }
@@ -632,24 +704,28 @@ async fn the_last_good_answer_stands_in_for_up_to_a_minute_and_says_so() {
 #[tokio::test]
 async fn a_refusal_a_redirect_and_an_oversized_or_odd_answer_are_one_sentence_each() {
     let words = |m: &str| m.to_string();
-    // 403: this computer is not on the helper's list.
+    // 403: this computer is not on the helper's list (an old install). Run the setup command again.
     let helper = Helper::new();
     helper.set(|b| b.broken = Some(403));
     let address = helper.serve().await;
     let status = PlaybackLibrary::new()
         .status(&settings_for(&address), false)
         .await;
+    assert_eq!(status.helper.state, HelperState::NeedsKey);
+    assert_eq!(
+        status.state,
+        LibraryState::Off,
+        "quiet: no warning for this"
+    );
     assert!(
-        status
-            .message
-            .starts_with("The Playback library refused this computer"),
+        status.message.contains("setup command again"),
         "{}",
         words(&status.message)
     );
     // 405 and other answers it does not know.
     helper.set(|b| b.broken = Some(405));
     let status = PlaybackLibrary::new()
-        .status(&settings_for(&address), false)
+        .status(&in_use(&settings_for(&address)), false)
         .await;
     assert_eq!(
         status.message,
@@ -661,7 +737,7 @@ async fn a_refusal_a_redirect_and_an_oversized_or_odd_answer_are_one_sentence_ea
         b.redirect = true;
     });
     let status = PlaybackLibrary::new()
-        .status(&settings_for(&address), false)
+        .status(&in_use(&settings_for(&address)), false)
         .await;
     assert_eq!(status.state, LibraryState::Problem);
     assert!(helper.hits().iter().all(|h| h == "/health"));
@@ -671,7 +747,7 @@ async fn a_refusal_a_redirect_and_an_oversized_or_odd_answer_are_one_sentence_ea
         b.huge_health = true;
     });
     let status = PlaybackLibrary::new()
-        .status(&settings_for(&address), false)
+        .status(&in_use(&settings_for(&address)), false)
         .await;
     assert_eq!(
         status.message,
@@ -683,7 +759,7 @@ async fn a_refusal_a_redirect_and_an_oversized_or_odd_answer_are_one_sentence_ea
         b.health = Some(json!(["a", 1, null]));
     });
     let status = PlaybackLibrary::new()
-        .status(&settings_for(&address), false)
+        .status(&in_use(&settings_for(&address)), false)
         .await;
     assert_eq!(status.state, LibraryState::Problem);
 }
@@ -775,7 +851,7 @@ async fn call(
 }
 
 #[tokio::test]
-async fn the_setting_is_off_by_default_and_the_routes_then_ask_nothing() {
+async fn with_no_playback_computer_chosen_the_routes_ask_nothing_and_say_nothing() {
     let (router, runtime) = app().await;
     assert!(runtime
         .settings_service
@@ -805,7 +881,7 @@ async fn the_setting_is_off_by_default_and_the_routes_then_ask_nothing() {
 }
 
 #[tokio::test]
-async fn turning_it_on_saves_only_that_and_checks_once() {
+async fn naming_the_helper_computer_saves_only_that_and_checks_once() {
     let helper = Helper::new();
     let address = helper.serve().await;
     let (router, runtime) = app().await;
@@ -814,7 +890,7 @@ async fn turning_it_on_saves_only_that_and_checks_once() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -824,7 +900,7 @@ async fn turning_it_on_saves_only_that_and_checks_once() {
     assert_eq!(
         after.playback_library,
         PlaybackLibrarySettings {
-            enabled: true,
+            enabled: None,
             address: format!("http://{address}")
         }
     );
@@ -834,8 +910,8 @@ async fn turning_it_on_saves_only_that_and_checks_once() {
     assert_eq!(helper.hits(), ["/health"]);
     let (_, settings) = call(&router, "GET", "/api/v1/settings", None).await;
     assert_eq!(
-        settings["settings"]["playback_library"]["enabled"],
-        json!(true)
+        settings["settings"]["playback_library"]["address"],
+        json!(format!("http://{address}"))
     );
     assert_eq!(settings["restart_required"], json!(false));
 }
@@ -847,7 +923,7 @@ async fn a_bad_address_is_refused_with_the_same_words_as_the_lightkey_helper() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": "10.0.0.5/path"})),
+        Some(json!({"address": "10.0.0.5/path"})),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -859,7 +935,7 @@ async fn a_bad_address_is_refused_with_the_same_words_as_the_lightkey_helper() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": "yes"})),
+        Some(json!({"address": 5})),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -885,7 +961,7 @@ async fn saving_the_general_settings_never_switches_the_library() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": "127.0.0.1:9"})),
+        Some(json!({"address": "127.0.0.1:9"})),
     )
     .await;
     // An older window sends its whole copy, which has no library in it.
@@ -896,7 +972,7 @@ async fn saving_the_general_settings_never_switches_the_library() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let saved = runtime.settings_service.snapshot();
     assert_eq!(saved.timezone, "America/Chicago");
-    assert!(saved.playback_library.enabled);
+    assert_eq!(saved.playback_library.address, "http://127.0.0.1:9");
 }
 
 #[tokio::test]
@@ -909,7 +985,7 @@ async fn the_plan_route_pairs_the_loaded_plan_and_leaves_the_playback_settings_a
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     // The demo plan is what is loaded; its songs are not in the fake's setlist, whatever the date.
@@ -1039,7 +1115,7 @@ async fn the_plan_carries_each_songs_sections_and_cover_description_but_never_th
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     let (status, body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
@@ -1320,7 +1396,7 @@ async fn a_different_plan_or_a_different_address_reads_everything_again() {
     assert_eq!(helper.count("/setlists/2026-11-22"), 3);
     // Switched off and on again: nothing is remembered.
     let off = PlaybackLibrarySettings {
-        enabled: false,
+        enabled: Some(false),
         ..renamed.clone()
     };
     let _ = library.status(&off, false).await;
@@ -1417,7 +1493,7 @@ async fn covers(art: Option<Art>) -> (Helper, axum::Router, Arc<Runtime>) {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -1519,7 +1595,7 @@ async fn a_song_the_helper_has_no_picture_for_is_a_404() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
@@ -1690,7 +1766,7 @@ async fn only_a_paired_song_of_the_current_plan_has_a_cover_route() {
 }
 
 #[tokio::test]
-async fn with_the_setting_off_the_cover_route_is_a_404_and_the_helper_sees_nothing() {
+async fn once_forgotten_the_cover_route_is_a_404_and_the_helper_sees_nothing() {
     let helper = Helper::new();
     helper.set(|b| {
         b.art = Some(art("image/jpeg", ETAG_A, jpeg(300)));
@@ -1705,39 +1781,30 @@ async fn with_the_setting_off_the_cover_route_is_a_404_and_the_helper_sees_nothi
     runtime
         .store
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
-    // Off by default.
+    // No Playback computer chosen: nothing to ask.
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
-    // Saved address but switched off.
+    // A saved address, then forgotten.
     let _ = call(
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": false, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
+    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
+    // (Saving the address asked once, before it was forgotten.)
+    helper.set(|b| b.hits.clear());
     assert_eq!(
         raw(&router, COVER_ONE, Some(ETAG_A)).await.0,
         StatusCode::NOT_FOUND
     );
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
-    // On, a picture held, then off again: the picture is let go.
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true})),
-    )
-    .await;
+    // Set up again (a new key), a picture held, then forgotten again: the picture is let go.
+    runtime.playback_library.ensure_key().unwrap();
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::OK);
     assert_eq!(runtime.playback_library.artwork_held().0, 1);
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"enabled": false})),
-    )
-    .await;
+    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
     assert_eq!(raw(&router, COVER_ONE, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(runtime.playback_library.artwork_held(), (0, 0));
 }
@@ -1770,7 +1837,7 @@ async fn the_cache_holds_at_most_64_pictures_and_8_mb_and_lets_the_oldest_go_fir
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     for n in 0..70 {
@@ -1829,7 +1896,7 @@ async fn big_pictures_stop_at_eight_megabytes_in_all() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     for id in 200..206 {
@@ -2107,7 +2174,7 @@ async fn only_a_paired_song_of_the_current_plan_has_a_waveform_route() {
 }
 
 #[tokio::test]
-async fn with_the_setting_off_the_waveform_route_is_a_404_and_the_helper_sees_nothing() {
+async fn once_forgotten_the_waveform_route_is_a_404_and_the_helper_sees_nothing() {
     let helper = Helper::new();
     helper.set(|b| b.waveform = Some(helper_wave(0.25, &[0.5, 0.7])));
     let address = helper.serve().await;
@@ -2115,39 +2182,30 @@ async fn with_the_setting_off_the_waveform_route_is_a_404_and_the_helper_sees_no
     runtime
         .store
         .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
-    // Off by default.
+    // No Playback computer chosen: nothing to ask.
     assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
-    // Saved address but switched off.
+    // A saved address, then forgotten.
     let _ = call(
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": false, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
+    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
+    // (Saving the address asked once, before it was forgotten.)
+    helper.set(|b| b.hits.clear());
     assert_eq!(
         raw(&router, WAVE_ONE, Some("\"x\"")).await.0,
         StatusCode::NOT_FOUND
     );
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(helper.hits().is_empty(), "{:?}", helper.hits());
-    // On, a waveform held, then off again: it is let go.
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true})),
-    )
-    .await;
+    // Set up again (a new key), a waveform held, then forgotten again: it is let go.
+    runtime.playback_library.ensure_key().unwrap();
     assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::OK);
     assert_eq!(runtime.playback_library.waveforms_held(), 1);
-    let _ = call(
-        &router,
-        "PUT",
-        "/api/v1/playback-library/settings",
-        Some(json!({"enabled": false})),
-    )
-    .await;
+    let _ = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
     assert_eq!(raw(&router, WAVE_ONE, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(runtime.playback_library.waveforms_held(), 0);
 }
@@ -2248,7 +2306,7 @@ async fn at_most_sixteen_songs_are_held_and_the_oldest_goes_first() {
         &router,
         "PUT",
         "/api/v1/playback-library/settings",
-        Some(json!({"enabled": true, "address": address})),
+        Some(json!({"address": address})),
     )
     .await;
     for id in 11..31 {
@@ -2312,4 +2370,393 @@ async fn the_window_gets_304_when_it_already_holds_the_waveform() {
     let (status, _, other) = raw(&router, WAVE_ONE, Some("\"0000000000000000\"")).await;
     assert_eq!((status, other), (StatusCode::OK, body));
     assert_eq!(helper.count("/songs/11/waveform"), 1);
+}
+
+// ---- the key, the signature and the helper's state ------------------------------------------------------
+
+const KEY: &str = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE";
+const NOW: u64 = 1_794_945_365;
+
+/// A library that signs with `KEY` and believes it is `NOW`, and a helper that wants that key.
+async fn keyed(version: &str) -> (Helper, String, PlaybackLibrary) {
+    let helper = Helper::new();
+    helper.set(|b| {
+        b.key = Some(KEY.to_string());
+        b.clock = NOW;
+        let mut health = ok_health();
+        health["version"] = json!(version);
+        b.health = Some(health);
+    });
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    library.set_key_for_test(KEY);
+    library.set_wall_clock(Box::new(|| NOW));
+    (helper, address, library)
+}
+
+#[tokio::test]
+async fn every_ask_carries_the_time_and_the_signature_of_the_key_and_never_the_key() {
+    let (helper, address, library) = keyed("0.3.0").await;
+    helper.set(|b| b.waveform = Some(helper_wave(0.25, &[0.5, 1.0])));
+    helper.set(|b| {
+        b.art = Some(art("image/jpeg", "\"a\"", jpeg(64)));
+        for song in b.items.iter_mut() {
+            let id = song["setlist_song_id"].as_i64().unwrap();
+            song["artwork"] = artwork_info(id, "image/jpeg", "\"a\"", 64);
+        }
+    });
+    let settings = settings_for(&address);
+    let loaded = plan("2026-11-22", &["Song One", "Song Two"]);
+    let status = library.status(&settings, false).await;
+    assert_eq!(status.helper.state, HelperState::Ready, "{status:?}");
+    let result = library.plan(&settings, Some(&loaded), false).await;
+    assert_eq!(result.state, LibraryState::Ready);
+    let id = result.songs[0]
+        .library
+        .as_ref()
+        .unwrap()
+        .setlist_song_id
+        .unwrap();
+    let art_info = result.songs[0]
+        .library
+        .as_ref()
+        .unwrap()
+        .artwork
+        .clone()
+        .unwrap();
+    library
+        .picture(&settings, id as u64, &art_info)
+        .await
+        .expect("the cover is asked for with a signature too");
+    library
+        .waveform(&settings, id as u64)
+        .await
+        .expect("and the waveform");
+    let asked = helper.inner.lock().unwrap().signed.clone();
+    assert!(asked.len() >= 5, "{asked:?}");
+    for (time, sig, target) in &asked {
+        assert_eq!(time.as_deref(), Some(NOW.to_string().as_str()), "{target}");
+        let want = sign(KEY, target, NOW);
+        assert_eq!(sig.as_deref(), Some(want.as_str()), "{target}");
+        assert!(!target.contains(KEY), "the key is never in a URL");
+    }
+    let targets: Vec<&str> = asked.iter().map(|(_, _, t)| t.as_str()).collect();
+    assert!(targets.contains(&"/health"));
+    assert!(targets
+        .iter()
+        .any(|t| t.starts_with("/songs/")
+            && t.contains("/waveform?points_per_second=8&clock=performed")));
+    assert!(targets.iter().any(|t| t.ends_with("/artwork")));
+}
+
+#[tokio::test]
+async fn a_helper_that_answers_to_the_key_is_ready_and_an_older_one_is_outdated() {
+    let (_, address, library) = keyed("0.3.0").await;
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(status.helper.state, HelperState::Ready);
+    assert!(status.active && status.enabled);
+    assert_eq!(status.helper.version.as_deref(), Some("0.3.0"));
+    assert_eq!(status.helper.bundled_version, "0.3.0");
+    assert!(status.helper.paired);
+    assert_eq!(status.state, LibraryState::Ready);
+
+    let (_, address, library) = keyed("0.2.9").await;
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(
+        status.helper.state,
+        HelperState::Outdated,
+        "older than the bundled one"
+    );
+    assert!(status.active, "an outdated helper still feeds the library");
+    assert_eq!(status.state, LibraryState::Ready);
+}
+
+#[tokio::test]
+async fn a_helper_without_a_key_works_but_offers_the_update() {
+    // The fake with no key answers everyone and has no `auth` field: helper 0.2.0.
+    let helper = Helper::new();
+    let address = helper.serve().await;
+    let library = PlaybackLibrary::new();
+    library.set_key_for_test(KEY);
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(status.helper.state, HelperState::Outdated);
+    assert!(status.active);
+    assert!(
+        status.helper.message.contains("can be updated"),
+        "{}",
+        status.helper.message
+    );
+}
+
+#[tokio::test]
+async fn a_helper_that_refuses_the_key_or_the_time_needs_the_command_again_and_says_nothing_louder()
+{
+    // Another key.
+    let (helper, address, library) = keyed("0.3.0").await;
+    library.set_key_for_test("ANOTHER-key-ANOTHER-key-ANOTHER-key-0123");
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(status.helper.state, HelperState::NeedsKey);
+    assert!(!status.active);
+    assert_eq!(status.state, LibraryState::Off, "quiet");
+    assert!(status.helper.message.contains("setup command again"));
+    assert!(
+        status.helper.paired,
+        "there is a key, it is just not the one the helper has"
+    );
+    // The plan is empty and says nothing.
+    let result = library
+        .plan(
+            &settings_for(&address),
+            Some(&plan("2026-11-22", &["Song One"])),
+            false,
+        )
+        .await;
+    assert_eq!(
+        (result.state, result.enabled, result.songs.len()),
+        (LibraryState::Off, false, 0)
+    );
+    // The right key but a clock that is more than two minutes off.
+    let (helper2, address2, library2) = keyed("0.3.0").await;
+    helper2.set(|b| b.clock = NOW + 500);
+    let status = library2.status(&settings_for(&address2), false).await;
+    assert_eq!(status.helper.state, HelperState::NeedsKey);
+    drop(helper);
+    // No key at all against a keyed helper: its bare answer says a key is required.
+    let (_, address3, _) = keyed("0.3.0").await;
+    let bare = PlaybackLibrary::new();
+    let status = bare.status(&settings_for(&address3), false).await;
+    assert_eq!(status.helper.state, HelperState::NeedsKey);
+    assert!(!status.helper.paired);
+}
+
+#[tokio::test]
+async fn a_helper_that_refused_is_not_pressed_with_more_bad_signatures() {
+    let (helper, address, library) = keyed("0.3.0").await;
+    library.set_key_for_test("ANOTHER-key-ANOTHER-key-ANOTHER-key-0123");
+    let settings = settings_for(&address);
+    let _ = library.status(&settings, true).await;
+    assert_eq!(helper.count("/health"), 1);
+    // The Check button asks again after two seconds, but not for a helper that has just said no.
+    library.advance_clock(Duration::from_secs(3));
+    let _ = library.status(&settings, true).await;
+    assert_eq!(
+        helper.count("/health"),
+        1,
+        "ten bad signatures a minute lock this address out"
+    );
+    library.advance_clock(Duration::from_secs(8));
+    let _ = library.status(&settings, true).await;
+    assert_eq!(helper.count("/health"), 2);
+    // Once the key is right it is read again at the next ask.
+    library.set_key_for_test(KEY);
+    library.advance_clock(Duration::from_secs(11));
+    let status = library.status(&settings, true).await;
+    assert_eq!(status.helper.state, HelperState::Ready);
+}
+
+#[tokio::test]
+async fn a_forgotten_key_asks_nothing_and_a_new_one_asks_again() {
+    let (helper, address, library) = keyed("0.3.0").await;
+    let forgotten = PlaybackLibrarySettings {
+        enabled: Some(false),
+        address: address.clone(),
+    };
+    library.forget_key().unwrap();
+    assert_eq!(
+        library.status(&forgotten, true).await.helper.state,
+        HelperState::Forgotten
+    );
+    assert!(helper.hits().is_empty());
+    // A new setup session makes a new key; the saved `enabled: false` stays until the helper answers it.
+    library.ensure_key().unwrap();
+    let status = library.status(&forgotten, true).await;
+    assert!(!helper.hits().is_empty(), "asked again");
+    assert_ne!(status.helper.state, HelperState::Forgotten);
+}
+
+fn route_helper_settings(runtime: &Runtime, host: Option<&str>, address: &str) {
+    let mut next = runtime.settings_service.snapshot();
+    next.playback_api.host = host.map(str::to_string);
+    next.playback_library.address = address.to_string();
+    runtime.settings_service.save(next).unwrap();
+}
+
+#[tokio::test]
+async fn the_helper_is_asked_at_the_saved_playback_computer_unless_advanced_names_another() {
+    let (_, runtime) = app().await;
+    let address_of = |runtime: &Runtime| {
+        stagepilot_server::playback_library::effective_settings(runtime).address
+    };
+    assert_eq!(
+        address_of(&runtime),
+        "",
+        "no Playback computer, no helper address"
+    );
+    route_helper_settings(&runtime, Some("10.30.0.141"), "");
+    assert_eq!(address_of(&runtime), "http://10.30.0.141");
+    assert_eq!(
+        base_url(&address_of(&runtime)).as_deref(),
+        Some("http://10.30.0.141:8780"),
+        "the helper's own port"
+    );
+    route_helper_settings(&runtime, Some("10.20.0.102"), "");
+    assert_eq!(address_of(&runtime), "http://10.20.0.102");
+    // Advanced: another address wins.
+    route_helper_settings(&runtime, Some("10.30.0.141"), "http://10.20.0.102:9000");
+    assert_eq!(address_of(&runtime), "http://10.20.0.102:9000");
+    // Blank host text is no host.
+    route_helper_settings(&runtime, Some("  "), "");
+    assert_eq!(address_of(&runtime), "");
+}
+
+#[tokio::test]
+async fn the_status_route_remembers_the_helper_was_in_use_and_a_later_silence_is_said() {
+    let (helper, address, library) = keyed("0.3.0").await;
+    let (router, runtime) = app().await;
+    runtime.playback_library.set_key_for_test(KEY);
+    runtime.playback_library.set_wall_clock(Box::new(|| NOW));
+    drop(library);
+    route_helper_settings(&runtime, None, &format!("http://{address}"));
+    let (_, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
+    assert_eq!(body["helper"]["state"], json!("ready"), "{body}");
+    assert_eq!(body["helper"]["version"], json!("0.3.0"));
+    assert_eq!(body["helper"]["bundled_version"], json!("0.3.0"));
+    assert_eq!(body["helper"]["paired"], json!(true));
+    assert_eq!(body["active"], json!(true));
+    assert_eq!(
+        runtime.settings_service.snapshot().playback_library.enabled,
+        Some(true),
+        "saved the first time the helper answers with the key"
+    );
+    // Silent now: after the minute the last good answer stands, it is said.
+    helper.set(|b| b.broken = Some(500));
+    runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(120));
+    let (_, body) = call(
+        &router,
+        "GET",
+        "/api/v1/playback-library/status?check=1",
+        None,
+    )
+    .await;
+    assert_eq!(body["helper"]["state"], json!("unreachable"), "{body}");
+    assert_eq!(body["active"], json!(false));
+    assert_eq!(body["state"], json!("problem"));
+}
+
+#[tokio::test]
+async fn a_helper_that_was_never_there_says_nothing_anywhere() {
+    let closed = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let (router, runtime) = app().await;
+    route_helper_settings(&runtime, None, &format!("http://127.0.0.1:{closed}"));
+    let (_, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
+    assert_eq!(body["helper"]["state"], json!("not_installed"), "{body}");
+    assert_eq!(
+        (
+            body["enabled"].clone(),
+            body["active"].clone(),
+            body["state"].clone()
+        ),
+        (json!(false), json!(false), json!("off"))
+    );
+    let (_, plan_body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(
+        (
+            plan_body["enabled"].clone(),
+            plan_body["state"].clone(),
+            plan_body["songs"].clone()
+        ),
+        (json!(false), json!("off"), json!([]))
+    );
+    assert_eq!(
+        runtime.settings_service.snapshot().playback_library.enabled,
+        None,
+        "nothing was written"
+    );
+}
+
+#[tokio::test]
+async fn forgetting_deletes_the_key_saves_it_and_keeps_the_address() {
+    let (helper, address, _) = keyed("0.3.0").await;
+    let (router, runtime) = app().await;
+    runtime.playback_library.set_key_for_test(KEY);
+    runtime.playback_library.set_wall_clock(Box::new(|| NOW));
+    route_helper_settings(&runtime, None, &format!("http://{address}"));
+    let (_, body) = call(&router, "GET", "/api/v1/playback-library/status", None).await;
+    assert_eq!(body["helper"]["state"], json!("ready"));
+    helper.set(|b| b.hits.clear());
+    let (status, body) = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["helper"]["state"], json!("forgotten"));
+    assert_eq!(body["helper"]["paired"], json!(false));
+    assert!(!runtime.playback_library.is_paired());
+    let saved = runtime.settings_service.snapshot().playback_library;
+    assert_eq!(saved.enabled, Some(false));
+    assert_eq!(
+        saved.address,
+        format!("http://{address}"),
+        "the address override is kept"
+    );
+    let (_, body) = call(
+        &router,
+        "GET",
+        "/api/v1/playback-library/status?check=1",
+        None,
+    )
+    .await;
+    assert_eq!(body["helper"]["state"], json!("forgotten"));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(helper.hits().is_empty(), "{:?}", helper.hits());
+    // Forgetting twice is harmless.
+    let (status, _) = call(&router, "POST", "/api/v1/playback-library/forget", None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_key_is_in_no_answer_no_setting_and_no_log_line() {
+    let (_, address, _) = keyed("0.3.0").await;
+    let (router, runtime) = app().await;
+    runtime.playback_library.set_key_for_test(KEY);
+    runtime.playback_library.set_wall_clock(Box::new(|| NOW));
+    route_helper_settings(&runtime, Some("127.0.0.1"), &format!("http://{address}"));
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One"])));
+    let mut seen = String::new();
+    for (method, path) in [
+        ("GET", "/api/v1/playback-library/status?check=1"),
+        ("GET", "/api/v1/playback-library/plan?check=1"),
+        ("GET", "/api/v1/settings"),
+        ("GET", "/api/v1/state"),
+        ("GET", "/api/v1/health"),
+        ("PUT", "/api/v1/playback-library/settings"),
+        ("POST", "/api/v1/playback-library/forget"),
+    ] {
+        let body = (method == "PUT").then(|| json!({"address": format!("http://{address}")}));
+        let (_, answer) = call(&router, method, path, body).await;
+        seen.push_str(&answer.to_string());
+    }
+    seen.push_str(&serde_json::to_string(&runtime.settings_service.snapshot()).unwrap());
+    seen.push_str(
+        &runtime
+            .settings_service
+            .snapshot()
+            .to_file_value()
+            .to_string(),
+    );
+    seen.push_str(&format!("{:?}", runtime.settings_service.snapshot()));
+    let with_report =
+        stagepilot_server::diagnostics::with_playback_section("{\"app\": 1}", &runtime);
+    seen.push_str(&with_report);
+    assert!(!seen.contains(KEY), "the key leaked");
+    assert!(!seen.to_lowercase().contains("x-pbl-sig"));
+    // The shipped redaction masks it by name too, wherever a log line names it.
+    assert!(
+        !stagepilot_core::redact::redact_text(&format!("helper_key={KEY} x-pbl-sig: {KEY}"))
+            .contains(KEY)
+    );
 }

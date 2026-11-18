@@ -232,6 +232,8 @@ pub async fn log_server_errors(request: Request, next: Next) -> Response {
         // The installer path carries a one-time token: never log it.
         let path = if path.starts_with("/lightkey-helper") {
             "/lightkey-helper/...".to_string()
+        } else if path.starts_with("/playback-helper") {
+            "/playback-helper/...".to_string()
         } else {
             path
         };

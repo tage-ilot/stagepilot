@@ -1,39 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, updatePlaybackLibrarySettings } from "../api";
+import { forgetPlaybackHelper, getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, updatePlaybackLibrarySettings } from "../api";
 import { describeError } from "../errorText";
 import type { LibraryPlan, LibraryStatus, SettingsResponse } from "../types";
 
 /** How often an open window asks again. The backend asks the helper at most this often however many windows there are. */
 export const LIBRARY_REFRESH_MS = 30_000;
+/** While a setup box waits for the network script to answer, the window looks this often (the backend still asks the helper only every few seconds). */
+export const LIBRARY_WATCH_MS = 3_000;
 
 export interface PlaybackLibraryController {
-  /** The saved setting. */
-  enabled: boolean;
+  /** The computer the helper is asked at: the saved override, else the saved Playback host. Empty until a Playback computer is chosen. */
+  target: string;
+  /** The saved override (Advanced); empty means the Playback host. */
   address: string;
   status: LibraryStatus | null;
   plan: LibraryPlan | null;
   error: string | null;
-  pending: "save" | "check" | null;
-  save: (enabled: boolean, address: string) => Promise<boolean>;
+  pending: "save" | "check" | "forget" | null;
+  /** Saves the override of the helper's computer (empty: the Playback host). */
+  saveAddress: (address: string) => Promise<boolean>;
+  /** "Forget the network script": the key is deleted; the script keeps running but cannot be used. */
+  forget: () => Promise<boolean>;
   /** The Check button: reads the helper's health now. */
   check: () => void;
+  /** A setup box is waiting for the script: look every few seconds instead of every 30. */
+  watch: (on: boolean) => void;
 }
 
 /**
- * The optional Playback library. While the setting is off NOTHING is asked (not even the status): this hook only wakes up when the
- * saved settings say it is on. While on, it asks for the status and the plan every 30 s, only while the window is visible.
- * Read-only: the one thing it can write is its own setting (`save`).
+ * The Playback library (the network script). There is no on/off switch: while a Playback computer is saved (or Advanced names another
+ * address) this hook asks for the status and the plan every 30 s, only while the window is visible. A helper that is not there is a quiet
+ * state, not an error, and the backend never asks a forgotten one at all. Read-only: the only things it can write are its own address
+ * override and "forget".
  */
 export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResponse | null, onSettings: (settings: SettingsResponse) => void): PlaybackLibraryController {
-  const saved = settings?.settings.playback_library;
-  const enabled = canConfigure && Boolean(saved?.enabled);
-  const address = saved?.address ?? "";
+  const address = settings?.settings.playback_library?.address ?? "";
+  const playbackHost = settings?.settings.playback_api?.host?.trim() ?? "";
+  const target = address || playbackHost;
+  const enabled = canConfigure && Boolean(target);
   const [status, setStatus] = useState<LibraryStatus | null>(null);
   const [plan, setPlan] = useState<LibraryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<"save" | "check" | null>(null);
+  const [pending, setPending] = useState<"save" | "check" | "forget" | null>(null);
+  const [watching, setWatching] = useState(false);
   const generation = useRef(0);
+  // A background read clears the error a read left, never the one an action (save, forget) left: that one stays until the next action.
+  const errorFrom = useRef<"read" | "action" | null>(null);
 
   const read = useCallback(async (check: boolean, current: number) => {
     try {
@@ -41,41 +54,69 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
       if (generation.current !== current) return;
       setStatus(nextStatus);
       setPlan(nextPlan);
-      setError(null);
+      if (errorFrom.current !== "action") { errorFrom.current = null; setError(null); }
     } catch (cause) {
-      if (generation.current === current) setError(describeError(cause, "The Playback library could not be read."));
+      if (generation.current === current && errorFrom.current !== "action") { errorFrom.current = "read"; setError(describeError(cause, "The network script could not be read.")); }
     }
   }, []);
 
+  // Another computer, or none: what was held belongs to the old one.
   useEffect(() => {
-    const current = ++generation.current;
     setStatus(null);
     setPlan(null);
+    errorFrom.current = null;
     setError(null);
+  }, [enabled, target]);
+
+  useEffect(() => {
+    const current = ++generation.current;
     if (!enabled) return;
+    const gap = watching ? LIBRARY_WATCH_MS : LIBRARY_REFRESH_MS;
     let timer: number | undefined;
     const tick = async () => {
       if (typeof document === "undefined" || document.visibilityState !== "hidden") await read(false, current);
-      if (generation.current === current) timer = window.setTimeout(() => void tick(), LIBRARY_REFRESH_MS);
+      if (generation.current === current) timer = window.setTimeout(() => void tick(), gap);
     };
     void tick();
     return () => {
       generation.current = current + 1;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [enabled, address, read]);
+  }, [enabled, target, watching, read]);
 
-  const save = useCallback(async (nextEnabled: boolean, nextAddress: string): Promise<boolean> => {
+  const saveAddress = useCallback(async (nextAddress: string): Promise<boolean> => {
     if (!canConfigure) return false;
     setPending("save");
+    errorFrom.current = null;
     setError(null);
     try {
-      const answer = await updatePlaybackLibrarySettings(nextEnabled, nextAddress);
+      const answer = await updatePlaybackLibrarySettings(nextAddress);
       setStatus(answer);
       onSettings(await getSettings());
       return true;
     } catch (cause) {
-      setError(describeError(cause, "The Playback library setting could not be saved."));
+      errorFrom.current = "action";
+      setError(describeError(cause, "The network script's address could not be saved."));
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }, [canConfigure, onSettings]);
+
+  const forget = useCallback(async (): Promise<boolean> => {
+    if (!canConfigure) return false;
+    setPending("forget");
+    errorFrom.current = null;
+    setError(null);
+    try {
+      const answer = await forgetPlaybackHelper();
+      setStatus(answer);
+      setPlan(null);
+      onSettings(await getSettings());
+      return true;
+    } catch (cause) {
+      errorFrom.current = "action";
+      setError(describeError(cause, "StagePilot could not forget the network script."));
       return false;
     } finally {
       setPending(null);
@@ -88,5 +129,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
     void read(true, generation.current).finally(() => setPending(null));
   }, [enabled, read]);
 
-  return { enabled, address, status, plan, error, pending, save, check };
+  const watch = useCallback((on: boolean) => setWatching(on), []);
+
+  return { target, address, status, plan, error, pending, saveAddress, forget, check, watch };
 }

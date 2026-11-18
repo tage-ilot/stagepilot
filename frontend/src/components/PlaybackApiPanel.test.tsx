@@ -85,7 +85,7 @@ describe("Scan Network is always first and never dead", () => {
 
 describe("Computer select with Other computer…", () => {
   const user = () => userEvent.setup();
-  const computer = () => screen.getByLabelText("Playback host");
+  const computer = () => screen.getByLabelText("Playback computer");
   const withHosts = (host: string | null, candidates: { name: string; host: string }[] = []) => controller({ status: none({
     scan: scanOf(candidates.length ? "found" : "idle", { candidates }),
     settings: { enabled: true, host, port: 8080, auto_scan: true, fast_transport: true },
