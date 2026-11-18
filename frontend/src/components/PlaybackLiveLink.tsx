@@ -105,7 +105,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
 
       <form className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="playback-live-link-line" id="playback-specific" onSubmit={(event) => { event.preventDefault(); connect(); }}>
         <LiveLinkField caption="Playback computer" className="live-link-host">
-          <Select aria-label="Playback computer" className={`w-full ${CONTROL_40}`} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
+          <Select aria-label="Playback computer" className={`w-full font-mono ${CONTROL_40}`} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
             {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
             <option value={OTHER_COMPUTER}>Other computer…</option>
           </Select>
@@ -203,7 +203,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
             <div className="space-y-3">
               <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void library.saveAddress(override.trim()); }}>
                 <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Network script address">
-                  <Input onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
+                  <Input className="font-mono" onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
                 </Field>
                 <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
               </form>
