@@ -71,6 +71,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           <div className={cx("grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none", orderOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")} data-part="region" data-state={orderOpen ? "open" : "closed"} id={orderBodyId}>
           <div className="min-h-0 space-y-2 overflow-hidden" inert={!orderOpen}>
           <p className="text-sm font-semibold text-integration-playback-text" data-testid="order-mode">{playbackOrderModeText(status)}</p>
+          {status.order_library_note && <p className="text-sm text-ink-body" data-testid="order-library-note">{status.order_library_note}</p>}
           {playbackOrderMode(status) !== "scanned" && status.order_note && <p className="text-sm text-warning-text">{status.order_note}</p>}
           {playbackHasDoubtfulSong(status) && <p className="text-sm text-warning-text">{DOUBTFUL_ORDER_HINT}</p>}
           <div>

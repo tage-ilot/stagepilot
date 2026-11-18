@@ -895,6 +895,30 @@ describe("Song order section", () => {
     expect(screen.getByTestId("song-order-summary")).toHaveTextContent(text);
   });
 
+  it.each([
+    ["from the Library Link", { order_source: "library" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "From the Library Link (6 songs)"],
+    ["from a scan", { order_source: "scan" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "From a scan (6 songs)"],
+    ["from a scan, one song", { order_source: "scan" as const, song_order: [1], song_count: 1 }, "From a scan (1 song)"],
+    ["learning", { song_order: [], song_count: 6, order_mode: "learned" as const, order_source: "learned" as const, learned_songs: [] }, "Learning as songs play"],
+    ["a library order the setlist has left behind", { order_source: "library" as const, stale: true }, "Needs a new scan"],
+  ])("summary says where the order came from: %s", (_name, extra, text) => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus(extra) })} />);
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent(text);
+    expect(screen.getByTestId("song-order-summary").textContent).toBe(text);
+  });
+
+  it("says in one plain line why the Library Link's order is not used, and nothing when it is", () => {
+    const line = "Not using the Library Link's order: Faithfulness is not in Playback's setlist.";
+    const view = render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_source: "none", song_order: [], song_count: 0, order_library_note: line }) })} />);
+    expect(screen.getByTestId("order-library-note")).toHaveTextContent(line);
+    // Information only: the scan button and the rest of the section stay exactly as they are.
+    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).toBeEnabled();
+    view.unmount();
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_source: "library", order_library_note: null }) })} />);
+    expect(screen.queryByTestId("order-library-note")).toBeNull();
+    expect(screen.getByTestId("order-mode")).toHaveTextContent("Order from the Library Link");
+  });
+
   it("uses the Scan Playback Songs wording in the dialog and the activity line", async () => {
     const user = userEvent.setup();
     const playback = controller({ status: playbackStatus(), events: [{ event: { type: "song.started", timestamp: 1, song_id: 101, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null }, discovery: true }] });

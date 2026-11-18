@@ -32,7 +32,7 @@ export const playbackOrderMode = (status: PlaybackStatusResponse): "scanned" | "
 export function playbackOrderModeText(status: PlaybackStatusResponse): string {
   const mode = playbackOrderMode(status);
   if (mode === "learned") return `Learning the order as songs play (${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed)`;
-  if (mode === "scanned") return "Order scanned";
+  if (mode === "scanned") return status.order_source === "library" ? "Order from the Library Link" : "Order scanned";
   return learnsOrder(status) && status.order_mode !== undefined ? "No order yet - set Up next or scan" : "No order yet - scan to set it up";
 }
 
@@ -108,7 +108,11 @@ export const SCAN_PLAYBACK_SONGS = "Scan Playback Songs";
 export function songOrderSummary(status: PlaybackStatusResponse, running: boolean): string {
   if (running) return "Scanning Playback songs…";
   const saved = Boolean(status.song_order.length) && !status.stale && !status.plan_changed;
-  if (saved) return `Saved - ${status.song_order.length} ${status.song_order.length === 1 ? "song" : "songs"}`;
-  if (playbackOrderMode(status) === "learned") return `Learning - ${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed`;
+  const songs = `${status.song_order.length} ${status.song_order.length === 1 ? "song" : "songs"}`;
+  // Backends that say where the order came from get the words for it; older ones keep the old summary.
+  if (saved && status.order_source === "library") return `From the Library Link (${songs})`;
+  if (saved && status.order_source === "scan") return `From a scan (${songs})`;
+  if (saved) return `Saved - ${songs}`;
+  if (playbackOrderMode(status) === "learned") return status.order_source === "learned" ? "Learning as songs play" : `Learning - ${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed`;
   return status.song_order.length > 0 ? "Needs a new scan" : "No order yet";
 }

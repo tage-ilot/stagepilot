@@ -102,6 +102,11 @@ RUST_SCALAR_EXTENSIONS = {
     "settings_set_aside": (list,),
     # Fixtures the saved looks can override: Release lights clears them even after a restart.
     "known_fixtures": (int,),
+    # Where the Playback song order came from (`library`, `scan`, `learned`, `none`) and, when the Library
+    # Link's order is not used, the one plain line saying why (null otherwise). On the Playback status;
+    # the recorded Python app has neither.
+    "order_source": (str,),
+    "order_library_note": (str, type(None)),
     # Lightkey capture/replay mode ("auto" | "replay" | "record") of #293; the Python app only had
     # the Record switch and the Replay on/off.
     "mode": (str,),

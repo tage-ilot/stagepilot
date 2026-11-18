@@ -15,6 +15,7 @@ pub mod outputs;
 pub mod pco_routes;
 pub mod playback_helper_install;
 pub mod playback_library;
+pub mod playback_order;
 pub mod playback_routes;
 pub mod remote_fakes;
 pub mod remote_feature;

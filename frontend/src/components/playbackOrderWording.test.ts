@@ -15,6 +15,14 @@ describe("order wording is shared by panel, status card and tooltips", () => {
     expect(playbackOrderModeText(playbackStatus({ song_order: [], order_mode: "none", settings: { ...on, learn_order: false } }))).toBe("No order yet - scan to set it up");
   });
 
+  it("a library order says so, and a library note never changes the notice", () => {
+    expect(playbackOrderModeText(playbackStatus({ order_mode: "scanned", order_source: "library" }))).toBe("Order from the Library Link");
+    expect(playbackOrderModeText(playbackStatus({ order_mode: "scanned", order_source: "scan" }))).toBe("Order scanned");
+    const note = "Not using the Library Link's order: Playback is not connected.";
+    expect(playbackOrderNotice(playbackStatus({ order_library_note: note }))).toBeNull();
+    expect(playbackOrderNotice(playbackStatus({ order_library_note: note, song_order: [] }))).toBe("Song order isn't set up yet.");
+  });
+
   it("older backends without order_mode keep the scanned wording", () => {
     expect(playbackOrderModeText(playbackStatus())).toBe("Order scanned");
     expect(playbackOrderNotice(playbackStatus({ song_order: [] }))).toBe("Song order isn't set up yet.");

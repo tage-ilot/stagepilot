@@ -763,6 +763,10 @@ export interface PlaybackStatusResponse extends PlaybackConnection {
   song_order: number[];
   /** Where the Playback song -> plan song pairing comes from. */
   order_mode?: "scanned" | "learned" | "none";
+  /** Who made the order: the Library Link's setlist, a person's scan, or what the songs taught StagePilot. */
+  order_source?: "library" | "scan" | "learned" | "none";
+  /** Why the Library Link's order is not used, as one plain line. Information only. */
+  order_library_note?: string | null;
   learned_songs?: { song_id: number; plan_position: number; confirmed: boolean; doubtful: boolean }[];
   order_note?: string | null;
   captured_version: number | null;

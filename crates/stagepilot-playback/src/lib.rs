@@ -8,6 +8,7 @@ pub mod find;
 pub mod helper_assets;
 pub mod lengths;
 pub mod library;
+pub mod library_order;
 pub mod mapping;
 pub mod normalizer;
 pub mod plugin;

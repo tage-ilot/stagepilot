@@ -454,6 +454,17 @@ pub enum SetlistId {
     Text(String),
 }
 
+/// Where the saved Playback song order came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum OrderSource {
+    /// A person ran "Scan Playback Songs" (also what an order saved before this field existed is).
+    Scan,
+    /// The Library Link's setlist, saved by StagePilot itself (see `stagepilot_playback::library_order`).
+    Library,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -496,6 +507,10 @@ pub struct PlaybackApiSettings {
     pub discovery_duration_seconds: Option<f64>,
     #[serde(default)]
     pub lengths_measured_at: Option<DateTime<Utc>>,
+    /// Who saved `song_order`. Absent in older files and while there is no order; an order with no
+    /// source is a scan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order_source: Option<OrderSource>,
 }
 
 fn port_8080() -> u16 {
@@ -523,6 +538,7 @@ impl Default for PlaybackApiSettings {
             skipped_plan_song_ids: vec![],
             discovery_duration_seconds: None,
             lengths_measured_at: None,
+            order_source: None,
         }
     }
 }

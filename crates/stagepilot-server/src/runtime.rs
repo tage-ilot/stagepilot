@@ -58,6 +58,8 @@ pub struct Runtime {
     keychain_degraded: std::sync::atomic::AtomicBool,
     keychain_interval_ms: std::sync::atomic::AtomicU64,
     keychain_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Looks every few seconds whether the Library Link's song order can be used (`playback_order`).
+    order_watch: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The one-time "Set up the Lighting computer" session (token, expiry, optional listener).
     pub helper_install: Arc<crate::helper_install::HelperInstall>,
     /// The optional Playback library (read-only; asks only while a window asks, and not at all once forgotten).
@@ -305,6 +307,7 @@ impl Runtime {
             keychain_degraded: std::sync::atomic::AtomicBool::new(false),
             keychain_interval_ms: std::sync::atomic::AtomicU64::new(KEYCHAIN_RETRY_SECONDS * 1000),
             keychain_watch: Mutex::new(None),
+            order_watch: Mutex::new(None),
             helper_install: Arc::new(crate::helper_install::HelperInstall::new()),
             playback_helper_install: Arc::new(
                 crate::playback_helper_install::PlaybackHelperInstall::new(
@@ -486,6 +489,8 @@ impl Runtime {
         }
         self.state_service.start();
         self.spawn_keychain_watch();
+        *self.order_watch.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(crate::playback_order::watch(Arc::downgrade(self)));
         self.plugins.start_all().await;
         // Proactive OAuth refresh: one lifespan-owned task polling a stop signal.
         let _ = self.oauth_stop.send(false);
@@ -531,6 +536,14 @@ impl Runtime {
         let _ = self.oauth_stop.send(true);
         if let Some(task) = self
             .keychain_watch
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            task.abort();
+        }
+        if let Some(task) = self
+            .order_watch
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .take()

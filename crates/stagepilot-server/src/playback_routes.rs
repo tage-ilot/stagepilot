@@ -753,6 +753,8 @@ fn status_json(rt: &Runtime) -> Value {
         song_count: song_order.len() as u32,
         song_order,
         order_mode: order_mode.as_str().to_string(),
+        order_source: rt.playback.order_source().to_string(),
+        order_library_note: rt.playback.library_note(),
         learned_songs: learned
             .iter()
             .map(|l| LearnedSongModel {
