@@ -12,6 +12,7 @@ import type {
 } from "../propresenterLink";
 import type { LibrarySong } from "../types";
 import type { Tone } from "./ui/types";
+import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 
 /** The words of the "Add to ProPresenter" window, in one place (church-operator wording: short, plain, no jargon). */
 
@@ -25,7 +26,7 @@ export const KEY_NOTE = "ProPresenter does not show the key for these songs; it 
 export const OTHER_ITEMS_STAY = "Other items stay as they are.";
 export const OPEN_LIBRARY_ONCE = "Open the Playback library in ProPresenter once, then press Try again.";
 export const PLAYING_WORDS = "A song is playing. Wait until it has ended, then try again.";
-export const LINK_NOT_READY_WORDS = "The ProPresenter Link is not ready. Check it in the Presentation panel.";
+export const LINK_NOT_READY_WORDS = `The ${PRESENTER_LINK_NAME} is not ready. Check it in the Presentation panel.`;
 export const AT_THE_END = "At the end";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

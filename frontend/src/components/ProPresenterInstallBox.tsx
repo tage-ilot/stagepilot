@@ -8,19 +8,20 @@ import type { PlaybackHelperInstall } from "../types";
 import { CONTROL_34 } from "./compactControl";
 import { countdownText, updatesItself } from "./lightkeyProject";
 import { Button } from "./ui/Button";
+import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 
 type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
 
 const WHY: Record<Exclude<LinkState, "ready" | "checking">, string> = {
-  not_installed: "The ProPresenter Link is optional. It lets StagePilot add Playback's songs to a ProPresenter playlist when ProPresenter runs on another computer. StagePilot gives you one command to paste into Terminal on the ProPresenter computer. The command runs there and that computer needs no internet.",
-  outdated: "The ProPresenter Link on the ProPresenter computer is older than the one StagePilot carries. It still works. Run one command in Terminal on that computer to update it. No internet needed.",
-  needs_command: "The ProPresenter Link on the ProPresenter computer does not know this StagePilot yet. Run the command again, in Terminal on that computer. No internet needed.",
-  not_answering: "StagePilot cannot reach the ProPresenter Link. Is the ProPresenter computer on and awake? If the Link was set up again from another computer, run the command again here.",
+  not_installed: `The ${PRESENTER_LINK_NAME} is optional. It lets StagePilot add Playback's songs to a ProPresenter playlist when ProPresenter runs on another computer. StagePilot gives you one command to paste into Terminal on the ProPresenter computer. The command runs there and that computer needs no internet.`,
+  outdated: `The ${PRESENTER_LINK_NAME} on the ProPresenter computer is older than the one StagePilot carries. It still works. Run one command in Terminal on that computer to update it. No internet needed.`,
+  needs_command: `The ${PRESENTER_LINK_NAME} on the ProPresenter computer does not know this StagePilot yet. Run the command again, in Terminal on that computer. No internet needed.`,
+  not_answering: `StagePilot cannot reach the ${PRESENTER_LINK_NAME}. Is the ProPresenter computer on and awake? If the Link was set up again from another computer, run the command again here.`,
 };
 
 /**
- * "Set up the ProPresenter computer", in the ProPresenter Live Link block. Shown while the ProPresenter Link is not ready, and as
- * "Update the ProPresenter Link" when the one that answers is older than the one StagePilot carries. StagePilot makes a one-time command;
+ * "Set up the ProPresenter computer", in the ProPresenter Live Link block. Shown while the Presenter Link is not ready, and as
+ * "Update the Presenter Link" when the one that answers is older than the one StagePilot carries. StagePilot makes a one-time command;
  * pasted into Terminal on the ProPresenter computer it fetches the matching Link from StagePilot itself (this network only, 30 minutes,
  * no internet), together with the key that only this StagePilot can use. The box ends the session by itself when the Link answers. The
  * command holds only the one-time address: the key is never on screen.
@@ -42,7 +43,7 @@ export function ProPresenterInstallBox({ link, hasComputer, autoStart = false }:
   const again = autoStart && ready;
   const startedReady = useRef(false);
   const autoRan = useRef(false);
-  const heading = again ? "ProPresenter Link command" : state === "outdated" ? "Update the ProPresenter Link" : "Set up the ProPresenter computer";
+  const heading = again ? `${PRESENTER_LINK_NAME} command` : state === "outdated" ? `Update the ${PRESENTER_LINK_NAME}` : "Set up the ProPresenter computer";
   const { watch } = link;
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -120,8 +121,8 @@ export function ProPresenterInstallBox({ link, hasComputer, autoStart = false }:
 
   // The live region stays on screen so the change to "ready" is announced even though the box closes.
   const announcement = phase === "done"
-    ? "The ProPresenter Link is ready."
-    : phase === "ready" ? "Waiting for the ProPresenter Link\u2026" : "";
+    ? `The ${PRESENTER_LINK_NAME} is ready.`
+    : phase === "ready" ? `Waiting for the ${PRESENTER_LINK_NAME}\u2026` : "";
   const live = <p aria-live="polite" className="sr-only" data-testid="propresenter-install-live" role="status">{announcement}</p>;
 
   if (phase === "done") return <div data-testid="propresenter-install-done">{live}</div>;
@@ -130,7 +131,7 @@ export function ProPresenterInstallBox({ link, hasComputer, autoStart = false }:
   const update = link.status?.update;
   if ((ready || state === null || state === "checking" || (state === "outdated" && updatesItself(update))) && phase === "idle" && !autoStart) return <div>{live}</div>;
   if (!hasComputer) {
-    return <div>{live}<p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-install-need-computer">Save the Presentation connection above with the ProPresenter computer&apos;s address, then set up its ProPresenter Link.</p></div>;
+    return <div>{live}<p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-install-need-computer">Save the Presentation connection above with the ProPresenter computer&apos;s address, then set up its {PRESENTER_LINK_NAME}.</p></div>;
   }
 
   const panel = "mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body";
@@ -157,7 +158,7 @@ export function ProPresenterInstallBox({ link, hasComputer, autoStart = false }:
             <li>
               On the ProPresenter computer, open Terminal and paste this command. It runs there and needs no internet.
               <p className="mt-1.5 font-medium text-ink" data-testid="propresenter-install-label">
-                ProPresenter Link for the ProPresenter computer:
+                {PRESENTER_LINK_NAME} for the ProPresenter computer:
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-[1_1_20rem] select-all break-all rounded-ds-lg border border-edge bg-surface-panel-strong px-2.5 py-1.5 font-mono text-[0.8125rem] text-ink" data-testid="propresenter-install-command" tabIndex={0}>
@@ -171,11 +172,11 @@ export function ProPresenterInstallBox({ link, hasComputer, autoStart = false }:
             {!startedReady.current && <li>Wait here. It connects by itself.</li>}
           </ol>
           <p className="mt-1.5 text-ink-muted" data-testid="propresenter-install-waiting">
-            {`${startedReady.current ? "" : "Waiting for the ProPresenter Link\u2026 "}The command works for ${countdownText(left)} more, on this network only.`}
+            {`${startedReady.current ? "" : `Waiting for the ${PRESENTER_LINK_NAME}\u2026 `}The command works for ${countdownText(left)} more, on this network only.`}
           </p>
           <p className="mt-1 text-ink-muted">
             Python comes with Apple&apos;s command-line tools. If Terminal says it is missing, run <code className="font-mono">xcode-select --install</code> first.
-            To let StagePilot load a song that ProPresenter does not have yet, also allow ProPresenter Link in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
+            To let StagePilot load a song that ProPresenter does not have yet, also switch on &quot;ProPresenter Link&quot; (the name macOS shows for the {PRESENTER_LINK_NAME}) in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
           </p>
           {error && <p className="mt-1 text-danger-text" role="alert">{error}</p>}
           <div className="mt-1.5">

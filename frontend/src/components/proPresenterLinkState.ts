@@ -3,9 +3,13 @@ import type { ProPresenterStatusResponse } from "../types";
 import type { LiveLinkLine, PillPart } from "./playbackLiveLinkState";
 import type { Tone } from "./ui/types";
 
+/** The two connection statuses of the ProPresenter Live Link block, named in ONE place (pills, status lines, hover text, aria labels, live region). */
+export const PROPRESENTER_API_NAME = "ProPresenter API";
+export const PRESENTER_LINK_NAME = "Presenter Link";
+
 /**
  * The words and tones of the ProPresenter Live Link block (DESIGN.md: a dot AND words, never colour alone). Two statuses are kept apart on
- * purpose: ProPresenter itself (the connection the timer and the Looks use) and the optional ProPresenter Link (the way StagePilot reaches
+ * purpose: ProPresenter itself (the connection the timer and the Looks use) and the optional Presenter Link (the way StagePilot reaches
  * the song files and the screen of the ProPresenter computer). The Link is optional: a computer that has none is "Not installed", a calm
  * grey, never a warning, and it never changes the header's Ready / Check system verdict.
  */
@@ -14,7 +18,7 @@ import type { Tone } from "./ui/types";
 export function proPresenterLine(status: Pick<ProPresenterStatusResponse, "enabled" | "host" | "connection_status"> | null): LiveLinkLine {
   if (!status) return { tone: "idle", text: "Checking ProPresenter…" };
   const at = status.host ? ` at ${status.host}` : "";
-  if (!status.enabled) return { tone: "idle", text: "Not connected. Save the connection above to use ProPresenter" };
+  if (!status.enabled) return { tone: "idle", text: "Not connected. Save the connection to use ProPresenter" };
   switch (status.connection_status) {
     case "connected": return { tone: "success", text: `Connected to ProPresenter${at}` };
     case "ready": return { tone: "info", text: `Ready, ProPresenter${at}` };
@@ -56,7 +60,7 @@ export function importBlockedWords(blocker: string | undefined | null): string {
 /** The Link can add songs ProPresenter already has, but not load a missing one from ProPresenter's Search. */
 export const importBlocked = (status: LinkStatus | null): boolean => status?.state === "ready" && !status.can_import;
 
-/** The ProPresenter Link line: `Ready, on this computer`, `Ready, version 0.1.0`, `Not installed`, `Update available, version 0.1.0`... */
+/** The Presenter Link line: `Ready, on this computer`, `Ready, version 0.1.0`, `Not installed`, `Update available, version 0.1.0`... */
 export function linkLine(status: LinkStatus | null, hasComputer: boolean): LiveLinkLine {
   if (!hasComputer) return { tone: "idle", text: "Not installed" };
   if (!status) return { tone: "idle", text: "Checking…" };
@@ -78,7 +82,7 @@ export function linkLine(status: LinkStatus | null, hasComputer: boolean): LiveL
   }
 }
 
-/** The pill word for the Link: one or two words. */
+/** The pill word for the Presenter Link: one or two words. */
 export function linkPill(status: LinkStatus | null, hasComputer: boolean): PillPart {
   if (!hasComputer) return { word: "Not installed", tone: "idle" };
   if (!status) return { word: "Checking", tone: "idle" };
@@ -108,4 +112,8 @@ export function linkNote(status: LinkStatus | null): string | null {
 }
 
 /** The text of the live region on the block's lines. */
-export const linkLive = (api: LiveLinkLine, link: LiveLinkLine): string => `${api.text}. ProPresenter Link: ${link.text}.`;
+export const linkLive = (api: LiveLinkLine, link: LiveLinkLine): string => `${PROPRESENTER_API_NAME}: ${api.text}. ${PRESENTER_LINK_NAME}: ${link.text}.`;
+
+/** One status as the block writes it, in the pill (`ProPresenter API: Connected`) and in the line under the title (`ProPresenter API: Connected to ProPresenter at 192.0.2.10.`). */
+export const apiWords = (rest: string): string => `${PROPRESENTER_API_NAME}: ${rest}`;
+export const linkWords = (rest: string): string => `${PRESENTER_LINK_NAME}: ${rest}`;

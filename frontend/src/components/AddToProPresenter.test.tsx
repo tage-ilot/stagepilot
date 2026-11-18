@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); window.localStorage.clear(); });
 
-describe("when the button is drawn: the ProPresenter Link AND the Library Link AND a paired setlist", () => {
+describe("when the button is drawn: the Presenter Link AND the Library Link AND a paired setlist", () => {
   it("is there when all three hold, for another computer and for this one", () => {
     const { unmount } = view();
     expect(screen.getByRole("button", OPEN)).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe("when the button is drawn: the ProPresenter Link AND the Library Link A
   });
 });
 
-describe("without the ProPresenter Link at all", () => {
+describe("without the Presenter Link at all", () => {
   it("draws nothing when no controller is given (a panel that does not know the Link)", () => {
     const { container } = render(<AddToProPresenter library={library()} />);
     expect(container).toBeEmptyDOMElement();
@@ -486,7 +486,7 @@ describe("Add songs: when it is off, and why", () => {
     expect(reason()).toBe("Blocked: That header is in the playlist twice.");
   });
 
-  it("is off when the ProPresenter Link stops being ready while the window is open", async () => {
+  it("is off when the Presenter Link stops being ready while the window is open", async () => {
     const { again } = view();
     const user = await open();
     await choose(user);
@@ -494,8 +494,8 @@ describe("Add songs: when it is off, and why", () => {
     again({ link: linkController(helperStatus("not_answering")) });
     expect(add()).toBeDisabled();
     expect(dialogButton("Preview")).toBeDisabled();
-    expect(reason()).toBe("The ProPresenter Link is not ready. Check it in the Presentation panel.");
-    expect(screen.getByTestId("add-songs-link-gone")).toHaveTextContent("The ProPresenter Link is not ready now. Nothing was changed.");
+    expect(reason()).toBe("The Presenter Link is not ready. Check it in the Presentation panel.");
+    expect(screen.getByTestId("add-songs-link-gone")).toHaveTextContent("The Presenter Link is not ready now. Nothing was changed.");
   });
 });
 
@@ -708,7 +708,7 @@ describe("Add songs: the job, step by step", () => {
     ["unknown_plan", 404, "That preview is too old or not known. Look at the preview again.", true],
     ["songs_blocked", 409, "Some songs cannot be added. Leave them out first.", true],
     ["busy", 409, "StagePilot is already adding songs. Wait until it has finished.", false],
-    ["link_not_ready", 409, "The ProPresenter Link is not ready.", false],
+    ["link_not_ready", 409, "The Presenter Link is not ready.", false],
   ])("refused at once with %s: the sentence, back to the preview, stale when it is no longer true", async (code, status, text, stale) => {
     const user = await start();
     vi.mocked(api.applyAddSongs).mockRejectedValueOnce(new api.ApiError(text, status, code));

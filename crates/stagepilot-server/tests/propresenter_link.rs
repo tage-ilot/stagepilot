@@ -479,7 +479,7 @@ async fn every_state_of_the_helper_has_its_status_and_its_one_line() {
     );
     assert_eq!(
         status.message,
-        "The ProPresenter Link is not installed on the ProPresenter computer."
+        "The Presenter Link is not installed on the ProPresenter computer."
     );
     assert_eq!(status.computer_address.as_deref(), Some("127.0.0.1"));
     assert!(!status.paired);
@@ -488,7 +488,7 @@ async fn every_state_of_the_helper_has_its_status_and_its_one_line() {
     link.advance_clock(Duration::from_secs(5));
     let status = link.status(true).await;
     assert_eq!(status.state, LinkState::NotAnswering);
-    assert_eq!(status.message, "The ProPresenter Link did not answer.");
+    assert_eq!(status.message, "The Presenter Link did not answer.");
     assert!(status.paired);
 
     // A helper that wants another key.
@@ -500,7 +500,7 @@ async fn every_state_of_the_helper_has_its_status_and_its_one_line() {
     assert_eq!(status.state, LinkState::NeedsCommand);
     assert_eq!(
         status.message,
-        "The ProPresenter Link does not know this StagePilot yet. Run the setup command again."
+        "The Presenter Link does not know this StagePilot yet. Run the setup command again."
     );
     assert!(status.libraries.is_empty() && !status.can_import);
     // A helper that answers the bare health only (no valid signature from us).
@@ -517,7 +517,7 @@ async fn every_state_of_the_helper_has_its_status_and_its_one_line() {
     assert_eq!(status.version.as_deref(), Some(BUNDLED_HELPER_VERSION));
     assert_eq!(
         status.message,
-        format!("The ProPresenter Link (version {BUNDLED_HELPER_VERSION}) is ready.")
+        format!("The Presenter Link (version {BUNDLED_HELPER_VERSION}) is ready.")
     );
     assert_eq!(status.libraries, ["Playback", "Songs"]);
     assert!(status.playback_library_exists && status.updater);
@@ -537,7 +537,7 @@ async fn every_state_of_the_helper_has_its_status_and_its_one_line() {
     link.advance_clock(Duration::from_secs(60));
     let status = link.status(true).await;
     assert_eq!(status.state, LinkState::Outdated);
-    assert_eq!(status.message, "The ProPresenter Link (version 0.0.1) can be updated. It still works; run the setup command to update it.");
+    assert_eq!(status.message, "The Presenter Link (version 0.0.1) can be updated. It still works; run the setup command to update it.");
     assert_eq!(status.libraries, ["Playback", "Songs"], "it is still used");
     // A newer one is fine.
     fake.set(|h| h.version = "9.9.9".into());
@@ -557,7 +557,7 @@ async fn a_look_in_flight_is_checking_until_it_has_an_answer() {
     tokio::time::sleep(Duration::from_millis(150)).await;
     let meanwhile = link.status(false).await;
     assert_eq!(meanwhile.state, LinkState::Checking);
-    assert_eq!(meanwhile.message, "Checking the ProPresenter Link…");
+    assert_eq!(meanwhile.message, "Checking the Presenter Link…");
     assert_eq!(slow.await.unwrap().state, LinkState::Ready);
     assert_eq!(fake.gets(), 1, "two windows, one ask");
 }
@@ -1019,6 +1019,6 @@ async fn three_failed_attempts_give_up_and_say_to_run_the_setup_command() {
     assert_eq!(view.mode, HelperUpdateMode::Manual);
     assert_eq!(
         view.message.as_deref(),
-        Some("The ProPresenter Link could not update itself. Run the setup command on the ProPresenter computer to update it.")
+        Some("The Presenter Link could not update itself. Run the setup command on the ProPresenter computer to update it.")
     );
 }

@@ -294,7 +294,11 @@ describe("ProPresenterSetupPanel", () => {
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
     expect(screen.getByText(/2 changes/)).toBeInTheDocument();
     expect(screen.getAllByText("Not saved yet").length).toBeGreaterThanOrEqual(2);
-    expect(document.querySelectorAll('[data-field][data-state="held"]')).toHaveLength(2);
+    // The Host box (in the Live Link block) and the Look field both show the marker; the Host box also carries the warning border.
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
+    expect(document.querySelectorAll('[data-field][data-state="held"]')).toHaveLength(1);
+    expect(screen.getByLabelText("Host")).toHaveClass("!border-warning");
+    expect(screen.getByLabelText("Host")).toHaveAccessibleDescription("Not saved yet");
   });
 
   it("a changed countdown timer is a held change and is sent with Save", async () => {

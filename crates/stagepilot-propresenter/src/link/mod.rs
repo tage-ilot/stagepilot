@@ -169,12 +169,11 @@ impl LinkError {
             }
             Self::NoAnswer => "The ProPresenter computer did not answer.".to_string(),
             Self::Refused(_) => {
-                "The ProPresenter Link refused this StagePilot. Run the setup command again."
+                "The Presenter Link refused this StagePilot. Run the setup command again."
                     .to_string()
             }
             Self::Unreadable => {
-                "The ProPresenter Link answered, but not in a way StagePilot understands."
-                    .to_string()
+                "The Presenter Link answered, but not in a way StagePilot understands.".to_string()
             }
         }
     }

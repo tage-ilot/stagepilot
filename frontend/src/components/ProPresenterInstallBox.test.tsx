@@ -43,16 +43,16 @@ describe("ProPresenterInstallBox", () => {
   it.each([
     ["not_installed", /optional/],
     ["needs_command", /does not know this StagePilot/],
-    ["not_answering", /cannot reach the ProPresenter Link/],
+    ["not_answering", /cannot reach the Presenter Link/],
     ["outdated", /older than the one StagePilot carries/],
   ] as [LinkState, RegExp][])("says why in plain words for a %s Link", (state, words) => {
     render(box(linkController(helperStatus(state))));
     expect(screen.getByTestId("propresenter-install-why")).toHaveTextContent(words);
   });
 
-  it("is called Update the ProPresenter Link when the Link is outdated", () => {
+  it("is called Update the Presenter Link when the Link is outdated", () => {
     render(box(linkController(helperStatus("outdated"))));
-    expect(screen.getByRole("button", { name: "Update the ProPresenter Link" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Update the Presenter Link" })).toBeEnabled();
   });
 
   it("offers no command for an older Link that StagePilot updates by itself, and offers it when StagePilot cannot", () => {
@@ -61,8 +61,8 @@ describe("ProPresenterInstallBox", () => {
       expect(screen.queryByTestId("propresenter-install")).toBeNull();
       unmount();
     }
-    render(box(linkController(helperStatus("outdated", { update: { mode: "manual", version: "0.1.0", message: "The ProPresenter Link could not update itself. Run the setup command on the ProPresenter computer to update it." } }))));
-    expect(screen.getByRole("button", { name: "Update the ProPresenter Link" })).toBeEnabled();
+    render(box(linkController(helperStatus("outdated", { update: { mode: "manual", version: "0.1.0", message: "The Presenter Link could not update itself. Run the setup command on the ProPresenter computer to update it." } }))));
+    expect(screen.getByRole("button", { name: "Update the Presenter Link" })).toBeEnabled();
     expect(screen.getByTestId("propresenter-install-why")).toHaveTextContent(/could not update itself.*older than the one StagePilot carries/);
   });
 
@@ -88,8 +88,8 @@ describe("ProPresenterInstallBox", () => {
     await user.click(screen.getByRole("button", { name: "Set up the ProPresenter computer" }));
     expect(await screen.findByTestId("propresenter-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/propresenter-helper/abc123/install.sh | sh");
     expect(api.startProPresenterHelperInstall).toHaveBeenCalledWith();
-    expect(screen.getByTestId("propresenter-install-label")).toHaveTextContent("ProPresenter Link for the ProPresenter computer:");
-    expect(screen.getByTestId("propresenter-install-waiting")).toHaveTextContent(/Waiting for the ProPresenter Link… The command works for 30:00 more, on this network only\./);
+    expect(screen.getByTestId("propresenter-install-label")).toHaveTextContent("Presenter Link for the ProPresenter computer:");
+    expect(screen.getByTestId("propresenter-install-waiting")).toHaveTextContent(/Waiting for the Presenter Link… The command works for 30:00 more, on this network only\./);
     expect(screen.getByTestId("propresenter-install-ready")).toHaveTextContent(/Terminal/);
     expect(screen.getByTestId("propresenter-install-ready")).toHaveTextContent(/Accessibility/);
     expect(link.watch).toHaveBeenLastCalledWith(true);
@@ -109,7 +109,7 @@ describe("ProPresenterInstallBox", () => {
     vi.mocked(api.startProPresenterHelperInstall).mockResolvedValue(made());
     render(box(linkController(helperStatus("ready")), true, true));
     expect(await screen.findByTestId("propresenter-install-command")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "ProPresenter Link command" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Presenter Link command" })).toBeInTheDocument();
     expect(screen.getByTestId("propresenter-install-waiting")).toHaveTextContent(/^The command works for 30:00 more, on this network only\.$/);
     expect(screen.queryByTestId("propresenter-install-done")).toBeNull();
   });
@@ -149,7 +149,7 @@ describe("ProPresenterInstallBox", () => {
     await screen.findByTestId("propresenter-install-command");
     rerender(box(linkController(helperStatus("ready"))));
     await waitFor(() => expect(screen.getByTestId("propresenter-install-done")).toBeInTheDocument());
-    expect(screen.getByTestId("propresenter-install-live")).toHaveTextContent("The ProPresenter Link is ready.");
+    expect(screen.getByTestId("propresenter-install-live")).toHaveTextContent("The Presenter Link is ready.");
     expect(screen.getByTestId("propresenter-install-live")).toHaveAttribute("aria-live", "polite");
     expect(api.endProPresenterHelperInstall).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("propresenter-install-command")).toBeNull();
@@ -158,7 +158,7 @@ describe("ProPresenterInstallBox", () => {
   it("an update ends only when the Link is ready again, not while it is still outdated", async () => {
     vi.mocked(api.startProPresenterHelperInstall).mockResolvedValue(made());
     const { rerender } = render(box(linkController(helperStatus("outdated"))));
-    await userEvent.setup().click(screen.getByRole("button", { name: "Update the ProPresenter Link" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Update the Presenter Link" }));
     await screen.findByTestId("propresenter-install-command");
     rerender(box(linkController(helperStatus("outdated"))));
     expect(screen.getByTestId("propresenter-install-command")).toBeInTheDocument();

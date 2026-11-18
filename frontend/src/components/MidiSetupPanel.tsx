@@ -94,7 +94,7 @@ export function MidiSetupPanel({
   songs?: Song[];
   playback?: PlaybackController;
   library?: PlaybackLibraryController;
-  /** The optional ProPresenter Link: with it ready, the Playback songs offer Add to ProPresenter. */
+  /** The optional Presenter Link: with it ready, the Playback songs offer Add to ProPresenter. */
   propresenterLink?: ProPresenterLinkController;
   /** StagePilot's own countdown is running (a song is playing). */
   timerRunning?: boolean;

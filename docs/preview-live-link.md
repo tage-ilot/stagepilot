@@ -69,7 +69,7 @@ The stand-ins speak the protocol the way the written spec and `playback_library.
 file's own signing code). They cannot show how the real installer behaves on macOS (launchd, Playback's permission prompts, `curl` and `sh`
 versions), or the real covers and arrangements. Run the setup command once on the real Playback computer to see that.
 
-## The ProPresenter Link (the block and the "Add to ProPresenter" window)
+## The Presenter Link (the block and the "Add to ProPresenter" window)
 
 `tools/preview_propresenter_link.py` starts the stand-ins and a small **preview server** in front of the demo backend:
 
@@ -88,7 +88,7 @@ address to anyone who should not see the demo. **Ctrl-C** stops everything and r
 
 | To see | Do |
 |---|---|
-| The block, this computer | Configuration > Presentation. Reads `ProPresenter Link: Can add songs, cannot import missing songs (needs a Mac), on this computer` (this computer is not a Mac) |
+| The block, this computer | Configuration > Presentation. The block is the first one under the header and holds Host, Port and **Test connection**; look at it next to Configuration > Playback and Configuration > Lighting. Reads `Presenter Link: Can add songs, cannot import missing songs (needs a Mac), on this computer` (this computer is not a Mac) |
 | The window | Configuration > Playback > **Add to ProPresenter**. With the demo's four songs: Holy Forever and Gratitude become new copies, Battle Belongs is not in ProPresenter (blocked: import needs a Mac), Firm Foundation has two files (needs a choice). Tick **Skip blocked songs**, **Add songs**, wait about 15 seconds |
 | `Already there` | Add the songs once, then **Preview** the same songs again |
 | Another computer's Link | `http://<this computer>:18900/__preview/` lists the states (Not installed, Ready, cannot import, Update available (by hand / by itself), Needs the command again, Not answering). They change only what the status and setup routes say; adding songs always goes through the real routes and the made-up folder. **Set up the ProPresenter computer** shows a made-up command with the countdown; switch to *Ready* and the box closes by itself |
