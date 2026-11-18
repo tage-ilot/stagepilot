@@ -54,8 +54,6 @@ pub enum HelperState {
     Ready,
     /// It was in use and does not answer now.
     Unreachable,
-    /// The operator forgot it: the key was deleted, so it cannot be used.
-    Forgotten,
 }
 
 impl HelperState {
@@ -78,6 +76,20 @@ pub struct HelperStatus {
     pub message: String,
     /// A key exists (StagePilot made one when a setup session was first opened).
     pub paired: bool,
+    /// The helper can install an update that StagePilot sends (helper 0.4.0 and newer say `"updater": 1` in `/health`). One that
+    /// cannot is a bootstrap case: it is updated once by hand, with the setup command.
+    pub updater: bool,
+    /// Why the last automatic update did not stay (the helper put the old version back), when it says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<String>")]
+    pub last_update_error: Option<String>,
+    /// What StagePilot is doing about an older helper (added by the route; left out when there is nothing to say).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(
+        optional,
+        as = "Option<stagepilot_core::helper_update::HelperUpdateStatus>"
+    )]
+    pub update: Option<stagepilot_core::helper_update::HelperUpdateStatus>,
 }
 
 /// What `GET /api/v1/playback-library/status` says.
@@ -397,6 +409,10 @@ pub struct Health {
     /// (no key is set: anyone may ask), `required` (the bare answer of a keyed helper), `key_too_short`.
     /// Absent on helper 0.2.0 and older.
     pub auth: Option<String>,
+    /// `"updater": 1` from helper 0.4.0: it can install a signed update that StagePilot sends. Absent on older helpers.
+    pub updater: Option<u32>,
+    /// The helper's own sentence about why the last update was undone (`last_update_error`), when there is one.
+    pub last_update_error: Option<String>,
 }
 
 /// Reads `GET /health`. Anything odd gives `Database::Unknown`, never a panic.
@@ -418,6 +434,9 @@ pub fn parse_health(value: &Value) -> Health {
         setlists: count_of(value, "setlists"),
         library_revision: text_of(value, "library_revision").map(|v| v.chars().take(64).collect()),
         auth: text_of(value, "auth").map(|v| v.chars().take(20).collect()),
+        updater: count_of(value, "updater"),
+        last_update_error: text_of(value, "last_update_error")
+            .map(|v| v.chars().take(200).collect()),
     }
 }
 
@@ -458,10 +477,6 @@ pub fn helper_words(state: HelperState, version: Option<&str>) -> String {
         ),
         HelperState::Ready => format!("The Library Link{version} is ready."),
         HelperState::Unreachable => "The Library Link did not answer.".to_string(),
-        HelperState::Forgotten => {
-            "StagePilot forgot the Library Link. Run the setup command to use it again."
-                .to_string()
-        }
     }
 }
 
@@ -1071,20 +1086,21 @@ mod tests {
 
     #[test]
     fn what_the_helper_says_about_authentication_decides_its_state() {
+        let bundled = crate::helper_assets::BUNDLED_HELPER_VERSION;
         let state = |auth: Option<&str>, version: &str| {
             helper_state_for(&parse_health(&json!({
                 "ok": true, "version": version, "database": "ok", "auth": auth
             })))
         };
-        assert_eq!(state(Some("key"), "0.3.0"), HelperState::Ready);
+        assert_eq!(state(Some("key"), bundled), HelperState::Ready);
         assert_eq!(state(Some("key"), "0.10.0"), HelperState::Ready);
         assert_eq!(
-            state(Some("key"), "0.2.9"),
+            state(Some("key"), "0.3.9"),
             HelperState::Outdated,
             "older than the bundled one"
         );
         assert_eq!(
-            state(Some("none"), "0.3.0"),
+            state(Some("none"), bundled),
             HelperState::Outdated,
             "no key set on the helper"
         );
@@ -1093,14 +1109,13 @@ mod tests {
             HelperState::Outdated,
             "0.2.0 has no auth field at all"
         );
-        assert_eq!(state(Some("required"), "0.3.0"), HelperState::NeedsKey);
-        assert_eq!(state(Some("key_too_short"), "0.3.0"), HelperState::NeedsKey);
+        assert_eq!(state(Some("required"), bundled), HelperState::NeedsKey);
+        assert_eq!(state(Some("key_too_short"), bundled), HelperState::NeedsKey);
         assert!(HelperState::Ready.is_active() && HelperState::Outdated.is_active());
         for quiet in [
             HelperState::NotInstalled,
             HelperState::NeedsKey,
             HelperState::Unreachable,
-            HelperState::Forgotten,
         ] {
             assert!(!quiet.is_active(), "{quiet:?}");
             assert!(!helper_words(quiet, None).is_empty());

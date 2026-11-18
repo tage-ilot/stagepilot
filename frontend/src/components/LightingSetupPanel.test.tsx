@@ -999,7 +999,7 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
     artwork: null, rental_expires_utc: null, ...over,
   });
   const libraryOf = (songs: unknown[], over: Record<string, unknown> = {}) => ({
-    target: "10.0.0.5", address: "", status: null, error: null, pending: null, saveAddress: vi.fn(), forget: vi.fn(), check: vi.fn(), watch: vi.fn(),
+    target: "10.0.0.5", address: "", status: null, error: null, pending: null, saveAddress: vi.fn(), check: vi.fn(), watch: vi.fn(),
     plan: { enabled: true, state: "ready", message: null, plan_date: "2026-07-19", setlist: null, newest: null, stale: false, checked_at: null, songs },
     ...over,
   }) as never;

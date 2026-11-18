@@ -395,6 +395,8 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
     // The Playback library connection is changed by its own route only (`PUT /api/v1/playback-library/settings`),
     // so a save of anything else, even from an older window, never switches it on or off.
     requested.playback_library = rt.settings_service.snapshot().playback_library;
+    // The automatic helper update is switched in the settings file only (`helper_auto_update`, docs/configuration.md): no window changes it.
+    requested.helper_auto_update = rt.settings_service.snapshot().helper_auto_update;
     let previous = rt.settings_service.effective_runtime_settings();
     let previous_effective = rt.settings_service.effective_snapshot();
     let timer_running = rt.store.snapshot().timer.status == TimerStatus::Running;

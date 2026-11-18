@@ -214,6 +214,15 @@ pub struct PersistentSettings {
     #[serde(default, skip_serializing_if = "PlaybackLibrarySettings::is_default")]
     #[ts(optional, as = "Option<PlaybackLibrarySettings>")]
     pub playback_library: PlaybackLibrarySettings,
+    /// File only, no screen: whether StagePilot installs a newer Library Link / Lightkey helper by itself when it starts (see
+    /// `docs/configuration.md`). On unless the file says `false`; left out of the saved file while it is on, so an older file saves back
+    /// unchanged.
+    #[serde(
+        default = "helper_auto_update_default",
+        skip_serializing_if = "is_true"
+    )]
+    #[ts(optional, as = "Option<bool>")]
+    pub helper_auto_update: bool,
     #[serde(default)]
     pub network_midi: NetworkMidiSettings,
     #[serde(default)]
@@ -237,6 +246,12 @@ fn server_port_default() -> u16 {
 fn pin_enabled_default() -> bool {
     true
 }
+fn helper_auto_update_default() -> bool {
+    true
+}
+fn is_true(value: &bool) -> bool {
+    *value
+}
 
 impl Default for PersistentSettings {
     fn default() -> Self {
@@ -255,6 +270,7 @@ impl Default for PersistentSettings {
             midi: MidiSettings::default(),
             playback_api: PlaybackApiSettings::default(),
             playback_library: PlaybackLibrarySettings::default(),
+            helper_auto_update: true,
             network_midi: NetworkMidiSettings::default(),
             lights: LightsSettings::default(),
             propresenter: ProPresenterSettings::default(),

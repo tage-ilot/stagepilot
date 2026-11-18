@@ -30,11 +30,10 @@ describe("the Library Link line: words for every state, and never a warning for 
     expect(line("outdated").text).toBe("Update available, version 0.2.0");
     expect(line("needs_key")).toEqual({ tone: "warning", text: "Needs the command again" });
     expect(line("unreachable")).toEqual({ tone: "warning", text: "Not answering" });
-    expect(line("forgotten")).toEqual({ tone: "idle", text: "Forgotten" });
   });
 
-  it("not installed and forgotten are grey, never red", () => {
-    for (const state of ["not_installed", "forgotten"] as const) expect(line(state).tone).toBe("idle");
+  it("not installed is grey, never red", () => {
+    expect(line("not_installed").tone).toBe("idle");
   });
 
   it("before the first answer it says it is checking, and with no computer chosen it says not installed", () => {
@@ -45,7 +44,7 @@ describe("the Library Link line: words for every state, and never a warning for 
   it("the script is active in ready and outdated only", () => {
     expect(scriptActive(libraryStatus("ready"))).toBe(true);
     expect(scriptActive(libraryStatus("outdated"))).toBe(true);
-    for (const state of ["not_installed", "needs_key", "unreachable", "forgotten"] as const) expect(scriptActive(libraryStatus(state))).toBe(false);
+    for (const state of ["not_installed", "needs_key", "unreachable"] as const) expect(scriptActive(libraryStatus(state))).toBe(false);
     expect(scriptActive(null)).toBe(false);
   });
 });
@@ -71,7 +70,6 @@ describe("the pill: one short word for each of the two statuses", () => {
     expect(word("outdated").word).toBe("Update available");
     expect(word("needs_key")).toEqual({ word: "Needs setup", tone: "warning" });
     expect(word("unreachable")).toEqual({ word: "Not answering", tone: "warning" });
-    expect(word("forgotten").word).toBe("Forgotten");
     expect(word("not_installed")).toEqual({ word: "Not installed", tone: "idle" });
   });
 

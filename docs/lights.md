@@ -914,6 +914,19 @@ host (not every address), on a random port, and closes it when the session ends.
 (`crates/stagepilot-lights/assets/lightkey-helper/`, refreshed with `node scripts/vendor-lightkey-helper.mjs <tag>`),
 so the installer always matches the StagePilot that offers it.
 
+**Updating it.** From helper 0.6.0 the helper updates itself: when StagePilot starts (and again whenever the helper was silent and
+answers), if the helper is older than the one StagePilot carries, StagePilot sends it the new `lightkey_api.py` and
+`lightkey_cues.py` (`POST /update`, at most 2 MB, one JSON body with the files, `SHA256SUMS` and its signature) while nothing is
+playing, no timer runs and no take is being recorded; it keeps asking every 2 minutes for up to 30 minutes, then waits for the next
+start. The helper installs the files only when `SHA256SUMS` carries an Ed25519 signature by the StagePilot project's key (pinned in the
+helper), every file matches the signed list, the names are exactly those two, the version is higher than the one that runs, and every
+`.py` compiles; before that, only a local-network address may ask. This helper has no key, so the request is not authenticated beyond
+those checks: the signature is the one thing that matters, and no new secret was added. The helper keeps the old files as `*.prev`,
+restarts, and a wrapper the installer writes (`lightkey_api_run.py`, never replaced by an update) puts them back when the new version
+exits with an error within 20 seconds of starting three times in a row; `/health` then says `last_update_error`. The strip says
+`Updating the helper to 0.6.0…` and, once, `Updated to 0.6.0 automatically.` A helper older than 0.6.0 is updated once with the
+setup command ("Update the helper"). The switch `helper_auto_update` in `settings.json` (on unless it says `false`) turns it off.
+
 **Removing it.** The helper's `uninstall.sh` is one of the five served files. Press **Set up the Lighting computer** to
 start a session, then in Terminal on the Lighting Mac run
 `curl -fsS http://<this computer>:<port>/lightkey-helper/<token>/files/uninstall.sh | sh` (the address is in the

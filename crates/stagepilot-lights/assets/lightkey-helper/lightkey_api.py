@@ -17,6 +17,7 @@ Commands:
   install-shortcut    optional (needs lightkey_cues.py): build the "Get Active Cues" Shortcut, turn "cues" on
   --version           print the version
 """
+import base64
 import hashlib
 import json
 import logging
@@ -36,9 +37,11 @@ import urllib.parse
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 HOME = os.path.expanduser("~")
+APP_DIR = os.path.dirname(os.path.abspath(__file__))     # where the installer put this file; an update replaces the files here
+UPDATE_FILES = ("lightkey_api.py", "lightkey_cues.py")    # the only files an update carries (the cue reader is written only if it is installed)
 DEFAULT_CONFIG_PATH = os.path.join(HOME, "Library", "Application Support", "LightkeyAPI", "config.json")
 
 DEFAULTS = {
@@ -81,6 +84,295 @@ S = {
     "dmx_changed_at": 0,    # ms epoch of the last sACN frame that differed
     "error": None,
 }
+# ===== BEGIN helper-update core =====
+# This block is the same, byte for byte, in the Playback helper (playback_library.py) and the Lightkey helper
+# (lightkey_api.py); StagePilot's tests keep the two copies equal. It holds everything a signed self-update needs:
+# the pinned public key, a pure-Python Ed25519 verifier (macOS command-line Python 3.9 has no Ed25519), the checks
+# an update must pass, and the staged, journaled swap of the files. It makes no network connection.
+UPDATE_PUBLIC_KEY = "Evky97ydM5zWJ02p6Wc7RguEHMglX3WRxiPrege4Op8="    # StagePilot's helper-signing key: raw 32 bytes, base64
+UPDATE_MAX_BYTES = 2 * 1024 * 1024         # the largest request body /update reads
+UPDATER_LEVEL = 1                          # what /health reports as "updater": this helper can update itself, protocol 1
+_VERSION_LINE = re.compile(rb'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"[ \t]*\r?$', re.M)
+_SUMS_LINE = re.compile(r"^([0-9a-f]{64}) [ *]([A-Za-z0-9_][A-Za-z0-9_.-]*)$")
+
+
+class UpdateRejected(Exception):
+    """An update that must not be installed. `message` is one plain sentence; `status` the HTTP code to answer."""
+
+    def __init__(self, message, status=422):
+        Exception.__init__(self, message)
+        self.message, self.status = message, status
+
+
+# ---- Ed25519 signature check (RFC 8032, section 5.1.7), the plain reference algorithm. One check per update, so speed
+# does not matter; clarity does. Points are kept as extended coordinates (X, Y, Z, T) with x = X/Z, y = Y/Z, T = X*Y/Z.
+_ED_P = 2 ** 255 - 19                                           # the field: numbers modulo this prime
+_ED_L = 2 ** 252 + 27742317777372353535851937790883648493       # the order of the base point
+_ED_D = -121665 * pow(121666, _ED_P - 2, _ED_P) % _ED_P         # the curve constant d = -121665/121666
+_ED_SQRT_M1 = pow(2, (_ED_P - 1) // 4, _ED_P)                   # a square root of -1
+
+
+def _ed_x_from_y(y, sign):
+    """The x of the curve point with this y and this low bit of x, or None when there is no such point."""
+    if y >= _ED_P:
+        return None
+    x2 = (y * y - 1) * pow(_ED_D * y * y + 1, _ED_P - 2, _ED_P) % _ED_P
+    if x2 == 0:
+        return None if sign else 0
+    x = pow(x2, (_ED_P + 3) // 8, _ED_P)
+    if (x * x - x2) % _ED_P:
+        x = x * _ED_SQRT_M1 % _ED_P
+    if (x * x - x2) % _ED_P:
+        return None
+    return x if x & 1 == sign else _ED_P - x
+
+
+def _ed_decode(data):
+    """A 32-byte point encoding (y, with the low bit of x in the top bit) as a point, or None when it is not a valid point."""
+    if len(data) != 32:
+        return None
+    y = int.from_bytes(data, "little")
+    sign, y = y >> 255, y & ((1 << 255) - 1)
+    x = _ed_x_from_y(y, sign)
+    return None if x is None else (x, y, 1, x * y % _ED_P)
+
+
+def _ed_add(a, b):
+    """Point addition (the complete formula of RFC 8032, section 5.1.4)."""
+    p = _ED_P
+    e = (a[1] - a[0]) * (b[1] - b[0]) % p
+    f = (a[1] + a[0]) * (b[1] + b[0]) % p
+    g = 2 * a[3] * b[3] * _ED_D % p
+    h = 2 * a[2] * b[2] % p
+    e, f, g, h = f - e, h - g, h + g, f + e
+    return (e * f % p, g * h % p, f * g % p, e * h % p)
+
+
+def _ed_mul(n, point):
+    """n * point by double-and-add."""
+    result = (0, 1, 1, 0)                                      # the neutral point
+    while n:
+        if n & 1:
+            result = _ed_add(result, point)
+        point = _ed_add(point, point)
+        n >>= 1
+    return result
+
+
+def _ed_same(a, b):
+    """The two points are equal (compared without dividing: x1/z1 = x2/z2 and y1/z1 = y2/z2)."""
+    return (a[0] * b[2] - b[0] * a[2]) % _ED_P == 0 and (a[1] * b[2] - b[1] * a[2]) % _ED_P == 0
+
+
+def _ed_is_small_order(point):
+    """The point is one of the 8 points of order dividing 8 (eight times it is the neutral point)."""
+    x, y, z, _t = _ed_mul(8, point)
+    return x % _ED_P == 0 and (y - z) % _ED_P == 0
+
+
+_ED_BASE_Y = 4 * pow(5, _ED_P - 2, _ED_P) % _ED_P
+_ED_BASE = (_ed_x_from_y(_ED_BASE_Y, 0), _ED_BASE_Y, 1, _ed_x_from_y(_ED_BASE_Y, 0) * _ED_BASE_Y % _ED_P)
+
+
+def ed25519_verify(public_key, message, signature):
+    """True only when `signature` (64 bytes) is a valid Ed25519 signature of `message` under `public_key` (32 bytes).
+    Anything malformed (a wrong length, a point that is not on the curve, a non-canonical S) is simply False."""
+    try:
+        if len(public_key) != 32 or len(signature) != 64:
+            return False
+        a = _ed_decode(bytes(public_key))
+        r = _ed_decode(bytes(signature[:32]))
+        s = int.from_bytes(signature[32:], "little")
+        if a is None or r is None or s >= _ED_L:               # S must be below the group order (no second encoding of a signature)
+            return False
+        if _ed_is_small_order(a) or _ed_is_small_order(r):    # no honest key or signature has one; with one the check proves nothing
+            return False
+        k = int.from_bytes(hashlib.sha512(bytes(signature[:32]) + bytes(public_key) + bytes(message)).digest(), "little") % _ED_L
+        return _ed_same(_ed_mul(s, _ED_BASE), _ed_add(r, _ed_mul(k, a)))     # S*B == R + k*A
+    except Exception:
+        return False
+
+
+# ---- what an update must pass
+def parse_version(text):
+    """'1.2.3' as (1, 2, 3); None for anything else."""
+    m = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)", text.strip()) if isinstance(text, str) else None
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
+def parse_sums(text):
+    """SHA256SUMS text as {file name: hex digest}. Every non-empty line must be '<64 hex>  <plain file name>', no name twice."""
+    table = {}
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        m = _SUMS_LINE.match(line.rstrip("\r"))
+        if not m or m.group(2) in table:
+            raise UpdateRejected("The update's checksum list is not valid.")
+        table[m.group(2)] = m.group(1)
+    return table
+
+
+def check_update(request, expected, version_file, current):
+    """Run the checks on a decoded /update body, in this order, and return (the new version text, {name: bytes}):
+    the signature of SHA256SUMS against the pinned key; every file's SHA-256 against SHA256SUMS; the file names are
+    exactly `expected`; the new version (read from `version_file`) is above `current`. Raises UpdateRejected."""
+    files, sums, sig = request.get("files"), request.get("sums"), request.get("sig")
+    if not isinstance(files, dict) or not isinstance(sums, str) or not isinstance(sig, str) or not all(isinstance(v, str) for v in files.values()):
+        raise UpdateRejected("The update request is not in the expected shape.", 400)
+    try:
+        sig_bytes = base64.b64decode(sig, validate=True)
+        signed = sums.encode("utf-8")
+    except ValueError:                                         # not base64, or text that cannot be bytes (UnicodeEncodeError is a ValueError)
+        sig_bytes, signed = b"", b""
+    if not ed25519_verify(base64.b64decode(UPDATE_PUBLIC_KEY), signed, sig_bytes):
+        raise UpdateRejected("The update is not signed by the StagePilot project.")
+    table = parse_sums(sums)
+    data = {}
+    for name, encoded in files.items():
+        try:
+            data[name] = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            raise UpdateRejected("A file in the update is not valid base64.", 400)
+        if table.get(name) != hashlib.sha256(data[name]).hexdigest():
+            raise UpdateRejected("A file in the update does not match the signed checksums.")
+    if set(data) != set(expected):
+        raise UpdateRejected("The update does not hold exactly the files this helper takes.")
+    found = _VERSION_LINE.search(data[version_file])
+    new, old = parse_version(found.group(1).decode()) if found else None, parse_version(current)
+    if new is None or old is None:
+        raise UpdateRejected("The update does not say which version it is.")
+    if new <= old:
+        raise UpdateRejected("The update is not newer than the version that runs (%s)." % current, 409)
+    return found.group(1).decode(), data
+
+
+def read_marker(app_dir, name):
+    """The JSON object in app_dir/name, or None."""
+    try:
+        with open(os.path.join(app_dir, name), encoding="utf-8") as f:
+            value = json.load(f)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def write_marker(app_dir, name, value):
+    """Writes app_dir/name as JSON, all at once (a half-written marker is never seen)."""
+    path = os.path.join(app_dir, name)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(value, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(path + ".tmp", path)
+
+
+def last_update_error(app_dir):
+    """The sentence the wrapper left when a new version would not start and the old one was put back; None otherwise."""
+    marker = read_marker(app_dir, "update-failed")
+    message = marker.get("message") if marker else None
+    return message if isinstance(message, str) and message else None
+
+
+def stage_update(app_dir, data):
+    """Writes the new files into app_dir/update/ (replacing any leftovers), checks that every .py compiles there, and
+    records the plan in update/journal.json, last. Raises UpdateRejected when a file does not compile; nothing outside
+    update/ is touched."""
+    import py_compile
+    stage = os.path.join(app_dir, "update")
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(os.path.join(stage, "compiled"))
+    try:
+        for name, blob in sorted(data.items()):
+            with open(os.path.join(stage, name), "wb") as f:
+                f.write(blob)
+                f.flush()
+                os.fsync(f.fileno())
+            if name.endswith(".py"):
+                try:
+                    py_compile.compile(os.path.join(stage, name), cfile=os.path.join(stage, "compiled", name + "c"), doraise=True)
+                except py_compile.PyCompileError:
+                    raise UpdateRejected("A file in the update does not compile.")
+        shutil.rmtree(os.path.join(stage, "compiled"), ignore_errors=True)
+        return stage
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+
+
+def commit_update(app_dir, journal):
+    """The swap. For each file in the journal, in order: keep the file that runs now as NAME.prev, then put the staged file
+    in its place (an atomic rename). Safe to run again after a crash at any point: a file whose staged copy is gone was done
+    before, so the same run finishes the rest. Last it marks the update as unproven (update-pending: the wrapper may put
+    the .prev files back while the new version has not yet run for a while) and removes the journal and the staging folder."""
+    stage = os.path.join(app_dir, "update")
+    for name in journal["files"]:
+        staged, final = os.path.join(stage, name), os.path.join(app_dir, name)
+        if not os.path.exists(staged):
+            continue
+        if os.path.exists(final):
+            shutil.copyfile(final, final + ".prev.tmp")
+            os.replace(final + ".prev.tmp", final + ".prev")
+        os.replace(staged, final)
+    write_marker(app_dir, "update-pending", {"from": journal["from"], "to": journal["to"]})
+    try:
+        os.remove(os.path.join(app_dir, "update-failed"))
+    except OSError:
+        pass
+    os.remove(os.path.join(stage, "journal.json"))
+    shutil.rmtree(stage, ignore_errors=True)
+
+
+def apply_update(app_dir, data, old_version, new_version):
+    """Stage the files, write the journal, swap. After this returns the new set is in place; the caller replies and exits so
+    that the service manager starts the new version."""
+    stage = stage_update(app_dir, data)
+    journal = {"from": old_version, "to": new_version, "files": sorted(data)}
+    write_marker(stage, "journal.json", journal)
+    commit_update(app_dir, journal)
+
+
+def finish_interrupted_update(app_dir):
+    """A crash between the first and the last rename left a journal: finish the swap. True when there was one."""
+    journal = read_marker(os.path.join(app_dir, "update"), "journal.json")
+    if not journal or not isinstance(journal.get("files"), list) or not isinstance(journal.get("from"), str) or not isinstance(journal.get("to"), str):
+        return False
+    if not all(isinstance(n, str) and re.fullmatch(r"[A-Za-z0-9_]+\.py", n) for n in journal["files"]):
+        return False                                           # only plain .py names in the install folder, whatever the file says
+    commit_update(app_dir, journal)
+    return True
+
+
+_PRIVATE_NETWORKS = None
+
+
+def peer_is_private(address):
+    """True for a loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7) or link-local (169.254/16, fe80::/10) address:
+    the local network only. An IPv4 address written as IPv6 counts as the IPv4 address."""
+    import ipaddress
+    global _PRIVATE_NETWORKS
+    if _PRIVATE_NETWORKS is None:
+        _PRIVATE_NETWORKS = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                                                              "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10")]
+    try:
+        ip = ipaddress.ip_address(address.split("%")[0])
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return any(ip.version == net.version and ip in net for net in _PRIVATE_NETWORKS)
+# ===== END helper-update core =====
+
+
+def update_health():
+    """What /health says about self-updates: that this helper can do it, and why the last one did not stay (when it did not)."""
+    body = {"updater": UPDATER_LEVEL}
+    error = last_update_error(APP_DIR)
+    if error:
+        body["last_update_error"] = error
+    return body
+
+
 HOOKS = {"online": [], "dmx": [], "get": {}}   # the optional cue module registers here (lightkey_cues.py)
 streak = [0]
 dirty_at = [0.0]
@@ -1544,6 +1836,7 @@ INDEX = {
         "/takes": "saved takes; /takes/<name> returns one (initial OSC + timed OSC commands)",
         "POST /fixtures/refresh": "read the open Lightkey project again now; answers whether the fixture map changed",
         "/health": "liveness, version, fixture map and project watcher",
+        "POST /update": "install a new version of this helper that the StagePilot project signed",
     },
 }
 
@@ -1563,11 +1856,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _json(self, obj, code=200):
+    def _json(self, obj, code=200, headers=None):
         b = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Length", str(len(b)))
         self.end_headers()
         self.wfile.write(b)
@@ -1614,7 +1909,60 @@ class Handler(BaseHTTPRequestHandler):
             seq = tr.seq
         return self._json({"events": evs, "seq": seq, "server_time": now_ms()})
 
+    def _update(self):
+        """POST /update: install a new version of this helper that the StagePilot project signed. This helper has no key, so the
+        request itself is not authenticated: it takes the same network limits as every request (the interface allow-list), only the
+        local network may ask, and the signature is the one thing that matters. The checks run in this order and the first one that
+        fails answers (and nothing has changed): the caller is on the local network; the signature on SHA256SUMS is the project's;
+        every file matches SHA256SUMS; the files are exactly the ones this helper takes; the version is higher than the one that
+        runs; every .py compiles. No take is being recorded: restarting would lose it."""
+        self.close_connection = True                    # a refused request leaves its body unread, so the connection ends with the answer
+        close = {"Connection": "close"}
+        if not peer_is_private(self.client_address[0]):
+            return self._json({"error": "updates are accepted from the local network only"}, 403, close)
+        if self.connection.getsockname()[0] not in _allowed_ips():
+            return self._json({"error": "not available on this interface"}, 403, close)
+        try:
+            length = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            return self._json({"error": "the request needs a Content-Length"}, 411, close)
+        if length < 0 or length > UPDATE_MAX_BYTES:
+            return self._json({"error": "the update is larger than %d bytes" % UPDATE_MAX_BYTES}, 413, close)
+        body = self.rfile.read(length)
+        if len(body) != length:
+            return self._json({"error": "the request ended early"}, 400, close)
+        try:
+            request = json.loads(body.decode("utf-8"))
+        except ValueError:
+            return self._json({"error": "the request is not JSON"}, 400, close)
+        if not isinstance(request, dict):
+            return self._json({"error": "the request is not in the expected shape"}, 400, close)
+        if not UPDATE_LOCK.acquire(False):
+            return self._json({"error": "another update is being installed"}, 409, close)
+        try:
+            version, data = check_update(request, UPDATE_FILES, "lightkey_api.py", __version__)
+            failed = read_marker(APP_DIR, "update-failed")
+            if failed and failed.get("version") == version:
+                raise UpdateRejected("Version %s was installed here before and did not start. Run the setup command on this computer instead." % version, 409)
+            if REC.status().get("recording"):
+                raise UpdateRejected("A take is being recorded. Try again when it is saved.", 409)
+            if not os.path.exists(os.path.join(APP_DIR, "lightkey_cues.py")):
+                del data["lightkey_cues.py"]            # the cue reader is optional: it is replaced only where it is installed
+            apply_update(APP_DIR, data, __version__, version)
+        except UpdateRejected as e:
+            return self._json({"error": e.message}, e.status, close)
+        except OSError:
+            log.exception("update could not be written")
+            return self._json({"error": "the update could not be written on this computer"}, 500, close)
+        finally:
+            UPDATE_LOCK.release()
+        log.info("update %s -> %s installed; stopping so the new version starts", __version__, version)
+        self._json({"updating": True, "from": __version__, "to": version}, 200, close)
+        schedule_restart(self.server)
+
     def do_POST(self):
+        if self.path.partition("?")[0] == "/update":
+            return self._update()
         if self.connection.getsockname()[0] not in _allowed_ips():
             return self._json({"error": "not available on this interface"}, 403)
         path = self.path.partition("?")[0]
@@ -1684,6 +2032,7 @@ class Handler(BaseHTTPRequestHandler):
             if CFG["cues"]:
                 body["reads"] = S.get("reads", 0)
             body["version"] = __version__
+            body.update(update_health())
             body["fixture_map"] = WATCH.fixture_map()
             body["watch"] = WATCH.report()
             return self._json(body)
@@ -1693,6 +2042,15 @@ class Handler(BaseHTTPRequestHandler):
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+
+UPDATE_LOCK = threading.Lock()
+
+
+def schedule_restart(server):
+    """Stop serving half a second after the answer went out; run() then returns and the process exits 0, and the service
+    manager (launchd, KeepAlive) starts the new version."""
+    threading.Timer(0.5, server.shutdown).start()
 
 
 # ---------------------------------------------------------------- optional cue names
@@ -1767,6 +2125,8 @@ def run():
     setup_logging()
     log.info("lightkey-api %s starting; config=%s", __version__,
              json.dumps({k: v for k, v in CFG.items() if k != "log_file"}))
+    if finish_interrupted_update(APP_DIR):
+        log.warning("an update was interrupted; it has been completed")
     S["online"] = lightkey_running()
     load_fixtures()
     loops = [process_loop, sacn_loop, WATCH.loop]
@@ -1780,7 +2140,11 @@ def run():
         threading.Thread(target=fn, daemon=True).start()
     if CFG["relay"]:
         RELAY.start()
-    Server((CFG["bind"], CFG["port"]), Handler).serve_forever()
+    server = Server((CFG["bind"], CFG["port"]), Handler)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
 
 
 def main(argv):

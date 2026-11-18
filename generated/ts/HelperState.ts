@@ -6,4 +6,4 @@
  * except that a helper that was ready and has gone silent (`unreachable`) may say so in the
  * header pill.
  */
-export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable" | "forgotten";
+export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable";

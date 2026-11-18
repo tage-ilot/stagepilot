@@ -2,13 +2,13 @@
 """A stand-in for the Playback helper (the "Library Link"), for looking at StagePilot's Playback Live Link in a
 browser. Standard library only. It is NOT the real helper: it has no Playback database and no Playback.
 
-It speaks the helper's HTTP protocol (version 0.3.0) well enough for StagePilot, and it checks the key the same
+It speaks the helper's HTTP protocol (version 0.4.0) well enough for StagePilot, and it checks the key the same
 way the real helper does (`playback_library.py`, "key authentication"):
 
 * with a key (`--key-file`, first line, at least 32 characters): every request except the bare `GET /health` must
   carry `X-PBL-Time: <unix seconds>` and `X-PBL-Sig: <hex HMAC-SHA256(key, "GET\\n" + path-with-query + "\\n" + time)>`;
   the time may be 120 s off; the signature is compared in constant time. The bare `/health` answers only
-  `{"ok":true,"name":"playback-library","version":"0.3.0","auth":"required"}`. Anything else without a good signature is
+  `{"ok":true,"name":"playback-library","version":"0.4.0","auth":"required"}`. Anything else without a good signature is
   `401 {"error":"key required"}`; ten bad ones from one address in 60 s make that address get `429` for 60 s.
 * without a key: it answers everyone and `/health` says `"auth":"none"` (`--old` leaves `auth` out, like helper 0.2.0).
 
@@ -362,7 +362,7 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8780)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--key-file", help="file whose first line is the key; read again on every request, so it may be made later")
-    parser.add_argument("--version", default="0.3.0", help="the version it reports (try 0.2.9 for the update notice)")
+    parser.add_argument("--version", default="0.4.0", help="the version it reports (try 0.2.9 for the update notice)")
     parser.add_argument("--old", action="store_true", help="behave like helper 0.2.0: no auth field in /health")
     parser.add_argument("--date", help="the date that gets the six-song setlist (default: today)")
     parser.add_argument("--no-setlist-on", action="append", default=[], metavar="DATE", help="a date Playback has no setlist for (answers 404 for it, the way a Sunday with no setlist does); repeatable")

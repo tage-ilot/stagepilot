@@ -285,8 +285,8 @@ async fn the_served_wrapper_names_the_session_url_the_checksums_and_carries_the_
         script.contains(KEY),
         "the key rides inside the served script"
     );
-    // The key was forgotten while the session was open: there is nothing to install any more.
-    rt.playback_library.forget_key().unwrap();
+    // The stored key became unusable while the session was open: there is nothing to install any more.
+    rt.playback_library.set_key_for_test("short");
     let again = send(
         &app,
         "GET",
@@ -553,7 +553,7 @@ async fn keyed_helper() -> String {
             return (
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, "application/json")],
-                json!({"ok": true, "version": "0.3.0", "auth": "key", "database": "ok", "songs": 1, "setlists": 1}).to_string(),
+                json!({"ok": true, "version": bundled::BUNDLED_HELPER_VERSION, "auth": "key", "database": "ok", "songs": 1, "setlists": 1}).to_string(),
             )
                 .into_response();
         }

@@ -1,21 +1,41 @@
 //! The Playback helper (`huntrw6/playback-library`, the "Library Link") files that ship inside this
 //! binary, so the "Set up the Playback computer" box can hand a version-matched installer to the
 //! Playback Mac without internet. They are the three files of a release that the installer needs:
-//! `playback_library.py`, `install.sh` and the `SHA256SUMS` that lists them (it also lists
-//! `uninstall.sh`, which is not bundled). Refresh them from a release of the helper:
-//! copy the three files into `assets/playback-helper/`, set [`BUNDLED_HELPER_VERSION`] to the
-//! helper's `__version__` and run the tests in this file.
+//! `playback_library.py`, `install.sh` and the `SHA256SUMS` that lists them (`uninstall.sh` is not
+//! bundled). Refresh them from a release of the helper: copy `playback_library.py` and `install.sh`
+//! into `assets/playback-helper/`, set [`BUNDLED_HELPER_VERSION`] to the helper's `__version__`,
+//! run `node scripts/sign_helpers.mjs --sums-only` and the tests in this file.
+//!
+//! The same files, signed, are what StagePilot sends to a helper that is older (`update_bundle`):
+//! `SHA256SUMS.sig` is the project's Ed25519 signature of `SHA256SUMS`, written on the release machine
+//! by `node scripts/sign_helpers.mjs --key <pem>` (it is empty in a working tree: nothing is sent then).
+
+use stagepilot_core::helper_update::UpdateBundle;
 
 /// The three files the install box serves, and nothing else. `install.sh` runs offline when
 /// `playback_library.py` and `SHA256SUMS` sit next to it.
 pub const FILE_NAMES: [&str; 3] = ["install.sh", "playback_library.py", "SHA256SUMS"];
 
 /// The helper version bundled here. A test keeps it equal to `__version__` in `playback_library.py`.
-pub const BUNDLED_HELPER_VERSION: &str = "0.3.0";
+pub const BUNDLED_HELPER_VERSION: &str = "0.4.0";
 
 const INSTALL_SH: &[u8] = include_bytes!("../assets/playback-helper/install.sh");
 const PLAYBACK_LIBRARY_PY: &[u8] = include_bytes!("../assets/playback-helper/playback_library.py");
 const SHA256SUMS: &[u8] = include_bytes!("../assets/playback-helper/SHA256SUMS");
+const SHA256SUMS_SIG: &[u8] = include_bytes!("../assets/playback-helper/SHA256SUMS.sig");
+
+/// The one file an update replaces on the Playback computer (the installer and the wrapper are not updated this way).
+pub const UPDATE_FILE_NAMES: [&str; 1] = ["playback_library.py"];
+
+/// What StagePilot sends to an older helper that can update itself: the script, `SHA256SUMS` and the project's signature of it.
+pub fn update_bundle() -> UpdateBundle {
+    UpdateBundle {
+        version: BUNDLED_HELPER_VERSION.to_string(),
+        files: vec![("playback_library.py", PLAYBACK_LIBRARY_PY)],
+        sums: SHA256SUMS,
+        signature: SHA256SUMS_SIG,
+    }
+}
 
 /// The bytes of a served file, by exact name.
 pub fn file(name: &str) -> Option<&'static [u8]> {
@@ -94,10 +114,27 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} is not in SHA256SUMS"));
             assert_eq!(sha256(file(name).unwrap()), want.0, "{name}");
         }
-        // The list also names the helper's uninstaller, which is not bundled; nothing else.
+        // The list names the files of the folder and nothing else (`node scripts/sign_helpers.mjs --sums-only` writes it).
         let mut names: Vec<&str> = sums.iter().map(|(_, n)| n.as_str()).collect();
         names.sort_unstable();
-        assert_eq!(names, ["install.sh", "playback_library.py", "uninstall.sh"]);
+        assert_eq!(names, ["install.sh", "playback_library.py"]);
+    }
+
+    #[test]
+    fn the_update_bundle_is_the_script_and_the_list_that_covers_it() {
+        let bundle = update_bundle();
+        assert_eq!(bundle.version, BUNDLED_HELPER_VERSION);
+        let names: Vec<&str> = bundle.files.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, UPDATE_FILE_NAMES);
+        let listed = bundle.listed();
+        for (name, bytes) in &bundle.files {
+            let want = listed.iter().find(|(_, n)| n == name).expect("listed");
+            assert_eq!(sha256(bytes), want.0, "{name}");
+        }
+        assert_eq!(
+            bundle.sums, SHA256SUMS,
+            "the exact bytes the signature covers"
+        );
     }
 
     #[test]
@@ -151,8 +188,8 @@ mod tests {
             assert_eq!(parse_version(bad), None, "{bad:?}");
         }
         assert!(is_older_than_bundled(Some("0.2.0")));
-        assert!(is_older_than_bundled(Some("0.2.9")));
-        assert!(!is_older_than_bundled(Some("0.3.0")));
+        assert!(is_older_than_bundled(Some("0.3.9")));
+        assert!(!is_older_than_bundled(Some(BUNDLED_HELPER_VERSION)));
         assert!(
             !is_older_than_bundled(Some("0.10.0")),
             "0.10.0 is newer than 0.3.0"

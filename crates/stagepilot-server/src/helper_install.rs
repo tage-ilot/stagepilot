@@ -37,7 +37,7 @@ pub const SESSION_MS: u64 = 30 * 60 * 1000;
 /// Requests one token may make. The wrapper makes six; the rest is room for a retry.
 pub const MAX_REQUESTS: u32 = 30;
 /// Shown when no LAN address that routes to the Lighting host can be found.
-pub const NO_ADDRESS: &str = "Could not find this computer's address on the Lighting network";
+pub const NO_ADDRESS: &str = "Could not find this computer's address on the Lighting network. StagePilot found no route to that computer from here, so type this computer's address below.";
 /// The URL prefix. Keep it off the remote allow-list (`remote_ingress`).
 pub const PREFIX: &str = "/lightkey-helper";
 

@@ -2212,6 +2212,12 @@ fn parse_health(body: &Value) -> LightkeyHelper {
         map: map.and_then(|m| m.get("map")).and_then(Value::as_i64),
         watch_state: text(watch.and_then(|w| w.get("state"))),
         watch_detail: text(watch.and_then(|w| w.get("detail"))),
+        updater: body
+            .get("updater")
+            .and_then(Value::as_u64)
+            .is_some_and(|level| level >= 1),
+        last_update_error: text(body.get("last_update_error")),
+        update: None,
     }
 }
 

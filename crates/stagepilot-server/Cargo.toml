@@ -52,6 +52,9 @@ percent-encoding = "2"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 sha2 = "0.10.9"
+# Ed25519 check of the signed helper bundles (already in the build through rustls).
+ring = "0.17"
+base64 = "0.22.1"
 hmac = "0.12"
 subtle = "2.6.1"
 getrandom = "0.3"

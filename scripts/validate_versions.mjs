@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertSignedBundles } from "./helper_signing.mjs";
+
 const root = path.resolve(import.meta.dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const jsonVersion = (file) => JSON.parse(read(file)).version;
@@ -61,6 +63,12 @@ for (const file of ["desktop/src-tauri/tauri.release.conf.json", "desktop/src-ta
     throw new Error(`The updater endpoint is missing or changed in ${file}.`);
   }
 }
+
+// A release carries the Playback and Lightkey helpers that StagePilot sends to Macs that run an older one, and a helper installs
+// only what the project signed. So a release (a tag argument such as v2.44.0) is refused when a bundle is unsigned, signed by another
+// key, or changed after it was signed. Sign them first: node scripts/sign_helpers.mjs --key <helper-signing.pem> (release machine only).
+// A run without a tag (npm run release:validate) and pull-request CI do not need the private key and skip this.
+if (expectedTag && /^v\d/.test(expectedTag)) assertSignedBundles(root);
 
 const tracked = process.env.STAGEPILOT_TRACKED_FILES?.split("\n").filter(Boolean) ?? [];
 if (tracked.some((file) => /\.(key|pem)$/i.test(file))) {

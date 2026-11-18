@@ -232,7 +232,7 @@ export interface PersistentSettings {
   playback_api?: PlaybackApiSettings;
   /**
    * The Playback library (the Library Link). Left out of the file until something is set. `enabled` is no longer a switch: absent = never
-   * paired, `true` = has been in use, `false` = forgotten. `address` is the optional override of the helper's computer (empty: the saved Playback host).
+   * paired, `true` = has been in use (`false` only comes from an older file and means nothing). `address` is the optional override of the helper's computer (empty: the saved Playback host).
    * Mirrors the generated `PlaybackLibrarySettings`.
    */
   playback_library?: { enabled?: boolean | null; address: string };
@@ -466,6 +466,10 @@ export interface LightkeyHelper {
   map?: number;
   watch_state?: string;
   watch_detail?: string;
+  /** The helper can install an update that StagePilot sends (helper 0.6.0 and newer). */
+  updater?: boolean;
+  last_update_error?: string;
+  update?: HelperUpdateStatus;
 }
 
 /** The current song was captured under another project than the one open now. A notice only. */
@@ -986,7 +990,22 @@ export type PlanMatch = "matched" | "uncertain" | "missing" | "duplicate_in_plan
 export type MatchConfidence = "exact" | "close" | "uncertain";
 
 /** Where the Library Link (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
-export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable" | "forgotten";
+export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable";
+
+/**
+ * What StagePilot is doing about a helper that is older than the one it carries (the backend's `HelperUpdateStatus`). `automatic`: it
+ * will send the signed update by itself when nothing is playing; `updating`: it is doing so now; `updated`: it did, said once;
+ * `manual`: the helper cannot update itself (or StagePilot may not), so the setup command is how to update it.
+ */
+export type HelperUpdateMode = "automatic" | "updating" | "updated" | "manual";
+
+export interface HelperUpdateStatus {
+  mode: HelperUpdateMode;
+  /** The version StagePilot carries. */
+  version: string;
+  /** One plain sentence for the window, when there is something to say. */
+  message?: string;
+}
 
 export interface LibraryHelper {
   state: HelperState;
@@ -997,6 +1016,11 @@ export interface LibraryHelper {
   message: string;
   /** A key exists (made when the first setup session was opened). The key itself is never sent to the window. */
   paired: boolean;
+  /** The helper can install an update that StagePilot sends (helper 0.4.0 and newer). One that cannot is updated once by hand. */
+  updater?: boolean;
+  /** Why the last automatic update did not stay (the helper put the old version back), when it says. */
+  last_update_error?: string;
+  update?: HelperUpdateStatus;
 }
 
 export interface LibraryStatus {

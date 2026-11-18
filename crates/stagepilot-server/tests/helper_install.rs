@@ -70,6 +70,13 @@ fn runtime() -> Arc<Runtime> {
     )
 }
 
+/// Saves the Lighting computer's address (the API address: a name or an IP).
+fn save_lighting_host(rt: &Runtime, host: &str) {
+    let mut next = rt.settings_service.snapshot();
+    next.lights.lightkey.api_url = format!("http://{host}:8770");
+    rt.settings_service.save(next).unwrap();
+}
+
 /// An app whose session is already open at `LAN:8000`, and the token.
 fn app_with_session() -> (axum::Router, Arc<Runtime>, String) {
     let rt = runtime();
@@ -252,7 +259,11 @@ async fn the_served_wrapper_names_the_session_url_and_checksums() {
     assert!(script.contains(&format!(
         "BASE='http://192.168.1.20:8000/lightkey-helper/{token}'"
     )));
-    for (hash, name) in bundled::checksums() {
+    // `SHA256SUMS` also lists files that are not installed on the Lighting computer (VERSION): only the served files are checked here.
+    for (hash, name) in bundled::checksums()
+        .into_iter()
+        .filter(|(_, name)| bundled::FILE_NAMES.contains(&name.as_str()))
+    {
         assert!(
             script.contains(&format!("{name}) want='{hash}' ;;")),
             "{name}"
@@ -297,6 +308,23 @@ async fn a_bad_address_is_refused_and_the_default_lighting_host_needs_no_address
         .as_str()
         .unwrap()
         .starts_with(&format!("curl -fsS http://{own}:")));
+}
+
+#[tokio::test]
+async fn a_lighting_host_that_does_not_resolve_gets_the_one_plain_sentence() {
+    let rt = runtime();
+    let app = build_app(rt.clone(), AppOptions { web_root: None });
+    save_lighting_host(&rt, "lighting-mac.invalid");
+    let none = send(
+        &app,
+        "POST",
+        "/api/v1/lights/lightkey/helper-install",
+        None,
+        "127.0.0.1",
+    )
+    .await;
+    assert_eq!(none.status, StatusCode::CONFLICT);
+    assert_eq!(none.json()["code"], "no_lan_address");
 }
 
 /// This computer's own private address, as the system would pick it toward the internet.

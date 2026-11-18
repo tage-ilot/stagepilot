@@ -10,6 +10,7 @@ pub mod bus;
 pub mod config;
 pub mod credential_guard;
 pub mod events;
+pub mod helper_update;
 pub mod logging;
 pub mod plugin;
 pub mod redact;

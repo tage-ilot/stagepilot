@@ -10,6 +10,7 @@ pub mod demo;
 pub mod diagnostics;
 pub mod embedded;
 pub mod helper_install;
+pub mod helper_update;
 pub mod launch;
 pub mod outputs;
 pub mod pco_routes;

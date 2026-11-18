@@ -5,6 +5,7 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import { rememberAddress, useRecentAddresses } from "../hooks/useRecentAddresses";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { CONTROL_40 } from "./liveLink";
+import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { DisclosureButton, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
@@ -89,9 +90,12 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const script = library ? scriptLine(library.status, hasComputer) : null;
   const parts = pillParts({ good: apiGood(status), line: api }, library?.status ?? null, hasComputer);
   const scriptState = library?.status?.helper.state ?? null;
-  const needsSetup = scriptState !== "ready" && scriptState !== null;
+  // A script that is behind and can update itself is updated by StagePilot: its setup box stays closed, with only a line to read.
+  const updatesBySelf = scriptState === "outdated" && updatesItself(library?.status?.helper.update);
+  const needsSetup = scriptState !== "ready" && scriptState !== null && !updatesBySelf;
   const setupShown = setupOpen ?? needsSetup;
-  const setupLabel = scriptState === "outdated" ? "Update the Library Link" : "Library Link setup";
+  const setupLabel = scriptState === "outdated" && !updatesBySelf ? "Update the Library Link" : "Library Link setup";
+  const updateLine = helperUpdateLine(library?.status?.helper.update);
   const note = scriptNote(library?.status ?? null);
 
   return (
@@ -199,6 +203,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       {library && (
         <>
           {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="library-link-note" role="status">{note}</p>}
+          {updateLine && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="library-link-update" role="status">{updateLine}</p>}
           <div hidden={!setupShown} id={setupId}>
             <PlaybackInstallBox autoStart={setupOpen === true} hasComputer={hasComputer} library={library} />
           </div>

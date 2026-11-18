@@ -108,6 +108,147 @@ else
   done
 fi
 for f in $FILES; do cp "$TMP/$f" "$APP/$f.new" && mv "$APP/$f.new" "$APP/$f"; done
+# A manual install is the new truth: forget what an automatic update left (the old version kept as .prev, a half-finished swap,
+# the "unproven" mark and the failure sentence), so the wrapper cannot put an older version back over this one.
+rm -rf "$APP/update"
+rm -f "$APP"/*.prev "$APP"/*.prev.tmp "$APP/update-pending" "$APP/update-failed" "$APP/run-state.json"
+
+# 1b. The wrapper: launchd runs this small file, and it starts the agent. It finishes an update that was cut short and puts the old
+#     version back when a new one will not start. Only this installer writes it; an update never replaces it.
+cat > "$APP/lightkey_api_run.py.new" <<'WRAPEOF'
+#!/usr/bin/env python3
+"""Starts the Lightkey API agent, and puts the old version back when a freshly installed one will not start.
+
+launchd runs this file (through the Lightkey API launcher). The installer writes it and an update never replaces it, so
+it stays the same whatever version the agent is. It does three things:
+
+1. Finishes an update that a crash cut short (update/journal.json is there), so the agent never starts from a half-swapped set.
+2. Starts the agent and waits for it. The agent exits 0 on purpose after it installed an update; launchd then starts this file
+   again, which starts the new version.
+3. When an update has just been installed (update-pending is there) and the agent exits with an error within 20 seconds of
+   starting, three times in a row, it puts the .prev files back, writes update-failed (the agent shows it as
+   last_update_error) and starts the old version. An agent that stays up for 20 seconds proves the new version: update-pending
+   goes away and no later crash can send it back.
+"""
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+APP = os.path.dirname(os.path.abspath(__file__))
+HELPER = os.path.join(APP, "lightkey_api.py")
+FILES = ("lightkey_api.py", "lightkey_cues.py")                  # what an update replaces (the cue reader only where it is installed)
+GRACE_S = float(os.environ.get("LIGHTKEY_WRAPPER_GRACE_S", "20"))   # "within 20 s" (tests shorten it)
+FAILS = 3
+
+
+def path(name):
+    return os.path.join(APP, name)
+
+
+def read(name):
+    try:
+        with open(path(name), encoding="utf-8") as f:
+            value = json.load(f)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def write(name, value):
+    with open(path(name) + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(value, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(path(name) + ".tmp", path(name))
+
+
+def remove(name):
+    try:
+        os.remove(path(name))
+    except OSError:
+        pass
+
+
+def finish_swap():
+    """The same swap the agent does after an update (keep the running file as NAME.prev, rename the staged file over it),
+    run again after a crash: a file whose staged copy is gone was done before."""
+    journal = read(os.path.join("update", "journal.json"))
+    if not journal:
+        return
+    for name in journal.get("files", []):
+        if name not in FILES or not os.path.exists(path(os.path.join("update", name))):
+            continue
+        if os.path.exists(path(name)):
+            shutil.copyfile(path(name), path(name) + ".prev.tmp")
+            os.replace(path(name) + ".prev.tmp", path(name) + ".prev")
+        os.replace(path(os.path.join("update", name)), path(name))
+    write("update-pending", {"from": journal.get("from"), "to": journal.get("to")})
+    remove("update-failed")
+    remove(os.path.join("update", "journal.json"))
+    shutil.rmtree(path("update"), ignore_errors=True)
+
+
+def put_old_version_back():
+    """Restores the .prev files (each one is used up by its own rename, so a crash here is finished by the next start),
+    says why in update-failed and ends the unproven state."""
+    pending = read("update-pending") or {}
+    restored = 0
+    for name in FILES:
+        if os.path.exists(path(name + ".prev")):
+            os.replace(path(name + ".prev"), path(name))
+            restored += 1
+    new = pending.get("to") or "the new version"
+    old = pending.get("from")
+    message = "Version %s would not start, so %s was put back." % (new, "version " + old if old else "the old version")
+    write("update-failed", {"version": pending.get("to"), "message": message if restored else "Version %s would not start." % new})
+    remove("update-pending")
+    return restored > 0
+
+
+def main():
+    finish_swap()
+    stopping = []
+    child = []
+
+    def forward(signum, _frame):
+        stopping.append(signum)
+        if child and child[0].poll() is None:
+            child[0].send_signal(signum)
+
+    for name in ("SIGTERM", "SIGINT", "SIGHUP"):
+        signal.signal(getattr(signal, name), forward)
+    while True:
+        state = read("run-state.json") or {}
+        process = subprocess.Popen([sys.executable, "-u", HELPER, "run"])
+        child[:] = [process]
+        started = time.monotonic()
+        try:
+            code = process.wait(timeout=GRACE_S)
+        except subprocess.TimeoutExpired:
+            if os.path.exists(path("update-pending")):      # it has been up long enough: this version is proven
+                remove("update-pending")
+            write("run-state.json", {"fast_failures": 0})
+            code = process.wait()
+        if stopping or code == 0 or time.monotonic() - started >= GRACE_S:
+            write("run-state.json", {"fast_failures": 0})
+            return 0 if stopping else code
+        state["fast_failures"] = int(state.get("fast_failures", 0)) + 1
+        write("run-state.json", state)
+        if state["fast_failures"] >= FAILS and os.path.exists(path("update-pending")):
+            put_old_version_back()
+            write("run-state.json", {"fast_failures": 0})
+            continue                                         # start the version that was put back, now
+        return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+WRAPEOF
+mv "$APP/lightkey_api_run.py.new" "$APP/lightkey_api_run.py"
 
 # 2. Config: keep an existing one; --allow and --allow-for add the interface.
 [ -f "$APP/config.json" ] || echo '{}' > "$APP/config.json"
@@ -186,11 +327,11 @@ PEOF
 }
 if build_launcher >"$APP/launcher-build.log" 2>&1; then
   START="$LAUNCHER_APP/Contents/MacOS/lightkey-api"
-  START_ARGS="<string>$APP/lightkey_api.py</string><string>run</string>"
+  START_ARGS="<string>$APP/lightkey_api_run.py</string>"
 else
   echo "Could not set up the Lightkey API launcher (see $APP/launcher-build.log). The agent will run without access to Documents and Downloads."
   START="$PY"
-  START_ARGS="<string>-u</string><string>$APP/lightkey_api.py</string><string>run</string>"
+  START_ARGS="<string>-u</string><string>$APP/lightkey_api_run.py</string>"
 fi
 
 # 3. Start it at login.

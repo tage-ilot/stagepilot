@@ -1,6 +1,6 @@
 //! The optional Playback library setting: absent by default and from older files, and a saved file
 //! that never had it saves back byte for byte the same. `enabled` is no longer a switch: absent is
-//! "never paired", `true` "has been in use", `false` "forgotten" (an old switch that was off reads so).
+//! "never paired", `true` "has been in use"; `false` is only what an older file may hold, and means nothing.
 
 use serde_json::{json, Value};
 use stagepilot_core::config::{clean_playback_library_address, PlaybackLibrarySettings};
@@ -58,14 +58,14 @@ fn the_setting_round_trips_and_the_address_is_cleaned_like_the_lightkey_helper_a
         kept.to_file_value()["playback_library"],
         json!({"enabled": false, "address": "http://10.0.0.9"})
     );
-    // Forgotten with nothing else kept is still saved (an absent field would read as "never paired"), and an
-    // older build, which only knows the old switch, reads the same file.
-    let forgotten =
+    // A file from a version that could forget the key holds `enabled: false` and nothing else: it loads, and it
+    // is saved back the way it was (an older build, which only knows the old switch, reads the same file).
+    let legacy =
         load(json!({"schema_version": 2, "playback_library": {"enabled": false}})).unwrap();
-    assert_eq!(forgotten.playback_library.enabled, Some(false));
-    assert!(!forgotten.playback_library.is_default());
+    assert_eq!(legacy.playback_library.enabled, Some(false));
+    assert!(!legacy.playback_library.is_default());
     assert_eq!(
-        forgotten.to_file_value()["playback_library"],
+        legacy.to_file_value()["playback_library"],
         json!({"enabled": false, "address": ""})
     );
     // A paired file with no address override has no address in it to speak of, only the empty text.
