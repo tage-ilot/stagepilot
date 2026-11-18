@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
@@ -162,43 +162,55 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
   });
 });
 
-describe("Advanced: the address override and Forget the Library Link", () => {
-  const openAdvanced = async () => userEvent.setup().click(screen.getByRole("button", { name: /Advanced/ }));
+describe("recent computers: a computer that connected before is one choice and Connect, with no scan", () => {
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => window.localStorage.clear());
 
-  it("saves an override of the script's address, and shows the saved one without http://", async () => {
-    const library = libraryController("ready", { address: "http://10.20.0.102:9000" });
-    render(<PlaybackLiveLink library={library} playback={controller()} />);
-    await openAdvanced();
-    const input = screen.getByLabelText("Library Link address");
-    expect(input).toHaveValue("10.20.0.102:9000");
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-    await userEvent.setup().clear(input);
-    await userEvent.setup().type(input, "10.20.0.102");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Save" }));
-    expect(library.saveAddress).toHaveBeenCalledWith("10.20.0.102");
+  it("remembers the computer it is connected to", () => {
+    render(<PlaybackLiveLink library={libraryController("not_installed")} playback={controller()} />);
+    expect(JSON.parse(window.localStorage.getItem("stagepilot.recent-addresses.playback") ?? "[]")).toEqual(["10.30.0.141"]);
   });
 
-  it("asks before forgetting, says what it does, and forgets only on the confirm", async () => {
-    const library = libraryController("ready");
-    render(<PlaybackLiveLink library={library} playback={controller()} />);
-    await openAdvanced();
+  it("does not remember a computer it could not connect to", () => {
+    render(<PlaybackLiveLink library={libraryController("not_installed")} playback={disconnected("10.30.0.9")} />);
+    expect(window.localStorage.getItem("stagepilot.recent-addresses.playback")).toBeNull();
+  });
+
+  it("lists the recent ones after the saved and found ones, and Connect on one connects to it directly", async () => {
+    window.localStorage.setItem("stagepilot.recent-addresses.playback", JSON.stringify(["10.20.0.102", "10.30.0.141", "10.30.0.7"]));
+    const playback = disconnected("10.30.0.141", { scan: scanOf("found", { candidates: [{ name: "Example Mac", host: "10.30.0.7" }] }) });
+    render(<PlaybackLiveLink library={libraryController("not_installed")} playback={playback} />);
+    const select = screen.getByRole("combobox", { name: "Playback computer" });
+    const labels = within(select).getAllByRole("option").map((option) => option.textContent);
+    expect(labels).toEqual(["Example Mac (10.30.0.7)", "10.30.0.141 (saved)", "10.20.0.102 (recent)", "Other computer…"]);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("Forget the Library Link?");
-    expect(dialog).toHaveTextContent("keeps running on the Playback computer");
-    expect(library.forget).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(library.forget).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Forget the Library Link" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Forget the Library Link" }));
-    expect(library.forget).toHaveBeenCalledTimes(1);
+    await user.selectOptions(select, "10.20.0.102");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(playback.scan).toHaveBeenCalledWith("10.20.0.102");
+  });
+});
+
+describe("the Library Link has no Forget button and no address box (it is always on the Playback computer)", () => {
+  it("has no Advanced button, no Forget button and no Library Link address box in any state", () => {
+    for (const state of ["ready", "not_installed", "outdated", "needs_key", "unreachable"] as HelperState[]) {
+      const { unmount } = render(<PlaybackLiveLink library={libraryController(state)} playback={controller()} />);
+      expect(screen.queryByRole("button", { name: /Advanced/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Forget/ })).toBeNull();
+      expect(screen.queryByLabelText("Library Link address")).toBeNull();
+      expect(document.body.textContent).not.toMatch(/Forget the Library Link|Library Link address|Same as the Playback computer/);
+      unmount();
+    }
   });
 
-  it("has nothing to forget when there is no key", async () => {
-    render(<PlaybackLiveLink library={libraryController("forgotten")} playback={controller()} />);
-    await openAdvanced();
-    expect(screen.queryByRole("button", { name: "Forget the Library Link" })).toBeNull();
+  it("clears an address typed in an older version, once", () => {
+    const library = libraryController("ready", { address: "http://10.20.0.102:9000" });
+    const { rerender } = render(<PlaybackLiveLink library={library} playback={controller()} />);
+    rerender(<PlaybackLiveLink library={library} playback={controller()} />);
+    expect(library.saveAddress).toHaveBeenCalledTimes(1);
+    expect(library.saveAddress).toHaveBeenCalledWith("");
+    const clean = libraryController("ready");
+    render(<PlaybackLiveLink library={clean} playback={controller()} />);
+    expect(clean.saveAddress).not.toHaveBeenCalled();
   });
 });
 
@@ -221,7 +233,16 @@ describe("a computer with no Library Link looks like a build without the library
     expect(screen.queryByTestId("playback-library")).toBeNull();
   });
 
-  it("and only a ready or outdated script brings the song chips in", () => {
+  it("puts Songs in Playback right under the Live Link block and above Song order", () => {
+    render(<PlaybackApiPanel library={libraryController("ready", { plan: libraryPlan([librarySongOf("Song One", 1)]) })} playback={controller()} plan={null} />);
+    const live = screen.getByTestId("playback-live-link");
+    const songs = screen.getByTestId("playback-library");
+    const order = screen.getByRole("region", { name: "Song order" });
+    expect(live.compareDocumentPosition(songs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(songs.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("and only a ready or outdated Library Link brings the song chips in", () => {
     const songs = libraryPlan([librarySongOf("Song One", 1)]);
     for (const state of ["ready", "outdated"] as HelperState[]) {
       const { unmount } = render(<PlaybackApiPanel library={libraryController(state, { plan: songs })} playback={controller()} plan={null} />);

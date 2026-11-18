@@ -134,7 +134,7 @@ describe("songs strip in the panel", () => {
     expect(within(items[0]!).getByTestId("song-chip-loudness")).toBeInTheDocument();
     expect(items[1]).toHaveTextContent("Not captured");
     expect(within(items[1]!).getByTestId("song-chip-live")).toBeInTheDocument();
-    expect(screen.getByText(/Songs in this service - \d of 3 fully captured/)).toBeInTheDocument();
+    expect(screen.queryByText(/Songs in this service -/)).toBeNull();
   });
 
   it("clicking a chip selects that song exactly like the Song menu, and Follow live returns", async () => {

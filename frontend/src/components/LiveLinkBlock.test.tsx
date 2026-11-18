@@ -15,6 +15,8 @@ vi.mock("../api", async (original) => ({
   saveLightkeySettings: vi.fn(),
   setLightkeyRecording: vi.fn(),
   releaseLightkeyLights: vi.fn(),
+  startLightkeyHelperInstall: vi.fn(),
+  endLightkeyHelperInstall: vi.fn().mockResolvedValue({ ended: true }),
   setLightkeyAudioMeter: vi.fn().mockResolvedValue({ available: false, reason: "No input.", devices: [], selected: null, note: null, level: null, metering: false }),
 }));
 
@@ -197,6 +199,20 @@ describe("Live Link block: the strip under the fields", () => {
     ]);
   });
 
+  it("Lighting computer setup is the last button of the strip and opens the one-line command", async () => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", holding_fixtures: 3, fixtures: live() }));
+    vi.mocked(api.startLightkeyHelperInstall).mockResolvedValue({ command: "curl -fsS http://192.168.1.20:8000/lightkey-helper/abc/install.sh | sh", url: "http://192.168.1.20:8000/lightkey-helper/abc/install.sh", expires_at: new Date(Date.now() + 1_800_000).toISOString(), lan_ip: "192.168.1.20", port: 8000, bundled_version: "0.5.0" });
+    render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
+    await screen.findByRole("radiogroup", { name: "Mode" });
+    const actions = screen.getByTestId("live-link-actions");
+    const buttons = within(actions).getAllByRole("button");
+    expect(buttons.at(-1)).toHaveTextContent("Lighting computer setup");
+    expect(buttons.at(-1)).toHaveAttribute("aria-expanded", "false");
+    await userEvent.setup().click(buttons.at(-1)!);
+    expect(await screen.findByTestId("lightkey-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/lightkey-helper/abc/install.sh | sh");
+    expect(screen.getByRole("button", { name: /Lighting computer setup/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("Send a test cue uses the conventional arrow: right when closed, down when open, and opens a nested box", async () => {
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
     await screen.findByRole("radiogroup", { name: "Mode" }); // the live status has arrived
@@ -233,9 +249,9 @@ describe("Live Link block: the strip under the fields", () => {
     await screen.findByText("Not connected");
     const sub = screen.getByTestId("live-link-sub");
     const actions = screen.getByTestId("live-link-actions");
-    // Two children of the strip: the state text and ONE group holding Release, Send a test cue and How to find.
+    // Two children of the strip: the state text and ONE group holding Release, Send a test cue, How to find and Lighting computer setup.
     expect(Array.from(sub.children)).toEqual([screen.getByTestId("lightkey-headline"), actions]);
-    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Read fixtures", "Send a test cue", "How to find a cue's address"]);
+    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Read fixtures", "Send a test cue", "How to find a cue's address", "Lighting computer setup"]);
     // The state text may shrink and wrap (basis 16rem) so the group stays on the first row when there is room.
     expect(screen.getByTestId("lightkey-headline").className).toContain("flex-[1_1_16rem]");
     expect(actions.className).toContain("flex-wrap");

@@ -62,6 +62,19 @@ describe("Button", () => {
     expect(b).not.toHaveClass("opacity-40");
   });
 
+  it("draws the sweep inside the button, over its text, only while loading", () => {
+    const { rerender } = render(<Button>Scan</Button>);
+    expect(screen.getByRole("button", { name: "Scan" }).querySelector("[data-part=loading-sweep]")).toBeNull();
+    rerender(<Button loading>Scan</Button>);
+    const b = screen.getByRole("button", { name: "Scan" });
+    const sweep = b.querySelector("[data-part=loading-sweep]");
+    expect(sweep).not.toBeNull();
+    expect(sweep).toHaveAttribute("aria-hidden", "true");
+    expect(b).toHaveClass("relative", "overflow-hidden");
+    rerender(<Button disabled loading>Scan</Button>);
+    expect(screen.getByRole("button", { name: "Scan" }).querySelector("[data-part=loading-sweep]")).toBeNull();
+  });
+
   it("keeps the label when loading without loadingLabel", () => {
     render(<Button loading>Save</Button>);
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();

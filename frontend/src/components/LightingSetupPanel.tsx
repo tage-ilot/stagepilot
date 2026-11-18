@@ -59,7 +59,8 @@ import { useSongWaveform } from "../hooks/useSongWaveform";
 import { LightkeyStrip } from "./LightkeyStrip";
 import { SongsStrip, type SongChip } from "./SongsStrip";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import { chipLibrary } from "./playbackLibrary";
+import { cardLibrary } from "./SongCard";
+import { bpmText } from "./playbackLibrary";
 import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40, shortLightingMessage } from "./liveLink";
 import { confirmMergeChangesValues, confirmRemoveFixture } from "./lightingCueConfirmations";
@@ -516,7 +517,7 @@ export function LightingSetupPanel({
   };
   // What the optional Playback library says about each plan song (nothing while it is off or has not answered).
   const libraryChips = useMemo(
-    () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = chipLibrary(song); return chip ? [[song.key, chip] as const] : []; })),
+    () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = cardLibrary(song); return chip ? [[song.key, chip] as const] : []; })),
     [library?.plan],
   );
   // The selected song's arrangement and waveform from the Playback library, for the timeline's song map: only a song that is paired
@@ -578,6 +579,7 @@ export function LightingSetupPanel({
     cueTotal === 0 ? "No cues yet" : `${formatCount(cueTotal)} cue${cueTotal === 1 ? "" : "s"} on ${songsWithCues} of ${songs.length} song${songs.length === 1 ? "" : "s"}`,
     `${activePads} pad${activePads === 1 ? "" : "s"}`,
     selectedSong && selectedSong.duration_seconds != null ? `${selectedSong.title} ${formatElapsed(selectedSong.duration_seconds)}` : null,
+    selectedSong && songMapLibrary?.bpm != null ? bpmText(songMapLibrary.bpm) : null,
   ].filter(Boolean).join(" · ");
   // Only the method on screen is drawn; cues of the other method stay saved.
   const timelineMarkers: TimelineMarker[] = useMemo(() => method === "osc"
@@ -904,7 +906,6 @@ export function LightingSetupPanel({
         liveKey={hasSong(liveKey) ? liveKey : ""}
         noun={method === "osc" ? "looks" : "cues"}
         onClear={clearSongByKey}
-        onClearAll={clearEverySongCues}
         onSelect={setManualSongKey}
         selectedKey={selectedSongKey}
       />
@@ -1060,6 +1061,9 @@ export function LightingSetupPanel({
         )}
         {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
       </Disclosure>
+      <div className="mt-3 flex justify-end">
+        <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs...</Button>
+      </div>
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

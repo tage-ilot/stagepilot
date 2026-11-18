@@ -489,16 +489,6 @@ export function PlanningCenterSetupPanel({
       </div>
 
       <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
-        {servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) && (
-          <div className="mb-5 border-b border-edge-subtle pb-5">
-            <ServicePlanPicker
-              canOperate={canOperate}
-              choice={servicePlanChoice}
-              state={state}
-              timezone={savedTimezone ?? systemTimezone()}
-            />
-          </div>
-        )}
         <div className="service-plan-fields grid gap-4">
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
             <Select
@@ -571,6 +561,16 @@ export function PlanningCenterSetupPanel({
             {pendingAction === "reload_plan" ? "Loading…" : "Load today’s service plan"}
           </Button>
         </div>
+        {servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) && (
+          <div className="mt-5 border-t border-edge-subtle pt-5">
+            <ServicePlanPicker
+              canOperate={canOperate}
+              choice={servicePlanChoice}
+              state={state}
+              timezone={savedTimezone ?? systemTimezone()}
+            />
+          </div>
+        )}
         {blockedReason && <p className="mt-4 text-sm text-ink-body" id="planning-center-save-blocked">{blockedReason}</p>}
         <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
       </div>

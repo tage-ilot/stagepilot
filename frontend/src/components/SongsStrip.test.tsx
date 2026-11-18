@@ -13,17 +13,17 @@ const chips: SongChip[] = [
 const mount = (props: Partial<Parameters<typeof SongsStrip>[0]> = {}) => {
   const onSelect = vi.fn();
   const onClear = vi.fn();
-  const onClearAll = vi.fn();
-  render(<SongsStrip chips={chips} liveKey="a" noun="looks" onClear={onClear} onClearAll={onClearAll} onSelect={onSelect} selectedKey="a" {...props} />);
-  return { onSelect, onClear, onClearAll };
+  render(<SongsStrip chips={chips} liveKey="a" noun="looks" onClear={onClear} onSelect={onSelect} selectedKey="a" {...props} />);
+  return { onSelect, onClear };
 };
 
 describe("SongsStrip", () => {
-  it("heads the strip with the captured count and a Clear all songs action", async () => {
-    const { onClearAll } = mount();
-    expect(screen.getByText("Songs in this service - 2 of 3 captured")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Clear all songs..." }));
-    expect(onClearAll).toHaveBeenCalledTimes(1);
+  it("has no heading and no Clear all button: that sits below the timeline, in the panel", () => {
+    mount();
+    expect(screen.queryByText(/Songs in this service -/)).toBeNull();
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.getByRole("region", { name: "Songs in this service" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear all songs..." })).toBeNull();
   });
 
   it("keeps plan order and shows each state", () => {
@@ -75,40 +75,31 @@ describe("SongsStrip", () => {
     }
   });
 
-  it("40 songs keep one fixed-height wrapping list that scrolls inside itself", () => {
+  it("40 songs grow the grid to show every card: nothing scrolls inside it", () => {
     const many: SongChip[] = Array.from({ length: 40 }, (_, i) => ({ key: `s${i}`, title: `Song number ${i + 1}`, order: i + 1, looks: i % 2 ? 5 : 0, handmade: 0, hasLoudness: false }));
     mount({ chips: many, liveKey: "s3", selectedKey: "s3" });
     const list = screen.getByRole("list", { name: "Songs in this service" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(40);
-    expect(list.className).toContain("flex-wrap");
-    expect(list.className).toContain("max-h-");
-    expect(list.className).toContain("overflow-y-auto");
-    expect(screen.getByText("Songs in this service - 20 of 40 captured")).toBeInTheDocument();
+    expect(list.className).toContain("grid");
+    expect(list.className).not.toMatch(/max-h-|overflow-/);
   });
 
   it("renders nothing without a service plan", () => {
-    const { container } = render(<SongsStrip chips={[]} liveKey="" noun="looks" onClear={vi.fn()} onClearAll={vi.fn()} onSelect={vi.fn()} selectedKey="" />);
+    const { container } = render(<SongsStrip chips={[]} liveKey="" noun="looks" onClear={vi.fn()} onSelect={vi.fn()} selectedKey="" />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("keeps the title whole and lets the count truncate first; a very long title truncates but stays named", () => {
+  it("shows the title on its own line over the count; a very long title truncates but stays named in full", () => {
     const long = "A very long song title that goes on and on and on past any sensible chip width";
     mount({ chips: [
       { key: "n", title: "Battle Belongs", order: 1, looks: 12, handmade: 0, hasLoudness: false },
       { key: "l", title: long, order: 2, looks: 3, handmade: 0, hasLoudness: false },
     ] });
-    const normal = screen.getByText("Battle Belongs");
-    expect(normal.className).toContain("shrink-0");
-    expect(normal.className).not.toContain("min-w-0");
-    expect(normal.className).toContain("max-w-[16rem]");
-    expect(normal.className).toContain("truncate");
-    const count = screen.getByText("· 12 looks");
-    expect(count.className).toContain("min-w-0");
-    expect(count.className).toContain("truncate");
-    expect(count.className).not.toContain("shrink-0");
+    expect(screen.getByText("Battle Belongs").className).toContain("truncate");
+    expect(screen.getByText("12 looks")).toBeInTheDocument();
     expect(screen.getByText(long).className).toContain("truncate");
+    expect(screen.getByText(long)).toHaveAttribute("title", long);
     expect(screen.getByRole("button", { name: new RegExp(`^${long}, 3 looks`) })).toBeInTheDocument();
-    expect(screen.getByText(long).closest("li")?.className).toContain("max-w-[28rem]");
   });
 });
 
@@ -132,7 +123,6 @@ describe("SongsStrip capture labels", () => {
     expect(items[4]).toHaveTextContent("Not captured");
     expect(items[0]).not.toHaveTextContent("12 looks");
     expect(items[0]).toHaveAttribute("title", expect.stringContaining("12 captured items (12 ramps/steps, 0 loops)"));
-    expect(screen.getByText("Songs in this service - 2 of 5 fully captured")).toBeInTheDocument();
   });
 
   it("uses the manual colour for hand-made only and the captured colour for captures", () => {
@@ -143,17 +133,28 @@ describe("SongsStrip capture labels", () => {
     expect(items[1]!.className).toContain("border-dashed");
   });
 
-  it("shows what the Playback library says on a matched song, and nothing on the others", () => {
+  it("draws a song the Library Link knows as a card: cover, arrangement bar and the capture words then the BPM, but not the key or length", () => {
     const withLibrary: SongChip[] = [
-      { ...chips[0]!, library: { text: "Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default", title: "Playback: Ab (was C), 65 BPM, 6:29 (plan 5:55), 8 sections, Default. Playback counts this song down to 6:29; the plan says 5:55." } },
+      { ...chips[0]!, library: {
+        text: "Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default",
+        title: "Playback: Ab (was C), 65 BPM, 6:29 (plan 5:55), 8 sections, Default. Playback counts this song down to 6:29; the plan says 5:55.",
+        cover: "/api/v1/playback-library/artwork/7?v=abc", bpm: "65 BPM",
+        sections: [{ name: "Verse 1", start: 0, end: 30 }, { name: "Chorus", start: 30, end: 60 }],
+      } },
       chips[1]!,
     ];
     mount({ chips: withLibrary });
     const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
-    expect(within(items[0]!).getByTestId("song-chip-library")).toHaveTextContent("Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default");
+    expect(items[0]).toHaveTextContent("Holy Forever12 looks♪ · 65 BPM");
+    expect(items[0]).not.toHaveTextContent(/6:29|Ab/);
+    expect(within(items[1]!).queryByTestId("song-chip-bpm")).toBeNull();
+    expect(items[0]!.querySelector("img")).toHaveAttribute("src", "/api/v1/playback-library/artwork/7?v=abc");
+    expect(items[0]!.querySelector("img")).toHaveAttribute("alt", "");
+    expect(within(items[0]!).getByTestId("library-bar").querySelectorAll(".library-seg")).toHaveLength(2);
+    // The facts are still one hover away, and in the button's spoken name.
     expect(within(items[0]!).getByRole("button", { name: /Playback counts this song down to 6:29; the plan says 5:55/ })).toBeInTheDocument();
-    expect(within(items[1]!).queryByTestId("song-chip-library")).toBeNull();
-    // The chip's other words are unchanged.
-    expect(items[0]).toHaveTextContent("12 looks");
+    // A song with no library data is the same card without cover or bar.
+    expect(items[1]!.querySelector("img")).toBeNull();
+    expect(within(items[1]!).queryByTestId("library-bar")).toBeNull();
   });
 });

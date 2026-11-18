@@ -13,9 +13,10 @@ import {
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeySaving, LightkeyStatus } from "../types";
 import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
-import { LightkeyInstallBox } from "./LightkeyInstallBox";
+import { LIGHTKEY_INSTALL_ID, LightkeyInstallBox } from "./LightkeyInstallBox";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, formatCount, simplifiedNote, startLookNote, type CaptureLabel } from "./lightingLooks";
+import { RecentAddresses } from "./RecentAddresses";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
@@ -167,6 +168,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const [error, setError] = useState<string | null>(null);
   const [ownHost, setOwnHost] = useState<string | null>(null); // only without `connection`
   const [apiPort, setApiPort] = useState<string | null>(null); // null = untouched, show the saved one
+  const [setupOpen, setSetupOpen] = useState(false);
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
@@ -373,6 +375,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           />
         </div>
       </div>
+      <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
       {status.link !== "off" && (
         <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
       )}
@@ -407,7 +410,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
         onUse={(address) => void run(() => switchToLightkeyComputer(address))}
       />
 
-      <LightkeyInstallBox status={status} />
+      <LightkeyInstallBox autoStart={setupOpen} status={status} />
 
       {!status.recording && status.replay === false && (
         <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
@@ -421,6 +424,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       )}
 
       <LiveLinkTools
+        setup={status.link === "off" ? undefined : { label: "Lighting computer setup", open: setupOpen, controls: LIGHTKEY_INSTALL_ID, onToggle: () => setSetupOpen(!setupOpen) }}
         footer={footer}
         release={(
           <>

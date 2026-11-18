@@ -90,7 +90,6 @@ const told = async (hook: { result: { current: ReturnType<typeof useStagePilot> 
   await act(async () => { hook.result.current.noteSettingsRevision(settingsRevision); });
 };
 const settle = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
-const heading = () => screen.getByRole("heading", { name: /Songs in this service/ }).textContent;
 const chip = (title: string) => within(screen.getByTestId("songs-strip")).getByRole("button", { name: new RegExp(`^${title}`) });
 
 const getSettings = vi.mocked(api.getSettings);
@@ -133,7 +132,7 @@ const openHook = async () => {
 describe("the window learns that the backend saved a recording by itself (F-U1)", () => {
   it("reloads the settings when the backend's settings_revision moves, and the Songs strip says captured", async () => {
     await open();
-    expect(heading()).toBe("Songs in this service - 0 of 2 fully captured");
+    expect(chip("Elohim").closest("li")).toHaveAttribute("data-state", "empty");
     expect(chip("Elohim")).toHaveAccessibleName(/not captured/);
 
     // 18:07 UTC: the recording of Elohim finishes on the backend; no request came from this window.
@@ -142,7 +141,7 @@ describe("the window learns that the backend saved a recording by itself (F-U1)"
     await settle(2_100);
 
     expect(getSettings).toHaveBeenCalledTimes(1);
-    expect(heading()).toBe("Songs in this service - 1 of 2 fully captured");
+    expect(chip("Elohim").closest("li")).toHaveAttribute("data-state", "captured");
     expect(chip("Elohim")).not.toHaveAccessibleName(/not captured/);
     expect(chip("Ever Be")).toHaveAccessibleName(/not captured/);
   });

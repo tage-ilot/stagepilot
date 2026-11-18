@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use stagepilot_core::auth::{csrf_token, RemoteStore};
 use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_lights::lightkey_helper_assets as bundled;
-use stagepilot_server::helper_install::{MAX_REQUESTS, NO_ADDRESS};
+use stagepilot_server::helper_install::MAX_REQUESTS;
 // Only the tests that run the generated script with a real `sh` and `curl` (Unix) use these.
 #[cfg(unix)]
 use stagepilot_server::helper_install::{served_routes, Assets, HelperInstall};
@@ -269,7 +269,7 @@ async fn the_served_wrapper_names_the_session_url_and_checksums() {
 // ---- the session routes ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn a_bad_address_is_refused_and_the_default_lighting_host_gives_the_plain_error() {
+async fn a_bad_address_is_refused_and_the_default_lighting_host_needs_no_address() {
     let rt = runtime();
     let app = build_app(rt, AppOptions { web_root: None });
     let bad = send(
@@ -281,8 +281,9 @@ async fn a_bad_address_is_refused_and_the_default_lighting_host_gives_the_plain_
     )
     .await;
     assert_eq!(bad.status, StatusCode::UNPROCESSABLE_ENTITY);
-    // The default Lighting host is this computer: there is no LAN address toward it.
-    let none = send(
+    // The default Lighting host is this computer: nobody is asked for an address, the command carries this computer's own.
+    let own = stagepilot_server::helper_install::own_lan_address().unwrap_or(Ipv4Addr::LOCALHOST);
+    let same = send(
         &app,
         "POST",
         "/api/v1/lights/lightkey/helper-install",
@@ -290,9 +291,12 @@ async fn a_bad_address_is_refused_and_the_default_lighting_host_gives_the_plain_
         "127.0.0.1",
     )
     .await;
-    assert_eq!(none.status, StatusCode::CONFLICT);
-    assert_eq!(none.json()["detail"], NO_ADDRESS);
-    assert_eq!(none.json()["code"], "no_lan_address");
+    assert_eq!(same.status, StatusCode::OK);
+    assert_eq!(same.json()["lan_ip"], own.to_string());
+    assert!(same.json()["command"]
+        .as_str()
+        .unwrap()
+        .starts_with(&format!("curl -fsS http://{own}:")));
 }
 
 /// This computer's own private address, as the system would pick it toward the internet.

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, endLightkeyHelperInstall, startLightkeyHelperInstall } from "../api";
+import { endLightkeyHelperInstall, startLightkeyHelperInstall } from "../api";
 import { describeError } from "../errorText";
 import type { LightkeyHelperInstall, LightkeyStatus } from "../types";
 import { countdownText, helperIsOutdated } from "./lightkeyProject";
 import { CONTROL_34 } from "./compactControl";
-import { LiveLinkField } from "./LightingOscParts";
 import { Button } from "./ui/Button";
-import { Input } from "./ui/Input";
+
+/** The box's id, so the strip's setup button can say what it controls. */
+export const LIGHTKEY_INSTALL_ID = "lightkey-install-box";
 
 type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
 
@@ -18,42 +19,50 @@ type Phase = "idle" | "starting" | "ready" | "expired" | "error" | "done";
  * the matching helper from StagePilot itself (this network only, 30 minutes). The box ends the
  * session by itself when the helper answers.
  */
-export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
+export function LightkeyInstallBox({ status, autoStart = false }: { status: LightkeyStatus; autoStart?: boolean }) {
   const connected = status.link === "connected";
   const outdated = helperIsOutdated(status);
   const [phase, setPhase] = useState<Phase>("idle");
   const [session, setSession] = useState<LightkeyHelperInstall | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [needAddress, setNeedAddress] = useState(false);
-  const [address, setAddress] = useState("");
   const [left, setLeft] = useState(0);
   const [copied, setCopied] = useState(false);
   const startedConnected = useRef(false);
+  // Opened on purpose (autoStart) while everything already works: the command for another Lighting computer, or again here.
+  const manual = useRef(false);
+  const autoRan = useRef(false);
   const alive = useRef(true);
-  const heading = connected ? "Update the helper" : "Set up the Lighting computer";
+  const current = connected && !outdated;
+  const heading = current ? "Lighting computer command" : connected ? "Update the helper" : "Set up the Lighting computer";
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const start = useCallback(async (typedAddress?: string) => {
+  const start = useCallback(async () => {
     setPhase("starting");
     setError(null);
     setCopied(false);
     try {
-      const made = await startLightkeyHelperInstall(typedAddress);
+      const made = await startLightkeyHelperInstall();
       if (!alive.current) return;
       startedConnected.current = connected;
+      manual.current = connected && !outdated;
       setSession(made);
       setLeft(Date.parse(made.expires_at) - Date.now());
-      setNeedAddress(false);
       setPhase("ready");
     } catch (cause) {
       if (!alive.current) return;
-      // 409: this computer's address on the Lighting network could not be found; ask for it.
-      setNeedAddress(cause instanceof ApiError && cause.status === 409);
       setError(describeError(cause, "Could not make the setup command."));
       setPhase("error");
     }
-  }, [connected]);
+  }, [connected, outdated]);
+
+  // Opened on purpose: make the command at once, once per opening (Cancel leaves it cancelled).
+  useEffect(() => {
+    if (!autoStart) { autoRan.current = false; return; }
+    if (autoRan.current || phase !== "idle") return;
+    autoRan.current = true;
+    void start();
+  }, [autoStart, phase, start]);
 
   // The countdown. One tick a second; it is text only (not announced every second).
   useEffect(() => {
@@ -71,7 +80,8 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
 
   // The helper answers: the box is done and the session ends (the backend ends it too).
   useEffect(() => {
-    if (phase !== "ready") return;
+    // A command made on purpose while it already works just runs until it expires or is cancelled.
+    if (phase !== "ready" || manual.current) return;
     const finished = startedConnected.current ? connected && !outdated : connected;
     if (!finished) return;
     setPhase("done");
@@ -89,7 +99,17 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
     }
   };
 
+  // Closing the box (the strip's button) ends a command that was made on purpose.
+  useEffect(() => {
+    if (autoStart || !manual.current || phase === "idle") return;
+    manual.current = false;
+    setPhase("idle");
+    setSession(null);
+    void endLightkeyHelperInstall().catch(() => undefined);
+  }, [autoStart, phase]);
+
   const cancel = () => {
+    manual.current = false;
     setPhase("idle");
     setSession(null);
     void endLightkeyHelperInstall().catch(() => undefined);
@@ -104,12 +124,12 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
   if (phase === "done") {
     return <div data-testid="lightkey-install-done">{live}</div>;
   }
-  if (connected && !outdated && phase === "idle") return <div>{live}</div>;
+  if (current && phase === "idle" && !autoStart) return <div>{live}</div>;
   if (status.link === "off" && phase === "idle") return <div>{live}</div>;
 
   const panel = "mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body";
   return (
-    <section aria-label={heading} className={panel} data-testid="lightkey-install">
+    <section aria-label={heading} className={panel} data-testid="lightkey-install" id={LIGHTKEY_INSTALL_ID}>
       {live}
       <h4 className="text-[0.8125rem] font-semibold text-ink">{heading}</h4>
 
@@ -144,10 +164,10 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
                 </Button>
               </div>
             </li>
-            <li>Wait here. It connects by itself.</li>
+            {!manual.current && <li>Wait here. It connects by itself.</li>}
           </ol>
           <p className="mt-1.5 text-ink-muted" data-testid="lightkey-install-waiting">
-            {`Waiting for the helper\u2026 The command works for ${countdownText(left)} more, on this network only.`}
+            {`${manual.current ? "" : "Waiting for the helper\u2026 "}The command works for ${countdownText(left)} more, on this network only.`}
           </p>
           <p className="mt-1 text-ink-muted">
             Python comes with Apple&apos;s command-line tools. If Terminal says it is missing, run <code className="font-mono">xcode-select --install</code> first.
@@ -165,16 +185,9 @@ export function LightkeyInstallBox({ status }: { status: LightkeyStatus }) {
           <p className={phase === "error" ? "text-danger-text" : "text-warning-text"} role="alert">
             {phase === "expired" ? "That command has expired. Make a new one." : error}
           </p>
-          {phase === "error" && needAddress && (
-            <div className="mt-1.5">
-              <LiveLinkField caption="This computer's address on the Lighting network">
-                <Input aria-label="This computer's address" className="w-56 font-mono" inputMode="decimal" onChange={(event) => setAddress(event.target.value)} placeholder="192.168.1.20" spellCheck={false} value={address} />
-              </LiveLinkField>
-            </div>
-          )}
           <div className="mt-1.5">
-            <Button className={CONTROL_34} disabled={phase === "error" && needAddress && !address.trim()} onClick={() => void start(needAddress ? address.trim() : undefined)} variant="secondary" tone="lighting">
-              {phase === "expired" ? "Make a new command" : needAddress ? "Use this address" : "Try again"}
+            <Button className={CONTROL_34} onClick={() => void start()} variant="secondary" tone="lighting">
+              {phase === "expired" ? "Make a new command" : "Try again"}
             </Button>
           </div>
         </div>

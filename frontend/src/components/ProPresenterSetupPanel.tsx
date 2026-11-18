@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { rememberAddress } from "../hooks/useRecentAddresses";
+import { RecentAddresses } from "./RecentAddresses";
 
 import type {
   ProPresenterSettingsInput,
@@ -134,6 +136,7 @@ export function ProPresenterSetupPanel({
     if (busy || (changeCount === 0 && propresenter?.enabled)) return;
     if (!parsedSettings) { attempt.refuse(); return; }
     setSaveFailed(false);
+    rememberAddress("presentation", parsedSettings.host);
     onSave(parsedSettings);
   };
   const timerDetected = Boolean(
@@ -174,6 +177,7 @@ export function ProPresenterSetupPanel({
             onChange={(event) => setHost(event.target.value)}
             value={host}
           />
+          <RecentAddresses disabled={busy} onPick={setHost} scope="presentation" value={host} />
         </Field>
         <Field error={errPort} heldChange={held.port} label="Port">
           <Input

@@ -59,6 +59,7 @@ import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import { libraryNotices, libraryPillLine } from "./playbackLibrary";
+import { playbackStreamRows } from "./playbackStatus";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { SetupChecklist } from "./SetupChecklist";
@@ -816,7 +817,9 @@ export function Dashboard({
   // minutes and do not use up the 10 slots of real events.
   const connectionRowsPerSource = new Map<string, number>();
   let realEventRows = 0;
-  const activity = [...state.recent_events].reverse().filter((event) => {
+  // Playback's own song events (started, paused, ended...) join the backend's events in one stream, newest first.
+  const streamEvents = [...state.recent_events, ...playbackStreamRows(playback?.events, playback?.status)].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  const activity = [...streamEvents].reverse().filter((event) => {
     if (event.type === "connection.changed") {
       const seen = connectionRowsPerSource.get(event.source) ?? 0;
       if (seen >= 2) return false;

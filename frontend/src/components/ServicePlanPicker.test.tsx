@@ -74,8 +74,8 @@ describe("ServicePlanPicker", () => {
 
   it("shows the pill and Back to upcoming while another service is picked", async () => {
     const { choice } = await show(stateFor(PLANS[2]!, true));
-    expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Not the upcoming service: Sun, Dec 6");
-    await userEvent.click(screen.getByRole("button", { name: "Back to upcoming" }));
+    expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Current upcoming service not selected");
+    await userEvent.click(screen.getByRole("button", { name: "Current Upcoming" }));
     expect(choice.back).toHaveBeenCalledTimes(1);
   });
 
@@ -114,7 +114,7 @@ describe("ServicePlanPicker", () => {
     expect(previous()).toBeDisabled();
     expect(next()).toBeDisabled();
     expect(calendar()).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Back to upcoming" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Current Upcoming" })).toBeDisabled();
     expect(screen.getByText("Loading the service…")).toBeInTheDocument();
   });
 
@@ -140,7 +140,7 @@ describe("ServicePlanPicker", () => {
     expect(previous()).toBeDisabled();
     expect(next()).toBeDisabled();
     expect(calendar()).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Back to upcoming" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Current Upcoming" })).not.toBeInTheDocument();
     expect(screen.getByTestId("not-upcoming-pill")).toBeInTheDocument();
   });
 

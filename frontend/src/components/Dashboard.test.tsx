@@ -308,6 +308,33 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(screen.getByText("song_started")).toBeInTheDocument();
   });
 
+  it("shows Playback's song events in the Event stream with the backend's, newest first, and not its reconnect snapshots", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T16:05:30Z"));
+    const state = applicationState(loadedServiceState, {
+      recent_events: [{ id: "pp", type: "song_started", timestamp: "2026-07-13T16:05:00Z", source: "propresenter" }],
+    });
+    const ev = { timestamp: 1, song_id: 101, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, message_kind: null, reason: null, provisional: false };
+    const playback: PlaybackController = {
+      status: playbackStatus(), events: [
+        { event: { ...ev, type: "song.started" }, discovery: false, at: "2026-07-13T16:05:10Z" },
+        { event: { ...ev, type: "state.snapshot" }, discovery: false, at: "2026-07-13T16:05:15Z" },
+        { event: { ...ev, type: "song.paused" }, discovery: true, at: "2026-07-13T16:05:20Z" },
+        { event: { ...ev, type: "song.ended" }, discovery: false, at: "2026-07-13T15:50:00Z" },
+      ], error: null, message: null, pending: null, saveArrangement: vi.fn(async () => true),
+    } as unknown as PlaybackController;
+    renderDashboard(loadedServiceState, { state, playback });
+
+    const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent ?? "");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain("playback.song.paused");
+    expect(rows[0]).toContain("Paused (while scanning Playback songs)");
+    expect(rows[1]).toContain("playback.song.started");
+    expect(rows[2]).toContain("song_started");
+    expect(rows.join(" ")).not.toContain("snapshot");
+    expect(screen.getByText("Latest 3")).toBeInTheDocument();
+  });
+
   it("shows the newest connection entry per integration beside the real events", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-13T16:30:00Z"));
@@ -2146,8 +2173,8 @@ describe("the service date picker's pill in the Service plan header", () => {
   it("says the service is not the upcoming one and goes back from the same place", async () => {
     const servicePlanChoice = choice();
     renderDashboard(loadedServiceState, { state: pinnedState(), servicePlanChoice });
-    expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Not the upcoming service: Sun, Jul 19");
-    await userEvent.click(screen.getByRole("button", { name: "Back to upcoming" }));
+    expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Current upcoming service not selected");
+    await userEvent.click(screen.getByRole("button", { name: "Current Upcoming" }));
     expect(servicePlanChoice.back).toHaveBeenCalledTimes(1);
   });
 
@@ -2183,7 +2210,7 @@ describe("the service date picker's pill in the Service plan header", () => {
       capabilities: { ...LOCAL_CAPABILITIES, canOperate: false },
     });
     expect(screen.getByTestId("not-upcoming-pill")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back to upcoming" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Current Upcoming" })).not.toBeInTheDocument();
   });
 
   it("shows the one-time note that a pick ended, and Dismiss hides it", async () => {

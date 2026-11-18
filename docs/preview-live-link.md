@@ -40,8 +40,7 @@ The block now reads **Playback API: Connected to Playback on this computer** and
 
 The setup command is for the *Playback computer's* Terminal; for the preview, the stand-in takes the key from the same one-time script.
 
-1. In the block, press **Set up the Playback computer**. StagePilot needs this computer's address on the Playback network and, because Playback
-   here is `127.0.0.1`, asks for it: type this computer's LAN address (for example `192.168.1.20`; `hostname -I`). A command appears with a countdown.
+1. In the block, press **Set up the Playback computer** (or open **Library Link setup**). The command appears at once with a countdown; StagePilot uses this computer's own network address and never asks for it.
 2. Stop the stand-in and start it again with the key taken from that script (the command itself is not run):
 
    ```sh

@@ -20,11 +20,14 @@ const mount = (plan: LibraryPlan | null, over: Partial<PlaybackLibraryController
 const chips = () => within(screen.getByTestId("library-songs")).getAllByRole("listitem");
 
 describe("the song chips in the Playback config", () => {
-  it("shows one chip per plan song, in plan order, with the title and key, BPM and length under it", () => {
+  it("shows one chip per plan song, in plan order, with the title and just the key and length under it (no BPM)", () => {
     mount(planOf([planSong("Song Two", 1), planSong("Song One", 2, { library: library({ key: "G", key_original: "G", bpm: 72.4, countdown_length_s: 300 }) })]));
     const [first, second] = chips();
-    expect(first).toHaveTextContent("Song TwoAb (was C) · 65 BPM · 6:29");
-    expect(second).toHaveTextContent("Song OneG · 72.4 BPM · 5:00");
+    expect(first).toHaveTextContent("Song TwoAb (was C) · 6:29");
+    expect(second).toHaveTextContent("Song OneG · 5:00");
+    expect(first).not.toHaveTextContent("BPM");
+    expect(screen.queryByRole("heading", { name: "Songs in Playback" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Songs in Playback" })).toBeInTheDocument();
     expect(chips().map((chip) => chip.dataset.song)).toEqual(["k1", "k2"]);
   });
 
@@ -57,7 +60,7 @@ describe("the song chips in the Playback config", () => {
   it("shows no cover box at all for a song with no picture (an old helper, or none stored)", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ artwork: null }) })]));
     expect(chips()[0]!.querySelector("img")).toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 6:29");
   });
 
   it("draws the arrangement as one block per section, in order, as wide as the time it plays, tinted like Playback", () => {
@@ -108,7 +111,7 @@ describe("the song chips in the Playback config", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ sections: [], section_count: null }) })]));
     expect(within(chips()[0]!).queryByRole("img")).toBeNull();
     expect(chips()[0]!.querySelector("img")).not.toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 65 BPM · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was C) · 6:29");
   });
 
   it("says an uncertain pair is only a maybe: the Playback title, no cover, no bar, nothing taken from it", () => {

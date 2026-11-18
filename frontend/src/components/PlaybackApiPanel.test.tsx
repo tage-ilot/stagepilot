@@ -278,39 +278,11 @@ describe("Song order card", () => {
   });
 });
 
-describe("Recent activity", () => {
-  it("is an activity Disclosure that opens and closes from its button", async () => {
+describe("Recent activity has moved", () => {
+  it("is not in the Playback config any more: the dashboard's Event stream shows Playback's song events", () => {
     render(<PlaybackApiPanel playback={controller()} />);
-    const toggle = screen.getByRole("button", { name: /^Recent activity\s*0 events$/ });
-    expect(toggle.closest("[data-variant='activity']")).toHaveAttribute("data-state", "closed");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Nothing yet.")).toBeVisible();
-  });
-  it("shows the event count on the activity Disclosure (singular and plural)", () => {
-    const ev = { type: "song.started", timestamp: 1, song_id: 202, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null };
-    const { unmount } = render(<PlaybackApiPanel playback={controller({ events: [{ event: ev, discovery: false }] })} />);
-    expect(screen.getByRole("button", { name: /^Recent activity\s*1 event$/ })).toBeInTheDocument();
-    unmount();
-    render(<PlaybackApiPanel playback={controller({ events: [{ event: ev, discovery: false }, { event: ev, discovery: false }] })} />);
-    expect(screen.getByRole("button", { name: /^Recent activity\s*2 events$/ })).toBeInTheDocument();
-  });
-  const event = { type: "song.started", timestamp: 123.4, song_id: 202, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null };
-  it("renders transport rollback as plain activity, without a song number", () => {
-    render(<PlaybackApiPanel playback={controller({ events: [{ event: { ...event, type: "transport.reverted", provisional: false }, discovery: false }] })} />);
-    expect(screen.getByRole("list", { name: "Recent activity", hidden: true })).toHaveTextContent("Playback did not confirm the command; transport reverted.");
-  });
-  it("uses plain rows and wall-clock time, no monotonic wording; unknown songs are never numbered", () => {
-    render(<PlaybackApiPanel playback={controller({ events: [
-      { event, discovery: false, at: "2026-01-01T10:00:00Z" },
-      { event: { ...event, type: "song.paused", song_id: 999 }, discovery: false, at: "2026-01-01T10:01:00Z" },
-      { event: { ...event, type: "song.stopped" }, discovery: false, at: "2026-01-01T10:02:00Z" },
-    ] })} />);
-    const list = screen.getByRole("list", { name: "Recent activity", hidden: true });
-    expect(list).toHaveTextContent("Song 2 started");
-    expect(list).toHaveTextContent("Paused");
-    expect(list).toHaveTextContent("Stopped");
-    expect(document.body.textContent).not.toMatch(/monotonic|velocit/i);
+    expect(screen.queryByRole("button", { name: /Recent activity/ })).toBeNull();
+    expect(screen.queryByText("Nothing yet.")).toBeNull();
   });
 });
 
@@ -895,7 +867,7 @@ describe("Song order section", () => {
     expect(screen.getByTestId("song-order-summary")).toHaveTextContent(text);
   });
 
-  it("uses the Scan Playback Songs wording in the dialog and the activity line", async () => {
+  it("uses the Scan Playback Songs wording in the dialog", async () => {
     const user = userEvent.setup();
     const playback = controller({ status: playbackStatus(), events: [{ event: { type: "song.started", timestamp: 1, song_id: 101, position: 0, previous_song_id: null, continues_playing: false, playing: true, pad: false, setlist_version: 1, previous_version: null, section_id: null, active: null, reason: null, message_kind: null }, discovery: true }] });
     render(<PlaybackApiPanel playback={playback} />);
@@ -903,8 +875,6 @@ describe("Song order section", () => {
     const dialog = screen.getByRole("dialog", { name: "Scan Playback Songs?" });
     expect(within(dialog).getByRole("button", { name: "Scan Playback Songs" })).toHaveFocus();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: /Recent activity/ }));
-    expect(screen.getByText(/while scanning Playback songs/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/setting up song order|Set up song order|Set up again/);
   });
 });

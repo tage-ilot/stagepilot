@@ -71,6 +71,24 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getAllByText("Song Countdown").length).toBeGreaterThan(0);
   });
 
+  it("remembers a saved host, and offers the recent ones as one-tap buttons so nobody retypes", async () => {
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const props = { error: null, message: null, onRefreshTimers: vi.fn(), onSave: vi.fn(), onTest: vi.fn(), pendingOperation: null, propresenter: status } as const;
+    const { unmount } = render(<ProPresenterSetupPanel {...props} />);
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "192.168.4.40");
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    unmount();
+    render(<ProPresenterSetupPanel {...props} />);
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "10.1.1.1");
+    await user.click(screen.getByRole("button", { name: "Use 192.168.4.40" }));
+    expect(screen.getByLabelText("Host")).toHaveValue("192.168.4.40");
+    expect(screen.queryByRole("button", { name: "Use 192.168.4.40" })).toBeNull();
+    window.localStorage.clear();
+  });
+
   it("distinguishes an API connection from a missing timer", () => {
     render(
       <ProPresenterSetupPanel

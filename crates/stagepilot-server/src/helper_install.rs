@@ -472,16 +472,42 @@ pub fn local_address_toward(target: SocketAddr) -> Option<Ipv4Addr> {
     }
 }
 
-/// Resolve `host` (an address or a name) and find the local address that routes to it.
+/// This computer's own private address toward the rest of its network (the way out the system would pick). `None` when it has no
+/// private address at all (no network).
+pub fn own_lan_address() -> Option<Ipv4Addr> {
+    // Nothing is sent: connecting a UDP socket only asks the system which of its addresses it would use.
+    local_address_toward("8.8.8.8:80".parse().ok()?)
+        .filter(|ip| ip.is_private() || ip.is_link_local())
+}
+
+/// Resolve `host` (an address or a name) and find the address THIS computer is reached at from there: the local address that
+/// routes to it, or, when the computer in question is this one (loopback) or there is no more specific route, this computer's own
+/// private address. A person is never asked for it: it only comes back `None` for a name that does not resolve, an empty name, or a
+/// computer with no network at all.
 pub async fn detect_lan_ip(host: &str, port: u16) -> Option<Ipv4Addr> {
     // An empty name must not reach the resolver: Windows answers it with this computer's own addresses.
     if host.trim().is_empty() {
         return None;
     }
-    let found = tokio::net::lookup_host((host.trim(), port)).await.ok()?;
-    found
+    let found: Vec<SocketAddr> = tokio::net::lookup_host((host.trim(), port))
+        .await
+        .ok()?
         .filter(SocketAddr::is_ipv4)
-        .find_map(local_address_toward)
+        .collect();
+    if let Some(ip) = found.iter().copied().find_map(local_address_toward) {
+        return Some(ip);
+    }
+    if found.is_empty() {
+        return None;
+    }
+    // This computer itself (or no specific route): the address the rest of the network knows it by. Its own address also works for a
+    // command pasted into Terminal on this very computer. Only a computer with no network falls back to loopback.
+    own_lan_address().or_else(|| {
+        found
+            .iter()
+            .any(|target| target.ip().is_loopback())
+            .then_some(Ipv4Addr::LOCALHOST)
+    })
 }
 
 /// Host and port of the saved Lighting API address.
@@ -1090,7 +1116,7 @@ mod tests {
     }
 
     #[test]
-    fn the_address_toward_loopback_or_an_unresolvable_name_is_not_found() {
+    fn the_address_toward_loopback_is_this_computers_own_and_an_unresolvable_name_is_not_found() {
         assert_eq!(
             local_address_toward("127.0.0.1:8770".parse().unwrap()),
             None
@@ -1108,8 +1134,16 @@ mod tests {
             rt.block_on(detect_lan_ip("lighting-mac.invalid", 8770)),
             None
         );
-        assert_eq!(rt.block_on(detect_lan_ip("localhost", 8770)), None);
         assert_eq!(rt.block_on(detect_lan_ip("", 8770)), None);
+        // This very computer: its own network address (never a question), or loopback only when it has no network at all.
+        assert_eq!(
+            rt.block_on(detect_lan_ip("localhost", 8770)),
+            Some(own_lan_address().unwrap_or(Ipv4Addr::LOCALHOST))
+        );
+        assert_eq!(
+            rt.block_on(detect_lan_ip("127.0.0.1", 8770)),
+            Some(own_lan_address().unwrap_or(Ipv4Addr::LOCALHOST))
+        );
     }
 
     #[test]

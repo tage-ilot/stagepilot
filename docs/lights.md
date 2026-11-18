@@ -908,8 +908,7 @@ press Cancel. Only addresses on a private network (192.168.x.x, 10.x.x.x, 172.16
 anything; a token serves at most 30 requests; an unknown or expired token answers `404` with no body. The files are
 never served through Remote access. With LAN access on in StagePilot the files are served on the normal port;
 otherwise StagePilot opens a temporary listener bound to the one address of this computer that routes to the Lighting
-host (not every address), on a random port, and closes it when the session ends. If StagePilot cannot find that
-address (`Could not find this computer's address on the Lighting network`) the box asks you to type it.
+host (not every address), on a random port, and closes it when the session ends. When the Lighting host is this computer (or there is no more specific route), the address used is this computer's own private network address, so nobody is asked for it. Only a Lighting host name that does not resolve, or a computer with no network, gives the one sentence `Could not find this computer's address on the Lighting network` with a Try again button.
 
 **The helper that is carried.** The helper files are compiled into StagePilot
 (`crates/stagepilot-lights/assets/lightkey-helper/`, refreshed with `node scripts/vendor-lightkey-helper.mjs <tag>`),

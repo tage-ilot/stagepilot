@@ -1,8 +1,7 @@
-import { playbackLibraryArtworkUrl } from "../api";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { LibraryPlanSong, ServicePlan } from "../types";
-import { ArrangementBar } from "./ArrangementBar";
-import { chipLibrary, libraryNotices, songFaceFacts } from "./playbackLibrary";
+import { chipLibrary, libraryNotices, songKeyLength } from "./playbackLibrary";
+import { cardLibrary, SongCardBody, songCover } from "./SongCard";
 
 /** What a chip says for a song Playback cannot be paired with (no cover, no bar). */
 const unpaired = (song: LibraryPlanSong) =>
@@ -16,34 +15,16 @@ const unpaired = (song: LibraryPlanSong) =>
  */
 function SongChip({ song }: { song: LibraryPlanSong }) {
   const library = song.library;
-  const cover = library?.artwork && library.setlist_song_id !== null ? playbackLibraryArtworkUrl(library.setlist_song_id, library.artwork.etag) : null;
-  const facts = library ? songFaceFacts(library).join(" · ") || "no details" : unpaired(song);
+  const card = cardLibrary(song);
+  const facts = library ? songKeyLength(library).join(" · ") || "no details" : unpaired(song);
   return (
     <li
-      className="flex min-w-0 flex-col rounded-ds-xl border border-edge-medium bg-surface-panel px-3 py-2 text-sm"
+      className="flex min-h-[44px] min-w-0 flex-col justify-between gap-0.5 rounded-ds-lg border border-edge-medium bg-surface-panel px-2.5 py-1.5 text-sm"
       data-song={song.key}
       data-status={song.status}
       title={library ? chipLibrary(song)?.title : undefined}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
-        {cover && (
-          <img
-            alt=""
-            className="h-7 w-7 shrink-0 rounded-ds-md bg-surface-900 object-cover"
-            decoding="async"
-            height={28}
-            loading="lazy"
-            onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
-            src={cover}
-            width={28}
-          />
-        )}
-        <div className="min-w-0 leading-tight">
-          <span className="block truncate font-semibold text-ink">{song.title}</span>
-          <span className="block truncate text-xs tabular-nums text-ink-muted">{facts}</span>
-        </div>
-      </div>
-      {library && <ArrangementBar sections={library.sections} />}
+      <SongCardBody cover={songCover(song)} sections={card?.sections ?? []} title={song.title}>{facts}</SongCardBody>
     </li>
   );
 }
@@ -62,15 +43,14 @@ export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: Pla
   const songs = library.plan?.enabled && library.plan.state === "ready" ? library.plan.songs : [];
   if (!songs.length && !notices.length) return null;
   return (
-    <section aria-labelledby="playback-library-heading" className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" data-testid="playback-library">
-      <h3 className="font-bold text-ink" id="playback-library-heading">Songs in Playback</h3>
+    <section aria-label="Songs in Playback" className="space-y-1.5" data-testid="playback-library">
       {songs.length > 0 && (
-        <ul aria-label="Songs in Playback" className="grid gap-[10px] [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]" data-testid="library-songs">
+        <ul aria-label="Songs in Playback" className="grid gap-1.5 p-0.5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]" data-testid="library-songs">
           {songs.map((song) => <SongChip key={`${song.key}-${song.plan_position}`} song={song} />)}
         </ul>
       )}
       {notices.length > 0 && (
-        <ul aria-label="Playback library notices" className="space-y-0.5 text-sm" data-testid="library-notices">
+        <ul aria-label="Playback library notices" className="space-y-0.5 text-xs" data-testid="library-notices">
           {notices.map((notice) => <li className={notice.actionable ? "text-warning-text" : "text-ink-muted"} data-kind={notice.kind} key={notice.id}>{notice.text}</li>)}
         </ul>
       )}

@@ -115,12 +115,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         look,
         fullWidth && "w-full",
         disabled && "cursor-not-allowed opacity-40",
+        loading && "relative overflow-hidden",
         loading && !disabled && "cursor-wait",
         className,
       )}
       {...rest}
     >
       {loading && loadingLabel ? loadingLabel : children}
+      {loading && !disabled && <span aria-hidden="true" className="loading-progress-scan pointer-events-none" data-part="loading-sweep" />}
     </button>
   );
 });

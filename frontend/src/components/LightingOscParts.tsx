@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { RecentAddresses } from "./RecentAddresses";
 
 import type { LightingEffect, OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
 import { groupByFixture, isCaptured, lookLabel } from "./lightingLooks";
@@ -88,8 +89,10 @@ export function DisclosureButton({ open, controls, onToggle, children }: { open:
  * The quiet strip under the fields: one line of state text, then Release lights, the Send a test cue disclosure and the
  * cue-address help. The test cue and the help open as nested boxes under the strip; both stay in the DOM so the words are always readable.
  */
-export function LiveLinkTools({ stateText, release, testCue, footer }: {
+export function LiveLinkTools({ stateText, release, testCue, footer, setup }: {
   stateText?: ReactNode;
+  /** The setup disclosure (the command for the other computer), drawn last among the actions. */
+  setup?: { label: string; open: boolean; controls: string; onToggle: () => void };
   release?: ReactNode;
   /** The test cue's fields; leave out to draw no disclosure. */
   testCue?: ReactNode;
@@ -110,6 +113,7 @@ export function LiveLinkTools({ stateText, release, testCue, footer }: {
           {release}
           {testCue && <DisclosureButton controls={cueId} onToggle={() => setCueOpen(!cueOpen)} open={cueOpen}>Send a test cue</DisclosureButton>}
           <DisclosureButton controls={helpId} onToggle={() => setHelpOpen(!helpOpen)} open={helpOpen}>How to find a cue&apos;s address</DisclosureButton>
+          {setup && <DisclosureButton controls={setup.controls} onToggle={setup.onToggle} open={setup.open}>{setup.label}</DisclosureButton>}
         </div>
       </div>
       <p className="mt-2 rounded-ds-lg border border-edge-subtle bg-surface-950 px-3 py-2 text-type-body-sm text-ink-body" data-testid="cue-address-help" hidden={!helpOpen} id={helpId}>{CUE_ADDRESS_HELP}</p>
@@ -151,6 +155,7 @@ export function OscConnectionFields({
           <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center font-mono tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
         </LiveLinkField>
       </div>
+      <RecentAddresses className="mt-2" onPick={onHost} scope="lighting" value={host} />
       {(hostError || portError) && <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, portError].filter(Boolean).join(" ")}</p>}
       <LiveLinkTools footer={footer} testCue={testCue} />
     </LiveLinkShell>

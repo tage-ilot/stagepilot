@@ -1,4 +1,4 @@
-import type { PlaybackConnection, PlaybackScanResult, PlaybackStatusResponse } from "../types";
+import type { EventSummary, PlaybackConnection, PlaybackMonitorEntry, PlaybackScanResult, PlaybackStatusResponse } from "../types";
 
 // The backend accepts a bare host, not a URL. Keep port at the existing configured value.
 export function validPlaybackHost(host: string): boolean {
@@ -83,6 +83,18 @@ export function playbackActivityText(type: string, position: number): string {
   const generic = verb === "Paused" || verb === "Stopped";
   if (generic) return verb;
   return position < 0 ? `A song ${verb}` : `Song ${position + 1} ${verb}`;
+}
+
+/** Playback's song events as rows of the dashboard's Event stream. Only the ones a person can read as news (a song started, paused, ended...); the state snapshots a reconnect sends are not. */
+export function playbackStreamRows(events: PlaybackMonitorEntry[] | undefined, status: Pick<PlaybackStatusResponse, "song_order" | "stale"> | null | undefined): EventSummary[] {
+  return (events ?? []).flatMap(({ event, discovery, at }, index) => {
+    if (!(event.type in EVENT_TEXT) && event.type !== "transport.reverted") return [];
+    const stamp = at ? Date.parse(at) : Number.NaN;
+    if (Number.isNaN(stamp)) return [];
+    const position = event.song_id === null ? -1 : status?.song_order.indexOf(event.song_id) ?? -1;
+    const known = !status?.stale && position >= 0 ? position : -1;
+    return [{ id: `playback-${at}-${index}`, type: `playback.${event.type}`, timestamp: new Date(stamp).toISOString(), source: `${playbackActivityText(event.type, known)}${discovery ? " (while scanning Playback songs)" : ""}` }];
+  });
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;

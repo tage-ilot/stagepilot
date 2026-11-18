@@ -22,7 +22,7 @@ const made = (minutes = 30): PlaybackHelperInstall => ({
   port: 8000,
   bundled_version: "0.3.0",
 });
-const box = (library: PlaybackLibraryController, hasComputer = true) => <PlaybackInstallBox hasComputer={hasComputer} library={library} />;
+const box = (library: PlaybackLibraryController, hasComputer = true, autoStart = false) => <PlaybackInstallBox autoStart={autoStart} hasComputer={hasComputer} library={library} />;
 
 beforeEach(() => {
   vi.mocked(api.endPlaybackHelperInstall).mockResolvedValue({ ended: true });
@@ -70,7 +70,7 @@ describe("PlaybackInstallBox", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
     expect(await screen.findByTestId("playback-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/playback-helper/abc123/install.sh | sh");
-    expect(api.startPlaybackHelperInstall).toHaveBeenCalledWith(undefined);
+    expect(api.startPlaybackHelperInstall).toHaveBeenCalledWith();
     expect(screen.getByTestId("playback-install-label")).toHaveTextContent("Library Link for the Playback computer:");
     expect(screen.getByTestId("playback-install-waiting")).toHaveTextContent(/Waiting for the Library Link… The command works for 30:00 more, on this network only\./);
     expect(screen.getByTestId("playback-install-ready")).toHaveTextContent(/Terminal/);
@@ -80,6 +80,36 @@ describe("PlaybackInstallBox", () => {
     await user.click(screen.getByRole("button", { name: "Copy" }));
     expect(await navigator.clipboard.readText()).toBe(made().command);
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("opened on purpose, it makes the command at once, even while the Library Link already works, and stays open", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    const library = libraryController("ready");
+    render(box(library, true, true));
+    expect(await screen.findByTestId("playback-install-command")).toHaveTextContent("curl -fsS http://192.168.1.20:8000/playback-helper/abc123/install.sh | sh");
+    expect(screen.getByRole("region", { name: "Library Link command" })).toBeInTheDocument();
+    // Already ready: it is not "waiting", it does not close itself, and it is a single line.
+    expect(screen.getByTestId("playback-install-waiting")).toHaveTextContent(/^The command works for 30:00 more, on this network only\.$/);
+    expect(screen.queryByTestId("playback-install-done")).toBeNull();
+    expect(screen.getByTestId("playback-install-command").textContent).not.toContain("\n");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(made().command);
+    expect(api.startPlaybackHelperInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not make a command just because it is on screen: only when opened on purpose", () => {
+    render(box(libraryController("not_installed")));
+    expect(api.startPlaybackHelperInstall).not.toHaveBeenCalled();
+  });
+
+  it("Cancel while opened on purpose ends the session and does not start another", async () => {
+    vi.mocked(api.startPlaybackHelperInstall).mockResolvedValue(made());
+    render(box(libraryController("ready"), true, true));
+    await screen.findByTestId("playback-install-command");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.endPlaybackHelperInstall).toHaveBeenCalledTimes(1);
+    expect(api.startPlaybackHelperInstall).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("playback-install-command")).toBeNull();
   });
 
   it("never shows a key: nothing on screen is the length of one", async () => {
@@ -141,7 +171,7 @@ describe("PlaybackInstallBox", () => {
     expect(await screen.findByTestId("playback-install-command")).toBeInTheDocument();
   });
 
-  it("asks for this computer's address on the Playback network when StagePilot cannot find it (409), then uses it", async () => {
+  it("never asks for this computer's address: when none can be found it says so in one sentence, with Try again", async () => {
     vi.mocked(api.startPlaybackHelperInstall)
       .mockRejectedValueOnce(new api.ApiError("Could not find this computer's address on the Playback network", 409))
       .mockResolvedValueOnce(made());
@@ -149,13 +179,10 @@ describe("PlaybackInstallBox", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Set up the Playback computer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not find this computer's address on the Playback network");
-    expect(screen.getByText("This computer's address on the Playback network")).toBeInTheDocument();
-    const use = screen.getByRole("button", { name: "Use this address" });
-    expect(use).toBeDisabled();
-    await user.type(screen.getByLabelText("This computer's address"), " 192.168.1.20 ");
-    await user.click(use);
-    expect(api.startPlaybackHelperInstall).toHaveBeenLastCalledWith("192.168.1.20");
-    expect(await screen.findByTestId("playback-install-command")).toBeInTheDocument();
+    expect(screen.queryByLabelText("This computer's address")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use this address" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(api.startPlaybackHelperInstall).toHaveBeenLastCalledWith();
   });
 
   it("another failure is one plain sentence with Try again, and no address field", async () => {

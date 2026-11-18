@@ -2,16 +2,14 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { openExternalUrl } from "../desktop";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import { rememberAddress, useRecentAddresses } from "../hooks/useRecentAddresses";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
-import { CONTROL_34 } from "./compactControl";
 import { CONTROL_40 } from "./liveLink";
 import { DisclosureButton, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
 import { PlaybackInstallBox } from "./PlaybackInstallBox";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
 import { scanProgressText, scanSummary, validPlaybackHost } from "./playbackStatus";
 import { Button } from "./ui/Button";
-import { Dialog } from "./ui/Dialog";
-import { Field } from "./ui/Field";
 import { InlineAlert } from "./ui/InlineAlert";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
@@ -29,7 +27,7 @@ const TITLE = "Playback Live Link";
  *
  * It holds the Playback host scan and chooser (Scan Network, progress, Scan again, the macOS permission help, the candidate chooser,
  * Other computer, Connect), moved here whole. Choosing a computer sets the API host AND the Library Link's address (the helper
- * is on the same computer, so its address follows the Playback host; an Advanced override is cleared when another computer is chosen).
+ * is on the same computer, so its address follows the Playback host; a stray address from an older version is cleared).
  *
  * The Library Link is optional. Without it nothing here is a warning: the line says "Not installed" in grey and the setup box offers
  * one command. Everything the library feeds elsewhere waits for the script to be ready (or outdated, which still works).
@@ -39,28 +37,34 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const [host, setHost] = useState("");
   const [choice, setChoice] = useState("");
   const [copied, setCopied] = useState(false);
-  const [forgetOpen, setForgetOpen] = useState(false);
-  const [override, setOverride] = useState("");
   // The two quiet boxes under the strip, opened by its buttons (null = the default: the setup box is open while the script is not ready).
   const [setupOpen, setSetupOpen] = useState<boolean | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const forgetId = useId();
   const setupId = useId();
-  const advancedId = useId();
   useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
-  const savedOverride = (library?.address ?? "").replace(/^http:\/\//, "");
-  useEffect(() => { setOverride(savedOverride); }, [savedOverride]);
+  // The Library Link is always on the Playback computer: an address typed in an older version is cleared once.
+  const strayAddress = Boolean(library?.address);
+  const cleared = useRef(false);
+  useEffect(() => {
+    if (!strayAddress || cleared.current || !library) return;
+    cleared.current = true;
+    void library.saveAddress("");
+  }, [strayAddress, library]);
 
+  const recent = useRecentAddresses("playback");
   const scan = status?.scan;
   const scanning = scan?.state === "scanning" || playback?.pending === "scan";
   const other = choice === OTHER_COMPUTER;
   const trimmed = other ? host.trim() : choice;
   const hostOk = validPlaybackHost(trimmed);
   const savedHost = status?.settings.host ?? null;
+  const connectedNow = apiGood(status);
+  useEffect(() => { if (connectedNow) rememberAddress("playback", savedHost); }, [connectedNow, savedHost]);
   const candidates = status?.scan.candidates ?? [];
   const computers = [
     ...candidates.map((candidate) => ({ host: candidate.host, label: `${candidate.name} (${candidate.host})` })),
     ...(savedHost && !candidates.some((candidate) => candidate.host === savedHost) ? [{ host: savedHost, label: `${savedHost} (saved)` }] : []),
+    // The last few that connected, so a computer used before is one choice and Connect, with no scan.
+    ...recent.filter((address) => address !== savedHost && !candidates.some((candidate) => candidate.host === address)).map((address) => ({ host: address, label: `${address} (recent)` })),
   ];
 
   const copyDetails = async (text: string) => {
@@ -89,9 +93,6 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const setupShown = setupOpen ?? needsSetup;
   const setupLabel = scriptState === "outdated" ? "Update the Library Link" : "Library Link setup";
   const note = scriptNote(library?.status ?? null);
-  const paired = Boolean(library?.status?.helper.paired) && library?.status?.helper.state !== "forgotten";
-  const overrideChanged = override.trim() !== savedOverride;
-  const busy = library?.pending != null;
 
   return (
     <LiveLinkShell
@@ -191,7 +192,6 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
         {library && (
           <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="live-link-actions">
             <DisclosureButton controls={setupId} onToggle={() => setSetupOpen(!setupShown)} open={setupShown}>{setupLabel}</DisclosureButton>
-            <DisclosureButton controls={advancedId} onToggle={() => setAdvancedOpen(!advancedOpen)} open={advancedOpen}>Advanced</DisclosureButton>
           </div>
         )}
       </div>
@@ -200,38 +200,9 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
         <>
           {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="library-link-note" role="status">{note}</p>}
           <div hidden={!setupShown} id={setupId}>
-            <PlaybackInstallBox hasComputer={hasComputer} library={library} />
+            <PlaybackInstallBox autoStart={setupOpen === true} hasComputer={hasComputer} library={library} />
           </div>
           {library.error && <p className="mt-2 text-sm text-danger-text" role="alert">{library.error}</p>}
-          <div className="mt-2 rounded-ds-lg border border-edge bg-surface-900/60 p-3" data-testid="playback-live-link-advanced" hidden={!advancedOpen} id={advancedId}>
-            <div className="space-y-3">
-              <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void library.saveAddress(override.trim()); }}>
-                <Field className="w-full flex-none sm:min-w-48 sm:flex-1" label="Library Link address">
-                  <Input className="font-mono" onChange={(event) => setOverride(event.target.value)} placeholder="Same as the Playback computer" spellCheck={false} value={override} />
-                </Field>
-                <Button className={CONTROL_34} disabled={busy || !overrideChanged} tone="playback" type="submit" variant="tinted">{library.pending === "save" ? "Saving…" : "Save"}</Button>
-              </form>
-              <p className="text-xs text-ink-muted">Leave this empty: the Library Link is on the same computer as the Playback API (port 8780). Fill it in only if it runs on another computer or port.</p>
-              {paired && (
-                <div>
-                  <Button className={CONTROL_34} disabled={busy} onClick={() => setForgetOpen(true)} tone="playback" type="button" variant="tinted">Forget the Library Link</Button>
-                  <p className="mt-1 text-xs text-ink-muted" id={forgetId}>Deletes the key StagePilot made for it. The Library Link keeps running on the Playback computer but StagePilot can no longer use it.</p>
-                </div>
-              )}
-            </div>
-          </div>
-          <Dialog
-            actions={
-              <>
-                <Button autoFocus onClick={() => setForgetOpen(false)} size="touch" tone="playback" variant="tinted">Cancel</Button>
-                <Button onClick={() => { setForgetOpen(false); void library.forget(); }} size="touch" tone="playback" variant="tinted">Forget the Library Link</Button>
-              </>
-            }
-            description="StagePilot deletes the key it made for the Library Link. The Library Link keeps running on the Playback computer, but StagePilot can no longer use it. Song details (key, BPM, arrangement) go away until you run the setup command again."
-            dismissible={false}
-            open={forgetOpen}
-            title="Forget the Library Link?"
-          />
         </>
       )}
     </LiveLinkShell>

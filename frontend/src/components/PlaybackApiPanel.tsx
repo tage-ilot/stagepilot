@@ -11,11 +11,10 @@ import { ScanProgress } from "./ScanProgress";
 import { PlaybackArrangement } from "./PlaybackArrangement";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { Disclosure } from "./ui/Disclosure";
 import { cx } from "./ui/cx";
 import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { Switch } from "./ui/Switch";
-import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackActivityText, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
+import { SCAN_PLAYBACK_SONGS, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
 // (skipped songs) until Save configuration. The scan, the computer chooser and the Library Link are the first block, PlaybackLiveLink.
@@ -49,6 +48,8 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
     <div className="mt-6 space-y-4">
 
       <PlaybackLiveLink library={library} playback={playback} />
+
+      {library && <PlaybackLibrarySongs library={library} plan={plan} timeZone={timeZone} />}
 
       {status && (
         <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
@@ -96,7 +97,6 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           </div>
         </section>
       )}
-      {library && <PlaybackLibrarySongs library={library} plan={plan} timeZone={timeZone} />}
       <Dialog
         open={confirm}
         dismissible={false}
@@ -109,17 +109,6 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
           </>
         }
       />
-
-
-      <Disclosure title="Recent activity" variant="activity" count={playback?.events.length ?? 0}>
-        {!playback?.events.length ? <p className="text-sm text-ink-muted">Nothing yet.</p> : <ul className="max-h-56 overflow-auto overscroll-contain text-sm text-ink-body" aria-label="Recent activity">
-          {[...playback.events].reverse().map(({ event, discovery, at }, index) => {
-            const position = event.song_id === null ? -1 : status?.song_order.indexOf(event.song_id) ?? -1;
-            const known = !status?.stale && position >= 0 ? position : -1;
-            return <li key={`${event.timestamp}-${index}`} className="flex gap-3 py-0.5"><span className="whitespace-nowrap tabular-nums text-ink-muted">{at ? new Date(at).toLocaleTimeString() : ""}</span><span>{playbackActivityText(event.type, known)}{discovery ? " (while scanning Playback songs)" : ""}</span></li>;
-          })}
-        </ul>}
-      </Disclosure>
     </div>
   );
 }

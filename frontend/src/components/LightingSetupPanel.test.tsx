@@ -1016,6 +1016,28 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
   beforeEach(() => window.localStorage.clear());
   afterEach(() => { vi.unstubAllGlobals(); window.localStorage.clear(); });
 
+  it("puts the song's BPM in the timeline's detail line, after its length, and leaves it out when Playback has no tempo", async () => {
+    wire(() => json({ step_s: 0.125, peak: [0, 100] }));
+    const { unmount } = mountWith(libraryOf([planSong()]));
+    const detail = () => screen.getByRole("button", { name: /^Song lighting timeline/ }).closest("[data-variant]")!.querySelector("[data-part=detail]")!;
+    expect(detail().textContent).toMatch(/ \d{2}:\d{2} · 65 BPM$/);
+    unmount();
+    mountWith(libraryOf([planSong({ library: libSong({ bpm: null }) })]));
+    expect(detail().textContent).toMatch(/\d{2}:\d{2}$/);
+    expect(detail().textContent).not.toContain("BPM");
+  });
+
+  it("puts Clear all songs... below the whole timeline card, not above the song cards", () => {
+    wire(() => json({ step_s: 0.125, peak: [0, 100] }));
+    mountWith(libraryOf([planSong()]));
+    const button = screen.getByRole("button", { name: "Clear all songs..." });
+    const card = screen.getByRole("button", { name: /^Song lighting timeline/ }).closest("[data-variant]")!;
+    const cards = screen.getByRole("list", { name: "Songs in this service" });
+    expect(cards.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.contains(button)).toBe(false);
+  });
+
   it("shows the paired song's bar and, once the backend answers, its waveform; the window asks the backend for it, never the helper", async () => {
     const fetchMock = wire(() => json({ step_s: 0.125, peak: [0, 100, 255, 100] }));
     mountWith(libraryOf([planSong()]));

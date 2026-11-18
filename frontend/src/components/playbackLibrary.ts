@@ -44,10 +44,18 @@ export function lengthSourceTitle(song: LibrarySong): string | null {
 export const sectionWord = (n: number) => `${n} ${n === 1 ? "section" : "sections"}`;
 
 /** The face of a song: key (and "was X" when it differs), BPM and the countdown length m:ss; only what the helper gave. */
+/** "65 BPM", or "72.4 BPM" when the tempo is not a whole number. */
+export const bpmText = (bpm: number): string => `${Number.isInteger(bpm) ? bpm : Math.round(bpm * 10) / 10} BPM`;
+
+/** "Ab (was C) · 4:57": only the key and the countdown length, the two facts the Playback config cards show. */
+export function songKeyLength(song: LibrarySong): string[] {
+  return songFaceFacts(song).filter((fact) => !/ BPM$/.test(fact));
+}
+
 export function songFaceFacts(song: LibrarySong): string[] {
   const facts: string[] = [];
   if (song.key) facts.push(song.key_original && song.key_original !== song.key ? `${song.key} (was ${song.key_original})` : song.key);
-  if (song.bpm !== null) facts.push(`${Number.isInteger(song.bpm) ? song.bpm : Math.round(song.bpm * 10) / 10} BPM`);
+  if (song.bpm !== null) facts.push(bpmText(song.bpm));
   if (song.countdown_length_s !== null) facts.push(formatLength(song.countdown_length_s));
   return facts;
 }

@@ -70,7 +70,7 @@ describe("LightkeyInstallBox", () => {
     render(<LightkeyInstallBox status={status()} />);
     await userEvent.click(screen.getByRole("button", { name: "Set up the Lighting computer" }));
     const ready = await screen.findByTestId("lightkey-install-ready");
-    expect(api.startLightkeyHelperInstall).toHaveBeenCalledWith(undefined);
+    expect(api.startLightkeyHelperInstall).toHaveBeenCalledWith();
     const steps = ready.querySelectorAll("ol > li");
     expect(steps).toHaveLength(3);
     expect(steps[0]).toHaveTextContent("turn on sACN output in Lightkey and open your project");
@@ -165,20 +165,18 @@ describe("LightkeyInstallBox", () => {
     expect(await screen.findByTestId("lightkey-install-ready")).toBeInTheDocument();
   });
 
-  it("asks for this computer's address when it could not be found, then uses it", async () => {
+  it("never asks for this computer's address: when none can be found it says so in one sentence, with Try again", async () => {
     vi.mocked(api.startLightkeyHelperInstall)
       .mockRejectedValueOnce(new api.ApiError("Could not find this computer's address on the Lighting network", 409))
       .mockResolvedValueOnce(made());
     render(<LightkeyInstallBox status={status()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Set up the Lighting computer" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Set up the Lighting computer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not find this computer's address on the Lighting network");
-    const field = screen.getByRole("textbox", { name: "This computer's address" });
-    const use = screen.getByRole("button", { name: "Use this address" });
-    expect(use).toBeDisabled();
-    await userEvent.type(field, "192.168.1.20");
-    await userEvent.click(use);
-    expect(api.startLightkeyHelperInstall).toHaveBeenLastCalledWith("192.168.1.20");
-    expect(await screen.findByTestId("lightkey-install-ready")).toBeInTheDocument();
+    expect(screen.queryByLabelText("This computer's address")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use this address" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(api.startLightkeyHelperInstall).toHaveBeenLastCalledWith();
   });
 
   it("can be cancelled, which ends the session", async () => {
@@ -213,5 +211,46 @@ describe("LightkeyInstallBox", () => {
       expect(api.endLightkeyHelperInstall).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId("lightkey-install-live")).toHaveTextContent("connected");
     });
+  });
+});
+
+describe("LightkeyInstallBox: the command is there on request, even while everything works", () => {
+  const current = () => connected({ helper: newHelper });
+
+  it("while everything works and nobody asked, it shows nothing and makes no command", () => {
+    render(<LightkeyInstallBox status={current()} />);
+    expect(screen.queryByTestId("lightkey-install")).toBeNull();
+    expect(api.startLightkeyHelperInstall).not.toHaveBeenCalled();
+  });
+
+  it("opened on purpose it makes the one-line command at once and stays open though the helper already answers", async () => {
+    vi.mocked(api.startLightkeyHelperInstall).mockResolvedValue(made());
+    render(<LightkeyInstallBox autoStart status={current()} />);
+    const command = await screen.findByTestId("lightkey-install-command");
+    expect(command).toHaveTextContent("curl -fsS http://192.168.1.20:8000/lightkey-helper/abc123/install.sh | sh");
+    expect(command.textContent).not.toContain("\n");
+    expect(screen.getByRole("region", { name: "Lighting computer command" })).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-install-waiting")).toHaveTextContent(/^The command works for 30:00 more, on this network only\./);
+    expect(screen.queryByTestId("lightkey-install-done")).toBeNull();
+    expect(api.endLightkeyHelperInstall).not.toHaveBeenCalled();
+    expect(api.startLightkeyHelperInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("closing it from the strip ends the session and hides the box", async () => {
+    vi.mocked(api.startLightkeyHelperInstall).mockResolvedValue(made());
+    const { rerender } = render(<LightkeyInstallBox autoStart status={current()} />);
+    await screen.findByTestId("lightkey-install-command");
+    rerender(<LightkeyInstallBox autoStart={false} status={current()} />);
+    await waitFor(() => expect(api.endLightkeyHelperInstall).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("lightkey-install")).toBeNull();
+  });
+
+  it("Cancel inside the box ends the session and does not start another", async () => {
+    vi.mocked(api.startLightkeyHelperInstall).mockResolvedValue(made());
+    render(<LightkeyInstallBox autoStart status={current()} />);
+    await screen.findByTestId("lightkey-install-command");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.endLightkeyHelperInstall).toHaveBeenCalledTimes(1);
+    expect(api.startLightkeyHelperInstall).toHaveBeenCalledTimes(1);
   });
 });

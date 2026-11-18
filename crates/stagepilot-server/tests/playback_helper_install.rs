@@ -326,8 +326,8 @@ async fn a_bad_address_is_refused_and_a_missing_playback_computer_gets_its_own_s
     assert_eq!(none.status, StatusCode::CONFLICT);
     assert_eq!(none.json()["detail"], NO_PLAYBACK_COMPUTER);
     assert_eq!(none.json()["code"], "no_playback_computer");
-    // The saved Playback computer is this computer: there is no LAN address toward it.
-    save_playback_host(&rt, "127.0.0.1", "");
+    // A name that does not resolve has no address to find: that is the one plain sentence.
+    save_playback_host(&rt, "playback-mac.invalid", "");
     let no_lan = send(
         &app,
         "POST",
@@ -343,6 +343,24 @@ async fn a_bad_address_is_refused_and_a_missing_playback_computer_gets_its_own_s
         !rt.playback_library.is_paired(),
         "a refused session makes no key"
     );
+    // The saved Playback computer is this computer: nobody is asked for an address. The command carries this computer's own address.
+    save_playback_host(&rt, "127.0.0.1", "");
+    let same = send(
+        &app,
+        "POST",
+        "/api/v1/playback-library/helper-install",
+        None,
+        "127.0.0.1",
+    )
+    .await;
+    assert_eq!(same.status, StatusCode::OK, "{}", same.text());
+    let own = stagepilot_server::helper_install::own_lan_address()
+        .unwrap_or(std::net::Ipv4Addr::LOCALHOST);
+    assert_eq!(same.json()["lan_ip"], own.to_string());
+    assert!(same.json()["command"]
+        .as_str()
+        .unwrap()
+        .starts_with(&format!("curl -fsS http://{own}:")));
 }
 
 /// This computer's own private address, as the system would pick it toward the internet.

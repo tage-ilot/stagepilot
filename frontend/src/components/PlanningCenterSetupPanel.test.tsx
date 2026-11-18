@@ -847,7 +847,7 @@ describe("the service date picker in the Services panel", () => {
     upcoming: { plan_id: "p1", date: "2026-11-22", title: "Sunday Service" },
   }) as ApplicationState;
 
-  it("shows the date of the loaded service above the service type and steps through the services", async () => {
+  it("shows the date of the loaded service below the service options and steps through the services", async () => {
     picker.getUpcomingServicePlans.mockResolvedValue(answer);
     renderPanel({ servicePlanChoice: choice, panelPlugins: { planning_center: {} }, panelState: loaded("p1", "Sunday Service", "2026-11-22") });
     const section = await screen.findByRole("region", { name: "Service date" });
@@ -856,15 +856,19 @@ describe("the service date picker in the Services panel", () => {
     await act(async () => { await Promise.resolve(); });
     await userEvent.click(within(section).getByRole("button", { name: "Next service" }));
     expect(choice.pick).toHaveBeenCalledWith("p2");
-    expect(section.compareDocumentPosition(screen.getByLabelText("Service type")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Under the other service options (type, timezone, title, time) and above their Save bar.
+    for (const label of ["Service type", "Timezone", "Service plan title preference", "Preferred service time"]) {
+      expect(screen.getByLabelText(label).compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(section.compareDocumentPosition(screen.getByRole("button", { name: "Save configuration" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("is also there for the demo Services source and shows Back to upcoming while another is picked", async () => {
     picker.getUpcomingServicePlans.mockResolvedValue({ ...answer, pinned_id: "p2", pinned_date: "2026-11-29" });
     renderPanel({ servicePlanChoice: choice, panelPlugins: { demo: {} }, panelState: loaded("p2", "Advent Sunday", "2026-11-29") });
     const section = await screen.findByRole("region", { name: "Service date" });
-    expect(within(section).getByTestId("not-upcoming-pill")).toHaveTextContent("Not the upcoming service: Sun, Nov 29");
-    await userEvent.click(within(section).getByRole("button", { name: "Back to upcoming" }));
+    expect(within(section).getByTestId("not-upcoming-pill")).toHaveTextContent("Current upcoming service not selected");
+    await userEvent.click(within(section).getByRole("button", { name: "Current Upcoming" }));
     expect(choice.back).toHaveBeenCalled();
   });
 

@@ -78,8 +78,8 @@ export function ServicePlanPicker({
 
   return (
     <section aria-busy={choice.pending || undefined} aria-labelledby={headingId} className="service-plan-picker">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted" id={headingId}>Service date</h3>
-      <div className="relative mt-2 flex flex-wrap items-center gap-2">
+      <h3 className="sr-only" id={headingId}>Service date</h3>
+      <div className="relative flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 max-w-full items-center gap-1 rounded-ds-lg border border-edge-medium bg-surface-900/60 p-1">
           <Button
             aria-label="Previous service"
@@ -143,13 +143,9 @@ export function ServicePlanPicker({
             </div>
           )}
         </div>
+        {pinned && plan && <NotUpcomingPill canOperate={canOperate} date={plan.date} size="touch" onBack={choice.back} pending={choice.pending} />}
       </div>
 
-      {pinned && plan && (
-        <div className="mt-2">
-          <NotUpcomingPill canOperate={canOperate} date={plan.date} onBack={choice.back} pending={choice.pending} />
-        </div>
-      )}
       {!loadingList && !listError && plans.length === 0 && (
         <p className="mt-2 text-sm text-ink-body">No upcoming services were found.</p>
       )}
