@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 
 import { addressTemplates } from "./AddressStates";
+import { factTemplates } from "./FactStates";
 import { seedRecentAddresses } from "./seedRecent";
 
 import { builtFromLine } from "./build";
@@ -42,6 +43,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "template-address", title: "Template: Address box", intro: "AddressBox: the one address box of every Live Link block (Lighting, Playback, ProPresenter), shown in all three at once: an ordinary text box with a small arrow inside its right edge that lists the Found and Recent addresses. Empty, typed, Recent, Found and Recent, only one of them, nothing yet, the keyboard in the list, a long list, error, held change, disabled. The Search, Connect and port stay the block's own.", states: addressTemplates },
   { id: "template-summary", title: "Template: Summary", intro: "StatusSummary: the list and the cards, with ok, warn and danger words.", states: summaryTemplates },
   { id: "template-notices", title: "Template: Notices", intro: "SectionNotice: the four tones as boxes, with a title and a button, as a question group, and as lines.", states: noticeTemplates },
+  { id: "template-facts", title: "Template: Fact chips", intro: "FactChips: a song's small facts (key, length, tempo, mtID, capture status) as square chips, by themselves and in the cards that have them: Lighting's songs, Playback's config songs and the matchup ledger. The Presenter Link's cards are in Section: Presenter Link.", states: factTemplates },
   { id: "template-optional", title: "Template: Optional sections", intro: "OptionalSection and the band: closed, open, remembered, opened by a question.", states: optionalTemplates },
   { id: "template-layout", title: "Template: Panel order, and a new connection page", intro: "PanelLayout with every slot, with the summary first, and the worked example of DESIGN.md: a new connection built from the templates in 35 lines.", states: layoutTemplates },
 ];

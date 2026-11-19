@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SongsStrip, type SongChip } from "./SongsStrip";
 
+/** The song cards of a list: each card's facts are a list of their own inside it (`FactChips`), so they are left out. */
+const cardsIn = (list: HTMLElement) => within(list).getAllByRole("listitem").filter((item) => item.dataset.song !== undefined);
+
 const chips: SongChip[] = [
   { key: "a", title: "Holy Forever", order: 1, looks: 12, handmade: 0, hasLoudness: true },
   { key: "b", title: "Goodness", order: 2, looks: 0, handmade: 0, hasLoudness: false },
@@ -29,7 +32,7 @@ describe("SongsStrip", () => {
   it("keeps plan order and shows each state", () => {
     mount();
     const list = screen.getByRole("list", { name: "Songs in this service" });
-    const items = within(list).getAllByRole("listitem");
+    const items = cardsIn(list);
     expect(items.map((item) => item.getAttribute("data-song"))).toEqual(["a", "b", "c"]);
     expect(items[0]).toHaveAttribute("data-state", "captured");
     expect(items[0]).toHaveTextContent("Holy Forever");
@@ -79,7 +82,7 @@ describe("SongsStrip", () => {
     const many: SongChip[] = Array.from({ length: 40 }, (_, i) => ({ key: `s${i}`, title: `Song number ${i + 1}`, order: i + 1, looks: i % 2 ? 5 : 0, handmade: 0, hasLoudness: false }));
     mount({ chips: many, liveKey: "s3", selectedKey: "s3" });
     const list = screen.getByRole("list", { name: "Songs in this service" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(40);
+    expect(cardsIn(list)).toHaveLength(40);
     expect(list.className).toContain("grid");
     expect(list.className).not.toMatch(/max-h-|overflow-/);
   });
@@ -114,7 +117,7 @@ describe("SongsStrip capture labels", () => {
 
   it("says which state each song is in instead of a look count", () => {
     mount({ chips: labelled });
-    const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
+    const items = cardsIn(screen.getByRole("list", { name: "Songs in this service" }));
     expect(items.map((item) => item.getAttribute("data-label"))).toEqual(["fully_captured", "incomplete", "manually_cued", "manually_cued_and_fully_captured", "not_captured"]);
     expect(items[0]).toHaveTextContent("Fully captured");
     expect(items[1]).toHaveTextContent("Incomplete capture");
@@ -127,7 +130,7 @@ describe("SongsStrip capture labels", () => {
 
   it("uses the manual colour for hand-made only and the captured colour for captures", () => {
     mount({ chips: labelled });
-    const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
+    const items = cardsIn(screen.getByRole("list", { name: "Songs in this service" }));
     expect(items[2]!.className).toContain("border-cue-look-manual");
     expect(items[0]!.className).toContain("border-cue-look-captured");
     expect(items[1]!.className).toContain("border-dashed");
@@ -136,7 +139,7 @@ describe("SongsStrip capture labels", () => {
   it("draws a song the Library Link knows as a card: cover, arrangement bar and the capture words then the BPM, but not the key or length", () => {
     const withLibrary: SongChip[] = [
       { ...chips[0]!, library: {
-        text: "Ab (was C) · 65 BPM · 6:29 (plan 5:55) · 8 sections · Default",
+        facts: ["Ab (was C)", "65 BPM", "6:29 (plan 5:55)", "8 sections", "Default"],
         title: "Playback: Ab (was C), 65 BPM, 6:29 (plan 5:55), 8 sections, Default. Playback counts this song down to 6:29; the plan says 5:55.",
         cover: "/api/v1/playback-library/artwork/7?v=abc", bpm: "65 BPM",
         sections: [{ name: "Verse 1", start: 0, end: 30 }, { name: "Chorus", start: 30, end: 60 }],
@@ -144,9 +147,14 @@ describe("SongsStrip capture labels", () => {
       chips[1]!,
     ];
     mount({ chips: withLibrary });
-    const items = within(screen.getByRole("list", { name: "Songs in this service" })).getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("Holy Forever12 looks♪ · 65 BPM");
+    const items = cardsIn(screen.getByRole("list", { name: "Songs in this service" }));
+    expect(items[0]).toHaveTextContent("Holy Forever12 looks ♪ 65 BPM");
     expect(items[0]).not.toHaveTextContent(/6:29|Ab/);
+    // The capture words, the loudness note and the tempo are one square chip each, with no dot or bullet between them.
+    expect(within(items[0]!).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["12 looks", "\u266A", "65 BPM"]);
+    expect(items[0]!.textContent).not.toMatch(/[\u00B7\u2022]/);
+    expect(within(items[0]!).getByTestId("song-chip-bpm")).toHaveClass("border-edge-medium", "bg-surface-950", "font-mono");
+    expect(within(items[1]!).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["not captured"]);
     expect(within(items[1]!).queryByTestId("song-chip-bpm")).toBeNull();
     expect(items[0]!.querySelector("img")).toHaveAttribute("src", "/api/v1/playback-library/artwork/7?v=abc");
     expect(items[0]!.querySelector("img")).toHaveAttribute("alt", "");

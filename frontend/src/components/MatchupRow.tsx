@@ -1,7 +1,8 @@
 import { playbackLibraryArtworkUrl } from "../api";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { ArrangementBar } from "./ArrangementBar";
-import { lengthSourceTitle } from "./playbackLibrary";
+import { bpmText, lengthSourceTitle } from "./playbackLibrary";
+import { FactChips, type Fact } from "./sections";
 import { clock, STAMP_WORDS, type MatchRow, type RowStamp } from "./songMatchup";
 import { Switch } from "./ui/Switch";
 import { cx } from "./ui/cx";
@@ -9,6 +10,9 @@ import { cx } from "./ui/cx";
 const kicker = "font-type-badge text-[0.6875rem] uppercase tracking-[0.1em]";
 const cell = "flex min-w-0 flex-col gap-1.5 border-2 p-3";
 const tag = "w-max border border-dashed border-ink-muted px-2 py-px text-xs uppercase tracking-[0.1em] text-ink";
+
+/** The key as a chip: the bare letter (as everywhere since the Presenter Link's plain song details), `Key Ab` for a screen reader. */
+const keyFact = (key: string): Fact => ({ text: key, name: `Key ${key}` });
 
 /** A stamp says its state in words and a mark, never in colour alone (DESIGN.md law 3). */
 const STAMP_STYLE: Record<RowStamp, { mark: string; box: string }> = {
@@ -61,14 +65,14 @@ export function MatchupRow({ row, draft, skips }: { row: MatchRow; draft?: Playb
         {plan.skipped && <span className={tag}>No track</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2">
-        <span aria-hidden="true" className="text-[0.8125rem] tabular-nums text-ink-body">{plan.key ? `Key ${plan.key}` : ""}</span>
+        {plan.key ? <FactChips facts={[keyFact(plan.key)]} /> : <span aria-hidden="true" />}
         {skips && <Switch className="self-end" label="Skip" aria-label={`Skip ${plan.title}`} checked={plan.skipped} disabled={!draft} onChange={(event) => draft?.setPlanSongSkipped(plan.id, event.target.checked)} />}
       </div>
     </div>
   );
   const song = playback?.song ?? null;
   const cover = playback?.cover && song?.artwork && song.setlist_song_id !== null ? playbackLibraryArtworkUrl(song.setlist_song_id, song.artwork.etag) : null;
-  const facts = song ? [song.key ? `Key ${song.key}` : null, song.bpm !== null ? `${Number.isInteger(song.bpm) ? song.bpm : Math.round(song.bpm * 10) / 10} BPM` : null].filter(Boolean).join(" · ") : "";
+  const facts: Fact[] = song ? [...(song.key ? [keyFact(song.key)] : []), ...(song.bpm !== null ? [{ text: bpmText(song.bpm) }] : [])] : [];
   const playbackBox = playback && (
     <div className={cx("arr-pb", cell, "rounded-none", playback.skipped ? "border-dashed border-ink-body/70 bg-ink/[0.03]" : "border-integration-playback-soft/70 bg-integration-playback-soft/10")} data-skipped={playback.skipped || undefined}>
       <div aria-hidden="true" className="flex min-w-0 flex-col gap-1.5">
@@ -84,7 +88,7 @@ export function MatchupRow({ row, draft, skips }: { row: MatchRow; draft?: Playb
         {playback.skipped && <span className={tag}>Not in this service</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2">
-        <span aria-hidden="true" className="text-[0.8125rem] tabular-nums text-ink-body">{facts}</span>
+        {facts.length ? <FactChips facts={facts} /> : <span aria-hidden="true" />}
         {skips && playback.skipId !== null && <Switch className="self-end" label="Skip" aria-label={playback.title ? `Skip Playback song ${playback.number}, ${playback.title}` : `Skip Playback song ${playback.number}`} checked={playback.skipped} disabled={!draft} onChange={(event) => draft?.setPlaybackSongSkipped(playback.skipId!, event.target.checked)} />}
       </div>
     </div>

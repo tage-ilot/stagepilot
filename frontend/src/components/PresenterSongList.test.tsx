@@ -104,22 +104,24 @@ describe("the song cards", () => {
     expect(screen.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "true")).toBe(true);
   });
 
-  it("each Playback card has the cover (when Playback has one), then `key · mtID number` as plain text, the arrangement, and its bar", async () => {
+  it("each Playback card has the cover (when Playback has one), then the key and `mtID number` as one square chip each, the arrangement, and its bar", async () => {
     draw();
     await ready();
     const holy = card("Holy Forever");
     expect(holy.querySelector("img")).not.toBeNull();
     expect(card("Battle Belongs").querySelector("img")).toBeNull();
     expect(within(holy).getByTestId("library-bar")).toHaveAttribute("role", "img");
-    // One compact line under the title: the key letters, a middle dot, mtID and the number: no \"Key\" word, no chip box.
+    // Under the title: the key letters, then mtID and the number, each in its own square chip with no dot between; no \"Key\" word on screen.
     const facts = holy.querySelector("[id$='-facts']") as HTMLElement;
-    expect(facts).toHaveTextContent(/^G \(was F\) \u00B7 mtID 43302$/);
+    expect(facts).toHaveTextContent(/^G \(was F\) mtID 43302$/);
+    expect(facts.textContent).not.toMatch(/[\u00B7\u2022]/);
+    expect(within(facts).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["G (was F)", "mtID 43302"]);
     expect(within(holy).getByTestId("add-songs-key")).toHaveTextContent(/^G \(was F\)$/);
     expect(within(holy).queryByText(/\bKey\b/)).toBeNull();
     expect(holy.textContent).not.toMatch(/MultiTracks|Default|Sections/);
     expect(within(card("Gratitude")).getByTestId("add-songs-key")).toHaveTextContent(/^A$/);
-    // The key is the card's own text style, not a box.
-    expect(within(holy).getByTestId("add-songs-key").className).not.toMatch(/border|bg-/);
+    // The key is the same square chip as every other song fact.
+    expect(within(holy).getByTestId("add-songs-key").className).toMatch(/\bborder\b.*\bbg-surface-950\b/);
     // The full order on hover (the card's title).
     expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
   });
@@ -138,7 +140,7 @@ describe("the song cards", () => {
   it("a song with no number shows `mtID \u2014`", async () => {
     draw();
     await ready();
-    expect(card("Firm Foundation").querySelector("[id$='-facts']")).toHaveTextContent(/^C \u00B7 mtID \u2014$/);
+    expect(card("Firm Foundation").querySelector("[id$='-facts']")).toHaveTextContent(/^C mtID \u2014$/);
     expect(within(card("Firm Foundation")).getByTestId("add-songs-mtid")).toHaveTextContent(/^\u2014$/);
   });
 
@@ -157,7 +159,7 @@ describe("the song cards", () => {
     expect(within(holy).getByTestId("library-bar")).toBeInTheDocument();
     // A screen reader hears it with the key and the number.
     const box = screen.getByRole("checkbox", { name: "Holy Forever" });
-    expect(box).toHaveAccessibleDescription(/G \(was F\) \u00B7 mtID 43302/);
+    expect(box).toHaveAccessibleDescription(/G \(was F\) mtID 43302/);
     expect(box).toHaveAccessibleDescription(/Count Off \u00B7 Verse 1 \u00B7 Vamp on 1/);
   });
 

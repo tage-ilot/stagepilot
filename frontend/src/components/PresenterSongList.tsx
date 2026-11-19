@@ -10,7 +10,7 @@ import {
 } from "./addSongsWording";
 import { StatusChip } from "./StatusChips";
 import { keyWas, librarySongCover } from "./playbackLibrary";
-import { ActionButton, ActionRow } from "./sections";
+import { ActionButton, ActionRow, FactChips } from "./sections";
 import { SONG_CARD_LOOK, SONG_GRID_CHECK, SongCardBody, SongCardShell } from "./SongCard";
 
 /** What the last preview (while it is still true) and the last import say about a song: the chip of a song it stopped for, and whether a section was guessed. */
@@ -52,13 +52,14 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
   const order = row.sections.join(", ");
   const was = playback && row.song ? keyWas(row.song, now) : null;
   const stopped = block ? BLOCK_CHIP[block] : null;
-  // `C \u00B7 mtID 23126`: plain text in the card's own style. The number is the MultiTracks Song Master ID (what ProPresenter shows as MTID), never Playback's own song number.
+  // The key and `mtID 23126`, one square chip each (`FactChips`, no dot between). The number is the MultiTracks Song Master ID (what ProPresenter shows as MTID), never Playback's own song number.
+  const keyWords = row.keyName ? `${row.keyName}${was ? ` (was ${was})` : ""}` : "No key";
+  const mtid = row.contentId !== null ? String(row.contentId) : "\u2014";
   const facts = playback ? (
-    <>
-      <span data-testid="add-songs-key">{row.keyName ? `${row.keyName}${was ? ` (was ${was})` : ""}` : "No key"}</span>
-      {" \u00B7 mtID "}
-      <span data-testid="add-songs-mtid">{row.contentId !== null ? row.contentId : "\u2014"}</span>
-    </>
+    <FactChips facts={[
+      { text: keyWords, name: row.keyName ? `Key ${keyWords}` : keyWords, testId: "add-songs-key" },
+      { text: `mtID ${mtid}`, content: <>mtID <span data-testid="add-songs-mtid">{mtid}</span></> },
+    ]} />
   ) : null;
   const chips = (
     <span className="contents" id={`${uid}-chips`}>
@@ -76,9 +77,7 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
     </span>
   ) : null;
   const body = (
-    <SongCardBody chips={chips} cover={librarySongCover(row.song)} detail={orderText} sections={row.song?.sections ?? []} title={row.title}>
-      {facts && <span id={`${uid}-facts`}>{facts}</span>}
-    </SongCardBody>
+    <SongCardBody chips={chips} cover={librarySongCover(row.song)} detail={orderText} facts={facts && <span className="block" id={`${uid}-facts`}>{facts}</span>} sections={row.song?.sections ?? []} title={row.title} />
   );
   const item = { "data-blocked": block ?? undefined, "data-row": row.id, "data-source": row.source, "data-testid": block === "unnamed" ? "add-songs-unnamed" : "add-songs-row", title: hasOrder ? `${row.title}: ${order}` : undefined };
   // A song Playback gave no number is a card with nothing to tick: it cannot be imported, and says why.

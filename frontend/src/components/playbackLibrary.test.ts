@@ -38,8 +38,8 @@ describe("the chip words", () => {
   it("shows the start of the last measure when there is one, never the end of the song next to it", () => {
     // (a) both known: the helper's scan length (388.64) is the countdown length; the end of the song (392.9) is not in the data this window reads.
     const chip = chipLibrary(song("Song One", 1, { scan_length_s: 388.64, countdown_length_s: 388.64, length_source: "last_measure" }, { plan_seconds: 389 }), at(1));
-    expect(chip?.text).toContain("6:29");
-    expect(chip?.text).not.toContain("6:33");
+    expect(chip?.facts).toContain("6:29");
+    expect(chip?.facts).not.toContain("6:33");
     expect(chip?.title).not.toContain("no bar lines");
     expect(Object.keys(playback())).not.toContain("length_s");
     expect(libraryNotices(ready([song("Song One", 1, { countdown_length_s: 388.64 }, { plan_seconds: 389 })]), plan, TZ)).toEqual([]);
@@ -51,14 +51,14 @@ describe("the chip words", () => {
     // (b) scan_length_s null, the backend resolved the end of the song (388.64 here, from the helper's length_s).
     const noGrid = song("Song One", 1, { scan_length_s: null, countdown_length_s: 388.64, length_source: "song_end_no_grid" }, { plan_seconds: 389 });
     const chip = chipLibrary(noGrid, at(1));
-    expect(chip?.text).toContain("6:29");
-    expect(chip?.text).not.toContain("bar lines");
+    expect(chip?.facts).toContain("6:29");
+    expect(chip?.facts).not.toContain("bar lines");
     expect(chip?.title).toContain("Playback has no bar lines for this song, so this is where the song ends.");
     expect(songFacts(noGrid.library!, at(1))).toEqual(["G", "72 BPM", "6:29", "6 sections", "Default"]);
     expect(libraryNotices(ready([noGrid]), plan, TZ)).toEqual([]);
     // The same 15 s rule and wording as for a measured length.
     const far = song("Song One", 1, { scan_length_s: null, countdown_length_s: 388.64, length_source: "song_end_no_grid" }, { plan_seconds: 355 });
-    expect(chipLibrary(far, at(1))?.text).toContain("6:29 (plan 5:55)");
+    expect(chipLibrary(far, at(1))?.facts).toContain("6:29 (plan 5:55)");
     expect(texts(ready([far]))).toEqual(["Song One: Playback counts this song down to 6:29; the plan says 5:55."]);
   });
 
@@ -76,22 +76,22 @@ describe("the chip words", () => {
     expect(long).toContain(longLast);
     expect(long).not.toContain(noGrid);
     // The chip's visible words are the same for all three: only the number differs.
-    expect(chipLibrary(song("Song One", 1, { scan_length_s: 380, countdown_length_s: 392.9, length_source: "song_end_long_last_measure" }, { plan_seconds: 393 }), at(1))?.text).toBe("G · 72 BPM · 6:33 · 6 sections · Default");
+    expect(chipLibrary(song("Song One", 1, { scan_length_s: 380, countdown_length_s: 392.9, length_source: "song_end_long_last_measure" }, { plan_seconds: 393 }), at(1))?.facts).toEqual(["G", "72 BPM", "6:33", "6 sections", "Default"]);
   });
 
   it("says nothing about a length when the song has neither, and no notice", () => {
     // (c) both null.
     const missing = song("Song One", 1, { scan_length_s: null, countdown_length_s: null, length_source: null });
-    expect(chipLibrary(missing, at(1))?.text).not.toMatch(/\d:\d\d/);
+    expect(chipLibrary(missing, at(1))?.facts.join(" ")).not.toMatch(/\d:\d\d/);
     expect(chipLibrary(missing, at(1))?.title).not.toContain("bar lines");
     expect(songFacts(missing.library!, at(1))).toEqual(["G", "72 BPM", "6 sections", "Default"]);
     expect(libraryNotices(ready([missing]), plan, TZ)).toEqual([]);
   });
 
   it("marks the plan's length next to Playback's when they are more than 15 s apart, and not otherwise", () => {
-    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 388.64 }, { plan_seconds: 355 }), at(1))?.text).toContain("6:29 (plan 5:55)");
-    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 315 }, { plan_seconds: 300 }), at(1))?.text).not.toContain("plan");
-    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 316 }, { plan_seconds: 300 }), at(1))?.text).toContain("(plan 5:00)");
+    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 388.64 }, { plan_seconds: 355 }), at(1))?.facts).toContain("6:29 (plan 5:55)");
+    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 315 }, { plan_seconds: 300 }), at(1))?.facts.join(" ")).not.toContain("plan");
+    expect(chipLibrary(song("Song One", 1, { countdown_length_s: 316 }, { plan_seconds: 300 }), at(1))?.facts).toContain("5:16 (plan 5:00)");
     expect(chipLibrary(song("Song One", 1, null), at(1))).toBeNull();
     expect(chipLibrary(undefined, at(1))).toBeNull();
   });
@@ -219,7 +219,7 @@ describe("a key changed in Playback, said for a day", () => {
     const one = song("Song One", 1, { key: "Ab", key_was: "G", key_changed_at: "2026-11-20T03:00:00Z" });
     expect(chipLibrary(one, at(5))?.title).toContain("Key changed in Playback from G to Ab in the last day");
     expect(chipLibrary(one, at(25))?.title).not.toContain("Key changed");
-    expect(chipLibrary(one, at(25))?.text).toBe("Ab · 72 BPM · 5:00 · 6 sections · Default");
+    expect(chipLibrary(one, at(25))?.facts).toEqual(["Ab", "72 BPM", "5:00", "6 sections", "Default"]);
   });
 
   it("knows whether any card shows it, so the clock runs only then", () => {

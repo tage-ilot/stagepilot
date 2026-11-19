@@ -10,6 +10,7 @@ export { ScanProgress, type ScanWording } from "./ScanProgress";
 export { NO_SCAN, scanSummary, type ScanCandidate, type ScanErrorKind, type ScanPhase, type ScanState } from "./scanState";
 export { ConnectionSection, type ConnectionSectionProps, type DetailsState, type StatusLine } from "./ConnectionSection";
 export { DisclosureButton } from "./DisclosureButton";
+export { FactChips, type Fact, type FactChipsProps, type FactTone } from "./FactChips";
 export { HelperSetupBox, type HelperBoxState, type HelperInstallController, type HelperSetupBoxProps, type HelperSetupWording } from "./HelperSetupBox";
 export { LiveLinkField } from "./LiveLinkField";
 export { LiveLinkPill } from "./LiveLinkPill";

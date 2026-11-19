@@ -17,18 +17,27 @@ const mount = (plan: LibraryPlan | null, over: Partial<PlaybackLibraryController
     plan={{ date: "2026-11-22", service_times: ["10:00"] } as never}
     timeZone="America/Los_Angeles"
   />);
-const chips = () => within(screen.getByTestId("library-songs")).getAllByRole("listitem");
+// The song chips only: each song's facts are a list of their own inside it (`FactChips`), so they are left out here.
+const chips = () => within(screen.getByTestId("library-songs")).getAllByRole("listitem").filter((item) => item.dataset.song !== undefined);
 
 describe("the song chips in the Playback config", () => {
   it("shows one chip per plan song, in plan order, with the title and just the key and length under it (no BPM)", () => {
     mount(planOf([planSong("Song Two", 1), planSong("Song One", 2, { library: library({ key: "G", key_original: "G", bpm: 72.4, countdown_length_s: 300 }) })]));
     const [first, second] = chips();
-    expect(first).toHaveTextContent("Song TwoAb · 6:29");
-    expect(second).toHaveTextContent("Song OneG · 5:00");
+    expect(first).toHaveTextContent("Song TwoAb 6:29");
+    expect(second).toHaveTextContent("Song OneG 5:00");
     expect(first).not.toHaveTextContent("BPM");
     expect(screen.queryByRole("heading", { name: "Songs in Playback" })).toBeNull();
     expect(screen.getByRole("region", { name: "Songs in Playback" })).toBeInTheDocument();
     expect(chips().map((chip) => chip.dataset.song)).toEqual(["k1", "k2"]);
+  });
+
+  it("draws the key and the length as one square chip each, with no dot or bullet between them", () => {
+    mount(planOf([planSong("Song One", 1, { library: library({ key: "Ab", key_was: "G", key_changed_at: new Date().toISOString() }) })]));
+    const facts = within(chips()[0]!).getByRole("list", { name: "Key Ab, was G, length 6:29" });
+    expect(within(facts).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["Ab (was G)", "6:29"]);
+    expect(within(facts).getAllByRole("listitem")[0]).toHaveClass("border-edge-medium", "bg-surface-950", "font-mono");
+    expect(chips()[0]!.textContent).not.toMatch(/[\u00B7\u2022]/);
   });
 
   it("shows a 28 px cover with no alt text, loaded lazily, fetched through StagePilot with the picture's etag in the address", () => {
@@ -60,7 +69,7 @@ describe("the song chips in the Playback config", () => {
   it("shows no cover box at all for a song with no picture (an old helper, or none stored)", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ artwork: null }) })]));
     expect(chips()[0]!.querySelector("img")).toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
   });
 
   it("draws the arrangement as one block per section, in order, as wide as the time it plays, tinted like Playback", () => {
@@ -111,7 +120,7 @@ describe("the song chips in the Playback config", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ sections: [], section_count: null }) })]));
     expect(within(chips()[0]!).queryByRole("img")).toBeNull();
     expect(chips()[0]!.querySelector("img")).not.toBeNull();
-    expect(chips()[0]).toHaveTextContent("Song OneAb · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
   });
 
   it("says an uncertain pair is only a maybe: the Playback title, no cover, no bar, nothing taken from it", () => {
@@ -169,7 +178,7 @@ describe("a key changed in Playback on the song chips", () => {
   it("shows the plain key when the key was never seen to change", () => {
     clockAt("2026-11-20T04:00:00Z");
     mount(planOf([planSong("Song One", 1)]));
-    expect(chips()[0]).toHaveTextContent("Song OneAb · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
     expect(chips()[0]).not.toHaveTextContent("was");
     expect(chips()[0]!.getAttribute("title")).not.toContain("Key changed");
   });
@@ -177,18 +186,18 @@ describe("a key changed in Playback on the song chips", () => {
   it("shows Ab (was G) for a change made a moment ago, with the words in the hover", () => {
     clockAt("2026-11-20T03:10:00Z");
     mount(changed());
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) 6:29");
     expect(chips()[0]).toHaveAttribute("title", expect.stringContaining("Key changed in Playback from G to Ab in the last day"));
   });
 
   it("goes back to Ab by itself when the day is over, with no reload", () => {
     clockAt("2026-11-21T02:30:00Z");
     mount(changed());
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) 6:29");
     act(() => { vi.advanceTimersByTime(29 * 60_000); });
-    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb (was G) 6:29");
     act(() => { vi.advanceTimersByTime(2 * 60_000); });
-    expect(chips()[0]).toHaveTextContent("Song OneAb · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
     expect(chips()[0]).not.toHaveTextContent("was");
     expect(chips()[0]!.getAttribute("title")).not.toContain("Key changed");
   });
@@ -197,7 +206,7 @@ describe("a key changed in Playback on the song chips", () => {
     clockAt("2026-11-21T03:01:00Z");
     const timers = vi.getTimerCount();
     mount(changed());
-    expect(chips()[0]).toHaveTextContent("Song OneAb · 6:29");
+    expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
     expect(vi.getTimerCount()).toBe(timers);
   });
 });

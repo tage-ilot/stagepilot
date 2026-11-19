@@ -1168,9 +1168,9 @@ describe("keyboard and screen reader", () => {
     await ready();
     const box = screen.getByRole("checkbox", { name: "Battle Belongs" });
     const row = box.closest("li")!;
-    expect(row).toHaveTextContent("Ab \u00B7 mtID 31877");
+    expect(row).toHaveTextContent("Ab mtID 31877");
     expect(row).toHaveTextContent("Verse 1 \u00B7 Chorus");
-    expect(box).toHaveAccessibleDescription(/Ab \u00B7 mtID 31877/);
+    expect(box).toHaveAccessibleDescription(/Ab mtID 31877/);
   });
 
   it("has one polite live region, announced even before anything is pressed", async () => {
