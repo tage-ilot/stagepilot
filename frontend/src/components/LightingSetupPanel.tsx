@@ -722,7 +722,7 @@ export function LightingSetupPanel({
   );
   const midiTestCue = (
     <OptionalSection title="Send a test cue" tone="midi">
-      <ActionRow align="end" aria-label="Test cue" className="mt-3" note={draftDiffersFromSaved ? "Save the changes above first, then send a test cue." : undefined}>
+      <ActionRow align="end" aria-label="Test cue" className="mt-3">
         <div className="w-28 flex-none">
           <Field label="Note">
             <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
@@ -736,6 +736,7 @@ export function LightingSetupPanel({
           </Field>
         </div>
         <ActionButton aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} busy={pendingOperation === "test"} busyLabel="Sending…" className="flex-none" disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} label="Send test cue" onClick={() => onTest(Number(testNote), Number(testVelocity))} />
+        {draftDiffersFromSaved && <SectionNotice className="w-full" quiet size="xs" tone="info" variant="line">Save the changes above first, then send a test cue.</SectionNotice>}
       </ActionRow>
     </OptionalSection>
   );
