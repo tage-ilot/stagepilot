@@ -7,5 +7,6 @@ import { Frame, Gallery } from "./Gallery";
 import { installMadeUpApi } from "./madeUpApi";
 
 installMadeUpApi();
-const framed = new URLSearchParams(window.location.search).has("frame");
-createRoot(document.getElementById("root")!).render(<StrictMode>{framed ? <Frame /> : <Gallery />}</StrictMode>);
+const query = new URLSearchParams(window.location.search);
+const only = query.get("only")?.split(",").filter(Boolean);
+createRoot(document.getElementById("root")!).render(<StrictMode>{query.has("frame") ? <Frame only={only} /> : <Gallery />}</StrictMode>);
