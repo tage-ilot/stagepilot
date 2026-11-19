@@ -16,6 +16,7 @@ import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
+import { useProPresenterScan, type ProPresenterScanController } from "../hooks/useProPresenterScan";
 import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
 import { PresenterLinkSection } from "./PresenterLinkSection";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
@@ -35,6 +36,7 @@ export function ProPresenterSetupPanel({
   library,
   plan,
   playing = false,
+  scanner,
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
@@ -54,7 +56,11 @@ export function ProPresenterSetupPanel({
   plan?: ServicePlan | null;
   /** A song is playing (Playback says so, or a StagePilot countdown runs): the Presenter Link adds nothing then. */
   playing?: boolean;
+  /** The network scan for ProPresenter's API. Left out, the panel runs its own (it asks nothing until Scan is pressed). */
+  scanner?: ProPresenterScanController;
 }) {
+  const ownScanner = useProPresenterScan();
+  const scanning = scanner ?? ownScanner;
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("1025");
   const [timerName, setTimerName] = useState("Song Countdown");
@@ -114,7 +120,7 @@ export function ProPresenterSetupPanel({
   const portNumber = Number(port);
   const timeoutNumber = Number(timeout);
   const errHost = attempt.attempted && !host.trim() ? "Enter a host." : undefined;
-  const errPort = attempt.attempted && !(Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535) ? "Enter a port from 1 to 65535." : undefined;
+  const errPort = attempt.attempted && !(Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535) ? "Enter the API port from 1 to 65535." : undefined;
   const errTimer = attempt.attempted && !timerName.trim() ? "Choose a timer." : undefined;
   const errTimeout = attempt.attempted && !(Number.isFinite(timeoutNumber) && timeoutNumber > 0 && timeoutNumber <= 60) ? "Enter a timeout above 0 and up to 60 seconds." : undefined;
   const wasSaving = useRef(false);
@@ -131,7 +137,7 @@ export function ProPresenterSetupPanel({
         ? { kind: "held", count: changeCount }
         : { kind: "clean" };
   const blockedReason = changeCount > 0 && parsedSettings === null
-    ? "Enter a host, a port from 1 to 65535, a timer and a timeout above 0 and up to 60 seconds before saving."
+    ? "Enter a host, an API port from 1 to 65535, a timer and a timeout above 0 and up to 60 seconds before saving."
     : null;
 
   const discard = () => {
@@ -153,6 +159,41 @@ export function ProPresenterSetupPanel({
     rememberAddress("presentation", parsedSettings.host);
     onSave(parsedSettings);
   };
+
+  // Connect: the connection the boxes hold, saved and connected the way Save does it (the same request), without taking the timer, Look or
+  // timeout along while they are held. A saved ProPresenter with nothing held in the two boxes is only checked again.
+  const [connectPressed, setConnectPressed] = useState(false);
+  useEffect(() => { if (!busy) setConnectPressed(false); }, [busy]);
+  const hostOk = Boolean(host.trim());
+  const portOk = Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535;
+  const checksAgain = Boolean(propresenter?.enabled) && !held.host && !held.port;
+  const connect = () => {
+    if (busy || !propresenter) return;
+    setConnectPressed(true);
+    if (checksAgain) { onTest(); return; }
+    if (!hostOk || !portOk) { attempt.refuse(); return; }
+    const settings: ProPresenterSettingsInput | null = propresenter.enabled
+      ? { host: host.trim(), port: portNumber, timer_name: propresenter.timer_name, look_id: propresenter.look_id ?? null, request_timeout_seconds: propresenter.request_timeout_seconds }
+      : parsedSettings;
+    if (!settings) { attempt.refuse(); return; }
+    setSaveFailed(false);
+    rememberAddress("presentation", settings.host);
+    onSave(settings);
+  };
+  // A computer found or chosen by the scan goes in the two boxes (a held change, saved by Connect); nothing is saved by the scan itself.
+  const chooseComputer = (chosenHost: string, chosenPort?: number) => {
+    setHost(chosenHost);
+    if (chosenPort !== undefined) setPort(String(chosenPort));
+  };
+  const scanState = scanning.scan;
+  const filled = useRef(false);
+  useEffect(() => {
+    if (scanState.state === "scanning") filled.current = false;
+    const [only] = scanState.candidates;
+    if (scanState.state !== "found" || scanState.candidates.length !== 1 || !only || filled.current) return;
+    filled.current = true;
+    chooseComputer(only.host, only.port);
+  }, [scanState]);
   const timerDetected = Boolean(
     propresenter?.timers.some((timer) => timer.name === timerName),
   );
@@ -179,8 +220,8 @@ export function ProPresenterSetupPanel({
       )}
       id="propresenter-configuration"
       tone="presentation"
-      // The Live Link block is the first block under the header (and its alert lines) and holds the connection (Host, Port, Test
-      // connection). Everything that is not the connection comes after it, in the order every page follows.
+      // The Live Link block is the first block under the header (and its alert lines) and holds the connection (Host, API, Scan,
+      // Connect). Everything that is not the connection comes after it, in the order every page follows.
       connection={(
         <ProPresenterLinkBlock
           connection={{
@@ -191,9 +232,12 @@ export function ProPresenterSetupPanel({
             held: { host: held.host, port: held.port },
             errors: { host: errHost, port: errPort },
             busy,
-            testDisabled: disabled || busy,
-            testing: pendingOperation === "test",
-            onTest,
+            checksAgain,
+            connectDisabled: !propresenter || busy,
+            connectHint: !propresenter ? "Waiting for the saved settings to load." : busy ? "Wait for the saving to finish." : undefined,
+            connecting: pendingOperation === "test" || (connectPressed && pendingOperation === "save"),
+            onConnect: connect,
+            scan: { state: scanState, start: scanning.start, cancel: scanning.cancel, choose: chooseComputer, error: scanning.error, starting: scanning.starting },
           }}
           link={link}
           propresenter={propresenter}
@@ -243,7 +287,7 @@ export function ProPresenterSetupPanel({
       content={link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
       actions={(
         <ActionRow
-          note={changeCount > 0 ? "Test connection and Refresh use the saved settings. Save configuration first to try the new ones." : undefined}
+          note={changeCount > 0 ? "Refresh uses the saved settings. Save configuration first to try the new ones." : undefined}
           noteId="propresenter-test-saved-note"
         >
           <ActionButton busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={disabled || busy} label="Refresh timers and Looks" onClick={onRefreshTimers} tone="presentation" />

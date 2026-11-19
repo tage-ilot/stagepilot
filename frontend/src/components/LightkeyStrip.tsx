@@ -28,6 +28,8 @@ import { oscHostError, oscPortError } from "./lightingOsc";
 import { OscConnectionFields } from "./LightingOscParts";
 import { useLiveLinkTools } from "./useLiveLinkTools";
 import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
+import { useRecheckNote } from "./useRecheckNote";
+import { HOST_HELP, HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
 import { CONTROL_40, liveLinkPillState, lightkeyFixtureWord } from "./liveLink";
 
 const POLL_MS = 1500;
@@ -146,6 +148,7 @@ export interface LiveLinkConnection {
 }
 
 const smallBox = "!w-[5.25rem] text-center tabular-nums";
+const LIGHTING_OFF = "Lighting is turned off. Turn it on first.";
 
 /**
  * sACN DMX Live Link, the approved bordered block: a header (title and the one state pill), a field row (the shared host, the OSC UDP and
@@ -177,6 +180,12 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
+  // Scan: "Search again" is the Scan button now. `asking`: its request is in flight; `stopped`: they pressed "Scanning… (cancel)" (the
+  // search itself keeps its own schedule). A search that runs by itself in the background shows as scanning too. `connecting`: Connect's own request.
+  const [asking, setAsking] = useState(false);
+  const [stopped, setStopped] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const recheck = useRecheckNote();
   const [readResult, setReadResult] = useState<LightkeyReadFixtures | null>(null);
   const alive = useRef(true);
   const reader = useRef(readStatus);
@@ -200,6 +209,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   }, [load, lightingEnabled]);
 
   useEffect(() => { if (status) onStatus?.(status); }, [status, onStatus]);
+  const searching = status?.discovery?.state === "searching";
+  useEffect(() => { if (!searching) setStopped(false); }, [searching]);
 
   const readFixtures = async () => {
     if (reading) return;
@@ -259,19 +270,32 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const connected = status.link === "connected";
   const changed = (apiPort !== null && apiPort.trim() !== saved.port) || (otherHost === null && host.trim().toLowerCase() !== saved.host.toLowerCase());
   const valid = !oscHostError(host) && !apiPortError(shownApiPort);
-  const connect = () => {
+  const connectNow = () => run(async () => {
+    const apiUrl = otherHost !== null
+      ? (apiPort === null ? status.api_url : `${otherHost}:${apiPort.trim()}`)
+      : composeApiUrl({ host, apiPort: shownApiPort, savedOscHost });
+    const response = await saveLightkeySettings({ api_url: apiUrl });
+    setApiPort(null);
+    if (!connection) setOwnHost(null);
+    return response;
+  });
+  const connect = async () => {
     setTried(true);
-    if (!valid) return Promise.resolve();
-    return run(async () => {
-      const apiUrl = otherHost !== null
-        ? (apiPort === null ? status.api_url : `${otherHost}:${apiPort.trim()}`)
-        : composeApiUrl({ host, apiPort: shownApiPort, savedOscHost });
-      const response = await saveLightkeySettings({ api_url: apiUrl });
-      setApiPort(null);
-      if (!connection) setOwnHost(null);
-      return response;
-    });
+    if (!valid) return;
+    // Connect on a block that is already connected, with nothing changed, only checks again: the status line says so.
+    if (connected && !changed) recheck.mark(); else recheck.clear();
+    setConnecting(true);
+    try { await connectNow(); } finally { if (alive.current) setConnecting(false); }
   };
+  // Scan: look for the Lighting computer now (what "Search again" did). A computer that is already connected answers "not searching" in the line.
+  const scan = async () => {
+    if (asking || busy) return;
+    setStopped(false);
+    recheck.clear();
+    setAsking(true);
+    try { await run(() => searchLightkeyAgain()); } finally { if (alive.current) setAsking(false); }
+  };
+  const scanning = (asking || searching) && !stopped;
   const acceptOscHost = () => run(async () => {
     const response = await saveLightkeySettings({ api_url: composeApiUrl({ host: savedOscHost, apiPort: shownApiPort, savedOscHost }) });
     setApiPort(null);
@@ -304,7 +328,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const downNote = status.link !== "connected" && status.link !== "off" ? status.detail : null;
   const segments: string[] = [];
   const seen = new Set<string>();
-  for (const part of [...lightkeyLines(status, error, looks), downNote, fixtureNote]) {
+  for (const part of [...lightkeyLines(status, error, looks), downNote, fixtureNote, recheck.note]) {
     const key = part ? normaliseLine(part) : "";
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -360,10 +384,43 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       attention={needsHelper}
       connection={(
         <>
-          <ConnectionRow testId="live-link-line">
-            <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
+          <ConnectionRow
+            after={(
+              <ConnectionRow className="live-link-modes" nested>
+                <ConnectionMethod
+                  disabled={busy}
+                  field
+                  label="Mode"
+                  onChange={(mode) => {
+                    if (mode !== "record") { void run(toMode(mode)); return; }
+                    if (looks?.edited && !confirmRerecordLooks()) return;
+                    void run(() => setLightkeyRecording(true));
+                  }}
+                  options={[
+                    { value: "auto", label: "Auto" },
+                    { value: "replay", label: "Replay" },
+                    { value: "record", label: "Record", disabled: !status.recording && !connected },
+                  ]}
+                  value={shownMode}
+                />
+              </ConnectionRow>
+            )}
+            buttonClassName={LIGHTING_BUTTONS}
+            connectDisabled={!lightingEnabled}
+            connectHint={LIGHTING_OFF}
+            connecting={connecting}
+            onCancelScan={() => setStopped(true)}
+            onConnect={() => void connect()}
+            onScan={() => void scan()}
+            scanDisabled={!lightingEnabled || busy}
+            scanHint={lightingEnabled ? undefined : LIGHTING_OFF}
+            scanning={scanning}
+            testId="live-link-line"
+            tone="lighting"
+          >
+            <LiveLinkField caption="Host" className="live-link-host">
               <Input
-                aria-label="Host or IP address"
+                aria-label={HOST_LABEL}
                 autoCapitalize="none"
                 autoCorrect="off"
                 className={`w-full font-mono ${CONTROL_40} ${connection?.held.host ? "!border-warning" : ""}`}
@@ -372,6 +429,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
                 onKeyDown={enterToConnect}
                 placeholder="192.0.2.10"
                 spellCheck={false}
+                title={HOST_TITLE}
                 value={host}
               />
             </LiveLinkField>
@@ -383,36 +441,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             <LiveLinkField caption="API">
               <Input aria-label="API port" className={`${smallBox} font-mono ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
             </LiveLinkField>
-            {/* The Lighting primary, never dimmed unless the panel itself is off; while a request is in flight it shows a busy state. */}
-            <Button
-              className={`live-link-connect ${CONTROL_40} !border-integration-lighting-soft !bg-surface-950 !text-ink can-hover:!bg-surface-900`}
-              disabled={!lightingEnabled}
-              loading={busy}
-              loadingLabel={"Checking\u2026"}
-              onClick={() => void connect()}
-              variant="tinted"
-              tone="lighting"
-            >
-              {connected && !changed ? "Check again" : "Connect"}
-            </Button>
-            <ConnectionRow className="live-link-modes" nested>
-              <ConnectionMethod
-                disabled={busy}
-                field
-                label="Mode"
-                onChange={(mode) => {
-                  if (mode !== "record") { void run(toMode(mode)); return; }
-                  if (looks?.edited && !confirmRerecordLooks()) return;
-                  void run(() => setLightkeyRecording(true));
-                }}
-                options={[
-                  { value: "auto", label: "Auto" },
-                  { value: "replay", label: "Replay" },
-                  { value: "record", label: "Record", disabled: !status.recording && !connected },
-                ]}
-                value={shownMode}
-              />
-            </ConnectionRow>
           </ConnectionRow>
           <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
           {status.link !== "off" && (
@@ -449,9 +477,11 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           <LightkeyDiscoveryNotice
             busy={busy}
             discovery={status.discovery}
+            // One of several computers: it goes in the Host box (and so in the helper's address); Connect connects.
+            onChoose={(address) => { setHost(address); recheck.clear(); }}
             onKeepWaiting={(address) => void run(() => keepWaitingForLightkey(address))}
-            onSearchAgain={() => void run(() => searchLightkeyAgain())}
             onUse={(address) => void run(() => switchToLightkeyComputer(address))}
+            stopped={stopped}
           />
 
           {!status.recording && status.replay === false && (
@@ -469,7 +499,12 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           )}
         </>
       )}
-      details={({ byChoice }) => <HelperSetupBox {...lightkeyBoxProps(status)} autoStart={byChoice} />}
+      details={({ byChoice }) => (
+        <>
+          <SectionNotice className="mt-2" quiet size="xs" testId="lightkey-host-help" tone="info" variant="line">{HOST_HELP}</SectionNotice>
+          <HelperSetupBox {...lightkeyBoxProps(status)} autoStart={byChoice} />
+        </>
+      )}
       detailsLabel={status.link === "off" ? null : "Lighting computer setup"}
       footer={(
         <>

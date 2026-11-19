@@ -21,7 +21,7 @@ note length or pulse. UDP has no handshake, so StagePilot reports **Sent**, neve
 Connected, and cannot tell whether the app received a cue. It does surface errors it
 can see: a host name that cannot be found, or a socket error while sending.
 
-Settings: **Host or IP address** and **UDP port**. The port is typed in: every
+Settings: **Host** (its full name is *Host or IP (OSC output + Live Link)*: the one host is used for the OSC output and for the Live Link) and **UDP port**. The port is typed in: every
 app listens on its own, and StagePilot does not guess one for you. The stored
 default is 21600 (Lightkey's port), so a fresh install works with Lightkey on the
 same computer, but you can change it to whatever your app expects.
@@ -43,7 +43,7 @@ even if the helper link changes meanwhile; a change that arrives inside those
 4. Use **Send test cue** with the same address to check it.
 
 Two-Mac layout: if Lightkey runs on a different Mac than StagePilot, put that Mac's
-IP address in **Host or IP address** (the default, `127.0.0.1`,
+IP address in **Host** (the default, `127.0.0.1`,
 only reaches the same computer). Both Macs need to be on the same network.
 
 ### Finding your app's port
@@ -947,7 +947,7 @@ searched and nothing is said.
 
 **When it searches.** Only while nothing is connected, and only with Lighting on and set to OSC (never for MIDI, never
 with Lighting off). The first search starts about 5 s after StagePilot starts or after a setting changes (so the saved
-address gets its chance first), then every 60 s while still not connected, and at once when you press **Search again**.
+address gets its chance first), then every 60 s while still not connected, and at once when you press **Scan** in the Live Link block (what the notice's *Search again* button used to do).
 It stops the moment the link connects and never runs twice at the same time. A Lighting computer that answers but has
 Lightkey closed counts as reachable: nothing is searched.
 
@@ -972,9 +972,9 @@ and a true/false `lightkey` (Lightkey running); anything else is ignored. HTTP 4
 |---|---|
 | Looking | `Looking for a Lighting computer on this network…` |
 | Automatic, exactly one found | connects by itself and saves it: `Found a Lighting computer at <ip> and connected.` |
-| Automatic, several found | connects to none: `Found <n> Lighting computers. Choose one:`, a row each `<ip> (Lightkey running)` or `<ip> (Lightkey not running)`, button `Use this one` |
+| Automatic, several found | connects to none: `Found <n> Lighting computers. Choose one:` and one button each, `<ip>` with `Lightkey running` or `Lightkey not running` beside it (the chooser the Playback and ProPresenter scans use); choosing one puts it in **Host**, and **Connect** connects |
 | Chosen address down, another found | nothing switches: `<chosen> isn't answering. A Lighting computer answered at <ip>. Use it?` with `Use <ip>` and `Keep waiting` |
-| Nothing found | `No Lighting computer found on this network.` and `Search again` |
+| Nothing found | `No Lighting computer found on this network.` (press **Scan** to look again) |
 | A refusing computer was seen | `A Lighting computer at <ip> is refusing StagePilot. Run the setup command on it again.` |
 | Chosen address connected | nothing |
 
@@ -985,7 +985,7 @@ edits a chosen address or a set Replay host by itself.
 
 **API.** `GET /api/v1/lights/lightkey` gains `discovery`: `{state: off|searching|connected|choose|offer|none, found:
 [{address, version?, lightkey_running, project?}], refusing: [address], chosen?, chosen_down_for_s?, last_scan_at?,
-message?, note?}`. `POST /api/v1/lights/lightkey/discovery/scan` is Search again (accepted only while nothing is
+message?, note?}`. `POST /api/v1/lights/lightkey/discovery/scan` is the **Scan** button (accepted only while nothing is
 connected); `POST .../discovery/use` `{address}` switches to a computer the last search found (any other address is a
 plain 422); `POST .../discovery/dismiss` `{address}` is Keep waiting. None of them is on a remote-tunnel allow-list.
 
@@ -1329,8 +1329,8 @@ on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to i
 
 In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and one **state
 pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
-is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one host or IP box**, a small **OSC UDP** port box (default 21600),
-a small **API** port box (default 8770), **Connect / Check again**, and at the right the labelled **Mode** (Auto | Replay |
+is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one Host box** (the caption says only Host; hover it, or open the Lighting computer setup, for *Host or IP (OSC output + Live Link)*; its accessible name is *Lighting host or IP address*), a small **OSC UDP** port box (default 21600),
+a small **API** port box (default 8770), the pair **Scan** and **Connect** (the same two buttons end the Playback and Presentation rows; Connect on a computer that is already connected only checks again and the status line says so; **Scan** reads **Scanning… (cancel)** while the search runs, and cancel only stops this block showing it: the search keeps its own schedule), and at the right the labelled **Mode** (Auto | Replay |
 Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
 1 yielded to the operator"), **Release lights**, **Read fixtures**, **Send a test cue** and **How to find a cue's address**. The Lighting
 computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.

@@ -139,8 +139,8 @@ describe("LightingSetupPanel OSC", () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn();
     mount({ onSaveSettings });
-    await user.clear(screen.getByLabelText("Host or IP address"));
-    await user.type(screen.getByLabelText("Host or IP address"), "192.168.4.50");
+    await user.clear(screen.getByLabelText("Lighting host or IP address"));
+    await user.type(screen.getByLabelText("Lighting host or IP address"), "192.168.4.50");
     await user.clear(screen.getByLabelText("OSC UDP port"));
     await user.type(screen.getByLabelText("OSC UDP port"), "8000");
     await user.click(screen.getByRole("button", { name: /Save/ }));

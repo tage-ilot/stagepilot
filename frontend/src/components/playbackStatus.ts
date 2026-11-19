@@ -1,4 +1,4 @@
-import type { EventSummary, PlaybackConnection, PlaybackMonitorEntry, PlaybackScanResult, PlaybackStatusResponse } from "../types";
+import type { EventSummary, PlaybackConnection, PlaybackMonitorEntry, PlaybackStatusResponse } from "../types";
 
 // The backend accepts a bare host, not a URL. Keep port at the existing configured value.
 export function validPlaybackHost(host: string): boolean {
@@ -15,8 +15,14 @@ export function validPlaybackHost(host: string): boolean {
   return host.split(".").every((part) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(part) && part.length <= 63);
 }
 
+/**
+ * The backend's sentences, in the buttons' words. Playback says "Choose Scan Network to find Playback" (that sentence is part of the
+ * contract the backend is held to), but the button is now Scan: the page says the button's name.
+ */
+export const playbackWords = (text: string): string => text.replace("Choose Scan Network to", "Choose Scan to");
+
 // Shared wording: connection health is not song-order/action readiness.
-export const playbackConnectionDetail = (status: PlaybackConnection) => status.reason;
+export const playbackConnectionDetail = (status: PlaybackConnection) => playbackWords(status.reason);
 export const STALE_SETLIST_NOTICE = "Your Playback setlist changed. Scan the setlist again before updating Planning Center.";
 export const STALE_PLAN_NOTICE = "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center.";
 export const LEARN_SWITCH_LABEL = "Learn the order as songs play";
@@ -97,21 +103,6 @@ export function playbackStreamRows(events: PlaybackMonitorEntry[] | undefined, s
   });
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
-export function scanProgressText(scan: PlaybackScanResult): string {
-  const seconds = Math.max(0, Math.floor(scan.elapsed ?? 0));
-  const phase = scan.phase ?? (scan.typed ? "Connecting…" : "Looking for Playback…");
-  const counts = scan.total > 1 ? ` Checked ${scan.current} of ${scan.total} addresses` : "";
-  return `${phase}${counts ? " —" + counts : ""} (${seconds}s)`;
-}
-
-export function scanSummary(scan: PlaybackScanResult): string {
-  const seconds = (scan.elapsed ?? 0).toFixed(1);
-  if (scan.typed) return `Tried one address in ${seconds}s.`;
-  const nets = scan.networks?.length ? `${plural(scan.networks.length, "network")} (${scan.networks.join(", ")})` : "no network";
-  return `Checked ${scan.hosts_probed ?? 0} of ${scan.hosts_total ?? 0} addresses on ${nets} in ${seconds}s.`;
-}
 
 export const SONG_ORDER_OPEN_KEY = "stagepilot.playback.song-order-open";
 export const SCAN_PLAYBACK_SONGS = "Scan Playback Songs";

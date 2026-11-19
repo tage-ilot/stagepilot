@@ -1227,7 +1227,7 @@ textarea:focus-visible {
   }
 }
 
-/* Playback API: the status message sits to the right of the Scan Network button, and drops under it when the half is too narrow. */
+/* Playback API: the status message sits to the right of the Scan button, and drops under it when the half is too narrow. */
 .playback-scan-row {
   display: flex;
   flex-wrap: wrap;

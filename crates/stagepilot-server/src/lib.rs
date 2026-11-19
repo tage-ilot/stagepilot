@@ -22,6 +22,7 @@ pub mod playback_routes;
 pub mod propresenter_add_songs;
 pub mod propresenter_helper_install;
 pub mod propresenter_link;
+pub mod propresenter_scan;
 pub mod remote_fakes;
 pub mod remote_feature;
 pub mod remote_ingress;

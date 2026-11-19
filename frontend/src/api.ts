@@ -58,6 +58,7 @@ import type {
   LinkStatus,
   ProPresenterPlaylist,
 } from "./propresenterLink";
+import type { ProPresenterScan } from "./propresenterScan";
 
 const SERVER_PORT_KEY = "stagepilot.server-port";
 const configuredOrigin = import.meta.env.VITE_STAGEPILOT_API_URL as string | undefined;
@@ -337,6 +338,10 @@ export const refreshProPresenterTimers = () =>
   requestJson<ProPresenterOperationResponse>("/api/v1/propresenter/timers/refresh", {
     method: "POST",
   });
+/** The network scan for ProPresenter's API: asks every private address `GET /version`, saves nothing. */
+export const getProPresenterScan = () => requestJson<ProPresenterScan>("/api/v1/propresenter/scan");
+export const startProPresenterScan = () => requestJson<ProPresenterScan>("/api/v1/propresenter/scan", { method: "POST" });
+export const cancelProPresenterScan = () => requestJson<ProPresenterScan>("/api/v1/propresenter/scan/cancel", { method: "POST" });
 export const updateProPresenterSettings = (settings: ProPresenterSettingsInput) =>
   requestJson<ProPresenterOperationResponse>("/api/v1/propresenter/settings", {
     method: "POST",

@@ -70,7 +70,7 @@ describe("Presentation panel: failed save", () => {
   it("a double click on a valid save sends one request while pending", () => {
     const onSave = vi.fn();
     const { rerender } = render(<ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={onSave} onTest={vi.fn()} pendingOperation={null} propresenter={status} />);
-    fireEvent.change(screen.getByLabelText("Port"), { target: { value: "1026" } });
+    fireEvent.change(screen.getByLabelText("ProPresenter API port"), { target: { value: "1026" } });
     fireEvent.click(save());
     rerender(<ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={onSave} onTest={vi.fn()} pendingOperation="save" propresenter={status} />);
     fireEvent.click(save());

@@ -99,6 +99,8 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::propresenter_link::routes())
         // Adding the songs Playback plays to a ProPresenter playlist (preview, apply, jobs): behind the same PIN, origin and remote rules.
         .merge(crate::propresenter_add_songs::routes())
+        // Finding ProPresenter's API by looking (GET /version on private addresses only; saves nothing): the same guards.
+        .merge(crate::propresenter_scan::routes())
         .merge(crate::propresenter_helper_install::api_routes())
         .merge(crate::propresenter_helper_install::served_routes(
             runtime.propresenter_helper_install.clone(),

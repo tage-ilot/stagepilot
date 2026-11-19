@@ -75,12 +75,12 @@ describe("Playback Save configuration is single-flight", () => {
   });
 });
 
-describe("Scan Network double click", () => {
+describe("Scan double click", () => {
   it("the second click of a double click starts nothing and does not cancel", async () => {
     const playback = controller();
     const user = userEvent.setup();
     const view = render(<PlaybackApiPanel playback={playback} />);
-    await user.click(screen.getByRole("button", { name: "Scan Network" }));
+    await user.click(screen.getByRole("button", { name: "Scan" }));
     expect(playback.scan).toHaveBeenCalledTimes(1);
     // The hook flips pending to "scan" and the button becomes Cancel; a click within the guard is ignored.
     view.rerender(<PlaybackApiPanel playback={{ ...playback, pending: "scan" }} />);
@@ -94,7 +94,7 @@ describe("Scan Network double click", () => {
       const playback = controller();
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const view = render(<PlaybackApiPanel playback={playback} />);
-      await user.click(screen.getByRole("button", { name: "Scan Network" }));
+      await user.click(screen.getByRole("button", { name: "Scan" }));
       view.rerender(<PlaybackApiPanel playback={{ ...playback, pending: "scan" }} />);
       await act(async () => { vi.advanceTimersByTime(1000); });
       await user.click(screen.getByRole("button", { name: /Scanning/ }));

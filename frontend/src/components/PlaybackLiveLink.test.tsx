@@ -154,10 +154,11 @@ describe("the Library Link setup box in the block", () => {
 });
 
 describe("the computer field takes in the scan, with the old behaviour", () => {
-  it("Scan Network is the first button, and the field is labelled Playback computer", () => {
+  it("Scan is the first button, then Connect, and the field is labelled Playback computer", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected()} />);
     const first = within(block()).getAllByRole("button")[0];
-    expect(first).toBe(screen.getByRole("button", { name: "Scan Network" }));
+    expect(first).toBe(screen.getByRole("button", { name: "Scan" }));
+    expect(within(block()).getAllByRole("button")[1]).toBe(screen.getByRole("button", { name: "Connect" }));
     expect(screen.getByLabelText("Playback computer").tagName).toBe("SELECT");
   });
 

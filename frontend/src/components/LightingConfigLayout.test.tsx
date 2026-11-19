@@ -54,8 +54,8 @@ describe("one shared host for OSC and the live-link API", () => {
   it("shows ONE host box, the OSC UDP port and the API port in a single titled line", async () => {
     mount();
     await screen.findByLabelText("API port");
-    expect(screen.getAllByLabelText("Host or IP address")).toHaveLength(1);
-    expect(screen.getByLabelText("Host or IP address")).toHaveValue("192.0.2.10");
+    expect(screen.getAllByLabelText("Lighting host or IP address")).toHaveLength(1);
+    expect(screen.getByLabelText("Lighting host or IP address")).toHaveValue("192.0.2.10");
     expect(screen.getByLabelText("OSC UDP port")).toHaveValue("21600");
     expect(screen.getByLabelText("API port")).toHaveValue("8770");
     expect(screen.queryByLabelText("Lightkey API address")).toBeNull();
@@ -65,7 +65,7 @@ describe("one shared host for OSC and the live-link API", () => {
   it("editing the host edits the panel's saved OSC host draft (Save bar), not a second address", async () => {
     const { onSaveSettings } = mount();
     await screen.findByLabelText("API port");
-    const host = screen.getByLabelText("Host or IP address");
+    const host = screen.getByLabelText("Lighting host or IP address");
     const user = userEvent.setup();
     await user.clear(host);
     await user.type(host, "192.0.2.77");

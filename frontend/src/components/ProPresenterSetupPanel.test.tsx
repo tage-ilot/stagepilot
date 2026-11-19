@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProPresenterSettingsInput, ProPresenterStatusResponse } from "../types";
+import type { ProPresenterScanController } from "../hooks/useProPresenterScan";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
+import type { ScanState } from "./sections";
 
 const status: ProPresenterStatusResponse = {
   enabled: true,
@@ -35,7 +37,7 @@ const status: ProPresenterStatusResponse = {
 };
 
 describe("ProPresenterSetupPanel", () => {
-  it("saves validated session settings and exposes connection tools", async () => {
+  it("saves validated session settings and exposes the refresh action", async () => {
     const onSave = vi.fn();
     const onTest = vi.fn();
     const onRefreshTimers = vi.fn();
@@ -56,7 +58,6 @@ describe("ProPresenterSetupPanel", () => {
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "192.168.4.40");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
-    await user.click(screen.getByRole("button", { name: "Test connection" }));
     await user.click(screen.getByRole("button", { name: "Refresh timers and Looks" }));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -66,7 +67,7 @@ describe("ProPresenterSetupPanel", () => {
       look_id: "look-default",
       request_timeout_seconds: 3,
     });
-    expect(onTest).toHaveBeenCalledOnce();
+    expect(onTest).not.toHaveBeenCalled();
     expect(onRefreshTimers).toHaveBeenCalledOnce();
     expect(screen.getAllByText("Song Countdown").length).toBeGreaterThan(0);
   });
@@ -245,7 +246,7 @@ describe("ProPresenterSetupPanel", () => {
     expect(container.querySelector("#propresenter-configuration")).toHaveAttribute("data-variant", "setup");
     expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
     expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
-    for (const name of ["Test connection", "Refresh timers and Looks"]) {
+    for (const name of ["Scan", "Connect", "Refresh timers and Looks"]) {
       const button = screen.getByRole("button", { name });
       expect(button).toHaveAttribute("data-variant", "tinted");
       expect(button).toHaveAttribute("data-tone", "presentation");
@@ -321,8 +322,8 @@ describe("ProPresenterSetupPanel", () => {
     renderPanel({ onSave });
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "  192.0.2.10  ");
-    await user.clear(screen.getByLabelText("Port"));
-    await user.type(screen.getByLabelText("Port"), "1026");
+    await user.clear(screen.getByLabelText("ProPresenter API port"));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "1026");
     await user.clear(screen.getByLabelText("Timeout (seconds)"));
     await user.type(screen.getByLabelText("Timeout (seconds)"), "4.5");
     await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "");
@@ -347,8 +348,8 @@ describe("ProPresenterSetupPanel", () => {
     const onSave = vi.fn();
     const user = userEvent.setup();
     renderPanel({ onSave });
-    await user.clear(screen.getByLabelText("Port"));
-    await user.type(screen.getByLabelText("Port"), "99999");
+    await user.clear(screen.getByLabelText("ProPresenter API port"));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "99999");
     expect(screen.getByText(/port from 1 to 65535/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(onSave).not.toHaveBeenCalled();
@@ -397,10 +398,10 @@ describe("ProPresenterSetupPanel", () => {
     }
   });
 
-  it("keeps Test connection and Refresh as actions outside the bar and keeps the Look helper text", () => {
+  it("keeps Connect and Refresh as actions outside the bar and keeps the Look helper text", () => {
     renderPanel();
     const bar = document.querySelector("[data-save-bar]") as HTMLElement;
-    expect(bar.contains(screen.getByRole("button", { name: "Test connection" }))).toBe(false);
+    expect(bar.contains(screen.getByRole("button", { name: "Connect" }))).toBe(false);
     expect(bar.contains(screen.getByRole("button", { name: "Refresh timers and Looks" }))).toBe(false);
     expect(screen.getByText("Selecting a Look does not change Presentation until you save these settings.")).toBeInTheDocument();
   });
@@ -447,7 +448,7 @@ describe("Presentation hold-until-saved conformance (guard)", () => {
   const bar = () => document.querySelector("[data-save-bar]")!;
   const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
     { label: "Host", value: "192.0.2.10", saved: "127.0.0.1", payload: { host: "192.0.2.10" } },
-    { label: "Port", value: "1100", saved: "1025", payload: { port: 1100 } },
+    { label: "ProPresenter API port", value: "1100", saved: "1025", payload: { port: 1100 } },
     { label: "Timeout (seconds)", value: "7", saved: "3", payload: { request_timeout_seconds: 7 } },
     { label: "ProPresenter Look", value: "look-worship", saved: "look-default", payload: { look_id: "look-worship" } },
   ];
@@ -470,13 +471,119 @@ describe("Presentation hold-until-saved conformance (guard)", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
-  it("Test connection and Refresh are explicit actions and say they use the saved settings while edits are waiting", () => {
-    const onTest = vi.fn();
-    mount({ onTest });
-    expect(screen.queryByText(/use the saved settings/)).not.toBeInTheDocument();
+  it("Refresh is an explicit action that says it uses the saved settings while edits are waiting", () => {
+    const onRefreshTimers = vi.fn();
+    render(<ProPresenterSetupPanel error={null} message={null} onRefreshTimers={onRefreshTimers} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={status} />);
+    expect(screen.queryByText(/uses the saved settings/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "192.0.2.10" } });
-    expect(screen.getByText(/Test connection and Refresh use the saved settings/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(screen.getByText(/Refresh uses the saved settings/)).toBeInTheDocument();
+    expect(screen.queryByText(/Test connection/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh timers and Looks" }));
+    expect(onRefreshTimers).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Presentation Connect and Scan (the pair that ends the Live Link row)", () => {
+  const panel = (props: Partial<React.ComponentProps<typeof ProPresenterSetupPanel>> = {}) => render(
+    <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={status} {...props} />,
+  );
+  const scanner = (state: ScanState, over: Partial<ProPresenterScanController> = {}): ProPresenterScanController => ({ scan: state, error: null, starting: false, start: vi.fn(), cancel: vi.fn(), ...over });
+
+  it("Scan then Connect end the row, in that order, and nothing is called Test connection", () => {
+    panel();
+    const row = screen.getByTestId("propresenter-live-link-line");
+    expect(within(row).getAllByRole("button").map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
+    expect(screen.queryByRole("button", { name: /Test connection/ })).toBeNull();
+  });
+
+  it("with ProPresenter saved and nothing held in Host or API, Connect only checks again (the request the old test button made) and says so", async () => {
+    const onTest = vi.fn();
+    const onSave = vi.fn();
+    panel({ onTest, onSave });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
     expect(onTest).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("propresenter-recheck")).toHaveTextContent("Checked again.");
+  });
+
+  it("with Host or API held, Connect saves the connection the way Save does and leaves a held timeout held", async () => {
+    const onTest = vi.fn();
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    panel({ onSave, onTest });
+    await user.clear(screen.getByLabelText("Host"));
+    await user.type(screen.getByLabelText("Host"), "  192.0.2.10  ");
+    await user.clear(screen.getByLabelText("ProPresenter API port"));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "11025");
+    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "9" } });
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onTest).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ host: "192.0.2.10", port: 11025, timer_name: "Song Countdown", look_id: "look-default", request_timeout_seconds: 3 });
+    expect(screen.queryByTestId("propresenter-recheck")).toBeNull();
+    // The Save bar still holds what Connect did not take.
+    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("9");
+  });
+
+  it("before ProPresenter is saved, Connect saves what the boxes hold (it is how the first computer is saved), the payload Save sends", async () => {
+    const onSave = vi.fn();
+    panel({ onSave, propresenter: { ...status, enabled: false, connection_status: "disconnected" } });
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ host: "127.0.0.1", port: 1025, timer_name: "Song Countdown", look_id: "look-default", request_timeout_seconds: 3 });
+  });
+
+  it("a bad API port is said in words and nothing is sent", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    panel({ onSave });
+    await user.clear(screen.getByLabelText("ProPresenter API port"));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "99999");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter the API port from 1 to 65535.");
+  });
+
+  it("Connect says Connecting… while its own request runs, and both buttons wait while the page is busy", () => {
+    const { unmount } = panel({ pendingOperation: "test" });
+    expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
+    unmount();
+    panel({ pendingOperation: "refresh" });
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
+  });
+
+  it("Scan asks the scanner, shows the progress, and cancel stops it", async () => {
+    const start = vi.fn();
+    const cancel = vi.fn();
+    const user = userEvent.setup();
+    const view = panel({ scanner: scanner({ state: "idle", candidates: [], current: 0, total: 0 }, { start, cancel }) });
+    await user.click(screen.getByRole("button", { name: "Scan" }));
+    expect(start).toHaveBeenCalledOnce();
+    view.unmount();
+    panel({ scanner: scanner({ state: "scanning", candidates: [], current: 10, total: 255, elapsed: 1 }, { start, cancel }) });
+    expect(screen.getByTestId("scan-progress")).toHaveTextContent("Checked 10 of 255 addresses");
+    await user.click(screen.getByRole("button", { name: "Scanning… (cancel)" }));
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("one computer found fills Host and API (held, not saved); Connect then saves them", async () => {
+    const onSave = vi.fn();
+    panel({ onSave, scanner: scanner({ state: "found", candidates: [{ host: "192.0.2.21", port: 11025, label: "Front MacBook" }], current: 255, total: 255 }) });
+    await waitFor(() => expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.21"));
+    expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("11025");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(2);
+    expect(onSave).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ host: "192.0.2.21", port: 11025 }));
+  });
+
+  it("several found: choosing one fills Host and API and nothing else", async () => {
+    const onSave = vi.fn();
+    panel({ onSave, scanner: scanner({ state: "found", candidates: [{ host: "192.0.2.21", port: 1025, label: "Front MacBook" }, { host: "192.0.2.34", port: 11025, label: "Stage Mac" }], current: 255, total: 255 }) });
+    expect(screen.getByLabelText("Host")).toHaveValue("127.0.0.1");
+    await userEvent.setup().click(screen.getByRole("button", { name: /Stage Mac/ }));
+    expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.34");
+    expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("11025");
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import { playbackStates } from "./PlaybackStates";
 import { presentationStates } from "./PresentationStates";
 import { presenterLinkStates } from "./PresenterLinkStates";
 import { remotePages } from "./RemoteStates";
+import { scanTemplates } from "./ScanStates";
 import { ConnectionGroup, type SampleState } from "./StateCard";
 import { actionTemplates, noticeTemplates, optionalTemplates, settingsTemplates, summaryTemplates } from "./TemplateStates";
 
@@ -32,6 +33,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "page-remote", title: "Page: Remote access", intro: "Remote access (inside StagePilot): boxed groups, notices as lines and as named question groups, the remembered open section.", states: remotePages },
   { id: "template-settings", title: "Template: Settings", intro: "SettingsSection: every column set, held, error, hint, busy, boxed.", states: settingsTemplates, lead: TEMPLATES_NOTE },
   { id: "template-actions", title: "Template: Actions", intro: "ActionRow and its buttons: idle, busy, disabled, with the note.", states: actionTemplates },
+  { id: "template-scan", title: "Template: Scan", intro: "ScanProgress, ScanChooser and ScanHelp: the one scan every Live Link block draws under its row, in each connection's colour: scanning, several found, nothing found, macOS blocking the local network.", states: scanTemplates },
   { id: "template-summary", title: "Template: Summary", intro: "StatusSummary: the list and the cards, with ok, warn and danger words.", states: summaryTemplates },
   { id: "template-notices", title: "Template: Notices", intro: "SectionNotice: the four tones as boxes, with a title and a button, as a question group, and as lines.", states: noticeTemplates },
   { id: "template-optional", title: "Template: Optional sections", intro: "OptionalSection and the band: closed, open, remembered, opened by a question.", states: optionalTemplates },
@@ -52,7 +54,7 @@ export function Frame({ only }: { only?: string[] }) {
   const shown = GROUPS.filter((group) => !only || only.includes(group.id));
   return (
     <main className="mx-auto min-h-screen max-w-4xl space-y-10 bg-background p-4 font-type-body-md text-ink-body" data-gallery-frame>
-      {!only && <p className="text-sm text-ink-muted">Press the Details button on a block to open or close it. Typing, Scan and Test connection do nothing here: the data is made up and no backend is asked.</p>}
+      {!only && <p className="text-sm text-ink-muted">Press the Details button on a block to open or close it. Typing, Scan and Connect do nothing here: the data is made up and no backend is asked.</p>}
       {shown.map((group) => (
         <Fragment key={group.id}>
           {!only && group.lead && <p className="border-t border-edge pt-6 text-sm text-ink-muted">{group.lead}</p>}

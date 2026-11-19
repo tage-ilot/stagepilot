@@ -14,7 +14,7 @@ StagePilot controls one reusable ProPresenter timer through ProPresenter's local
 The production setup panel persistently stores:
 
 - Host
-- Port
+- API port (the port of ProPresenter's network API; saved as `port`)
 - Timer name
 - Request timeout
 - Connection test
@@ -236,11 +236,12 @@ the whole write `404`).
 The block is the **first block under the header** (and under the panel's alert lines), where the Playback and Lighting panels put their
 Live Link blocks, in the same spacing. It is built like them: a title, two pills (`ProPresenter API: Connected`,
 `Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
-**connection**, like the other two blocks do: under the two status lines, **Host** and **Port** (with the recent addresses) and
-**Test connection**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
-connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Test connection and
-Refresh use the saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. Nothing about saving changed: a changed Host or Port is marked `Not saved yet`
-(in words, with the warning border) and is saved only by **Save configuration**. The two names are exactly **ProPresenter API** and **Presenter Link**; they are written once in the code
+**connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API, with the recent addresses) and the
+same two buttons every Live Link block ends its row with, **Scan** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
+connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Refresh uses the
+saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`
+(in words, with the warning border) and is saved by **Save configuration**, or by **Connect**, which saves the connection (Host and API only) and connects the way Save does;
+with ProPresenter saved and nothing held in those two boxes, **Connect** only checks the saved connection again and the status line says `Checked again.` The two names are exactly **ProPresenter API** and **Presenter Link**; they are written once in the code
 (`proPresenterLinkState.ts`). macOS still lists the little app that runs the Presenter Link as "ProPresenter Link" in System Settings.
 
 | The line says | It means | What to do |
@@ -288,10 +289,27 @@ has no window; everything, including progress and the result, happens in place, 
    before touching the screen: *Stopped: ProPresenter is showing something on screen*, with **Try again** once it is clear. **Try again**
    makes a fresh preview and adds it at once when it is clean.
 
+### Scan: finding ProPresenter on the network
+
+**Scan** in the block looks for ProPresenter's API. StagePilot asks every private address this computer is on (the networks it is attached to, never wider than the
+attached /24, plus the /24 of the saved Host when that is a private address), and this computer, ONE thing: `GET /version`, with a short time limit, 32 addresses
+at a time. It tries the saved API port first, then 1025. It sends nothing else, writes nothing, never asks a public address and saves nothing. While it looks the
+button reads **Scanning… (cancel)** and a line says how far it is. When ProPresenter runs on this computer, that is the answer and the scan stops there.
+
+- **One computer answered:** Host and API are filled in (a change not saved yet), a line says which computer, and **Connect** saves and connects.
+- **Several:** a list (the same one the Playback scan uses): choosing one fills Host and API.
+- **Nobody:** a short "Make sure" list stays under the row.
+- **macOS blocks the local network:** the red notice with the steps (System Settings > Privacy & Security > Local Network), **Open Local Network settings** and **Copy diagnostic details**.
+
+The routes (the same PIN, origin and remote-access rules as every other write; a remote viewer cannot start a scan): `POST /api/v1/propresenter/scan` (an empty body or `{}`),
+`POST /api/v1/propresenter/scan/cancel` and `GET /api/v1/propresenter/scan` answer `{state: idle|scanning|found|not_found, candidates: [{host, port, name, version}], reason,
+current, total, phase, error_class: permission_denied|no_route|null, elapsed, networks, hosts_probed, hosts_total, details, settings_url}`. `name` and `version` are what
+ProPresenter's own answer says (`name`, `host_description`).
+
 ### One page
 
 **Set up (once).** *Same computer:* nothing. *Another computer:* Configuration > Presentation > in **ProPresenter
-Live Link** type the host and port, **Save configuration**, then press **Set up the ProPresenter computer**, paste the command in Terminal on that computer, wait for `Ready`. For songs missing
+Live Link** type the host and the API port, **Save configuration** (or press **Connect**), then press **Set up the ProPresenter computer**, paste the command in Terminal on that computer, wait for `Ready`. For songs missing
 from ProPresenter, allow "ProPresenter Link" (the name macOS shows for the Presenter Link; or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
 In ProPresenter, Settings > Network must have the API on.
 

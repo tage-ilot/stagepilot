@@ -993,7 +993,7 @@ impl Discovery {
         }
     }
 
-    /// "Search again": scan now. `Err` is why not.
+    /// "Scan": scan now. `Err` is why not.
     pub fn scan_now(&self, inputs: &HostInputs) -> Result<String, String> {
         if !self.core.options.enabled || !inputs.active {
             return Err("Turn Lighting on first.".into());
@@ -1033,8 +1033,7 @@ impl Discovery {
             .as_ref()
             .and_then(|scan| scan.found.iter().find(|f| f.address() == address).cloned())
             .ok_or_else(|| {
-                "That Lighting computer was not found by the last search. Press Search again."
-                    .to_string()
+                "That Lighting computer was not found by the last search. Press Scan.".to_string()
             })?;
         let inputs = host.inputs();
         let target = match inputs.mode() {

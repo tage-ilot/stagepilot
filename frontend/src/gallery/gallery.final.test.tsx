@@ -74,7 +74,7 @@ describe("the panel order and the worked example", () => {
     expect(page.querySelector("[data-section=connection]")).not.toBeNull();
     await user.clear(within(page).getByLabelText("Host"));
     await user.type(within(page).getByLabelText("Host"), "bad");
-    await user.click(within(page).getByRole("button", { name: "Test connection" }));
+    await user.click(within(page).getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(within(page).getByText("Check the host and the port, then test again.")).toBeInTheDocument());
     expect(within(page).getByText("Acme did not answer.")).toBeInTheDocument();
   });

@@ -6,11 +6,11 @@ import type { PlaybackController } from "../hooks/usePlaybackInput";
 import { CONTROL_40 } from "./liveLink";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { playbackBoxProps } from "./helperBoxProps";
-import { PlaybackScanHelp } from "./PlaybackScanHelp";
-import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
+import { PLAYBACK_SCAN_WORDS, playbackScanState } from "./playbackScan";
+import { NO_SCAN, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice } from "./sections";
+import { useRecheckNote } from "./useRecheckNote";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
-import { scanProgressText, validPlaybackHost } from "./playbackStatus";
-import { Button } from "./ui/Button";
+import { validPlaybackHost } from "./playbackStatus";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 
@@ -22,8 +22,8 @@ const TITLE = "Playback Live Link";
  * The first block of the Playback API panel, built like the Lighting "sACN DMX Live Link" block: a bordered card with a title, a state pill
  * beside it, two status lines (the Playback API and the Library Link), labelled fields and the same spacing.
  *
- * It holds the Playback host scan and chooser (Scan Network, progress, Scan again, the macOS permission help, the candidate chooser,
- * Other computer, Connect), moved here whole. Choosing a computer sets the API host AND the Library Link's address (the helper
+ * It holds the Playback host scan and chooser (Scan, progress, the macOS permission help, the candidate chooser,
+ * Other computer, Connect), moved here whole. Scan and Connect are the row's one pair, the same in every Live Link block. Choosing a computer sets the API host AND the Library Link's address (the helper
  * is on the same computer, so its address follows the Playback host; a stray address from an older version is cleared).
  *
  * The Library Link is optional. Without it nothing here is a warning: the line says "Not installed" in grey and the setup box offers
@@ -45,8 +45,14 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   }, [strayAddress, library]);
 
   const recent = useRecentAddresses("playback");
-  const scan = status?.scan;
-  const scanning = scan?.state === "scanning" || playback?.pending === "scan";
+  const scan = status ? playbackScanState(status.scan) : NO_SCAN;
+  const busy = scan.state === "scanning" || playback?.pending === "scan";
+  // What was pressed: a typed or chosen computer is Connect, the network scan is Scan. The backend marks a one-address scan `typed`.
+  const [pressed, setPressed] = useState<"scan" | "connect" | null>(null);
+  useEffect(() => { if (!busy) setPressed(null); }, [busy]);
+  const connecting = busy && (scan.typed === true || pressed === "connect");
+  const scanning = busy && !connecting;
+  const recheck = useRecheckNote();
   const other = choice === OTHER_COMPUTER;
   const trimmed = other ? host.trim() : choice;
   const hostOk = validPlaybackHost(trimmed);
@@ -67,16 +73,23 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   // The scan button turns into Cancel once the scan starts, so the second click of a double click
   // must not land on Cancel. Clicks on Cancel in the first moments are ignored.
   const scanClickedAt = useRef(0);
-  const startScan = () => { scanClickedAt.current = Date.now(); playback?.scan(); };
+  const startScan = () => { scanClickedAt.current = Date.now(); setPressed("scan"); recheck.clear(); playback?.scan(); };
   const cancelScan = () => { if (Date.now() - scanClickedAt.current < SCAN_CANCEL_GUARD_MS) return; playback?.cancelScan(); };
   // Choosing a computer sets the Playback API host (saved by the scan) and, with it, the Library Link's address: the script is asked at
   // the Playback host unless Advanced names another address, and a name typed for the old computer would be wrong for the new one.
   const choose = (chosen: string) => {
     scanClickedAt.current = Date.now();
+    setPressed("connect");
     playback?.scan(chosen);
     if (library?.address) void library.saveAddress("");
   };
-  const connect = () => { if (trimmed && hostOk) choose(trimmed); };
+  // Connect on a computer that is already connected only checks again, and the status line says so.
+  const connect = () => {
+    if (!trimmed || !hostOk) return;
+    if (connectedNow && trimmed === savedHost) recheck.mark(); else recheck.clear();
+    choose(trimmed);
+  };
+  const connectHint = !choice ? "Choose a computer first." : !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the scan to finish, or cancel it." : undefined;
 
   const api = status ? apiLine(status, "Checking Playback…") : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
   const hasComputer = Boolean(library?.target || savedHost);
@@ -96,11 +109,23 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       className="!mt-0"
       connection={(
         <>
-          {status?.scan.state === "scanning" && <p className="mt-2 text-[0.8125rem] tabular-nums text-ink-muted" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
+          <ScanProgress scan={scan} wording={PLAYBACK_SCAN_WORDS} />
 
-          <ConnectionRow as="form" id="playback-specific" onSubmit={(event) => { event.preventDefault(); connect(); }} testId="playback-live-link-line">
+          <ConnectionRow
+            as="form"
+            connectDisabled={!trimmed || !hostOk || scanning}
+            connectHint={connectHint}
+            connecting={connecting}
+            id="playback-specific"
+            onCancelScan={cancelScan}
+            onConnect={connect}
+            onScan={startScan}
+            scanning={scanning}
+            testId="playback-live-link-line"
+            tone="playback"
+          >
             <LiveLinkField caption="Playback computer" className="live-link-host">
-              <Select aria-label="Playback computer" className={`w-full font-mono ${CONTROL_40}`} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
+              <Select aria-label="Playback computer" className={`w-full font-mono ${CONTROL_40}`} onChange={(event) => { setChoice(event.target.value); recheck.clear(); }} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
                 {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
                 <option value={OTHER_COMPUTER}>Other computer…</option>
               </Select>
@@ -110,15 +135,16 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
                 <Input aria-label="Computer name or address" className={`w-full font-mono ${CONTROL_40}`} error={!hostOk} onChange={(event) => setHost(event.target.value)} placeholder="For example, 192.0.2.10…" spellCheck={false} value={host} />
               </LiveLinkField>
             )}
-            {scanning
-              ? <Button className={`flex-none ${CONTROL_40}`} onClick={cancelScan} tone="playback" type="button" variant="tinted">Scanning… (cancel)</Button>
-              : <Button className={`flex-none ${CONTROL_40}`} onClick={startScan} tone="playback" type="button" variant="tinted">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
-            {choice && <Button className={CONTROL_40} disabled={!trimmed || !hostOk || scanning} tone="playback" type="submit" variant="tinted">Connect</Button>}
-            {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
-            {other && !hostOk && <SectionNotice className="w-full" role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}
           </ConnectionRow>
+          {other && !trimmed && <p className="mt-2 text-xs text-ink-muted">Type an address to connect.</p>}
+          {other && !hostOk && <SectionNotice className="mt-2" role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}
 
-          <PlaybackScanHelp copied={copied} onChoose={choose} onCopy={copyDetails} onOther={() => setChoice(OTHER_COMPUTER)} playback={playback} scanning={scanning} />
+          <ScanArea>
+            <ScanHelp copied={copied} onCopy={copyDetails} onOther={() => setChoice(OTHER_COMPUTER)} scan={scan} scanning={busy} tone="playback" wording={PLAYBACK_SCAN_WORDS} />
+            <ScanChooser onChoose={(chosen) => choose(chosen)} scan={scan} tone="playback" wording={PLAYBACK_SCAN_WORDS} />
+            {playback?.error && <p className="text-sm text-danger-text" role="alert">{playback.error}</p>}
+            {playback?.message && <p className="text-sm text-integration-playback-text" role="status">{playback.message}</p>}
+          </ScanArea>
         </>
       )}
       details={library ? ({ byChoice }) => (
@@ -138,6 +164,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       )}
       status={[
         { text: api.text, testId: "playback-banner" },
+        ...(recheck.note ? [{ text: recheck.note, testId: "playback-recheck" }] : []),
         ...(script ? [{ text: `Library Link: ${script.text}.`, testId: "library-link-status", tone: script.tone }] : []),
       ]}
       testId="playback-live-link"
