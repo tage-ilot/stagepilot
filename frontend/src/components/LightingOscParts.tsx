@@ -435,7 +435,7 @@ export function EffectRow({ effect, disabled, highlight = false, onRemove }: {
         <span className="font-mono tabular-nums text-ink-body">{from} to {formatElapsed(effect.end_seconds)}</span>
         <span className="rounded-ds-full border border-edge-medium px-2 text-type-body-sm text-ink-muted" data-testid="effect-badge">{effect.source === "captured" ? "Captured loop" : "Loop"}</span>
         <span className="ml-auto flex gap-1">
-          <Button aria-label={`Remove loop ${text} at ${from}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Remove...</Button>
+          <Button aria-label={`Remove loop ${text} at ${from}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Remove…</Button>
         </span>
       </div>
       {open && <EffectDetail className="pl-2" effect={effect} />}

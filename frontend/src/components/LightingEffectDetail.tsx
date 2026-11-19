@@ -65,7 +65,7 @@ export function EffectDetail({ effect, disabled = false, onRemove, className = "
       <p className="text-type-body-sm text-ink-muted">A loop is played as one item. It is not changed by editing the rows; to get a different one, remove it and record the song again.</p>
       {onRemove && (
         <div>
-          <Button aria-label={`Remove loop ${effectLabel(effect)}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Remove loop...</Button>
+          <Button aria-label={`Remove loop ${effectLabel(effect)}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Remove loop…</Button>
         </div>
       )}
     </div>

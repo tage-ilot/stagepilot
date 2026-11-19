@@ -26,7 +26,7 @@ describe("SongsStrip", () => {
     expect(screen.queryByText(/Songs in this service -/)).toBeNull();
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("region", { name: "Songs in this service" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear all songs..." })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear all songs…" })).toBeNull();
   });
 
   it("keeps plan order and shows each state", () => {

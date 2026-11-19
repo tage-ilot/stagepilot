@@ -797,7 +797,7 @@ export function LightingSetupPanel({
         </div>
       )}
       <Button className={CONTROL_34} disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} variant="tinted">Add cue</Button>
-      <Button className={CONTROL_34} disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear song..."}</Button>
+      <Button className={CONTROL_34} disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear song\u2026"}</Button>
       {method === "osc" && (
         <>
           <Button
@@ -1084,7 +1084,7 @@ export function LightingSetupPanel({
             {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
           </OptionalSection>
           <div className="flex justify-end">
-            <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs...</Button>
+            <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs…</Button>
           </div>
         </>
       )}
