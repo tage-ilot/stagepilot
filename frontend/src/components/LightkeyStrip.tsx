@@ -342,6 +342,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const outdated = helperIsOutdated(status);
   const readBlocked = outdated ? UPDATE_HELPER_TIP : !connected ? "Connect to Lightkey first." : undefined;
   const releasable = Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) > 0;
+  const releaseBlocked = releasable ? undefined : "No lights to release.";
   const statusText = (
     <>
       {segments.length > 0 && joinStateLine(segments)}
@@ -359,14 +360,17 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
     <ConnectionSection
       actions={(
         <>
-          <Button
-            className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-            disabled={busy || !releasable}
-            onClick={() => void run(() => releaseLightkeyLights())}
-            variant="secondary"
-          >
-            Release lights
-          </Button>
+          {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper (as for Read fixtures). */}
+          <span data-testid="lightkey-release-wrap" title={releaseBlocked}>
+            <Button
+              className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+              disabled={busy || !releasable}
+              onClick={() => void run(() => releaseLightkeyLights())}
+              variant="secondary"
+            >
+              Release lights
+            </Button>
+          </span>
           {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
           <span data-testid="lightkey-read-fixtures-wrap" title={readBlocked}>
             <Button

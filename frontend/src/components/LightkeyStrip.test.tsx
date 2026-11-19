@@ -399,6 +399,7 @@ describe("LightkeyStrip operator override", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ yielded_fixtures: 2 }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByRole("button", { name: "Release lights" })).toBeDisabled();
+    expect(screen.getByTestId("lightkey-release-wrap")).toHaveAttribute("title", "No lights to release.");
   });
 
   it("Release lights calls the backend and shows the new status", async () => {
@@ -439,6 +440,7 @@ describe("LightkeyStrip saved replay off and release after a restart", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ known_fixtures: 4 }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByRole("button", { name: "Release lights" })).toBeEnabled();
+    expect(screen.getByTestId("lightkey-release-wrap")).not.toHaveAttribute("title");
   });
 });
 
