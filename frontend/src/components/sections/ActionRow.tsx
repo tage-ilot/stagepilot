@@ -13,16 +13,18 @@ export interface ActionRowProps {
   className?: string;
   testId?: string;
   "aria-label"?: string;
+  /** `end`: the row holds fields as well as buttons (Lighting's test cue: note, velocity, Send), so the buttons sit level with the inputs. */
+  align?: "start" | "end";
 }
 
 /**
  * The ACTIONS section: the Test / Refresh / Reload buttons in one wrapping row, then its one note ("Test connection and Refresh use the
  * saved settings. Save configuration first to try the new ones."). The buttons are quick actions that never save anything.
  */
-export function ActionRow({ children, note, noteId, className, testId, "aria-label": ariaLabel }: ActionRowProps) {
+export function ActionRow({ children, note, noteId, className, testId, align = "start", "aria-label": ariaLabel }: ActionRowProps) {
   return (
     <div className={cx("min-w-0", note ? "space-y-4" : undefined, className)} data-section="actions" data-testid={testId}>
-      <div aria-label={ariaLabel} className="flex flex-wrap gap-2" data-part="buttons" role={ariaLabel ? "group" : undefined}>{children}</div>
+      <div aria-label={ariaLabel} className={cx("flex flex-wrap gap-2", align === "end" && "items-end")} data-part="buttons" role={ariaLabel ? "group" : undefined}>{children}</div>
       {note && <p className="text-sm text-ink-muted" data-part="note" id={noteId}>{note}</p>}
     </div>
   );

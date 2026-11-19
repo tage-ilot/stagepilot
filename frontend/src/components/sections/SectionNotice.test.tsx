@@ -69,4 +69,13 @@ describe("SectionNotice: a line", () => {
     render(<Panel tone="backend"><SectionNotice tone="success" variant="line">Done</SectionNotice></Panel>);
     expect(screen.getByText("Done")).toHaveClass("text-integration-backend-text");
   });
+  it("a line can have its button beside the words: one row that carries the role and the test id, the words first", () => {
+    render(<SectionNotice actions={<button type="button">Use the OSC host</button>} role="status" testId="host-notice" tone="warning" variant="line">The API is set to another host.</SectionNotice>);
+    const row = screen.getByTestId("host-notice");
+    expect(row).toHaveAttribute("role", "status");
+    expect(row).toHaveClass("flex", "flex-wrap", "items-center", "gap-2");
+    expect(row.firstElementChild).toHaveTextContent("The API is set to another host.");
+    expect(row.firstElementChild).toHaveClass("text-warning-text");
+    expect(row.lastElementChild).toBe(screen.getByRole("button", { name: "Use the OSC host" }));
+  });
 });

@@ -71,4 +71,10 @@ describe("ActionRow", () => {
     render(<ActionRow><ActionButton label="Connect" onClick={() => undefined} tone="presentation" variant="primary" /></ActionRow>);
     expect(screen.getByRole("button", { name: "Connect" })).toHaveClass("bg-primary");
   });
+  it("`align=end` sits the buttons level with the inputs beside them (Lighting's test cue: note, velocity, Send)", () => {
+    const { rerender } = render(<ActionRow aria-label="Test cue"><button type="button">Send</button></ActionRow>);
+    expect(screen.getByRole("group", { name: "Test cue" })).not.toHaveClass("items-end");
+    rerender(<ActionRow align="end" aria-label="Test cue"><button type="button">Send</button></ActionRow>);
+    expect(screen.getByRole("group", { name: "Test cue" })).toHaveClass("flex", "flex-wrap", "gap-2", "items-end");
+  });
 });

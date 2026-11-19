@@ -22,7 +22,7 @@ export interface SectionNoticeProps extends DataAttributes {
   variant?: "box" | "line";
   /** A bold first line (`Your Services connection has expired`). Box only. */
   title?: ReactNode;
-  /** A button (or two) under the words. Box only. */
+  /** A button (or two): under the words of a box, beside the words of a line. */
   actions?: ReactNode;
   /** A line's role: none unless the page asks. A box always follows its tone, as `InlineAlert` does (warning and danger interrupt, info and success are polite), unless it is a `group`. */
   role?: "alert" | "status";
@@ -65,8 +65,18 @@ export function SectionNotice({ tone, children, variant = "box", title, actions,
     );
   }
   const colour = tone === "warning" || tone === "danger" ? lineTone[tone] : tone === "accent" ? (accent ? accentClasses[accent].text : "text-info-text") : tone === "success" ? (accent ? accentClasses[accent].text : "text-success-text") : quiet ? "text-ink-muted" : "text-ink-body";
+  const text = cx(size === "xs" ? "text-xs" : "text-sm", strong && "font-semibold", colour);
+  if (actions) {
+    // A line that has its button beside it ("Use the OSC host"): one row, the words first. The row carries the role and the test id.
+    return (
+      <div {...data} aria-live={live ? "polite" : undefined} className={cx("flex flex-wrap items-center gap-2", className)} data-part="notice" data-testid={testId} data-tone={tone} id={id} role={role}>
+        <p className={text}>{children}</p>
+        {actions}
+      </div>
+    );
+  }
   return (
-    <p {...data} aria-live={live ? "polite" : undefined} className={cx(size === "xs" ? "text-xs" : "text-sm", strong && "font-semibold", colour, className)} data-part="notice" data-testid={testId} data-tone={tone} id={id} role={role}>
+    <p {...data} aria-live={live ? "polite" : undefined} className={cx(text, className)} data-part="notice" data-testid={testId} data-tone={tone} id={id} role={role}>
       {children}
     </p>
   );
