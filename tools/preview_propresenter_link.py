@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Look at the ProPresenter Link block and the "Add to ProPresenter" window in a browser, without ProPresenter, without Playback and
+"""Look at the ProPresenter Link block and the Presenter Link section (Add to ProPresenter) in a browser, without ProPresenter, without Playback and
 without a second computer. Standard library only; read docs/preview-live-link.md ("The ProPresenter Link") for the whole recipe.
 
 It starts, on this computer:
@@ -220,6 +220,21 @@ class Preview:
         self.session_until = None
         self.token = args.token or secrets.token_urlsafe(9)
         self.backend = args.stagepilot
+        # The Library Link stand-in: stopped, Playback has given no songs and the Presenter Link lists the plan's Planning Center names.
+        self.library = None
+        self.library_command = None
+
+    def library_running(self):
+        return self.library is not None and self.library.poll() is None
+
+    def start_library(self):
+        if self.library_command and not self.library_running():
+            self.library = subprocess.Popen(self.library_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def stop_library(self):
+        if self.library_running():
+            self.library.terminate()
+            self.library.wait(timeout=10)
 
     def over(self):
         return dict((key, over) for key, _, over in SCENARIOS)[self.scenario]
@@ -236,7 +251,7 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <style>body{font:16px/1.5 system-ui;max-width:42rem;margin:1rem auto;padding:0 1rem}a.b,button{display:block;margin:.4rem 0;padding:.6rem .8rem;border:2px solid #444;border-radius:6px;text-decoration:none;color:inherit;background:#fff;font:inherit;text-align:left;width:100%%}
 .on{background:#ffe9a8!important}code{background:#eee;padding:0 .2rem}</style>
 <h1>Presenter Link preview</h1>
-<p>Pick how the Presenter Link looks, then <a href="/">open StagePilot</a> (Configuration &gt; Presentation, and Playback &gt; songs). Nothing here touches a real ProPresenter.</p>
+<p>Pick how the Presenter Link looks, then <a href="/">open StagePilot</a> (Configuration &gt; Presentation &gt; Presenter Link). Nothing here touches a real ProPresenter.</p>
 %(items)s
 <h2>Other things to try</h2>
 <form method=post action="/__preview/lazy"><button>Simulate: ProPresenter loads the new songs only after "Open the Playback library once" (press, then add songs)</button></form>
@@ -244,6 +259,9 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <form method=post action="/__preview/slides"><button>Pretend ProPresenter is showing slides (StagePilot must not touch the screen: try Add songs after the simulation above)</button></form>
 <form method=post action="/__preview/clear"><button>ProPresenter shows nothing again (press Try again)</button></form>
 <p>On screen now: <b>%(live)s</b></p>
+<form method=post action="/__preview/playback-off"><button>Playback gives no songs (the Presenter Link lists the plan's Planning Center names)</button></form>
+<form method=post action="/__preview/playback-on"><button>Playback gives the songs again (the list swaps, your ticks stay)</button></form>
+<p>Playback's songs now: <b>%(playback)s</b></p>
 <form method=post action="/__preview/reset"><button>Start over: forget the songs added to the playlists</button></form>
 <p>Made-up folder: <code>%(folder)s</code></p>
 """
@@ -277,7 +295,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             items = "".join('<a class="b%s" href="/__preview/set?scenario=%s">%s</a>' % (" on" if key == self.preview.scenario else "", key, label) for key, label, _ in SCENARIOS)
             shown = [name for name, on in sorted(self.preview.api_state.layers.items()) if on and name not in ("video_input", "audio")]
             live = "nothing (a camera input and audio do not count)" if not shown else ", ".join(shown)
-            self.send_text(200, PAGE % {"items": items, "folder": self.preview.args.folder, "live": live})
+            playback = "given (the Library Link answers)" if self.preview.library_running() else "none (the plan's names)"
+            self.send_text(200, PAGE % {"items": items, "folder": self.preview.args.folder, "live": live, "playback": playback})
         elif method == "GET" and path == "/__preview/set":
             key = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("scenario", ["live"])[0]
             if key in dict((k, 1) for k, _, _ in SCENARIOS):
@@ -292,6 +311,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 os.remove(os.path.join(self.preview.args.folder, ".selected-Playback"))
             except OSError:
                 pass
+            self.send_text(303, "", extra=[("Location", "/__preview/")])
+        elif method == "POST" and path == "/__preview/playback-off":
+            self.preview.stop_library()
+            self.send_text(303, "", extra=[("Location", "/__preview/")])
+        elif method == "POST" and path == "/__preview/playback-on":
+            self.preview.start_library()
             self.send_text(303, "", extra=[("Location", "/__preview/")])
         elif method == "POST" and path == "/__preview/slides":
             self.preview.api_state.set_layers(slide=True)
@@ -480,12 +505,10 @@ def main(argv=None):
     api_state, api_server, api_url = start_api(args.folder, args.api_port, args.lazy)
     children = []
     key_file = os.path.join(args.folder, ".library-key")
-    for command in (
-        [sys.executable, os.path.join(HERE, "fake_playback_api.py"), "--port", str(args.playback_port)],
-        [sys.executable, os.path.join(HERE, "fake_playback_library.py"), "--port", str(args.library_port), "--key-file", key_file],
-    ):
-        children.append(subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    children.append(subprocess.Popen([sys.executable, os.path.join(HERE, "fake_playback_api.py"), "--port", str(args.playback_port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     preview = Preview(args, api_state)
+    preview.library_command = [sys.executable, os.path.join(HERE, "fake_playback_library.py"), "--port", str(args.library_port), "--key-file", key_file]
+    preview.start_library()
     Handler.preview = preview
     server = Server((args.bind, args.port), Handler)
     if not args.no_configure:
@@ -515,6 +538,7 @@ def main(argv=None):
     finally:
         server.server_close()
         api_server.shutdown()
+        preview.stop_library()
         for child in children:
             child.terminate()
         if made:

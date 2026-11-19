@@ -6,6 +6,8 @@ import { ProPresenterSetupPanel } from "../components/ProPresenterSetupPanel";
 import type { ProPresenterStatusResponse } from "../types";
 import { libraryController, libraryOf, linkController, linkOf, playbackController, playbackOf, presenterApi } from "./fixtures";
 import { madeUpHealth, madeUpLights, madeUpMidi, madeUpPlanningCenter, madeUpServiceTypes, madeUpSettings, madeUpState } from "./panelFixtures";
+import { PresenterApiContext } from "../hooks/presenterApi";
+import { madeUpPresenterApi, PLAN_NAMES, withoutPlayback } from "./presenterLinkData";
 import { Fresh, Scripted, type Step } from "./Scripted";
 import type { SampleState } from "./StateCard";
 
@@ -18,21 +20,27 @@ const page = (steps: Step[], node: React.ReactNode, flags?: Record<string, boole
 const timers = [{ id: "t1", name: "Song Countdown", index: 0, is_countdown: true, state: null }, { id: "t2", name: "Video Timer", index: 1, is_countdown: false, state: null }];
 const looks = [{ id: "l1", name: "Worship", index: 0 }, { id: "l2", name: "Message", index: 1 }];
 const ppApi = (over: Partial<ProPresenterStatusResponse> = {}) => presenterApi({ timers, looks, current_look_id: "l1", last_checked_at: "2026-11-15T17:45:00Z", ...over });
+const madeUpStagePilot = madeUpPresenterApi();
+// With the Presenter Link ready the page also draws its section (the plan's Planning Center names, no Playback data), answered by a made-up StagePilot.
 const presentation = (over: { api?: ProPresenterStatusResponse | null; error?: string | null; message?: string | null; pending?: "save" | "test" | "refresh" | null } = {}) => (
-  <ProPresenterSetupPanel
-    error={over.error ?? null}
-    link={linkController(linkOf("ready"))}
-    message={over.message ?? null}
-    onRefreshTimers={nothing}
-    onSave={nothing}
-    onTest={nothing}
-    pendingOperation={over.pending ?? null}
-    propresenter={over.api === undefined ? ppApi() : over.api}
-  />
+  <PresenterApiContext.Provider value={madeUpStagePilot}>
+    <ProPresenterSetupPanel
+      error={over.error ?? null}
+      library={withoutPlayback()}
+      link={linkController(linkOf("ready"))}
+      message={over.message ?? null}
+      onRefreshTimers={nothing}
+      onSave={nothing}
+      onTest={nothing}
+      pendingOperation={over.pending ?? null}
+      plan={{ id: "p", title: "Sunday", date: "2026-11-22", service_type: "Sunday", service_type_id: null, service_times: [], duration_source: "plan", songs: PLAN_NAMES.songs }}
+      propresenter={over.api === undefined ? ppApi() : over.api}
+    />
+  </PresenterApiContext.Provider>
 );
 
 export const presentationPages: SampleState[] = [
-  { id: "clean", label: "Presentation: clean", look: "Order: Live Link block, Detected timer + Timeout (a pair), Look (narrow, with its hint), the Refresh row, the Save bar, the summary (API, Configured timer, Last checked).", render: () => page([], presentation()) },
+  { id: "clean", label: "Presentation: clean", look: "Order: Live Link block, Detected timer + Timeout (a pair), Look (narrow, with its hint), the Refresh row, the Presenter Link section (the plan's names), the Save bar, the summary (API, Configured timer, Last checked).", render: () => page([], presentation()) },
   { id: "held", label: "Presentation: held changes", look: "'Not saved yet' beside each changed caption with the warning border; the Refresh row says it uses the saved settings; the Save bar counts the changes.", render: () => page([{ type: ["Timeout", "5"] }, { pick: ["Detected timer", "Video Timer"] }, { pick: ["ProPresenter Look", "l2"] }], presentation()) },
   { id: "error", label: "Presentation: error after Save", look: "The red sentence under the field (role alert), the Save bar's blocked reason (a line, not a box).", render: () => page([{ type: ["Timeout", "0"] }, { press: "Save configuration" }], presentation()) },
   { id: "busy-refresh", label: "Presentation: Refresh running", look: "Every field is disabled by the section; the button says Refreshing…", render: () => page([], presentation({ pending: "refresh" })) },

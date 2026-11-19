@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { applyAddSongs, getAddSongsJob, getProPresenterPlaylists, previewAddSongs } from "../api";
 import { presenterLinkReady, type AddSongsRow } from "../components/addSongsSongs";
 import { guessAnnouncement, isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
+import { usePresenterApi } from "./presenterApi";
 import { useTitleLookup } from "./useTitleLookup";
 
 /** The last playlist and place, remembered in this browser only (never sent anywhere, never saved in StagePilot's settings). */
@@ -60,6 +60,7 @@ export function problemOf(cause: unknown, fallback: string): AddSongsProblem {
  */
 export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link: ProPresenterLinkController; playing: boolean }) {
   const linkReady = presenterLinkReady(link);
+  const stagepilot = usePresenterApi();
   const names = useMemo(() => rows.filter((row) => row.source === "planning-center").map((row) => row.title), [rows]);
   const lookup = useTitleLookup(names, linkReady);
   const blockOf = useCallback((row: AddSongsRow): RowBlock | null => {
@@ -100,7 +101,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const loadPlaylists = useCallback(async () => {
     setPlaylistsError(null);
     try {
-      const answer = await getProPresenterPlaylists();
+      const answer = await stagepilot.playlists();
       if (!alive.current) return;
       setPlaylists(answer.playlists);
       const last = remembered();
@@ -112,7 +113,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     } catch (cause) {
       if (alive.current) setPlaylistsError(problemOf(cause, "StagePilot could not read the playlists from ProPresenter.").message);
     }
-  }, []);
+  }, [stagepilot]);
   // The playlists are asked for only while the Presenter Link is ready (the section is not drawn otherwise).
   useEffect(() => { if (linkReady) void loadPlaylists(); }, [linkReady, loadPlaylists]);
 
@@ -160,7 +161,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     // What the preview calls a song: Playback's number, or `t1`, `t2`... in the order the titles were sent.
     const refs = new Map(picked.map((row, index) => [fromPlayback ? row.ref : `t${index + 1}`, row] as const));
     try {
-      const made = await previewAddSongs(request);
+      const made = await stagepilot.preview(request);
       if (!alive.current) return null;
       setPlan(made);
       setPreviewSignature(signature);
@@ -174,7 +175,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       setPhase("choose");
       return null;
     }
-  }, [fromPlayback, picked, place, playlistId, signature]);
+  }, [fromPlayback, picked, place, playlistId, signature, stagepilot]);
 
   /** Applies a preview that was just made; `skip` leaves out the songs it called stuck. */
   const start = useCallback(async (made: AddSongsPlan, skip: boolean) => {
@@ -184,7 +185,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     setSkipBlocked(skip);
     setPhase("applying");
     try {
-      const started = await applyAddSongs(made.plan_id, skip ? made.songs.filter(isStuck).map((song) => song.ref_id) : []);
+      const started = await stagepilot.apply(made.plan_id, skip ? made.songs.filter(isStuck).map((song) => song.ref_id) : []);
       if (!alive.current) return;
       setJobId(started.job_id);
     } catch (cause) {
@@ -195,7 +196,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       if (found.code === "plan_changed" || found.code === "unknown_plan" || found.code === "songs_blocked") setGone(true);
       setPhase("previewed");
     }
-  }, []);
+  }, [stagepilot]);
 
   /** The button: the preview, then (when nothing is blocked and no song is playing) the add, in one go. */
   const run = useCallback(async () => {
@@ -218,7 +219,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     let misses = 0;
     const tick = async () => {
       try {
-        const next = await getAddSongsJob(jobId);
+        const next = await stagepilot.job(jobId);
         if (cancelled || !alive.current) return;
         misses = 0;
         setLostContact(false);
@@ -232,7 +233,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     };
     void tick();
     return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [phase, jobId]);
+  }, [phase, jobId, stagepilot]);
 
   /** Try again: a fresh preview of the same choice, applied at once when it is clean (files made before are reused, so repeating is safe). */
   const tryAgain = useCallback(() => {

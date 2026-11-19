@@ -8,7 +8,7 @@ import { SONG_ORDER_OPEN_KEY } from "../components/playbackStatus";
  * One thing a person does on a page: type into a field by its label, pick an option, or press a button by its words. The gallery runs
  * these on the REAL page after it is drawn, so a held change or an error is reached the way a person reaches it, not painted on.
  */
-export type Step = { type: [label: string, value: string] } | { pick: [label: string, value: string] } | { press: string };
+export type Step = { type: [label: string, value: string] } | { pick: [label: string, value: string] } | { press: string } | { toggle: string };
 
 const nativeValue = (element: HTMLInputElement | HTMLSelectElement, value: string) => {
   const proto = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -24,6 +24,12 @@ const controlOf = (root: HTMLElement, label: string) => {
 };
 
 function runStep(root: HTMLElement, step: Step): void {
+  if ("toggle" in step) {
+    // A tick box, found by the words of its label.
+    const caption = Array.from(root.querySelectorAll("label")).find((node) => node.textContent?.trim() === step.toggle);
+    (caption?.htmlFor ? (document.getElementById(caption.htmlFor) as HTMLInputElement | null) : null)?.click();
+    return;
+  }
   if ("press" in step) {
     Array.from(root.querySelectorAll("button")).find((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, "").trim().startsWith(step.press) && !button.disabled)?.click();
     return;
@@ -33,12 +39,12 @@ function runStep(root: HTMLElement, step: Step): void {
   if (control) nativeValue(control, value);
 }
 
-/** Draws its children, then does the steps one after another (a beat between them, so each change is drawn before the next). */
-export function Scripted({ steps, children }: { steps: Step[]; children: ReactNode }) {
+/** Draws its children, then does the steps one after another (a beat between them, so each change is drawn before the next). `gap` is the beat in milliseconds. */
+export function Scripted({ steps, children, gap = 30 }: { steps: Step[]; children: ReactNode; gap?: number }) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timers: number[] = [];
-    steps.forEach((step, index) => timers.push(window.setTimeout(() => { if (root.current) runStep(root.current, step); }, 30 * (index + 1))));
+    steps.forEach((step, index) => timers.push(window.setTimeout(() => { if (root.current) runStep(root.current, step); }, gap * (index + 1))));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
     // The steps are fixed for a sample: they run once, when it is drawn.
     // eslint-disable-next-line react-hooks/exhaustive-deps

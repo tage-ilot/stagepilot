@@ -38,7 +38,7 @@ describe("side by side", () => {
     expect(names).toEqual(["Presentation", "Playback / MIDI", "Lighting", "Services", "StagePilot"]);
     const frames = within(columns).getAllByTestId("gallery-column-frame");
     expect(frames.map((frame) => frame.getAttribute("src"))).toEqual([
-      "?frame=1&only=presentation,page-presentation",
+      "?frame=1&only=presentation,page-presentation,presenter-link",
       "?frame=1&only=playback,page-playback",
       "?frame=1&only=lighting,page-lighting",
       "?frame=1&only=page-services",
