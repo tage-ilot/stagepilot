@@ -54,6 +54,7 @@ import type {
   AddSongsPlan,
   AddSongsPreviewRequest,
   AddSongsStarted,
+  AddSongsTitlesAnswer,
   LinkStatus,
   ProPresenterPlaylist,
 } from "./propresenterLink";
@@ -504,6 +505,11 @@ export const endProPresenterHelperInstall = () =>
   requestJson<{ ended: boolean }>("/api/v1/propresenter-link/helper-install", { method: "DELETE" });
 export const getProPresenterPlaylists = () =>
   requestJson<{ playlists: ProPresenterPlaylist[] }>("/api/v1/propresenter-link/playlists");
+/** Which of these song titles ProPresenter's Songs library has (file names only: nothing is written, the screen is not touched). */
+export const lookupAddSongsTitles = (titles: string[]) =>
+  requestJson<AddSongsTitlesAnswer>("/api/v1/propresenter-link/add-songs/titles", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ titles }),
+  });
 /** What would be done. Writes nothing anywhere. */
 export const previewAddSongs = (request: AddSongsPreviewRequest) =>
   requestJson<AddSongsPlan>("/api/v1/propresenter-link/add-songs/preview", {

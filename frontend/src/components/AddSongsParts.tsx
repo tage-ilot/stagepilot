@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import type { AddSongsController } from "../hooks/useAddSongs";
 import { PLACE_END } from "../hooks/useAddSongs";
 import type { AddSongsGuess, AddSongsJob, AddSongsJobStep, AddSongsPlan, AddSongsReport, AddSongsSong } from "../propresenterLink";
-import type { AddSongsRow } from "./addSongsSongs";
 import {
-  ACTION_STAMP, afterHeaderLabel, AT_THE_END, backupName, guessNote, importsSentence, isStuck, KEY_NOTE, mappingLines, neighbours, NOTHING_CHANGES, OPEN_LIBRARY_ONCE, OUTCOME,
+  ACTION_STAMP, afterHeaderLabel, ADD_TO_PROPRESENTER, asTheyAreSentence, AT_THE_END, backupName, guessNote, importsSentence, isStuck, mappingLines, neighbours, NOTHING_CHANGES, OPEN_LIBRARY_ONCE, OUTCOME,
   playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
 } from "./addSongsWording";
+import type { AddSongsRow } from "./addSongsSongs";
+import { SectionNotice, SettingsSection } from "./sections";
 import { Field } from "./ui/Field";
-import { InlineAlert } from "./ui/InlineAlert";
 import { Select } from "./ui/Select";
 import { cx } from "./ui/cx";
 import type { Tone } from "./ui/types";
@@ -35,76 +35,34 @@ export function KeyChip({ keyName }: { keyName: string | null }) {
   return <span className="inline-flex flex-none items-center border border-edge-medium bg-surface-950 px-1.5 py-0.5 font-mono text-[0.8125rem] tabular-nums text-ink" data-testid="add-songs-key">{keyName ? `Key ${keyName}` : "No key"}</span>;
 }
 
-const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-presentation-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-presentation";
+export const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-presentation-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-presentation";
 
-// ---- 1. the songs, 2. the playlist and the place -----------------------------------------------------------------------------
+// ---- 1. the playlist and the section (the songs list is `PresenterSongList`) -----------------------------------------------------
 
-export function SongPicker({ add, headingId }: { add: AddSongsController; headingId: string }) {
-  const { rows, unnamed, selected, selectedCount } = add;
-  const all = selectedCount === rows.length;
-  return (
-    <section aria-labelledby={headingId} data-testid="add-songs-songs">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h3 className="font-semibold text-ink" id={headingId}>Songs</h3>
-        <div className="flex flex-wrap items-center gap-x-3">
-          <span className="text-sm tabular-nums text-ink-muted" data-testid="add-songs-count">{selectedCount} of {rows.length} ticked</span>
-          <button className={linkButton} onClick={() => add.toggleAll(!all)} type="button">{all ? "Untick all" : "Tick all"}</button>
-        </div>
-      </div>
-      <ul aria-label="Songs to add" className="mt-1 divide-y divide-dashed divide-edge-medium border-y border-edge-medium" data-testid="add-songs-list">
-        {rows.map((row) => <SongRow checked={selected.has(row.ref)} key={row.ref} onToggle={() => add.toggle(row.ref)} row={row} />)}
-        {unnamed.map((row) => (
-          <li className="flex min-h-ds-touch-target flex-wrap items-center gap-x-3 gap-y-1 py-2 text-ink-muted" data-testid="add-songs-unnamed" key={`unnamed-${row.title}`}>
-            <span className="min-w-0 flex-[1_1_12rem] break-words">{row.title}</span>
-            <span className="text-sm">Playback gave this song no number, so it cannot be added.</span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-sm text-ink-muted" data-testid="add-songs-key-note">{KEY_NOTE}</p>
-    </section>
-  );
-}
-
-function SongRow({ row, checked, onToggle }: { row: AddSongsRow; checked: boolean; onToggle: () => void }) {
-  return (
-    <li>
-      <label className="flex min-h-ds-touch-target cursor-pointer touch-manipulation flex-wrap items-center gap-x-3 gap-y-1 py-2">
-        <input checked={checked} className="size-5 flex-none accent-integration-presentation" onChange={onToggle} type="checkbox" />
-        <span className="min-w-0 flex-[1_1_12rem] break-words font-semibold text-ink">{row.title}</span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-8 text-sm text-ink-body min-[560px]:pl-0">
-          <KeyChip keyName={row.keyName} />
-          <span data-testid="add-songs-arrangement">{row.arrangement ?? "No arrangement name"}</span>
-        </span>
-      </label>
-    </li>
-  );
-}
-
-export function PlaylistPicker({ add }: { add: AddSongsController }) {
+export function PlaylistPicker({ add, title }: { add: AddSongsController; title?: string }) {
   const { playlists, playlistsError, playlistId, playlist, place } = add;
-  const busy = add.phase === "previewing";
+  const busy = add.phase === "previewing" || add.phase === "applying";
   return (
-    <section aria-label="Where the songs go" className="space-y-2" data-testid="add-songs-where">
-      <div className="grid gap-3 min-[560px]:grid-cols-2">
+    <>
+      <SettingsSection aria-label={title ? undefined : "Where the songs go"} busy={busy} columns="pair" testId="add-songs-where" title={title}>
         <Field label="Playlist">
-          <Select disabled={busy || !playlists} loading={!playlists && !playlistsError} loadingLabel={"Loading playlists\u2026"} onChange={(event) => add.choosePlaylist(event.target.value)} placeholder={"Choose a playlist\u2026"} value={playlistId}>
+          <Select disabled={!playlists} loading={!playlists && !playlistsError} loadingLabel={"Loading playlists\u2026"} onChange={(event) => add.choosePlaylist(event.target.value)} placeholder={"Choose a playlist\u2026"} value={playlistId}>
             {playlists?.map((candidate) => <option key={candidate.id} value={candidate.id}>{playlistLabel(candidate)}</option>)}
           </Select>
         </Field>
-        <Field label="Place">
-          <Select disabled={busy || !playlist} onChange={(event) => add.choosePlace(event.target.value)} value={playlist ? place : PLACE_END}>
+        <Field label="Section">
+          <Select disabled={!playlist} onChange={(event) => add.choosePlace(event.target.value)} value={playlist ? place : PLACE_END}>
             {playlist?.headers.map((header, index) => <option key={`${index}-${header}`} value={header}>{afterHeaderLabel(header)}</option>)}
             <option value={PLACE_END}>{AT_THE_END}</option>
           </Select>
         </Field>
-      </div>
+      </SettingsSection>
       {playlistsError && (
-        <InlineAlert className="flex flex-wrap items-center gap-x-3 gap-y-1" tone="danger">
-          <span className="min-w-0 flex-[1_1_14rem]">{playlistsError}</span>
-          <button className={linkButton} onClick={() => void add.reloadPlaylists()} type="button">Look again</button>
-        </InlineAlert>
+        <SectionNotice actions={<button className={linkButton} onClick={() => void add.reloadPlaylists()} type="button">Look again</button>} tone="danger">
+          {playlistsError}
+        </SectionNotice>
       )}
-    </section>
+    </>
   );
 }
 
@@ -146,23 +104,17 @@ export function PreviewSong({ song, row, skipped = false }: { song: AddSongsSong
 export function PreviewBody({ add, plan, headingId }: { add: AddSongsController; plan: AddSongsPlan; headingId: string }) {
   const header = add.place === PLACE_END ? null : add.place;
   const around = neighbours(plan.playlist);
-  const byRef = new Map(add.rows.map((row) => [row.ref, row]));
+  const byRef = add.previewRows;
   return (
     <section aria-labelledby={headingId} className={cx("space-y-2", add.stale && "opacity-60")} data-stale={add.stale || undefined} data-testid="add-songs-preview">
       <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Preview</h3>
-      {add.stale && <p className="text-sm font-semibold text-warning-text" data-testid="add-songs-stale">You changed something since this preview. Press Preview again.</p>}
-      <p className="text-sm text-ink-body" data-testid="add-songs-imports">{importsSentence(plan.playlist.name)}</p>
+      {add.stale && <p className="text-sm font-semibold text-warning-text" data-testid="add-songs-stale">{`You changed something since this preview. Press ${ADD_TO_PROPRESENTER} again.`}</p>}
+      <p className="text-sm text-ink-body" data-testid="add-songs-imports">{(add.fromPlayback ? importsSentence : asTheyAreSentence)(plan.playlist.name)}</p>
       <p className="text-sm font-semibold text-ink" data-testid="add-songs-nothing-changes">{NOTHING_CHANGES}</p>
       <p className="text-sm text-ink-body" data-testid="add-songs-playlist-line">
         {playlistSentence(plan, header)}{around && plan.to_add > 0 ? ` ${around}` : ""}
       </p>
-      {plan.playlist.blocked && <InlineAlert tone="warning"><span data-testid="add-songs-playlist-blocked">Blocked: {plan.playlist.blocked}</span></InlineAlert>}
-      {plan.stuck > 0 && (
-        <label className="flex min-h-ds-touch-target cursor-pointer touch-manipulation items-center gap-3 text-sm text-ink-body">
-          <input checked={add.skipBlocked} className="size-5 flex-none accent-integration-presentation" data-testid="add-songs-skip" onChange={(event) => add.setSkipBlocked(event.target.checked)} type="checkbox" />
-          Skip blocked songs ({plan.stuck})
-        </label>
-      )}
+      {plan.playlist.blocked && <SectionNotice tone="warning"><span data-testid="add-songs-playlist-blocked">Blocked: {plan.playlist.blocked}</span></SectionNotice>}
       <ol aria-label="What will happen to each song" className="divide-y divide-dashed divide-edge-medium border-y border-edge-medium" data-testid="add-songs-preview-list">
         {plan.songs.map((song) => <PreviewSong key={song.ref_id} row={byRef.get(song.ref_id)} skipped={add.skipBlocked && isStuck(song)} song={song} />)}
       </ol>
@@ -200,7 +152,7 @@ export function Progress({ add, plan, headingId }: { add: AddSongsController; pl
     <section aria-labelledby={headingId} className="space-y-2" data-testid="add-songs-progress">
       <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Adding songs</h3>
       <p className="min-h-[1.5rem] text-sm text-ink-body" data-testid="add-songs-now">{last ? `Now: ${last.text}` : "Starting\u2026"}</p>
-      {add.lostContact && <InlineAlert tone="warning">StagePilot lost contact with itself for a moment. It keeps trying; the songs are still being added.</InlineAlert>}
+      {add.lostContact && <SectionNotice tone="warning">StagePilot lost contact with itself for a moment. It keeps trying; the songs are still being added.</SectionNotice>}
       {job && job.steps.length > 0 && (
         <ol aria-label="Steps for the playlist" className="space-y-1" data-testid="add-songs-steps">
           {job.steps.map((step) => <StepLine key={step.step} step={step} />)}
@@ -240,7 +192,7 @@ export function Result({ add, headingId }: { add: AddSongsController; headingId:
       <h3 className={cx("font-semibold", heading[words.tone] ?? "text-ink")} id={headingId} tabIndex={-1}><span aria-hidden="true">{words.mark} </span>{words.heading}</h3>
       <p className="text-sm text-ink-body" data-testid="add-songs-result-message">{report.message}</p>
       {report.outcome === "needs_library_open" && (
-        <InlineAlert tone="warning"><span data-testid="add-songs-open-library">{OPEN_LIBRARY_ONCE}</span></InlineAlert>
+        <SectionNotice tone="warning"><span data-testid="add-songs-open-library">{OPEN_LIBRARY_ONCE}</span></SectionNotice>
       )}
       {counts && <p className="text-sm tabular-nums text-ink-muted" data-testid="add-songs-counts">{counts}</p>}
       <ul aria-label="Result for each song" className="divide-y divide-dashed divide-edge-medium border-y border-edge-medium" data-testid="add-songs-result-songs">
@@ -284,12 +236,15 @@ export function GuessNote({ guesses, title }: { guesses: AddSongsGuess[]; title:
   );
 }
 
-/** A footer area for the buttons: why one of them is off, in words, and (always) what pressing Add songs does. */
+/**
+ * Above the button: what pressing it does, said plainly (the same sentence before the first press and after), and, when something stops
+ * it, why in words. `id` is what the button's `aria-describedby` points at.
+ */
 export function Reason({ id, children, note }: { id: string; children?: ReactNode; note?: string }) {
   return (
-    <div className="min-w-0 space-y-0.5 max-[480px]:col-span-3 min-[481px]:mr-auto min-[481px]:!w-auto min-[481px]:flex-[1_1_0%] min-[481px]:self-center">
-      {children && <p className="break-words text-sm text-ink-body" data-testid="add-songs-reason" id={id}>{children}</p>}
-      {note && <p className="break-words text-xs text-ink-muted" data-testid="add-songs-what-it-does">{note}</p>}
+    <div className="min-w-0 space-y-1" data-testid="add-songs-reason-box">
+      {note && <p className="break-words text-sm text-ink-muted" data-testid="add-songs-what-it-does">{note}</p>}
+      {children && <p className="break-words text-sm font-semibold text-ink" data-testid="add-songs-reason" id={id}>{children}</p>}
     </div>
   );
 }

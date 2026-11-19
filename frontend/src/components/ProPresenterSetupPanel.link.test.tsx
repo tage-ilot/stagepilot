@@ -2,12 +2,17 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../api";
+
 import { helperStatus, linkController, localStatus, presentation } from "../test/propresenterLinkFixtures";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { rememberAddress } from "../hooks/useRecentAddresses";
 import { libraryController } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
+
+vi.mock("../api", async (original) => ({ ...(await original<typeof import("../api")>()), getProPresenterPlaylists: vi.fn().mockResolvedValue({ playlists: [] }) }));
+void api;
 
 const panel = (link?: ReturnType<typeof linkController>, over: Partial<Parameters<typeof ProPresenterSetupPanel>[0]> = {}) => render(
   <ProPresenterSetupPanel error={null} link={link} message={null} onClose={vi.fn()} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={presentation()} {...over} />,
@@ -122,7 +127,10 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "Port", "Test connection", "Presenter Link setup",
-      "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks", "Save configuration",
+      "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks",
+      // The Presenter Link section sits between the settings and the Save bar (it has no list to tick without a plan).
+      "Playlist",
+      "Save configuration",
     ]);
   });
 });

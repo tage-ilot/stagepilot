@@ -91,7 +91,7 @@ fn strip_copy_suffix(stem: &str) -> &str {
     stem
 }
 
-fn stem(file: &str) -> &str {
+pub(super) fn stem(file: &str) -> &str {
     file.strip_suffix(".pro").unwrap_or(file)
 }
 
@@ -225,6 +225,8 @@ pub(crate) struct World {
     pub playlist_json: Value,
     /// The Playback library as ProPresenter lists it (when it lists it).
     pub entries: Vec<LibraryEntry>,
+    /// The Songs library as ProPresenter lists it: read only when a song is asked for by its title alone.
+    pub songs: Vec<LibraryEntry>,
     pub version: Option<String>,
 }
 
@@ -262,14 +264,20 @@ impl AddSongs {
             playlist,
             playlist_json,
             entries,
+            songs: Vec::new(),
             version,
         })
     }
 
     /// The Playback library as ProPresenter lists it now.
     pub(crate) async fn playback_entries(&self) -> Result<Vec<LibraryEntry>, ApiError> {
+        self.library_entries(PLAYBACK_LIBRARY).await
+    }
+
+    /// A library as ProPresenter lists it now (empty when ProPresenter has no library of that name).
+    pub(crate) async fn library_entries(&self, name: &str) -> Result<Vec<LibraryEntry>, ApiError> {
         let libraries = self.api.libraries().await?;
-        match libraries.iter().find(|l| l.name == PLAYBACK_LIBRARY) {
+        match libraries.iter().find(|l| l.name == name) {
             Some(library) => self.api.library(&library.uuid).await,
             None => Ok(Vec::new()),
         }
@@ -288,7 +296,10 @@ impl AddSongs {
         if request.songs.len() > MAX_SONGS {
             return Err(PlanError::TooMany);
         }
-        let world = self.world(&request.playlist_id).await?;
+        let mut world = self.world(&request.playlist_id).await?;
+        if request.songs.iter().any(|w| w.as_is) {
+            world.songs = self.library_entries(SONGS_LIBRARY).await.unwrap_or_default();
+        }
         let items = items_of(&world.playlist_json);
         let in_playlist = item_uuids(&items);
         // Names already used by any file, in any library, plus the ones this plan claims.
@@ -381,6 +392,9 @@ impl AddSongs {
             plan.reason = Some(why);
             plan
         };
+        if wanted.as_is {
+            return Self::plan_as_is(plan, wanted, world, in_playlist);
+        }
         let Some(id) = wanted.content_id else {
             return stuck(
                 plan,

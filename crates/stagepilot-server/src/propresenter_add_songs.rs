@@ -2,6 +2,7 @@
 //! (`stagepilot_propresenter::link::add_songs`).
 //!
 //! * `GET  /api/v1/propresenter-link/playlists` the playlists with their headers, for the pickers (kept for 10 s).
+//! * `POST /api/v1/propresenter-link/add-songs/titles` which titles ProPresenter's Songs library has (for songs asked for by title).
 //! * `POST /api/v1/propresenter-link/add-songs/preview` what would be done; writes nothing anywhere.
 //! * `POST /api/v1/propresenter-link/add-songs/apply` does what a preview named, as a job (answers at once with its id).
 //! * `GET  /api/v1/propresenter-link/add-songs/jobs/{id}` the job: what it has done, step by step, and the result.
@@ -23,7 +24,7 @@ use stagepilot_core::state::TimerStatus;
 use stagepilot_playback::library::{LibraryPlan, LibrarySong, LibraryState};
 use stagepilot_propresenter::link::add_songs::{
     AddSongs, ApplyRefusal, ApplyReport, Event, Guard, Place, PlanError, PlanRequest, Prepared,
-    Progress, Step, StepState, Timing, WantedSong, MAX_SONGS,
+    Progress, Step, StepState, TitleFound, Timing, WantedSong, MAX_SONGS,
 };
 use stagepilot_propresenter::link::api::{ApiError, HttpApi, ProPresenterApi};
 use stagepilot_propresenter::link::status::LinkState;
@@ -49,6 +50,8 @@ const MAX_PLAYLISTS_LISTED: usize = 80;
 enum Selection {
     Setlist(Vec<i64>),
     Content(Vec<u64>),
+    /// Titles alone (no Playback data): each is the one Songs entry with that title, added as it is. In the order given.
+    Titles(Vec<String>),
 }
 
 #[derive(Clone)]
@@ -475,6 +478,27 @@ fn whole_numbers<T: TryFrom<u64>>(value: &Value, what: &str) -> Result<Vec<T>, J
     Ok(out)
 }
 
+/// 1 to [`MAX_SONGS`] song titles: plain text, no control characters, each different.
+fn title_list(value: &Value) -> Result<Vec<String>, Json> {
+    let list = value
+        .as_array()
+        .ok_or_else(|| invalid("titles must be a list of song titles."))?;
+    if list.is_empty() || list.len() > MAX_SONGS {
+        return Err(invalid(&format!(
+            "titles must have 1 to {MAX_SONGS} song titles."
+        )));
+    }
+    let mut out: Vec<String> = Vec::new();
+    for item in list {
+        let title = plain_text(item, "A title", 120)?;
+        if out.iter().any(|t| t.eq_ignore_ascii_case(&title)) {
+            return Err(invalid("Each title can be named once."));
+        }
+        out.push(title);
+    }
+    Ok(out)
+}
+
 struct PreviewBody {
     selection: Selection,
     playlist_id: String,
@@ -487,18 +511,28 @@ fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
         &[
             "setlist_song_ids",
             "content_ids",
+            "titles",
             "playlist_id",
             "after_header",
             "place",
         ],
     )?;
-    let selection = match (map.get("setlist_song_ids"), map.get("content_ids")) {
-        (Some(ids), None) => Selection::Setlist(whole_numbers::<i64>(ids, "setlist_song_ids")?),
-        (None, Some(ids)) => Selection::Content(whole_numbers::<u64>(ids, "content_ids")?),
-        (None, None) => {
-            return Err(invalid("Send setlist_song_ids or content_ids."));
+    let selection = match (
+        map.get("setlist_song_ids"),
+        map.get("content_ids"),
+        map.get("titles"),
+    ) {
+        (Some(ids), None, None) => Selection::Setlist(whole_numbers::<i64>(ids, "setlist_song_ids")?),
+        (None, Some(ids), None) => Selection::Content(whole_numbers::<u64>(ids, "content_ids")?),
+        (None, None, Some(titles)) => Selection::Titles(title_list(titles)?),
+        (None, None, None) => {
+            return Err(invalid("Send setlist_song_ids, content_ids or titles."));
         }
-        _ => return Err(invalid("Send setlist_song_ids or content_ids, not both.")),
+        _ => {
+            return Err(invalid(
+                "Send setlist_song_ids, content_ids or titles, only one of them.",
+            ))
+        }
     };
     let playlist_id = plain_id(
         map.get("playlist_id")
@@ -540,11 +574,15 @@ fn wanted(song: &LibrarySong, now: chrono::DateTime<chrono::Utc>) -> WantedSong 
             .as_deref()
             .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
             .is_some_and(|t| t.with_timezone(&chrono::Utc) <= now),
+        as_is: false,
     }
 }
 
 /// The chosen songs of Playback's plan, by what the person named them by.
 fn pick_songs(plan: &LibraryPlan, selection: &Selection) -> Result<Vec<WantedSong>, Json> {
+    if let Selection::Titles(titles) = selection {
+        return Ok(title_songs(titles));
+    }
     let now = chrono::Utc::now();
     let all: Vec<&LibrarySong> = plan
         .songs
@@ -571,6 +609,7 @@ fn pick_songs(plan: &LibraryPlan, selection: &Selection) -> Result<Vec<WantedSon
                 }
             }
         }
+        Selection::Titles(_) => {}
     }
     if !missing.is_empty() {
         return Err(Json(
@@ -584,6 +623,24 @@ fn pick_songs(plan: &LibraryPlan, selection: &Selection) -> Result<Vec<WantedSon
     }
     out.dedup_by(|a, b| a.ref_id == b.ref_id);
     Ok(out)
+}
+
+/// Songs named by their title alone: `t1`, `t2`... in the order asked, each to be added as it is in ProPresenter's Songs library.
+fn title_songs(titles: &[String]) -> Vec<WantedSong> {
+    titles
+        .iter()
+        .zip(1u32..)
+        .map(|(title, position)| WantedSong {
+            ref_id: format!("t{position}"),
+            title: title.clone(),
+            position,
+            content_id: None,
+            key: None,
+            sections: Vec::new(),
+            rental_expired: false,
+            as_is: true,
+        })
+        .collect()
 }
 
 /// The Playback plan as the window gets it.
@@ -613,6 +670,15 @@ async fn library_plan(rt: &Rt) -> Result<LibraryPlan, Json> {
         ));
     }
     Ok(plan)
+}
+
+/// The songs a selection names: from Playback's plan, or (by title) with no Playback data at all.
+async fn songs_for(rt: &Rt, selection: &Selection) -> Result<Vec<WantedSong>, Json> {
+    if let Selection::Titles(titles) = selection {
+        return Ok(title_songs(titles));
+    }
+    let plan = library_plan(rt).await?;
+    pick_songs(&plan, selection)
 }
 
 /// The engine for the saved ProPresenter computer, when the Link is ready.
@@ -716,6 +782,35 @@ fn playlists_json(list: &[PlaylistInfo]) -> Value {
     })).collect::<Vec<_>>()})
 }
 
+/// `POST /api/v1/propresenter-link/add-songs/titles` `{titles: [...]}`: which of those titles ProPresenter's Songs library has.
+/// Reads file names only; nothing is written and nothing is asked of the screen.
+async fn titles(State(rt): State<Rt>, body: Bytes) -> Json {
+    let map = match parse_object(&body, &["titles"]) {
+        Ok(map) => map,
+        Err(error) => return error,
+    };
+    let list = match map.get("titles").map(title_list) {
+        Some(Ok(list)) => list,
+        Some(Err(error)) => return error,
+        None => return invalid("Send titles."),
+    };
+    let engine = match engine(&rt).await {
+        Ok(engine) => engine,
+        Err(error) => return error,
+    };
+    match engine.find_titles(&list).await {
+        Ok(found) => ok(json!({"titles": found.iter().map(|m| json!({
+            "title": m.title,
+            "state": match m.found {
+                TitleFound::Found => "found",
+                TitleFound::Missing => "missing",
+                TitleFound::Several => "several",
+            },
+        })).collect::<Vec<_>>()})),
+        Err(error) => plan_error(&error),
+    }
+}
+
 /// `POST /api/v1/propresenter-link/add-songs/preview`.
 async fn preview(State(rt): State<Rt>, body: Bytes) -> Json {
     let asked = match parse_preview(&body) {
@@ -726,11 +821,7 @@ async fn preview(State(rt): State<Rt>, body: Bytes) -> Json {
         Ok(engine) => engine,
         Err(error) => return error,
     };
-    let plan = match library_plan(&rt).await {
-        Ok(plan) => plan,
-        Err(error) => return error,
-    };
-    let songs = match pick_songs(&plan, &asked.selection) {
+    let songs = match songs_for(&rt, &asked.selection).await {
         Ok(songs) => songs,
         Err(error) => return error,
     };
@@ -864,8 +955,7 @@ async fn prepare(
         return Err(coded(409, "song_playing", PLAYING_WORDS));
     }
     let engine = engine(rt).await?;
-    let plan = library_plan(rt).await?;
-    let songs = pick_songs(&plan, &stored.selection)?;
+    let songs = songs_for(rt, &stored.selection).await?;
     let request = PlanRequest {
         songs,
         playlist_id: stored.playlist_id.clone(),
@@ -893,6 +983,7 @@ async fn job(State(rt): State<Rt>, Path(id): Path<String>) -> Json {
 pub fn routes() -> Router<Rt> {
     Router::new()
         .route("/api/v1/propresenter-link/playlists", get(playlists))
+        .route("/api/v1/propresenter-link/add-songs/titles", post(titles))
         .route("/api/v1/propresenter-link/add-songs/preview", post(preview))
         .route("/api/v1/propresenter-link/add-songs/apply", post(apply))
         .route("/api/v1/propresenter-link/add-songs/jobs/{id}", get(job))
@@ -922,7 +1013,21 @@ mod tests {
         .unwrap();
         assert_eq!(end.selection, Selection::Content(vec![5_000_001]));
         assert_eq!(end.place, Place::End);
+        let titled = parse_preview(&body(json!({
+            "titles": [" Holy Forever ", "Gratitude"], "playlist_id": "x", "place": "end"
+        })))
+        .map_err(|_| "refused")
+        .unwrap();
+        assert_eq!(
+            titled.selection,
+            Selection::Titles(vec!["Holy Forever".into(), "Gratitude".into()])
+        );
         let bad = |value: Value| parse_preview(&body(value)).is_err();
+        assert!(bad(
+            json!({"titles": ["A"], "setlist_song_ids": [1], "playlist_id": "x", "place": "end"})
+        ));
+        assert!(bad(json!({"titles": ["A", "a"], "playlist_id": "x", "place": "end"})));
+        assert!(bad(json!({"titles": [], "playlist_id": "x", "place": "end"})));
         assert!(bad(json!({"playlist_id": "x", "place": "end"})), "no songs");
         assert!(bad(
             json!({"setlist_song_ids": [1], "content_ids": [2], "playlist_id": "x", "place": "end"})

@@ -13,7 +13,6 @@ import type {
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { PlaybackSaveBar, usePlaybackDraft, type PlaybackMethod } from "./PlaybackSaveFooter";
 import { usePlaybackSave } from "./usePlaybackSave";
@@ -68,8 +67,6 @@ export function MidiSetupPanel({
   songs = [],
   playback,
   library,
-  propresenterLink,
-  timerRunning = false,
   plan = null,
 }: {
   midi: MidiInputsResponse | null;
@@ -92,9 +89,7 @@ export function MidiSetupPanel({
   playback?: PlaybackController;
   library?: PlaybackLibraryController;
   /** The optional Presenter Link: with it ready, the Playback songs offer Add to ProPresenter. */
-  propresenterLink?: ProPresenterLinkController;
   /** StagePilot's own countdown is running (a song is playing). */
-  timerRunning?: boolean;
   /** The loaded service plan: the Playback library pairs its songs with Playback's. */
   plan?: ServicePlan | null;
 }) {
@@ -418,7 +413,7 @@ export function MidiSetupPanel({
       tone="playback"
     >
       {draft.method === "playback_api"
-        ? <PlaybackApiPanel playback={playback} draft={draft} library={library} link={propresenterLink} plan={plan} timeZone={settings?.settings.timezone ?? "UTC"} timerRunning={timerRunning} />
+        ? <PlaybackApiPanel playback={playback} draft={draft} library={library} plan={plan} timeZone={settings?.settings.timezone ?? "UTC"} />
         : midiBody}
     </PanelLayout>
   );

@@ -13,6 +13,10 @@ export const PAGE_FILES = [
   "src/components/LightingOscParts.tsx",
   "src/components/PlaybackLiveLink.tsx",
   "src/components/ProPresenterLinkBlock.tsx",
+  // The Presenter Link section (in the Presentation page): its frame, options, list, button and result are templates plus its own list.
+  "src/components/PresenterLinkSection.tsx",
+  "src/components/PresenterSongList.tsx",
+  "src/components/AddSongsParts.tsx",
 ];
 
 const USE = "Use the section templates (import from components/sections, see DESIGN.md 6.6)";

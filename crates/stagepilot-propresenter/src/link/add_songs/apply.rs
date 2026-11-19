@@ -272,7 +272,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn needs_entry(song: &SongPlan) -> bool {
     matches!(
         song.action,
-        SongAction::Reuse | SongAction::Copy | SongAction::ImportThenCopy
+        SongAction::Reuse | SongAction::Copy | SongAction::ImportThenCopy | SongAction::AsIs
     ) && !song.already_in_playlist
 }
 
@@ -497,37 +497,52 @@ impl AddSongs {
             }
         }
 
-        // 3. the Playback library
-        run.say(
-            None,
-            Step::Library,
-            StepState::Running,
-            "Making sure the Playback library exists.",
-        );
-        match self.host.ensure_library(PLAYBACK_LIBRARY).await {
-            Ok(made) => run.say(
+        // 3. the Playback library (left alone when every song goes in as it is)
+        let makes_copies = active
+            .iter()
+            .any(|s| s.action != SongAction::AsIs && !s.already_in_playlist);
+        if makes_copies {
+            run.say(
+                None,
+                Step::Library,
+                StepState::Running,
+                "Making sure the Playback library exists.",
+            );
+            match self.host.ensure_library(PLAYBACK_LIBRARY).await {
+                Ok(made) => run.say(
+                    None,
+                    Step::Library,
+                    StepState::Done,
+                    if made {
+                        "Made the library named Playback."
+                    } else {
+                        "The library named Playback is there."
+                    },
+                ),
+                Err(error) => {
+                    run.say(None, Step::Library, StepState::Failed, error.words());
+                    return Ok(done(
+                        report,
+                        results,
+                        ApplyOutcome::Stopped,
+                        format!("{} Nothing was changed in the playlist.", error.words()),
+                    ));
+                }
+            }
+        } else {
+            run.say(
                 None,
                 Step::Library,
                 StepState::Done,
-                if made {
-                    "Made the library named Playback."
-                } else {
-                    "The library named Playback is there."
-                },
-            ),
-            Err(error) => {
-                run.say(None, Step::Library, StepState::Failed, error.words());
-                return Ok(done(
-                    report,
-                    results,
-                    ApplyOutcome::Stopped,
-                    format!("{} Nothing was changed in the playlist.", error.words()),
-                ));
-            }
+                "No copy is made, so the Playback library is left alone.",
+            );
         }
 
         // 4. the files, in order
         let mut stems: HashMap<String, String> = HashMap::new();
+        // The arrangement a song in the playlist is expected to read back with: the one the file has selected for a song that goes
+        // in as it is, `Playback` for a copy.
+        let mut arrangements: HashMap<String, String> = HashMap::new();
         let mut stopped = false;
         for song in &active {
             let at = results
@@ -565,6 +580,19 @@ impl AddSongs {
                     );
                     Ok((stem, Vec::new()))
                 }
+                (Some(_), SongAction::AsIs) => {
+                    let stem = song.file.clone().unwrap_or_default();
+                    run.say(
+                        Some(&song.ref_id),
+                        Step::Copy,
+                        StepState::Done,
+                        format!(
+                            "Using \"{stem}\" as it is in the Songs library. Nothing is copied."
+                        ),
+                    );
+                    arrangements.insert(song.ref_id.clone(), self.selected_arrangement(&stem).await);
+                    Ok((stem, Vec::new()))
+                }
                 (Some(wanted), SongAction::Copy | SongAction::ImportThenCopy) => {
                     self.make_song(
                         &run,
@@ -581,7 +609,11 @@ impl AddSongs {
             match result {
                 Ok((stem, guesses)) => {
                     results[at].file = Some(stem.clone());
-                    results[at].text = "The copy is ready.".into();
+                    results[at].text = if song.action == SongAction::AsIs {
+                        "Found in the Songs library; it goes in as it is.".into()
+                    } else {
+                        "The copy is ready.".into()
+                    };
                     if !guesses.is_empty() {
                         results[at].guesses = guesses;
                     }
@@ -638,14 +670,14 @@ impl AddSongs {
         // 5. ProPresenter loads the new files
         let wait_for: Vec<(String, String)> = active
             .iter()
-            .filter(|s| needs_entry(s))
+            .filter(|s| needs_entry(s) && s.action != SongAction::AsIs)
             .filter_map(|s| {
                 stems
                     .get(&s.ref_id)
                     .map(|stem| (s.ref_id.clone(), stem.clone()))
             })
             .collect();
-        let uuids = match self.wait_loaded(&run, &wait_for).await {
+        let mut uuids = match self.wait_loaded(&run, &wait_for).await {
             Ok(found) => found,
             Err(Waited::Api(error)) => {
                 run.say(None, Step::Load, StepState::Failed, error.words());
@@ -683,6 +715,58 @@ impl AddSongs {
                 ));
             }
         };
+
+        // 5b. the songs that go in as they are are already in ProPresenter's Songs library: their ids are read, nothing is waited for
+        let as_is: Vec<(String, String)> = active
+            .iter()
+            .filter(|s| s.action == SongAction::AsIs && !s.already_in_playlist)
+            .filter_map(|s| {
+                stems
+                    .get(&s.ref_id)
+                    .map(|stem| (s.ref_id.clone(), stem.clone()))
+            })
+            .collect();
+        if !as_is.is_empty() {
+            match self.library_entries(SONGS_LIBRARY).await {
+                Ok(entries) => {
+                    let mut missing: Vec<String> = Vec::new();
+                    for (ref_id, stem) in &as_is {
+                        match entry_in(&entries, SONGS_LIBRARY, stem) {
+                            Some(uuid) => {
+                                uuids.insert(ref_id.clone(), uuid);
+                            }
+                            None => missing.push(ref_id.clone()),
+                        }
+                    }
+                    if !missing.is_empty() {
+                        for result in &mut results {
+                            if missing.contains(&result.ref_id) {
+                                result.status = SongStatus::NotLoaded;
+                                result.code = Some("not_listed".into());
+                                result.text = "ProPresenter does not list this song in its Songs library now.".into();
+                            }
+                        }
+                        let text = "ProPresenter does not list a song in its Songs library any more. Open the Songs library in ProPresenter once, then press Try again.";
+                        run.say(None, Step::Load, StepState::Failed, text);
+                        return Ok(done(
+                            report,
+                            results,
+                            ApplyOutcome::Stopped,
+                            format!("{text} The playlist was not changed."),
+                        ));
+                    }
+                }
+                Err(error) => {
+                    run.say(None, Step::Load, StepState::Failed, error.words());
+                    return Ok(done(
+                        report,
+                        results,
+                        ApplyOutcome::NotReachable,
+                        format!("{} The playlist was not changed.", error.words()),
+                    ));
+                }
+            }
+        }
 
         // 6. the playlist, once
         if let Err(why) = guard.check() {
@@ -735,6 +819,7 @@ impl AddSongs {
         };
         let mut present = item_uuids(&items);
         let mut added: Vec<Value> = Vec::new();
+        let mut expected: Vec<String> = Vec::new();
         for song in &active {
             let Some(stem) = stems.get(&song.ref_id) else {
                 continue;
@@ -751,12 +836,17 @@ impl AddSongs {
                 results[slot].text = "Already in the playlist; left as it is.".into();
                 continue;
             }
+            let arrangement = arrangements
+                .get(&song.ref_id)
+                .cloned()
+                .unwrap_or_else(|| PLAYBACK_ARRANGEMENT.to_string());
+            expected.push(arrangement.clone());
             added.push(json!({
                 "id": {"uuid": uuid, "name": stem, "index": 0},
                 "type": "presentation",
                 "is_hidden": false,
                 "is_pco": false,
-                "presentation_info": {"presentation_uuid": uuid, "arrangement_name": PLAYBACK_ARRANGEMENT}
+                "presentation_info": {"presentation_uuid": uuid, "arrangement_name": arrangement}
             }));
             results[slot].status = SongStatus::Added;
             results[slot].text = "Added to the playlist.".into();
@@ -823,7 +913,7 @@ impl AddSongs {
         );
         tokio::time::sleep(self.timing.read_back).await;
         let differences = match self.api.playlist(&plan.playlist.id).await {
-            Ok(back) => compare(&list, new_from, new_count, &items_of(&back)),
+            Ok(back) => compare(&list, new_from, &expected, &items_of(&back)),
             Err(error) => vec![format!(
                 "The playlist could not be read back: {}",
                 error.words()
@@ -1047,6 +1137,17 @@ impl AddSongs {
         }
     }
 
+    /// The arrangement a song of the Songs library has selected (what the playlist reads back with); blank when it cannot be read.
+    async fn selected_arrangement(&self, stem: &str) -> String {
+        let Ok(bytes) = self.host.read_file(SONGS_LIBRARY, &format!("{stem}.pro")).await else {
+            return String::new();
+        };
+        crate::pro_file::Song::read(&bytes)
+            .ok()
+            .and_then(|song| song.selected_arrangement().map(|a| a.name.clone()))
+            .unwrap_or_default()
+    }
+
     async fn same_copy_exists(&self, stem: &str, id: u64, wanted: &WantedSong) -> bool {
         let file = format!("{stem}.pro");
         let Ok(bytes) = self.host.read_file(PLAYBACK_LIBRARY, &file).await else {
@@ -1204,9 +1305,14 @@ enum Waited {
 
 /// The id of the entry for a file in ProPresenter's listing of the Playback library.
 fn entry_for(entries: &[LibraryEntry], stem: &str) -> Option<String> {
+    entry_in(entries, PLAYBACK_LIBRARY, stem)
+}
+
+/// The id of the entry for a file in ProPresenter's listing of the named library.
+fn entry_in(entries: &[LibraryEntry], library: &str, stem: &str) -> Option<String> {
     entries
         .iter()
-        .find(|e| e.display_name(PLAYBACK_LIBRARY) == stem)
+        .find(|e| e.display_name(library) == stem)
         .and_then(|e| e.uuid.clone())
         .filter(|u| !u.is_empty())
 }
@@ -1239,7 +1345,7 @@ fn number_of(item: &Value) -> Option<f64> {
 }
 
 /// What the read-back shows that the plan did not say: order, names, kinds, durations and the arrangement of the new songs.
-fn compare(sent: &[Value], new_from: usize, new_count: usize, back: &[Value]) -> Vec<String> {
+fn compare(sent: &[Value], new_from: usize, expected: &[String], back: &[Value]) -> Vec<String> {
     let mut out = Vec::new();
     if sent.len() != back.len() {
         out.push(format!(
@@ -1260,14 +1366,14 @@ fn compare(sent: &[Value], new_from: usize, new_count: usize, back: &[Value]) ->
         if item_name(want) != item_name(got) {
             out.push(format!("{place}: it reads \"{}\" now.", item_name(got)));
         }
-        let is_new = (new_from..new_from + new_count).contains(&index);
-        if is_new {
+        let new_one = index.checked_sub(new_from).and_then(|n| expected.get(n));
+        if let Some(wanted) = new_one {
             let arrangement = got["presentation_info"]["arrangement_name"]
                 .as_str()
                 .unwrap_or_default();
-            if arrangement != PLAYBACK_ARRANGEMENT {
+            if arrangement != wanted {
                 out.push(format!(
-                    "{place}: ProPresenter shows the arrangement \"{arrangement}\" instead of \"{PLAYBACK_ARRANGEMENT}\"."
+                    "{place}: ProPresenter shows the arrangement \"{arrangement}\" instead of \"{wanted}\"."
                 ));
             }
         } else {

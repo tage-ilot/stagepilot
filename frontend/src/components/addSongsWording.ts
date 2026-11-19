@@ -17,10 +17,20 @@ import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 /** The words of the "Add to ProPresenter" window, in one place (church-operator wording: short, plain, no jargon). */
 
 export const ADD_TO_PROPRESENTER = "Add to ProPresenter";
-export const NOTHING_CHANGES = "Nothing in ProPresenter changes until you press Add songs.";
-/** What pressing Add songs does, said plainly. The playlist's contents are replaced on purpose: no warning about it, just the fact. */
+export const NOTHING_CHANGES = `Nothing in ProPresenter changes until you press ${ADD_TO_PROPRESENTER}.`;
+/** What pressing the button does, said plainly. The playlist's contents are replaced on purpose: no warning about it, just the fact. */
 export const importsSentence = (playlist: string | null): string =>
   `This imports songs, arrangements and keys into ${playlist ?? "the playlist"}. The playlist's contents are replaced with what the preview shows.`;
+/** The same for the Planning Center names: nothing is imported or copied, the songs ProPresenter has go in as they are. */
+export const asTheyAreSentence = (playlist: string | null): string =>
+  `This adds the songs as they are in ProPresenter to ${playlist ?? "the playlist"}: no copy, no new arrangement, no key change. The playlist's contents are replaced with what the preview shows.`;
+export const PC_NAMES_NOTE = "Playback has not given the songs yet: these are the Planning Center names.";
+export const PLAYBACK_NOTE = "These songs come from Playback, in Playback's order, with the key and arrangement it plays.";
+export const NOT_IN_PROPRESENTER = "Not in ProPresenter";
+export const NOT_IN_PROPRESENTER_WHY = "Playback data is needed to import it.";
+export const SEVERAL_IN_PROPRESENTER = "More than one song in ProPresenter has this title";
+export const SKIP_AND_ADD = "Skip those and add the rest";
+export const NO_PLAN_SONGS = "The loaded plan has no songs yet.";
 export const CHECK_IN_PROPRESENTER = "Check in ProPresenter:";
 export const KEY_NOTE = "ProPresenter does not show the key for these songs; it is written into the copy and shown here.";
 export const OTHER_ITEMS_STAY = "Other items stay as they are.";
@@ -56,11 +66,28 @@ export interface SongStamp {
 /** The stamp on a preview row: one word and a mark. */
 export const ACTION_STAMP: Record<AddSongsAction, SongStamp> = {
   reuse: { word: "Already there", mark: "\u2713", tone: "success" },
+  as_is: { word: "Used as is", mark: "+", tone: "info" },
   copy: { word: "New copy", mark: "+", tone: "info" },
   import_then_copy: { word: "Load first", mark: "\u2193", tone: "info" },
   needs_choice: { word: "Needs a choice", mark: "?", tone: "warning" },
   blocked: { word: "Blocked", mark: "!", tone: "warning" },
 };
+
+/**
+ * What stops the one button after the preview, in words: blocked songs, a blocked place, nothing to add. `null` when the preview is clean and
+ * the songs can go ahead. `full` adds what the person can do about it.
+ */
+export function stuckReason(plan: Pick<AddSongsPlan, "songs" | "stuck" | "to_add" | "can_apply"> & { playlist: Pick<AddSongsPlan["playlist"], "blocked"> }, full: boolean): string | null {
+  if (plan.playlist.blocked) return `Blocked: ${plan.playlist.blocked}`;
+  if (plan.stuck > 0) {
+    const names = plan.songs.filter((song) => isStuck(song)).map((song) => song.title).join(", ");
+    const lead = `${plural(plan.stuck, "song")} cannot be added yet (${names}).`;
+    if (!full) return lead;
+    return plan.to_add > 0 ? `${lead} Skip those to add the rest, or fix them and press ${ADD_TO_PROPRESENTER} again.` : `${lead} Fix them, or tick other songs, and press ${ADD_TO_PROPRESENTER} again.`;
+  }
+  if (!plan.can_apply) return "There is nothing to add: every ticked song is already in the playlist.";
+  return null;
+}
 
 /** A song the plan cannot do: it must be skipped for the others to go ahead. */
 export const isStuck = (song: Pick<AddSongsSong, "action">): boolean => song.action === "blocked" || song.action === "needs_choice";
@@ -74,6 +101,8 @@ export function songSentence(song: AddSongsSong, library: Pick<LibrarySong, "sec
   switch (song.action) {
     case "reuse":
       return `Already in ProPresenter as ${quoted(file)}.${inList}`;
+    case "as_is":
+      return `Added as it is in ProPresenter as ${quoted(file)}: no copy, no new arrangement, no key change.${inList}`;
     case "copy":
       return `New copy ${quoted(file)} with Playback's order (${orderWords(song, library)}).${inList}`;
     case "import_then_copy":

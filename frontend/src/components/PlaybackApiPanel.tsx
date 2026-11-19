@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ServicePlan } from "../types";
 import { PlaybackLibrarySongs } from "./PlaybackLibrarySongs";
 import { PlaybackLiveLink } from "./PlaybackLiveLink";
@@ -18,7 +17,7 @@ import { LIBRARY_BUTTON_HELP, LIBRARY_ORDER_HELP, SCAN_PLAYBACK_SONGS, SCAN_WITH
 
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
 // (skipped songs) until Save configuration. The scan, the computer chooser and the Library Link are the first block, PlaybackLiveLink.
-export function PlaybackApiPanel({ playback, draft, library, link, plan = null, timeZone = "UTC", timerRunning = false }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: ServicePlan | null; timeZone?: string; timerRunning?: boolean }) {
+export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZone = "UTC" }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; plan?: ServicePlan | null; timeZone?: string }) {
   const status = playback?.status;
   const [confirm, setConfirm] = useState(false);
   // Shown optimistically while the save runs; a failed save puts it back.
@@ -103,7 +102,7 @@ export function PlaybackApiPanel({ playback, draft, library, link, plan = null, 
         connection={<PlaybackLiveLink library={library} playback={playback} />}
         content={(library || status) ? (
           <>
-            {library && <PlaybackLibrarySongs library={library} link={link} plan={plan} playing={Boolean(status?.playing) || timerRunning} timeZone={timeZone} />}
+            {library && <PlaybackLibrarySongs library={library} plan={plan} timeZone={timeZone} />}
             {songOrder}
           </>
         ) : undefined}

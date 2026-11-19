@@ -3,4 +3,4 @@
 /**
  * What will happen to one song.
  */
-export type AddSongsAction = "reuse" | "copy" | "import_then_copy" | "needs_choice" | "blocked";
+export type AddSongsAction = "reuse" | "copy" | "import_then_copy" | "as_is" | "needs_choice" | "blocked";

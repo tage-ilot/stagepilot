@@ -15,12 +15,14 @@
 //! preview and in the result; a section no group has blocks that song until the person leaves it out.
 
 mod apply;
+mod as_is;
 mod plan;
 
 pub use apply::{
     ApplyOutcome, ApplyRefusal, ApplyReport, Event, Guard, Prepared, Progress, SongResult,
     SongStatus, Step, StepState, Timing,
 };
+pub use as_is::{TitleFound, TitleMatch};
 pub use plan::{clean_name, copy_file_name, PlanError};
 
 use super::api::ProPresenterApi;
@@ -52,6 +54,10 @@ pub struct WantedSong {
     pub sections: Vec<String>,
     /// The rental ran out.
     pub rental_expired: bool,
+    /// Only the title is known (the person has no Playback data for it): the song is added AS IT IS, the one entry of
+    /// ProPresenter's Songs library with this title. Never imported, never copied, no arrangement or key changed; a title the
+    /// library does not have blocks the song.
+    pub as_is: bool,
 }
 
 /// Where in the playlist the songs go.
@@ -82,6 +88,9 @@ pub enum SongAction {
     Copy,
     /// ProPresenter does not have the song: it is imported through ProPresenter's Search, then copied as above.
     ImportThenCopy,
+    /// The song is the one entry of ProPresenter's Songs library with this title and goes into the playlist as it is: no copy,
+    /// no import, no arrangement or key change.
+    AsIs,
     /// More than one file in ProPresenter could be this song and StagePilot does not guess which.
     NeedsChoice,
     /// Nothing can be done for this song, and `reason` says why.

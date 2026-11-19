@@ -869,8 +869,8 @@ export function Dashboard({
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
   const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
   const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
-  // The optional ProPresenter Link: asked only while ProPresenter is saved and a panel that shows it (Presentation, or the Playback songs) is open.
-  const propresenterLink = useProPresenterLink(canConfigure && Boolean(propresenter?.enabled), shown === "propresenter" || shown === "midi");
+  // The optional ProPresenter Link: asked only while ProPresenter is saved and the Presentation panel (which shows it) is open.
+  const propresenterLink = useProPresenterLink(canConfigure && Boolean(propresenter?.enabled), shown === "propresenter");
   const [panelDirty, setPanelDirty] = useState(false);
   // A one-time note about a pick that ended by itself ("Back to the upcoming service"); closing it hides that note.
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
@@ -1115,8 +1115,6 @@ export function Dashboard({
           <MidiSetupPanel
             playback={playback}
             library={library}
-            propresenterLink={propresenterLink}
-            timerRunning={state.timer.status === "running"}
             plan={state.plan}
             error={midiError}
             onRetryLoad={retryLoads}
@@ -1138,7 +1136,10 @@ export function Dashboard({
         )}
           {shown === "propresenter" && (
           <ProPresenterSetupPanel
+            library={library}
             link={propresenterLink}
+            plan={state.plan}
+            playing={Boolean(playback?.status?.playing) || state.timer.status === "running"}
             onDirtyChange={setPanelDirty}
             error={propresenterError}
             onRetryLoad={retryLoads}

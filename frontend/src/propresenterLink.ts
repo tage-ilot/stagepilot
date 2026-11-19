@@ -6,6 +6,7 @@ import type { AddSongsReport } from "../../generated/ts/AddSongsReport";
 import type { AddSongsSongResult } from "../../generated/ts/AddSongsSongResult";
 import type { AddSongsStep } from "../../generated/ts/AddSongsStep";
 import type { AddSongsStepState } from "../../generated/ts/AddSongsStepState";
+import type { TitleFound } from "../../generated/ts/TitleFound";
 
 export type { AddSongsAction } from "../../generated/ts/AddSongsAction";
 export type { AddSongsEvent } from "../../generated/ts/AddSongsEvent";
@@ -21,6 +22,7 @@ export type { AddSongsSongStatus } from "../../generated/ts/AddSongsSongStatus";
 export type { AddSongsStep } from "../../generated/ts/AddSongsStep";
 export type { AddSongsStepState } from "../../generated/ts/AddSongsStepState";
 export type { LinkMode } from "../../generated/ts/LinkMode";
+export type { TitleFound } from "../../generated/ts/TitleFound";
 export type { LinkState } from "../../generated/ts/LinkState";
 export type { LinkStatus } from "../../generated/ts/LinkStatus";
 
@@ -35,11 +37,21 @@ export interface ProPresenterPlaylist {
 /** Where in the playlist the songs go: after the section under a header (by name), or at the end. */
 export type AddSongsPlace = { after_header: string } | { place: "end" };
 
-/** The body of `POST add-songs/preview`: the songs are named by Playback's setlist ids (or, when it has none, by MultiTracks numbers). */
+/**
+ * The body of `POST add-songs/preview`: the songs are named by Playback's setlist ids (or, when it has none, by MultiTracks numbers), or
+ * by their titles alone when there is no Playback data (each is then added AS IT IS from ProPresenter's Songs library: never imported,
+ * never copied). The songs of a titles preview are called `t1`, `t2`... in the order sent.
+ */
 export type AddSongsPreviewRequest = (
   | { setlist_song_ids: number[] }
   | { content_ids: number[] }
+  | { titles: string[] }
 ) & { playlist_id: string } & AddSongsPlace;
+
+/** `POST add-songs/titles`: which of the titles ProPresenter's Songs library has, in the order asked. */
+export interface AddSongsTitlesAnswer {
+  titles: { title: string; state: TitleFound }[];
+}
 
 /** What `POST add-songs/apply` answers (202). */
 export interface AddSongsStarted {

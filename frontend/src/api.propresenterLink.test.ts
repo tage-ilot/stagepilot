@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, applyAddSongs, endProPresenterHelperInstall, getAddSongsJob, getProPresenterLinkStatus, getProPresenterPlaylists, previewAddSongs, startProPresenterHelperInstall } from "./api";
+import { ApiError, applyAddSongs, endProPresenterHelperInstall, getAddSongsJob, getProPresenterLinkStatus, getProPresenterPlaylists, lookupAddSongsTitles, previewAddSongs, startProPresenterHelperInstall } from "./api";
 
 const answer = (status: number, body: unknown) => vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
 afterEach(() => vi.restoreAllMocks());
@@ -38,6 +38,17 @@ describe("the ProPresenter Link routes", () => {
       ["/api/v1/propresenter-link/add-songs/preview", "POST", "{\"setlist_song_ids\":[1,2],\"playlist_id\":\"PL\",\"after_header\":\"Worship\"}"],
       ["/api/v1/propresenter-link/add-songs/apply", "POST", "{\"plan_id\":\"0123456789abcdef0123456789abcdef\",\"skip\":[\"2\"]}"],
       ["/api/v1/propresenter-link/add-songs/jobs/fedcba9876543210fedcba9876543210", "GET", undefined],
+    ]);
+  });
+
+  it("looks titles up and previews by title with the bodies the routes want", async () => {
+    const spy = answer(200, { titles: [] });
+    await lookupAddSongsTitles(["Holy Forever", "Gratitude"]);
+    await previewAddSongs({ titles: ["Holy Forever"], playlist_id: "PL", place: "end" });
+    const calls = spy.mock.calls.map(([url, init]) => [String(url).replace(/^https?:\/\/[^/]+/, ""), init?.method ?? "GET", init?.body]);
+    expect(calls).toEqual([
+      ["/api/v1/propresenter-link/add-songs/titles", "POST", "{\"titles\":[\"Holy Forever\",\"Gratitude\"]}"],
+      ["/api/v1/propresenter-link/add-songs/preview", "POST", "{\"titles\":[\"Holy Forever\"],\"playlist_id\":\"PL\",\"place\":\"end\"}"],
     ]);
   });
 
