@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { STATUS, type StatusKey } from "./addSongsStatus";
-import { StatusChip, StatusRow, STATUS_ROW } from "./AddSongsStatus";
+import { StatusChip, StatusRow, STATUS_ROW } from "./StatusChips";
 
 const row = (chip: StatusKey, extra: Partial<Parameters<typeof StatusRow>[0]> = {}) => (
   <ul><StatusRow chip={<StatusChip column {...STATUS[chip]} testId="chip" title="The long sentence." />} detail="The long sentence." testId="row" title="Holy Forever" {...extra} /></ul>

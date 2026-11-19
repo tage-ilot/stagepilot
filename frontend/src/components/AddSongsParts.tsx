@@ -5,7 +5,7 @@ import { hasSections, PLACE_END } from "../hooks/useAddSongs";
 import type { AddSongsPlan } from "../propresenterLink";
 import { placeHeading, songStatus, summaryParts } from "./addSongsStatus";
 import { END_OF_PLAYLIST, isStuck, neighbours, playlistLabel, STALE_WORDS, twoHeadersLine } from "./addSongsWording";
-import { StatusChip, StatusRow } from "./AddSongsStatus";
+import { StatusChip, StatusRow } from "./StatusChips";
 import { SectionNotice, SettingsSection } from "./sections";
 import { Field } from "./ui/Field";
 import { Select } from "./ui/Select";

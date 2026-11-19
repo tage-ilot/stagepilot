@@ -2,7 +2,7 @@ import type { AddSongsController } from "../hooks/useAddSongs";
 import type { AddSongsGuess, AddSongsJob, AddSongsJobStep, AddSongsPlan, AddSongsReport } from "../propresenterLink";
 import { differenceLine, guessPhrase, resultHeading, resultWord, STATUS } from "./addSongsStatus";
 import { backupName, guessLine, guessNote, isStuck, OPEN_LIBRARY_ONCE, resultCounts, SONG_STATUS, STEP_STATE, STEP_WORDS } from "./addSongsWording";
-import { StatusChip, StatusRow } from "./AddSongsStatus";
+import { StatusChip, StatusRow } from "./StatusChips";
 import { SectionNotice } from "./sections";
 import { cx } from "./ui/cx";
 import type { Tone } from "./ui/types";

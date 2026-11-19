@@ -8,7 +8,7 @@ import {
   isStuck, NO_NUMBER, NO_NUMBER_PHRASE, NO_NUMBER_WHY, NO_PLAN_SONGS, NOT_IN_PROPRESENTER, NOT_IN_PROPRESENTER_PHRASE, NOT_IN_PROPRESENTER_WHY, PLANNING_CENTER,
   SELECT_ALL, SELECT_NONE, selectedWords, SEVERAL_IN_PROPRESENTER, SEVERAL_IN_PROPRESENTER_WHY,
 } from "./addSongsWording";
-import { StatusChip } from "./AddSongsStatus";
+import { StatusChip } from "./StatusChips";
 import { keyWas, librarySongCover } from "./playbackLibrary";
 import { ActionButton, ActionRow } from "./sections";
 import { SONG_CARD_LOOK, SONG_GRID_CHECK, SongCardBody, SongCardShell } from "./SongCard";
