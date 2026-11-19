@@ -80,7 +80,7 @@ describe("the section gallery: configuration pages", () => {
     expect(sample("page-backend-disconnected").querySelector("[data-section=summary] [data-tone=danger]")).toHaveTextContent("Disconnected");
     const tones = Array.from(sample("template-notices-boxes").querySelectorAll("[data-tone]")).map((node) => node.getAttribute("data-tone"));
     expect(tones).toEqual(["info", "success", "warning", "danger"]);
-    expect(sample("template-notices-group").querySelector("[role=group][aria-label='Confirm disable Remote Access']")).toBeInTheDocument();
+    expect(sample("template-notices-group").querySelector("[role=group][aria-label='Confirm disable Remote access']")).toBeInTheDocument();
   });
 
   it("draws the Lighting and MIDI pages with their settings group and action row", async () => {

@@ -88,22 +88,22 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
   };
   const url = status?.state === "connected" ? safeUrl(status.url) : null;
   const operators = users.filter((user) => user.enabled && user.role === "Operator").length;
-  if (!canManage) return <div aria-label="Remote Access"><p className="text-sm text-ink-body">Read-only access. An Operator manages Remote Access.</p></div>;
+  if (!canManage) return <div aria-label="Remote access"><p className="text-sm text-ink-body">Read-only access. An Operator manages Remote access.</p></div>;
 
   // Remote Access is two separate groups (owner, 2026-10-14): the link and its status, then the people who can use it.
   const showPeople = Boolean(status?.needs_operator && !local) || bootstrap || Boolean(status && !status.needs_operator);
 
-  return <div aria-label="Remote Access" className="space-y-4">
+  return <div aria-label="Remote access" className="space-y-4">
     <SettingsSection aria-label="Remote link" boxed columns="single" data-remote-group="link">
     <SectionNotice tone="info" variant="line">Securely view or operate this StagePilot from another device. Local operation continues if Remote disconnects.</SectionNotice>
-    <SectionNotice role="status" tone="success" variant="line">{status ? labels[status.state] : "Checking Remote Access…"}</SectionNotice>
+    <SectionNotice role="status" tone="success" variant="line">{status ? labels[status.state] : "Checking Remote access…"}</SectionNotice>
     {status?.state === "enabling" && <SectionNotice quiet tone="info" variant="line">
       Check for a system password prompt (Keychain/Credential Manager) and enter it — this can take a moment.
     </SectionNotice>}
     {status?.temporary_url ?
       <SectionNotice tone="warning" variant="line">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</SectionNotice> :
       <SectionNotice tone="success" variant="line">Stable Remote link: this installation keeps the same address after reconnecting.</SectionNotice>}
-    {status && !status.available && <SectionNotice tone="info" variant="line">Remote Access is unavailable on this installation. Local StagePilot is unaffected.</SectionNotice>}
+    {status && !status.available && <SectionNotice tone="info" variant="line">Remote access is unavailable on this installation. Local StagePilot is unaffected.</SectionNotice>}
     {status?.provisioned && !status.credential_available && credentialWarning && <SectionNotice tone="warning" variant="line">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</SectionNotice>}
     {status?.permanently_revoked && <SectionNotice
       actions={<Button className="gap-2" variant="primary" disabled={busy || resetBusy} type="button" onClick={() => {
@@ -114,7 +114,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       group="Reset installation identity"
       tone="warning"
     >
-      Your previous Remote Access configuration could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
+      Your previous Remote access configuration could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
     </SectionNotice>}
     {status?.state === "error" && <SectionNotice tone="info" variant="line">Check your Internet connection. You can disable Remote and try enabling it again.</SectionNotice>}
     {status?.state === "reconnecting" && <SectionNotice tone="info" variant="line">Reconnecting. Check here for the current link once connected.</SectionNotice>}
@@ -147,7 +147,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         <Button variant="primary" disabled={busy} type="button" onClick={confirmDisableAccept}>Confirm disable</Button>
         <Button variant="secondary" type="button" onClick={cancelDisable}>Cancel</Button>
       </ActionRow>}
-      group="Confirm disable Remote Access"
+      group="Confirm disable Remote access"
       tone="warning"
     >
       Disconnect all people? Local StagePilot will keep running.
@@ -157,7 +157,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
     {status?.needs_operator && !local && <SectionNotice tone="info" variant="line">Create the first Operator from local StagePilot.</SectionNotice>}
     {bootstrap && <>
       <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">Create first Operator</h3>
-      <SectionNotice tone="warning" variant="line">Remote Access is running. Create the first Operator to allow sign-in.</SectionNotice>
+      <SectionNotice tone="warning" variant="line">Remote access is running. Create the first Operator to allow sign-in.</SectionNotice>
     </>}
     {(bootstrap || status && !status.needs_operator) && <>
       <SectionNotice tone="info" variant="line">Viewers are read-only. Operators can control StagePilot.</SectionNotice>

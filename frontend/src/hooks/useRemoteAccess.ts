@@ -19,7 +19,7 @@ export function friendlyRemoteError(cause: unknown): string {
     // than collapsing everything to the generic fallback below.
     if (cause.status === 503 && cause.message) return cause.message;
   }
-  return "Remote Access is unavailable. Local StagePilot is unaffected. Try again shortly.";
+  return "Remote access is unavailable. Local StagePilot is unaffected. Try again shortly.";
 }
 
 /**

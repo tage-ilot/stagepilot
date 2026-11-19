@@ -423,7 +423,7 @@ export function buildReadinessChecks({
     required: false,
     severity: "warning",
     status: "error",
-    detail: "Remote Access is turned on but cannot be reached. StagePilot keeps retrying; this computer is unaffected.",
+    detail: "Remote access is turned on but cannot be reached. StagePilot keeps retrying; this computer is unaffected.",
   });
   // Listed only when the optional Playback library has something actionable to say. Not required: it never blocks Ready.
   if (libraryLine) checks.push({
