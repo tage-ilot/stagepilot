@@ -764,13 +764,13 @@ describe("Save configuration SaveBar", () => {
     expect(bar()).toHaveTextContent("Couldn't save");
     fireEvent.click(screen.getByRole("button", {name: "Try again"}));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({server_port: 9000}));
-    expect(screen.getByText(/take effect after a backend restart/)).toBeInTheDocument();
+    expect(screen.getByText(/take effect after StagePilot restarts/)).toBeInTheDocument();
   });
 
   it("puts the restart sentence inside the Advanced section, under its settings", () => {
     withSettings();
     const note = document.querySelector("[data-part=note]")!;
-    expect(note).toHaveTextContent("Timezone, logging and port changes take effect after a backend restart.");
+    expect(note).toHaveTextContent("Timezone, logging and port changes take effect after StagePilot restarts.");
     const advanced = screen.getByRole("button", { name: /Advanced/ }).closest("[data-variant]")!;
     expect(advanced.contains(note)).toBe(true);
     // It follows the four fields, so it reads as a note to them rather than to the whole panel.
