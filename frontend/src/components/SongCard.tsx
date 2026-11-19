@@ -26,7 +26,7 @@ export function cardLibrary(song: LibraryPlanSong | undefined, now: number): Car
  * two lists read as the same thing: a small cover when Playback has a picture, the title, one line of facts, and under both a thin
  * bar of the arranged song. The caller draws the border and any buttons around it.
  */
-export function SongCardBody({ title, cover, sections, lead, chips, children }: {
+export function SongCardBody({ title, cover, sections, lead, chips, detail, children }: {
   title: string;
   cover: string | null;
   sections: LibrarySection[];
@@ -34,6 +34,8 @@ export function SongCardBody({ title, cover, sections, lead, chips, children }: 
   lead?: ReactNode;
   /** Small chips under the line of facts (a key, where the song comes from, why it cannot be used). Left out: nothing is drawn. */
   chips?: ReactNode;
+  /** More plain text under the line of facts, never cut short (the Presenter Link's arrangement). Left out: nothing is drawn. */
+  detail?: ReactNode;
   /** The line of facts under the title. */
   children: ReactNode;
 }) {
@@ -58,6 +60,7 @@ export function SongCardBody({ title, cover, sections, lead, chips, children }: 
             <span className="block truncate font-semibold text-ink" title={title}>{title}</span>
           </span>
           <span className="block line-clamp-2 text-xs tabular-nums text-ink-muted">{children}</span>
+          {detail}
           {chips && <span className="mt-1 flex flex-wrap items-center gap-1" data-part="chips">{chips}</span>}
         </span>
       </span>
@@ -112,8 +115,6 @@ export interface SongCardShellProps {
   children: ReactNode;
   /** Buttons beside the card's own (Lighting's x). */
   after?: ReactNode;
-  /** A part under the card, across its width (a Sections button and the order it opens). Left out: the card is one row. */
-  below?: ReactNode;
   /** The list item's own attributes (`data-*`, `title`). */
   item?: Omit<ComponentPropsWithoutRef<"li">, "className" | "children"> & DataAttributes;
 }
@@ -131,10 +132,10 @@ function CheckMark({ checked }: { checked: boolean }) {
  * ONE song card, around a `SongCardBody`: the border and fill, the outline when selected, a 44 px target. Used by the Lighting tab's
  * strip (press mode) and the Presenter Link's song list (check mode), so the two read as the same thing.
  */
-export function SongCardShell({ look, mode = "press", selected = false, disabled = false, label, describedBy, onActivate, children, after, below, item }: SongCardShellProps) {
+export function SongCardShell({ look, mode = "press", selected = false, disabled = false, label, describedBy, onActivate, children, after, item }: SongCardShellProps) {
   const check = mode === "check";
   return (
-    <li className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${look} ${selected ? SELECTED : ""}${below ? " flex-wrap" : ""}`} {...item}>
+    <li className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${look} ${selected ? SELECTED : ""}`} {...item}>
       {mode === "static" ? <div className={PRESSABLE.replace(" touch-manipulation", "")} data-part="card">{children}</div> : (
         <button
           aria-checked={check ? selected : undefined}
@@ -152,7 +153,6 @@ export function SongCardShell({ look, mode = "press", selected = false, disabled
       )}
       {check && <CheckMark checked={selected} />}
       {after}
-      {below && <div className="basis-full px-2.5 pb-1.5" data-part="below">{below}</div>}
     </li>
   );
 }

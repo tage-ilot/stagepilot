@@ -48,6 +48,11 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 EPOCH_DATE = datetime.date(2000, 1, 1)
+
+
+def song_master_id(setlist_song_id):
+    """The MultiTracks Song Master ID (what ProPresenter shows as MTID): 5 digits, like the real ones, and never the setlist song number it comes from."""
+    return 10_000 + (setlist_song_id - 1_000_000) % 90_000
 MIN_KEY_LENGTH = 32
 TIME_WINDOW_S = 120
 FAIL_LIMIT = 10
@@ -157,7 +162,7 @@ class State:
             sid = self.song_id(date, i)
             cover = self.covers[(i + (0 if rows is SIX else 1)) % len(self.covers)]
             items.append({
-                "setlist_song_id": sid, "content_id": 5_000_000 + sid, "order": i + 1, "title": title, "artist": artist,
+                "setlist_song_id": sid, "content_id": song_master_id(sid), "order": i + 1, "title": title, "artist": artist,
                 "key": {"id": 3, "name": key}, "key_original": {"id": 1, "name": original},
                 "bpm": bpm, "bpm_original": bpm, "length_s": length, "scan_length_s": scan,
                 "arrangement": "Default", "planning_center_song_id": None, "rental_expires_utc": None,
@@ -322,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, waveform(pps, row[5], index))
             if what == "beats":
                 return self._send(404, {"error": "not found"})
-            return self._send(200, {"setlist_song_id": int(m.group(1)), "content_id": 5_000_000 + int(m.group(1)), "title": row[0],
+            return self._send(200, {"setlist_song_id": int(m.group(1)), "content_id": song_master_id(int(m.group(1))), "title": row[0],
                                     "arrangement_detail": {"title": "Default", "sections": sections_for(row[5])}})
         if path in ("/", "/index.json"):
             return self._send(200, {"name": "fake playback-library", "version": state.args.version})

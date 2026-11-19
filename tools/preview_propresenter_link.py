@@ -130,7 +130,7 @@ def make_folder(root):
     days = (today - playback_library.EPOCH_DATE).days
 
     def content_id(index):
-        return 5_000_000 + 1_000_000 + days * 10 + index + 1
+        return playback_library.song_master_id(1_000_000 + days * 10 + index + 1)
 
     def write(file, title, index, seed, count_offs=1):
         groups = song_groups(count_offs)

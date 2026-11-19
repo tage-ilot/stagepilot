@@ -126,6 +126,9 @@ class Fake(unittest.TestCase):
         self.assertIsInstance(item["content_id"], int)
         self.assertEqual(detail["content_id"], item["content_id"])
         self.assertNotEqual(item["content_id"], sid)
+        # A Song Master ID looks like the real ones (4 to 6 digits); the setlist song number is a much longer one.
+        self.assertTrue(1_000 <= item["content_id"] <= 999_999, item["content_id"])
+        self.assertEqual(item["content_id"], fake.song_master_id(sid))
         sections = detail["arrangement_detail"]["sections"]
         self.assertGreater(len(sections), 5)
         self.assertAlmostEqual(sections[-1]["performed_end"], item["length_s"], places=2)

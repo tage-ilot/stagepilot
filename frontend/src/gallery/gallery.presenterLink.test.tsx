@@ -17,12 +17,12 @@ describe("the Presenter Link states", () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="presenter-link"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("presenter-link-", ""));
-    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "two-headers", "names", "playback", "mixed", "playback-stopped", "swap", "previewing", "progress", "result", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
+    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "playback-stopped", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
   });
 
   it("no playlists yet: nothing to choose, the button off with its reason", async () => {
     draw();
-    await waitFor(() => expect(within(sample("no-playlists")).getByTestId("add-songs-reason")).toHaveTextContent("Choose a playlist."), WAIT);
+    await waitFor(() => expect(within(sample("no-playlists")).getByTestId("add-songs-reason")).toHaveTextContent("Choose a playlist"), WAIT);
     expect(within(sample("no-playlists")).getByRole("button", { name: "Import songs to ProPresenter" })).toBeDisabled();
     expect(within(sample("no-playlists")).getByLabelText("Playlist").querySelectorAll("option")).toHaveLength(1);
   });
@@ -31,13 +31,15 @@ describe("the Presenter Link states", () => {
     draw();
     await waitFor(() => expect(within(sample("options")).getByLabelText("Section")).toHaveValue("Worship"), WAIT);
     expect(within(sample("options")).getByRole("button", { name: "Import songs to ProPresenter" })).toBeEnabled();
-    expect(Array.from(within(sample("options")).getByLabelText("Section").querySelectorAll("option")).map((o) => o.textContent)).toEqual(["Welcome", "Worship", "Message", "Closing", "End of Playlist"]);
+    expect(Array.from(within(sample("options")).getByLabelText("Section").querySelectorAll("option")).map((o) => o.textContent)).toEqual(["Welcome", "Worship", "Message", "Closing"]);
   });
 
-  it("the Section box: End of Playlist first, and two headers of one name show the engine's line and stop the button", async () => {
+  it("the Section box: the last section first (End of Playlist only with no section), and two headers of one name show the engine's line and stop the button", async () => {
     draw();
     await waitFor(() => expect(within(sample("end-of-playlist")).getByLabelText("Playlist")).toHaveValue("PL-SUNDAY"), WAIT);
-    expect(within(sample("end-of-playlist")).getByLabelText("Section")).toHaveValue("");
+    expect(within(sample("end-of-playlist")).getByLabelText("Section")).toHaveValue("Closing");
+    await waitFor(() => expect(within(sample("no-sections")).getByLabelText("Playlist")).toHaveValue("PL-WED"), WAIT);
+    expect(Array.from(within(sample("no-sections")).getByLabelText("Section").querySelectorAll("option")).map((o) => o.textContent)).toEqual(["End of Playlist"]);
     await waitFor(() => expect(hook("two-headers", "add-songs-two-headers")()).toHaveTextContent("More than one header in this playlist is named \u201CWorship\u201D."), WAIT);
     expect(within(sample("two-headers")).getByRole("button", { name: "Import songs to ProPresenter" })).toBeDisabled();
   });
@@ -53,14 +55,17 @@ describe("the Presenter Link states", () => {
     expect(within(sample("names")).getAllByTestId("add-songs-source-chip")).toHaveLength(4);
   });
 
-  it("Playback data: four songs with id, key and arrangement, and a section order that opens", async () => {
+  it("Playback data: four songs with key, mtID and the order written on the card, never Playback's own song number", async () => {
     draw();
-    await waitFor(() => expect(within(sample("playback")).getByTestId("add-songs-order")).toBeInTheDocument(), WAIT);
+    await waitFor(() => expect(within(sample("playback")).getAllByTestId("add-songs-order")).toHaveLength(4), WAIT);
     const rows = within(sample("playback")).getAllByTestId("add-songs-row");
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toHaveTextContent("5000101");
-    expect(rows[0]).toHaveTextContent("Key G (was F)");
-    expect(rows[0]).toHaveTextContent("Radio");
+    expect(rows.map((row) => within(row).getByTestId("add-songs-mtid").textContent)).toEqual(["43302", "23126", "31877", "8412"]);
+    expect(rows[0]).toHaveTextContent("G (was F) \u00B7 mtID 43302");
+    expect(rows[0]).toHaveTextContent("Count Off \u00B7 Intro \u00B7 Verse 1 \u00B7 Chorus");
+    expect(rows[0]).not.toHaveTextContent("Radio");
+    expect(rows[0]?.textContent).not.toMatch(/3038971\d/);
+    expect(within(rows[0]!).queryByRole("button", { name: /Sections/ })).toBeNull();
     expect(within(rows[0]!).getByTestId("library-bar")).toBeInTheDocument();
   });
 
@@ -74,10 +79,39 @@ describe("the Presenter Link states", () => {
   it("one press stops at a preview with a blocked song: the reason, the guess line and Skip", async () => {
     draw();
     await waitFor(() => expect(within(sample("playback-stopped")).getByRole("button", { name: "Skip those and import the rest" })).toBeEnabled(), WAIT);
-    expect(hook("playback-stopped", "add-songs-reason")()).toHaveTextContent("1 song cannot be imported yet (Firm Foundation)");
-    expect(hook("playback-stopped", "add-songs-stuck")()).toHaveTextContent("Blocked");
-    expect(hook("playback-stopped", "add-songs-guessed")()).toHaveTextContent("Guessed");
-    expect(within(sample("playback-stopped")).getAllByTestId("add-songs-mapping").map((node) => node.textContent).join(" ")).toContain("Interlude (1st use) uses the 2nd");
+    expect(hook("playback-stopped", "add-songs-reason")()).toHaveTextContent("1 can't be imported yet");
+    expect(hook("playback-stopped", "add-songs-stuck")()).toHaveTextContent("Can't map");
+    expect(hook("playback-stopped", "add-songs-guessed")()).toHaveTextContent("Check");
+    expect(hook("playback-stopped", "add-songs-summary")()).toHaveTextContent("3 to add \u00B7 1 can't map");
+    const phrases = within(sample("playback-stopped")).getAllByTestId("add-songs-phrase").map((node) => node.textContent);
+    expect(phrases).toContain("Interlude (3rd use): 2nd group");
+    expect(phrases).toContain("Missing: Bridge");
+  });
+
+  it("every status in one preview: the four of the old screenshot, then will import, can't map, no mtID, check, ready and new copy", async () => {
+    draw();
+    await waitFor(() => expect(hook("statuses", "add-songs-preview")()).toBeInTheDocument(), WAIT);
+    const rows = within(sample("statuses")).getAllByTestId("add-songs-preview-song");
+    expect(rows.map((row) => [row.querySelector("h3, span")?.textContent, within(row).getByTestId("add-songs-status").textContent?.replace(/^[^A-Za-z]+/, "")])).toEqual([
+      ["Holy Forever", "In playlist"], ["Battle Belongs", "Can't import"], ["Gratitude", "In playlist"], ["Firm Foundation", "Pick one"],
+      ["Living Hope", "Will import"], ["Graves Into Gardens", "Can't map"], ["Goodness of God", "No mtID"], ["What a Beautiful Name", "Check"],
+      ["Great Are You Lord", "Ready"], ["Build My Life", "New copy"],
+    ]);
+    expect(rows.map((row) => row.querySelector("[data-testid=add-songs-phrase]")?.textContent ?? null)).toEqual([
+      null, "Needs a Mac", null, null, null, "Missing: Bridge 2", null, "Interlude (3rd use): 2nd group", "Copy exists", "Playback order, \u201C(2)\u201D",
+    ]);
+    expect(within(rows[3]!).getAllByRole("listitem").map((file) => file.textContent)).toEqual(["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"]);
+    expect(within(sample("statuses")).getByTestId("add-songs-summary")).toHaveTextContent("4 to add \u00B7 2 in playlist \u00B7 1 can't import \u00B7 1 can't map \u00B7 1 no mtID \u00B7 1 pick one");
+    expect(within(sample("statuses")).getByTestId("add-songs-playlist-line")).toHaveTextContent("Sunday Morning Service \u203A Worship");
+    expect(within(sample("statuses")).queryByTestId("add-songs-version")).toBeNull();
+    // The cards are all ten songs, and the one with no number says so.
+    expect(within(sample("statuses")).getAllByTestId("add-songs-row")).toHaveLength(10);
+    expect(within(sample("statuses")).getByRole("checkbox", { name: "Goodness of God" }).closest("li")).toHaveTextContent("Bb \u00B7 mtID \u2014");
+  });
+
+  it("a song is playing: one short line at the top", async () => {
+    draw();
+    await waitFor(() => expect(hook("playing", "add-songs-playing")()).toHaveTextContent(/^Song playing: wait$/), WAIT);
   });
 
   it("the swap keeps the person's tick: Battle Belongs stays off when Playback gives the songs, and again when it loses them", async () => {
@@ -86,7 +120,7 @@ describe("the Presenter Link states", () => {
     await waitFor(() => expect(sample("swap").querySelector('[data-testid="add-songs-songs"]')).toHaveAttribute("data-source", "playback"), WAIT);
     expect(box("Battle Belongs").checked).toBe(false);
     expect(box("Holy Forever").checked).toBe(true);
-    expect(within(sample("swap")).getAllByTestId("add-songs-multitracks")).toHaveLength(4);
+    expect(within(sample("swap")).getAllByTestId("add-songs-mtid")).toHaveLength(4);
     within(sample("swap")).getByRole("button", { name: "Playback loses the songs" }).click();
     await waitFor(() => expect(sample("swap").querySelector('[data-testid="add-songs-songs"]')).toHaveAttribute("data-source", "planning-center"), WAIT);
     expect(box("Battle Belongs").checked).toBe(false);
@@ -97,9 +131,15 @@ describe("the Presenter Link states", () => {
     await waitFor(() => expect(within(sample("previewing")).getByRole("button", { name: /Importing/ })).toBeDisabled(), WAIT);
     await waitFor(() => expect(within(sample("progress")).getByTestId("add-songs-progress")).toBeInTheDocument(), WAIT);
     await waitFor(() => expect(within(sample("result")).getByTestId("add-songs-result")).toHaveAttribute("data-outcome", "done"), WAIT);
-    expect(within(sample("result")).getByTestId("add-songs-guess-note")).toHaveTextContent("Check in ProPresenter:");
+    expect(within(sample("result")).getByTestId("add-songs-result").querySelector("h3")).toHaveTextContent("Done: 4 added");
+    expect(within(sample("result")).getByTestId("add-songs-guess-note")).toHaveTextContent("Check");
+    expect(within(sample("result")).getByTestId("add-songs-guess-note")).toHaveTextContent("Interlude (3rd use): 2nd group");
+    await waitFor(() => expect(within(sample("result-differs")).getByTestId("add-songs-result").querySelector("h3")).toHaveTextContent("3 added, 1 differs"), WAIT);
+    expect(within(sample("result-differs")).getByTestId("add-songs-differences")).toHaveTextContent("Item 7: duration 80 \u2192 0");
+    await waitFor(() => expect(within(sample("result-stopped")).getByTestId("add-songs-result").querySelector("h3")).toHaveTextContent("Stopped: Can't import \u201CBattle Belongs\u201D"), WAIT);
     await waitFor(() => expect(within(sample("result-names")).getByTestId("add-songs-result")).toHaveAttribute("data-outcome", "done"), WAIT);
     await waitFor(() => expect(within(sample("live")).getByTestId("add-songs-result")).toHaveAttribute("data-outcome", "live_on_screen"), WAIT);
+    expect(within(sample("live")).getByTestId("add-songs-result").querySelector("h3")).toHaveTextContent("Live on screen: clear it, then try again");
     expect(within(sample("live")).getByRole("button", { name: "Try again" })).toBeInTheDocument();
     await waitFor(() => expect(within(sample("library")).getByTestId("add-songs-open-library")).toBeInTheDocument(), WAIT);
   });

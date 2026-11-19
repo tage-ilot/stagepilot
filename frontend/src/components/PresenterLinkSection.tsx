@@ -5,7 +5,7 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ServicePlan } from "../types";
 import { presenterRows } from "./addSongsSongs";
-import { canTryAgain, IMPORT_SONGS, IMPORTING, SKIP_AND_IMPORT } from "./addSongsWording";
+import { canTryAgain, IMPORT_SONGS, IMPORTING, PLAYING_WORDS, SKIP_AND_IMPORT } from "./addSongsWording";
 import { PlaylistPicker, PreviewBody, Progress, Reason, Result } from "./AddSongsParts";
 import { PresenterSongList } from "./PresenterSongList";
 import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
@@ -50,13 +50,14 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
   // The section never outlives the state that allowed it, unless it is running a job (it stays to say how it ended).
   if (!add.linkReady && !running && !finished) return null;
 
-  const reason = running ? "Importing songs. Wait here until it says it is finished." : finished ? null : add.blockedBy ?? add.stopped;
+  const reason = running ? "Importing: wait here" : finished ? null : add.blockedBy ?? add.stopped;
   return (
     <div className="space-y-4" data-phase={phase} data-testid="presenter-link-section">
       <p aria-live="polite" className="sr-only" data-testid="add-songs-live" role="status">{add.announcement}</p>
       <PlaylistPicker add={add} title={PRESENTER_LINK_NAME} />
-      {!add.linkReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone">{`The ${PRESENTER_LINK_NAME} is not ready now. Nothing was changed.`}</span></SectionNotice>}
-      {playing && !running && !finished && <SectionNotice tone="info"><span data-testid="add-songs-playing">A song is playing. You can look at a preview now, but songs can only be imported when it has ended.</span></SectionNotice>}
+      {!add.linkReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone" title="Nothing was changed.">{`${PRESENTER_LINK_NAME} not ready: nothing changed`}</span></SectionNotice>}
+      {/* The one line at the top when a song is playing; once the preview has stopped for it, the same words are the reason above the button. */}
+      {playing && !running && !finished && reason !== PLAYING_WORDS && <SectionNotice tone="info"><span data-testid="add-songs-playing">{PLAYING_WORDS}</span></SectionNotice>}
       {add.problem && <SectionNotice tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></SectionNotice>}
       <PresenterSongList add={add} headingId={ids.songs} />
       <div className="space-y-3">

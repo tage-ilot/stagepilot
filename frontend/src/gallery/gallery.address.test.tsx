@@ -21,7 +21,7 @@ describe("the gallery: the address box", () => {
   it("draws the same box in the three blocks: Lighting, Playback and ProPresenter", () => {
     render(<Frame only={["template-address"]} />);
     const empty = sample("template-address-empty");
-    expect(boxes(empty).map((box) => box.getAttribute("aria-label"))).toEqual(["Lighting host or IP address", "Playback computer", "Host"]);
+    expect(boxes(empty).map((box) => box.getAttribute("aria-label"))).toEqual(["Lighting host or IP address", "Playback host", "Host"]);
     for (const box of boxes(empty)) {
       expect(box.tagName).toBe("INPUT");
       expect(box).toHaveClass("font-mono", "!h-10");

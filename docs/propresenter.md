@@ -107,7 +107,7 @@ in the **Presenter Link** section of the **ProPresenter (Presentation) panel**; 
 has two sources, and it is ONE list:
 
 - **Playback has given the songs** (the Playback Library Link answers with fresh data and the loaded plan is paired with a Playback setlist):
-  the songs in Playback's setlist order, each **with the arrangement and the key Playback plays it in** and its MultiTracks id. This needs
+  the songs in Playback's setlist order, each **with the key Playback plays it in, its mtID and the order Playback plays**. This needs
   the Playback Library Link (for the songs, their sections, their keys and their MultiTracks numbers), the Presenter Link (for the files;
   **Ready**) and ProPresenter's own network setting (its API, port 1025).
 - **No Playback data yet:** the upcoming plan's **Planning Center song names**; each card has a small **Planning Center** chip (the
@@ -266,34 +266,65 @@ The section is drawn **only while the Presenter Link is Ready** (this computer, 
 said: the feature is optional. It is built from the section templates (a settings group for the options, the notices, the action row) and
 has no window; everything, including progress and the result, happens in place, under the button.
 
-1. **Playlist** and **Section**, side by side. **Section** lists the playlist's section (header) names in the playlist's order, then
-   **End of Playlist**. A section is every item after its header up to the next header; the songs go at the **end** of the chosen
-   section, right before the next header (for the last section, at the end of the playlist). The first default is **End of Playlist**.
-   The section that was last **used for an import** in that playlist (choosing one is not enough) is the default the next time, while
-   the playlist still has it; else **End of Playlist**. The last playlist and these sections are kept in this browser only. When a
-   playlist has two headers with the same name both are listed; choosing that name shows ProPresenter Link's own line under the box
-   (*More than one header in this playlist is named "Worship". Pick another place.*) and the button stays off: StagePilot does not guess.
+1. **Playlist** and **Section**, side by side. **Section** lists the playlist's section (header) names in the playlist's order and nothing
+   else: **End of Playlist** is offered **only when the playlist has no section header at all** (then it is the one option). A section is
+   every item after its header up to the next header; the songs go at the **end** of the chosen section, right before the next header (for
+   the last section, at the end of the playlist, so the last section is the same place as the end). The default is the section that was
+   last **used for an import** in that playlist (choosing one is not enough), while the playlist still has it; else the **last section**.
+   A remembered *End of Playlist* in a playlist that now has sections falls back to its last section. The last playlist and these
+   sections are kept in this browser only. When a playlist has two headers with the same name both are listed; choosing that name (it is
+   the default when it is the last section) shows ProPresenter Link's own line under the box (*More than one header in this playlist is
+   named "Worship". Pick another place.*) and the button stays off: StagePilot does not guess.
 2. **Songs**: the same song cards as the Lighting tab's songs (an auto-fill grid, the cover when the Library Link has one, the title, a
    small line of facts, the thin arrangement bar), with the count (`3 of 4 selected`, read out politely) and **Select all** / **Select
    none** above them. Every card starts selected: a selected card has the outline and a check mark; Space or Enter turns it on or off.
-   With Playback data a card shows the MultiTracks id, the arrangement (its whole order on hover, and **Sections** opens it on the card)
-   and a key chip (`Key Ab`, with `(was G)` for a key changed in Playback in the last day), in Playback's order; a song Playback gave no
-   number is a grey card that says it cannot be imported. Without Playback data a card is the Planning Center name and a **Planning
-   Center** chip. After a preview, the cards it stopped for carry its stamp (`Blocked`, `Needs a choice`) and a song with a guessed
-   section a **Guessed** chip.
-3. Above the button, only when it is off or the preview stopped: why, in words.
+   With Playback data a card shows, as plain text and nothing to open: one line `C · mtID 23126` (the key as letters, `Ab (was G)` for a
+   key changed in Playback in the last day, then **mtID** and the number), and under it the **order Playback plays**, section by section
+   (`Intro · Verse 1 · Chorus · Verse 2 · Chorus · Bridge · Chorus`, wrapping onto as many lines as it needs), above the thin bar. The
+   **mtID** is the MultiTracks **Song Master ID** (the same number ProPresenter shows as MTID and the one to type in Playback's search and
+   in ProPresenter's Search; the helper's `content_id`), never Playback's own song number (the long `setlist_song_id`). A song with no id
+   shows `mtID —`; a song Playback gave no number at all is a grey card that says `Can't import`. Without Playback data a card is the
+   Planning Center name and a **Planning Center** chip. After a preview, the cards it stopped for carry its chip (`Can't import`,
+   `Pick one`...) and a song with a guessed section a **Check** chip.
+3. Above the button, only when it is off or the preview stopped: why, in a few words.
 4. **Import songs to ProPresenter**: ONE button (`Importing…` while it works). It makes the preview and, when nothing is blocked and no song is playing, imports the songs at once.
    If a song is blocked or needs a choice, the playlist side is blocked, there is nothing to add, or a song is playing, it **stops after the
-   preview** with the reason in words and the preview under the button (a stamp per song: `Already there`, `New copy`, `Load first`,
-   `Used as is`, `Needs a choice`, `Blocked`; how sections matched; guesses are listed and never block). **Skip those and import the rest** is
-   offered when something can still be imported without the blocked songs; it never imports half silently. Changing a selection, the playlist or the
-   section after a preview marks it as old: press the button again.
-5. While it runs, each song and each step shows a word and a mark (`Done`, `Working`, `Failed`), the newest thing said is announced
-   politely, and the button and the options are off. The end is a result under the button: what was imported, anything ProPresenter shows
-   differently from the plan, the name of the playlist backup and, under a song whose sections were guessed, a short *Check in
-   ProPresenter:* note (information only). When ProPresenter is showing slides, media, announcements, props or messages the job stops
-   before touching the screen: *Stopped: ProPresenter is showing something on screen*, with **Try again** once it is clear. **Try again**
-   makes a fresh preview and adds it at once when it is clean.
+   preview**. The preview is short: the place (`Sunday Morning Service › Worship`), ONE line of counts (`1 to add · 2 in playlist · 1
+   can't import · 1 pick one`; zero counts are left out, red only when something blocks the whole import) and one row per song: the title,
+   ONE status chip (an icon and a word) and at most one short phrase (the table below). The long sentences are the chip's hover text and
+   what a screen reader hears. **Skip those and import the rest** is offered when something can still be imported without the blocked
+   songs; it never imports half silently. Changing a selection, the playlist or the section after a preview marks it as old (*Out of
+   date: press Import again*).
+5. While it runs, each step is a chip with one word (`Backup`, `Library`, `Importing`, `Copy`, `Loading`, `Playlist`, `Check`) and a
+   spinner, a check or a cross; the newest thing said is announced politely, and the button and the options are off. The end is a result
+   under the button: `Done: 3 added`, `3 added, 1 differs` or `Stopped: Can't import "Battle Belongs"`, a chip per song, anything
+   ProPresenter shows differently as short lines (`Item 7: duration 80 → 0`), under a song whose sections were guessed a `Check` chip with
+   the guess in a few words (information only), the name of the playlist backup as a small line and, small, ProPresenter's version. When
+   ProPresenter is showing slides, media, announcements, props or messages the job stops before touching the screen (`Live on screen:
+   clear it, then try again`), with **Try again** once it is clear. **Try again** makes a fresh preview and adds it at once when it is clean.
+
+#### The status words (preview, cards and result)
+
+One chip per song, one set of words, in the status colours (green done, teal news, red only for what stops a song, grey left out). The
+word is the status: colour never carries it alone.
+
+| Chip | Where | Phrase beside it | Means |
+| --- | --- | --- | --- |
+| `✓ In playlist` | preview, result | none | the song is already an item of the playlist: it is not added again |
+| `+ Ready` | preview | `Copy exists` or `Used as is` | a copy that plays this arrangement exists (or a Planning Center name goes in as it is), and it will be added |
+| `+ New copy` | preview | `Playback order, “(2)”` | a new file `<Song> (2)` is made with Playback's order |
+| `↓ Will import` | preview | none | ProPresenter does not have the song; it is imported through ProPresenter's Search, then copied |
+| `! Can't import` | preview, cards, result | `Needs a Mac`, `Rental ended`, `No arrangement`, `File unreadable`... | the song cannot be done; the full reason is the hover text |
+| `? Pick one` | preview, cards | the file names, one per line | more than one file in ProPresenter is this song; StagePilot does not guess |
+| `! Can't map` | preview, result | `Missing: Bridge 2` | these sections have no group of that name in the song |
+| `! No mtID` | preview | none | Playback gave no MultiTracks number for the song |
+| `? Check` | preview, cards, result | `Interlude (3rd use): 2nd group` | a section fit more than one group and one was picked: look at it in ProPresenter (never blocks) |
+| `− Skipped` | preview, result | none | left out on purpose (**Skip those and import the rest**) |
+| `✓ Added` | result | none | the song is in the playlist now |
+| `! Not loaded` | result | none | ProPresenter has not loaded the new copy yet |
+
+Whole-job lines at the top: `Song playing: wait` (nothing is imported while a song plays) and, after the job, `Live on screen: clear it,
+then try again`. The cards say `Not in ProPresenter` (with `Needs Playback data`) for a Planning Center name ProPresenter does not have.
 
 ### Search: finding ProPresenter on the network
 
@@ -320,7 +351,7 @@ Live Link** type the host and the API port, **Save configuration** (or press **C
 from ProPresenter, allow "ProPresenter Link" (the name macOS shows for the Presenter Link; or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
 In ProPresenter, Settings > Network must have the API on.
 
-**Import the songs.** Configuration > Presentation > **Presenter Link** > choose the playlist and the section (or **End of Playlist**) >
+**Import the songs.** Configuration > Presentation > **Presenter Link** > choose the playlist and the section (the last one is the default; **End of Playlist** only for a playlist with no section) >
 leave the songs you want selected (they are Playback's when Playback has given them, else the plan's Planning Center names) > **Import
 songs to ProPresenter**. It imports songs, arrangements and keys into the playlist, at the end of the chosen section (names already in
 ProPresenter go in as they are), and the playlist's contents are replaced with what the preview shows. If something is blocked it stops
@@ -331,7 +362,7 @@ before the service, not while a song plays and not while ProPresenter shows slid
 Count Off groups), StagePilot picks one and goes on, then lists the pick under the song. Open the song in ProPresenter and change that
 section by hand if the pick is wrong.
 
-**"ProPresenter is showing something on screen. Clear it or wait, then press Try again."** StagePilot does not click or type in ProPresenter
+**"Live on screen: clear it, then try again."** (ProPresenter's own sentence: *ProPresenter is showing something on screen. Clear it or wait, then press Try again.*) StagePilot does not click or type in ProPresenter
 while slides, media, announcements, props or messages are on screen. Clear the output (a camera input does not count), then press **Try again**.
 
 **"Open the Playback library in ProPresenter once, then press Try again."** ProPresenter loads a new song file only when it looks at its

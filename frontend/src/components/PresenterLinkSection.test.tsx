@@ -26,7 +26,7 @@ const SONGS = [
   { title: "Battle Belongs", key: "Ab", arrangement: "Long ending" },
   { title: "Gratitude", key: "A", arrangement: "Default" },
 ];
-const plan = () => libraryPlan(SONGS.map((s, i) => librarySongOf(s.title, i + 1, { library: librarySong({ title: s.title, position: i + 1, setlist_song_id: 2000001 + i, content_id: 5000001 + i, key: s.key, arrangement: s.arrangement, sections: [{ name: "Verse 1", start: 0, end: 1 }, { name: "Chorus", start: 1, end: 2 }] }) })));
+const plan = () => libraryPlan(SONGS.map((s, i) => librarySongOf(s.title, i + 1, { library: librarySong({ title: s.title, position: i + 1, setlist_song_id: 2000001 + i, content_id: [23126, 31877, 8412][i]!, key: s.key, arrangement: s.arrangement, sections: [{ name: "Verse 1", start: 0, end: 1 }, { name: "Chorus", start: 1, end: 2 }] }) })));
 const library = (over: Partial<PlaybackLibraryController> = {}) => libraryController("ready", { plan: plan(), ...over });
 const REF = ["2000001", "2000002", "2000003"];
 /** The loaded Planning Center plan: the names the list shows until Playback has given the songs. */
@@ -74,6 +74,12 @@ async function press(user: ReturnType<typeof userEvent.setup>, made: AddSongsPla
 }
 /** The sentences the section no longer says (docs/propresenter.md explains instead). */
 const REMOVED = /This imports songs|This adds the songs as they are|contents are replaced|Nothing in ProPresenter changes until|Playback has not given the songs yet|These songs come from Playback|ProPresenter does not show the key/;
+/** What a person sees: the element's text without the parts only a screen reader gets. */
+const visibleText = (element: Element) => {
+  const copy = element.cloneNode(true) as Element;
+  copy.querySelectorAll(".sr-only").forEach((node) => node.remove());
+  return copy.textContent ?? "";
+};
 const checked = (box: HTMLElement) => box.getAttribute("aria-checked") === "true";
 const nameOf = (row: HTMLElement) => within(row).getByRole("checkbox").getAttribute("aria-label");
 
@@ -180,11 +186,17 @@ describe("the list: Planning Center names until Playback has given the songs", (
     expect(missing).not.toBeChecked();
     const row = missing.closest("li")!;
     expect(row).toHaveAttribute("data-blocked", "missing");
+    // A chip and one short phrase; the full sentence is the hover text.
     expect(row).toHaveTextContent("Not in ProPresenter");
-    expect(row).toHaveTextContent("Playback data is needed to import it.");
+    expect(within(row).getByTestId("add-songs-why")).toHaveTextContent("Needs Playback data");
+    expect(within(row).getByTestId("add-songs-why")).toHaveAttribute("title", "Playback data is needed to import it.");
+    expect(row.textContent).not.toMatch(/\.$/);
     expect(missing).toHaveAccessibleDescription(/Not in ProPresenter/);
     expect(screen.getByRole("checkbox", { name: "Gratitude" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "Gratitude" }).closest("li")).toHaveTextContent("More than one song in ProPresenter has this title");
+    const several = screen.getByRole("checkbox", { name: "Gratitude" }).closest("li")!;
+    expect(several).toHaveTextContent("Pick one");
+    expect(several).toHaveTextContent("Several files");
+    expect(within(several).getByTestId("add-songs-blocked")).toHaveAttribute("title", "More than one song in ProPresenter has this title.");
     // The disabled look: grey and dashed, like a Lighting card with nothing saved.
     expect(row.className).toMatch(/border-dashed/);
     expect(screen.getByRole("checkbox", { name: "Holy Forever" })).toBeEnabled();
@@ -223,7 +235,7 @@ describe("the list: Planning Center names until Playback has given the songs", (
 });
 
 describe("the list: Playback's songs once it has given them", () => {
-  it("shows title, MultiTracks id, key and arrangement on each card, in Playback's order, selected", async () => {
+  it("shows title, key, mtID and the order on each card, in Playback's order, selected", async () => {
     view();
     await ready();
     expect(section().textContent).not.toMatch(REMOVED);
@@ -232,10 +244,12 @@ describe("the list: Playback's songs once it has given them", () => {
     const rows = within(list).getAllByTestId("add-songs-row");
     expect(rows.map((row) => [
       nameOf(row),
-      within(row).getByTestId("add-songs-multitracks").textContent,
       within(row).getByTestId("add-songs-key").textContent,
-      within(row).getByTestId("add-songs-arrangement").textContent,
-    ])).toEqual([["Holy Forever", "5000001", "Key G", "Default"], ["Battle Belongs", "5000002", "Key Ab", "Long ending"], ["Gratitude", "5000003", "Key A", "Default"]]);
+      within(row).getByTestId("add-songs-mtid").textContent,
+      within(row).getByTestId("add-songs-order").textContent,
+    ])).toEqual([["Holy Forever", "G", "23126", "Verse 1 \u00B7 Chorus"], ["Battle Belongs", "Ab", "31877", "Verse 1 \u00B7 Chorus"], ["Gratitude", "A", "8412", "Verse 1 \u00B7 Chorus"]]);
+    // Plain text: no "Key" word, no MultiTracks, no arrangement name.
+    expect(list.textContent).not.toMatch(/\bKey\b|MultiTracks|Default|Long ending|Sections/);
     for (const box of within(list).getAllByRole("checkbox")) expect(box).toBeChecked();
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("3 of 3 selected");
     expect(screen.queryByTestId("add-songs-source-chip")).toBeNull();
@@ -250,19 +264,14 @@ describe("the list: Playback's songs once it has given them", () => {
     expect(screen.getAllByTestId("add-songs-row").map(nameOf)).toEqual(["First", "Second"]);
   });
 
-  it("shows the order of the sections by pressing Sections, and on hover", async () => {
+  it("shows the order of the sections on the card with nothing to press, and the full names on hover", async () => {
     view();
-    const user = await ready();
+    await ready();
     const row = screen.getAllByTestId("add-songs-row")[0]!;
-    expect(within(row).getByTestId("add-songs-arrangement")).toHaveAttribute("title", "Verse 1, Chorus");
-    const button = within(row).getByRole("button", { name: /Sections/ });
-    expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("add-songs-order")).toBeNull();
-    await user.click(button);
-    expect(button).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("add-songs-order")).toHaveTextContent("Holy Forever plays: Verse 1, Chorus.");
-    await user.click(button);
-    expect(screen.queryByTestId("add-songs-order")).toBeNull();
+    expect(within(row).getByTestId("add-songs-order")).toHaveTextContent("Verse 1 \u00B7 Chorus");
+    expect(row).toHaveAttribute("title", "Holy Forever: Verse 1, Chorus");
+    expect(within(row).queryByRole("button", { name: /Sections/ })).toBeNull();
+    expect(row.querySelector("[aria-expanded]")).toBeNull();
   });
 
   it("a song can be ticked off by its name, and all of them at once", async () => {
@@ -281,7 +290,9 @@ describe("the list: Playback's songs once it has given them", () => {
     view({ library: lib });
     await ready();
     expect(screen.getByTestId("add-songs-unnamed")).toHaveTextContent("Odd One");
-    expect(screen.getByTestId("add-songs-unnamed")).toHaveTextContent("Playback gave this song no number, so it cannot be imported.");
+    expect(screen.getByTestId("add-songs-unnamed")).toHaveTextContent("Can't import");
+    expect(screen.getByTestId("add-songs-unnamed")).toHaveTextContent("No Playback number");
+    expect(within(screen.getByTestId("add-songs-unnamed")).getByTestId("add-songs-blocked")).toHaveAttribute("title", "Playback gave this song no number, so it cannot be imported.");
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
 
@@ -311,13 +322,13 @@ describe("the swap between the two sources", () => {
     const before = screen.getAllByTestId("add-songs-row");
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("2 of 3 selected");
     // Playback gives the songs (one more than the plan has names for).
-    const lib = library({ plan: libraryPlan([...plan().songs, librarySongOf("Brand New", 4, { library: librarySong({ title: "Brand New", position: 4, setlist_song_id: 2000004, content_id: 5000004 }) })]) });
+    const lib = library({ plan: libraryPlan([...plan().songs, librarySongOf("Brand New", 4, { library: librarySong({ title: "Brand New", position: 4, setlist_song_id: 2000004, content_id: 16500 }) })]) });
     again({ library: lib });
     const after = screen.getAllByTestId("add-songs-row");
     expect(screen.getByTestId("add-songs-songs")).toHaveAttribute("data-source", "playback");
     expect(after.slice(0, 3)).toEqual(before);
     expect(after.map((row) => checked(within(row).getByRole("checkbox")))).toEqual([true, false, true, true]);
-    expect(within(after[1]!).getByTestId("add-songs-key")).toHaveTextContent("Key Ab");
+    expect(within(after[1]!).getByTestId("add-songs-key")).toHaveTextContent(/^Ab$/);
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("3 of 4 selected");
     // And back when the data is lost: the ticks stay.
     again({ library: undefined });
@@ -350,7 +361,7 @@ describe("the swap between the two sources", () => {
 });
 
 describe("the options: playlist and section", () => {
-  it("lists the playlists (a folder is named) and, once one is chosen, the section names in the playlist's order and End of Playlist", async () => {
+  it("lists the playlists (a folder is named) and, once one is chosen, the section names in the playlist's order, with End of Playlist only when there is no section", async () => {
     view();
     const user = await ready();
     const playlist = screen.getByLabelText("Playlist");
@@ -358,11 +369,24 @@ describe("the options: playlist and section", () => {
     expect(playlist).toHaveValue("");
     expect(screen.getByLabelText("Section")).toBeDisabled();
     await choose(user);
-    expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Welcome", "Worship", "Message", "End of Playlist"]);
-    expect(screen.getByLabelText("Section")).toHaveValue("");
+    // No End of Playlist next to real sections: the last section is the same place.
+    expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Welcome", "Worship", "Message"]);
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
+    expect(screen.queryByRole("option", { name: "End of Playlist" })).toBeNull();
     expect(section().textContent).not.toMatch(/After \u201C/);
     await user.selectOptions(screen.getByLabelText("Playlist"), "PL-WED");
     expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["End of Playlist"]);
+    expect(screen.getByLabelText("Section")).toHaveValue("");
+    await user.selectOptions(screen.getByLabelText("Playlist"), "PL-YOUTH");
+    expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Games"]);
+  });
+
+  it("offers no option at all (a dash) until a playlist is chosen", async () => {
+    view();
+    await ready();
+    const box = screen.getByLabelText("Section");
+    expect(box).toBeDisabled();
+    expect(within(box).queryByRole("option", { name: "End of Playlist" })).toBeNull();
   });
 
   it("is built from the settings template: a group named Presenter Link, two fields side by side", async () => {
@@ -407,12 +431,19 @@ describe("the last playlist, and per playlist the section last USED FOR AN IMPOR
     await screen.findByTestId("add-songs-progress");
   };
 
-  it("the very first default is End of Playlist", async () => {
+  it("the very first default is the LAST section (the same place as the end); a playlist with no section starts at its one option, End of Playlist", async () => {
     view();
     const user = await ready();
     await choose(user);
-    expect(screen.getByLabelText("Section")).toHaveValue("");
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
+    expect(within(screen.getByLabelText("Section")).getByRole("option", { selected: true })).toHaveTextContent("Message");
+    await choose(user, "PL-WED");
     expect(within(screen.getByLabelText("Section")).getByRole("option", { selected: true })).toHaveTextContent("End of Playlist");
+    // The last section is what is asked of the engine: after its header, which is the end of that playlist.
+    await choose(user, "PL-SUNDAY");
+    await press(user);
+    await screen.findByTestId("add-songs-progress");
+    expect(vi.mocked(api.previewAddSongs).mock.calls[0]![0]).toMatchObject({ after_header: "Message" });
   });
 
   it("choosing a section is not remembered; an import is, for that playlist, and is the default the next time", async () => {
@@ -424,7 +455,7 @@ describe("the last playlist, and per playlist the section last USED FOR AN IMPOR
     view();
     await ready();
     expect(screen.getByLabelText("Playlist")).toHaveValue("PL-SUNDAY");
-    expect(screen.getByLabelText("Section")).toHaveValue("");
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
     await importInto(user, "PL-SUNDAY", "Worship");
     expect(stored()).toEqual({ playlist_id: "PL-SUNDAY", places: { "PL-SUNDAY": "Worship" } });
     cleanup();
@@ -447,12 +478,24 @@ describe("the last playlist, and per playlist the section last USED FOR AN IMPOR
     expect(screen.getByLabelText("Section")).toHaveValue("Message");
   });
 
-  it("an import to End of Playlist is remembered as End of Playlist", async () => {
+  it("an import into a playlist with no section is remembered as End of Playlist", async () => {
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "PL-SUNDAY", places: { "PL-SUNDAY": "Worship" } }));
     view();
     const user = await ready();
-    await importInto(user, "PL-SUNDAY", "");
-    expect(stored().places).toEqual({ "PL-SUNDAY": "" });
+    await importInto(user, "PL-WED", "");
+    expect(stored().places).toEqual({ "PL-SUNDAY": "Worship", "PL-WED": "" });
+    expect(vi.mocked(api.previewAddSongs).mock.calls[0]![0]).toMatchObject({ place: "end" });
+  });
+
+  it("a remembered End of Playlist in a playlist that now has sections falls back to the last section; a remembered section in one that has none, to End of Playlist", async () => {
+    window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "PL-SUNDAY", places: { "PL-SUNDAY": "", "PL-WED": "Worship" } }));
+    view();
+    const user = await ready();
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
+    expect(within(screen.getByLabelText("Section")).queryByRole("option", { name: "End of Playlist" })).toBeNull();
+    await user.selectOptions(screen.getByLabelText("Playlist"), "PL-WED");
+    expect(screen.getByLabelText("Section")).toHaveValue("");
+    expect(addButton()).toBeEnabled();
   });
 
   it("a preview that stopped (nothing imported) remembers nothing", async () => {
@@ -464,12 +507,12 @@ describe("the last playlist, and per playlist the section last USED FOR AN IMPOR
     expect(stored().places).toEqual({});
   });
 
-  it("falls back to End of Playlist when the remembered section is not in the playlist any more, and to nothing when the playlist is gone", async () => {
+  it("falls back to the last section when the remembered section is not in the playlist any more, and to nothing when the playlist is gone", async () => {
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "PL-SUNDAY", places: { "PL-SUNDAY": "Old header" } }));
     const { unmount } = view();
     await ready();
     expect(screen.getByLabelText("Playlist")).toHaveValue("PL-SUNDAY");
-    expect(screen.getByLabelText("Section")).toHaveValue("");
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
     unmount();
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "GONE", places: {} }));
     view();
@@ -481,8 +524,8 @@ describe("the last playlist, and per playlist the section last USED FOR AN IMPOR
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "PL-SUNDAY", place: "Worship" }));
     const older = view();
     await ready();
-    // The older shape remembered a choice, not an import: the section is not taken from it.
-    expect(screen.getByLabelText("Section")).toHaveValue("");
+    // The older shape remembered a choice, not an import: the section is not taken from it (the last section shows).
+    expect(screen.getByLabelText("Section")).toHaveValue("Message");
     older.unmount();
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, "{not json");
     const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
@@ -515,7 +558,9 @@ describe("two headers with the same name", () => {
     const user = userEvent.setup();
     await screen.findByRole("option", { name: "Twice" });
     await user.selectOptions(screen.getByLabelText("Playlist"), "PL-TWICE");
-    expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Worship", "Message", "Worship", "End of Playlist"]);
+    expect(within(screen.getByLabelText("Section")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Worship", "Message", "Worship"]);
+    // The last section is the default, and its name is there twice: the line shows at once and the button waits.
+    await user.selectOptions(screen.getByLabelText("Section"), "Message");
     expect(screen.queryByTestId("add-songs-two-headers")).toBeNull();
     await user.selectOptions(screen.getByLabelText("Section"), "Worship");
     const line = screen.getByTestId("add-songs-two-headers");
@@ -530,6 +575,21 @@ describe("two headers with the same name", () => {
   });
 });
 
+describe("the Section default when the last section's name is there twice", () => {
+  it("shows the engine's line at once and keeps the button off until another section is chosen", async () => {
+    vi.mocked(api.getProPresenterPlaylists).mockResolvedValue({ playlists: [{ id: "PL-TWICE", name: "Twice", folder: null, headers: ["Worship", "Message", "Worship"] }] });
+    view();
+    const user = userEvent.setup();
+    await screen.findByRole("option", { name: "Twice" });
+    await user.selectOptions(screen.getByLabelText("Playlist"), "PL-TWICE");
+    expect(screen.getByLabelText("Section")).toHaveValue("Worship");
+    expect(screen.getByTestId("add-songs-two-headers")).toBeInTheDocument();
+    expect(addButton()).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("Section"), "Message");
+    expect(addButton()).toBeEnabled();
+  });
+});
+
 describe("the one button: when it is off, and why", () => {
   const reason = () => screen.getByTestId("add-songs-reason").textContent;
 
@@ -537,13 +597,13 @@ describe("the one button: when it is off, and why", () => {
     view();
     const user = await ready();
     expect(addButton()).toBeDisabled();
-    expect(reason()).toBe("Choose a playlist.");
+    expect(reason()).toBe("Choose a playlist");
     await choose(user);
     expect(addButton()).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Select none" }));
     expect(addButton()).toBeDisabled();
-    expect(reason()).toBe("Select at least one song.");
-    expect(addButton()).toHaveAccessibleDescription("Select at least one song.");
+    expect(reason()).toBe("Select a song");
+    expect(addButton()).toHaveAccessibleDescription("Select a song");
   });
 
   it("is off until the section is a header the playlist has", async () => {
@@ -577,7 +637,7 @@ describe("the one button: when it is off, and why", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5); });
     again({ link: linkController(helperStatus("not_answering")) });
     // The job is running: the section stays to say how it ends, and says the Link is gone.
-    expect(screen.getByTestId("add-songs-link-gone")).toHaveTextContent("The Presenter Link is not ready now. Nothing was changed.");
+    expect(screen.getByTestId("add-songs-link-gone")).toHaveTextContent("Presenter Link not ready: nothing changed");
   });
 });
 
@@ -652,12 +712,16 @@ describe("the one button: preview, then add, in one press", () => {
     it("stops after the preview when a song is blocked or needs a choice: nothing is applied, the reason is in words, Skip is offered", async () => {
       await stopped();
       expect(api.applyAddSongs).not.toHaveBeenCalled();
-      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("2 songs cannot be imported yet (Battle Belongs, Gratitude). Skip those to import the rest, or fix them and press Import songs to ProPresenter again.");
+      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("2 can't be imported yet: skip them, or fix them and try again");
+      // One neutral line of counts, then a chip per song.
+      expect(screen.getByTestId("add-songs-summary")).toHaveTextContent("1 to add \u00B7 1 can't import \u00B7 1 pick one");
+      expect(screen.getByTestId("add-songs-summary").className).not.toMatch(/danger|warning/);
+      expect(screen.getAllByTestId("add-songs-status").map((chip) => chip.textContent)).toEqual(["+New copy", "!Can't import", "?Pick one"]);
       expect(screen.getByRole("button", { name: "Skip those and import the rest" })).toBeEnabled();
       const lines = screen.getAllByTestId("add-songs-preview-song");
       expect(lines.map((line) => line.getAttribute("data-action"))).toEqual(["copy", "blocked", "needs_choice"]);
       expect(screen.getByRole("heading", { name: "Preview" })).toHaveFocus();
-      expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/^Preview ready\. 2 songs cannot be imported yet/);
+      expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/^Preview ready\. 2 can't be imported yet/);
     });
 
     it("Skip those and import the rest applies the preview with the stuck songs named as skipped", async () => {
@@ -679,31 +743,42 @@ describe("the one button: preview, then add, in one press", () => {
     it("offers no Skip when every song is stuck, and says to fix them", async () => {
       await stopped(addPlan([addSong({ ref_id: REF[0]!, title: "Holy Forever", action: "blocked", reason: "x" })]));
       expect(screen.queryByRole("button", { name: "Skip those and import the rest" })).toBeNull();
-      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("1 song cannot be imported yet (Holy Forever). Fix them, or select other songs, and press Import songs to ProPresenter again.");
+      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("1 can't be imported yet: fix them, or select other songs");
     });
 
-    it("stops, with the sentence, when the playlist side is blocked, and Skip would not help", async () => {
+    it("stops, in a few words, when the playlist side is blocked (the engine's sentence is for screen readers), and Skip would not help", async () => {
       const blocked = copyPlan();
       blocked.playlist.blocked = "That header is in the playlist twice.";
       await stopped(blocked);
-      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Blocked: That header is in the playlist twice.");
-      expect(screen.getByTestId("add-songs-playlist-blocked")).toHaveTextContent("Blocked: That header is in the playlist twice.");
+      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Playlist is blocked");
+      // The one case where the counts line is red: something blocks the whole import.
+      expect(screen.getByTestId("add-songs-summary")).toHaveTextContent("Playlist is blocked");
+      expect(screen.getByTestId("add-songs-summary").className).toMatch(/danger/);
+      expect(screen.getByTestId("add-songs-playlist-blocked")).toHaveTextContent("That header is in the playlist twice.");
+      expect(screen.getByTestId("add-songs-playlist-blocked")).toHaveClass("sr-only");
       expect(screen.queryByRole("button", { name: "Skip those and import the rest" })).toBeNull();
       expect(api.applyAddSongs).not.toHaveBeenCalled();
     });
 
     it("stops, with the sentence, when there is nothing to add", async () => {
       await stopped(addPlan([addSong({ ref_id: REF[0]!, title: "Holy Forever", action: "reuse", already_in_playlist: true })], { can_apply: false, to_add: 0 }));
-      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("There is nothing to import: every selected song is already in the playlist.");
+      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Nothing to import: all in playlist");
+      expect(screen.getByTestId("add-songs-summary")).toHaveTextContent("0 to add \u00B7 1 in playlist");
+      expect(screen.getByTestId("add-songs-status")).toHaveTextContent("In playlist");
       expect(screen.getByTestId("add-songs-song-sentence")).toHaveTextContent("It is already in this playlist, so it is not added again.");
       expect(api.applyAddSongs).not.toHaveBeenCalled();
     });
 
-    it("a song that is playing stops it after the preview, with that reason; pressing again when it has ended adds", async () => {
+    it("a song that is playing says so in one short line at the top, before and after the preview; pressing again when it has ended adds", async () => {
+      const first = view({ playing: true });
+      await ready();
+      expect(screen.getByTestId("add-songs-playing")).toHaveTextContent(/^Song playing: wait$/);
+      first.unmount();
       const { user, again } = await stopped(copyPlan(), { playing: true });
       expect(api.applyAddSongs).not.toHaveBeenCalled();
-      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("A song is playing. Wait until it has ended, then try again.");
-      expect(screen.getByTestId("add-songs-playing")).toHaveTextContent("A song is playing. You can look at a preview now, but songs can only be imported when it has ended.");
+      // After the preview the same words are the reason above the button: one line, not two.
+      expect(screen.getByTestId("add-songs-reason")).toHaveTextContent(/^Song playing: wait$/);
+      expect(screen.queryByTestId("add-songs-playing")).toBeNull();
       expect(addButton()).toBeEnabled();
       expect(screen.queryByRole("button", { name: "Skip those and import the rest" })).toBeNull();
       again({ playing: false });
@@ -716,12 +791,12 @@ describe("the one button: preview, then add, in one press", () => {
     it("goes stale when a song, the playlist or the section changes: Skip goes, and the preview says to press again", async () => {
       const { user } = await stopped();
       await user.click(screen.getByRole("checkbox", { name: "Gratitude" }));
-      expect(screen.getByTestId("add-songs-stale")).toHaveTextContent("You changed something since this preview. Press Import songs to ProPresenter again.");
+      expect(screen.getByTestId("add-songs-stale")).toHaveTextContent("Out of date: press Import again");
       expect(screen.queryByRole("button", { name: "Skip those and import the rest" })).toBeNull();
       await user.click(screen.getByRole("checkbox", { name: "Gratitude" }));
       expect(screen.queryByTestId("add-songs-stale")).toBeNull();
       expect(screen.getByRole("button", { name: "Skip those and import the rest" })).toBeEnabled();
-      await user.selectOptions(screen.getByLabelText("Section"), "");
+      await user.selectOptions(screen.getByLabelText("Section"), "Welcome");
       expect(screen.getByTestId("add-songs-stale")).toBeInTheDocument();
       await user.selectOptions(screen.getByLabelText("Section"), "Worship");
       await user.selectOptions(screen.getByLabelText("Playlist"), "PL-WED");
@@ -729,27 +804,34 @@ describe("the one button: preview, then add, in one press", () => {
       expect(api.applyAddSongs).not.toHaveBeenCalled();
     });
 
-    it("shows how sections were matched (each sentence once), the notes, the warnings and the version in the preview", async () => {
+    it("keeps how sections were matched, the notes and the warnings out of sight: only for a screen reader and the hover text; no key sentence, no version", async () => {
       const line = "\u201CCount Off\u201D: matched by name to the blank group, the only group with that name.";
       const made = addPlan([
-        addSong({ ref_id: REF[0]!, title: "Holy Forever", notes: [line, "The key G is saved in the copy."], mapping: [{ section: "Count Off", group: null, how: "only", line }, { section: "Verse 1", group: "Verse 1", how: "full", line: null }] }),
+        addSong({ ref_id: REF[0]!, title: "Holy Forever", notes: [line, "The key G is saved in the copy. ProPresenter does not show it for these songs; StagePilot does."], mapping: [{ section: "Count Off", group: null, how: "only", line }, { section: "Verse 1", group: "Verse 1", how: "full", line: null }] }),
         addSong({ ref_id: REF[1]!, title: "Battle Belongs", action: "blocked", reason: "x" }),
       ], { warnings: ["ProPresenter is older than the one StagePilot was tried with."] });
       await stopped(made);
-      expect(screen.getByTestId("add-songs-mapping")).toHaveTextContent("All 2 sections matched exactly to the song's own groups.");
-      expect(screen.getAllByText(line)).toHaveLength(1);
-      expect(screen.getByTestId("add-songs-notes")).toHaveTextContent("The key G is saved in the copy.");
+      const first = screen.getAllByTestId("add-songs-preview-song")[0]!;
+      const said = within(first).getByTestId("add-songs-song-sentence");
+      expect(said).toHaveClass("sr-only");
+      expect(said.textContent).toContain("All 2 sections matched exactly to the song's own groups.");
+      expect(said.textContent).toContain(line);
+      expect(screen.getAllByText(line, { exact: false })).toHaveLength(1);
+      expect(within(first).getByTestId("add-songs-status")).toHaveAttribute("title", said.textContent!);
+      expect(screen.getByTestId("add-songs-warnings")).toHaveClass("sr-only");
       expect(screen.getByTestId("add-songs-warnings")).toHaveTextContent("ProPresenter is older than the one StagePilot was tried with.");
-      expect(screen.getByTestId("add-songs-version")).toHaveTextContent("ProPresenter 19.0.1 (API v1)");
-      expect(screen.getByRole("list", { name: "How Holy Forever was matched" })).toBeInTheDocument();
-      expect(screen.getByRole("list", { name: "Notes about Holy Forever" })).toBeInTheDocument();
+      // The key is on the card; the sentence about it is gone, and the version is only in the result.
+      expect(section().textContent).not.toMatch(/key G is saved|ProPresenter does not show/);
+      expect(screen.queryByTestId("add-songs-version")).toBeNull();
+      expect(screen.queryByRole("list", { name: "How Holy Forever was matched" })).toBeNull();
+      expect(section().textContent).not.toMatch(REMOVED);
       expect(screen.queryByTestId("add-songs-nothing-changes")).toBeNull();
       expect(screen.queryByTestId("add-songs-imports")).toBeNull();
-      expect(section().textContent).not.toMatch(REMOVED);
-      expect(screen.getByTestId("add-songs-playlist-line")).toHaveTextContent("Imports 1 song at the end of the section Worship in Sunday Morning Service. Other items stay as they are.");
+      expect(screen.getByTestId("add-songs-playlist-line")).toHaveTextContent("Sunday Morning Service \u203A Worship");
+      expect(screen.getByTestId("add-songs-summary")).toHaveTextContent("1 to add \u00B7 1 can't import");
     });
 
-    it("renders every outcome as a plain checklist line with a stamp (a mark and a word)", async () => {
+    it("renders every outcome as a row with ONE chip (a mark and a word) and at most one short phrase", async () => {
       await stopped(addPlan([
         addSong({ ref_id: REF[0]!, title: "Holy Forever", action: "reuse", file: "Holy Forever (1)" }),
         addSong({ ref_id: REF[1]!, title: "Battle Belongs", action: "copy", file: "Battle Belongs (2)", sections: 2 }),
@@ -762,13 +844,18 @@ describe("the one button: preview, then add, in one press", () => {
       expect(lines.map((line) => line.getAttribute("data-action"))).toEqual(["reuse", "copy", "import_then_copy", "needs_choice", "blocked", "as_is"]);
       const said = (i: number) => within(lines[i]!).getByTestId("add-songs-song-sentence").textContent;
       expect(said(0)).toBe("Already in ProPresenter as \u201CHoly Forever (1)\u201D.");
-      expect(said(1)).toBe("New copy \u201CBattle Belongs (2)\u201D with Playback's order (Verse 1, Chorus).");
-      expect(said(2)).toBe("Will be loaded from ProPresenter search first (as \u201CGratitude\u201D), then a new copy \u201CGratitude (1)\u201D with Playback's order (Verse 1, Chorus).");
+      expect(said(1)).toBe("New copy \u201CBattle Belongs (2)\u201D with Playback's order (2 sections).");
+      expect(said(2)).toBe("Will be loaded from ProPresenter search first (as \u201CGratitude\u201D), then a new copy \u201CGratitude (1)\u201D with Playback's order (2 sections).");
       expect(said(3)).toBe("Needs a choice: Two files are this song. Files: \u201CSongs / A.pro\u201D, \u201CSongs / B.pro\u201D.");
       expect(said(4)).toBe("Blocked: The song has no group called Bridge.");
       expect(said(5)).toBe("Added as it is in ProPresenter as \u201CPlain Song\u201D: no copy, no new arrangement, no key change.");
-      expect(lines.map((line) => line.querySelector("[data-tone]")?.textContent)).toEqual(["\u2713Already there", "+New copy", "\u2193Load first", "?Needs a choice", "!Blocked", "+Used as is"]);
+      expect(lines.map((line) => line.querySelector("[data-tone]")?.textContent)).toEqual(["+Ready", "+New copy", "\u2193Will import", "?Pick one", "!Can't import", "+Ready"]);
+      expect(lines.map((line) => line.querySelector("[data-testid=add-songs-phrase]")?.textContent ?? null)).toEqual(["Copy exists", "Playback order, \u201C(2)\u201D", null, null, null, "Used as is"]);
+      expect(within(lines[3]!).getAllByRole("listitem").map((file) => file.textContent)).toEqual(["Songs / A.pro", "Songs / B.pro"]);
       for (const line of lines) expect(line.querySelector("[data-tone]")?.textContent?.replace(/[^A-Za-z ]/g, "")).toMatch(/[A-Za-z]{4}/);
+      // The chip text is the status, not the colour: the visible text of a row has no sentence.
+      for (const line of lines) expect(visibleText(line), visibleText(line)).not.toMatch(/[.!?]($|\s)/);
+      expect(within(lines[0]!).getByTestId("add-songs-status")).toHaveAttribute("title", said(0)!);
     });
   });
 
@@ -834,17 +921,23 @@ describe("progress, the result and Try again, in the section", () => {
     await press(user);
     await tick(5);
     const progress = screen.getByTestId("add-songs-progress");
-    expect(within(progress).getByRole("heading", { name: "Importing songs" })).toHaveFocus();
+    expect(within(progress).getByRole("heading", { name: "Importing" })).toHaveFocus();
     expect(screen.getByTestId("add-songs-now")).toHaveTextContent("Now: Saving the playlist.");
     expect(screen.getByTestId("add-songs-live")).toHaveTextContent("Saving the playlist.");
     expect(within(screen.getByRole("list", { name: "Steps for the playlist" })).getAllByRole("listitem").map((li) => li.getAttribute("data-state"))).toEqual(["done", "running"]);
     expect(screen.getAllByTestId("add-songs-job-song").map((song) => song.querySelector("span")?.textContent)).toEqual(["Holy Forever", "Gratitude"]);
-    expect(within(screen.getByRole("list", { name: "Steps for Holy Forever" })).getByText("Making the copy")).toBeInTheDocument();
-    expect(within(progress).getAllByText("Done").length).toBeGreaterThan(0);
-    expect(within(progress).getByText("Working")).toBeInTheDocument();
+    // One short word per step, in a chip with a check, a spinner or a cross: no sentence on the page (what a step said is the hover and screen-reader text).
+    expect(within(screen.getByRole("list", { name: "Steps for Holy Forever" })).getByText("Copy")).toBeInTheDocument();
+    const steps = within(screen.getByRole("list", { name: "Steps for the playlist" })).getAllByRole("listitem");
+    expect(steps.map((li) => visibleText(li))).toEqual(["\u2713ProPresenter", "Backup"]);
+    expect(steps[1]!.querySelector("[data-part=spinner]")).not.toBeNull();
+    expect(steps[0]!.querySelector("[data-part=spinner]")).toBeNull();
+    expect(steps[0]).toHaveTextContent("Done");
+    expect(steps[1]).toHaveTextContent("Working");
+    expect(visibleText(progress)).not.toMatch(/Saving the playlist|ProPresenter says|Made \u201C|Now:/);
     // No way to press it again while it runs.
     expect(screen.queryByRole("button", ADD)).toBeNull();
-    expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Importing songs. Wait here until it says it is finished.");
+    expect(screen.getByTestId("add-songs-reason")).toHaveTextContent("Importing: wait here");
     expect(screen.getByLabelText("Playlist")).toBeDisabled();
     // It is under the button's place, in the section itself: no dialog anywhere.
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -866,12 +959,20 @@ describe("progress, the result and Try again, in the section", () => {
     await tick();
     const done = await screen.findByTestId("add-songs-result");
     expect(done).toHaveAttribute("data-outcome", "done");
-    expect(within(done).getByRole("heading")).toHaveTextContent("Imported");
+    expect(within(done).getByRole("heading")).toHaveTextContent("Done: 1 added");
     expect(within(done).getByRole("heading")).toHaveFocus();
-    expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/^Imported\. Added 2 song\(s\) to the playlist/);
-    expect(screen.getByTestId("add-songs-counts")).toHaveTextContent("1 imported, 1 skipped");
-    expect(within(screen.getAllByTestId("add-songs-result-song")[0]!).getByText("Imported")).toBeInTheDocument();
-    expect(screen.getByTestId("add-songs-backup")).toHaveTextContent("The playlist was saved first as Sunday Morning Service-20261122-081500.json, beside StagePilot's settings.");
+    expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/^Done: 1 added\. Added 2 song\(s\) to the playlist/);
+    expect(screen.getByTestId("add-songs-counts")).toHaveTextContent("1 added \u00B7 1 skipped");
+    expect(within(screen.getAllByTestId("add-songs-result-song")[0]!).getByText("Added")).toBeInTheDocument();
+    expect(within(screen.getAllByTestId("add-songs-result-song")[1]!).getByText("Skipped")).toBeInTheDocument();
+    // The backend's sentence is not on the page: it is for a screen reader.
+    expect(screen.getByTestId("add-songs-result-message")).toHaveClass("sr-only");
+    expect(visibleText(done)).not.toMatch(/Added 2 song|Left out/);
+    // The backup's file name is a small mono line; the version is small and only in the result.
+    expect(screen.getByTestId("add-songs-backup")).toHaveTextContent(/^Backup Sunday Morning Service-20261122-081500\.json$/);
+    expect(screen.getByTestId("add-songs-backup").querySelector("code")).toHaveClass("font-mono");
+    expect(screen.getByTestId("add-songs-version")).toHaveTextContent("ProPresenter 19.0.1 (API v1)");
+    expect(screen.getByTestId("add-songs-version")).toHaveClass("text-xs");
     expect(screen.queryByTestId("add-songs-differences")).toBeNull();
     // A finished job offers no Try again, and the button is there again for the next time.
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
@@ -890,10 +991,11 @@ describe("progress, the result and Try again, in the section", () => {
     const done = await screen.findByTestId("add-songs-result");
     const notes = within(done).getAllByTestId("add-songs-guess-note");
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toHaveTextContent("Check in ProPresenter:");
-    expect(within(notes[0]!).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "Interlude (3rd use) uses the 2nd \u201CInterlude\u201D group (Playback uses it once more than the song has groups, so the last group is used again)",
-      "Count Off (1st use) uses the 1st blank-named group",
+    // The Check chip and one short line per guess; the whole sentence (and the rule) is the hover and screen-reader text.
+    expect(within(notes[0]!).getByText("Check")).toBeInTheDocument();
+    expect(within(notes[0]!).getAllByRole("listitem").map((li) => [visibleText(li), li.querySelector(".sr-only")?.textContent])).toEqual([
+      ["Interlude (3rd use): 2nd group", "Interlude (3rd use) uses the 2nd \u201CInterlude\u201D group (Playback uses it once more than the song has groups, so the last group is used again)"],
+      ["Count Off (1st use): 1st group", "Count Off (1st use) uses the 1st blank-named group"],
     ]);
     expect(within(done).queryByRole("checkbox")).toBeNull();
     expect(screen.getByTestId("add-songs-live")).toHaveTextContent(/Check in ProPresenter: How Awesome: Interlude \(3rd use\)/);
@@ -902,16 +1004,20 @@ describe("progress, the result and Try again, in the section", () => {
 
   it("lists what ProPresenter shows differently from the plan", async () => {
     const user = await start();
-    vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({ state: "done", report: report({ outcome: "done_with_differences", message: "Added, but 2 things are not as planned.", differences: ["\u201CHoly Forever (1)\u201D shows the arrangement \u201CFull\u201D, not \u201CPlayback\u201D.", "The item \u201CMessage\u201D moved from place 5 to place 6."] }) }));
+    vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({ state: "done", report: report({ outcome: "done_with_differences", message: "Added, but 2 things are not as planned.", differences: ["\u201CHoly Forever (1)\u201D shows the arrangement \u201CFull\u201D, not \u201CPlayback\u201D.", "The item \u201CMessage\u201D moved from place 5 to place 6.", "Item 7 \"Gratitude\": its duration reads 0 now, it was 80."] }) }));
     await press(user);
     await tick(5);
     const done = await screen.findByTestId("add-songs-result");
     expect(done).toHaveAttribute("data-outcome", "done_with_differences");
-    expect(within(done).getByRole("heading")).toHaveTextContent("Imported, but ProPresenter shows something different");
-    expect(within(screen.getByTestId("add-songs-differences")).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "\u201CHoly Forever (1)\u201D shows the arrangement \u201CFull\u201D, not \u201CPlayback\u201D.",
-      "The item \u201CMessage\u201D moved from place 5 to place 6.",
+    expect(within(done).getByRole("heading")).toHaveTextContent("0 added, 3 differ");
+    const lines = within(screen.getByTestId("add-songs-differences")).getAllByRole("listitem");
+    // Short lines (`Item 7: duration 80 \u2192 0`); what the engine wrote is the hover text, and a line it does not know keeps its words without the full stop.
+    expect(lines.map((li) => li.textContent)).toEqual([
+      "\u201CHoly Forever (1)\u201D shows the arrangement \u201CFull\u201D, not \u201CPlayback\u201D",
+      "The item \u201CMessage\u201D moved from place 5 to place 6",
+      "Item 7: duration 80 \u2192 0",
     ]);
+    expect(lines[2]).toHaveAttribute("title", "Item 7 \"Gratitude\": its duration reads 0 now, it was 80.");
   });
 
   it("needs_library_open: the plain instruction and Try again, which makes a fresh preview and applies it when it is clean", async () => {
@@ -924,8 +1030,8 @@ describe("progress, the result and Try again, in the section", () => {
     await tick(5);
     const done = await screen.findByTestId("add-songs-result");
     expect(done).toHaveAttribute("data-outcome", "needs_library_open");
-    expect(screen.getByTestId("add-songs-open-library")).toHaveTextContent("Open the Playback library in ProPresenter once, then press Try again.");
-    expect(screen.getByRole("alert")).toHaveTextContent("Open the Playback library in ProPresenter once, then press Try again.");
+    expect(screen.getByTestId("add-songs-open-library")).toHaveTextContent("Open the Playback library in ProPresenter, then Try again");
+    expect(screen.getByRole("alert")).toHaveTextContent("Open the Playback library in ProPresenter, then Try again");
     expect(within(done).getByText("Not loaded yet")).toBeInTheDocument();
     vi.mocked(api.previewAddSongs).mockClear();
     vi.mocked(api.applyAddSongs).mockClear();
@@ -954,13 +1060,13 @@ describe("progress, the result and Try again, in the section", () => {
 
   it.each([
     ["stopped", "Stopped"],
-    ["song_playing", "Stopped: a song is playing"],
-    ["live_on_screen", "Stopped: ProPresenter is showing something on screen"],
-    ["playlist_refused", "ProPresenter did not accept the change"],
-    ["playlist_failed", "The playlist could not be changed"],
-    ["backup_failed", "Nothing was changed: the playlist could not be saved first"],
-    ["not_reachable", "ProPresenter did not answer"],
-  ] as const)("%s: a headline, the backend's sentence and Try again", async (outcome, heading) => {
+    ["song_playing", "Song playing: wait"],
+    ["live_on_screen", "Live on screen: clear it, then try again"],
+    ["playlist_refused", "ProPresenter refused it"],
+    ["playlist_failed", "Playlist not changed"],
+    ["backup_failed", "Stopped: no backup"],
+    ["not_reachable", "ProPresenter not answering"],
+  ] as const)("%s: a short headline, the backend's sentence for screen readers only, and Try again", async (outcome, heading) => {
     const user = await start();
     vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({ state: "done", report: report({ outcome, message: `The backend's sentence for ${outcome}.`, playlist_changed: false, backup: null }) }));
     await press(user);
@@ -968,6 +1074,8 @@ describe("progress, the result and Try again, in the section", () => {
     const done = await screen.findByTestId("add-songs-result");
     expect(within(done).getByRole("heading")).toHaveTextContent(heading);
     expect(screen.getByTestId("add-songs-result-message")).toHaveTextContent(`The backend's sentence for ${outcome}.`);
+    expect(screen.getByTestId("add-songs-result-message")).toHaveClass("sr-only");
+    expect(within(done).getByRole("heading").textContent!.split(/\s+/).length).toBeLessThanOrEqual(9);
     expect(screen.queryByTestId("add-songs-backup")).toBeNull();
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
     // Try again is under the result, in the section.
@@ -989,13 +1097,14 @@ describe("progress, the result and Try again, in the section", () => {
     vi.mocked(api.getAddSongsJob).mockRejectedValue(new TypeError("Failed to fetch"));
     await press(user);
     await tick(5);
-    expect(screen.queryByText(/lost contact/)).toBeNull();
+    expect(screen.queryByText(/lost contact/i)).toBeNull();
     await tick(JOB_POLL_MS * 5);
-    expect(screen.getByText(/StagePilot lost contact with itself for a moment/)).toBeInTheDocument();
+    expect(screen.getByText("Lost contact: still trying")).toBeInTheDocument();
+    expect(screen.getByText("Lost contact: still trying")).toHaveAttribute("title", "StagePilot lost contact with itself for a moment. It keeps trying; the songs are still being imported.");
     vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({ state: "done", report: report() }));
     await tick(JOB_POLL_MS * 2);
     expect(await screen.findByTestId("add-songs-result")).toBeInTheDocument();
-    expect(screen.queryByText(/lost contact/)).toBeNull();
+    expect(screen.queryByText(/lost contact/i)).toBeNull();
   });
 
   it("adds Planning Center names as titles, then shows the result in place", async () => {
@@ -1019,8 +1128,9 @@ describe("keyboard and screen reader", () => {
       return node.labels?.[0]?.textContent ?? node.getAttribute("aria-label") ?? node.textContent?.replace(/[\u25B8\u25BE]/g, "").trim();
     };
     const seen: (string | null | undefined)[] = [];
-    for (let i = 0; i < 10; i += 1) { await user.tab(); seen.push(here()); }
-    expect(seen).toEqual(["Section", "Select all", "Select none", "Holy Forever", "Sections", "Battle Belongs", "Sections", "Gratitude", "Sections", "Import songs to ProPresenter"]);
+    for (let i = 0; i < 7; i += 1) { await user.tab(); seen.push(here()); }
+    // No Sections button on a card any more: the order is text on the card, so Tab goes from card to card.
+    expect(seen).toEqual(["Section", "Select all", "Select none", "Holy Forever", "Battle Belongs", "Gratitude", "Import songs to ProPresenter"]);
     const box = screen.getByRole("checkbox", { name: "Holy Forever" });
     box.focus();
     await user.keyboard(" ");
@@ -1053,13 +1163,14 @@ describe("keyboard and screen reader", () => {
     expect(screen.getByRole("region", { name: "Preview" })).toBeInTheDocument();
   });
 
-  it("the key and arrangement are text, so a screen reader reads each song's key", async () => {
+  it("the key, the number and the order are plain text, so a screen reader reads each song's key", async () => {
     view();
     await ready();
-    const row = screen.getByRole("checkbox", { name: "Battle Belongs" }).closest("li")!;
-    expect(row).toHaveTextContent("Key Ab");
-    expect(row).toHaveTextContent("Long ending");
-    expect(row).toHaveTextContent("5000002");
+    const box = screen.getByRole("checkbox", { name: "Battle Belongs" });
+    const row = box.closest("li")!;
+    expect(row).toHaveTextContent("Ab \u00B7 mtID 31877");
+    expect(row).toHaveTextContent("Verse 1 \u00B7 Chorus");
+    expect(box).toHaveAccessibleDescription(/Ab \u00B7 mtID 31877/);
   });
 
   it("has one polite live region, announced even before anything is pressed", async () => {

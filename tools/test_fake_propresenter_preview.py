@@ -111,7 +111,7 @@ class PreviewTests(unittest.TestCase):
         for name, index in want.items():
             with open(os.path.join(songs, name + ".pro"), "rb") as handle:
                 data = handle.read()
-            number = 5_000_000 + 1_000_000 + days * 10 + index + 1
+            number = playback_library.song_master_id(1_000_000 + days * 10 + index + 1)
             self.assertIn(preview.vrec(1, number), data, name)
             self.assertIn(name.encode(), data)
 

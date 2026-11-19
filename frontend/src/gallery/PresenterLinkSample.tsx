@@ -9,13 +9,13 @@ import { madeUpPresenterApi, NAMES_IN_PROPRESENTER, PLAN_NAMES, type Scenario, w
 import { Fresh, Scripted, type Step } from "./Scripted";
 
 /** The Presenter Link as it sits in the Presentation panel (the real panel frame, in the Presentation colour), asked of a made-up StagePilot. */
-export function Sample({ scenario, steps = [], playback = false, link = linkController(linkOf("ready")), gap }: { scenario?: Scenario; steps?: Step[]; playback?: boolean; link?: ReturnType<typeof linkController>; gap?: number }) {
+export function Sample({ scenario, steps = [], playback = false, songs, playing = false, link = linkController(linkOf("ready")), gap }: { scenario?: Scenario; steps?: Step[]; playback?: boolean; /** How many of Playback's songs (four by default). */ songs?: number; playing?: boolean; link?: ReturnType<typeof linkController>; gap?: number }) {
   const [api] = useState<PresenterApi>(() => madeUpPresenterApi(scenario));
   return (
     <Fresh>
       <PresenterApiContext.Provider value={api}>
         <Scripted gap={gap} patient steps={steps}>
-          <Panel tone="presentation" variant="setup"><PresenterLinkSection library={playback ? withPlayback() : withoutPlayback()} link={link} plan={PLAN_NAMES} /></Panel>
+          <Panel tone="presentation" variant="setup"><PresenterLinkSection library={playback ? withPlayback(songs) : withoutPlayback()} link={link} plan={PLAN_NAMES} playing={playing} /></Panel>
         </Scripted>
       </PresenterApiContext.Provider>
     </Fresh>

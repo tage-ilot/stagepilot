@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { presenterLinkReady, type AddSongsRow } from "../components/addSongsSongs";
-import { guessAnnouncement, IMPORTING, isStuck, liveText, LINK_NOT_READY_WORDS, OUTCOME, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
+import { resultHeading } from "../components/addSongsStatus";
+import { guessAnnouncement, IMPORTING, isStuck, liveText, LINK_NOT_READY_WORDS, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
@@ -13,7 +14,7 @@ import { useTitleLookup } from "./useTitleLookup";
  * that was last USED FOR AN IMPORT (choosing a section alone does not remember it). `""` is End of Playlist.
  */
 export const ADD_SONGS_CHOICE_KEY = "stagepilot.propresenter.add-songs-choice";
-/** The Section box's value for End of Playlist (the route's `place: "end"`). */
+/** The Section box's value for End of Playlist (the route's `place: "end"`): the only option of a playlist with no section header. */
 export const PLACE_END = "";
 /** How often a running job is looked at. */
 export const JOB_POLL_MS = 1000;
@@ -42,10 +43,13 @@ function remember(change: Partial<Remembered>) {
   const next = { ...remembered(), ...change };
   try { window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify(next)); } catch { /* the choice lasts while the section is on screen */ }
 }
-/** The section the songs went to last time in this playlist, while the playlist still has it; else End of Playlist. */
-function rememberedPlace(playlist: ProPresenterPlaylist | null | undefined): string {
-  const place = playlist ? remembered().places[playlist.id] : undefined;
-  return place && playlist?.headers.includes(place) ? place : PLACE_END;
+/** A playlist with no section header has one place, the end; with headers the songs go in a section (never "the end" as a separate place). */
+export const hasSections = (playlist: Pick<ProPresenterPlaylist, "headers"> | null | undefined): boolean => Boolean(playlist?.headers.length);
+/** The section the songs went to last time in this playlist while it still has it, else its LAST section (the same place as the end); End of Playlist only when it has no section. */
+export function defaultPlace(playlist: ProPresenterPlaylist | null | undefined): string {
+  if (!playlist || !hasSections(playlist)) return PLACE_END;
+  const place = remembered().places[playlist.id];
+  return place && playlist.headers.includes(place) ? place : playlist.headers[playlist.headers.length - 1]!;
 }
 
 export interface AddSongsProblem { message: string; code: string | null }
@@ -88,7 +92,8 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const [playlists, setPlaylists] = useState<ProPresenterPlaylist[] | null>(null);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   const [playlistId, setPlaylistId] = useState("");
-  const [place, setPlace] = useState(PLACE_END);
+  // What the person picked in the Section box for the chosen playlist; `null` until they pick (then the playlist's default shows).
+  const [pickedPlace, setPickedPlace] = useState<string | null>(null);
   const [phase, setPhase] = useState<AddSongsPhase>("choose");
   const [plan, setPlan] = useState<AddSongsPlan | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
@@ -107,11 +112,13 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const picked = useMemo(() => choices.filter((row) => !unticked.has(row.id)), [choices, unticked]);
   const selected = useMemo(() => new Set(picked.map((row) => row.id)), [picked]);
   const fromPlayback = rows.some((row) => row.source === "playback");
+  const playlist = playlists?.find((candidate) => candidate.id === playlistId) ?? null;
+  // The section the box shows: the pick while the playlist still has that header, else the playlist's default (the section last used for an import, else the last one).
+  // A playlist with no header has one place, the end. A remembered End of Playlist in a playlist that now has sections falls back to the last section.
+  const place = useMemo(() => (pickedPlace !== null && playlist?.headers.includes(pickedPlace) ? pickedPlace : defaultPlace(playlist)), [pickedPlace, playlist]);
+  const placeOk = !playlist || (hasSections(playlist) ? playlist.headers.includes(place) : place === PLACE_END);
   const signature = `${fromPlayback ? "playback" : "names"}|${picked.map((row) => row.id).join(",")}|${playlistId}|${place}`;
   const stale = plan !== null && (gone || previewSignature !== signature);
-  const playlist = playlists?.find((candidate) => candidate.id === playlistId) ?? null;
-  // A header the playlist no longer has falls back to the end.
-  const placeOk = place === PLACE_END || Boolean(playlist?.headers.includes(place));
   // Two headers with this name: the engine refuses to guess which one, and so does the page (the line under the Section box says so).
   const placeTwice = place !== PLACE_END && (playlist?.headers.filter((header) => header === place).length ?? 0) > 1;
 
@@ -122,10 +129,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       if (!alive.current) return;
       setPlaylists(answer.playlists);
       const chosen = answer.playlists.find((candidate) => candidate.id === remembered().playlist_id);
-      if (chosen) {
-        setPlaylistId((current) => current || chosen.id);
-        setPlace((current) => (current === PLACE_END ? rememberedPlace(chosen) : current));
-      }
+      if (chosen) setPlaylistId((current) => current || chosen.id);
     } catch (cause) {
       if (alive.current) setPlaylistsError(problemOf(cause, "StagePilot could not read the playlists from ProPresenter.").message);
     }
@@ -144,18 +148,18 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
 
   const choosePlaylist = useCallback((id: string) => {
     setPlaylistId(id);
-    setPlace(rememberedPlace(playlists?.find((candidate) => candidate.id === id)));
+    setPickedPlace(null);
     remember({ playlist_id: id });
-  }, [playlists]);
+  }, []);
   // Choosing a section is not remembered: only an import is (see `start`).
-  const choosePlace = useCallback((value: string) => setPlace(value), []);
+  const choosePlace = useCallback((value: string) => setPickedPlace(value), []);
 
   // ---- what stops the button, said in words -------------------------------------------------------------------------------
   const blockedBy: string | null = !linkReady ? LINK_NOT_READY_WORDS
-    : picked.length === 0 ? "Select at least one song."
-      : !playlistId ? "Choose a playlist."
-        : !placeOk ? "Choose a section of the playlist."
-          : placeTwice ? "Choose another section."
+    : picked.length === 0 ? "Select a song"
+      : !playlistId ? "Choose a playlist"
+        : !placeOk ? "Choose a section"
+          : placeTwice ? "Choose another section"
             : null;
 
   // ---- the one button -----------------------------------------------------------------------------------------------------
@@ -272,7 +276,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       const title = last.song ? job?.songs.find((song) => song.ref_id === last.song)?.title ?? null : null;
       return liveText(title, last.text);
     }
-    if (phase === "finished") return report ? [`${OUTCOME[report.outcome].heading}. ${report.message}`, guessAnnouncement(report)].filter(Boolean).join(" ") : job?.error ?? "The job stopped.";
+    if (phase === "finished") return report ? [`${resultHeading(report).text}. ${report.message}`, guessAnnouncement(report)].filter(Boolean).join(" ") : job?.error ?? "The job stopped.";
     return "";
   }, [phase, plan, stale, stopped, job, report]);
 

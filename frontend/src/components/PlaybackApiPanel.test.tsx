@@ -72,7 +72,7 @@ describe("Scan is always first and never dead", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(playback.scan).toHaveBeenCalledWith();
     await userEvent.setup().click(screen.getByRole("button", { name: "Enter address instead" }));
-    expect(screen.getByRole("combobox", { name: "Playback computer" })).toHaveFocus();
+    expect(screen.getByRole("combobox", { name: "Playback host" })).toHaveFocus();
   });
 
   it("several found: pick one by computer name", () => {
@@ -86,7 +86,7 @@ describe("Scan is always first and never dead", () => {
 
 describe("Playback computer address box (no select, no Other computer…)", () => {
   const user = () => userEvent.setup();
-  const computer = () => screen.getByRole("combobox", { name: "Playback computer" });
+  const computer = () => screen.getByRole("combobox", { name: "Playback host" });
   const arrow = () => screen.getByRole("button", { name: "Show recent and found addresses" });
   const withHosts = (host: string | null, candidates: { name: string; host: string }[] = [], extra = {}) => controller({ status: none({
     scan: scanOf(candidates.length ? "found" : "idle", { candidates }),
