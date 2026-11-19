@@ -25,7 +25,7 @@ export interface ConnectionSectionProps {
   title: string;
   /** The state pills beside the title, one `LiveLinkPill` per connection. */
   pills?: ReactNode;
-  /** The connection row: the address input(s), the port and the one or two main buttons, with whatever belongs right under it (recent addresses, field errors, scan help). */
+  /** The connection row: the address input(s), the port and the one or two main buttons, with whatever belongs right under it (field errors, scan help). */
   connection: ReactNode;
   /** Each connection's status words. They are joined into ONE line by " · " and announced politely. */
   status?: StatusLine[];

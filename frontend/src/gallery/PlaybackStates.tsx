@@ -1,5 +1,6 @@
 import { PlaybackLiveLink } from "../components/PlaybackLiveLink";
 import type { HelperState } from "../types";
+import { Scripted } from "./Scripted";
 import { libraryController, libraryOf, playbackController, playbackDown, playbackOf, scanOf } from "./fixtures";
 import type { SampleState } from "./StateCard";
 
@@ -14,6 +15,7 @@ export const playbackStates: SampleState[] = [
   { id: "error", label: "Could not connect (error on the address)", look: "The red notice with the reason, the buttons and 'Enter address instead'.", render: () => block("ready", playbackDown(scanOf("not_found", { error_class: "refused", typed: true, reason: "Playback at 10.30.0.99 refused the connection.", hosts_probed: 1, hosts_total: 1 }))) },
   { id: "found-many", label: "Found more than one", look: "The chooser group under the row.", render: () => block("ready", playbackDown(scanOf("found", { candidates: [{ name: "Playback (front)", host: "10.30.0.141" }, { name: "Playback (stage)", host: "10.30.0.152" }] }))) },
   { id: "found-one", label: "Scan found one", look: "One Playback answered: StagePilot connected to it by itself; the status line says where.", render: () => block("ready", playbackOf({ reason: "Connected to Playback at 10.30.0.141." }, scanOf("found", { candidates: [{ name: "Playback (front)", host: "10.30.0.141" }] }))) },
+  { id: "address-list", label: "The computer arrow open: Scanned and Recent", look: "ArrowDown in the box (or the arrow) opens the list: the computers the scan found, then what worked before. The box is always open to typing; there is no Other computer.", render: () => <div className="pb-64"><Scripted steps={[{ key: ["Playback computer", "ArrowDown"] }]}>{block("ready", playbackDown(scanOf("found", { candidates: [{ name: "Playback (front)", host: "10.30.0.141" }, { name: "Playback (stage)", host: "10.30.0.152" }] })))}</Scripted></div> },
   { id: "blocked", label: "macOS blocks the local network", look: "The red notice with the steps, Open Local Network settings and Copy diagnostic details.", render: () => block("ready", playbackDown(scanOf("not_found", { error_class: "permission_denied", reason: "macOS is blocking StagePilot's local-network access.", details: "{\"outcome\":\"blocked\"}", settings_url: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork" }))) },
   { id: "connecting", label: "Connecting", look: "Connect says Connecting… (a one-address scan); Scan waits.", render: () => block("ready", playbackOf({ reason: "Connecting to 10.30.0.141…" }, scanOf("scanning", { typed: true, phase: "Connecting to 10.30.0.141…", current: 0, total: 1 }))) },
   { id: "not-installed", label: "Library Link not installed: set-up needed", look: "The Details open by themselves; nothing is a warning, the line says Not installed in grey.", render: () => block("not_installed") },

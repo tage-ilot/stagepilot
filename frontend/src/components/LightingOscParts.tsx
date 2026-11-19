@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { RecentAddresses } from "./RecentAddresses";
 
 import type { LightingEffect, OscArgument, OscArgumentType, OscLightingCue, OscMessage } from "../types";
 import { groupByFixture, isCaptured, lookLabel } from "./lightingLooks";
@@ -23,7 +22,7 @@ import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeIn
 import { EffectDetail } from "./LightingEffectDetail";
 import { useLiveLinkTools } from "./useLiveLinkTools";
 import { HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
-import { ActionButton, ActionRow, ConnectionRow, ConnectionSection, LiveLinkField, SectionNotice } from "./sections";
+import { ActionButton, ActionRow, AddressBox, ConnectionRow, ConnectionSection, LiveLinkField, SectionNotice } from "./sections";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
   { value: "int", label: "Whole number" },
@@ -67,13 +66,12 @@ export function OscConnectionFields({
           {/* The live link has not answered yet, so there is nothing to scan for or connect to: both buttons are there, switched off, and say why. */}
           <ConnectionRow buttonClassName={LIGHTING_BUTTONS} connectDisabled connectHint={WAITING} scanDisabled scanHint={WAITING} testId="live-link-line" tone="lighting">
             <LiveLinkField caption="Host" className="live-link-host">
-              <Input aria-label={HOST_LABEL} autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} title={HOST_TITLE} value={host} />
+              <AddressBox aria-label={HOST_LABEL} error={Boolean(hostError)} held={held.host} onChange={onHost} placeholder="192.0.2.10" scope="lighting" title={HOST_TITLE} value={host} />
             </LiveLinkField>
             <LiveLinkField caption="OSC UDP">
               <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center font-mono tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
             </LiveLinkField>
           </ConnectionRow>
-          <RecentAddresses className="mt-2" onPick={onHost} scope="lighting" value={host} />
           {(hostError || portError) && <SectionNotice className="mt-1" role="alert" size="xs" tone="danger" variant="line">{[hostError, portError].filter(Boolean).join(" ")}</SectionNotice>}
         </>
       )}

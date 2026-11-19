@@ -1,8 +1,6 @@
-import { act, render, renderHook, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RecentAddresses } from "../components/RecentAddresses";
 import { readRecentAddresses, rememberAddress, useRecentAddresses } from "./useRecentAddresses";
 
 beforeEach(() => window.localStorage.clear());
@@ -45,29 +43,5 @@ describe("recent addresses", () => {
     expect(result.current).toEqual([]);
     act(() => rememberAddress("lighting", "10.30.0.211"));
     expect(result.current).toEqual(["10.30.0.211"]);
-  });
-});
-
-describe("<RecentAddresses>", () => {
-  it("draws nothing until there is a recent address that is not already in the box", () => {
-    const { container, rerender } = render(<RecentAddresses onPick={vi.fn()} scope="lighting" value="" />);
-    expect(container).toBeEmptyDOMElement();
-    rememberAddress("lighting", "10.30.0.211");
-    rerender(<RecentAddresses onPick={vi.fn()} scope="lighting" value="10.30.0.211" />);
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("remembers the working address, lists the others as one-tap buttons and hands the tapped one back", async () => {
-    rememberAddress("lighting", "10.30.0.50");
-    const onPick = vi.fn();
-    const { rerender } = render(<RecentAddresses onPick={onPick} scope="lighting" value="" working="10.30.0.211" />);
-    expect(readRecentAddresses("lighting")).toEqual(["10.30.0.211", "10.30.0.50"]);
-    const group = screen.getByRole("group", { name: "Recent addresses" });
-    expect(group).toHaveTextContent("Recent:10.30.0.21110.30.0.50");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Use 10.30.0.50" }));
-    expect(onPick).toHaveBeenCalledWith("10.30.0.50");
-    // Not working (disconnected): nothing new is remembered.
-    rerender(<RecentAddresses onPick={onPick} scope="lighting" value="" working={null} />);
-    expect(readRecentAddresses("lighting")).toEqual(["10.30.0.211", "10.30.0.50"]);
   });
 });

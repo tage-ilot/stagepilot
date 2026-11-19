@@ -1,4 +1,6 @@
 export { ActionButton, ActionRow, type ActionButtonProps, type ActionRowProps } from "./ActionRow";
+export { AddressBox, NO_ADDRESSES, type AddressBoxProps } from "./AddressBox";
+export { addressGroups, scannedAddresses, type AddressGroups, type AddressOption, type ScannedAddress } from "./addressOptions";
 export { ConnectionRow, type ConnectionRowProps } from "./ConnectionRow";
 export { SCAN_WORDS, ScanConnectButtons, type ScanConnectProps } from "./ScanConnectButtons";
 export { ScanArea } from "./ScanArea";

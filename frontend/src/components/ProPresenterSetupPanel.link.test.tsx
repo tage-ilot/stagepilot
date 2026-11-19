@@ -69,12 +69,18 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     for (const outside of [screen.getByRole("combobox", { name: /Detected timer/i }), screen.getByLabelText("Timeout (seconds)"), screen.getByLabelText("ProPresenter Look"), screen.getByRole("button", { name: "Refresh timers and Looks" }), screen.getByRole("button", { name: "Save configuration" })]) expect(block()).not.toContainElement(outside);
   });
 
-  it("the recent addresses sit under the connection row inside the block, and one tap fills Host", async () => {
+  it("the recent addresses are the arrow's list inside the Host box (no chip row under the row), and one pick fills Host", async () => {
     rememberAddress("presentation", "10.30.0.211");
     panel(linkController(helperStatus("ready")));
-    const recent = within(block()).getByRole("group", { name: "Recent addresses" });
-    expect(before(screen.getByTestId("propresenter-live-link-line"), recent)).toBe(true);
-    await userEvent.setup().click(within(recent).getByRole("button", { name: "Use 10.30.0.211" }));
+    expect(within(block()).queryByRole("group", { name: "Recent addresses" })).toBeNull();
+    expect(within(block()).queryByRole("button", { name: "Use 10.30.0.211" })).toBeNull();
+    const host = within(block()).getByRole("combobox", { name: "Host" });
+    const row = screen.getByTestId("propresenter-live-link-line");
+    expect(row).toContainElement(host);
+    expect(row).toContainElement(within(block()).getByRole("button", { name: "Show recent and scanned addresses" }));
+    await userEvent.setup().click(within(block()).getByRole("button", { name: "Show recent and scanned addresses" }));
+    expect(within(screen.getByRole("group", { name: "Recent" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["10.30.0.211"]);
+    await userEvent.setup().click(screen.getByRole("option", { name: "10.30.0.211" }));
     expect(screen.getByLabelText("Host")).toHaveValue("10.30.0.211");
     expect(within(block()).getByText("Not saved yet")).toBeInTheDocument();
   });

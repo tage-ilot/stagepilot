@@ -40,7 +40,8 @@ describe("Scan is always first and never dead", () => {
     panel(playback);
     const scan = screen.getByRole("button", { name: "Scan" });
     expect(scan).toBeEnabled();
-    const primary = screen.getAllByRole("button").find((b) => !/Close/.test(b.textContent ?? "") && !/Close/.test(b.getAttribute("aria-label") ?? ""));
+    // (The little arrow inside the address box is not a tab stop: Scan is still the first button a person reaches.)
+    const primary = screen.getAllByRole("button").find((b) => !/Close/.test(b.textContent ?? "") && !/Close/.test(b.getAttribute("aria-label") ?? "") && b.tabIndex !== -1);
     expect(primary).toBe(scan);
     fireEvent.click(scan);
     expect(playback.scan).toHaveBeenCalledWith();
@@ -71,7 +72,7 @@ describe("Scan is always first and never dead", () => {
     fireEvent.click(screen.getByRole("button", { name: "Scan" }));
     expect(playback.scan).toHaveBeenCalledWith();
     await userEvent.setup().click(screen.getByRole("button", { name: "Enter address instead" }));
-    expect(screen.getByLabelText("Computer name or address")).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Playback computer" })).toHaveFocus();
   });
 
   it("several found: pick one by computer name", () => {
@@ -83,36 +84,50 @@ describe("Scan is always first and never dead", () => {
   });
 });
 
-describe("Computer select with Other computer…", () => {
+describe("Playback computer address box (no select, no Other computer…)", () => {
   const user = () => userEvent.setup();
-  const computer = () => screen.getByLabelText("Playback computer");
-  const withHosts = (host: string | null, candidates: { name: string; host: string }[] = []) => controller({ status: none({
+  const computer = () => screen.getByRole("combobox", { name: "Playback computer" });
+  const arrow = () => screen.getByRole("button", { name: "Show recent and scanned addresses" });
+  const withHosts = (host: string | null, candidates: { name: string; host: string }[] = [], extra = {}) => controller({ status: none({
     scan: scanOf(candidates.length ? "found" : "idle", { candidates }),
     settings: { enabled: true, host, port: 8080, auto_scan: true, fast_transport: true },
+    ...extra,
   }) });
+  beforeEach(() => window.localStorage.clear());
 
-  it("lists scan candidates, the saved host when not among them, and Other computer… last", () => {
-    render(<PlaybackApiPanel playback={withHosts("192.0.2.9", [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }])} />);
-    expect(computer().tagName).toBe("SELECT");
-    expect(within(computer()).getAllByRole("option").map((o) => o.textContent)).toEqual([
-      "Example Mac (192.0.2.1)", "Other PC (192.0.2.2)", "192.0.2.9 (saved)", "Other computer…"]);
+  it("is one editable text box holding the saved host: there is no select and no Other computer anywhere", () => {
+    render(<PlaybackApiPanel playback={withHosts("192.0.2.9", [{ name: "Example Mac", host: "192.0.2.1" }])} />);
+    expect(computer().tagName).toBe("INPUT");
     expect(computer()).toHaveValue("192.0.2.9");
+    expect(screen.queryByRole("combobox", { name: "Computer name or address" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Other computer/)).not.toBeInTheDocument();
+    expect(document.querySelector("select")).toBeNull();
   });
 
-  it("does not repeat a saved host that is already a candidate", () => {
+  it("the arrow lists the scan's computers by name and address, under Scanned; the saved host is the box's value, not a list entry", async () => {
+    render(<PlaybackApiPanel playback={withHosts("192.0.2.9", [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }])} />);
+    await user().click(arrow());
+    expect(within(screen.getByRole("group", { name: "Scanned" })).getAllByRole("option").map((o) => o.textContent)).toEqual(["Example Mac (192.0.2.1)", "Other PC (192.0.2.2)"]);
+    expect(screen.queryByText(/\(saved\)|\(recent\)/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Recent" })).not.toBeInTheDocument();
+  });
+
+  it("does not repeat a saved host that is also a candidate, and marks it as the one in the box", async () => {
     render(<PlaybackApiPanel playback={withHosts("192.0.2.2", [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }])} />);
+    await user().click(arrow());
     expect(screen.getAllByRole("option", { name: /192\.0\.2\.2/ })).toHaveLength(1);
+    expect(screen.getByRole("option", { name: /192\.0\.2\.2/ })).toHaveAttribute("data-current", "true");
     expect(computer()).toHaveValue("192.0.2.2");
   });
 
-  it("empty candidates and no saved host: only Other computer… and nothing selected", () => {
+  it("empty candidates and no saved host: an empty box, Connect off and saying what to do, and a calm list", async () => {
     render(<PlaybackApiPanel playback={withHosts(null)} />);
-    expect(within(computer()).getAllByRole("option").map((o) => o.textContent)).toEqual(["Other computer…"]);
     expect(computer()).toHaveValue("");
-    // Connect is always there; with no computer chosen it is off, and says what to do.
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Connect" }).closest("[data-part=connect-wrap]")).toHaveAttribute("title", "Choose a computer first.");
-    expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" }).closest("[data-part=connect-wrap]")).toHaveAttribute("title", "Type an address to connect.");
+    await user().click(arrow());
+    expect(screen.getByText("No recent or scanned addresses yet.")).toBeVisible();
   });
 
   it("the old expander text is gone", () => {
@@ -121,56 +136,94 @@ describe("Computer select with Other computer…", () => {
     expect(document.getElementById("playback-specific")).not.toHaveAttribute("aria-expanded");
   });
 
-  it("choosing a listed computer then Connect scans exactly that host; changing the select alone calls nothing", async () => {
+  it("choosing a scanned computer only fills the box; Connect then scans exactly that host", async () => {
     const playback = withHosts(null, [{ name: "Example Mac", host: "192.0.2.1" }, { name: "Other PC", host: "192.0.2.2" }]);
     const u = user();
     render(<PlaybackApiPanel playback={playback} />);
-    await u.selectOptions(computer(), "192.0.2.2");
+    await u.click(arrow());
+    await u.click(screen.getByRole("option", { name: /Other PC/ }));
+    expect(computer()).toHaveValue("192.0.2.2");
     expect(playback.scan).not.toHaveBeenCalled();
     await u.click(screen.getByRole("button", { name: "Connect" }));
     expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.2");
   });
 
-  it("Other computer… shows the address field; Enter connects in one action; blank cannot connect", async () => {
+  it("a chosen scanned computer can be edited at once: Connect uses what the box holds then", async () => {
+    const playback = withHosts(null, [{ name: "Example Mac", host: "192.0.2.1" }]);
+    const u = user();
+    render(<PlaybackApiPanel playback={playback} />);
+    await u.click(arrow());
+    await u.click(screen.getByRole("option", { name: /Example Mac/ }));
+    await u.type(computer(), "0");
+    expect(computer()).toHaveValue("192.0.2.10");
+    await u.click(screen.getByRole("button", { name: "Connect" }));
+    expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.10");
+  });
+
+  it("typing an address: Enter connects in one action (list closed), blank cannot connect, there is no line saying so", async () => {
     const playback = withHosts(null);
     const u = user();
     render(<PlaybackApiPanel playback={playback} />);
-    await u.selectOptions(computer(), "__other__");
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.getByText("Type an address to connect.")).toBeVisible();
-    await u.type(screen.getByLabelText("Computer name or address"), "  192.0.2.10  {Enter}");
+    expect(screen.queryByText("Type an address to connect.")).not.toBeInTheDocument();
+    await u.type(computer(), "  192.0.2.10  {Enter}");
     expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.10");
     expect(screen.queryByText(/Save address|Find \/ Scan|override/)).not.toBeInTheDocument();
+  });
+
+  it("Enter in the box with the list open chooses the active option and does not connect", async () => {
+    const playback = withHosts(null, [{ name: "Example Mac", host: "192.0.2.1" }]);
+    const u = user();
+    render(<PlaybackApiPanel playback={playback} />);
+    await u.click(computer());
+    await u.keyboard("{ArrowDown}{Enter}");
+    expect(computer()).toHaveValue("192.0.2.1");
+    expect(playback.scan).not.toHaveBeenCalled();
   });
 
   it.each(["http://192.0.2.10", "192.0.2.10:8080", "bad host", "999.0.2.10", "a/b"])("rejects invalid address %s inline", async (value) => {
     const playback = withHosts(null);
     render(<PlaybackApiPanel playback={playback} />);
-    await user().selectOptions(computer(), "__other__");
-    fireEvent.change(screen.getByLabelText("Computer name or address"), { target: { value } });
+    fireEvent.change(computer(), { target: { value } });
     expect(screen.getByRole("alert")).toHaveTextContent("no http://");
+    expect(computer()).toBeInvalid();
+    expect(computer()).toHaveAccessibleDescription(/no http:\/\//);
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    fireEvent.submit(screen.getByLabelText("Computer name or address").closest("form")!);
+    fireEvent.submit(computer().closest("form")!);
     expect(playback.scan).not.toHaveBeenCalled();
   });
 
-  it("Enter address instead (not found) selects Other computer… and opens the address field", async () => {
+  it("Enter address instead (not found) puts the cursor in the box (it is always open to typing)", async () => {
     render(<PlaybackApiPanel playback={controller({ status: none({ scan: scanOf("not_found") }) })} />);
-    expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
     await user().click(screen.getByRole("button", { name: "Enter address instead" }));
-    expect(computer()).toHaveValue("__other__");
-    expect(screen.getByLabelText("Computer name or address")).toBeVisible();
+    expect(computer()).toHaveFocus();
   });
 
-  it("Enter address instead in a scan error (refused, permission denied) opens the same field", async () => {
+  it("Enter address instead in a scan error (refused, permission denied) does the same", async () => {
     for (const error_class of ["refused", "permission_denied"]) {
       const scan = scanOf("not_found", { error_class, typed: false, reason: "x", details: "{}" });
       const { unmount } = render(<PlaybackApiPanel playback={controller({ status: none({ scan }) })} />);
       await user().click(screen.getByRole("button", { name: "Enter address instead" }));
-      expect(computer()).toHaveValue("__other__");
-      expect(screen.getByLabelText("Computer name or address")).toBeVisible();
+      expect(computer()).toHaveFocus();
       unmount();
     }
+  });
+
+  it("a computer that connected is in Recent the next time, newest first; one tap fills the box and Connect connects", async () => {
+    const connected = withHosts("192.0.2.9", [], { connected: true, active_source: "playback_api", reason: "Connected to Playback at 192.0.2.9.", sources: { playback_api: { connected: true, reason: "Playback is connected." }, midi: { connected: false, reason: "MIDI is disconnected." } } });
+    const first = render(<PlaybackApiPanel playback={connected} />);
+    first.unmount();
+    expect(JSON.parse(window.localStorage.getItem("stagepilot.recent-addresses.playback") ?? "[]")).toEqual(["192.0.2.9"]);
+    const playback = withHosts("192.0.2.77");
+    const u = user();
+    render(<PlaybackApiPanel playback={playback} />);
+    await u.click(arrow());
+    expect(within(screen.getByRole("group", { name: "Recent" })).getAllByRole("option").map((o) => o.textContent)).toEqual(["192.0.2.9"]);
+    await u.click(screen.getByRole("option", { name: "192.0.2.9" }));
+    expect(computer()).toHaveValue("192.0.2.9");
+    expect(playback.scan).not.toHaveBeenCalled();
+    await u.click(screen.getByRole("button", { name: "Connect" }));
+    expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.9");
   });
 });
 

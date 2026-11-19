@@ -1,5 +1,8 @@
 import { Fragment, useState } from "react";
 
+import { addressTemplates } from "./AddressStates";
+import { seedRecentAddresses } from "./seedRecent";
+
 import { builtFromLine } from "./build";
 import { layoutTemplates } from "./LayoutStates";
 
@@ -34,6 +37,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "template-settings", title: "Template: Settings", intro: "SettingsSection: every column set, held, error, hint, busy, boxed.", states: settingsTemplates, lead: TEMPLATES_NOTE },
   { id: "template-actions", title: "Template: Actions", intro: "ActionRow and its buttons: idle, busy, disabled, with the note.", states: actionTemplates },
   { id: "template-scan", title: "Template: Scan", intro: "ScanProgress, ScanChooser and ScanHelp: the one scan every Live Link block draws under its row, in each connection's colour: scanning, several found, nothing found, macOS blocking the local network.", states: scanTemplates },
+  { id: "template-address", title: "Template: Address box", intro: "AddressBox: the one address box of every Live Link block (Lighting, Playback, ProPresenter), shown in all three at once: an ordinary text box with a small arrow inside its right edge that lists the Scanned and Recent addresses. Empty, typed, Recent, Scanned and Recent, only one of them, nothing yet, the keyboard in the list, a long list, error, held change, disabled. The Scan, Connect and port stay the block's own.", states: addressTemplates },
   { id: "template-summary", title: "Template: Summary", intro: "StatusSummary: the list and the cards, with ok, warn and danger words.", states: summaryTemplates },
   { id: "template-notices", title: "Template: Notices", intro: "SectionNotice: the four tones as boxes, with a title and a button, as a question group, and as lines.", states: noticeTemplates },
   { id: "template-optional", title: "Template: Optional sections", intro: "OptionalSection and the band: closed, open, remembered, opened by a question.", states: optionalTemplates },
@@ -51,6 +55,8 @@ const COLUMNS: { label: string; groups: string[] }[] = [
 
 /** Every state of every connection, as the real blocks draw them (made-up data). `only` (a comma list of group ids, from `?only=`) draws just those groups: that is one column of the side-by-side view. */
 export function Frame({ only }: { only?: string[] }) {
+  // The real blocks' arrows list what worked before: made-up addresses, only where this browser remembers none.
+  useState(() => { seedRecentAddresses(); return null; });
   const shown = GROUPS.filter((group) => !only || only.includes(group.id));
   return (
     <main className="mx-auto min-h-screen max-w-4xl space-y-10 bg-background p-4 font-type-body-md text-ink-body" data-gallery-frame>
