@@ -24,7 +24,7 @@ use stagepilot_core::state::TimerStatus;
 use stagepilot_playback::library::{LibraryPlan, LibrarySong, LibraryState};
 use stagepilot_propresenter::link::add_songs::{
     AddSongs, ApplyRefusal, ApplyReport, Event, Guard, Place, PlanError, PlanRequest, Prepared,
-    Progress, Step, StepState, TitleFound, Timing, WantedSong, MAX_SONGS,
+    Progress, Step, StepState, Timing, TitleFound, WantedSong, MAX_SONGS,
 };
 use stagepilot_propresenter::link::api::{ApiError, HttpApi, ProPresenterApi};
 use stagepilot_propresenter::link::status::LinkState;
@@ -522,7 +522,9 @@ fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
         map.get("content_ids"),
         map.get("titles"),
     ) {
-        (Some(ids), None, None) => Selection::Setlist(whole_numbers::<i64>(ids, "setlist_song_ids")?),
+        (Some(ids), None, None) => {
+            Selection::Setlist(whole_numbers::<i64>(ids, "setlist_song_ids")?)
+        }
         (None, Some(ids), None) => Selection::Content(whole_numbers::<u64>(ids, "content_ids")?),
         (None, None, Some(titles)) => Selection::Titles(title_list(titles)?),
         (None, None, None) => {
@@ -1026,8 +1028,12 @@ mod tests {
         assert!(bad(
             json!({"titles": ["A"], "setlist_song_ids": [1], "playlist_id": "x", "place": "end"})
         ));
-        assert!(bad(json!({"titles": ["A", "a"], "playlist_id": "x", "place": "end"})));
-        assert!(bad(json!({"titles": [], "playlist_id": "x", "place": "end"})));
+        assert!(bad(
+            json!({"titles": ["A", "a"], "playlist_id": "x", "place": "end"})
+        ));
+        assert!(bad(
+            json!({"titles": [], "playlist_id": "x", "place": "end"})
+        ));
         assert!(bad(json!({"playlist_id": "x", "place": "end"})), "no songs");
         assert!(bad(
             json!({"setlist_song_ids": [1], "content_ids": [2], "playlist_id": "x", "place": "end"})

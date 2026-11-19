@@ -298,7 +298,10 @@ impl AddSongs {
         }
         let mut world = self.world(&request.playlist_id).await?;
         if request.songs.iter().any(|w| w.as_is) {
-            world.songs = self.library_entries(SONGS_LIBRARY).await.unwrap_or_default();
+            world.songs = self
+                .library_entries(SONGS_LIBRARY)
+                .await
+                .unwrap_or_default();
         }
         let items = items_of(&world.playlist_json);
         let in_playlist = item_uuids(&items);

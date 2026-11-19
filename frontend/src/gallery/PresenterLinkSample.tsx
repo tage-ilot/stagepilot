@@ -14,7 +14,7 @@ export function Sample({ scenario, steps = [], playback = false, link = linkCont
   return (
     <Fresh>
       <PresenterApiContext.Provider value={api}>
-        <Scripted gap={gap} steps={steps}>
+        <Scripted gap={gap} patient steps={steps}>
           <Panel tone="presentation" variant="setup"><PresenterLinkSection library={playback ? withPlayback() : withoutPlayback()} link={link} plan={PLAN_NAMES} /></Panel>
         </Scripted>
       </PresenterApiContext.Provider>
@@ -29,7 +29,7 @@ export function Swap({ steps }: { steps: Step[] }) {
   return (
     <Fresh>
       <PresenterApiContext.Provider value={api}>
-        <Scripted steps={steps}>
+        <Scripted patient steps={steps}>
           <div className="mb-2 flex flex-wrap items-center gap-3">
             <Button onClick={() => setGiven((now) => !now)} size="control" variant="secondary">{given ? "Playback loses the songs" : "Playback gives the songs"}</Button>
             <span className="text-xs text-ink-muted">{given ? "Playback's songs are listed." : "The Planning Center names are listed."}</span>

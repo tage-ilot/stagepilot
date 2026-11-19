@@ -1048,7 +1048,10 @@ async fn titles_are_looked_up_and_added_as_they_are_with_no_playback_data_at_all
         .as_str()
         .unwrap()
         .contains("Playback's data is needed to import it"));
-    assert_eq!((plan["to_add"].as_u64(), plan["stuck"].as_u64()), (Some(1), Some(1)));
+    assert_eq!(
+        (plan["to_add"].as_u64(), plan["stuck"].as_u64()),
+        (Some(1), Some(1))
+    );
     // The missing one is left out by name, then the job adds Beta as it is.
     let (status, started) = call(
         &w.app,
@@ -1099,7 +1102,11 @@ async fn the_title_inputs_are_checked_too() {
     bad(TITLES, json!({"titles": ["x".repeat(121)]})).await;
     bad(TITLES, json!({"titles": vec!["x"; 61]})).await;
     bad(TITLES, json!({"titles": ["A"], "path": "/etc"})).await;
-    bad(PREVIEW, json!({"titles": [], "playlist_id": id, "place": "end"})).await;
+    bad(
+        PREVIEW,
+        json!({"titles": [], "playlist_id": id, "place": "end"}),
+    )
+    .await;
     bad(
         PREVIEW,
         json!({"titles": ["A"], "setlist_song_ids": [11], "playlist_id": id, "place": "end"}),

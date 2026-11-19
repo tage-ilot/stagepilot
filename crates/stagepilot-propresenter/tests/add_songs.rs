@@ -4,7 +4,7 @@
 use serde_json::{json, Value};
 use stagepilot_propresenter::link::add_songs::{
     AddSongs, ApplyOutcome, ApplyRefusal, Event, Guard, Place, PlanRequest, Progress, SongAction,
-    SongStatus, TitleFound, Timing, WantedSong,
+    SongStatus, Timing, TitleFound, WantedSong,
 };
 use stagepilot_propresenter::link::api::fake::{FakeApi, Loading};
 use stagepilot_propresenter::link::api::{ApiError, Layers, ProPresenterApi};
@@ -1833,7 +1833,8 @@ async fn an_import_that_leaves_the_playlist_alone_reports_no_difference() {
 // ---- songs asked for by their title alone: added as they are --------------------------------------------------------------------
 
 #[tokio::test]
-async fn a_title_is_found_in_the_songs_library_as_it_is_and_a_missing_one_is_blocked_in_plain_words() {
+async fn a_title_is_found_in_the_songs_library_as_it_is_and_a_missing_one_is_blocked_in_plain_words(
+) {
     let rig = rig(Loading::Immediately);
     let req = request(
         &rig,
@@ -1859,11 +1860,9 @@ async fn a_title_is_found_in_the_songs_library_as_it_is_and_a_missing_one_is_blo
     let gamma = &plan.songs[1];
     assert_eq!(gamma.action, SongAction::Blocked);
     assert!(
-        gamma
-            .reason
-            .as_deref()
-            .unwrap()
-            .contains("does not have \"Gamma\" in its Songs library. Playback's data is needed to import it."),
+        gamma.reason.as_deref().unwrap().contains(
+            "does not have \"Gamma\" in its Songs library. Playback's data is needed to import it."
+        ),
         "{:?}",
         gamma.reason
     );
@@ -1873,7 +1872,12 @@ async fn a_title_is_found_in_the_songs_library_as_it_is_and_a_missing_one_is_blo
     assert_eq!((plan.to_add, plan.stuck), (1, 1));
     // A preview of titles writes and imports nothing.
     let calls = rig.host.calls().join("\n");
-    for forbidden in ["create_file", "search_import", "ensure_library", "select_library"] {
+    for forbidden in [
+        "create_file",
+        "search_import",
+        "ensure_library",
+        "select_library",
+    ] {
         assert!(!calls.contains(forbidden), "{forbidden}: {calls}");
     }
     assert!(rig.api.puts().is_empty());
@@ -1884,9 +1888,21 @@ async fn titles_are_looked_up_by_file_name_rules_and_only_in_the_songs_library()
     let host = Arc::new(
         FakeHost::new()
             .with_file("Songs", "Alpha.pro", &alpha())
-            .with_file("Songs", "Beta.pro", &song_numbered("Beta", 1002, 0xB2000000))
-            .with_file("Songs", "Beta (1).pro", &song_numbered("Beta", 1002, 0xB3000000))
-            .with_file("Playback", "Gamma (1).pro", &song_numbered("Gamma", 1003, 0xC1000000)),
+            .with_file(
+                "Songs",
+                "Beta.pro",
+                &song_numbered("Beta", 1002, 0xB2000000),
+            )
+            .with_file(
+                "Songs",
+                "Beta (1).pro",
+                &song_numbered("Beta", 1002, 0xB3000000),
+            )
+            .with_file(
+                "Playback",
+                "Gamma (1).pro",
+                &song_numbered("Gamma", 1003, 0xC1000000),
+            ),
     );
     let rig = rig_from(host, Loading::Immediately);
     let found = rig
@@ -1899,7 +1915,8 @@ async fn titles_are_looked_up_by_file_name_rules_and_only_in_the_songs_library()
         ])
         .await
         .unwrap();
-    let states: Vec<(&str, TitleFound)> = found.iter().map(|m| (m.title.as_str(), m.found)).collect();
+    let states: Vec<(&str, TitleFound)> =
+        found.iter().map(|m| (m.title.as_str(), m.found)).collect();
     assert_eq!(
         states,
         [
@@ -1917,8 +1934,16 @@ async fn titles_are_looked_up_by_file_name_rules_and_only_in_the_songs_library()
 async fn two_songs_with_one_title_are_not_guessed() {
     let host = Arc::new(
         FakeHost::new()
-            .with_file("Songs", "Beta.pro", &song_numbered("Beta", 1002, 0xB2000000))
-            .with_file("Songs", "BETA.pro", &song_numbered("Beta", 1002, 0xB3000000)),
+            .with_file(
+                "Songs",
+                "Beta.pro",
+                &song_numbered("Beta", 1002, 0xB2000000),
+            )
+            .with_file(
+                "Songs",
+                "BETA.pro",
+                &song_numbered("Beta", 1002, 0xB3000000),
+            ),
     );
     let rig = rig_from(host, Loading::Immediately);
     let plan = rig
@@ -1928,7 +1953,10 @@ async fn two_songs_with_one_title_are_not_guessed() {
         .unwrap();
     assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
     assert_eq!(plan.songs[0].choices.len(), 2);
-    assert_eq!(rig.engine.find_titles(&["beta".to_string()]).await.unwrap()[0].found, TitleFound::Several);
+    assert_eq!(
+        rig.engine.find_titles(&["beta".to_string()]).await.unwrap()[0].found,
+        TitleFound::Several
+    );
 }
 
 #[tokio::test]
@@ -1951,7 +1979,12 @@ async fn apply_puts_a_title_into_the_playlist_as_it_is_with_no_file_made_and_not
     assert_eq!(report.songs[0].file.as_deref(), Some("Beta"));
     // No file made, nothing imported, the Playback library not even created, no screen, the song itself untouched.
     let calls = rig.host.calls().join("\n");
-    for forbidden in ["create_file", "search_import", "ensure_library", "select_library"] {
+    for forbidden in [
+        "create_file",
+        "search_import",
+        "ensure_library",
+        "select_library",
+    ] {
         assert!(!calls.contains(forbidden), "{forbidden}: {calls}");
     }
     assert!(rig.host.files_of("Playback").is_empty());
@@ -1962,10 +1995,21 @@ async fn apply_puts_a_title_into_the_playlist_as_it_is_with_no_file_made_and_not
     assert_eq!(after.len(), before.len() + 1);
     assert_eq!(
         names_of(&after),
-        ["Welcome", "Alpha", "Worship", "Alpha", "Beta", "Message", "Sermon placeholder"]
+        [
+            "Welcome",
+            "Alpha",
+            "Worship",
+            "Alpha",
+            "Beta",
+            "Message",
+            "Sermon placeholder"
+        ]
     );
     let item = &after[4];
-    assert_eq!(item["id"]["uuid"], item["presentation_info"]["presentation_uuid"]);
+    assert_eq!(
+        item["id"]["uuid"],
+        item["presentation_info"]["presentation_uuid"]
+    );
     assert_eq!(
         item["id"]["uuid"],
         stagepilot_propresenter::link::api::fake::entry_uuid("Songs", "Beta.pro")
@@ -1973,48 +2017,70 @@ async fn apply_puts_a_title_into_the_playlist_as_it_is_with_no_file_made_and_not
     // It keeps the arrangement the song itself has selected: StagePilot does not choose one.
     assert_eq!(item["presentation_info"]["arrangement_name"], "Full");
     let texts = log.texts().join("\n");
-    assert!(texts.contains("as it is in the Songs library. Nothing is copied."), "{texts}");
+    assert!(
+        texts.contains("as it is in the Songs library. Nothing is copied."),
+        "{texts}"
+    );
     assert!(texts.contains("No copy is made"), "{texts}");
     assert!(texts.contains("reads back as planned"), "{texts}");
     // Asking again: it is there now and is not added twice.
     let again = rig.engine.preview(&req).await.unwrap();
     assert!(again.songs[0].already_in_playlist);
     assert_eq!(
-        rig.engine.apply(&req, &again.plan_id, &[], &Quiet, &log).await,
+        rig.engine
+            .apply(&req, &again.plan_id, &[], &Quiet, &log)
+            .await,
         Err(ApplyRefusal::NothingToAdd)
     );
     assert_eq!(rig.api.puts().len(), 1);
 }
 
 #[tokio::test]
-async fn a_title_that_is_missing_must_be_left_out_and_then_the_rest_is_added_with_a_copy_beside_it() {
+async fn a_title_that_is_missing_must_be_left_out_and_then_the_rest_is_added_with_a_copy_beside_it()
+{
     let rig = rig(Loading::Immediately);
     let req = request(
         &rig,
-        vec![
-            titled("t1", "Gamma", 1),
-            titled("t2", "Beta", 2),
-        ],
+        vec![titled("t1", "Gamma", 1), titled("t2", "Beta", 2)],
         worship(),
     );
     let plan = rig.engine.preview(&req).await.unwrap();
     assert_eq!((plan.to_add, plan.stuck), (1, 1));
     assert_eq!(
-        rig.engine.apply(&req, &plan.plan_id, &[], &Quiet, &Log::default()).await,
+        rig.engine
+            .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+            .await,
         Err(ApplyRefusal::StuckNotSkipped(vec!["t1".to_string()]))
     );
     let report = rig
         .engine
-        .apply(&req, &plan.plan_id, &["t1".to_string()], &Quiet, &Log::default())
+        .apply(
+            &req,
+            &plan.plan_id,
+            &["t1".to_string()],
+            &Quiet,
+            &Log::default(),
+        )
         .await
         .unwrap();
     assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
     assert_eq!(report.songs[0].status, SongStatus::Skipped);
     assert_eq!(report.songs[1].status, SongStatus::Added);
-    assert!(rig.host.imports().is_empty(), "a missing title is never imported");
+    assert!(
+        rig.host.imports().is_empty(),
+        "a missing title is never imported"
+    );
     assert_eq!(
         names_of(&rig.api.stored(&rig.playlist)),
-        ["Welcome", "Alpha", "Worship", "Alpha", "Beta", "Message", "Sermon placeholder"]
+        [
+            "Welcome",
+            "Alpha",
+            "Worship",
+            "Alpha",
+            "Beta",
+            "Message",
+            "Sermon placeholder"
+        ]
     );
 }
 
@@ -2023,7 +2089,13 @@ async fn a_song_as_it_is_and_a_copy_can_go_in_together_in_the_order_asked() {
     let rig = rig(Loading::Immediately);
     let mut songs = vec![
         titled("t1", "Beta", 1),
-        wanted("11", "Alpha", 2, Some(1001), &["Count Off", "Intro", "Verse 1", "Chorus"]),
+        wanted(
+            "11",
+            "Alpha",
+            2,
+            Some(1001),
+            &["Count Off", "Intro", "Verse 1", "Chorus"],
+        ),
     ];
     songs.reverse();
     let req = request(&rig, songs, worship());
@@ -2040,10 +2112,17 @@ async fn a_song_as_it_is_and_a_copy_can_go_in_together_in_the_order_asked() {
     let after = rig.api.stored(&rig.playlist);
     assert_eq!(names_of(&after)[4..6], ["Beta", "Alpha (1)"]);
     assert_eq!(after[4]["presentation_info"]["arrangement_name"], "Full");
-    assert_eq!(after[5]["presentation_info"]["arrangement_name"], "Playback");
+    assert_eq!(
+        after[5]["presentation_info"]["arrangement_name"],
+        "Playback"
+    );
     // Only the copy was made.
     assert_eq!(
-        rig.host.files_of("Playback").into_iter().map(|(n, _)| n).collect::<Vec<_>>(),
+        rig.host
+            .files_of("Playback")
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect::<Vec<_>>(),
         ["Alpha (1).pro"]
     );
 }

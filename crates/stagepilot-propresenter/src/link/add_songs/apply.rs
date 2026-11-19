@@ -590,7 +590,8 @@ impl AddSongs {
                             "Using \"{stem}\" as it is in the Songs library. Nothing is copied."
                         ),
                     );
-                    arrangements.insert(song.ref_id.clone(), self.selected_arrangement(&stem).await);
+                    arrangements
+                        .insert(song.ref_id.clone(), self.selected_arrangement(&stem).await);
                     Ok((stem, Vec::new()))
                 }
                 (Some(wanted), SongAction::Copy | SongAction::ImportThenCopy) => {
@@ -1139,7 +1140,11 @@ impl AddSongs {
 
     /// The arrangement a song of the Songs library has selected (what the playlist reads back with); blank when it cannot be read.
     async fn selected_arrangement(&self, stem: &str) -> String {
-        let Ok(bytes) = self.host.read_file(SONGS_LIBRARY, &format!("{stem}.pro")).await else {
+        let Ok(bytes) = self
+            .host
+            .read_file(SONGS_LIBRARY, &format!("{stem}.pro"))
+            .await
+        else {
             return String::new();
         };
         crate::pro_file::Song::read(&bytes)
