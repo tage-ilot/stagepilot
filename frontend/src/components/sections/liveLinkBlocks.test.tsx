@@ -94,7 +94,7 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
 
   it("Lighting: title and pills, the Host/Port row, ONE status line with the quick actions and the Details button, then the details", async () => {
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
-    await screen.findByText("Connected");
+    await screen.findByText("sACN: Connected");
     const section = screen.getByTestId("lightkey-strip");
     // The quick actions' boxes (test cue, address help) sit between the status row and the details, outside the collapsed area.
     expect(parts(section)).toEqual(["header", "connection", "status-row", "details"]);
@@ -115,7 +115,7 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
       api_url: "http://192.0.2.10:8770", link: "unreachable", detail: "No answer.", active_count: null, recording: false, recording_song: null, replay: true, replay_blocked: null, replaying_song: null, message: null,
     } as LightkeyStatus);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     expect(screen.getByRole("button", { name: /Lighting computer setup/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Set up the Lighting computer" })).toBeVisible();
   });
@@ -137,7 +137,7 @@ describe("the three rows end with the same two buttons", () => {
     const playbackPair = pairOf(screen.getByTestId("playback-live-link-line"));
     playback.unmount();
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Connected");
+    await screen.findByText("sACN: Connected");
     const lightingPair = pairOf(screen.getByTestId("live-link-line"));
     for (const pair of [presentationPair, playbackPair, lightingPair]) {
       expect(pair.labels).toEqual(["Search", "Connect"]);
@@ -146,6 +146,13 @@ describe("the three rows end with the same two buttons", () => {
         expect(button).toHaveClass("!h-10", "!min-h-10", "coarse:!h-11", "flex-none", "rounded-ds-lg");
         expect(button).toHaveAttribute("data-variant", "tinted");
       }
+    }
+    // No page-specific look: apart from the tone's own colours the three blocks draw the pair with the very same classes.
+    const shared = (button: HTMLElement) => button.className.split(/\s+/).filter((name) => !/(lighting|playback|presentation)/.test(name)).sort().join(" ");
+    for (const key of ["scan", "connect"] as const) {
+      expect(shared(playbackPair[key])).toBe(shared(presentationPair[key]));
+      expect(shared(lightingPair[key])).toBe(shared(presentationPair[key]));
+      expect(lightingPair[key].className).not.toMatch(/!border|!bg|!text-ink/);
     }
     expect(presentationPair.scan).toHaveAttribute("data-tone", "presentation");
     expect(playbackPair.scan).toHaveAttribute("data-tone", "playback");

@@ -24,7 +24,25 @@ describe("the section gallery page", () => {
 
   it("shows every state the review asked for, for Lighting", () => {
     render(<Frame />);
-    expect(ids("lighting")).toEqual(["ready", "searching", "found-one", "found-many", "address-list", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "off"]);
+    expect(ids("lighting")).toEqual(["ready", "one-fixture", "dmx-waiting", "dmx-lost", "searching", "found-one", "found-many", "address-list", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "off"]);
+  });
+
+  it("shows the two Lighting pills in every state: sACN, then DMX, always both", async () => {
+    render(<Frame />);
+    const expected: Record<string, [string, string]> = {
+      ready: ["sACN: Connected", "DMX: 66 fixtures identified"],
+      "one-fixture": ["sACN: Connected", "DMX: 1 fixture identified"],
+      "dmx-waiting": ["sACN: Connected", "DMX: Connecting\u2026"],
+      "dmx-lost": ["sACN: Connected", "DMX: Not receiving"],
+      "not-connected": ["sACN: Not connected", "DMX: \u2014"],
+      closed: ["sACN: Lightkey is closed", "DMX: \u2014"],
+      off: ["sACN: Off", "DMX: \u2014"],
+    };
+    for (const [state, [sacn, dmx]] of Object.entries(expected)) {
+      const card = sample(`lighting-${state}`);
+      expect(await within(card).findByTestId("lightkey-sacn-pill"), state).toHaveTextContent(sacn);
+      expect(within(card).getByTestId("lightkey-dmx-pill"), state).toHaveTextContent(dmx);
+    }
   });
 
   it("draws each state with the REAL block: a Live Link section with its title, pills and (where there is a Link) a Details button", async () => {

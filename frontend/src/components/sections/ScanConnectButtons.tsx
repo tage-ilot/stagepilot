@@ -3,7 +3,7 @@ import type { Tone } from "../ui/types";
 import { CONTROL_40 } from "../liveLink";
 
 /**
- * The words of the pair. Every Live Link block says exactly these; nothing else is ever drawn as a Search or Connect button. **Search**
+ * The words of the pair. Every Live Link block says exactly these, drawn exactly alike (tinted, in the connection's tone; there is no prop for a page-specific look); nothing else is ever drawn as a Search or Connect button. **Search**
  * finds a computer on the network; the word Scan is kept for reading the songs (the Playback config's Scan Playback API / Library).
  * The identifiers stay `scan` (routes, props, test ids).
  */
@@ -25,8 +25,6 @@ export interface ScanConnectProps {
   /** Why Search / Connect is switched off, as a hint on the button (a disabled button shows no tooltip of its own, so it sits on the wrapper). */
   scanHint?: string;
   connectHint?: string;
-  /** Page-specific look for BOTH buttons (Lighting's dark fill); the size, order and place stay the template's. */
-  buttonClassName?: string;
   /** The Connect button submits the row when the row is a form (Enter in the address field presses Connect). */
   submit?: boolean;
 }
@@ -35,7 +33,7 @@ const SIZE = `flex-none ${CONTROL_40}`;
 
 /** The two buttons that end every connection row: **Search**, then **Connect**. Same size, same order, same place in every block. */
 export function ScanConnectButtons({
-  tone, onScan, onCancelScan, onConnect, scanning = false, connecting = false, scanDisabled = false, connectDisabled = false, scanHint, connectHint, buttonClassName, submit = false,
+  tone, onScan, onCancelScan, onConnect, scanning = false, connecting = false, scanDisabled = false, connectDisabled = false, scanHint, connectHint, submit = false,
 }: ScanConnectProps) {
   const scanOff = !scanning && (scanDisabled || connecting || !onScan);
   const connectOff = connectDisabled || !onConnect;
@@ -46,7 +44,7 @@ export function ScanConnectButtons({
       {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
       <span className="inline-flex" data-part="scan-wrap" title={scanTitle}>
         <Button
-          className={`${SIZE} ${buttonClassName ?? ""}`}
+          className={SIZE}
           data-part="scan"
           disabled={scanOff}
           onClick={scanning ? onCancelScan : onScan}
@@ -60,7 +58,7 @@ export function ScanConnectButtons({
       <span className="inline-flex" data-part="connect-wrap" title={connectTitle}>
         {/* While it connects the button is busy (the sweep, aria-busy, no second press), not dimmed: nothing else in the row says it is working. */}
         <Button
-          className={`live-link-connect ${SIZE} ${buttonClassName ?? ""}`}
+          className={`live-link-connect ${SIZE}`}
           data-part="connect"
           disabled={connectOff}
           loading={connecting}

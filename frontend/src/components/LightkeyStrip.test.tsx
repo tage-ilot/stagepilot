@@ -38,14 +38,14 @@ afterEach(() => { vi.clearAllMocks(); });
 describe("LightkeyStrip", () => {
   it("shows the link word", async () => {
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Connected")).toBeInTheDocument();
+    expect(await screen.findByText("sACN: Connected")).toBeInTheDocument();
     expect(screen.queryByText(/cues on/)).not.toBeInTheDocument();
   });
 
   it("says why it is not connected, in words", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API.", active_count: null }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Not connected")).toBeInTheDocument();
+    expect(await screen.findByText("sACN: Not connected")).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("Cannot reach the Lightkey API.");
     expect(screen.getByRole("radio", { name: "Record" })).toBeDisabled();
   });
@@ -118,8 +118,9 @@ describe("LightkeyStrip", () => {
     for (const name of ["Lighting host or IP address", "OSC UDP port", "API port"]) expect(line).toContainElement(screen.getByLabelText(name));
     expect(line).toContainElement(screen.getByRole("button", { name: "Connect" }));
     expect(line).toContainElement(screen.getByRole("radiogroup", { name: "Mode" }));
-    // The one state pill sits in the header beside the title, not in the field row.
-    expect(line).not.toContainElement(screen.getByTestId("lightkey-link"));
+    // The two state pills sit in the header beside the title, not in the field row.
+    expect(line).not.toContainElement(screen.getByTestId("lightkey-sacn-pill"));
+    expect(line).not.toContainElement(screen.getByTestId("lightkey-dmx-pill"));
     expect(screen.getByLabelText("API port")).toHaveValue("8770");
     // Release lights sits on the second line, outside the first.
     expect(line).not.toContainElement(screen.getByRole("button", { name: "Release lights" }));
@@ -188,7 +189,7 @@ describe("LightkeyStrip", () => {
       
     }));
     render(<LightkeyStrip lightingEnabled looks={{ count: 190, edited: false }} />);
-    expect(await screen.findByText("Connected \u00B7 66 fixtures")).toBeInTheDocument();
+    expect(await screen.findByText("DMX: 66 fixtures identified")).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("190 captured items (190 ramps/steps, 0 loops) on this song");
     expect(screen.queryByRole("list", { name: "Captured songs" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Clear capture/ })).toBeNull();
@@ -250,8 +251,8 @@ describe("LightkeyStrip", () => {
   it("says connecting while the first fixture data is awaited", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: { link: "waiting", detail: null, fixtures: 1, lost_packets: 0, recording: false } }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Connecting\u2026")).toBeInTheDocument();
-    expect(screen.getByTestId("lightkey-link")).toHaveAttribute("title", expect.stringContaining("Colour and levels: connecting"));
+    expect(await screen.findByText("DMX: Connecting\u2026")).toBeInTheDocument();
+    expect(screen.getByTestId("lightkey-dmx-pill")).toHaveAttribute("title", expect.stringContaining("Colour and levels: connecting"));
   });
 
   it("says in words when the fixture stream stops, and says nothing for an older Lightkey API", async () => {
@@ -259,12 +260,12 @@ describe("LightkeyStrip", () => {
       fixtures: { link: "lost", detail: "No fixture data from the Lightkey API.", fixtures: 66, lost_packets: 2, recording: false },
     }));
     const { unmount } = render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByText("Connected \u00B7 not receiving")).toBeInTheDocument();
+    expect(await screen.findByText("DMX: Not receiving")).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("No fixture data from the Lightkey API.");
     unmount();
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status());
     render(<LightkeyStrip lightingEnabled />);
-    await screen.findByText("Connected");
+    await screen.findByText("sACN: Connected");
     expect(screen.queryByTestId("lightkey-fixtures")).not.toBeInTheDocument();
   });
 
@@ -371,7 +372,7 @@ describe("LightkeyStrip lines on screen (B3)", () => {
   it("an expired message (backend sends null) falls back to the headline", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", active_count: null, message: null }));
     render(<LightkeyStrip lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     expect(screen.getByTestId("lightkey-headline")).toHaveTextContent("No lights captured yet.");
   });
 });
@@ -547,7 +548,7 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
   it("disables Read fixtures when not connected", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API." }));
     render(<LightkeyStrip lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
     expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Connect to Lightkey first.");
   });
@@ -650,7 +651,7 @@ describe("LightkeyStrip: saving a recording that just ended (F-H5)", () => {
 
   it("is not there when nothing is being saved", async () => {
     render(<LightkeyStrip lightingEnabled />);
-    await screen.findByText("Connected");
+    await screen.findByText("sACN: Connected");
     expect(screen.queryByTestId("lightkey-saving")).not.toBeInTheDocument();
   });
 
