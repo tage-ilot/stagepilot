@@ -4,8 +4,8 @@ import type { AddSongsController } from "../hooks/useAddSongs";
 import { PLACE_END } from "../hooks/useAddSongs";
 import type { AddSongsGuess, AddSongsJob, AddSongsJobStep, AddSongsPlan, AddSongsReport, AddSongsSong } from "../propresenterLink";
 import {
-  ACTION_STAMP, afterHeaderLabel, ADD_TO_PROPRESENTER, asTheyAreSentence, AT_THE_END, backupName, guessNote, importsSentence, isStuck, mappingLines, neighbours, NOTHING_CHANGES, OPEN_LIBRARY_ONCE, OUTCOME,
-  playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
+  ACTION_STAMP, backupName, END_OF_PLAYLIST, guessNote, IMPORT_SONGS, isStuck, mappingLines, neighbours, OPEN_LIBRARY_ONCE, OUTCOME,
+  playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, twoHeadersLine,
 } from "./addSongsWording";
 import type { AddSongsRow } from "./addSongsSongs";
 import { SectionNotice, SettingsSection } from "./sections";
@@ -30,17 +30,25 @@ export function Stamp({ tone, mark, word, testId }: { tone: Tone; mark: string; 
   );
 }
 
-/** The key Playback plays a song in, as a small square chip (the same words as the matchup ledger: `Key Ab`). */
-export function KeyChip({ keyName }: { keyName: string | null }) {
-  return <span className="inline-flex flex-none items-center border border-edge-medium bg-surface-950 px-1.5 py-0.5 font-mono text-[0.8125rem] tabular-nums text-ink" data-testid="add-songs-key">{keyName ? `Key ${keyName}` : "No key"}</span>;
+/**
+ * The key Playback plays a song in, as a small square chip (the same words as the matchup ledger: `Key Ab`), with `(was G)` for a key
+ * changed in Playback in the last day (the same rule as the Playback config's cards, `keyWas`).
+ */
+export function KeyChip({ keyName, was = null }: { keyName: string | null; was?: string | null }) {
+  return <span className="inline-flex flex-none items-center border border-edge-medium bg-surface-950 px-1.5 py-0.5 font-mono text-[0.8125rem] tabular-nums text-ink" data-testid="add-songs-key">{keyName ? `Key ${keyName}${was ? ` (was ${was})` : ""}` : "No key"}</span>;
 }
 
 export const linkButton = "min-h-ds-touch-target touch-manipulation text-integration-presentation-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-presentation";
 
 // ---- 1. the playlist and the section (the songs list is `PresenterSongList`) -----------------------------------------------------
 
+/**
+ * The Section box: the playlist's section (header) names in the playlist's order, then End of Playlist. A section is every item after its
+ * header up to the next header; the songs go at the END of the chosen section (right before the next header, or at the end of the
+ * playlist for the last one). Two headers with the same name are both listed; choosing that name shows the engine's line under the box.
+ */
 export function PlaylistPicker({ add, title }: { add: AddSongsController; title?: string }) {
-  const { playlists, playlistsError, playlistId, playlist, place } = add;
+  const { playlists, playlistsError, playlistId, playlist, place, placeTwice } = add;
   const busy = add.phase === "previewing" || add.phase === "applying";
   return (
     <>
@@ -52,11 +60,12 @@ export function PlaylistPicker({ add, title }: { add: AddSongsController; title?
         </Field>
         <Field label="Section">
           <Select disabled={!playlist} onChange={(event) => add.choosePlace(event.target.value)} value={playlist ? place : PLACE_END}>
-            {playlist?.headers.map((header, index) => <option key={`${index}-${header}`} value={header}>{afterHeaderLabel(header)}</option>)}
-            <option value={PLACE_END}>{AT_THE_END}</option>
+            {playlist?.headers.map((header, index) => <option key={`${index}-${header}`} value={header}>{header}</option>)}
+            <option value={PLACE_END}>{END_OF_PLAYLIST}</option>
           </Select>
         </Field>
       </SettingsSection>
+      {placeTwice && <SectionNotice role="alert" size="xs" testId="add-songs-two-headers" tone="warning" variant="line">{twoHeadersLine(place)}</SectionNotice>}
       {playlistsError && (
         <SectionNotice actions={<button className={linkButton} onClick={() => void add.reloadPlaylists()} type="button">Look again</button>} tone="danger">
           {playlistsError}
@@ -108,9 +117,7 @@ export function PreviewBody({ add, plan, headingId }: { add: AddSongsController;
   return (
     <section aria-labelledby={headingId} className={cx("space-y-2", add.stale && "opacity-60")} data-stale={add.stale || undefined} data-testid="add-songs-preview">
       <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Preview</h3>
-      {add.stale && <p className="text-sm font-semibold text-warning-text" data-testid="add-songs-stale">{`You changed something since this preview. Press ${ADD_TO_PROPRESENTER} again.`}</p>}
-      <p className="text-sm text-ink-body" data-testid="add-songs-imports">{(add.fromPlayback ? importsSentence : asTheyAreSentence)(plan.playlist.name)}</p>
-      <p className="text-sm font-semibold text-ink" data-testid="add-songs-nothing-changes">{NOTHING_CHANGES}</p>
+      {add.stale && <p className="text-sm font-semibold text-warning-text" data-testid="add-songs-stale">{`You changed something since this preview. Press ${IMPORT_SONGS} again.`}</p>}
       <p className="text-sm text-ink-body" data-testid="add-songs-playlist-line">
         {playlistSentence(plan, header)}{around && plan.to_add > 0 ? ` ${around}` : ""}
       </p>
@@ -150,15 +157,15 @@ export function Progress({ add, plan, headingId }: { add: AddSongsController; pl
   const last = job?.events[job.events.length - 1];
   return (
     <section aria-labelledby={headingId} className="space-y-2" data-testid="add-songs-progress">
-      <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Adding songs</h3>
+      <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Importing songs</h3>
       <p className="min-h-[1.5rem] text-sm text-ink-body" data-testid="add-songs-now">{last ? `Now: ${last.text}` : "Starting\u2026"}</p>
-      {add.lostContact && <SectionNotice tone="warning">StagePilot lost contact with itself for a moment. It keeps trying; the songs are still being added.</SectionNotice>}
+      {add.lostContact && <SectionNotice tone="warning">StagePilot lost contact with itself for a moment. It keeps trying; the songs are still being imported.</SectionNotice>}
       {job && job.steps.length > 0 && (
         <ol aria-label="Steps for the playlist" className="space-y-1" data-testid="add-songs-steps">
           {job.steps.map((step) => <StepLine key={step.step} step={step} />)}
         </ol>
       )}
-      <ol aria-label="Songs being added" className="divide-y divide-dashed divide-edge-medium border-y border-edge-medium" data-testid="add-songs-job-songs">
+      <ol aria-label="Songs being imported" className="divide-y divide-dashed divide-edge-medium border-y border-edge-medium" data-testid="add-songs-job-songs">
         {songs.map((song) => (
           <li className="space-y-1 py-2" data-testid="add-songs-job-song" key={song.ref_id}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -236,15 +243,12 @@ export function GuessNote({ guesses, title }: { guesses: AddSongsGuess[]; title:
   );
 }
 
-/**
- * Above the button: what pressing it does, said plainly (the same sentence before the first press and after), and, when something stops
- * it, why in words. `id` is what the button's `aria-describedby` points at.
- */
-export function Reason({ id, children, note }: { id: string; children?: ReactNode; note?: string }) {
+/** Above the button, when something stops it: why, in words. `id` is what the button's `aria-describedby` points at. */
+export function Reason({ id, children }: { id: string; children?: ReactNode }) {
+  if (!children) return null;
   return (
     <div className="min-w-0 space-y-1" data-testid="add-songs-reason-box">
-      {note && <p className="break-words text-sm text-ink-muted" data-testid="add-songs-what-it-does">{note}</p>}
-      {children && <p className="break-words text-sm font-semibold text-ink" data-testid="add-songs-reason" id={id}>{children}</p>}
+      <p className="break-words text-sm font-semibold text-ink" data-testid="add-songs-reason" id={id}>{children}</p>
     </div>
   );
 }

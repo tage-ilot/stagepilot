@@ -20,7 +20,7 @@ export interface PlaybackController {
   scan: (host?: string) => void;
   cancelScan: () => void;
   discover: () => void;
-  /** "Scan Playback Songs" while the Library Link works: reads the Library Link fresh, steps through nothing. */
+  /** "Scan Playback Library" (the Song order button while the Library Link works): reads the Library Link fresh, steps through nothing. */
   refreshFromLibrary?: () => void;
   /** How many songs the last press read from the Library Link, once the answer is in and confirmed; null otherwise. */
   libraryRead?: number | null;
@@ -185,7 +185,7 @@ export function usePlaybackInput(canConfigure: boolean, onSettings: (settings: S
         ++statusRevision.current;
         setStatus(next);
       } catch (cause) {
-        if (generation.current === current) setError(describeError(cause, "Could not cancel the scan."));
+        if (generation.current === current) setError(describeError(cause, "Could not cancel the search."));
       } finally {
         if (generation.current === current) {
           scanStarted.current = null;

@@ -30,7 +30,7 @@ function Strip({ host = "10.30.0.211", held = false, attempted = false }: { host
 }
 const answered = () => screen.findByRole("radiogroup", { name: "Mode" });
 const box = () => screen.getByRole("combobox", { name: HOST_LABEL });
-const arrow = () => screen.getByRole("button", { name: "Show recent and scanned addresses" });
+const arrow = () => screen.getByRole("button", { name: "Show recent and found addresses" });
 
 beforeEach(() => { window.localStorage.clear(); vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });
 afterEach(() => { vi.clearAllMocks(); });
@@ -66,7 +66,7 @@ describe("Lighting Live Link: the Host address box", () => {
     render(<Strip />);
     await answered();
     await user.click(arrow());
-    expect(within(screen.getByRole("group", { name: "Scanned" })).getAllByRole("option").map((o) => o.textContent)).toEqual(["10.30.0.141", "10.30.0.152"]);
+    expect(within(screen.getByRole("group", { name: "Found" })).getAllByRole("option").map((o) => o.textContent)).toEqual(["10.30.0.141", "10.30.0.152"]);
     await user.click(screen.getByRole("option", { name: "10.30.0.141" }));
     await user.type(box(), "5");
     expect(box()).toHaveValue("10.30.0.1415");

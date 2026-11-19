@@ -34,7 +34,7 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
 import { CueTypeBadge } from "./CueTypeParts";
 import { classifyOscCue } from "./lightingCueTypes";
 
-const WAITING = "Lighting has not answered yet. Scan and Connect work once it has.";
+const WAITING = "Lighting has not answered yet. Search and Connect work once it has.";
 
 /**
  * The sACN DMX Live Link block when the live link itself is not on screen (Lighting is not saved as OSC yet): the same shared host

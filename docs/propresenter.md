@@ -102,7 +102,7 @@ own HTTP API (libraries and playlists) for the later arrangement work.
 
 ## Adding songs to a playlist
 
-StagePilot can put the songs of the service into one ProPresenter playlist, at a section you choose. The button is **Add to ProPresenter**
+StagePilot can put the songs of the service into one ProPresenter playlist, at a section you choose. The button is **Import songs to ProPresenter**
 in the **Presenter Link** section of the **ProPresenter (Presentation) panel**; it is **not** in the Playback panel any more. The list
 has two sources, and it is ONE list:
 
@@ -110,19 +110,18 @@ has two sources, and it is ONE list:
   the songs in Playback's setlist order, each **with the arrangement and the key Playback plays it in** and its MultiTracks id. This needs
   the Playback Library Link (for the songs, their sections, their keys and their MultiTracks numbers), the Presenter Link (for the files;
   **Ready**) and ProPresenter's own network setting (its API, port 1025).
-- **No Playback data yet:** the upcoming plan's **Planning Center song names**, with the line *Playback has not given the songs yet: these
-  are the Planning Center names.* These need only the Presenter Link. Each name is looked up **by its title in ProPresenter's Songs
+- **No Playback data yet:** the upcoming plan's **Planning Center song names**; each card has a small **Planning Center** chip (the
+  section says nothing more about where the list comes from). These need only the Presenter Link. Each name is looked up **by its title in ProPresenter's Songs
   library** and added to the playlist **as it is**: no copy, no import, no arrangement and no key change. A name ProPresenter does not
-  have is marked **Not in ProPresenter**, cannot be ticked, and says that Playback data is needed to import it.
+  have is marked **Not in ProPresenter** (a grey dashed card), cannot be selected, and says that Playback data is needed to import it.
 
-The list changes by itself from one source to the other when Playback gives the songs or loses them; a song you unticked stays unticked.
-Nothing happens unless a person presses the one button; it makes the preview and, when nothing in the preview is blocked, adds the songs.
+The list changes by itself from one source to the other when Playback gives the songs or loses them; a song you turned off stays off.
+Nothing happens unless a person presses the one button; it makes the preview and, when nothing in the preview is blocked, imports the songs.
 
-**What pressing Add to ProPresenter does, in the section's words:** *This imports songs, arrangements and keys into <playlist>. The
-playlist's contents are replaced with what the preview shows.* The playlist is written whole, so what is in it afterwards is what
-the preview showed; that is expected and the section does not warn about it. For Planning Center names the sentence is *This adds the songs
-as they are in ProPresenter to <playlist>: no copy, no new arrangement, no key change. The playlist's contents are replaced with what the
-preview shows.* *Nothing in ProPresenter changes until you press Add to ProPresenter.* stays as it was in spirit.
+**What pressing Import songs to ProPresenter does.** (The section itself says as little as it can: only what you must act on. This is the
+explanation it leaves out.) It imports the songs, their arrangements and their keys into the chosen playlist: nothing in ProPresenter
+changes until you press it. The playlist is written whole, so what is in it afterwards is what the preview showed; that is expected and the
+section does not warn about it. Planning Center names go in **as they are** in ProPresenter: no copy, no new arrangement, no key change.
 
 **What happens, song by song.**
 
@@ -236,8 +235,8 @@ the whole write `404`).
 The block is the **first block under the header** (and under the panel's alert lines), where the Playback and Lighting panels put their
 Live Link blocks, in the same spacing. It is built like them: a title, two pills (`ProPresenter API: Connected`,
 `Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
-**connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API); **Host** is the address box every Live Link block has (type any address, or open its arrow for the computers the last scan found and the ones that worked before) and the
-same two buttons every Live Link block ends its row with, **Scan** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
+**connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API); **Host** is the address box every Live Link block has (type any address, or open its arrow for the computers the last search found, under **Found**, and the ones that worked before, under **Recent**) and the
+same two buttons every Live Link block ends its row with, **Search** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
 connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Refresh uses the
 saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`
 (in words, with the warning border) and is saved by **Save configuration**, or by **Connect**, which saves the connection (Host and API only) and connects the way Save does;
@@ -253,7 +252,7 @@ with ProPresenter saved and nothing held in those two boxes, **Connect** only ch
 | `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the Presenter Link** and run the command |
 | `Needs the command again` | the helper does not know this StagePilot's key | press **Set up the ProPresenter computer** and run the command again |
 | `Not answering` | the other computer is off, asleep or not on the network | wake it; if it was set up again from another StagePilot, run the command here again |
-| `Not installed` | there is no Link (grey, never a warning) | nothing, unless you want Add to ProPresenter |
+| `Not installed` | there is no Link (grey, never a warning) | nothing, unless you want Import songs to ProPresenter |
 
 When ProPresenter is on **this** computer the block has no setup button and says so. For **another** computer the button **Set up the
 ProPresenter computer** opens a box: **press it** to get one command (nothing is made until you press), paste it in Terminal on the
@@ -267,41 +266,49 @@ The section is drawn **only while the Presenter Link is Ready** (this computer, 
 said: the feature is optional. It is built from the section templates (a settings group for the options, the notices, the action row) and
 has no window; everything, including progress and the result, happens in place, under the button.
 
-1. **Playlist** and **Section** (`After "Worship"` for each header of that playlist, or `At the end`), side by side. The last choice is
-   kept in this browser only.
-2. **Songs**: one list, ticked, with a count and **Tick all / Untick all**. Columns: **Song**, **MultiTracks id**, **Key**, **Arrangement**
-   (the **Sections** button on a row shows the order the arrangement plays). With Playback data these are Playback's, in its order, and a
-   song Playback gave no number cannot be added and says so. Without it the list is the plan's Planning Center names with a dash in the
-   other columns, the same columns and heights, so nothing moves when the data arrives. Under a Playback list: *ProPresenter does not show
-   the key for these songs; it is written into the copy and shown here.*
-3. Above the button: what pressing it does (*This imports songs, arrangements and keys into <playlist>. The playlist's contents are
-   replaced with what the preview shows.*, or *This adds the songs as they are...* for names) and, when it is off, why in words.
-4. **Add to ProPresenter**: ONE button. It makes the preview and, when nothing is blocked and no song is playing, adds the songs at once.
+1. **Playlist** and **Section**, side by side. **Section** lists the playlist's section (header) names in the playlist's order, then
+   **End of Playlist**. A section is every item after its header up to the next header; the songs go at the **end** of the chosen
+   section, right before the next header (for the last section, at the end of the playlist). The first default is **End of Playlist**.
+   The section that was last **used for an import** in that playlist (choosing one is not enough) is the default the next time, while
+   the playlist still has it; else **End of Playlist**. The last playlist and these sections are kept in this browser only. When a
+   playlist has two headers with the same name both are listed; choosing that name shows ProPresenter Link's own line under the box
+   (*More than one header in this playlist is named "Worship". Pick another place.*) and the button stays off: StagePilot does not guess.
+2. **Songs**: the same song cards as the Lighting tab's songs (an auto-fill grid, the cover when the Library Link has one, the title, a
+   small line of facts, the thin arrangement bar), with the count (`3 of 4 selected`, read out politely) and **Select all** / **Select
+   none** above them. Every card starts selected: a selected card has the outline and a check mark; Space or Enter turns it on or off.
+   With Playback data a card shows the MultiTracks id, the arrangement (its whole order on hover, and **Sections** opens it on the card)
+   and a key chip (`Key Ab`, with `(was G)` for a key changed in Playback in the last day), in Playback's order; a song Playback gave no
+   number is a grey card that says it cannot be imported. Without Playback data a card is the Planning Center name and a **Planning
+   Center** chip. After a preview, the cards it stopped for carry its stamp (`Blocked`, `Needs a choice`) and a song with a guessed
+   section a **Guessed** chip.
+3. Above the button, only when it is off or the preview stopped: why, in words.
+4. **Import songs to ProPresenter**: ONE button (`Importing…` while it works). It makes the preview and, when nothing is blocked and no song is playing, imports the songs at once.
    If a song is blocked or needs a choice, the playlist side is blocked, there is nothing to add, or a song is playing, it **stops after the
    preview** with the reason in words and the preview under the button (a stamp per song: `Already there`, `New copy`, `Load first`,
-   `Used as is`, `Needs a choice`, `Blocked`; how sections matched; guesses are listed and never block). **Skip those and add the rest** is
-   offered when something can still be added without the blocked songs; it never adds half silently. Changing a tick, the playlist or the
+   `Used as is`, `Needs a choice`, `Blocked`; how sections matched; guesses are listed and never block). **Skip those and import the rest** is
+   offered when something can still be imported without the blocked songs; it never imports half silently. Changing a selection, the playlist or the
    section after a preview marks it as old: press the button again.
 5. While it runs, each song and each step shows a word and a mark (`Done`, `Working`, `Failed`), the newest thing said is announced
-   politely, and the button and the options are off. The end is a result under the button: what was added, anything ProPresenter shows
+   politely, and the button and the options are off. The end is a result under the button: what was imported, anything ProPresenter shows
    differently from the plan, the name of the playlist backup and, under a song whose sections were guessed, a short *Check in
    ProPresenter:* note (information only). When ProPresenter is showing slides, media, announcements, props or messages the job stops
    before touching the screen: *Stopped: ProPresenter is showing something on screen*, with **Try again** once it is clear. **Try again**
    makes a fresh preview and adds it at once when it is clean.
 
-### Scan: finding ProPresenter on the network
+### Search: finding ProPresenter on the network
 
-**Scan** in the block looks for ProPresenter's API. StagePilot asks every private address this computer is on (the networks it is attached to, never wider than the
+**Search** in the block looks for ProPresenter's API (Search finds a computer; the word Scan is kept for reading the songs, the Playback
+panel's **Scan Playback API** / **Scan Playback Library**). StagePilot asks every private address this computer is on (the networks it is attached to, never wider than the
 attached /24, plus the /24 of the saved Host when that is a private address), and this computer, ONE thing: `GET /version`, with a short time limit, 32 addresses
 at a time. It tries the saved API port first, then 1025. It sends nothing else, writes nothing, never asks a public address and saves nothing. While it looks the
-button reads **Scanning… (cancel)** and a line says how far it is. When ProPresenter runs on this computer, that is the answer and the scan stops there.
+button reads **Searching… (cancel)** and a line says how far it is (`Searching the network for ProPresenter… — Checked 64 of 255 addresses (6s)`). When ProPresenter runs on this computer, that is the answer and the search stops there.
 
 - **One computer answered:** Host and API are filled in (a change not saved yet), a line says which computer, and **Connect** saves and connects.
-- **Several:** a list (the same one the Playback scan uses): choosing one fills Host and API.
+- **Several:** a list (`Found 2 ProPresenter computers. Choose one:`, the same one the Playback search uses): choosing one fills Host and API.
 - **Nobody:** a short "Make sure" list stays under the row.
 - **macOS blocks the local network:** the red notice with the steps (System Settings > Privacy & Security > Local Network), **Open Local Network settings** and **Copy diagnostic details**.
 
-The routes (the same PIN, origin and remote-access rules as every other write; a remote viewer cannot start a scan): `POST /api/v1/propresenter/scan` (an empty body or `{}`),
+The routes (the same PIN, origin and remote-access rules as every other write; a remote viewer cannot start a search): `POST /api/v1/propresenter/scan` (an empty body or `{}`),
 `POST /api/v1/propresenter/scan/cancel` and `GET /api/v1/propresenter/scan` answer `{state: idle|scanning|found|not_found, candidates: [{host, port, name, version}], reason,
 current, total, phase, error_class: permission_denied|no_route|null, elapsed, networks, hosts_probed, hosts_total, details, settings_url}`. `name` and `version` are what
 ProPresenter's own answer says (`name`, `host_description`).
@@ -313,10 +320,11 @@ Live Link** type the host and the API port, **Save configuration** (or press **C
 from ProPresenter, allow "ProPresenter Link" (the name macOS shows for the Presenter Link; or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
 In ProPresenter, Settings > Network must have the API on.
 
-**Add the songs.** Configuration > Presentation > **Presenter Link** > choose the playlist and the section > tick the songs (they are Playback's
-when Playback has given them, else the plan's Planning Center names) > **Add to ProPresenter**. It imports songs, arrangements and keys into
-the playlist (names already in ProPresenter go in as they are), and the playlist's contents are replaced with what the preview shows. If
-something is blocked it stops and tells you; read it, then **Skip those and add the rest** or fix it and press the button again. Do it
+**Import the songs.** Configuration > Presentation > **Presenter Link** > choose the playlist and the section (or **End of Playlist**) >
+leave the songs you want selected (they are Playback's when Playback has given them, else the plan's Planning Center names) > **Import
+songs to ProPresenter**. It imports songs, arrangements and keys into the playlist, at the end of the chosen section (names already in
+ProPresenter go in as they are), and the playlist's contents are replaced with what the preview shows. If something is blocked it stops
+and tells you; read it, then **Skip those and import the rest** or fix it and press the button again. Do it
 before the service, not while a song plays and not while ProPresenter shows slides.
 
 **"Check in ProPresenter".** When a section of Playback's arrangement fits more than one group of a song (a repeated Interlude, several blank
@@ -327,12 +335,12 @@ section by hand if the pick is wrong.
 while slides, media, announcements, props or messages are on screen. Clear the output (a camera input does not count), then press **Try again**.
 
 **"Open the Playback library in ProPresenter once, then press Try again."** ProPresenter loads a new song file only when it looks at its
-library. In ProPresenter, click the library **Playback** in the left list once, then press **Try again** (it makes a new preview and adds the songs). Nothing was added to the
+library. In ProPresenter, click the library **Playback** in the left list once, then press **Try again** (it makes a new preview and imports the songs). Nothing was added to the
 playlist, and the copies already made are reused.
 
 **What the Link never does.** It never edits, renames or deletes a song or a playlist item; it never edits a file in `Songs`; it never
 deletes a playlist; it never touches more than the `Playback` library folder, ProPresenter's own import into `Songs`, and **one** named
-playlist (saved as a backup first, read back after); it never changes anything until you pressed Add to ProPresenter; never while a
+playlist (saved as a backup first, read back after); it never changes anything until you pressed Import songs to ProPresenter; never while a
 song plays; never clicks or types in ProPresenter while it shows something on screen; it never shows or sends the helper's key; it never quits or restarts ProPresenter; and ProPresenter itself does not show the key
 Playback plays a song in.
 

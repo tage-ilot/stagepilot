@@ -6,7 +6,7 @@ import { libraryController } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 
-// "Scan Playback Songs" when the Library Link works reads it instead of stepping through Playback.
+// "Scan Playback Library" when the Library Link works: it reads the Library Link instead of stepping through Playback. Otherwise the one button is "Scan Playback API".
 const controller = (overrides: Partial<PlaybackController> = {}): PlaybackController => ({
   status: playbackStatus({ order_source: "library", order_library_note: null }), events: [], error: null, message: null, pending: null,
   saveArrangement: vi.fn(async () => true), save: vi.fn().mockResolvedValue(true), selectSource: vi.fn().mockResolvedValue(true),
@@ -15,11 +15,11 @@ const controller = (overrides: Partial<PlaybackController> = {}): PlaybackContro
 const NOTE = "Not using the Library Link's order: Faithfulness is not in Playback's setlist.";
 const failed = (extra = {}) => playbackStatus({ order_source: "none", order_library_note: NOTE, song_order: [], stale: true, ...extra });
 
-describe("Scan Playback Songs with the Library Link working", () => {
+describe("Scan Playback Library with the Library Link working", () => {
   it("reads the Library Link at one press: no confirm dialog, nothing stepped, the label stays", () => {
     const playback = controller();
     render(<PlaybackApiPanel library={libraryController("ready")} playback={playback} />);
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Library" }));
     expect(playback.refreshFromLibrary).toHaveBeenCalledOnce();
     expect(playback.discover).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -36,7 +36,7 @@ describe("Scan Playback Songs with the Library Link working", () => {
   it("an outdated helper still works the same way", () => {
     const playback = controller();
     render(<PlaybackApiPanel library={libraryController("outdated")} playback={playback} />);
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Library" }));
     expect(playback.refreshFromLibrary).toHaveBeenCalledOnce();
   });
 
@@ -44,24 +44,24 @@ describe("Scan Playback Songs with the Library Link working", () => {
     const playback = controller({ status: playbackStatus({ playing: true, order_source: "library", order_library_note: null }) });
     render(<PlaybackApiPanel library={libraryController("ready")} playback={playback} />);
     expect(screen.queryByText("Stop Playback to scan Playback songs.")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Library" }));
     expect(playback.refreshFromLibrary).toHaveBeenCalledOnce();
   });
 
   it("shows the loading state on the button itself, keeps its text, and cannot be pressed again while it reads", () => {
     const playback = controller({ pending: "library" });
     render(<PlaybackApiPanel library={libraryController("ready")} playback={playback} />);
-    const button = screen.getByRole("button", { name: "Scan Playback Songs" });
+    const button = screen.getByRole("button", { name: "Scan Playback Library" });
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toHaveAttribute("data-loading", "true");
-    expect(button).toHaveTextContent("Scan Playback Songs");
+    expect(button).toHaveTextContent("Scan Playback Library");
     fireEvent.click(button);
     expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
   });
 
   it("is not loading when nothing is being read", () => {
     render(<PlaybackApiPanel library={libraryController("ready")} playback={controller()} />);
-    expect(screen.getByRole("button", { name: "Scan Playback Songs" })).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("button", { name: "Scan Playback Library" })).not.toHaveAttribute("aria-busy");
   });
 
   it("confirms the read in the Song order section, in a polite live region, once the answer is in", () => {
@@ -76,37 +76,37 @@ describe("Scan Playback Songs with the Library Link working", () => {
     expect(screen.getByTestId("library-read-line")).toHaveTextContent("Read 1 song from the Library Link");
   });
 
-  it("a failed condition: the plain line, and the stepping scan offered quietly as the backup", () => {
+  it("a failed condition: the plain line stays, and the one button is the best scan left, Scan Playback API (confirm, then step)", () => {
     const playback = controller({ status: failed() });
     render(<PlaybackApiPanel library={libraryController("ready")} playback={playback} />);
     expect(screen.getByTestId("order-library-note")).toHaveTextContent(NOTE);
     expect(screen.getByTestId("library-read-line")).toBeEmptyDOMElement();
-    const backup = screen.getByRole("button", { name: "Scan with Playback instead" });
-    expect(backup).toHaveAttribute("data-variant", "secondary");
-    // The first button still tries the Library Link.
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
-    expect(playback.refreshFromLibrary).toHaveBeenCalledOnce();
-    expect(playback.discover).not.toHaveBeenCalled();
-    // The backup opens today's confirm, with today's words, and then steps as before.
-    fireEvent.click(backup);
-    const dialog = screen.getByRole("dialog");
+    expect(screen.queryByRole("button", { name: "Scan Playback Library" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Scan with Playback instead" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback API" }));
+    expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
+    // Today's confirm, with today's words, and then it steps as before.
+    const dialog = screen.getByRole("dialog", { name: "Scan Playback API?" });
     expect(dialog).toHaveTextContent("must stay stopped");
     expect(dialog).toHaveTextContent("Nothing will be played.");
-    fireEvent.click(screen.getAllByRole("button", { name: "Scan Playback Songs" }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Scan Playback API" }).at(-1)!);
     expect(playback.discover).toHaveBeenCalledOnce();
   });
 
-  it("a failed condition while Playback plays: the backup is not offered (stepping needs Playback stopped)", () => {
+  it("a failed condition while Playback plays: Scan Playback API is greyed out (stepping needs Playback stopped) and says why", () => {
     render(<PlaybackApiPanel library={libraryController("ready")} playback={controller({ status: failed({ playing: true }) })} />);
     expect(screen.getByTestId("order-library-note")).toBeVisible();
+    const button = screen.getByRole("button", { name: "Scan Playback API" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription("Stop Playback to scan songs.");
     expect(screen.queryByRole("button", { name: "Scan with Playback instead" })).not.toBeInTheDocument();
   });
 
-  it.each(["not_installed", "needs_key", "unreachable"] as const)("Library Link %s: exactly as before (confirm, then step through Playback)", (state) => {
+  it.each(["not_installed", "needs_key", "unreachable"] as const)("Library Link %s: Scan Playback API, exactly as before (confirm, then step through Playback)", (state) => {
     const playback = controller({ status: playbackStatus({ song_order: [], stale: true }) });
     render(<PlaybackApiPanel library={libraryController(state)} playback={playback} />);
     expect(screen.getByText(/steps through your Playback songs once/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback API" }));
     expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Scan with Playback instead" })).not.toBeInTheDocument();
@@ -116,15 +116,21 @@ describe("Scan Playback Songs with the Library Link working", () => {
     const library = libraryController("ready");
     const playback = controller({ status: playbackStatus({ song_order: [], stale: true }) });
     render(<PlaybackApiPanel library={{ ...library, status: { ...library.status!, stale: true } }} playback={playback} />);
-    fireEvent.click(screen.getByRole("button", { name: "Scan Playback Songs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan Playback API" }));
     expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeVisible();
   });
 
-  it("Playback not connected: no button, the same explanation as before", () => {
+  it("Playback not connected: the same explanation as before, and the button greyed out with its reason", () => {
     const status = playbackStatus({ sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: false, reason: "MIDI is disconnected." } } });
-    render(<PlaybackApiPanel library={libraryController("ready")} playback={controller({ status })} />);
+    const playback = controller({ status });
+    render(<PlaybackApiPanel library={libraryController("ready")} playback={playback} />);
     expect(screen.getByText("Connect to Playback first.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Scan Playback Songs" })).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Scan Playback Library" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Connect to the Playback API first.");
+    expect(button).toHaveAccessibleDescription("Connect to the Playback API first.");
+    fireEvent.click(button);
+    expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
   });
 });

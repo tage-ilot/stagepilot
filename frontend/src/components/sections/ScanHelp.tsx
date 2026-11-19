@@ -49,8 +49,8 @@ export function ScanHelp({ scan, wording, tone = "info", scanning = false, copie
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>Quit StagePilot.</li>
             <li>Open System Settings &gt; Privacy &amp; Security &gt; Local Network.</li>
-            <li>Turn StagePilot off and on again (if it is not listed, press Scan once and click Allow when macOS asks).</li>
-            <li>Reopen StagePilot and scan again.</li>
+            <li>Turn StagePilot off and on again (if it is not listed, press Search once and click Allow when macOS asks).</li>
+            <li>Reopen StagePilot and search again.</li>
           </ol>
           {actions(true)}
         </InlineAlert>
@@ -61,7 +61,7 @@ export function ScanHelp({ scan, wording, tone = "info", scanning = false, copie
     return (
       <div data-part="scan-help">
         <InlineAlert className="p-3 text-ink-body" data-testid={testId} tone="danger">
-          <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't scan the network"}</p>
+          <p className="font-semibold">{scan.typed ? "Couldn't connect" : "Couldn't search the network"}</p>
           <p className="mt-1">{scan.reason}</p>
           <p className="mt-1 text-xs text-ink-muted">{scanSummary(scan)}</p>
           {actions(Boolean(scan.settingsUrl))}

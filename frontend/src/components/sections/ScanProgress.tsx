@@ -1,9 +1,9 @@
 import type { ScanState } from "./scanState";
 
 export interface ScanWording {
-  /** The progress line before the scan says more ("Looking for Playback…"). */
+  /** The progress line of a network search ("Searching the network for Playback…"); what the search is doing now follows it. */
   looking: string;
-  /** The chooser's title for `count` computers ("Choose which Playback"). Also its accessible name. */
+  /** The chooser's title for `count` computers ("Found 2 Playback computers. Choose one:"). Also its accessible name. */
   choose: (count: number) => string;
   /** What the help says when nothing answered. Left out: the scan's own reason. */
   notFound?: string;
@@ -13,9 +13,16 @@ export interface ScanWording {
   other?: string;
 }
 
-/** The ONE progress line of a scan, in every block: what it is doing, how far, how long (`Looking for Playback… — Checked 64 of 254 addresses (3s)`). Drawn only while it scans. */
+/** A backend's own "Looking for X…" phase says what `looking` says already. */
+const SAYS_LOOKING = /^Looking for /;
+
+/**
+ * The ONE progress line of a search, in every block: what it is doing, how far, how long (`Searching the network for Playback… This
+ * computer — Checked 64 of 254 addresses (3s)`). A one-address try (Connect) says its own phase (`Connecting to 10.0.0.5…`). Drawn only while it runs.
+ */
 function scanProgressText(scan: ScanState, wording: ScanWording): string {
-  const phase = scan.phase ?? (scan.typed ? "Connecting…" : wording.looking);
+  const detail = scan.phase && !SAYS_LOOKING.test(scan.phase) ? scan.phase : null;
+  const phase = scan.typed ? scan.phase ?? "Connecting…" : detail ? `${wording.looking} ${detail}` : wording.looking;
   const counts = scan.total > 1 ? ` Checked ${scan.current} of ${scan.total} addresses` : "";
   // A search that does not time itself (Lighting's) says no seconds.
   const seconds = scan.elapsed === undefined ? "" : ` (${Math.max(0, Math.floor(scan.elapsed))}s)`;

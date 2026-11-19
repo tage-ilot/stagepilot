@@ -77,7 +77,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
     if (connectedNow && trimmed === savedHost) recheck.mark(); else recheck.clear();
     choose(trimmed);
   };
-  const connectHint = !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the scan to finish, or cancel it." : undefined;
+  const connectHint = !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the search to finish, or cancel it." : undefined;
 
   const api = status ? apiLine(status, "Checking Playback…") : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
   const hasComputer = Boolean(library?.target || savedHost);

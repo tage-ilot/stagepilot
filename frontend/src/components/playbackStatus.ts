@@ -17,9 +17,9 @@ export function validPlaybackHost(host: string): boolean {
 
 /**
  * The backend's sentences, in the buttons' words. Playback says "Choose Scan Network to find Playback" (that sentence is part of the
- * contract the backend is held to), but the button is now Scan: the page says the button's name.
+ * contract the backend is held to), but the button is now Search: the page says the button's name.
  */
-export const playbackWords = (text: string): string => text.replace("Choose Scan Network to", "Choose Scan to");
+export const playbackWords = (text: string): string => text.replace("Choose Scan Network to", "Choose Search to");
 
 // Shared wording: connection health is not song-order/action readiness.
 export const playbackConnectionDetail = (status: PlaybackConnection) => playbackWords(status.reason);
@@ -105,8 +105,38 @@ export function playbackStreamRows(events: PlaybackMonitorEntry[] | undefined, s
 
 
 export const SONG_ORDER_OPEN_KEY = "stagepilot.playback.song-order-open";
-export const SCAN_PLAYBACK_SONGS = "Scan Playback Songs";
-export const SCAN_WITH_PLAYBACK_INSTEAD = "Scan with Playback instead";
+/** The ONE song-scan button of the Song order section names the best scan there is: the Library Link (read, nothing is stepped) or the Playback API (stepping through the songs). */
+export const SCAN_PLAYBACK_LIBRARY = "Scan Playback Library";
+export const SCAN_PLAYBACK_API = "Scan Playback API";
+/** Why the button is greyed out (its title, and the words a screen reader hears with it). */
+export const SCAN_NEEDS_API = "Connect to the Playback API first.";
+export const SCAN_NEEDS_STOPPED = "Stop Playback to scan songs.";
+export const SCAN_IS_RUNNING = "A scan is running.";
+
+export interface SongScanButton {
+  /** `library`: reads the Library Link (no confirmation, works while a song plays). `api`: the confirmation, then stepping through Playback. */
+  kind: "library" | "api";
+  label: typeof SCAN_PLAYBACK_LIBRARY | typeof SCAN_PLAYBACK_API;
+  /** Why it cannot be pressed now; null when it can. The button is never hidden. */
+  reason: string | null;
+}
+
+/**
+ * The best song scan available. The Library Link when it is usable (answering, not an old copy) and its order has no failed condition;
+ * otherwise the Playback API (also when the Library Link is usable but its order failed: then its plain line says why). `reading`: a
+ * Library Link read is in flight (that button shows its own loading).
+ */
+export function songScanButton({ libraryUsable, libraryNote, apiConnected, playing, running, reading }: {
+  libraryUsable: boolean; libraryNote: string | null | undefined; apiConnected: boolean; playing: boolean; running: boolean; reading: boolean;
+}): SongScanButton {
+  const library = libraryUsable && !libraryNote;
+  const kind = library ? "library" : "api";
+  const reason = !apiConnected ? SCAN_NEEDS_API
+    : running || (!library && reading) ? SCAN_IS_RUNNING
+      : !library && playing ? SCAN_NEEDS_STOPPED
+        : null;
+  return { kind, label: library ? SCAN_PLAYBACK_LIBRARY : SCAN_PLAYBACK_API, reason };
+}
 /** The help line when the button reads the Library Link (the order already comes from it / it does not yet). */
 export const LIBRARY_ORDER_HELP = "The song order comes from the Library Link. The button reads it again now; Playback is not touched.";
 export const LIBRARY_BUTTON_HELP = "The button reads the song order from the Library Link. Playback is not touched and can keep playing.";

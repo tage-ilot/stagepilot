@@ -303,7 +303,7 @@ export const discoverPlaybackSongOrder = () =>
   requestJson<PlaybackStatusResponse>("/api/v1/playback-api/discover-song-order", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }),
   });
-/** "Scan Playback Songs" while the Library Link works: reads the Library Link fresh; nothing is stepped in Playback. */
+/** "Scan Playback Library" (the Song order button while the Library Link works): reads the Library Link fresh; nothing is stepped in Playback. */
 export const refreshPlaybackSongOrderFromLibrary = () =>
   requestJson<PlaybackStatusResponse>("/api/v1/playback-api/song-order/refresh-from-library", { method: "POST" });
 const lengthPath = "/api/v1/playback-api/planning-center-lengths";

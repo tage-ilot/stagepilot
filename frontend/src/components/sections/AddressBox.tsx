@@ -6,7 +6,7 @@ import { cx } from "../ui/cx";
 import { Input } from "../ui/Input";
 import { addressGroups, sameAddress, type AddressOption, type ScannedAddress } from "./addressOptions";
 
-export const NO_ADDRESSES = "No recent or scanned addresses yet.";
+export const NO_ADDRESSES = "No recent or found addresses yet.";
 
 export interface AddressBoxProps {
   value: string;
@@ -57,7 +57,7 @@ function Chevron() {
 
 /**
  * THE address box of every Live Link block (Lighting, Playback, ProPresenter): an ordinary text box for the computer's address, with a small
- * arrow inside its right edge that opens the list of the addresses that worked (Recent) and the computers the last scan found (Scanned).
+ * arrow inside its right edge that opens the list of the addresses that worked (Recent) and the computers the last search found (Found).
  *
  * The text is ALWAYS editable: typing, pasting, editing the address in it and replacing it all work whether or not the list is open. Choosing
  * an entry only puts its address in the box; it never connects (Connect does). The list is the standard combobox: the box has
@@ -197,7 +197,7 @@ export function AddressBox({
       <button
         aria-controls={listId}
         aria-expanded={open}
-        aria-label="Show recent and scanned addresses"
+        aria-label="Show recent and found addresses"
         className="absolute inset-y-0 right-0 flex w-8 touch-manipulation items-center justify-center rounded-r-ds-lg text-ink-muted disabled:cursor-not-allowed disabled:opacity-40 can-hover:text-ink coarse:w-11"
         data-part="address-arrow"
         disabled={disabled}
@@ -215,8 +215,8 @@ export function AddressBox({
           onMouseDown={(event) => event.preventDefault()}
         >
           {options.length > 0 ? (
-            <div aria-label="Recent and scanned addresses" id={listId} role="listbox">
-              {group("Scanned", "scanned", groups.scanned, 0)}
+            <div aria-label="Recent and found addresses" id={listId} role="listbox">
+              {group("Found", "scanned", groups.scanned, 0)}
               {group("Recent", "recent", groups.recent, groups.scanned.length)}
             </div>
           ) : (

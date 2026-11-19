@@ -1,6 +1,6 @@
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
 import type { CardLibrary } from "./SongCard";
-import { SongCardBody } from "./SongCard";
+import { SONG_CARD_LOOK, SONG_GRID, SongCardBody, SongCardShell } from "./SongCard";
 
 /** One song of the loaded service plan, with what is saved for it under the method on screen. */
 export interface SongChip {
@@ -46,7 +46,7 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
   if (!chips.length) return null;
   return (
     <section aria-label="Songs in this service" className="mt-5" data-testid="songs-strip">
-      <ul aria-label="Songs in this service" className="grid content-start gap-1.5 p-0.5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+      <ul aria-label="Songs in this service" className={SONG_GRID}>
         {chips.map((chip) => {
           const has = isCaptured(chip);
           const manualOnly = chip.label === "manually_cued";
@@ -63,33 +63,8 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
             live ? "live now" : null,
           ].filter(Boolean).join(", ");
           return (
-            <li
-              className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${manualOnly ? "border-cue-look-manual bg-cue-look-manual/20 text-ink" : incomplete ? "border-dashed border-cue-look-captured bg-cue-look-captured/10 text-ink" : has ? "border-cue-look-captured bg-cue-look-captured/20 text-ink" : "border-dashed border-edge-medium bg-surface-900/40 text-ink-muted"} ${selected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`}
-              data-song={chip.key}
-              data-state={has ? "captured" : "empty"}
-              data-label={chip.label}
-              title={chip.label ? `${captureLabelText[chip.label]} (${counts})` : undefined}
-              key={chip.key}
-            >
-              <button
-                aria-label={name}
-                aria-pressed={selected}
-                className="flex min-h-[44px] min-w-0 flex-1 touch-manipulation flex-col justify-between gap-0.5 rounded-ds-lg px-2.5 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-                onClick={() => onSelect(chip.key)}
-                type="button"
-              >
-                <SongCardBody
-                  cover={chip.library?.cover ?? null}
-                  lead={live ? <span aria-hidden="true" className="size-2 shrink-0 rounded-ds-full bg-success" data-testid="song-chip-live" /> : undefined}
-                  sections={chip.library?.sections ?? []}
-                  title={chip.title}
-                >
-                  <span data-testid="song-chip-capture">{captureWords}</span>
-                  {has && chip.hasLoudness && <span className="ml-1" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
-                  {chip.library?.bpm && <span data-testid="song-chip-bpm" title={chip.library.title}>{` · ${chip.library.bpm}`}</span>}
-                </SongCardBody>
-              </button>
-              {chip.looks + (chip.loops ?? 0) + chip.handmade > 0 && (
+            <SongCardShell
+              after={chip.looks + (chip.loops ?? 0) + chip.handmade > 0 && (
                 <button
                   aria-label={`Clear cues for ${chip.title}...`}
                   className="flex min-h-[44px] min-w-[36px] shrink-0 touch-manipulation items-center justify-center rounded-ds-lg text-ink-body can-hover:text-danger-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
@@ -99,7 +74,24 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
                   <span aria-hidden="true">×</span>
                 </button>
               )}
-            </li>
+              item={{ "data-song": chip.key, "data-state": has ? "captured" : "empty", "data-label": chip.label, title: chip.label ? `${captureLabelText[chip.label]} (${counts})` : undefined }}
+              key={chip.key}
+              label={name}
+              look={manualOnly ? SONG_CARD_LOOK.manual : incomplete ? SONG_CARD_LOOK.incomplete : has ? SONG_CARD_LOOK.captured : SONG_CARD_LOOK.empty}
+              onActivate={() => onSelect(chip.key)}
+              selected={selected}
+            >
+              <SongCardBody
+                cover={chip.library?.cover ?? null}
+                lead={live ? <span aria-hidden="true" className="size-2 shrink-0 rounded-ds-full bg-success" data-testid="song-chip-live" /> : undefined}
+                sections={chip.library?.sections ?? []}
+                title={chip.title}
+              >
+                <span data-testid="song-chip-capture">{captureWords}</span>
+                {has && chip.hasLoudness && <span className="ml-1" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
+                {chip.library?.bpm && <span data-testid="song-chip-bpm" title={chip.library.title}>{` · ${chip.library.bpm}`}</span>}
+              </SongCardBody>
+            </SongCardShell>
           );
         })}
       </ul>

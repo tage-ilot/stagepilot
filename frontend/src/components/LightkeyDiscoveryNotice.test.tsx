@@ -44,9 +44,9 @@ describe("LightkeyDiscoveryNotice: every message and button", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("looks: 'Looking for a Lighting computer on this network…'", () => {
+  it("looks: 'Searching the network for a Lighting computer…'", () => {
     render(<LightkeyDiscoveryNotice {...noop} discovery={discovery({ state: "searching" })} />);
-    expect(screen.getByTestId("lightkey-discovery")).toHaveTextContent("Looking for a Lighting computer on this network\u2026");
+    expect(screen.getByTestId("lightkey-discovery")).toHaveTextContent("Searching the network for a Lighting computer\u2026");
   });
 
   it("found one and connected: the sentence, and the Capture/Replay line when they differ", () => {
@@ -139,10 +139,10 @@ describe("LightkeyStrip with the search", () => {
     const user = userEvent.setup();
     vi.mocked(api.searchLightkeyAgain).mockResolvedValue(respond(status({ discovery: discovery({ state: "searching" }) })));
     render(<LightkeyStrip lightingEnabled />);
-    await user.click(await screen.findByRole("button", { name: "Scan" }));
+    await user.click(await screen.findByRole("button", { name: "Search" }));
     await waitFor(() => expect(api.searchLightkeyAgain).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId("lightkey-discovery-searching")).toHaveTextContent("Looking for a Lighting computer on this network\u2026");
-    expect(screen.getByRole("button", { name: "Scanning\u2026 (cancel)" })).toBeEnabled();
+    expect(await screen.findByTestId("lightkey-discovery-searching")).toHaveTextContent("Searching the network for a Lighting computer\u2026");
+    expect(screen.getByRole("button", { name: "Searching\u2026 (cancel)" })).toBeEnabled();
 
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ discovery: discovery({ state: "offer", chosen: "10.30.0.50", found: [{ address: "10.30.0.211", lightkey_running: true }] }) }));
     vi.mocked(api.keepWaitingForLightkey).mockResolvedValue(respond(status({ discovery: discovery({ state: "none", chosen: "10.30.0.50" }) })));
@@ -157,11 +157,11 @@ describe("LightkeyStrip with the search", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ discovery: discovery({ state: "searching" }) }));
     vi.mocked(api.searchLightkeyAgain).mockResolvedValue(respond(status({ discovery: discovery({ state: "searching" }) })));
     render(<LightkeyStrip lightingEnabled />);
-    await user.click(await screen.findByRole("button", { name: "Scanning\u2026 (cancel)" }));
-    expect(screen.getByRole("button", { name: "Scan" })).toBeEnabled();
+    await user.click(await screen.findByRole("button", { name: "Searching\u2026 (cancel)" }));
+    expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
     expect(screen.queryByTestId("lightkey-discovery-searching")).toBeNull();
     expect(api.searchLightkeyAgain).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Scan" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => expect(api.searchLightkeyAgain).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId("lightkey-discovery-searching")).toBeInTheDocument();
   });
@@ -170,9 +170,9 @@ describe("LightkeyStrip with the search", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "connected", detail: null, discovery: discovery({ state: "connected" }) }));
     vi.mocked(api.searchLightkeyAgain).mockResolvedValue({ accepted: false, message: "A Lighting computer is already connected.", lightkey: status({ link: "connected", detail: null, discovery: discovery({ state: "connected" }) }) });
     render(<LightkeyStrip lightingEnabled />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Scan" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Search" }));
     expect(await screen.findByText(/A Lighting computer is already connected/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Scan" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
   });
 
   it("choosing one of several puts it in Host (and so in the helper's address); nothing is sent until Connect", async () => {

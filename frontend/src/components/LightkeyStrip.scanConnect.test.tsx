@@ -51,7 +51,7 @@ describe("Lighting Live Link: the Host caption", () => {
     expect(box).toHaveAttribute("title", HOST_TITLE);
     // Both buttons are there, switched off, and say why.
     const row = screen.getByTestId("live-link-line");
-    expect(within(row).getByRole("button", { name: "Scan" })).toBeDisabled();
+    expect(within(row).getByRole("button", { name: "Search" })).toBeDisabled();
     expect(within(row).getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(within(row).getByRole("button", { name: "Connect" }).closest("[data-part=connect-wrap]")).toHaveAttribute("title", expect.stringContaining("has not answered yet"));
   });
@@ -75,13 +75,13 @@ describe("Lighting Live Link: Scan and Connect", () => {
     const user = userEvent.setup();
     const { unmount } = render(<LightkeyStrip connection={connection} lightingEnabled />);
     await answered();
-    await user.click(screen.getByRole("button", { name: "Scan" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => expect(api.searchLightkeyAgain).toHaveBeenCalledTimes(1));
     unmount();
     render(<LightkeyStrip connection={connection} lightingEnabled={false} />);
     await answered();
-    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Scan" }).closest("[data-part=scan-wrap]")).toHaveAttribute("title", "Lighting is turned off. Turn it on first.");
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Search" }).closest("[data-part=scan-wrap]")).toHaveAttribute("title", "Lighting is turned off. Turn it on first.");
   });
 
   it("Connect sends what it sent before: the host and the API port, in the same request", async () => {
@@ -106,7 +106,7 @@ describe("Lighting Live Link: Scan and Connect", () => {
     expect(await screen.findByTestId("lightkey-headline")).toHaveTextContent("Checked again.");
     // The same words go away with the next thing the person does.
     vi.mocked(api.searchLightkeyAgain).mockResolvedValue(respond(status(), false));
-    await user.click(screen.getByRole("button", { name: "Scan" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => expect(screen.getByTestId("lightkey-headline")).not.toHaveTextContent("Checked again."));
   });
 });
