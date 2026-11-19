@@ -355,5 +355,13 @@ async fn something_else_answering_is_not_propresenter() {
     let answer = SystemNetwork::default()
         .probe(Ipv4Addr::LOCALHOST, closed, Duration::from_secs(2))
         .await;
-    assert_eq!(answer, Err(ProbeError::Refused));
+    // Windows does not answer a closed loopback port at once: it retries the connection until the time limit.
+    if cfg!(windows) {
+        assert!(
+            matches!(answer, Err(ProbeError::Refused | ProbeError::TimedOut)),
+            "{answer:?}"
+        );
+    } else {
+        assert_eq!(answer, Err(ProbeError::Refused));
+    }
 }
