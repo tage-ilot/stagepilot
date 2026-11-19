@@ -75,6 +75,16 @@ Use `cargo fmt` without `--check` to apply formatting. Frontend
 formatting follows the scripts and configuration committed in that workspace.
 Run `npm --prefix frontend run lint` before pushing frontend changes.
 
+### Configuration pages are built from section templates
+
+A configuration page (Presentation, Services, StagePilot, Playback / MIDI, Lighting, Remote access, and any new connection) is built **only** from
+the templates in `frontend/src/components/sections/` plus the content it passes in: `PanelLayout`, `ConnectionSection`, `SettingsSection`,
+`ActionRow`, `StatusSummary`, `SectionNotice`, `OptionalSection`. Changing how a section type looks is one edit in `sections/`; adding a
+connection reuses them. `npm --prefix frontend run lint` fails (with the name of the template to use) when a page file rebuilds one, and
+`npm --prefix frontend test` fails when a page's sections change order. Read `DESIGN.md` §6.6 "Section templates" first: the list, each
+template's props, the order of a page, a worked example of a new connection in about 35 lines, how to change one section type, and how to look at
+the result in the section gallery (`npm --prefix frontend run build:gallery`, then `python3 tools/preview_sections.py --bind 0.0.0.0 --port 8102`).
+
 ### Tests never talk to production
 
 Tests refuse to contact production. The cargo feature `forbid-production` of `stagepilot-remote`
