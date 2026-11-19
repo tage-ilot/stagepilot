@@ -101,7 +101,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       Check for a system password prompt (Keychain/Credential Manager) and enter it — this can take a moment.
     </SectionNotice>}
     {status?.temporary_url ?
-      <SectionNotice tone="warning" variant="line">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</SectionNotice> :
+      <SectionNotice tone="info" variant="line">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</SectionNotice> :
       <SectionNotice tone="success" variant="line">Stable Remote link: this installation keeps the same address after reconnecting.</SectionNotice>}
     {status && !status.available && <SectionNotice tone="info" variant="line">Remote access is unavailable on this installation. Local StagePilot is unaffected.</SectionNotice>}
     {status?.provisioned && !status.credential_available && credentialWarning && <SectionNotice tone="warning" variant="line">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</SectionNotice>}
