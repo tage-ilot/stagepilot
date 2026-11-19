@@ -86,7 +86,7 @@ describe("StagePilot update UI", () => {
     render(<UpdateDialog onCancel={vi.fn()} onCloseError={vi.fn()} onConfirm={vi.fn()} onRetry={vi.fn()} returnFocus={createRef()} updater={confirmation} />);
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     await user.tab();
-    expect(screen.getByRole("button", { name: "Update and Restart" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Update and restart" })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
   });

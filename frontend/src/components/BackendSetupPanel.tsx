@@ -58,7 +58,7 @@ export function CopyLogButton() {
       title={message ?? undefined}
       variant="secondary"
     >
-      {status === "copying" ? "Copying…" : "Copy Log"}
+      {status === "copying" ? "Copying…" : "Copy log"}
     </Button>
   );
 }

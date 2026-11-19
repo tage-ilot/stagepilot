@@ -297,7 +297,7 @@ describe("Copy Log", () => {
     });
     renderPanel();
 
-    const copyButton = screen.getByRole("button", { name: "Copy Log" });
+    const copyButton = screen.getByRole("button", { name: "Copy log" });
     const sendButton = screen.getByRole("button", { name: "Send all logs to developer" });
     // "to the left of" -- Copy Log must appear earlier in DOM order within
     // the shared button row than Send all logs to developer.
@@ -307,7 +307,7 @@ describe("Copy Log", () => {
 
     expect(diagnostics.copyDiagnosticsLog).toHaveBeenCalledOnce();
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("log contents here"));
-    expect(await screen.findByRole("button", { name: "Copy Log" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copy log" })).toBeInTheDocument();
   });
 
   it("shows an error message when the copy fails", async () => {
@@ -316,7 +316,7 @@ describe("Copy Log", () => {
     );
     renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy Log" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy log" }));
 
     expect(await screen.findByTitle("No backend log is available yet.")).toBeInTheDocument();
   });
@@ -780,7 +780,7 @@ describe("Save configuration SaveBar", () => {
 
   it("keeps diagnostics and the Connection Access switch available", async () => {
     withSettings();
-    expect(screen.getByRole("button", {name: "Copy Log"})).toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Copy log"})).toBeInTheDocument();
     expect(screen.getByRole("button", {name: "Send all logs to developer"})).toBeInTheDocument();
     expect(await screen.findByRole("radio", {name: "Internet"})).toBeInTheDocument();
   });

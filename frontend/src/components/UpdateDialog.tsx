@@ -57,7 +57,7 @@ export function UpdateDialog({
       actions={updater.status === "confirmation" ? (
         <>
           <Button onClick={() => { onCancel(); returnFocus.current?.focus(); }} size="touch" variant="secondary">Cancel</Button>
-          <Button onClick={onConfirm} size="touch" variant="primary">Update and Restart</Button>
+          <Button onClick={onConfirm} size="touch" variant="primary">Update and restart</Button>
         </>
       ) : updater.status === "error" ? (
         <>

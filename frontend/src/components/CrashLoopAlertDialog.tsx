@@ -85,7 +85,7 @@ export function CrashLoopAlertDialog({
             {sending ? "Sending…" : "Send to developer"}
           </Button>
           <Button size="touch" variant="destructive-soft" onClick={() => void copyLog()}>
-            Copy Log
+            Copy log
           </Button>
         </>
       }
