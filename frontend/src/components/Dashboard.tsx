@@ -1075,11 +1075,11 @@ export function Dashboard({
           accessibleTitle="StagePilot"
           active={activeConnection === "backend"}
           controls="backend-configuration"
-          detail={health ? `v${health.version} · state revision ${state.revision}` : "Connecting to local API"}
+          detail={health ? `v${health.version} · state revision ${state.revision}` : "Connecting to StagePilot\u2026"}
           icon={connectionIcon(stagepilotIcon, "stagepilot", true)}
           onClick={() => toggleConnection("backend")}
           status={backendStatus}
-          title="Backend"
+          title="StagePilot"
           tone="backend"
         />
       </section>
