@@ -268,7 +268,7 @@ export function MidiSetupPanel({
         </p>
         {songs.length > 0 ? (
           <>
-            {/* eslint-disable-next-line no-restricted-syntax -- page-specific:  a numbered list of the service plan's songs, not fields. */}
+            {/* eslint-disable-next-line no-restricted-syntax -- page-specific: a numbered list of the service plan's songs, not fields. */}
             <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
               {songs.slice(0, 99).map((song, index) => (
                 <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>

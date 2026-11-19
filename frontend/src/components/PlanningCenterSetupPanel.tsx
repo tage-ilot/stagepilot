@@ -504,7 +504,7 @@ export function PlanningCenterSetupPanel({
       below={serviceLoad.candidates.length > 0 ? (
         <div className="mt-5 border-t border-edge-subtle pt-4">
           <p className="text-xs font-bold uppercase tracking-wider text-warning-text">Matching service plans</p>
-          {/* eslint-disable-next-line no-restricted-syntax -- page-specific:  the plans the person chooses between, each with its own button: a list of choices, not fields. */}
+          {/* eslint-disable-next-line no-restricted-syntax -- page-specific: the plans the person chooses between, each with its own button: a list of choices, not fields. */}
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             {serviceLoad.candidates.map((candidate) => (
               <div className="flex items-center justify-between gap-3 rounded-ds-lg bg-surface-900/60 px-3 py-2" key={candidate.id}>
