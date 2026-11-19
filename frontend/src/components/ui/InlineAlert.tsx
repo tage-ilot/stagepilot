@@ -7,6 +7,8 @@ export type InlineAlertTone = "warning" | "danger" | "success" | "info";
 
 export interface InlineAlertProps extends Omit<ComponentPropsWithoutRef<"div">, "role"> {
   tone: InlineAlertTone;
+  /** Only for a box that asks a question the person just caused (a confirmation with buttons): a named `group`, not an interruption. */
+  role?: "alert" | "status" | "group";
   /** Keep the plain tone inside a connection's panel instead of taking the connection's accent (a neutral note, not the connection's news). */
   neutral?: boolean;
 }
@@ -26,13 +28,13 @@ const roles: Record<InlineAlertTone, "alert" | "status"> = {
   info: "status",
 };
 
-export function InlineAlert({ tone, neutral = false, className, ...rest }: InlineAlertProps) {
+export function InlineAlert({ tone, neutral = false, role, className, ...rest }: InlineAlertProps) {
   const accent = useAccent();
   // In a connection's panel, success and info messages wear the connection's colour. Warning and danger never change.
   const look = accent && !neutral && (tone === "success" || tone === "info") ? accentClasses[accent].banner : looks[tone];
   return (
     <div
-      role={roles[tone]}
+      role={role ?? roles[tone]}
       data-tone={tone}
       className={cx("rounded-ds-lg border px-3 py-2 font-type-body-md text-type-body-md text-shadow-label", look, className)}
       {...rest}

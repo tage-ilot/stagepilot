@@ -15,7 +15,8 @@ export function StateCard({ connection, state }: { connection: string; state: Sa
     <section aria-labelledby={`${id}-title`} className="min-w-0" data-sample={id}>
       <h3 className="text-sm font-semibold text-ink" id={`${id}-title`}>{state.label}</h3>
       {state.look && <p className="mb-1 text-xs text-ink-muted">{state.look}</p>}
-      <div className="[&>section]:!mt-0">{state.render()}</div>
+      {/* On a phone the Save bar sticks to the bottom of the screen; on this page, which stacks many pages, it stays where the page puts it. */}
+      <div className="[&>section]:!mt-0 [&_[data-sticky]]:!static">{state.render()}</div>
     </section>
   );
 }

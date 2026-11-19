@@ -818,14 +818,14 @@ describe("Services hold-until-saved conformance (guard)", () => {
 
   it("keeps the four status checks on one row for as long as their words fit (follows the panel width, not the window)", async () => {
     renderPanel();
-    const checks = document.querySelector(".status-checks")!;
-    expect(checks.parentElement).toHaveClass("status-checks-box");
+    const checks = document.querySelector(".section-summary")!;
+    expect(checks.parentElement).toHaveClass("section-summary-wrap");
     expect(checks.querySelectorAll("dt")).toHaveLength(4);
     const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
     const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
-    expect(css).toMatch(/\.status-checks-box \{\s*container-type: inline-size;/);
-    expect(css).toMatch(/@container \(min-width: 30rem\) \{\s*\.status-checks \{\s*grid-template-columns: repeat\(4, minmax\(max-content, 1fr\)\);/);
-    expect(css).toMatch(/@container \(min-width: 23rem\) \{\s*\.status-checks \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+    expect(css).toMatch(/\.section-summary-wrap \{\s*container-type: inline-size;/);
+    expect(css).toMatch(/@container \(min-width: 30rem\) \{\s*\.section-summary\[data-variant="list"\] \{\s*grid-template-columns: repeat\(4, minmax\(max-content, 1fr\)\);/);
+    expect(css).toMatch(/@container \(min-width: 23rem\) \{\s*\.section-summary\[data-variant="list"\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   });
 });
 

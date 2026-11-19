@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the section gallery (every state of the Connection section, for Lighting, Playback and Presentation) on the local network, so a
+"""Serve the section gallery (every section template and every configuration page in every state, plus the Connection section for Lighting, Playback and Presentation) on the local network, so a
 design can be looked at in a browser on any computer or phone. Standard library only; no backend is needed: the data on the page is made up.
 
     cd frontend && npm run build:gallery        # writes frontend/dist-gallery (never part of the app or the desktop bundle)

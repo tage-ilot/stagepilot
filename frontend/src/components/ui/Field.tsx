@@ -9,6 +9,8 @@ export interface FieldProps {
   error?: ReactNode;
   /** Visual marker only (warning dot, "Not saved yet", warning border). Save logic lives elsewhere. */
   heldChange?: boolean;
+  /** Something that belongs right beside the label, not inside it (a `?` help button). */
+  labelExtra?: ReactNode;
   className?: string;
   children: ReactNode;
 }
@@ -18,7 +20,7 @@ export interface FieldProps {
  * Input and Select inside a Field pick up id, aria-describedby, aria-invalid and the held border.
  * Field clones nothing. Place exactly one control inside.
  */
-export function Field({ label, hint, error, heldChange = false, className, children }: FieldProps) {
+export function Field({ label, hint, error, heldChange = false, labelExtra, className, children }: FieldProps) {
   const uid = useId();
   const id = `${uid}-control`;
   const hintId = hint ? `${uid}-hint` : undefined;
@@ -30,15 +32,17 @@ export function Field({ label, hint, error, heldChange = false, className, child
     <FieldContext.Provider value={{ id, describedBy, invalid: Boolean(error), held: heldChange }}>
       <div data-field data-state={error ? "error" : heldChange ? "held" : "default"} className={cx("flex min-w-0 flex-col gap-1.5", className)}>
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <label htmlFor={id} className="min-w-0 break-words font-type-text-strong text-type-text-strong text-ink">
-            {label}
-          </label>
-          {heldChange && (
-            <span id={heldId} data-held-marker className="inline-flex items-center gap-1.5 text-type-body-sm text-warning-text">
-              <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
-              Not saved yet
+          {labelExtra ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <label htmlFor={id} className="min-w-0 break-words font-type-text-strong text-type-text-strong text-ink">{label}</label>
+              {labelExtra}
             </span>
+          ) : (
+            <label htmlFor={id} className="min-w-0 break-words font-type-text-strong text-type-text-strong text-ink">
+              {label}
+            </label>
           )}
+          {heldChange && <HeldMarker id={heldId} />}
         </div>
         {children}
         {hint && (
@@ -53,5 +57,15 @@ export function Field({ label, hint, error, heldChange = false, className, child
         )}
       </div>
     </FieldContext.Provider>
+  );
+}
+
+/** The one "Not saved yet" mark: a warning dot and the words (never colour alone). Field draws it; a control that is not a Field (a checkbox row) uses it too. */
+export function HeldMarker({ id, className }: { id?: string; className?: string }) {
+  return (
+    <span id={id} data-held-marker className={cx("inline-flex items-center gap-1.5 text-type-body-sm text-warning-text", className)}>
+      <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
+      Not saved yet
+    </span>
   );
 }

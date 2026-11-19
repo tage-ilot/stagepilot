@@ -39,8 +39,10 @@ import { classifyOscCue } from "./lightingCueTypes";
  * and OSC UDP port boxes, so the person can type the machine before saving. Once OSC is saved, LightkeyStrip draws the full line.
  */
 export function OscConnectionFields({
-  host, port, held, attempted, onHost, onPort, testCue, footer,
+  host, port, held, attempted, onHost, onPort, testCue, footer, className,
 }: {
+  /** Added to the block (the panel body takes the space above it: `!mt-0`). */
+  className?: string;
   host: string;
   port: string;
   held: { host: boolean; port: boolean };
@@ -56,7 +58,7 @@ export function OscConnectionFields({
   return (
     <ConnectionSection
       actions={tools.actions}
-      className="lighting-osc-connection"
+      className={`lighting-osc-connection${className ? ` ${className}` : ""}`}
       connection={(
         <>
           <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">

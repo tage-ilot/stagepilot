@@ -14,12 +14,10 @@ import type { ServicePlanChoice } from "../hooks/useServicePlanChoice";
 import { ServicePlanPicker } from "./ServicePlanPicker";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
-import { Disclosure } from "./ui/Disclosure";
-import { Field } from "./ui/Field";
-import { InlineAlert } from "./ui/InlineAlert";
+import { Field, HeldMarker } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { Panel } from "./ui/Panel";
+import { ActionButton, ActionRow, OptionalSection, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
@@ -128,15 +126,6 @@ const systemTimezone = () => {
 
 const formatTimestamp = (value: string | null) =>
   value ? new Date(value).toLocaleString() : "Not yet";
-
-function HeldNote() {
-  return (
-    <span className="mt-1.5 inline-flex items-center gap-1.5 text-type-body-sm text-warning-text" data-held-marker>
-      <span aria-hidden="true" className="h-2 w-2 rounded-ds-full bg-warning" />
-      Not saved yet
-    </span>
-  );
-}
 
 export function PlanningCenterSetupPanel({
   state,
@@ -301,201 +290,159 @@ export function PlanningCenterSetupPanel({
     setSecret("");
   };
 
+  const appIdHelp = (
+    <div
+      className="relative"
+      ref={applicationIdHelp.containerRef}
+      {...applicationIdHelp.hoverProps}
+    >
+      <button
+        aria-describedby="planning-center-pat-help"
+        aria-label="How to get a Planning Center Personal Access Token"
+        className="relative grid h-4 w-4 touch-manipulation place-items-center rounded-ds-full border border-ink-muted pb-px text-type-micro font-black leading-none normal-case tracking-normal text-ink-muted transition-colors duration-[140ms] after:absolute after:left-1/2 after:top-1/2 after:hidden after:size-ds-touch-target after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] coarse:after:block can-hover:border-integration-services-soft can-hover:text-integration-services-text motion-reduce:transition-none"
+        type="button"
+      >
+        ?
+      </button>
+      <div
+        className={`absolute left-0 top-full z-50 w-[min(22rem,calc(100vw-3rem))] pt-2 text-left text-sm font-normal normal-case tracking-normal transition-[opacity,transform,visibility] motion-reduce:transition-none ${applicationIdHelp.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
+        id="planning-center-pat-help"
+        role="tooltip"
+      >
+        <div className="rounded-ds-xl border border-edge-medium bg-surface-950 p-4 text-ink-body shadow-elevation-overlay">
+          <p className="font-semibold text-ink">Connect your Planning Center account</p>
+          <p className="mt-2 leading-relaxed">
+            Open Planning Center&apos;s{" "}
+            <a
+              className="font-semibold text-integration-services-text underline decoration-integration-services-soft/50 underline-offset-2 can-hover:text-integration-services active:text-integration-services-text"
+              href="https://api.planningcenteronline.com/personal_access_tokens"
+              onClick={(event) => {
+                event.preventDefault();
+                void openExternalUrl(event.currentTarget.href);
+              }}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Personal Access Tokens page
+            </a>
+            , create a new token, and give it a recognizable name. Copy
+            its Client ID into Application ID and its Secret into the
+            Secret field. Save the settings, then load your service types
+            to keep StagePilot&apos;s Service plan updated.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const signedIn = connectionMethod === "oauth" && oauthConnected;
   return (
-    <Panel
+    <PanelLayout
       aria-busy={busy}
       aria-labelledby="planning-center-setup-heading"
-      className="mt-5"
+      header={(
+        <SetupPanelHeader
+          closeLabel="Close Services configuration"
+          description="Sign in with Planning Center and manage the Service plan."
+          headingId="planning-center-setup-heading"
+          onClose={onClose}
+          status={pendingOperation === "save" ? "connecting" : (status?.connection_status ?? state.planning_center_status)}
+          title="Services"
+        />
+      )}
       id="planning-center-configuration"
       tone="services"
-      variant="setup"
-    >
-      <SetupPanelHeader
-        closeLabel="Close Services configuration"
-        description="Sign in with Planning Center and manage the Service plan."
-        headingId="planning-center-setup-heading"
-        onClose={onClose}
-        status={pendingOperation === "save" ? "connecting" : (status?.connection_status ?? state.planning_center_status)}
-        title="Services"
-      />
-
-
-      <div className="pco-connect mt-4">
-        <div className="pco-connect-grid grid gap-4">
-        <div className="min-w-0">
-        {oauthNeedsReconnect && (
-          <InlineAlert className="px-4 py-3" tone="warning">
-            <p className="font-semibold">Your Services connection has expired</p>
-            <p className="mt-1">
-              Sign in again to keep loading your Service plan from Planning Center.
-            </p>
-            <Button
-              className="mt-3"
-              disabled={busy || !onSignInOAuth}
-              onClick={onSignInOAuth}
-              tone="warning"
-              variant="tinted"
-            >
-              {pendingOperation === "oauth-sign-in" ? "Reconnecting…" : "Reconnect to Planning Center"}
-            </Button>
-          </InlineAlert>
-        )}
-
-        {connectionMethod === "oauth" && oauthConnected && !oauthNeedsReconnect && (
-          <InlineAlert className="px-4 py-3" tone="success">
-            <p className="font-semibold">Connected to Planning Center</p>
-            <p className="mt-1">
-              Signed in with Planning Center. Your credentials never leave Planning Center&apos;s servers.
-            </p>
-            <Button
-              className="mt-3"
-              disabled={busy || !onDisconnectOAuth}
-              onClick={onDisconnectOAuth}
-              variant="secondary"
-            >
-              {pendingOperation === "oauth-disconnect" ? "Disconnecting…" : "Disconnect"}
-            </Button>
-          </InlineAlert>
-        )}
-
-        {!(connectionMethod === "oauth" && oauthConnected) && !oauthNeedsReconnect && (
-          <InlineAlert className="px-4 py-3" tone="info">
-            <p className="font-semibold">Sign in with Planning Center</p>
-            <Button
-              className="mt-3"
-              disabled={busy || !onSignInOAuth}
-              onClick={onSignInOAuth}
-              variant="primary"
-            >
-              {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center OAuth"}
-            </Button>
-          </InlineAlert>
-        )}
-        </div>
-      <div className="pco-manual min-w-0">
-      <Disclosure
-        onOpenChange={setManualConnectionOpen}
-        open={manualConnectionOpen}
-        summary={manualSummary}
-        title="Manual API Connection"
-        tone="services"
-        variant="advanced"
-      >
-        <div className="manual-connection-fields grid gap-4">
-          <div className="text-sm text-ink-body">
-            <div className="mb-1.5 flex items-center gap-1.5">
-              <label
-                className="font-type-text-strong text-type-text-strong text-ink"
-                htmlFor="planning-center-application-id"
-              >
-                Application ID
-              </label>
-              <div
-                className="relative"
-                ref={applicationIdHelp.containerRef}
-                {...applicationIdHelp.hoverProps}
-              >
-                <button
-                  aria-describedby="planning-center-pat-help"
-                  aria-label="How to get a Planning Center Personal Access Token"
-                  className="relative grid h-4 w-4 touch-manipulation place-items-center rounded-ds-full border border-ink-muted pb-px text-type-micro font-black leading-none normal-case tracking-normal text-ink-muted transition-colors duration-[140ms] after:absolute after:left-1/2 after:top-1/2 after:hidden after:size-ds-touch-target after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] coarse:after:block can-hover:border-integration-services-soft can-hover:text-integration-services-text motion-reduce:transition-none"
-                  type="button"
+      // Sign-in takes the wide column and the Manual API Connection the narrow one (about a quarter), stacked when the panel is compact.
+      connection={(
+        <div className="pco-connect">
+          <div className="pco-connect-grid grid gap-4">
+            <div className="min-w-0">
+              {oauthNeedsReconnect && (
+                <SectionNotice
+                  actions={(
+                    <Button disabled={busy || !onSignInOAuth} onClick={onSignInOAuth} tone="warning" variant="tinted">
+                      {pendingOperation === "oauth-sign-in" ? "Reconnecting…" : "Reconnect to Planning Center"}
+                    </Button>
+                  )}
+                  title="Your Services connection has expired"
+                  tone="warning"
                 >
-                  ?
-                </button>
-                <div
-                  className={`absolute left-0 top-full z-50 w-[min(22rem,calc(100vw-3rem))] pt-2 text-left text-sm font-normal normal-case tracking-normal transition-[opacity,transform,visibility] motion-reduce:transition-none ${applicationIdHelp.open ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-1 opacity-0"}`}
-                  id="planning-center-pat-help"
-                  role="tooltip"
+                  Sign in again to keep loading your Service plan from Planning Center.
+                </SectionNotice>
+              )}
+
+              {signedIn && !oauthNeedsReconnect && (
+                <SectionNotice
+                  actions={(
+                    <Button disabled={busy || !onDisconnectOAuth} onClick={onDisconnectOAuth} variant="secondary">
+                      {pendingOperation === "oauth-disconnect" ? "Disconnecting…" : "Disconnect"}
+                    </Button>
+                  )}
+                  title="Connected to Planning Center"
+                  tone="success"
                 >
-                  <div className="rounded-ds-xl border border-edge-medium bg-surface-950 p-4 text-ink-body shadow-elevation-overlay">
-                    <p className="font-semibold text-ink">Connect your Planning Center account</p>
-                    <p className="mt-2 leading-relaxed">
-                      Open Planning Center&apos;s{" "}
-                      <a
-                        className="font-semibold text-integration-services-text underline decoration-integration-services-soft/50 underline-offset-2 can-hover:text-integration-services active:text-integration-services-text"
-                        href="https://api.planningcenteronline.com/personal_access_tokens"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          void openExternalUrl(event.currentTarget.href);
-                        }}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Personal Access Tokens page
-                      </a>
-                      , create a new token, and give it a recognizable name. Copy
-                      its Client ID into Application ID and its Secret into the
-                      Secret field. Save the settings, then load your service types
-                      to keep StagePilot&apos;s Service plan updated.
-                    </p>
-                  </div>
-                </div>
-              </div>
+                  Signed in with Planning Center. Your credentials never leave Planning Center&apos;s servers.
+                </SectionNotice>
+              )}
+
+              {!signedIn && !oauthNeedsReconnect && (
+                <SectionNotice
+                  actions={(
+                    <Button disabled={busy || !onSignInOAuth} onClick={onSignInOAuth} variant="primary">
+                      {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center OAuth"}
+                    </Button>
+                  )}
+                  title="Sign in with Planning Center"
+                  tone="info"
+                />
+              )}
             </div>
-            <Input
-              autoComplete="username"
-              disabled={busy}
-              aria-describedby={errAppId ? "planning-center-application-id-error" : undefined}
-              aria-invalid={errAppId ? true : undefined}
-              id="planning-center-application-id"
-              onChange={(event) => setAppId(event.target.value)}
-              value={appId}
-            />
-            {held.appId && <HeldNote />}
-            {errAppId && <p className="mt-1 text-type-body-sm text-danger-text" id="planning-center-application-id-error" role="alert">{errAppId}</p>}
-          </div>
-          <Field heldChange={held.secret} label="Secret">
-            <Input
-              autoComplete="current-password"
-              disabled={busy || removeSecret}
-              onChange={(event) => setSecret(event.target.value)}
-              placeholder={status?.planning_center_secret_saved ? "Saved securely — leave blank to keep…" : "Enter PAT secret…"}
-              type="password"
-              value={secret}
-            />
-          </Field>
-          <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-2 self-end rounded-ds-lg bg-surface-900/60 px-3 py-2.5 text-sm text-ink-body">
-            <input
-              checked={removeSecret}
-              className="accent-integration-services"
-              disabled={busy || !status?.planning_center_secret_saved}
-              onChange={(event) => {
-                setRemoveSecret(event.target.checked);
-                if (event.target.checked) setSecret("");
-              }}
-              type="checkbox"
-            />
-            Remove saved secret
-            {held.removeSecret && <HeldNote />}
-          </label>
-        </div>
+            <div className="pco-manual min-w-0">
+              <OptionalSection onOpenChange={setManualConnectionOpen} open={manualConnectionOpen} summary={manualSummary} title="Manual API Connection" tone="services">
+                <SettingsSection busy={busy} columns="pair">
+                  <Field error={errAppId} heldChange={held.appId} label="Application ID" labelExtra={appIdHelp}>
+                    <Input autoComplete="username" onChange={(event) => setAppId(event.target.value)} value={appId} />
+                  </Field>
+                  <Field heldChange={held.secret} label="Secret">
+                    <Input
+                      autoComplete="current-password"
+                      disabled={removeSecret}
+                      onChange={(event) => setSecret(event.target.value)}
+                      placeholder={status?.planning_center_secret_saved ? "Saved securely — leave blank to keep…" : "Enter PAT secret…"}
+                      type="password"
+                      value={secret}
+                    />
+                  </Field>
+                  <label className="flex min-h-ds-touch-target touch-manipulation items-center gap-2 self-end rounded-ds-lg bg-surface-900/60 px-3 py-2.5 text-sm text-ink-body">
+                    <input
+                      checked={removeSecret}
+                      className="accent-integration-services"
+                      disabled={busy || !status?.planning_center_secret_saved}
+                      onChange={(event) => {
+                        setRemoveSecret(event.target.checked);
+                        if (event.target.checked) setSecret("");
+                      }}
+                      type="checkbox"
+                    />
+                    Remove saved secret
+                    {held.removeSecret && <HeldMarker className="mt-1.5" />}
+                  </label>
+                </SettingsSection>
 
-        {!(connectionMethod === "oauth" && oauthConnected) && (
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button
-              disabled={busy || (!secret && !status?.planning_center_secret_saved)}
-              onClick={() => onTest(testInput())}
-              tone="services"
-              variant="tinted"
-            >
-              {pendingOperation === "test" ? "Testing…" : "Test connection"}
-            </Button>
+                {!signedIn && (
+                  <ActionRow className="mt-5">
+                    <ActionButton busy={pendingOperation === "test"} busyLabel="Testing…" disabled={busy || (!secret && !status?.planning_center_secret_saved)} label="Test connection" onClick={() => onTest(testInput())} tone="services" />
+                  </ActionRow>
+                )}
+              </OptionalSection>
+            </div>
           </div>
-        )}
-      </Disclosure>
-      </div>
         </div>
-      </div>
-
-      <div className="service-plan-section mt-5 border-t border-edge-subtle pt-4">
-        <div className="service-plan-fields grid gap-4">
+      )}
+      settings={(
+        <SettingsSection busy={busy} divided>
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
-            <Select
-              disabled={busy || serviceTypes.length === 0}
-              onChange={(event) => setServiceTypeId(event.target.value)}
-              value={serviceTypeId}
-            >
+            <Select disabled={serviceTypes.length === 0} onChange={(event) => setServiceTypeId(event.target.value)} value={serviceTypeId}>
               <option value="">Load and choose a service type</option>
               <option value={ALL_SERVICE_TYPES_ID}>All service types (nearest upcoming service plan)</option>
               {serviceTypeId && !selectedServiceTypeKnown && (
@@ -507,13 +454,7 @@ export function PlanningCenterSetupPanel({
             </Select>
           </Field>
           <Field error={errTimezone} heldChange={held.timezone} label="Timezone">
-            <Select
-              disabled={busy}
-              onChange={(event) => {
-                setTimezone(event.target.value);
-              }}
-              value={timezone}
-            >
+            <Select onChange={(event) => setTimezone(event.target.value)} value={timezone}>
               {timezone && !TIMEZONE_OPTIONS.some((option) => option.timezone === timezone) && (
                 <option value={timezone}>{timezone} ({formatOffset(standardOffsetForTimezone(timezone) ?? 0)})</option>
               )}
@@ -525,80 +466,42 @@ export function PlanningCenterSetupPanel({
             </Select>
           </Field>
           <Field heldChange={held.title} label="Service plan title preference">
-            <Input
-              disabled={busy}
-              onChange={(event) => setTitlePreference(event.target.value)}
-              placeholder="Optional. For example, Sunday Morning…"
-              value={titlePreference}
-            />
+            <Input onChange={(event) => setTitlePreference(event.target.value)} placeholder="Optional. For example, Sunday Morning…" value={titlePreference} />
           </Field>
           <Field heldChange={held.time} label="Preferred service time">
-            <Input
-              className="tabular-nums"
-              disabled={busy}
-              onChange={(event) => setPreferredTime(event.target.value)}
-              type="time"
-              value={preferredTime}
-            />
+            <Input className="tabular-nums" onChange={(event) => setPreferredTime(event.target.value)} type="time" value={preferredTime} />
           </Field>
+        </SettingsSection>
+      )}
+      actions={(
+        <ActionRow>
+          <ActionButton busy={pendingOperation === "load-types"} busyLabel="Loading…" disabled={busy || !(status?.oauth_connected || status?.planning_center_secret_saved)} label="Load service types" onClick={onLoadServiceTypes} tone="services" />
+          <ActionButton busy={pendingAction === "reload_plan"} busyLabel="Loading…" disabled={pendingAction !== null || !state.plugins.planning_center} label="Load today’s service plan" onClick={onReload} tone="services" />
+        </ActionRow>
+      )}
+      content={servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) ? (
+        <div className="border-t border-edge-subtle pt-5">
+          <ServicePlanPicker canOperate={canOperate} choice={servicePlanChoice} state={state} timezone={savedTimezone ?? systemTimezone()} />
         </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            disabled={busy || !(status?.oauth_connected || status?.planning_center_secret_saved)}
-            onClick={onLoadServiceTypes}
-            tone="services"
-            variant="tinted"
-          >
-            {pendingOperation === "load-types" ? "Loading…" : "Load service types"}
-          </Button>
-          <Button
-            disabled={pendingAction !== null || !state.plugins.planning_center}
-            onClick={onReload}
-            tone="services"
-            variant="tinted"
-          >
-            {pendingAction === "reload_plan" ? "Loading…" : "Load today’s service plan"}
-          </Button>
-        </div>
-        {servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) && (
-          <div className="mt-5 border-t border-edge-subtle pt-5">
-            <ServicePlanPicker
-              canOperate={canOperate}
-              choice={servicePlanChoice}
-              state={state}
-              timezone={savedTimezone ?? systemTimezone()}
-            />
-          </div>
-        )}
-        {blockedReason && <p className="mt-4 text-sm text-ink-body" id="planning-center-save-blocked">{blockedReason}</p>}
-        <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
-      </div>
-
-      <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!status ? onRetryLoad : undefined} />
-
-      <div className="status-checks-box mt-5">
-      <dl className="status-checks grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm">
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Connection</dt>
-          <dd className="mt-1 text-ink-body">{connectionWord[status?.connection_status ?? state.planning_center_status]}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Credential</dt>
-          <dd className="mt-1 text-ink-body">{status?.planning_center_secret_saved ? "Saved securely" : "Not saved"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Target date</dt>
-          <dd className="mt-1 text-ink-body tabular-nums">{serviceLoad.target_date ?? "Not selected"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Last successful sync</dt>
-          <dd className="mt-1 text-ink-body tabular-nums">{formatTimestamp(state.last_successful_plan_reload_at)}</dd>
-        </div>
-      </dl>
-      </div>
-
-      {serviceLoad.candidates.length > 0 && (
+      ) : undefined}
+      notices={(
+        <>
+          {blockedReason && <SectionNotice id="planning-center-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice>}
+          <PanelAlert error={error} message={message} messageTone="success" onRetry={!status ? onRetryLoad : undefined} />
+        </>
+      )}
+      saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
+      summary={(
+        <StatusSummary
+          items={[
+            { label: "Connection", value: connectionWord[status?.connection_status ?? state.planning_center_status] },
+            { label: "Credential", value: status?.planning_center_secret_saved ? "Saved securely" : "Not saved" },
+            { label: "Target date", value: serviceLoad.target_date ?? "Not selected", tabular: true },
+            { label: "Last successful sync", value: formatTimestamp(state.last_successful_plan_reload_at), tabular: true },
+          ]}
+        />
+      )}
+      below={serviceLoad.candidates.length > 0 ? (
         <div className="mt-5 border-t border-edge-subtle pt-4">
           <p className="text-xs font-bold uppercase tracking-wider text-warning-text">Matching service plans</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -620,7 +523,7 @@ export function PlanningCenterSetupPanel({
             ))}
           </div>
         </div>
-      )}
-    </Panel>
+      ) : undefined}
+    />
   );
 }

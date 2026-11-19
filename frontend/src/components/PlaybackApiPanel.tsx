@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
@@ -12,8 +12,7 @@ import { ScanProgress } from "./ScanProgress";
 import { PlaybackArrangement } from "./PlaybackArrangement";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { cx } from "./ui/cx";
-import { usePersistedFlag } from "../hooks/usePersistedFlag";
+import { OptionalBand, PanelBody, SectionNotice } from "./sections";
 import { Switch } from "./ui/Switch";
 import { LIBRARY_BUTTON_HELP, LIBRARY_ORDER_HELP, SCAN_PLAYBACK_SONGS, SCAN_WITH_PLAYBACK_INSTEAD, readFromLibraryText, SONG_ORDER_OPEN_KEY, songOrderSummary, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_HELP, LEARN_SWITCH_LABEL, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderModeText, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
@@ -22,8 +21,6 @@ import { LIBRARY_BUTTON_HELP, LIBRARY_ORDER_HELP, SCAN_PLAYBACK_SONGS, SCAN_WITH
 export function PlaybackApiPanel({ playback, draft, library, link, plan = null, timeZone = "UTC", timerRunning = false }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: ServicePlan | null; timeZone?: string; timerRunning?: boolean }) {
   const status = playback?.status;
   const [confirm, setConfirm] = useState(false);
-  const [orderOpen, setOrderOpen] = usePersistedFlag(SONG_ORDER_OPEN_KEY, true);
-  const orderBodyId = useId();
   // Shown optimistically while the save runs; a failed save puts it back.
   const [learnDraft, setLearnDraft] = useState<boolean | null>(null);
 
@@ -53,67 +50,64 @@ export function PlaybackApiPanel({ playback, draft, library, link, plan = null, 
     try { await playback?.save({ ...status.settings, learn_order: next }); } finally { setLearnDraft(null); }
   };
 
-  return (
-    <div className="mt-6 space-y-4">
-
-      <PlaybackLiveLink library={library} playback={playback} />
-
-      {library && <PlaybackLibrarySongs library={library} link={link} plan={plan} playing={Boolean(status?.playing) || timerRunning} timeZone={timeZone} />}
-
-      {status && (
-        <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-song-order-header>
-            <button
-              aria-controls={orderBodyId}
-              aria-expanded={orderOpen}
-              className="flex min-h-ds-touch-target min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-ds-lg text-left can-hover:bg-surface-900/40"
-              onClick={() => setOrderOpen(!orderOpen)}
-              type="button"
-            >
-              <svg aria-hidden="true" className={cx("size-3.5 shrink-0 text-integration-playback-text transition-transform duration-[140ms] motion-reduce:transition-none", orderOpen && "rotate-90")} data-part="chevron" viewBox="0 0 12 12">
-                <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
-              </svg>
-              <h3 id="song-order-heading" className="shrink-0 font-bold text-ink">Song order</h3>
-              <span className="min-w-0 truncate text-sm text-ink-body" data-part="summary" data-testid="song-order-summary">{songOrderSummary(status, running)}</span>
-            </button>
-            {canDiscover && <Button loading={reading} onClick={() => libraryUsable ? playback?.refreshFromLibrary?.() : setConfirm(true)} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"}>{SCAN_PLAYBACK_SONGS}</Button>}
-            {libraryNote && canStep && <Button onClick={() => setConfirm(true)} size="control" tone="playback" variant="secondary">{SCAN_WITH_PLAYBACK_INSTEAD}</Button>}
-          </div>
-          <div className={cx("grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none", orderOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")} data-part="region" data-state={orderOpen ? "open" : "closed"} id={orderBodyId}>
-          <div className="min-h-0 space-y-2 overflow-hidden" inert={!orderOpen}>
-          <p className="text-sm font-semibold text-integration-playback-text" data-testid="order-mode">{playbackOrderModeText(status)}</p>
-          {status.order_library_note && <p className="text-sm text-ink-body" data-testid="order-library-note">{status.order_library_note}</p>}
-          <p aria-live="polite" className="text-sm font-semibold text-integration-playback-text empty:hidden" data-testid="library-read-line" role="status">{libraryRead !== null && libraryRead !== undefined && !reading && status.order_source === "library" ? readFromLibraryText(libraryRead) : null}</p>
-          {playbackOrderMode(status) !== "scanned" && status.order_note && <p className="text-sm text-warning-text">{status.order_note}</p>}
-          {playbackHasDoubtfulSong(status) && <p className="text-sm text-warning-text">{DOUBTFUL_ORDER_HINT}</p>}
-          <div>
-            <Switch label={LEARN_SWITCH_LABEL} checked={learnOn} disabled={playback?.pending === "save"} onChange={(event) => void toggleLearn(event.target.checked)} />
-            <p className="text-xs text-ink-muted">{LEARN_SWITCH_HELP}</p>
-          </div>
-          <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
-          <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>
-          {!apiConnected ? <p className="text-sm text-ink-body">Connect to Playback first.</p>
-              : libraryUsable ? <>
-                  {orderSaved ? <p className="text-sm text-integration-playback-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
-                    : notice && <p className="text-sm text-warning-text">{notice}</p>}
-                  <p className="text-sm text-ink-body" data-testid="order-help">{status.order_source === "library" && !status.order_library_note ? LIBRARY_ORDER_HELP : LIBRARY_BUTTON_HELP}</p>
-                </>
-              : status.playing ? <p className="text-sm text-warning-text">Stop Playback to scan Playback songs.</p>
-                : <>
-                  {orderSaved ? <p className="text-sm text-integration-playback-text">Song order saved ({status.song_order.length} {status.song_order.length === 1 ? "song" : "songs"})</p>
-                    : <>{notice && <p className="text-sm text-warning-text">{notice}</p>}
-                      <p className="text-sm text-ink-body">StagePilot steps through your Playback songs once to learn the order. Playback must be stopped.</p></>}
-                </>}
-          </ScanProgress></div>
-          <PlanningCenterLengths status={status} onStatus={playback?.acceptStatus} />
-          </div>
-          {mismatch && <p className="text-sm text-ink-body">{mismatch}</p>}
-          <PlaybackArrangement draft={draft} library={library} status={status} />
-          {status.discovery === "failed" && status.last_error && <p role="alert" className="text-sm text-danger-text">{status.last_error}</p>}
-          </div>
-          </div>
-        </section>
+  const orderHeadline = status ? `Song order saved (${status.song_order.length} ${status.song_order.length === 1 ? "song" : "songs"})` : "";
+  const songOrder = status && (
+    <OptionalBand
+      actions={(
+        <>
+          {canDiscover && <Button loading={reading} onClick={() => libraryUsable ? playback?.refreshFromLibrary?.() : setConfirm(true)} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"}>{SCAN_PLAYBACK_SONGS}</Button>}
+          {libraryNote && canStep && <Button onClick={() => setConfirm(true)} size="control" tone="playback" variant="secondary">{SCAN_WITH_PLAYBACK_INSTEAD}</Button>}
+        </>
       )}
+      headingId="song-order-heading"
+      persistKey={SONG_ORDER_OPEN_KEY}
+      summary={songOrderSummary(status, running)}
+      summaryTestId="song-order-summary"
+      title="Song order"
+    >
+      <SectionNotice strong testId="order-mode" tone="accent" variant="line">{playbackOrderModeText(status)}</SectionNotice>
+      {status.order_library_note && <SectionNotice testId="order-library-note" tone="info" variant="line">{status.order_library_note}</SectionNotice>}
+      <SectionNotice className="empty:hidden" live role="status" strong testId="library-read-line" tone="accent" variant="line">{libraryRead !== null && libraryRead !== undefined && !reading && status.order_source === "library" ? readFromLibraryText(libraryRead) : null}</SectionNotice>
+      {playbackOrderMode(status) !== "scanned" && status.order_note && <SectionNotice tone="warning" variant="line">{status.order_note}</SectionNotice>}
+      {playbackHasDoubtfulSong(status) && <SectionNotice tone="warning" variant="line">{DOUBTFUL_ORDER_HINT}</SectionNotice>}
+      <div>
+        <Switch label={LEARN_SWITCH_LABEL} checked={learnOn} disabled={playback?.pending === "save"} onChange={(event) => void toggleLearn(event.target.checked)} />
+        <SectionNotice quiet size="xs" tone="info" variant="line">{LEARN_SWITCH_HELP}</SectionNotice>
+      </div>
+      <div className="flex flex-wrap items-start gap-3"><div className="w-full min-w-0 sm:w-auto sm:flex-1">
+        <ScanProgress state={running ? "running" : status.discovery} steps={status.discovery_song ?? 0} total={status.discovery_total ?? 0} previousDuration={status.discovery_duration_seconds} estimatedSongs={status.song_order.length}>
+          {!apiConnected ? <SectionNotice tone="info" variant="line">Connect to Playback first.</SectionNotice>
+            : libraryUsable ? <>
+              {orderSaved ? <SectionNotice tone="accent" variant="line">{orderHeadline}</SectionNotice>
+                : notice && <SectionNotice tone="warning" variant="line">{notice}</SectionNotice>}
+              <SectionNotice testId="order-help" tone="info" variant="line">{status.order_source === "library" && !status.order_library_note ? LIBRARY_ORDER_HELP : LIBRARY_BUTTON_HELP}</SectionNotice>
+            </>
+              : status.playing ? <SectionNotice tone="warning" variant="line">Stop Playback to scan Playback songs.</SectionNotice>
+                : <>
+                  {orderSaved ? <SectionNotice tone="accent" variant="line">{orderHeadline}</SectionNotice>
+                    : <>{notice && <SectionNotice tone="warning" variant="line">{notice}</SectionNotice>}
+                      <SectionNotice tone="info" variant="line">StagePilot steps through your Playback songs once to learn the order. Playback must be stopped.</SectionNotice></>}
+                </>}
+        </ScanProgress></div>
+        <PlanningCenterLengths status={status} onStatus={playback?.acceptStatus} />
+      </div>
+      {mismatch && <SectionNotice tone="info" variant="line">{mismatch}</SectionNotice>}
+      <PlaybackArrangement draft={draft} library={library} status={status} />
+      {status.discovery === "failed" && status.last_error && <SectionNotice role="alert" tone="danger" variant="line">{status.last_error}</SectionNotice>}
+    </OptionalBand>
+  );
+
+  return (
+    <>
+      <PanelBody
+        connection={<PlaybackLiveLink library={library} playback={playback} />}
+        content={(library || status) ? (
+          <>
+            {library && <PlaybackLibrarySongs library={library} link={link} plan={plan} playing={Boolean(status?.playing) || timerRunning} timeZone={timeZone} />}
+            {songOrder}
+          </>
+        ) : undefined}
+      />
       <Dialog
         open={confirm}
         dismissible={false}
@@ -126,6 +120,6 @@ export function PlaybackApiPanel({ playback, draft, library, link, plan = null, 
           </>
         }
       />
-    </div>
+    </>
   );
 }

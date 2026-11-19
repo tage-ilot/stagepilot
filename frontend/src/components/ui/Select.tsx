@@ -1,6 +1,7 @@
 import { forwardRef, useState, type ChangeEvent, type ComponentPropsWithoutRef } from "react";
 
 import { cx } from "./cx";
+import { useBusy } from "./busyContext";
 import { joinIds, useFieldContext } from "./fieldContext";
 import { fieldBase, fieldBorder, fieldState } from "./fieldStyles";
 
@@ -36,7 +37,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   const field = useFieldContext();
   const invalid = Boolean(error) || Boolean(field.invalid);
   const held = Boolean(field.held);
-  const inert = Boolean(disabled) || loading;
+  const busy = useBusy();
+  const inert = Boolean(disabled) || busy || loading;
   const controlled = value !== undefined;
   const [inner, setInner] = useState(defaultValue ?? "");
   const current = controlled ? value : inner;
@@ -56,7 +58,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         aria-busy={loading || undefined}
         aria-invalid={invalid || ariaInvalid || undefined}
         aria-describedby={joinIds(describedBy, field.describedBy)}
-        data-state={fieldState({ error: invalid, held, inert: Boolean(disabled), loading })}
+        data-state={fieldState({ error: invalid, held, inert: Boolean(disabled) || busy, loading })}
         data-loading={loading ? "true" : undefined}
         data-placeholder={showingPlaceholder ? "true" : undefined}
         key={loading ? "loading" : "ready"}

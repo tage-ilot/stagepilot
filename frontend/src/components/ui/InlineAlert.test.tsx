@@ -21,4 +21,10 @@ describe("InlineAlert", () => {
     render(<InlineAlert tone="info" className="extra">m</InlineAlert>);
     expect(screen.getByRole("status").className.endsWith("extra")).toBe(true);
   });
+
+  it("a confirmation that holds buttons can be a named group instead of an interruption", () => {
+    render(<InlineAlert aria-label="Confirm" role="group" tone="warning">Sure?</InlineAlert>);
+    expect(screen.getByRole("group", { name: "Confirm" })).toHaveAttribute("data-tone", "warning");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

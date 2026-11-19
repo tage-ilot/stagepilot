@@ -87,17 +87,18 @@ describe("Status section", () => {
     renderPanel();
     expect(screen.queryByRole("heading", {name: "Status"})).not.toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
-    const order = Array.from(document.querySelectorAll(".backend-status > div dt")).map((dt) => dt.textContent);
+    const order = Array.from(document.querySelectorAll(".section-summary[data-variant=cards] > div dt")).map((dt) => dt.textContent);
     expect(order).toEqual(["Version", "State revision", "API endpoint", "WebSocket"]);
     for (const gone of ["Running since", "Connections", "Connection details"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {name: /Connection details/})).not.toBeInTheDocument();
     expect(screen.queryByText(/\d of 5 connected/)).not.toBeInTheDocument();
-    expect(document.querySelectorAll(".backend-status > div")).toHaveLength(4);
+    expect(document.querySelectorAll(".section-summary[data-variant=cards] > div")).toHaveLength(4);
   });
 
-  it("keeps some of the space under the header that the removed Status heading used to take: half of its 52.5px, so 26px", () => {
+  it("keeps some of the space under the header that the removed Status heading used to take: the panel body's 24px gap (it was 26px before the panel layout)", () => {
     renderPanel();
-    expect(document.querySelector(".backend-status-wrap")).toHaveClass("mt-[26px]");
+    expect(document.querySelector("[data-panel-body]")).toHaveClass("mt-6");
+    expect(document.querySelector("[data-panel-body]")!.firstElementChild).toHaveAttribute("data-section", "summary");
   });
 
   it("says Backend configuration above the title and drops the runtime-identity sentence", () => {
@@ -340,9 +341,9 @@ describe("StagePilot panel sections", () => {
     const access = screen.getByText("Connection Access");
     expect(after(cards, advanced)).toBe(true);
     expect(after(advanced, access)).toBe(true);
-    const labels = Array.from(document.querySelectorAll(".backend-advanced label")).map((l) => l.textContent);
+    const labels = Array.from(document.querySelectorAll(".section-fields[data-columns=inset] label")).map((l) => l.textContent);
     expect(labels).toEqual(["Timezone", "Server port", "Log level"]);
-    expect(document.querySelector(".backend-advanced")).toContainElement(screen.getByLabelText("Timezone"));
+    expect(document.querySelector(".section-fields[data-columns=inset]")).toContainElement(screen.getByLabelText("Timezone"));
     for (const label of ["Timezone", "Server port", "Log level"]) expect(after(advanced, screen.getByLabelText(label))).toBe(true);
     expect(after(access, screen.getByRole("button", {name: "Save configuration"}))).toBe(true);
   });
@@ -351,11 +352,17 @@ describe("StagePilot panel sections", () => {
     // vitest blanks CSS imports, so read the stylesheet from disk (no @types/node in the app tsconfig).
     const { readFileSync } = (await import("node:fs" as string)) as { readFileSync(file: string, enc: "utf8"): string };
     const css = readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/index.css`, "utf8");
-    for (const klass of ["backend-status", "backend-advanced"]) {
-      const columns = [...css.matchAll(new RegExp(`\\.${klass} \\{\\s*grid-template-columns: ([^;]+);`, "g"))].map((m) => m[1]);
-      expect(columns).toEqual(["minmax(0, 1fr)", "repeat(2, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))"]);
+    for (const [kind, attribute] of [["cards", "data-variant"], ["inset", "data-columns"]] as const) {
+      const selector = kind === "cards" ? ".section-summary" : ".section-fields";
+      const rule = new RegExp(`\\${selector}\\[${attribute}="${kind}"\\] \\{\\s*grid-template-columns: ([^;]+);`, "g");
+      expect([...css.matchAll(rule)].map((m) => m[1])).toEqual(["repeat(2, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))"]);
     }
-    expect(css).toMatch(/\.backend-advanced-wrap \{\s*container-type: inline-size;/);
+    // Advanced switches where the cards do, less its own 2.2rem of padding.
+    expect(css).toMatch(/@container \(min-width: 24rem\) \{\s*\.section-summary\[data-variant="cards"\]/);
+    expect(css).toMatch(/@container \(min-width: 21\.8rem\) \{\s*\.section-fields\[data-columns="inset"\]/);
+    expect(css).toMatch(/@container \(min-width: 52rem\) \{\s*\.section-summary\[data-variant="cards"\]/);
+    expect(css).toMatch(/@container \(min-width: 49\.8rem\) \{\s*\.section-fields\[data-columns="inset"\]/);
+    expect(css).toMatch(/\.section-fields-wrap,\s*\.section-summary-wrap \{\s*container-type: inline-size;/);
   });
 
   it("has no Network access dropdown, no Require a PIN checkbox and no Remote Access checkbox any more", async () => {
@@ -762,12 +769,12 @@ describe("Save configuration SaveBar", () => {
 
   it("puts the restart sentence inside the Advanced section, under its settings", () => {
     withSettings();
-    const note = document.querySelector("[data-advanced-restart-note]")!;
+    const note = document.querySelector("[data-part=note]")!;
     expect(note).toHaveTextContent("Timezone, logging and port changes take effect after a backend restart.");
     const advanced = screen.getByRole("button", { name: /Advanced/ }).closest("[data-variant]")!;
     expect(advanced.contains(note)).toBe(true);
     // It follows the four fields, so it reads as a note to them rather than to the whole panel.
-    const lastField = advanced.querySelector(".backend-advanced")!;
+    const lastField = advanced.querySelector(".section-fields[data-columns=inset]")!;
     expect(lastField.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

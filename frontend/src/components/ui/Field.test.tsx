@@ -3,7 +3,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { Field } from "./Field";
+import { BusyContext } from "./busyContext";
+import { Field, HeldMarker } from "./Field";
 import { Input } from "./Input";
 import { Select } from "./Select";
 
@@ -212,5 +213,41 @@ describe("Select", () => {
     const ref = createRef<HTMLSelectElement>();
     render(<Select ref={ref} aria-label="s"><option>A</option></Select>);
     expect(ref.current).toBe(screen.getByLabelText("s"));
+  });
+});
+
+describe("Field: label extra and the busy section", () => {
+  it("draws what belongs beside the label next to it (a help button), not inside the label, and the held marker stays at the right", () => {
+    render(<Field heldChange label="Application ID" labelExtra={<button type="button">?</button>}><Input /></Field>);
+    const label = screen.getByText("Application ID");
+    const help = screen.getByRole("button", { name: "?" });
+    expect(label.tagName).toBe("LABEL");
+    expect(label).not.toContainElement(help);
+    expect(label.parentElement).toContainElement(help);
+    expect(screen.getByLabelText("Application ID")).toBeInTheDocument();
+    expect(label.parentElement?.nextElementSibling).toHaveAttribute("data-held-marker");
+  });
+
+  it("without a label extra the label is drawn exactly as before", () => {
+    const { container } = render(<Field label="Host"><Input /></Field>);
+    expect(container.querySelector("[data-field] > div")?.firstElementChild?.tagName).toBe("LABEL");
+  });
+
+  it("the held marker is one component: a dot and the words 'Not saved yet'", () => {
+    render(<HeldMarker className="mt-1.5" />);
+    const marker = document.querySelector("[data-held-marker]")!;
+    expect(marker).toHaveTextContent("Not saved yet");
+    expect(marker).toHaveClass("mt-1.5");
+    expect(marker.querySelector("[aria-hidden=true]")).toBeInTheDocument();
+  });
+
+  it("a busy section disables a control inside a Field, and a control's own disabled still holds when it is not busy", () => {
+    const { rerender } = render(<BusyContext.Provider value><Field label="One"><Input /></Field><Field label="Two"><Select><option>A</option></Select></Field></BusyContext.Provider>);
+    expect(screen.getByLabelText("One")).toBeDisabled();
+    expect(screen.getByLabelText("Two")).toBeDisabled();
+    expect(screen.getByLabelText("One")).toHaveAttribute("data-state", "disabled");
+    rerender(<BusyContext.Provider value={false}><Field label="One"><Input disabled /></Field><Field label="Two"><Select><option>A</option></Select></Field></BusyContext.Provider>);
+    expect(screen.getByLabelText("One")).toBeDisabled();
+    expect(screen.getByLabelText("Two")).toBeEnabled();
   });
 });
