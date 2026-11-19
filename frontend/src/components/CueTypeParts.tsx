@@ -46,7 +46,7 @@ export function CueTypeLegend({
                 <button
                   aria-label={CUE_TYPES[id].name}
                   aria-pressed={!off}
-                  className={`inline-flex min-h-[34px] touch-manipulation items-center gap-1.5 rounded-ds-full border border-edge-medium bg-surface-panel-strong py-1 pl-2 pr-3 text-type-body-sm text-ink-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${off ? "line-through opacity-40" : ""} ${unused ? "opacity-40" : ""}`}
+                  className={`inline-flex min-h-[34px] coarse:min-h-[44px] touch-manipulation items-center gap-1.5 rounded-ds-full border border-edge-medium bg-surface-panel-strong py-1 pl-2 pr-3 text-type-body-sm text-ink-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${off ? "line-through opacity-40" : ""} ${unused ? "opacity-40" : ""}`}
                   data-testid="cue-legend-chip"
                   data-type={id}
                   disabled={unused}

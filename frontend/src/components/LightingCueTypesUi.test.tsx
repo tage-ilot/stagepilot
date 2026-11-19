@@ -88,6 +88,8 @@ describe("marker rendering per OSC type", () => {
     expect(within(screen.getByRole("group", { name: "Looks" })).getAllByTestId("cue-legend-chip")).toHaveLength(4); // captured, edited, manual and the effect loop
     expect(within(screen.getByRole("group", { name: "Lightkey cues" })).getAllByTestId("cue-legend-chip")).toHaveLength(2);
     expect(within(screen.getByRole("group", { name: "Single messages" })).getAllByTestId("cue-legend-chip")).toHaveLength(2);
+    // 34 px with a mouse, 44 px on touch, like every other toolbar control (CONTROL_34).
+    for (const chip of screen.getAllByTestId("cue-legend-chip")) expect(chip.className).toMatch(/(^| )coarse:min-h-\[44px\]( |$)/);
   });
 });
 
