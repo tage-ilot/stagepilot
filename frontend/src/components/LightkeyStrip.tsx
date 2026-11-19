@@ -473,7 +473,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             </SectionNotice>
           )}
           {outdated && (
-            <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-helper-update" tone="warning" variant="line">
+            <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-helper-update" tone="info" variant="line">
               Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
             </SectionNotice>
           )}

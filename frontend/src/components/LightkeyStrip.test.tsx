@@ -533,6 +533,8 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByTestId("lightkey-helper-update")).toHaveTextContent("Helper update available");
+    // Capture and replay keep working: an update is information (as the Library Link and Presenter Link say it), never red.
+    expect(screen.getByTestId("lightkey-helper-update")).toHaveAttribute("data-tone", "info");
     expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
     expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Update the helper to use this.");
     // everything else still works
