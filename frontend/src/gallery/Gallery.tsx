@@ -7,6 +7,7 @@ import { lightingStates } from "./LightingStates";
 import { backendPages, lightingPages, playbackPages, presentationPages, servicesPages } from "./PageStates";
 import { playbackStates } from "./PlaybackStates";
 import { presentationStates } from "./PresentationStates";
+import { presenterLinkStates } from "./PresenterLinkStates";
 import { remotePages } from "./RemoteStates";
 import { ConnectionGroup, type SampleState } from "./StateCard";
 import { actionTemplates, noticeTemplates, optionalTemplates, settingsTemplates, summaryTemplates } from "./TemplateStates";
@@ -23,6 +24,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "playback", title: "Connection section: Playback", intro: "Playback Live Link (Configuration > Playback): the Playback API and the optional Library Link.", states: playbackStates },
   { id: "lighting", title: "Connection section: Lighting", intro: "sACN DMX Live Link (Configuration > Lighting): the Lightkey link and its helper on the Lighting computer.", states: lightingStates },
   { id: "page-presentation", title: "Page: Presentation", intro: "Settings, actions, summary and notices of the Presentation page: clean, held, error, busy, disabled, failed, loading.", states: presentationPages, lead: PAGES_NOTE },
+  { id: "presenter-link", title: "Section: Presenter Link", intro: "The Presenter Link in the Presentation panel: playlist and section, ONE list of songs (Planning Center names until Playback has given them), and ONE button. Every state is reached by pressing the real buttons; the answers are made up.", states: presenterLinkStates },
   { id: "page-services", title: "Page: Services", intro: "Services (Planning Center): the three sign-in notices, the optional Manual API Connection, the settings group, the action row.", states: servicesPages },
   { id: "page-backend", title: "Page: StagePilot", intro: "StagePilot: the summary cards first, the optional Advanced section, Connection Access, the Save bar.", states: backendPages },
   { id: "page-playback", title: "Page: Playback / MIDI", intro: "Playback and MIDI: the Song order band (remembered open or closed), the MIDI input actions and the velocities.", states: playbackPages },
@@ -38,7 +40,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
 
 /** One column of the side-by-side view: a connection, with the groups that show it (its Live Link block, then its page). */
 const COLUMNS: { label: string; groups: string[] }[] = [
-  { label: "Presentation", groups: ["presentation", "page-presentation"] },
+  { label: "Presentation", groups: ["presentation", "page-presentation", "presenter-link"] },
   { label: "Playback / MIDI", groups: ["playback", "page-playback"] },
   { label: "Lighting", groups: ["lighting", "page-lighting"] },
   { label: "Services", groups: ["page-services"] },

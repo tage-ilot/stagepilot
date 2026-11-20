@@ -69,7 +69,7 @@ The stand-ins speak the protocol the way the written spec and `playback_library.
 file's own signing code). They cannot show how the real installer behaves on macOS (launchd, Playback's permission prompts, `curl` and `sh`
 versions), or the real covers and arrangements. Run the setup command once on the real Playback computer to see that.
 
-## The Presenter Link (the block and the "Add to ProPresenter" window)
+## The Presenter Link (the block and the Presenter Link section)
 
 `tools/preview_propresenter_link.py` starts the stand-ins and a small **preview server** in front of the demo backend:
 
@@ -89,12 +89,13 @@ address to anyone who should not see the demo. **Ctrl-C** stops everything and r
 | To see | Do |
 |---|---|
 | The block, this computer | Configuration > Presentation. The block is the first one under the header and holds Host, Port and **Test connection**; look at it next to Configuration > Playback and Configuration > Lighting. Reads `Presenter Link: Can add songs, cannot import missing songs (needs a Mac), on this computer` (this computer is not a Mac) |
-| The window | Configuration > Playback > **Add to ProPresenter**. With the demo's four songs: Holy Forever and Gratitude become new copies, Battle Belongs is not in ProPresenter (blocked: import needs a Mac), Firm Foundation has two files (needs a choice). Tick **Skip blocked songs**, **Add songs**, wait about 15 seconds |
-| `Already there` | Add the songs once, then **Preview** the same songs again |
+| The section | Configuration > Presentation > **Presenter Link** (below Refresh timers and Looks). With the demo's four songs from Playback: Holy Forever and Gratitude become new copies, Battle Belongs is not in ProPresenter (blocked: import needs a Mac), Firm Foundation has two files (needs a choice). Choose a playlist and a section, press **Add to ProPresenter**: it stops at the preview and says why; press **Skip those and add the rest**, wait about 15 seconds. Configuration > Playback has no Add button any more |
+| Planning Center names | On the states page press **Playback gives no songs**: the list is the demo plan's Planning Center names with the line *Playback has not given the songs yet*. Names the made-up ProPresenter folder has go in as they are; the others say **Not in ProPresenter** and cannot be ticked. Press **Playback gives the songs again** and the list becomes Playback's songs, keeping your ticks |
+| `Already there` | Add the songs once, then press **Add to ProPresenter** again: the songs already in the playlist are marked and nothing is added twice |
 | Another computer's Link | `http://<this computer>:18900/__preview/` lists the states (Not installed, Ready, cannot import, Update available (by hand / by itself), Needs the command again, Not answering). They change only what the status and setup routes say; adding songs always goes through the real routes and the made-up folder. **Set up the ProPresenter computer** shows a made-up command with the countdown; switch to *Ready* and the box closes by itself |
-| `Open the Playback library once` | Stop the preview, start it again with `--lazy select`: new files get their id only after the library was selected. Add songs, wait 30 seconds for the instruction, press **I opened the Playback library in ProPresenter** on the states page, then **Try again** in the window |
-| A guess | **Gratitude** has two different blank "Count Off" groups, so its preview line reads *Count Off (1st use) uses the 1st blank-named group: check it in ProPresenter.* and **Add songs** stays on; after adding, the result lists it under *Check in ProPresenter:* |
-| `ProPresenter is showing something on screen` | On the states page press **Pretend ProPresenter is showing slides**, start `--lazy select`, press **Simulate: ProPresenter loads the new songs only after...**, then **Add songs** and wait 10 seconds: StagePilot would now select the library on screen, so it stops (`Stopped: ProPresenter is showing something on screen (slides)`). Press **ProPresenter shows nothing again**, then **Try again** |
+| `Open the Playback library once` | Stop the preview, start it again with `--lazy select`: new files get their id only after the library was selected. Press **Add to ProPresenter**, wait 30 seconds for the instruction, press **I opened the Playback library in ProPresenter** on the states page, then **Try again** under the result |
+| A guess | **Gratitude** has two different blank "Count Off" groups, so its preview line reads *Count Off (1st use) uses the 1st blank-named group: check it in ProPresenter.* and the button still adds it; after adding, the result lists it under *Check in ProPresenter:* |
+| `ProPresenter is showing something on screen` | On the states page press **Pretend ProPresenter is showing slides**, start `--lazy select`, press **Simulate: ProPresenter loads the new songs only after...**, then **Add to ProPresenter** and wait 10 seconds: StagePilot would now select the library on screen, so it stops (`Stopped: ProPresenter is showing something on screen (slides)`). Press **ProPresenter shows nothing again**, then **Try again** |
 | Start over | **Start over** on the states page forgets the songs added to the playlists |
 
 It cannot show how the real helper installs on macOS, ProPresenter's own lazy loading, the Search import, or whether ProPresenter honours the

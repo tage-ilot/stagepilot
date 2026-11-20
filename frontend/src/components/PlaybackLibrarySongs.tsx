@@ -1,6 +1,4 @@
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
-import { AddToProPresenter } from "./AddToProPresenter";
 import type { LibraryPlanSong, ServicePlan } from "../types";
 import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
 import { anyKeyWas, chipLibrary, libraryNotices, songKeyLength } from "./playbackLibrary";
@@ -40,7 +38,7 @@ function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
  * It draws NOTHING unless the Library Link is ready (or outdated, which still works): a computer without the script looks exactly like
  * a build without the library. The notices that need action also go in the header pill; the length difference is information only.
  */
-export function PlaybackLibrarySongs({ library, plan, timeZone, link, playing = false }: { library: PlaybackLibraryController; plan: ServicePlan | null; timeZone: string; link?: ProPresenterLinkController; playing?: boolean }) {
+export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: PlaybackLibraryController; plan: ServicePlan | null; timeZone: string }) {
   // The backend answers `ready` only while the Library Link is ready or outdated, so this one gate is the whole rule.
   const notices = libraryNotices(library.plan, plan, timeZone);
   // "(was X)" on a key lasts a day: while one shows, the cards look again every minute so it goes away by itself.
@@ -59,7 +57,6 @@ export function PlaybackLibrarySongs({ library, plan, timeZone, link, playing = 
           {notices.map((notice) => <li className={notice.actionable ? "text-warning-text" : "text-ink-muted"} data-kind={notice.kind} key={notice.id}>{notice.text}</li>)}
         </ul>
       )}
-      <AddToProPresenter library={library} link={link} playing={playing} />
     </section>
   );
 }

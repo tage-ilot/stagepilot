@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { applyAddSongs, getAddSongsJob, getProPresenterPlaylists, previewAddSongs } from "../api";
-import type { AddSongsRow } from "../components/addSongsSongs";
-import { guessAnnouncement, isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS } from "../components/addSongsWording";
+import { presenterLinkReady, type AddSongsRow } from "../components/addSongsSongs";
+import { guessAnnouncement, isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
+import { usePresenterApi } from "./presenterApi";
+import { useTitleLookup } from "./useTitleLookup";
 
 /** The last playlist and place, remembered in this browser only (never sent anywhere, never saved in StagePilot's settings). */
 export const ADD_SONGS_CHOICE_KEY = "stagepilot.propresenter.add-songs-choice";
@@ -14,7 +15,11 @@ export const PLACE_END = "";
 export const JOB_POLL_MS = 1000;
 const POLL_FAILS_BEFORE_SAYING = 4;
 
+/** `choose`: nothing asked yet. `previewed`: the one button made a preview and STOPPED (something needs a decision, or nothing can be added). */
 export type AddSongsPhase = "choose" | "previewing" | "previewed" | "applying" | "finished";
+
+/** Why a row cannot be ticked: Playback gave it no number, ProPresenter has no song with this title, or it has two. */
+export type RowBlock = "unnamed" | "missing" | "several";
 
 interface Remembered { playlist_id: string; place: string }
 
@@ -27,7 +32,7 @@ function remembered(): Remembered | null {
   }
 }
 function remember(choice: Remembered) {
-  try { window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify(choice)); } catch { /* the choice lasts while the window is open */ }
+  try { window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify(choice)); } catch { /* the choice lasts while the section is on screen */ }
 }
 
 export interface AddSongsProblem { message: string; code: string | null }
@@ -46,13 +51,27 @@ export function problemOf(cause: unknown, fallback: string): AddSongsProblem {
 }
 
 /**
- * The state of the "Add to ProPresenter" window: which songs, which playlist and place, the preview, the running job and its result.
- * Nothing is written to ProPresenter by anything here except `add`, and `add` only runs on a preview that is still true: changing a song,
- * the playlist or the place makes the preview stale (it must be looked at again). The last playlist and place are kept in this browser.
+ * The state of the Presenter Link section: which songs (the list's rows, whichever source they come from), which playlist and section, the
+ * preview, the running job and its result. ONE press (`run`) makes the preview and, when nothing in it is blocked, applies it at once; if
+ * anything is blocked or needs a decision it stops after the preview with the reason, and only `skipAndAdd` goes on without those songs.
+ * Nothing is written to ProPresenter by anything here except `start`, and `start` only runs on the preview just made. Ticks belong to a song
+ * (its title), not to a row, so the list swapping from Planning Center names to Playback's songs keeps them. The last playlist and place are
+ * kept in this browser.
  */
 export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link: ProPresenterLinkController; playing: boolean }) {
-  const named = useMemo(() => rows.filter((row) => !row.unnamed), [rows]);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(named.map((row) => row.ref)));
+  const linkReady = presenterLinkReady(link);
+  const stagepilot = usePresenterApi();
+  const names = useMemo(() => rows.filter((row) => row.source === "planning-center").map((row) => row.title), [rows]);
+  const lookup = useTitleLookup(names, linkReady);
+  const blockOf = useCallback((row: AddSongsRow): RowBlock | null => {
+    if (row.source === "playback") return row.unnamed ? "unnamed" : null;
+    const known = lookup.stateOf(row.title);
+    return known === "missing" || known === "several" ? known : null;
+  }, [lookup]);
+  const choices = useMemo(() => rows.filter((row) => !blockOf(row)), [rows, blockOf]);
+
+  // The person's UNticks: a song nobody touched is ticked, so a new row (the list swapped, a song arrived) starts ticked.
+  const [unticked, setUnticked] = useState<Set<string>>(() => new Set());
   const [playlists, setPlaylists] = useState<ProPresenterPlaylist[] | null>(null);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   const [playlistId, setPlaylistId] = useState("");
@@ -60,6 +79,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const [phase, setPhase] = useState<AddSongsPhase>("choose");
   const [plan, setPlan] = useState<AddSongsPlan | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
+  const [previewRows, setPreviewRows] = useState<Map<string, AddSongsRow>>(() => new Map());
   const [gone, setGone] = useState(false);
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [problem, setProblem] = useState<AddSongsProblem | null>(null);
@@ -69,8 +89,10 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const ids = useMemo(() => named.filter((row) => selected.has(row.ref)).map((row) => Number(row.ref)), [named, selected]);
-  const signature = `${ids.join(",")}|${playlistId}|${place}`;
+  const picked = useMemo(() => choices.filter((row) => !unticked.has(row.id)), [choices, unticked]);
+  const selected = useMemo(() => new Set(picked.map((row) => row.id)), [picked]);
+  const fromPlayback = rows.some((row) => row.source === "playback");
+  const signature = `${fromPlayback ? "playback" : "names"}|${picked.map((row) => row.id).join(",")}|${playlistId}|${place}`;
   const stale = plan !== null && (gone || previewSignature !== signature);
   const playlist = playlists?.find((candidate) => candidate.id === playlistId) ?? null;
   // A header the playlist no longer has falls back to the end.
@@ -79,7 +101,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const loadPlaylists = useCallback(async () => {
     setPlaylistsError(null);
     try {
-      const answer = await getProPresenterPlaylists();
+      const answer = await stagepilot.playlists();
       if (!alive.current) return;
       setPlaylists(answer.playlists);
       const last = remembered();
@@ -91,17 +113,18 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     } catch (cause) {
       if (alive.current) setPlaylistsError(problemOf(cause, "StagePilot could not read the playlists from ProPresenter.").message);
     }
-  }, []);
-  useEffect(() => { void loadPlaylists(); }, [loadPlaylists]);
+  }, [stagepilot]);
+  // The playlists are asked for only while the Presenter Link is ready (the section is not drawn otherwise).
+  useEffect(() => { if (linkReady) void loadPlaylists(); }, [linkReady, loadPlaylists]);
 
-  const toggle = useCallback((ref: string) => {
-    setSelected((current) => {
+  const toggle = useCallback((id: string) => {
+    setUnticked((current) => {
       const next = new Set(current);
-      if (next.has(ref)) next.delete(ref); else next.add(ref);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }, []);
-  const toggleAll = useCallback((on: boolean) => setSelected(on ? new Set(named.map((row) => row.ref)) : new Set()), [named]);
+  const toggleAll = useCallback((on: boolean) => setUnticked(on ? new Set() : new Set(choices.map((row) => row.id))), [choices]);
 
   const choosePlaylist = useCallback((id: string) => {
     setPlaylistId(id);
@@ -116,53 +139,53 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     remember({ playlist_id: playlistId, place: value });
   }, [playlistId]);
 
-  // ---- what stops a button, said in words -------------------------------------------------------------------------------
-  const linkReady = link.status?.state === "ready";
-  const previewBlocked: string | null = !linkReady ? LINK_NOT_READY_WORDS
-    : ids.length === 0 ? "Tick at least one song."
+  // ---- what stops the button, said in words -------------------------------------------------------------------------------
+  const blockedBy: string | null = !linkReady ? LINK_NOT_READY_WORDS
+    : picked.length === 0 ? "Tick at least one song."
       : !playlistId ? "Choose a playlist."
-        : !placeOk ? "Choose a place in the playlist."
+        : !placeOk ? "Choose a section of the playlist."
           : null;
-  const addBlocked: string | null = !linkReady ? LINK_NOT_READY_WORDS
-    : playing ? PLAYING_WORDS
-      : ids.length === 0 ? "Tick at least one song."
-        : !plan ? "Press Preview first to see what will change."
-          : stale ? "You changed something. Press Preview again."
-            : plan.playlist.blocked ? `Blocked: ${plan.playlist.blocked}`
-              : plan.stuck > 0 && !skipBlocked ? "Some songs are blocked. Tick \u201CSkip blocked songs\u201D to add the others."
-                : !plan.can_apply ? "There is nothing to add."
-                  : null;
 
-  const preview = useCallback(async () => {
-    if (previewBlocked) return;
+  // ---- the one button -----------------------------------------------------------------------------------------------------
+  /** The preview of what is ticked. `null` when it could not be made (then `problem` says why). */
+  const makePreview = useCallback(async (): Promise<AddSongsPlan | null> => {
     setPhase("previewing");
     setProblem(null);
     setGone(false);
+    setJob(null);
+    setJobId(null);
     const where = place === PLACE_END ? { place: "end" as const } : { after_header: place };
-    const request: AddSongsPreviewRequest = { setlist_song_ids: ids, playlist_id: playlistId, ...where };
+    const request: AddSongsPreviewRequest = fromPlayback
+      ? { setlist_song_ids: picked.map((row) => Number(row.ref)), playlist_id: playlistId, ...where }
+      : { titles: picked.map((row) => row.title), playlist_id: playlistId, ...where };
+    // What the preview calls a song: Playback's number, or `t1`, `t2`... in the order the titles were sent.
+    const refs = new Map(picked.map((row, index) => [fromPlayback ? row.ref : `t${index + 1}`, row] as const));
     try {
-      const made = await previewAddSongs(request);
-      if (!alive.current) return;
+      const made = await stagepilot.preview(request);
+      if (!alive.current) return null;
       setPlan(made);
       setPreviewSignature(signature);
+      setPreviewRows(refs);
       setSkipBlocked(false);
-      setPhase("previewed");
+      return made;
     } catch (cause) {
-      if (!alive.current) return;
+      if (!alive.current) return null;
       setPlan(null);
       setProblem(problemOf(cause, "StagePilot could not make the preview."));
       setPhase("choose");
+      return null;
     }
-  }, [ids, place, playlistId, previewBlocked, signature]);
+  }, [fromPlayback, picked, place, playlistId, signature, stagepilot]);
 
-  const add = useCallback(async () => {
-    if (addBlocked || !plan) return;
+  /** Applies a preview that was just made; `skip` leaves out the songs it called stuck. */
+  const start = useCallback(async (made: AddSongsPlan, skip: boolean) => {
     setProblem(null);
     setJob(null);
     setLostContact(false);
+    setSkipBlocked(skip);
     setPhase("applying");
     try {
-      const started = await applyAddSongs(plan.plan_id, skipBlocked ? plan.songs.filter(isStuck).map((song) => song.ref_id) : []);
+      const started = await stagepilot.apply(made.plan_id, skip ? made.songs.filter(isStuck).map((song) => song.ref_id) : []);
       if (!alive.current) return;
       setJobId(started.job_id);
     } catch (cause) {
@@ -173,7 +196,20 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       if (found.code === "plan_changed" || found.code === "unknown_plan" || found.code === "songs_blocked") setGone(true);
       setPhase("previewed");
     }
-  }, [addBlocked, plan, skipBlocked]);
+  }, [stagepilot]);
+
+  /** The button: the preview, then (when nothing is blocked and no song is playing) the add, in one go. */
+  const run = useCallback(async () => {
+    if (blockedBy) return;
+    const made = await makePreview();
+    if (!made) return;
+    if (playing || stuckReason(made, false) !== null) { setPhase("previewed"); return; }
+    await start(made, false);
+  }, [blockedBy, makePreview, playing, start]);
+
+  /** **Skip those and add the rest**: only on a preview that stopped for blocked songs and is still true. */
+  const canSkip = phase === "previewed" && plan !== null && !stale && !playing && linkReady && plan.stuck > 0 && !plan.playlist.blocked && plan.to_add > 0;
+  const skipAndAdd = useCallback(() => { if (canSkip && plan) void start(plan, true); }, [canSkip, plan, start]);
 
   // A running job is looked at every second until it has an answer.
   useEffect(() => {
@@ -183,7 +219,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     let misses = 0;
     const tick = async () => {
       try {
-        const next = await getAddSongsJob(jobId);
+        const next = await stagepilot.job(jobId);
         if (cancelled || !alive.current) return;
         misses = 0;
         setLostContact(false);
@@ -197,20 +233,23 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     };
     void tick();
     return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [phase, jobId]);
+  }, [phase, jobId, stagepilot]);
 
-  /** Try again: a fresh preview of the same choice (files made before are reused, so repeating is safe). */
+  /** Try again: a fresh preview of the same choice, applied at once when it is clean (files made before are reused, so repeating is safe). */
   const tryAgain = useCallback(() => {
     setJob(null);
     setJobId(null);
-    void preview();
-  }, [preview]);
+    void run();
+  }, [run]);
+
+  // Why the one button stopped after the preview (in words), while that preview is still true.
+  const stopped = phase === "previewed" && plan && !stale ? (playing ? PLAYING_WORDS : stuckReason(plan, true)) : null;
 
   // ---- the sentence a screen reader hears: the newest thing the job did, then its result ----------------------------------
   const report = job?.report ?? null;
   const announcement = useMemo(() => {
     if (phase === "previewing") return "Making the preview\u2026";
-    if (phase === "previewed" && plan && !stale) return `Preview ready. ${plan.to_add === 1 ? "1 song" : `${plan.to_add} songs`} would be added. ${NOTHING_CHANGES}`;
+    if (phase === "previewed" && plan && !stale) return stopped ? `Preview ready. ${stopped} ${NOTHING_CHANGES}` : `Preview ready. ${plan.to_add === 1 ? "1 song" : `${plan.to_add} songs`} would be added. ${NOTHING_CHANGES}`;
     if (phase === "applying") {
       const last = job?.events[job.events.length - 1];
       if (!last) return "Adding songs\u2026";
@@ -219,13 +258,13 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     }
     if (phase === "finished") return report ? [`${OUTCOME[report.outcome].heading}. ${report.message}`, guessAnnouncement(report)].filter(Boolean).join(" ") : job?.error ?? "The job stopped.";
     return "";
-  }, [phase, plan, stale, job, report]);
+  }, [phase, plan, stale, stopped, job, report]);
 
   return {
-    rows: named, unnamed: rows.filter((row) => row.unnamed), selected, toggle, toggleAll, selectedCount: ids.length,
+    rows, choices, blockOf, selected, toggle, toggleAll, selectedCount: picked.length, fromPlayback, previewRows,
     playlists, playlistsError, reloadPlaylists: loadPlaylists, playlistId, choosePlaylist, place, choosePlace, playlist,
-    phase, plan, stale, skipBlocked, setSkipBlocked, problem, previewBlocked, addBlocked,
-    preview, add, tryAgain, job, report, lostContact, announcement, linkReady,
+    phase, plan, stale, skipBlocked, problem, blockedBy, stopped, canSkip,
+    run, skipAndAdd, tryAgain, job, report, lostContact, announcement, linkReady,
   };
 }
 

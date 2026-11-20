@@ -4,6 +4,7 @@ import { rememberAddress } from "../hooks/useRecentAddresses";
 import type {
   ProPresenterSettingsInput,
   ProPresenterStatusResponse,
+  ServicePlan,
 } from "../types";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Field } from "./ui/Field";
@@ -16,6 +17,8 @@ import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
+import { PresenterLinkSection } from "./PresenterLinkSection";
+import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 
 export function ProPresenterSetupPanel({
   propresenter,
@@ -29,6 +32,9 @@ export function ProPresenterSetupPanel({
   onClose,
   onDirtyChange,
   link,
+  library,
+  plan,
+  playing = false,
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
@@ -42,6 +48,12 @@ export function ProPresenterSetupPanel({
   onDirtyChange?: (dirty: boolean) => void;
   /** The optional Presenter Link (its line, pill and setup in the Live Link block). Left out, the block holds the connection and the ProPresenter API line only. */
   link?: ProPresenterLinkController;
+  /** The Playback library (the Library Link): when it has given the songs of the upcoming plan, the Presenter Link section lists those instead of the plan's Planning Center names. */
+  library?: PlaybackLibraryController;
+  /** The loaded service plan: its song names are the Presenter Link list until Playback has given the songs. */
+  plan?: ServicePlan | null;
+  /** A song is playing (Playback says so, or a StagePilot countdown runs): the Presenter Link adds nothing then. */
+  playing?: boolean;
 }) {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("1025");
@@ -228,6 +240,7 @@ export function ProPresenterSetupPanel({
           </SettingsSection>
         </>
       )}
+      content={link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
       actions={(
         <ActionRow
           note={changeCount > 0 ? "Test connection and Refresh use the saved settings. Save configuration first to try the new ones." : undefined}

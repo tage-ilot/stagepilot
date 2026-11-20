@@ -1001,3 +1001,130 @@ async fn nothing_on_screen_is_touched_while_propresenter_shows_something_and_try
     assert_eq!(job["report"]["outcome"], "done", "{job}");
     assert_eq!(w.host.imports().len(), 1);
 }
+
+// ---- songs asked for by title alone (no Playback data) --------------------------------------------------------------------------
+
+const TITLES: &str = "/api/v1/propresenter-link/add-songs/titles";
+
+#[tokio::test]
+async fn titles_are_looked_up_and_added_as_they_are_with_no_playback_data_at_all() {
+    let w = world(Loading::Immediately).await;
+    // Playback is not asked: with no plan at all the title route still works.
+    w.rt.propresenter_add_songs.set_plan_for_test(None);
+    let (status, found) = call(
+        &w.app,
+        "POST",
+        TITLES,
+        Some(json!({"titles": ["beta", "Nowhere Song"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{found}");
+    assert_eq!(
+        found,
+        json!({"titles": [
+            {"title": "beta", "state": "found"},
+            {"title": "Nowhere Song", "state": "missing"},
+        ]})
+    );
+    let body = json!({"titles": ["Nowhere Song", "Beta"], "playlist_id": w.playlist, "after_header": "Worship"});
+    let (status, plan) = call(&w.app, "POST", PREVIEW, Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    let songs = plan["songs"].as_array().unwrap();
+    let shown: Vec<(&str, &str, &str)> = songs
+        .iter()
+        .map(|s| {
+            (
+                s["ref_id"].as_str().unwrap(),
+                s["title"].as_str().unwrap(),
+                s["action"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        [("t1", "Nowhere Song", "blocked"), ("t2", "Beta", "as_is")]
+    );
+    assert!(songs[0]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("Playback's data is needed to import it"));
+    assert_eq!(
+        (plan["to_add"].as_u64(), plan["stuck"].as_u64()),
+        (Some(1), Some(1))
+    );
+    // The missing one is left out by name, then the job adds Beta as it is.
+    let (status, started) = call(
+        &w.app,
+        "POST",
+        APPLY,
+        Some(json!({"plan_id": plan["plan_id"], "skip": ["t1"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{started}");
+    let job = finished(&w.app, started["job_id"].as_str().unwrap()).await;
+    assert_eq!(job["state"], "done", "{job}");
+    assert_eq!(job["report"]["outcome"], "done", "{job}");
+    let statuses: Vec<&str> = job["report"]["songs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses, ["skipped", "added"]);
+    assert!(w.host.imports().is_empty());
+    assert!(w.host.files_of("Playback").is_empty());
+    let names: Vec<String> = w
+        .api
+        .stored(&w.playlist)
+        .iter()
+        .map(|i| i["id"]["name"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert_eq!(names, ["Welcome", "Alpha", "Worship", "Beta", "Message"]);
+}
+
+#[tokio::test]
+async fn the_title_inputs_are_checked_too() {
+    let w = world(Loading::Immediately).await;
+    let id = &w.playlist;
+    let bad = |path: &'static str, body: Value| {
+        let app = w.app.clone();
+        async move {
+            let (status, answer) = call(&app, "POST", path, Some(body)).await;
+            assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+            assert!(answer["detail"].as_str().is_some_and(|d| !d.is_empty()));
+        }
+    };
+    bad(TITLES, json!({})).await;
+    bad(TITLES, json!({"titles": []})).await;
+    bad(TITLES, json!({"titles": ["A", "a"]})).await;
+    bad(TITLES, json!({"titles": [5]})).await;
+    bad(TITLES, json!({"titles": ["bell\u{7}"]})).await;
+    bad(TITLES, json!({"titles": ["x".repeat(121)]})).await;
+    bad(TITLES, json!({"titles": vec!["x"; 61]})).await;
+    bad(TITLES, json!({"titles": ["A"], "path": "/etc"})).await;
+    bad(
+        PREVIEW,
+        json!({"titles": [], "playlist_id": id, "place": "end"}),
+    )
+    .await;
+    bad(
+        PREVIEW,
+        json!({"titles": ["A"], "setlist_song_ids": [11], "playlist_id": id, "place": "end"}),
+    )
+    .await;
+    bad(
+        PREVIEW,
+        json!({"titles": ["A"], "content_ids": [1001], "playlist_id": id, "place": "end"}),
+    )
+    .await;
+    // Without a ready Link nothing is asked of ProPresenter for titles either.
+    let settings = SettingsService::ephemeral_persistent(PersistentSettings::default());
+    let rt = Runtime::with_backends(Arc::new(settings), false, OutputBackends::fake_midi());
+    let app = build_app(rt, AppOptions { web_root: None });
+    let (status, answer) = call(&app, "POST", TITLES, Some(json!({"titles": ["A"]}))).await;
+    assert_eq!(
+        (status, answer["code"].as_str()),
+        (StatusCode::CONFLICT, Some("no_propresenter")),
+        "{answer}"
+    );
+}

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import {
-  ACTION_STAMP, afterHeaderLabel, backupName, canTryAgain, guessAnnouncement, guessLine, guessNote, importsSentence, isStuck, mappingLines, neighbours,
-  NOTHING_CHANGES, orderWords, ordinal, OUTCOME, playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
+  ACTION_STAMP, afterHeaderLabel, asTheyAreSentence, backupName, canTryAgain, guessAnnouncement, guessLine, guessNote, importsSentence, isStuck, mappingLines, neighbours,
+  NOTHING_CHANGES, orderWords, ordinal, OUTCOME, playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason,
 } from "./addSongsWording";
 
 const sections = (...names: string[]) => ({ sections: names.map((name, i) => ({ name, start: i, end: i + 1 })) });
@@ -122,7 +122,7 @@ describe("what pressing Add songs does", () => {
     );
     expect(importsSentence(null)).toContain("into the playlist.");
     // The older promise stays as it was, and no warning about hand-chosen arrangements is added.
-    expect(NOTHING_CHANGES).toBe("Nothing in ProPresenter changes until you press Add songs.");
+    expect(NOTHING_CHANGES).toBe("Nothing in ProPresenter changes until you press Add to ProPresenter.");
     expect(importsSentence("X")).not.toMatch(/hand|chosen|reset/i);
   });
 });
@@ -172,5 +172,43 @@ describe("sections that were guessed", () => {
     expect(lines[0]).toBe("1 of 3 sections matched exactly, 2 guessed (check them in ProPresenter).");
     expect(lines).not.toContain("1 of 3 sections matched exactly, 2 not matched.");
     expect(lines[1]).toContain("Interlude (3rd use) uses the 2nd");
+  });
+});
+
+describe("the one button: what stops it after the preview, in words", () => {
+  const plan = (over: Partial<Parameters<typeof stuckReason>[0]> = {}) => ({
+    songs: [addSong({ ref_id: "1", title: "Holy Forever" }), addSong({ ref_id: "2", title: "Battle Belongs", action: "blocked", reason: "x" }), addSong({ ref_id: "3", title: "Gratitude", action: "needs_choice", reason: "y" })],
+    stuck: 2, to_add: 1, can_apply: false, playlist: { blocked: null }, ...over,
+  });
+
+  it("is nothing when the preview is clean, so the songs go ahead", () => {
+    expect(stuckReason(plan({ songs: [addSong({ ref_id: "1", title: "A" })], stuck: 0, can_apply: true }), true)).toBeNull();
+  });
+
+  it("names the stuck songs and what to do, with and without something left to add", () => {
+    expect(stuckReason(plan(), false)).toBe("2 songs cannot be added yet (Battle Belongs, Gratitude).");
+    expect(stuckReason(plan(), true)).toBe("2 songs cannot be added yet (Battle Belongs, Gratitude). Skip those to add the rest, or fix them and press Add to ProPresenter again.");
+    expect(stuckReason(plan({ to_add: 0, stuck: 1, songs: [addSong({ ref_id: "2", title: "Battle Belongs", action: "blocked", reason: "x" })] }), true)).toBe("1 song cannot be added yet (Battle Belongs). Fix them, or tick other songs, and press Add to ProPresenter again.");
+  });
+
+  it("says a blocked place first, and nothing-to-add when every song is already there", () => {
+    expect(stuckReason(plan({ playlist: { blocked: "That header is in the playlist twice." } }), true)).toBe("Blocked: That header is in the playlist twice.");
+    expect(stuckReason(plan({ songs: [], stuck: 0, to_add: 0, can_apply: false }), true)).toBe("There is nothing to add: every ticked song is already in the playlist.");
+  });
+});
+
+describe("a title-only add", () => {
+  it("says it adds the songs as they are, never that it imports", () => {
+    expect(asTheyAreSentence("Sunday Morning Service")).toBe("This adds the songs as they are in ProPresenter to Sunday Morning Service: no copy, no new arrangement, no key change. The playlist's contents are replaced with what the preview shows.");
+    expect(asTheyAreSentence(null)).toContain("to the playlist:");
+    expect(asTheyAreSentence("X")).not.toMatch(/import/i);
+  });
+
+  it("has a stamp and a sentence for a song that goes in as it is", () => {
+    expect(ACTION_STAMP.as_is).toEqual({ word: "Used as is", mark: "+", tone: "info" });
+    const song = addSong({ ref_id: "t1", title: "Plain", action: "as_is", file: "Plain", sections: 0, key: null });
+    expect(songSentence(song, null)).toBe("Added as it is in ProPresenter as \u201CPlain\u201D: no copy, no new arrangement, no key change.");
+    expect(songSentence({ ...song, already_in_playlist: true }, null)).toContain("It is already in this playlist, so it is not added again.");
+    expect(isStuck(song)).toBe(false);
   });
 });

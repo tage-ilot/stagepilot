@@ -1,4 +1,4 @@
-"""Tests of tools/preview_propresenter_link.py, the preview of the ProPresenter Link block and the Add to ProPresenter window: the
+"""Tests of tools/preview_propresenter_link.py, the preview of the ProPresenter Link block and the Presenter Link section: the
 made-up songs are real enough for StagePilot's engine (the fake API reads their arrangement), the access word keeps strangers out, a
 page of states changes only the two routes it says, and everything else goes to the backend untouched.
 
@@ -232,6 +232,23 @@ class PreviewTests(unittest.TestCase):
         self.assertFalse(os.path.exists(marker))
         self.rig.call("POST", "/__preview/select")
         self.assertTrue(os.path.exists(marker))
+
+    def test_playback_can_stop_giving_songs_and_give_them_again(self):
+        # A stand-in process for the Library Link: the page stops it (the Presenter Link then lists Planning Center names) and starts it again.
+        self.rig.preview.library_command = [sys.executable, "-c", "import time; time.sleep(120)"]
+        self.rig.preview.start_library()
+        self.addCleanup(self.rig.preview.stop_library)
+        self.assertTrue(self.rig.preview.library_running())
+        _, _, page = self.rig.call("GET", "/__preview/")
+        self.assertIn(b"given (the Library Link answers)", page)
+        status, _, _ = self.rig.call("POST", "/__preview/playback-off")
+        self.assertEqual(status, 303)
+        self.assertFalse(self.rig.preview.library_running())
+        _, _, page = self.rig.call("GET", "/__preview/")
+        self.assertIn(b"none (the plan", page)
+        status, _, _ = self.rig.call("POST", "/__preview/playback-on")
+        self.assertEqual(status, 303)
+        self.assertTrue(self.rig.preview.library_running())
 
     def test_pretend_slides_are_on_screen_and_clear_them_again(self):
         page = self.rig.call("GET", "/__preview/")[2].decode()

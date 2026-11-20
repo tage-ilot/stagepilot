@@ -1316,11 +1316,16 @@ async fn remote_viewers_cannot_use_the_propresenter_song_routes() {
     let preview = json!({"setlist_song_ids": [1], "playlist_id": "x", "place": "end"});
     let apply = json!({"plan_id": "0".repeat(32), "skip": []});
     let job = "/api/v1/propresenter-link/add-songs/jobs/00000000000000000000000000000000";
-    let routes: [(&str, &str, Option<Value>); 4] = [
+    let routes: [(&str, &str, Option<Value>); 5] = [
         (
             "POST",
             "/api/v1/propresenter-link/add-songs/preview",
             Some(preview.clone()),
+        ),
+        (
+            "POST",
+            "/api/v1/propresenter-link/add-songs/titles",
+            Some(json!({"titles": ["Alpha"]})),
         ),
         (
             "POST",
