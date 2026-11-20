@@ -26,9 +26,10 @@ describe("FactChips", () => {
   });
 
   it("has no separator character anywhere in what it draws: the box is the separator", () => {
-    render(<FactChips facts={[key, length, { text: "65 BPM" }, { text: "mtID 23126" }]} testId="facts" />);
-    expect(screen.getByTestId("facts").textContent).not.toMatch(/[\u00B7\u2022|,;/\-\u2013\u2014]/);
-    expect(screen.getByTestId("facts").textContent).toBe("Ab 4:37 65 BPM mtID 23126");
+    render(<FactChips facts={[key, length, { text: "65 BPM" }, { text: "mtID-23126" }]} testId="facts" />);
+    // The only hyphen is the one inside the chip's own words (`mtID-23126`, Hunter's format); between chips there is nothing.
+    expect((screen.getByTestId("facts").textContent ?? "").replace("mtID-", "mtID")).not.toMatch(/[\u00B7\u2022|,;/\-\u2013\u2014]/);
+    expect(screen.getByTestId("facts").textContent).toBe("Ab 4:37 65 BPM mtID-23126");
   });
 
   it("is a list of list items (on spans, so it is also valid inside a button that is a whole card), named by the facts' own plain words", () => {
@@ -39,8 +40,8 @@ describe("FactChips", () => {
   });
 
   it("names a fact by its words when it has no other name, and the list by `label` when given", () => {
-    const { rerender } = render(<FactChips facts={[{ text: "65 BPM" }, { text: "mtID 23126" }]} />);
-    expect(screen.getByRole("list", { name: "65 BPM, mtID 23126" })).toBeInTheDocument();
+    const { rerender } = render(<FactChips facts={[{ text: "65 BPM" }, { text: "mtID-23126" }]} />);
+    expect(screen.getByRole("list", { name: "65 BPM, mtID-23126" })).toBeInTheDocument();
     rerender(<FactChips facts={[{ text: "65 BPM" }]} label="Facts of Holy Forever" />);
     expect(screen.getByRole("list", { name: "Facts of Holy Forever" })).toBeInTheDocument();
   });
@@ -75,9 +76,9 @@ describe("FactChips", () => {
   });
 
   it("passes the test id of a fact to its chip, and keeps a fact's own content (a number with its own hook)", () => {
-    render(<FactChips facts={[{ text: "G", testId: "key" }, { text: "mtID 7", content: <>mtID <span data-testid="mtid">7</span></> }]} />);
+    render(<FactChips facts={[{ text: "G", testId: "key" }, { text: "mtID-7", content: <>mtID-<span data-testid="mtid">7</span></> }]} />);
     expect(screen.getByTestId("key")).toHaveTextContent("G");
     expect(screen.getByTestId("mtid")).toHaveTextContent("7");
-    expect(items()[1]).toHaveTextContent("mtID 7");
+    expect(items()[1]).toHaveTextContent("mtID-7");
   });
 });

@@ -44,7 +44,7 @@ const TONES: Record<FactTone, string> = {
  * card is too narrow, and a long fact is cut inside its own chip with its full words as the hover text.
  *
  * Use it wherever a list of a song's facts was written as one dotted line. NOT for a sentence or a status line that merely has a dot
- * between clauses. The words are the facts' own (`Ab`, `4:37`, `65 BPM`, `mtID 23126`); a tone is only for words that already said it
+ * between clauses. The words are the facts' own (`Ab`, `4:37`, `65 BPM`, `mtID-23126`); a tone is only for words that already said it
  * (`Not captured`), never new colour. It is a list for a screen reader (`role="list"` on a span, so it is also valid inside a button
  * that is a whole card), named by the facts' own names. No facts: nothing is drawn.
  */
