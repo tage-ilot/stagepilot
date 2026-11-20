@@ -112,8 +112,8 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
             testId="playback-live-link-line"
             tone="playback"
           >
-            <LiveLinkField caption="Playback computer" className="live-link-host">
-              <AddressBox aria-describedby={hostOk ? undefined : errorId} aria-label="Playback computer" error={!hostOk} inputRef={hostField} onChange={(next) => { setHost(next); recheck.clear(); }} placeholder="For example, 192.0.2.10" scanned={scanned} scope="playback" value={host} working={connectedNow ? savedHost : null} />
+            <LiveLinkField caption="Host" className="live-link-host">
+              <AddressBox aria-describedby={hostOk ? undefined : errorId} aria-label="Playback host" error={!hostOk} inputRef={hostField} onChange={(next) => { setHost(next); recheck.clear(); }} placeholder="For example, 192.0.2.10" scanned={scanned} scope="playback" value={host} working={connectedNow ? savedHost : null} />
             </LiveLinkField>
           </ConnectionRow>
           {!hostOk && <SectionNotice className="mt-2" id={errorId} role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}

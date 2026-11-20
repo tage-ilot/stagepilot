@@ -50,15 +50,17 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
     expect(screen.getAllByTestId("add-songs-row").map((row) => within(row).getByRole("checkbox").getAttribute("aria-label"))).toEqual(["Holy Forever", "Gratitude"]);
   });
 
-  it("lists Playback's songs, with id, key and arrangement, when the Library Link has given them", async () => {
-    const library = libraryController("ready", { plan: libraryPlan([librarySongOf("Holy Forever", 1, { library: librarySong({ title: "Holy Forever", position: 1, setlist_song_id: 2000001, content_id: 5000123, key: "E", arrangement: "Radio" }) })]) });
+  it("lists Playback's songs, with key, mtID and the order, when the Library Link has given them", async () => {
+    const library = libraryController("ready", { plan: libraryPlan([librarySongOf("Holy Forever", 1, { library: librarySong({ title: "Holy Forever", position: 1, setlist_song_id: 30389715, content_id: 5123, key: "E", arrangement: "Radio" }) })]) });
     panel({ library });
     await screen.findByRole("option", { name: "Sunday Morning Service" });
     const row = screen.getByTestId("add-songs-row");
     expect(row).toHaveAttribute("data-source", "playback");
-    expect(row).toHaveTextContent("5000123");
-    expect(row).toHaveTextContent("Key E");
-    expect(row).toHaveTextContent("Radio");
+    expect(row).toHaveTextContent("E \u00B7 mtID 5123");
+    expect(row).not.toHaveTextContent("30389715");
+    // The arrangement's name is not on the card; the order Playback plays is.
+    expect(row).not.toHaveTextContent("Radio");
+    expect(row).toHaveTextContent("Count Off \u00B7 Verse 1 \u00B7 Vamp on 1");
   });
 
   it.each([

@@ -154,14 +154,22 @@ describe("the Library Link setup box in the block", () => {
 });
 
 describe("the computer field takes in the scan, with the old behaviour", () => {
-  it("Scan is the first button, then Connect, and the field is labelled Playback computer", () => {
+  it("Scan is the first button, then Connect, and the field is captioned Host (the box is named Playback host)", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected()} />);
     // The little arrow inside the address box is not a tab stop (tabindex -1): the buttons a person reaches are Scan, then Connect.
     const buttons = within(block()).getAllByRole("button").filter((button) => button.tabIndex !== -1);
     expect(buttons[0]).toBe(screen.getByRole("button", { name: "Search" }));
     expect(buttons[1]).toBe(screen.getByRole("button", { name: "Connect" }));
-    expect(screen.getByRole("combobox", { name: "Playback computer" }).tagName).toBe("INPUT");
+    expect(screen.getByRole("combobox", { name: "Playback host" }).tagName).toBe("INPUT");
     expect(screen.queryByRole("option", { name: /Other computer/ })).toBeNull();
+  });
+
+  it("the address box caption is Host, the same as Lighting and ProPresenter, and no caption says Playback computer", () => {
+    render(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected()} />);
+    const label = screen.getByRole("combobox", { name: "Playback host" }).closest("label") as HTMLElement;
+    expect(label.firstChild?.textContent).toBe("Host");
+    // The computer is still called the Playback computer where a sentence means the computer, not this field.
+    expect(within(block()).queryByText("Playback computer")).toBeNull();
   });
 
   it("choosing a computer sets the API host and the Library Link's address: an Advanced override is cleared", async () => {
@@ -202,7 +210,7 @@ describe("recent computers: a computer that connected before is one choice and C
     const playback = disconnected("10.30.0.141", { scan: scanOf("found", { candidates: [{ name: "Example Mac", host: "10.30.0.7" }] }) });
     render(<PlaybackLiveLink library={libraryController("not_installed")} playback={playback} />);
     const user = userEvent.setup();
-    expect(screen.getByRole("combobox", { name: "Playback computer" })).toHaveValue("10.30.0.141");
+    expect(screen.getByRole("combobox", { name: "Playback host" })).toHaveValue("10.30.0.141");
     await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
     const groups = within(screen.getByRole("listbox")).getAllByRole("group");
     expect(groups.map((group) => within(group).getAllByRole("option").map((option) => option.textContent?.replace("(in the box now)", "")))).toEqual([["Example Mac (10.30.0.7)"], ["10.20.0.102", "10.30.0.141"]]);

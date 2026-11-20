@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import {
-  ACTION_STAMP, backupName, canTryAgain, END_OF_PLAYLIST, guessAnnouncement, guessLine, guessNote, IMPORT_SONGS, IMPORTING, isStuck, mappingLines, neighbours,
-  orderWords, ordinal, OUTCOME, playlistLabel, playlistSentence, resultCounts, selectedWords, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
+  backupName, canTryAgain, END_OF_PLAYLIST, guessAnnouncement, guessLine, guessNote, IMPORT_SONGS, IMPORTING, isStuck, mappingLines, neighbours,
+  orderWords, ordinal, OUTCOME, playlistLabel, resultCounts, selectedWords, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
 } from "./addSongsWording";
 
 const sections = (...names: string[]) => ({ sections: names.map((name, i) => ({ name, start: i, end: i + 1 })) });
@@ -42,11 +42,7 @@ describe("what the preview says about a song", () => {
     expect(songSentence({ ...choice, reason: null, choices: [] }, null)).toContain("StagePilot does not guess");
   });
 
-  it("every action has a stamp with a mark and a word, and only blocked and needs_choice are stuck", () => {
-    for (const action of ["reuse", "copy", "import_then_copy", "needs_choice", "blocked"] as const) {
-      expect(ACTION_STAMP[action].mark).not.toBe("");
-      expect(ACTION_STAMP[action].word).not.toBe("");
-    }
+  it("only blocked and needs_choice are stuck (every action's chip is in addSongsStatus.test.ts)", () => {
     expect(["reuse", "copy", "import_then_copy", "needs_choice", "blocked"].map((action) => isStuck({ action: action as never }))).toEqual([false, false, false, true, true]);
   });
 });
@@ -66,14 +62,6 @@ describe("mapping confidence lines", () => {
 });
 
 describe("the playlist side", () => {
-  const playlist = { name: "Sunday Morning Service", before: "Worship", after: "Message" } as never;
-  it("reads as the owner's sentence", () => {
-    // A section is everything from its header to the next header: the songs go at its end.
-    expect(playlistSentence({ playlist, to_add: 4 }, "Worship")).toBe("Imports 4 songs at the end of the section Worship in Sunday Morning Service. Other items stay as they are.");
-    expect(playlistSentence({ playlist, to_add: 1 }, null)).toBe("Imports 1 song at the end of Sunday Morning Service. Other items stay as they are.");
-    expect(playlistSentence({ playlist, to_add: 0 }, null)).toBe("Imports nothing into Sunday Morning Service. Other items stay as they are.");
-    expect(playlistSentence({ playlist, to_add: 4 }, "Worship")).not.toMatch(/\bafter\b/i);
-  });
   it("names the neighbours the songs land between", () => {
     expect(neighbours({ before: "A", after: "B" })).toBe("They go between \u201CA\u201D and \u201CB\u201D.");
     expect(neighbours({ before: "A", after: null })).toBe("They go after \u201CA\u201D, the last item.");
@@ -114,16 +102,16 @@ describe("the job and its result", () => {
     expect(backupName("/home/church/.config/StagePilot/propresenter-playlist-backups/Sunday-1.json")).toBe("Sunday-1.json");
     expect(backupName("C:\\Users\\church\\backups\\Sunday-1.json")).toBe("Sunday-1.json");
     expect(backupName(null)).toBeNull();
-    expect(resultCounts(report({ songs: [result("1", "A", "added"), result("2", "B", "added"), result("3", "C", "skipped"), result("4", "D", "failed"), result("5", "E", "not_loaded")] }))).toBe("2 imported, 1 skipped, 1 failed, 1 not loaded yet");
+    expect(resultCounts(report({ songs: [result("1", "A", "added"), result("2", "B", "added"), result("3", "C", "skipped"), result("4", "D", "failed"), result("5", "E", "not_loaded")] }))).toBe("2 added \u00B7 1 skipped \u00B7 1 failed \u00B7 1 not loaded");
   });
 });
 
 describe("the one button and the count", () => {
-  it("is Import songs to ProPresenter, Importing… while it works, and the result says imported", () => {
+  it("is Import songs to ProPresenter, Importing… while it works, and the result says Done and Added", () => {
     expect(IMPORT_SONGS).toBe("Import songs to ProPresenter");
     expect(IMPORTING).toBe("Importing\u2026");
-    expect(OUTCOME.done.heading).toBe("Imported");
-    expect(SONG_STATUS.added.word).toBe("Imported");
+    expect(OUTCOME.done.heading).toBe("Done");
+    expect(SONG_STATUS.added.word).toBe("Added");
     expect(selectedWords(3, 4)).toBe("3 of 4 selected");
   });
 });
@@ -186,21 +174,20 @@ describe("the one button: what stops it after the preview, in words", () => {
     expect(stuckReason(plan({ songs: [addSong({ ref_id: "1", title: "A" })], stuck: 0, can_apply: true }), true)).toBeNull();
   });
 
-  it("names the stuck songs and what to do, with and without something left to add", () => {
-    expect(stuckReason(plan(), false)).toBe("2 songs cannot be imported yet (Battle Belongs, Gratitude).");
-    expect(stuckReason(plan(), true)).toBe("2 songs cannot be imported yet (Battle Belongs, Gratitude). Skip those to import the rest, or fix them and press Import songs to ProPresenter again.");
-    expect(stuckReason(plan({ to_add: 0, stuck: 1, songs: [addSong({ ref_id: "2", title: "Battle Belongs", action: "blocked", reason: "x" })] }), true)).toBe("1 song cannot be imported yet (Battle Belongs). Fix them, or select other songs, and press Import songs to ProPresenter again.");
+  it("says in a few words how many cannot be imported and what to do, with and without something left to add", () => {
+    expect(stuckReason(plan(), false)).toBe("2 can't be imported yet");
+    expect(stuckReason(plan(), true)).toBe("2 can't be imported yet: skip them, or fix them and try again");
+    expect(stuckReason(plan({ to_add: 0, stuck: 1, songs: [addSong({ ref_id: "2", title: "Battle Belongs", action: "blocked", reason: "x" })] }), true)).toBe("1 can't be imported yet: fix them, or select other songs");
   });
 
   it("says a blocked place first, and nothing-to-add when every song is already there", () => {
-    expect(stuckReason(plan({ playlist: { blocked: "That header is in the playlist twice." } }), true)).toBe("Blocked: That header is in the playlist twice.");
-    expect(stuckReason(plan({ songs: [], stuck: 0, to_add: 0, can_apply: false }), true)).toBe("There is nothing to import: every selected song is already in the playlist.");
+    expect(stuckReason(plan({ playlist: { blocked: "That header is in the playlist twice." } }), true)).toBe("Playlist is blocked");
+    expect(stuckReason(plan({ songs: [], stuck: 0, to_add: 0, can_apply: false }), true)).toBe("Nothing to import: all in playlist");
   });
 });
 
 describe("a title-only add", () => {
-  it("has a stamp and a sentence for a song that goes in as it is", () => {
-    expect(ACTION_STAMP.as_is).toEqual({ word: "Used as is", mark: "+", tone: "info" });
+  it("has a sentence for a song that goes in as it is", () => {
     const song = addSong({ ref_id: "t1", title: "Plain", action: "as_is", file: "Plain", sections: 0, key: null });
     expect(songSentence(song, null)).toBe("Added as it is in ProPresenter as \u201CPlain\u201D: no copy, no new arrangement, no key change.");
     expect(songSentence({ ...song, already_in_playlist: true }, null)).toContain("It is already in this playlist, so it is not added again.");

@@ -23,11 +23,12 @@ vi.mock("../api", async (original) => ({
 }));
 
 const NOW = Date.parse("2026-11-19T08:00:00Z");
+// The MultiTracks Song Master ID (`content_id`, 4-6 digits) and Playback's own setlist song number (`setlist_song_id`, a long number) differ on purpose.
 const songs = () => libraryPlan([
-  librarySongOf("Holy Forever", 1, { library: librarySong({ title: "Holy Forever", position: 1, setlist_song_id: 2000001, content_id: 5000001, key: "G", key_was: "F", key_changed_at: "2026-11-19T07:00:00Z" }) }),
-  librarySongOf("Battle Belongs", 2, { library: librarySong({ title: "Battle Belongs", position: 2, setlist_song_id: 2000002, content_id: 5000002, key: "Ab", artwork: null }) }),
-  librarySongOf("Gratitude", 3, { library: librarySong({ title: "Gratitude", position: 3, setlist_song_id: 2000003, content_id: 5000003, key: "A" }) }),
-  librarySongOf("Firm Foundation", 4, { library: librarySong({ title: "Firm Foundation", position: 4, setlist_song_id: 2000004, content_id: 5000004, key: "C" }) }),
+  librarySongOf("Holy Forever", 1, { library: librarySong({ title: "Holy Forever", position: 1, setlist_song_id: 30389715, content_id: 43302, key: "G", key_was: "F", key_changed_at: "2026-11-19T07:00:00Z" }) }),
+  librarySongOf("Battle Belongs", 2, { library: librarySong({ title: "Battle Belongs", position: 2, setlist_song_id: 30389716, content_id: 23126, key: "Ab", artwork: null }) }),
+  librarySongOf("Gratitude", 3, { library: librarySong({ title: "Gratitude", position: 3, setlist_song_id: 30389717, content_id: 8412, key: "A" }) }),
+  librarySongOf("Firm Foundation", 4, { library: librarySong({ title: "Firm Foundation", position: 4, setlist_song_id: 30389718, content_id: null, key: "C" }) }),
 ]);
 const draw = (withPlayback = true) => render(<PresenterLinkSection library={withPlayback ? libraryController("ready", { plan: songs() }) : undefined} link={linkController(helperStatus("ready"))} plan={{ songs: ["Holy Forever", "Battle Belongs"].map((title, order) => ({ id: `s${order}`, title, duration_seconds: 300, order, is_generic: false, source_song_id: null })) }} />);
 const card = (name: string) => screen.getByRole("checkbox", { name }).closest("li") as HTMLElement;
@@ -103,21 +104,73 @@ describe("the song cards", () => {
     expect(screen.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "true")).toBe(true);
   });
 
-  it("each Playback card has the cover (when Playback has one), MultiTracks id, the key chip with (was X), the arrangement and its bar", async () => {
+  it("each Playback card has the cover (when Playback has one), then `key · mtID number` as plain text, the arrangement, and its bar", async () => {
     draw();
     await ready();
     const holy = card("Holy Forever");
     expect(holy.querySelector("img")).not.toBeNull();
     expect(card("Battle Belongs").querySelector("img")).toBeNull();
-    expect(within(holy).getByTestId("add-songs-multitracks")).toHaveTextContent("5000001");
-    expect(within(holy).getByTestId("add-songs-key")).toHaveTextContent("Key G (was F)");
-    expect(within(card("Gratitude")).getByTestId("add-songs-key")).toHaveTextContent("Key A");
-    expect(within(holy).getByTestId("add-songs-arrangement")).toHaveTextContent("Default");
     expect(within(holy).getByTestId("library-bar")).toHaveAttribute("role", "img");
-    // The whole order on hover (the card's title) and for a screen reader (the description); Sections opens it on the card.
+    // One compact line under the title: the key letters, a middle dot, mtID and the number: no \"Key\" word, no chip box.
+    const facts = holy.querySelector("[id$='-facts']") as HTMLElement;
+    expect(facts).toHaveTextContent(/^G \(was F\) \u00B7 mtID 43302$/);
+    expect(within(holy).getByTestId("add-songs-key")).toHaveTextContent(/^G \(was F\)$/);
+    expect(within(holy).queryByText(/\bKey\b/)).toBeNull();
+    expect(holy.textContent).not.toMatch(/MultiTracks|Default|Sections/);
+    expect(within(card("Gratitude")).getByTestId("add-songs-key")).toHaveTextContent(/^A$/);
+    // The key is the card's own text style, not a box.
+    expect(within(holy).getByTestId("add-songs-key").className).not.toMatch(/border|bg-/);
+    // The full order on hover (the card's title).
     expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
-    expect(screen.getByRole("checkbox", { name: "Holy Forever" })).toHaveAccessibleDescription(/sections: Count Off, Verse 1, Vamp on 1/);
-    expect(screen.getByRole("checkbox", { name: "Holy Forever" })).toHaveAccessibleDescription(/Key G \(was F\)/);
+  });
+
+  it("the card shows the MultiTracks number (content_id), never Playback's own song number", async () => {
+    draw();
+    await ready();
+    // Holy Forever: Playback's setlist song number is 30389715, the Song Master ID is 43302.
+    expect(within(card("Holy Forever")).getByTestId("add-songs-mtid")).toHaveTextContent(/^43302$/);
+    expect(card("Holy Forever").textContent).not.toContain("30389715");
+    expect(within(card("Battle Belongs")).getByTestId("add-songs-mtid")).toHaveTextContent(/^23126$/);
+    expect(within(card("Gratitude")).getByTestId("add-songs-mtid")).toHaveTextContent(/^8412$/);
+    for (const name of ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"]) expect(card(name).textContent).not.toMatch(/3038971\d/);
+  });
+
+  it("a song with no number shows `mtID \u2014`", async () => {
+    draw();
+    await ready();
+    expect(card("Firm Foundation").querySelector("[id$='-facts']")).toHaveTextContent(/^C \u00B7 mtID \u2014$/);
+    expect(within(card("Firm Foundation")).getByTestId("add-songs-mtid")).toHaveTextContent(/^\u2014$/);
+  });
+
+  it("the order Playback plays is on every card with no button, no heading and no click, and the bar stays", async () => {
+    draw();
+    await ready();
+    const holy = card("Holy Forever");
+    expect(within(holy).getByTestId("add-songs-order")).toHaveTextContent("Count Off \u00B7 Verse 1 \u00B7 Vamp on 1");
+    expect(within(holy).queryByRole("button", { name: /Sections/ })).toBeNull();
+    expect(screen.queryByText("Sections")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /Sections/ })).toBeNull();
+    expect(holy.querySelector("[aria-expanded]")).toBeNull();
+    expect(screen.queryByTestId("add-songs-arrangement")).toBeNull();
+    // Written out for every card (the arrangement name, \"Default\", is not on the card), next to the bar.
+    for (const name of ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"]) expect(within(card(name)).getByTestId("add-songs-order")).toBeVisible();
+    expect(within(holy).getByTestId("library-bar")).toBeInTheDocument();
+    // A screen reader hears it with the key and the number.
+    const box = screen.getByRole("checkbox", { name: "Holy Forever" });
+    expect(box).toHaveAccessibleDescription(/G \(was F\) \u00B7 mtID 43302/);
+    expect(box).toHaveAccessibleDescription(/Count Off \u00B7 Verse 1 \u00B7 Vamp on 1/);
+  });
+
+  it("a long order wraps onto as many lines as it needs: it is never cut short", async () => {
+    const long = ["Count Off", "Intro", "Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge", "Chorus", "Interlude", "Verse 3", "Chorus", "Outro"];
+    const library = libraryPlan([librarySongOf("Long One", 1, { library: librarySong({ title: "Long One", position: 1, setlist_song_id: 30389720, content_id: 12000, sections: long.map((name, i) => ({ name, start: i * 10, end: i * 10 + 9 })) }) })]);
+    render(<PresenterLinkSection library={libraryController("ready", { plan: library })} link={linkController(helperStatus("ready"))} plan={null} />);
+    await ready();
+    const text = within(card("Long One")).getByTestId("add-songs-order");
+    expect(text).toHaveTextContent(long.join(" \u00B7 "));
+    expect(text.className).toContain("break-words");
+    expect(text.className).not.toMatch(/line-clamp|truncate/);
+    expect(text.parentElement?.className).not.toMatch(/truncate/);
   });
 
   it("a Planning Center card is just the title and a Planning Center chip", async () => {
@@ -128,33 +181,34 @@ describe("the song cards", () => {
     expect(holy.querySelector("img")).toBeNull();
     expect(within(holy).queryByTestId("library-bar")).toBeNull();
     expect(within(holy).queryByRole("button", { name: /Sections/ })).toBeNull();
+    expect(within(holy).queryByTestId("add-songs-mtid")).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Holy Forever" })).toHaveAccessibleDescription("Planning Center");
   });
 
-  it("after a preview that stopped, the cards it stopped for carry its stamp, and a guessed song a Guessed chip", async () => {
+  it("after a preview that stopped, the cards it stopped for carry its chip, and a guessed song a Check chip", async () => {
     vi.mocked(api.previewAddSongs).mockResolvedValue(addPlan([
-      addSong({ ref_id: "2000001", title: "Holy Forever", mapping: [{ section: "Interlude", group: "Interlude", how: "guessed", line: "x" }] }),
-      addSong({ ref_id: "2000002", title: "Battle Belongs", action: "blocked", reason: "Not in ProPresenter." }),
-      addSong({ ref_id: "2000003", title: "Gratitude", action: "needs_choice", reason: "Two files." }),
-      addSong({ ref_id: "2000004", title: "Firm Foundation" }),
+      addSong({ ref_id: "30389715", title: "Holy Forever", mapping: [{ section: "Interlude", group: "Interlude", how: "guessed", line: "x" }] }),
+      addSong({ ref_id: "30389716", title: "Battle Belongs", action: "blocked", reason: "Not in ProPresenter." }),
+      addSong({ ref_id: "30389717", title: "Gratitude", action: "needs_choice", reason: "Two files." }),
+      addSong({ ref_id: "30389718", title: "Firm Foundation" }),
     ]));
     draw();
     const user = await ready();
     await user.selectOptions(screen.getByLabelText("Playlist"), "PL-SUNDAY");
     await user.click(screen.getByRole("button", { name: "Import songs to ProPresenter" }));
     await screen.findByTestId("add-songs-preview");
-    expect(within(card("Battle Belongs")).getByTestId("add-songs-stuck")).toHaveTextContent("Blocked");
-    expect(within(card("Gratitude")).getByTestId("add-songs-stuck")).toHaveTextContent("Needs a choice");
-    expect(within(card("Holy Forever")).getByTestId("add-songs-guessed")).toHaveTextContent("Guessed");
+    expect(within(card("Battle Belongs")).getByTestId("add-songs-stuck")).toHaveTextContent("Can't import");
+    expect(within(card("Gratitude")).getByTestId("add-songs-stuck")).toHaveTextContent("Pick one");
+    expect(within(card("Holy Forever")).getByTestId("add-songs-guessed")).toHaveTextContent("Check");
     expect(within(card("Firm Foundation")).queryByTestId("add-songs-stuck")).toBeNull();
-    // A change makes the preview old: its stamps go with it.
+    // A change makes the preview old: its chips go with it.
     await user.click(screen.getByRole("checkbox", { name: "Firm Foundation" }));
     expect(screen.queryByTestId("add-songs-stuck")).toBeNull();
   });
 
-  it("after an import, a song with guessed sections keeps a Guessed chip on its card", async () => {
-    const how = { ...result("2000001", "Holy Forever", "added"), guesses: [guess()] };
-    vi.mocked(api.previewAddSongs).mockResolvedValue(addPlan([addSong({ ref_id: "2000001", title: "Holy Forever" })]));
+  it("after an import, a song with guessed sections keeps a Check chip on its card", async () => {
+    const how = { ...result("30389715", "Holy Forever", "added"), guesses: [guess()] };
+    vi.mocked(api.previewAddSongs).mockResolvedValue(addPlan([addSong({ ref_id: "30389715", title: "Holy Forever" })]));
     vi.mocked(api.getAddSongsJob).mockResolvedValue(jobOf({ state: "done", report: report({ songs: [how] }) }));
     draw();
     const user = await ready();

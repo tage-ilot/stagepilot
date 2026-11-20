@@ -20,15 +20,27 @@ export const PLAN_NAMES = { songs: NAMES.map(song) };
 /** A plan whose names ProPresenter has, except the last one. */
 export const NAMES_IN_PROPRESENTER: Record<string, TitleFound> = { "Holy Forever": "found", "Battle Belongs": "found", "Gratitude": "found", "Firm Foundation": "missing" };
 
-// ---- Playback's setlist: the same songs, with id, key and arrangement --------------------------------------------------------
-const SET: { title: string; key: string; arrangement: string; id: number; sections: string[] }[] = [
-  { title: "Holy Forever", key: "G", arrangement: "Radio", id: 5_000_101, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge", "Chorus"] },
-  { title: "Battle Belongs", key: "Ab", arrangement: "Long ending", id: 5_000_102, sections: ["Count Off", "Intro", "Verse 1", "Chorus", "Interlude", "Verse 2", "Chorus", "Outro"] },
-  { title: "Gratitude", key: "A", arrangement: "Default", id: 5_000_103, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus"] },
-  { title: "Firm Foundation", key: "E", arrangement: "Default", id: 5_000_104, sections: ["Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge"] },
+// ---- Playback's setlist: the same songs, with number, key and order ----------------------------------------------------------
+// `id` is the MultiTracks Song Master ID (the number ProPresenter shows as MTID: 4 to 6 digits, `content_id`). Playback's own song number
+// (`setlist_song_id`, a long number) is different on purpose: the cards must show the first and never the second.
+const SET: { title: string; key: string; arrangement: string; id: number | null; sections: string[] }[] = [
+  { title: "Holy Forever", key: "G", arrangement: "Radio", id: 43302, sections: ["Count Off", "Intro", "Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge", "Chorus"] },
+  { title: "Battle Belongs", key: "Ab", arrangement: "Long ending", id: 23126, sections: ["Count Off", "Intro", "Verse 1", "Chorus", "Interlude", "Verse 2", "Chorus", "Outro"] },
+  { title: "Gratitude", key: "A", arrangement: "Default", id: 31877, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus"] },
+  { title: "Firm Foundation", key: "E", arrangement: "Default", id: 8412, sections: ["Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge"] },
+  // The songs only the all-statuses preview uses.
+  { title: "Living Hope", key: "D", arrangement: "Default", id: 21874, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus"] },
+  { title: "Graves Into Gardens", key: "B", arrangement: "Default", id: 24017, sections: ["Count Off", "Verse 1", "Chorus", "Bridge 2", "Chorus"] },
+  { title: "Goodness of God", key: "Bb", arrangement: "Default", id: null, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus"] },
+  { title: "What a Beautiful Name", key: "D", arrangement: "Default", id: 27363, sections: ["Count Off", "Verse 1", "Chorus", "Interlude", "Interlude", "Interlude", "Chorus"] },
+  { title: "Great Are You Lord", key: "C", arrangement: "Default", id: 12988, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus"] },
+  { title: "Build My Life", key: "E", arrangement: "Default", id: 19405, sections: ["Count Off", "Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge"] },
 ];
+/** Playback's own song number for the song at `index`: long, and never the number a card shows. */
+const SETLIST_ID = (index: number) => 30_389_715 + index;
+const REF = (index: number) => String(SETLIST_ID(index));
 const librarySong = (item: (typeof SET)[number], index: number): LibrarySong => ({
-  setlist_song_id: 2_000_001 + index, content_id: item.id, position: index + 1, title: item.title, key: item.key, key_original: item.key,
+  setlist_song_id: SETLIST_ID(index), content_id: item.id, position: index + 1, title: item.title, key: item.key, key_original: item.key,
   // The first song's key was changed in Playback an hour ago: its card says "(was F)".
   key_was: index === 0 ? "F" : null, key_changed_at: index === 0 ? new Date(Date.now() - 3_600_000).toISOString() : null, bpm: 72,
   scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure", arrangement: item.arrangement, section_count: item.sections.length,
@@ -37,12 +49,14 @@ const librarySong = (item: (typeof SET)[number], index: number): LibrarySong => 
 const planSong = (item: (typeof SET)[number], index: number): LibraryPlanSong => ({
   key: `k${index + 1}`, title: item.title, plan_position: index + 1, plan_seconds: 300, plan_key: null, status: "matched", confidence: "exact", library: librarySong(item, index), candidate: null,
 });
-export const SETLIST: LibraryPlan = {
-  enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { id: 1, title: "Sunday set", date: "2026-11-22", songs: SET.length },
-  newest: null, stale: false, checked_at: null, songs: SET.map(planSong), playback_only: [], chosen: false, setlists: [],
-};
+/** The setlist with its first `count` songs (four, or all ten for the preview with every status). */
+export const setlistOf = (count = 4): LibraryPlan => ({
+  enabled: true, state: "ready", message: null, plan_date: "2026-11-22", setlist: { id: 1, title: "Sunday set", date: "2026-11-22", songs: count },
+  newest: null, stale: false, checked_at: null, songs: SET.slice(0, count).map(planSong), playback_only: [], chosen: false, setlists: [],
+});
+export const SETLIST: LibraryPlan = setlistOf();
 /** The Library Link with Playback's songs, or without any data (not installed). */
-export const withPlayback = (): PlaybackLibraryController => ({ ...libraryController(libraryOf("ready")), plan: SETLIST });
+export const withPlayback = (count = 4): PlaybackLibraryController => ({ ...libraryController(libraryOf("ready")), plan: setlistOf(count) });
 export const withoutPlayback = (): PlaybackLibraryController => libraryController(libraryOf("not_installed"));
 
 // ---- what the routes answer --------------------------------------------------------------------------------------------------
@@ -57,14 +71,28 @@ const planOf = (songs: AddSongsSong[]): AddSongsPlan => {
     songs, to_add: songs.length - stuck, stuck, can_apply: songs.length - stuck > 0, propresenter: "ProPresenter 19.0.1 (API v1)", can_import: true, warnings: [],
   };
 };
-const GUESS = { section: "Interlude", position: 1, uses: 1, group_name: "Interlude", group_index: 2, groups: 2, rule: "in_order", text: "Interlude (1st use) uses the 2nd \"Interlude\" group: check it in ProPresenter." };
+const GUESS = { section: "Interlude", position: 3, uses: 3, group_name: "Interlude", group_index: 2, groups: 2, rule: "last_reused", text: "Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter." };
 
 /** Four Playback songs: one needs a guess (still goes in), one cannot be added (the preview stops there). */
 export const PREVIEW_PLAYBACK_STOPPED = planOf([
-  row({ ref_id: "2000001", title: "Holy Forever", content_id: 5_000_101, key: "G", mapping: [{ section: "Verse 1", group: "Verse 1", how: "full", line: null }] }),
-  row({ ref_id: "2000002", title: "Battle Belongs", content_id: 5_000_102, key: "Ab", file: "Battle Belongs (2)", guesses: [GUESS], mapping: [{ section: "Interlude", group: "Interlude", how: "guessed", line: GUESS.text }] }),
-  row({ ref_id: "2000003", title: "Gratitude", content_id: 5_000_103, key: "A", action: "reuse", file: "Gratitude (1)" }),
-  row({ ref_id: "2000004", title: "Firm Foundation", content_id: 5_000_104, key: "E", action: "blocked", file: null, reason: "These sections have no group with that name in the song: Bridge. Nothing is made for this song." }),
+  row({ ref_id: REF(0), title: "Holy Forever", content_id: 43302, key: "G", mapping: [{ section: "Verse 1", group: "Verse 1", how: "full", line: null }] }),
+  row({ ref_id: REF(1), title: "Battle Belongs", content_id: 23126, key: "Ab", file: "Battle Belongs (2)", guesses: [GUESS], mapping: [{ section: "Interlude", group: "Interlude", how: "guessed", line: GUESS.text }] }),
+  row({ ref_id: REF(2), title: "Gratitude", content_id: 31877, key: "A", action: "reuse", file: "Gratitude (1)" }),
+  row({ ref_id: REF(3), title: "Firm Foundation", content_id: 8412, key: "E", action: "blocked", file: null, reason: "These sections have no group with that name in the song: Bridge. Nothing is made for this song." }),
+]);
+/** The preview with EVERY status (the four of Hunter's screenshot first, then the rest): one chip and at most one short phrase each. */
+const MAC = "ProPresenter does not have this song and it cannot be imported from here. Importing a song needs a Mac; this computer is not one.";
+export const PREVIEW_ALL_STATUSES = planOf([
+  row({ ref_id: REF(0), title: "Holy Forever", content_id: 43302, key: "G", action: "reuse", file: "Holy Forever (1)", already_in_playlist: true }),
+  row({ ref_id: REF(1), title: "Battle Belongs", content_id: 23126, key: "Ab", action: "blocked", file: null, reason: MAC }),
+  row({ ref_id: REF(2), title: "Gratitude", content_id: 31877, key: "A", action: "reuse", file: "Gratitude (1)", already_in_playlist: true }),
+  row({ ref_id: REF(3), title: "Firm Foundation", content_id: 8412, key: "E", action: "needs_choice", file: null, reason: "More than one file in ProPresenter is this song and StagePilot does not guess which to use. Remove the extra files in ProPresenter or leave this song out.", choices: ["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"] }),
+  row({ ref_id: REF(4), title: "Living Hope", content_id: 21874, key: "D", action: "import_then_copy", file: "Living Hope (1)", import_as: "Living Hope" }),
+  row({ ref_id: REF(5), title: "Graves Into Gardens", content_id: 24017, key: "B", action: "blocked", file: null, reason: "These sections have no group with that name in the song: Bridge 2. Nothing is made for this song.", mapping: [{ section: "Bridge 2", group: null, how: "missing", line: "No group called Bridge 2." }] }),
+  row({ ref_id: REF(6), title: "Goodness of God", content_id: null, key: "Bb", action: "blocked", file: null, reason: "Playback did not give this song's MultiTracks number, so StagePilot cannot find it in ProPresenter." }),
+  row({ ref_id: REF(7), title: "What a Beautiful Name", content_id: 27363, key: "D", file: "What a Beautiful Name (1)", guesses: [GUESS], mapping: [{ section: "Interlude", group: "Interlude", how: "guessed", line: GUESS.text }] }),
+  row({ ref_id: REF(8), title: "Great Are You Lord", content_id: 12988, key: "C", action: "reuse", file: "Great Are You Lord (1)" }),
+  row({ ref_id: REF(9), title: "Build My Life", content_id: 19405, key: "E", file: "Build My Life (2)" }),
 ]);
 /** The same four with nothing blocked: the one button goes on and adds them. */
 export const PREVIEW_PLAYBACK_CLEAN = planOf(PREVIEW_PLAYBACK_STOPPED.songs.map((s) => (s.action === "blocked" ? { ...s, action: "copy" as const, file: "Firm Foundation (1)", reason: null } : s)));
@@ -79,20 +107,30 @@ const resultOf = (ref_id: string, title: string, status: AddSongsReport["songs"]
 const job = (over: Partial<AddSongsJob>): AddSongsJob => ({ id: "fedcba9876543210fedcba9876543210", plan_id: "0123456789abcdef0123456789abcdef", state: "running", started_at: "2026-11-22T08:15:00Z", steps: [], songs: [], events: [], report: null, error: null, ...over });
 
 export const JOB_RUNNING = job({
-  steps: [{ step: "check", state: "done", text: "ProPresenter says: ProPresenter 19.0.1.", notes: [] }, { step: "backup", state: "done", text: "Saved the playlist.", notes: [] }, { step: "playlist", state: "running", text: "Writing the playlist.", notes: [] }],
+  steps: [{ step: "check", state: "done", text: "ProPresenter says: ProPresenter 19.0.1.", notes: [] }, { step: "backup", state: "done", text: "Saved the playlist.", notes: [] }, { step: "library", state: "done", text: "The Playback library is there.", notes: [] }, { step: "playlist", state: "running", text: "Writing the playlist.", notes: [] }],
   songs: [
-    { ref_id: "2000001", title: "Holy Forever", steps: [{ step: "copy", state: "done", text: "Made \"Holy Forever (1)\" in the Playback library.", notes: [] }], result: null },
-    { ref_id: "2000002", title: "Battle Belongs", steps: [{ step: "copy", state: "running", text: "Making the copy from \"Songs / Battle Belongs.pro\".", notes: [] }], result: null },
-    { ref_id: "2000003", title: "Gratitude", steps: [], result: null },
-    { ref_id: "2000004", title: "Firm Foundation", steps: [], result: null },
+    { ref_id: REF(0), title: "Holy Forever", steps: [{ step: "copy", state: "done", text: "Made \"Holy Forever (1)\" in the Playback library.", notes: [] }], result: null },
+    { ref_id: REF(1), title: "Battle Belongs", steps: [{ step: "copy", state: "running", text: "Making the copy from \"Songs / Battle Belongs.pro\".", notes: [] }], result: null },
+    { ref_id: REF(2), title: "Gratitude", steps: [], result: null },
+    { ref_id: REF(3), title: "Firm Foundation", steps: [], result: null },
   ],
-  events: [{ song: "2000002", step: "copy", state: "running", text: "Making the copy from \"Songs / Battle Belongs.pro\"." }],
+  events: [{ song: REF(1), step: "copy", state: "running", text: "Making the copy from \"Songs / Battle Belongs.pro\"." }],
 });
 const finished = (report: AddSongsReport): AddSongsJob => job({ state: "done", report });
-export const JOB_DONE = finished(done({ songs: ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"].map((t, i) => resultOf(String(2_000_001 + i), t, "added", "Added to the playlist.", i === 1 ? [GUESS] : [])) }));
+export const JOB_DONE = finished(done({ songs: ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"].map((t, i) => resultOf(REF(i), t, "added", "Added to the playlist.", i === 1 ? [GUESS] : [])) }));
 export const JOB_DONE_NAMES = finished(done({ message: "Added 3 song(s) to the playlist \"Sunday Morning Service\" and read it back: all as planned.", songs: ["Holy Forever", "Battle Belongs", "Gratitude"].map((t, i) => resultOf(`t${i + 1}`, t, "added", "Found in the Songs library; it goes in as it is.")) }));
-export const JOB_LIVE = finished(done({ outcome: "live_on_screen", message: "ProPresenter is showing something on screen (slide). Clear it or wait, then press Try again. Nothing was changed.", playlist_changed: false, backup: null, songs: [resultOf("2000004", "Firm Foundation", "failed", "ProPresenter is showing something on screen (slide). Clear it or wait, then press Try again.")] }));
-export const JOB_LIBRARY = finished(done({ outcome: "needs_library_open", message: "ProPresenter has not loaded the new songs yet. Nothing was added to the playlist.", playlist_changed: false, songs: [resultOf("2000001", "Holy Forever", "not_loaded", "ProPresenter has not loaded this copy yet.")] }));
+/** Three songs went in and the read-back found one thing different. */
+export const JOB_DIFFERS = finished(done({
+  outcome: "done_with_differences", message: "Added 3 song(s) to the playlist \"Sunday Morning Service\", but ProPresenter shows 1 difference(s) from the plan.",
+  songs: ["Holy Forever", "Battle Belongs", "Gratitude"].map((t, i) => resultOf(REF(i), t, "added")), differences: ["Item 7 \"Message\": its duration reads 0 now, it was 80."],
+}));
+/** The job stopped at a song it could not import; the others were not tried. */
+export const JOB_STOPPED = finished(done({
+  outcome: "stopped", message: "Stopped at \"Battle Belongs\": ProPresenter does not have this song and it cannot be imported from here. Nothing was added to the playlist.", playlist_changed: false,
+  songs: [resultOf(REF(0), "Holy Forever", "skipped", "Left out: the job stopped first."), resultOf(REF(1), "Battle Belongs", "failed", "ProPresenter does not have this song and it cannot be imported from here."), resultOf(REF(2), "Gratitude", "not_tried", "Not reached.")],
+}));
+export const JOB_LIVE = finished(done({ outcome: "live_on_screen", message: "ProPresenter is showing something on screen (slide). Clear it or wait, then press Try again. Nothing was changed.", playlist_changed: false, backup: null, songs: [resultOf(REF(3), "Firm Foundation", "failed", "ProPresenter is showing something on screen (slide). Clear it or wait, then press Try again.")] }));
+export const JOB_LIBRARY = finished(done({ outcome: "needs_library_open", message: "ProPresenter has not loaded the new songs yet. Nothing was added to the playlist.", playlist_changed: false, songs: [resultOf(REF(0), "Holy Forever", "not_loaded", "ProPresenter has not loaded this copy yet.")] }));
 
 // ---- the answers one state gives --------------------------------------------------------------------------------------------
 export interface Scenario {

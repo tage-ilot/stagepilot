@@ -1,5 +1,4 @@
 import type {
-  AddSongsAction,
   AddSongsGuess,
   AddSongsOutcome,
   AddSongsPlan,
@@ -32,19 +31,26 @@ export const SELECT_NONE = "Select none";
 export const selectedWords = (selected: number, of: number): string => `${selected} of ${of} selected`;
 /** The engine's own line for a header name the playlist has twice: StagePilot does not guess which one. */
 export const twoHeadersLine = (header: string): string => `More than one header in this playlist is named \u201C${header.trim()}\u201D. Pick another place.`;
+/** The chip on a Planning Center card ProPresenter does not have, and its one short phrase; the full sentence is the chip's hover text. */
 export const NOT_IN_PROPRESENTER = "Not in ProPresenter";
 export const NOT_IN_PROPRESENTER_WHY = "Playback data is needed to import it.";
-export const SEVERAL_IN_PROPRESENTER = "More than one song in ProPresenter has this title";
+export const NOT_IN_PROPRESENTER_PHRASE = "Needs Playback data";
+export const SEVERAL_IN_PROPRESENTER = "Pick one";
+export const SEVERAL_IN_PROPRESENTER_WHY = "More than one song in ProPresenter has this title.";
 export const SKIP_AND_IMPORT = "Skip those and import the rest";
-/** A Playback song with no number: the reason on its card. */
-export const NO_NUMBER = "No number";
+/** A Playback song with no setlist number (nothing to name it by): the chip on its card, its phrase, and the hover text. */
+export const NO_NUMBER = "Can't import";
+export const NO_NUMBER_PHRASE = "No Playback number";
 export const NO_NUMBER_WHY = "Playback gave this song no number, so it cannot be imported.";
 export const NO_PLAN_SONGS = "The loaded plan has no songs yet.";
 export const CHECK_IN_PROPRESENTER = "Check in ProPresenter:";
-export const OTHER_ITEMS_STAY = "Other items stay as they are.";
-export const OPEN_LIBRARY_ONCE = "Open the Playback library in ProPresenter once, then press Try again.";
-export const PLAYING_WORDS = "A song is playing. Wait until it has ended, then try again.";
-export const LINK_NOT_READY_WORDS = `The ${PRESENTER_LINK_NAME} is not ready. Check it in the Presentation panel.`;
+export const OPEN_LIBRARY_ONCE = "Open the Playback library in ProPresenter, then Try again";
+/** The one line at the top when a song is playing (the whole job waits). */
+export const PLAYING_WORDS = "Song playing: wait";
+/** On a preview that no longer matches what is ticked. */
+export const STALE_WORDS = "Out of date: press Import again";
+export const LIVE_ON_SCREEN_WORDS = "Live on screen: clear it, then try again";
+export const LINK_NOT_READY_WORDS = `${PRESENTER_LINK_NAME} not ready`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -60,36 +66,18 @@ export function orderWords(song: Pick<AddSongsSong, "sections">, library: Pick<L
   return `${names.slice(0, spoken).join(", ")}, \u2026 (${names.length} sections)`;
 }
 
-export interface SongStamp {
-  word: string;
-  /** A glyph that carries the state next to the word (never colour alone). */
-  mark: string;
-  tone: "success" | "info" | "warning";
-}
-
-/** The stamp on a preview row: one word and a mark. */
-export const ACTION_STAMP: Record<AddSongsAction, SongStamp> = {
-  reuse: { word: "Already there", mark: "\u2713", tone: "success" },
-  as_is: { word: "Used as is", mark: "+", tone: "info" },
-  copy: { word: "New copy", mark: "+", tone: "info" },
-  import_then_copy: { word: "Load first", mark: "\u2193", tone: "info" },
-  needs_choice: { word: "Needs a choice", mark: "?", tone: "warning" },
-  blocked: { word: "Blocked", mark: "!", tone: "warning" },
-};
-
 /**
- * What stops the one button after the preview, in words: blocked songs, a blocked place, nothing to add. `null` when the preview is clean and
- * the songs can go ahead. `full` adds what the person can do about it.
+ * What stops the one button after the preview, short: a blocked place, songs that cannot be done, nothing to add. `null` when the preview
+ * is clean and the songs can go ahead. `full` adds what the person can do about it. The preview's own chips say which songs and why.
  */
 export function stuckReason(plan: Pick<AddSongsPlan, "songs" | "stuck" | "to_add" | "can_apply"> & { playlist: Pick<AddSongsPlan["playlist"], "blocked"> }, full: boolean): string | null {
-  if (plan.playlist.blocked) return `Blocked: ${plan.playlist.blocked}`;
+  if (plan.playlist.blocked) return "Playlist is blocked";
   if (plan.stuck > 0) {
-    const names = plan.songs.filter((song) => isStuck(song)).map((song) => song.title).join(", ");
-    const lead = `${plural(plan.stuck, "song")} cannot be imported yet (${names}).`;
+    const lead = `${plan.stuck} can't be imported yet`;
     if (!full) return lead;
-    return plan.to_add > 0 ? `${lead} Skip those to import the rest, or fix them and press ${IMPORT_SONGS} again.` : `${lead} Fix them, or select other songs, and press ${IMPORT_SONGS} again.`;
+    return plan.to_add > 0 ? `${lead}: skip them, or fix them and try again` : `${lead}: fix them, or select other songs`;
   }
-  if (!plan.can_apply) return "There is nothing to import: every selected song is already in the playlist.";
+  if (!plan.can_apply) return "Nothing to import: all in playlist";
   return null;
 }
 
@@ -166,14 +154,6 @@ export function mappingLines(song: Pick<AddSongsSong, "mapping">): string[] {
   return lines;
 }
 
-/** `Imports 4 songs at the end of the section Worship in Sunday Morning Service. Other items stay as they are.` (the end of a section: right before the next header) */
-export function playlistSentence(plan: Pick<AddSongsPlan, "playlist" | "to_add">, header: string | null): string {
-  const { playlist, to_add: count } = plan;
-  if (count === 0) return `Imports nothing into ${playlist.name}. ${OTHER_ITEMS_STAY}`;
-  const where = header ? `at the end of the section ${header} in ${playlist.name}` : `at the end of ${playlist.name}`;
-  return `Imports ${plural(count, "song")} ${where}. ${OTHER_ITEMS_STAY}`;
-}
-
 /** The neighbours the new songs land between, when the plan names them. */
 export function neighbours(playlist: Pick<AddSongsPlan["playlist"], "before" | "after">): string | null {
   const { before, after } = playlist;
@@ -185,15 +165,16 @@ export function neighbours(playlist: Pick<AddSongsPlan["playlist"], "before" | "
 
 // ---- the job ----------------------------------------------------------------------------------------------------------
 
+/** One short word per step of the job. */
 export const STEP_WORDS: Record<AddSongsStep, string> = {
-  check: "Checking ProPresenter",
-  backup: "Saving a copy of the playlist",
-  library: "The Playback library",
-  import: "Loading from ProPresenter search",
-  copy: "Making the copy",
-  load: "Waiting for ProPresenter to load it",
-  playlist: "Writing the playlist",
-  read_back: "Checking the playlist",
+  check: "ProPresenter",
+  backup: "Backup",
+  library: "Library",
+  import: "Importing",
+  copy: "Copy",
+  load: "Loading",
+  playlist: "Playlist",
+  read_back: "Check",
 };
 
 export const STEP_STATE: Record<AddSongsStepState, { word: string; mark: string }> = {
@@ -204,12 +185,12 @@ export const STEP_STATE: Record<AddSongsStepState, { word: string; mark: string 
 };
 
 export const SONG_STATUS: Record<AddSongsSongStatus, { word: string; mark: string; tone: Tone }> = {
-  added: { word: "Imported", mark: "\u2713", tone: "success" },
-  already_there: { word: "Was already there", mark: "\u2713", tone: "success" },
+  added: { word: "Added", mark: "\u2713", tone: "success" },
+  already_there: { word: "In playlist", mark: "\u2713", tone: "success" },
   skipped: { word: "Skipped", mark: "\u2212", tone: "idle" },
   failed: { word: "Failed", mark: "\u2715", tone: "danger" },
   not_tried: { word: "Not tried", mark: "\u2212", tone: "idle" },
-  not_loaded: { word: "Not loaded yet", mark: "!", tone: "warning" },
+  not_loaded: { word: "Not loaded", mark: "!", tone: "warning" },
 };
 
 export interface OutcomeWords {
@@ -218,18 +199,18 @@ export interface OutcomeWords {
   mark: string;
 }
 
-/** The headline of the result. The sentence under it is the backend's own (`report.message`). */
+/** The headline of the result, short; `resultHeading` adds the counts (`Done: 3 added`). */
 export const OUTCOME: Record<AddSongsOutcome, OutcomeWords> = {
-  done: { heading: "Imported", tone: "success", mark: "\u2713" },
-  done_with_differences: { heading: "Imported, but ProPresenter shows something different", tone: "warning", mark: "!" },
-  needs_library_open: { heading: "ProPresenter has not loaded the new songs yet", tone: "warning", mark: "!" },
+  done: { heading: "Done", tone: "success", mark: "\u2713" },
+  done_with_differences: { heading: "Differs", tone: "warning", mark: "!" },
+  needs_library_open: { heading: "Not loaded yet", tone: "warning", mark: "!" },
   stopped: { heading: "Stopped", tone: "warning", mark: "!" },
-  song_playing: { heading: "Stopped: a song is playing", tone: "warning", mark: "!" },
-  live_on_screen: { heading: "Stopped: ProPresenter is showing something on screen", tone: "warning", mark: "!" },
-  playlist_refused: { heading: "ProPresenter did not accept the change", tone: "danger", mark: "\u2715" },
-  playlist_failed: { heading: "The playlist could not be changed", tone: "danger", mark: "\u2715" },
-  backup_failed: { heading: "Nothing was changed: the playlist could not be saved first", tone: "danger", mark: "\u2715" },
-  not_reachable: { heading: "ProPresenter did not answer", tone: "danger", mark: "\u2715" },
+  song_playing: { heading: PLAYING_WORDS, tone: "warning", mark: "!" },
+  live_on_screen: { heading: LIVE_ON_SCREEN_WORDS, tone: "warning", mark: "!" },
+  playlist_refused: { heading: "ProPresenter refused it", tone: "danger", mark: "\u2715" },
+  playlist_failed: { heading: "Playlist not changed", tone: "danger", mark: "\u2715" },
+  backup_failed: { heading: "Stopped: no backup", tone: "danger", mark: "\u2715" },
+  not_reachable: { heading: "ProPresenter not answering", tone: "danger", mark: "\u2715" },
   nothing_to_do: { heading: "Nothing to import", tone: "info", mark: "i" },
 };
 
@@ -242,17 +223,17 @@ export const backupName = (backup: string | null): string | null => (backup ? ba
 /** One sentence for a screen reader when the job's newest event changes. */
 export const liveText = (title: string | null, text: string): string => (title ? `${title}: ${text}` : text);
 
-/** What the report says in one line for the counts: `3 imported, 1 skipped`. */
+/** The report in one line of counts: `3 added \u00B7 1 skipped`. */
 export function resultCounts(report: Pick<AddSongsReport, "songs">): string {
   const count = (status: AddSongsSongStatus) => report.songs.filter((song) => song.status === status).length;
   return [
-    count("added") ? `${count("added")} imported` : null,
-    count("already_there") ? `${count("already_there")} already there` : null,
+    count("added") ? `${count("added")} added` : null,
+    count("already_there") ? `${count("already_there")} in playlist` : null,
     count("skipped") ? `${count("skipped")} skipped` : null,
     count("failed") ? `${count("failed")} failed` : null,
-    count("not_loaded") ? `${count("not_loaded")} not loaded yet` : null,
+    count("not_loaded") ? `${count("not_loaded")} not loaded` : null,
     count("not_tried") ? `${count("not_tried")} not tried` : null,
-  ].filter(Boolean).join(", ");
+  ].filter(Boolean).join(" \u00B7 ");
 }
 
 /** A sentence for a screen reader after a job: the guesses to check, per song. Empty when nothing was guessed. */
