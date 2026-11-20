@@ -27,7 +27,7 @@ import { apiHostMismatch, apiPortError, composeApiUrl, splitApiUrl } from "./lig
 import { oscHostError, oscPortError } from "./lightingOsc";
 import { OscConnectionFields } from "./LightingOscParts";
 import { useLiveLinkTools } from "./useLiveLinkTools";
-import { ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./sections";
+import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
 import { CONTROL_40, liveLinkPillState, lightkeyFixtureWord } from "./liveLink";
 
 const POLL_MS = 1500;
@@ -235,13 +235,13 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
 
   if (!status) {
     // The host and OSC UDP boxes never wait for the live link to answer: they are the saved OSC output.
-    const waiting = <p className="mt-2 text-type-body-sm text-ink-muted">{error ?? "Loading\u2026"}</p>;
+    const waiting = <SectionNotice className="mt-2" quiet size="xs" tone="info" variant="line">{error ?? "Loading\u2026"}</SectionNotice>;
     if (connection) {
       return (
         <OscConnectionFields attempted={connection.attempted} footer={<>{waiting}{footer}</>} held={connection.held} host={connection.host} onHost={connection.onHost} onPort={connection.onPort} port={connection.oscPort} testCue={testCue} />
       );
     }
-    return <LiveLinkShell>{waiting}</LiveLinkShell>;
+    return <ConnectionSection connection={waiting} title="sACN DMX Live Link" />;
   }
 
   const saved = splitApiUrl(status.api_url);
@@ -360,7 +360,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       attention={needsHelper}
       connection={(
         <>
-          <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">
+          <ConnectionRow testId="live-link-line">
             <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
               <Input
                 aria-label="Host or IP address"
@@ -395,7 +395,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             >
               {connected && !changed ? "Check again" : "Connect"}
             </Button>
-            <div className="live-link-modes flex flex-wrap items-end gap-x-2.5 gap-y-2">
+            <ConnectionRow className="live-link-modes" nested>
               <ConnectionMethod
                 disabled={busy}
                 field
@@ -412,33 +412,38 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
                 ]}
                 value={shownMode}
               />
-            </div>
-          </div>
+            </ConnectionRow>
+          </ConnectionRow>
           <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
           {status.link !== "off" && (
             <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
           )}
           {(hostError || udpError || apiError) && (
-            <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</p>
+            <SectionNotice className="mt-1" role="alert" size="xs" tone="danger" variant="line">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</SectionNotice>
           )}
           {otherHost !== null && (
-            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-host-notice" role="status">
-              <p className="text-type-body-sm text-warning-text">
-                {`The live-link API is set to ${otherHost}, not the OSC host ${savedOscHost}. It keeps using ${otherHost} until you change it.`}
-              </p>
-              <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
-            </div>
+            <SectionNotice
+              actions={<Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>}
+              className="mt-2"
+              role="status"
+              size="xs"
+              testId="lightkey-host-notice"
+              tone="warning"
+              variant="line"
+            >
+              {`The live-link API is set to ${otherHost}, not the OSC host ${savedOscHost}. It keeps using ${otherHost} until you change it.`}
+            </SectionNotice>
           )}
 
           {status.project_mismatch && (
-            <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-project-mismatch" role="status">
+            <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-project-mismatch" tone="warning" variant="line">
               {status.project_mismatch.message}
-            </p>
+            </SectionNotice>
           )}
           {outdated && (
-            <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-helper-update" role="status">
+            <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-helper-update" tone="warning" variant="line">
               Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
-            </p>
+            </SectionNotice>
           )}
 
           <LightkeyDiscoveryNotice
@@ -450,14 +455,17 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           />
 
           {!status.recording && status.replay === false && (
-            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
-              <p className="text-type-body-sm text-warning-text">
-                Replay is off, so saved lights will not play. The toggle above does not show this.
-              </p>
-              <Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">
-                Turn Replay on
-              </Button>
-            </div>
+            <SectionNotice
+              actions={<Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">Turn Replay on</Button>}
+              className="mt-2"
+              role="status"
+              size="xs"
+              testId="lightkey-replay-off"
+              tone="warning"
+              variant="line"
+            >
+              Replay is off, so saved lights will not play. The toggle above does not show this.
+            </SectionNotice>
           )}
         </>
       )}
@@ -469,7 +477,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           {status.saving && <LightkeySavingLine saving={status.saving} />}
 
           {readResult && (
-            <p className={`mt-2 text-type-body-sm ${readResult.ok ? "text-ink-muted" : "text-danger-text"}`} data-testid="lightkey-read-result" role="status">{readResult.message}</p>
+            <SectionNotice className="mt-2" quiet role="status" size="xs" testId="lightkey-read-result" tone={readResult.ok ? "info" : "danger"} variant="line">{readResult.message}</SectionNotice>
           )}
 
           {status.recording && (

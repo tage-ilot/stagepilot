@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { cx } from "../ui/cx";
 import { Panel, type PanelIdentity } from "../ui/Panel";
+import { bodyOrder } from "./panelOrder";
 
 /** The slots of a panel's body, in the order they are drawn. A page leaves a slot out to skip it; nothing else moves. */
 export interface PanelBodySlots {
@@ -28,23 +29,14 @@ export interface PanelBodySlots {
 const filled = (slot: ReactNode) => slot !== undefined && slot !== null && slot !== false;
 
 /**
- * The BODY of a configuration panel: the order every page follows, written once. Top to bottom: the connection section, the settings
- * section(s), the optional sections, the action row, the page's own content, the notices, the Save bar, the summary. The gap between
+ * The BODY of a configuration panel: the order every page follows (`BODY_SLOTS`). Top to bottom: the connection section, the settings
+ * section(s), the action row, the optional sections, the page's own content, the notices, the Save bar, the summary. The gap between
  * them is one `space-y-4`, so no page sets margins of its own on a section.
  */
-export function PanelBody({ connection, settings, actions, optional, content, notices, saveBar, summary, summaryAt = "bottom" }: PanelBodySlots) {
-  const summaryNode = filled(summary) ? summary : null;
+export function PanelBody({ summaryAt = "bottom", ...slots }: PanelBodySlots) {
   return (
     <div className="mt-6 space-y-4" data-panel-body>
-      {summaryAt === "top" && summaryNode}
-      {filled(connection) && connection}
-      {filled(settings) && settings}
-      {filled(actions) && actions}
-      {filled(optional) && optional}
-      {filled(content) && content}
-      {filled(notices) && notices}
-      {filled(saveBar) && saveBar}
-      {summaryAt === "bottom" && summaryNode}
+      {bodyOrder(summaryAt).map((name) => (filled(slots[name]) ? <Fragment key={name}>{slots[name]}</Fragment> : null))}
     </div>
   );
 }

@@ -699,30 +699,30 @@ export function LightingSetupPanel({
   // The OSC test cue lives in the Live Link block's strip ("Send a test cue"), folded away until it is wanted. Same fields, checks and sending as before.
   const oscTestCue = (
     <div aria-label="OSC test cue" className="lighting-osc-test grid gap-2" role="group">
-      <div className="flex flex-wrap items-end gap-x-2.5 gap-y-2">
+      <ActionRow align="end">
         <Field className="live-link-host" label="OSC address">
           <Input aria-describedby={oscTestAddress && oscTestAddressError ? "osc-test-cue-hint osc-test-cue-error" : "osc-test-cue-hint"} autoCapitalize="none" autoCorrect="off" className={`font-mono ${CONTROL_40}`} error={Boolean(oscTestAddress && oscTestAddressError)} onChange={(event) => setOscTestAddress(event.target.value)} placeholder="/live/*/cue/Stars/activate" spellCheck={false} value={oscTestAddress} />
         </Field>
         <OscArgumentRows drafts={oscTestArgs} inline label="Test argument" onChange={setOscTestArgs} />
-        <Button
+        <ActionButton
           aria-describedby={draftDiffersFromSaved ? testReasonId : undefined}
+          busy={pendingOperation === "test"}
+          busyLabel="Sending…"
           className={CONTROL_40}
           disabled={pendingOperation !== null || draftDiffersFromSaved || savedMethod !== "osc" || Boolean(oscTestAddressError) || Boolean(oscTestParsed.error)}
+          label="Send test cue"
           onClick={() => onTestOsc?.(oscTestAddress.trim(), oscTestParsed.args)}
-          variant="tinted"
-        >
-          {pendingOperation === "test" ? "Sending…" : "Send test cue"}
-        </Button>
-      </div>
-      <p className="text-type-body-sm text-ink-muted" id="osc-test-cue-hint">The cue&apos;s OSC path, for example /live/*/cue/Stars/activate. The host is set above.</p>
-      {oscTestAddress && oscTestAddressError && <p className="text-type-body-sm text-danger-text" id="osc-test-cue-error" role="alert">{oscTestAddressError}</p>}
-      {oscTestParsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{oscTestParsed.error}</p>}
-      {draftDiffersFromSaved && <p className="text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
+        />
+      </ActionRow>
+      <SectionNotice id="osc-test-cue-hint" quiet size="xs" tone="info" variant="line">The cue&apos;s OSC path, for example /live/*/cue/Stars/activate. The host is set above.</SectionNotice>
+      {oscTestAddress && oscTestAddressError && <SectionNotice id="osc-test-cue-error" role="alert" size="xs" tone="danger" variant="line">{oscTestAddressError}</SectionNotice>}
+      {oscTestParsed.error && <SectionNotice role="alert" size="xs" tone="danger" variant="line">{oscTestParsed.error}</SectionNotice>}
+      {draftDiffersFromSaved && <SectionNotice quiet size="xs" tone="info" variant="line">Save the changes above first, then send a test cue.</SectionNotice>}
     </div>
   );
   const midiTestCue = (
     <OptionalSection title="Send a test cue" tone="midi">
-      <div aria-label="Test cue" className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
+      <ActionRow align="end" aria-label="Test cue" className="mt-3">
         <div className="w-28 flex-none">
           <Field label="Note">
             <Select aria-label="Note" onChange={(event) => setTestNote(event.target.value)} value={testNote}>
@@ -735,9 +735,9 @@ export function LightingSetupPanel({
             <Input aria-label="Velocity" className="tabular-nums" max={127} min={1} onChange={(event) => setTestVelocity(event.target.value)} type="number" value={testVelocity} />
           </Field>
         </div>
-        <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
-        {draftDiffersFromSaved && <p className="w-full text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
-      </div>
+        <ActionButton aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} busy={pendingOperation === "test"} busyLabel="Sending…" className="flex-none" disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} label="Send test cue" onClick={() => onTest(Number(testNote), Number(testVelocity))} />
+        {draftDiffersFromSaved && <SectionNotice className="w-full" quiet size="xs" tone="info" variant="line">Save the changes above first, then send a test cue.</SectionNotice>}
+      </ActionRow>
     </OptionalSection>
   );
   // Under the Live Link block's strip. The "ready" state is NOT repeated here (the banner above and the header pill say it once): only what
@@ -752,9 +752,9 @@ export function LightingSetupPanel({
   const replayBusy = replayBusyNote(lights?.replay_load);
   const oscFooter = (
     <>
-      {oscStatusLine && <p className={`mt-2 text-type-body-sm ${savedMethod === "osc" && lights?.connection_status === "error" ? "text-danger-text" : "text-ink-muted"}`} data-testid="osc-status">{oscStatusLine}</p>}
-      {replayBusy && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="replay-busy">{replayBusy}</p>}
-      {heldMethod && <p className="mt-2 text-type-body-sm text-ink-muted">MIDI cues stay saved and send nothing while OSC is the saved method.</p>}
+      {oscStatusLine && <SectionNotice className="mt-2" quiet size="xs" testId="osc-status" tone={savedMethod === "osc" && lights?.connection_status === "error" ? "danger" : "info"} variant="line">{oscStatusLine}</SectionNotice>}
+      {replayBusy && <SectionNotice className="mt-2" quiet size="xs" testId="replay-busy" tone="info" variant="line">{replayBusy}</SectionNotice>}
+      {heldMethod && <SectionNotice className="mt-2" quiet size="xs" tone="info" variant="line">MIDI cues stay saved and send nothing while OSC is the saved method.</SectionNotice>}
     </>
   );
 
@@ -945,8 +945,8 @@ export function LightingSetupPanel({
             variant="feature"
           >
             {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
-            {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{testReasonText}</p>}
-            {selectedSong && projectNotice && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lighting-project-notice" role="status">{projectNotice}</p>}
+            {draftDiffersFromSaved && <SectionNotice className="mt-2" id={testReasonId} quiet tone="info" variant="line">{testReasonText}</SectionNotice>}
+            {selectedSong && projectNotice && <SectionNotice className="mt-2" role="status" size="xs" testId="lighting-project-notice" tone="warning" variant="line">{projectNotice}</SectionNotice>}
             <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
             {onSavePads && (
@@ -1049,6 +1049,7 @@ export function LightingSetupPanel({
               {method === "midi" && (
               <>
               {listedMidi.map((cue) => (
+                // eslint-disable-next-line no-restricted-syntax -- page-specific: one cue per row (time, note, velocity, label, Test, Remove), a table of cues and not a group of settings.
                 <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[auto_7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" data-testid="midi-cue-row" key={cue.id}>
                   <span className="self-end pb-2"><CueTypeBadge sharp={classifyMidiCue(cue).sharp} type={classifyMidiCue(cue).type} /></span>
                   <Field label="Elapsed time">
@@ -1065,7 +1066,7 @@ export function LightingSetupPanel({
                   <Field label="Cue label">
                     <Input aria-label="Cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
                   </Field>
-                  <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} variant="tinted">Test</Button>
+                  <ActionButton aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} className="self-end" disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} label="Test" onClick={() => onTest(cue.note, cue.velocity)} />
                   <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
                 </div>
               ))}

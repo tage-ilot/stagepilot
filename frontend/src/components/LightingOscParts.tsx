@@ -22,7 +22,7 @@ import { clampCueTime } from "./lightingTimelineMath";
 import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary, type RowValueIndex } from "./lightingSmooth";
 import { EffectDetail } from "./LightingEffectDetail";
 import { useLiveLinkTools } from "./useLiveLinkTools";
-import { ConnectionSection, LiveLinkField } from "./sections";
+import { ActionButton, ActionRow, ConnectionRow, ConnectionSection, LiveLinkField, SectionNotice } from "./sections";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
   { value: "int", label: "Whole number" },
@@ -61,16 +61,16 @@ export function OscConnectionFields({
       className={`lighting-osc-connection${className ? ` ${className}` : ""}`}
       connection={(
         <>
-          <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">
+          <ConnectionRow testId="live-link-line">
             <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
               <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
             </LiveLinkField>
             <LiveLinkField caption="OSC UDP">
               <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center font-mono tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />
             </LiveLinkField>
-          </div>
+          </ConnectionRow>
           <RecentAddresses className="mt-2" onPick={onHost} scope="lighting" value={host} />
-          {(hostError || portError) && <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, portError].filter(Boolean).join(" ")}</p>}
+          {(hostError || portError) && <SectionNotice className="mt-1" role="alert" size="xs" tone="danger" variant="line">{[hostError, portError].filter(Boolean).join(" ")}</SectionNotice>}
         </>
       )}
       footer={footer}
@@ -98,6 +98,7 @@ export function OscArgumentRows({
   return (
     <div className={inline ? "flex flex-wrap items-end gap-2" : "grid gap-2"}>
       {drafts.map((draft, index) => (
+        // eslint-disable-next-line no-restricted-syntax -- page-specific: one argument is a type, a value and a remove button on one line (no Field grid).
         <div className={inline ? "flex items-end gap-2" : "grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-end gap-2"} key={index}>
           <Field className={inline ? "w-36" : undefined} label={caption(index, "type")}>
             <Select
@@ -217,20 +218,13 @@ export function OscCueRow({
         label="Argument"
         onChange={(next) => { setDrafts(next); commit({ drafts: next }); }}
       />
-      {touched && parsedArgs.error && <p className="text-type-body-sm text-danger-text" role="alert">{parsedArgs.error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          aria-describedby={testReason}
-          disabled={!canTest || disabled || Boolean(error)}
-          onClick={() => onTest(address.trim(), parsedArgs.args)}
-          variant="tinted"
-        >
-          Test
-        </Button>
+      {touched && parsedArgs.error && <SectionNotice role="alert" size="xs" tone="danger" variant="line">{parsedArgs.error}</SectionNotice>}
+      <ActionRow>
+        <ActionButton aria-describedby={testReason} disabled={!canTest || disabled || Boolean(error)} label="Test" onClick={() => onTest(address.trim(), parsedArgs.args)} />
         <Button aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">
           Remove
         </Button>
-      </div>
+      </ActionRow>
     </div>
   );
 }
@@ -276,7 +270,7 @@ function LookMessageEditor({
         label="Value"
         onChange={(next) => { setDrafts(next); commit(address, next); }}
       />
-      {touched && parsed.error && <p className="text-type-body-sm text-danger-text" role="alert">{parsed.error}</p>}
+      {touched && parsed.error && <SectionNotice role="alert" size="xs" tone="danger" variant="line">{parsed.error}</SectionNotice>}
       <div>
         <Button aria-label={`Delete message ${message.address || "(new)"}`} disabled={disabled} onClick={onRemove} tone="danger" variant="tinted">Delete message</Button>
       </div>
@@ -340,6 +334,7 @@ export function LookRow({
         <label className="flex min-h-[44px] items-center gap-2 text-type-body-sm text-ink-muted">
           <input aria-label={`Select look at ${at}`} checked={selected} className="h-5 w-5" disabled={disabled} onChange={onToggleSelect} type="checkbox" />
         </label>
+        {/* eslint-disable-next-line no-restricted-syntax -- page-specific: this row's own Edit / Hide toggle (one cue or look), not a section's Details or optional block. */}
         <Button aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} look at ${at}`} onClick={() => setOpen(!open)} variant="tinted">{open ? "Hide" : "Edit"}</Button>
         <CueTypeBadge type={classifyOscCue(cue)} />
         <span className="font-semibold text-ink">{label}</span>
@@ -431,6 +426,7 @@ export function EffectRow({ effect, disabled, highlight = false, onRemove }: {
       id={`look-row-${effect.id}`}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {/* eslint-disable-next-line no-restricted-syntax -- page-specific: this row's own Edit / Hide toggle (one cue or look), not a section's Details or optional block. */}
         <Button aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} loop ${text} at ${from}`} onClick={() => setOpen(!open)} variant="tinted">{open ? "Hide" : "Show"}</Button>
         <CueTypeBadge type="effect-loop" />
         <span className="font-semibold text-ink">{text}</span>

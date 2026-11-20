@@ -7,7 +7,7 @@ import { CONTROL_40 } from "./liveLink";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { playbackBoxProps } from "./helperBoxProps";
 import { PlaybackScanHelp } from "./PlaybackScanHelp";
-import { ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill } from "./sections";
+import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
 import { scanProgressText, validPlaybackHost } from "./playbackStatus";
 import { Button } from "./ui/Button";
@@ -98,7 +98,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
         <>
           {status?.scan.state === "scanning" && <p className="mt-2 text-[0.8125rem] tabular-nums text-ink-muted" data-testid="scan-progress">{scanProgressText(status.scan)}</p>}
 
-          <form className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="playback-live-link-line" id="playback-specific" onSubmit={(event) => { event.preventDefault(); connect(); }}>
+          <ConnectionRow as="form" id="playback-specific" onSubmit={(event) => { event.preventDefault(); connect(); }} testId="playback-live-link-line">
             <LiveLinkField caption="Playback computer" className="live-link-host">
               <Select aria-label="Playback computer" className={`w-full font-mono ${CONTROL_40}`} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
                 {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
@@ -115,21 +115,21 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
               : <Button className={`flex-none ${CONTROL_40}`} onClick={startScan} tone="playback" type="button" variant="tinted">{scan?.state === "not_found" ? "Scan again" : "Scan Network"}</Button>}
             {choice && <Button className={CONTROL_40} disabled={!trimmed || !hostOk || scanning} tone="playback" type="submit" variant="tinted">Connect</Button>}
             {other && !trimmed && <p className="w-full text-xs text-ink-muted">Type an address to connect.</p>}
-            {other && !hostOk && <p className="w-full text-sm text-danger-text" role="alert">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</p>}
-          </form>
+            {other && !hostOk && <SectionNotice className="w-full" role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}
+          </ConnectionRow>
 
           <PlaybackScanHelp copied={copied} onChoose={choose} onCopy={copyDetails} onOther={() => setChoice(OTHER_COMPUTER)} playback={playback} scanning={scanning} />
         </>
       )}
       details={library ? ({ byChoice }) => (
         <>
-          {note && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="library-link-note" role="status">{note}</p>}
-          {updateLine && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="library-link-update" role="status">{updateLine}</p>}
+          {note && <SectionNotice className="mt-2" role="status" size="xs" testId="library-link-note" tone="warning" variant="line">{note}</SectionNotice>}
+          {updateLine && <SectionNotice className="mt-2" quiet role="status" size="xs" testId="library-link-update" tone="info" variant="line">{updateLine}</SectionNotice>}
           <HelperSetupBox {...playbackBoxProps(library, hasComputer)} autoStart={byChoice} />
         </>
       ) : undefined}
       detailsLabel={setupLabel}
-      footer={library?.error ? <p className="mt-2 text-sm text-danger-text" role="alert">{library.error}</p> : undefined}
+      footer={library?.error ? <SectionNotice className="mt-2" role="alert" tone="danger" variant="line">{library.error}</SectionNotice> : undefined}
       pills={(
         <>
           <LiveLinkPill detail={api.text} name="" testId="playback-api-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />

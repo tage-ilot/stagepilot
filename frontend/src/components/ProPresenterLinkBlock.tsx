@@ -6,10 +6,9 @@ import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ProPresenterStatusResponse } from "../types";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { proPresenterBoxProps } from "./helperBoxProps";
-import { ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill } from "./sections";
+import { ActionButton, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
 import { CONTROL_40 } from "./liveLink";
 import { PRESENTER_LINK_NAME, apiWords, importBlocked, linkLine, linkNote, linkPill, linkWords, proPresenterLine, proPresenterPill } from "./proPresenterLinkState";
-import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
 const TITLE = "ProPresenter Live Link";
@@ -94,7 +93,7 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
       className="!mt-0"
       connection={fields && (
         <>
-          <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="propresenter-live-link-line">
+          <ConnectionRow testId="propresenter-live-link-line">
             <LiveLinkField caption="Host" className="live-link-host" marker={hostMarker}>
               <Input
                 aria-describedby={[hostMarker ? heldHostId : null, fields.errors.host ? errorHostId : null].filter(Boolean).join(" ") || undefined}
@@ -121,25 +120,23 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
                 value={fields.port}
               />
             </LiveLinkField>
-            <Button className={`flex-none ${CONTROL_40}`} disabled={fields.testDisabled} onClick={fields.onTest} tone="presentation" variant="tinted">
-              {fields.testing ? "Testing…" : "Test connection"}
-            </Button>
-          </div>
+            <ActionButton busy={fields.testing} busyLabel="Testing…" className={`flex-none ${CONTROL_40}`} disabled={fields.testDisabled} label="Test connection" onClick={fields.onTest} tone="presentation" />
+          </ConnectionRow>
           <RecentAddresses className="mt-2" disabled={fields.busy} onPick={fields.onHost} scope="presentation" value={fields.host} />
-          {fields.errors.host && <p className="mt-1 text-type-body-sm text-danger-text" id={errorHostId} role="alert">{fields.errors.host}</p>}
-          {fields.errors.port && <p className="mt-1 text-type-body-sm text-danger-text" id={errorPortId} role="alert">{fields.errors.port}</p>}
+          {fields.errors.host && <SectionNotice className="mt-1" id={errorHostId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.host}</SectionNotice>}
+          {fields.errors.port && <SectionNotice className="mt-1" id={errorPortId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.port}</SectionNotice>}
         </>
       )}
       details={hasDetails && link ? ({ byChoice }) => (
         <>
-          {local && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-local">ProPresenter runs on this computer, so there is nothing to set up. StagePilot uses its folder directly.</p>}
-          {note && <p className={`mt-2 text-type-body-sm ${importBlocked(status) ? "text-ink-body" : "text-warning-text"}`} data-testid="propresenter-link-note" role="status">{note}</p>}
-          {updateLine && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-update" role="status">{updateLine}</p>}
+          {local && <SectionNotice className="mt-2" quiet size="xs" testId="propresenter-link-local" tone="info" variant="line">ProPresenter runs on this computer, so there is nothing to set up. StagePilot uses its folder directly.</SectionNotice>}
+          {note && <SectionNotice className="mt-2" role="status" size="xs" testId="propresenter-link-note" tone={importBlocked(status) ? "info" : "warning"} variant="line">{note}</SectionNotice>}
+          {updateLine && <SectionNotice className="mt-2" quiet role="status" size="xs" testId="propresenter-link-update" tone="info" variant="line">{updateLine}</SectionNotice>}
           {helper && <HelperSetupBox {...proPresenterBoxProps(link, hasComputer)} autoStart={byChoice} />}
         </>
       ) : undefined}
       detailsLabel={detailsLabel}
-      footer={link?.error ? <p className="mt-2 text-sm text-danger-text" role="alert">{link.error}</p> : undefined}
+      footer={link?.error ? <SectionNotice className="mt-2" role="alert" tone="danger" variant="line">{link.error}</SectionNotice> : undefined}
       pills={(
         <>
           <LiveLinkPill detail={api.text} name="" testId="propresenter-api-pill" text={apiWords(pillApi.word)} tone={pillApi.tone} />

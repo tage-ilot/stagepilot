@@ -268,6 +268,7 @@ export function MidiSetupPanel({
         </p>
         {songs.length > 0 ? (
           <>
+            {/* eslint-disable-next-line no-restricted-syntax -- page-specific: a numbered list of the service plan's songs, not fields. */}
             <ol className="mt-3 grid gap-1.5 sm:grid-cols-2">
               {songs.slice(0, 99).map((song, index) => (
                 <li className="flex items-center gap-2 text-xs text-ink-body" key={`${song.id}-${index}`}>
@@ -279,13 +280,13 @@ export function MidiSetupPanel({
               ))}
             </ol>
             {songs.length > 99 && (
-              <p className="mt-3 text-xs text-danger-text">
+              <SectionNotice className="mt-3" size="xs" tone="danger" variant="line">
                 This service plan has more than 99 songs. Positions after 99 cannot be addressed by MIDI velocity.
-              </p>
+              </SectionNotice>
             )}
           </>
         ) : (
-          <p className="mt-2 text-xs text-warning-text">Load a service plan to see its song-to-velocity map.</p>
+          <SectionNotice className="mt-2" size="xs" tone="warning" variant="line">Load a service plan to see its song-to-velocity map.</SectionNotice>
         )}
       </div>
   );
