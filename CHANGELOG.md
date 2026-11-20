@@ -5,6 +5,7 @@
 ### Fixed
 
 - **Presenter Link: no more endless "Checking…" while macOS asks for permission.** When ProPresenter is on the same computer, the first look at its folder (and later the System Events check) can make macOS ask *"StagePilot would like to access files in your Documents folder"*, and the panel waited for the answer for minutes. StagePilot now waits at most 8 seconds, then says **Presenter Link: Waiting for macOS** and *macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.* The next look tries again by itself. Nothing changes for another computer's helper.
+- **The log no longer fills up when Playback is off the network.** StagePilot still tries to reach a saved Playback address every second, but `stagepilot-backend.log` used to get one warning line for each try (489 lines in a few minutes, the same line again and again). Now the first failure and every change of reason (no route, no answer, refused...) is one line; the same reason again is one line a minute with the number of tries (*still failing, 61 attempts since 12:01:04, same reason*); and one line says when Playback answered again.
 
 ## [2.44.0-rc.3] - 2026-11-19
 
