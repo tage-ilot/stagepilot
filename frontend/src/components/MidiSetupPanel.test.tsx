@@ -159,6 +159,8 @@ describe("MidiSetupPanel", () => {
     expect(screen.getByText(/Receives song and action cues from Playback to control StagePilot/i)).toBeInTheDocument();
     expect(screen.getByText("Startup default: Startup Controller")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveAccessibleDescription("Choose an input first.");
+    expect(screen.getByRole("button", { name: "Disconnect" })).toHaveAccessibleDescription("No input is connected.");
 
     await user.selectOptions(screen.getByLabelText("Available input"), "a".repeat(64));
     await user.click(screen.getByRole("button", { name: "Connect" }));

@@ -2064,6 +2064,15 @@ describe("Dashboard connection configuration panels", () => {
     }
   });
 
+  it("says why Restart current is off while nothing has played yet, and keeps the other controls plain (D5 audit)", () => {
+    renderDashboard(loadedServiceState, { live: true, state: applicationState(loadedServiceState, { current_song: null }) });
+    const restart = screen.getByRole("button", { name: "Restart current" });
+    expect(restart).toBeDisabled();
+    expect(restart).toHaveAccessibleDescription("Nothing has played yet.");
+    expect(restart.parentElement).toHaveAttribute("title", "Nothing has played yet.");
+    expect(screen.getByRole("button", { name: "Start next" })).not.toHaveAttribute("aria-describedby");
+  });
+
   it("turns the live controls off with the reason when StagePilot is unreachable, and back on when it returns", () => {
     const view = renderDashboard(loadedServiceState, { live: false });
     expect(screen.getByText("Can't reach StagePilot, so these controls are off until it is back.")).toBeInTheDocument();

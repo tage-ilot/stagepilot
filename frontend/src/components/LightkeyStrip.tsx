@@ -361,7 +361,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       actions={(
         <>
           <ReasonButton
-            alwaysWrap
             className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
             disabled={busy}
             onClick={() => void run(() => releaseLightkeyLights())}
@@ -372,7 +371,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             Release lights
           </ReasonButton>
           <ReasonButton
-            alwaysWrap
             className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
             disabled={busy || reading}
             loading={reading}

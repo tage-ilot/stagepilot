@@ -15,6 +15,7 @@ import {
 import type { UpcomingServicePlan } from "../types";
 import { accentClasses } from "./ui/accent";
 import { Button } from "./ui/Button";
+import { ReasonButton } from "./sections";
 import { cx } from "./ui/cx";
 
 export interface ServicePlanCalendarProps {
@@ -154,15 +155,15 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
       role="dialog"
     >
       <div className="flex items-center justify-between gap-2">
-        <Button aria-label="Previous month" disabled={month <= first} onClick={() => showMonth(monthOf(addMonths(`${month}-01`, -1)))} size="touch">
+        <ReasonButton aria-label="Previous month" onClick={() => showMonth(monthOf(addMonths(`${month}-01`, -1)))} reason={month <= first ? "There are no earlier services." : undefined} size="touch">
           ‹
-        </Button>
+        </ReasonButton>
         <h3 aria-live="polite" className="text-center font-type-text-strong text-type-text-strong text-ink" id={titleId}>
           {formatMonthTitle(`${month}-01`)}
         </h3>
-        <Button aria-label="Next month" disabled={month >= lastMonth} onClick={() => showMonth(monthOf(addMonths(`${month}-01`, 1)))} size="touch">
+        <ReasonButton aria-label="Next month" onClick={() => showMonth(monthOf(addMonths(`${month}-01`, 1)))} reason={month >= lastMonth ? "There are no later services." : undefined} size="touch">
           ›
-        </Button>
+        </ReasonButton>
       </div>
 
       <div aria-labelledby={titleId} className="mt-3" onKeyDown={onGridKey} role="grid">

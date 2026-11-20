@@ -17,7 +17,7 @@ import { Button } from "./ui/Button";
 import { Field, HeldMarker } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { ActionButton, ActionRow, OptionalSection, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
+import { ActionButton, ActionRow, OptionalSection, PanelLayout, ReasonWrap, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
@@ -431,7 +431,7 @@ export function PlanningCenterSetupPanel({
 
                 {!signedIn && (
                   <ActionRow className="mt-5">
-                    <ActionButton busy={pendingOperation === "test"} busyLabel="Testing…" disabled={busy || (!secret && !status?.planning_center_secret_saved)} label="Test connection" onClick={() => onTest(testInput())} tone="services" />
+                    <ActionButton busy={pendingOperation === "test"} busyLabel="Testing…" disabled={busy} label="Test connection" onClick={() => onTest(testInput())} reason={!secret && !status?.planning_center_secret_saved ? "Enter the Planning Center secret first." : undefined} tone="services" />
                   </ActionRow>
                 )}
               </OptionalSection>
@@ -442,7 +442,9 @@ export function PlanningCenterSetupPanel({
       settings={(
         <SettingsSection busy={busy} divided>
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
-            <Select disabled={serviceTypes.length === 0} onChange={(event) => setServiceTypeId(event.target.value)} value={serviceTypeId}>
+            <ReasonWrap reason={serviceTypes.length === 0 ? "Load service types first." : undefined} wrapProps={{ className: "!flex w-full min-w-0" }}>
+              {(describedBy) => (
+            <Select aria-describedby={describedBy} disabled={serviceTypes.length === 0} onChange={(event) => setServiceTypeId(event.target.value)} value={serviceTypeId}>
               <option value="">Load and choose a service type</option>
               <option value={ALL_SERVICE_TYPES_ID}>All service types (nearest upcoming service plan)</option>
               {serviceTypeId && !selectedServiceTypeKnown && (
@@ -452,6 +454,8 @@ export function PlanningCenterSetupPanel({
                 <option key={serviceType.id} value={serviceType.id}>{serviceType.name}</option>
               ))}
             </Select>
+              )}
+            </ReasonWrap>
           </Field>
           <Field error={errTimezone} heldChange={held.timezone} label="Timezone">
             <Select onChange={(event) => setTimezone(event.target.value)} value={timezone}>
@@ -475,8 +479,8 @@ export function PlanningCenterSetupPanel({
       )}
       actions={(
         <ActionRow>
-          <ActionButton busy={pendingOperation === "load-types"} busyLabel="Loading…" disabled={busy || !(status?.oauth_connected || status?.planning_center_secret_saved)} label="Load service types" onClick={onLoadServiceTypes} tone="services" />
-          <ActionButton busy={pendingAction === "reload_plan"} busyLabel="Loading…" disabled={pendingAction !== null || !state.plugins.planning_center} label="Load today’s service plan" onClick={onReload} tone="services" />
+          <ActionButton busy={pendingOperation === "load-types"} busyLabel="Loading…" disabled={busy} label="Load service types" onClick={onLoadServiceTypes} reason={status?.oauth_connected || status?.planning_center_secret_saved ? undefined : "Sign in to Planning Center first."} tone="services" />
+          <ActionButton busy={pendingAction === "reload_plan"} busyLabel="Loading…" disabled={pendingAction !== null} label="Load today’s service plan" onClick={onReload} reason={state.plugins.planning_center ? undefined : "Sign in to Planning Center first."} tone="services" />
         </ActionRow>
       )}
       content={servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) ? (

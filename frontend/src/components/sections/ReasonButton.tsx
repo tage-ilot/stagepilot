@@ -1,4 +1,4 @@
-import { useId, type HTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useId, type HTMLAttributes, type ReactNode } from "react";
 
 import { Button, type ButtonProps } from "../ui/Button";
 import { cx } from "../ui/cx";
@@ -9,7 +9,11 @@ export type ReasonWrapAttributes = Omit<HTMLAttributes<HTMLSpanElement>, "title"
 export interface ReasonWrapOptions {
   /** Why the control is off, in words an operator can act on (`Sign in to Planning Center first.`). Empty or missing: the control works and nothing is added. */
   reason?: string | null;
-  /** Draw the wrapper even while there is no reason (so a test or a stylesheet can address it, and the layout never moves when a reason comes and goes). */
+  /**
+   * The wrapper is drawn even while there is no reason (the default): a control that turns off while it has the focus (Zoom out at the end of its
+   * range, Disconnect once it has disconnected) keeps its element and its focus when the reason comes, and the layout never moves. `false`: no
+   * wrapper while there is no reason (only where nothing can toggle).
+   */
   alwaysWrap?: boolean;
   wrapProps?: ReasonWrapAttributes;
   /** The control, given the id of the hidden copy of the reason to point `aria-describedby` at (undefined while there is no reason). */
@@ -22,7 +26,7 @@ export interface ReasonWrapOptions {
  * around it AND as a visually hidden copy the control points at with `aria-describedby`: a screen reader reads it as the control's description.
  * Works for any control (a button, a select, an arrow); `ReasonButton` and `ActionButton` use it.
  */
-export function ReasonWrap({ reason, alwaysWrap = false, wrapProps, children }: ReasonWrapOptions) {
+export function ReasonWrap({ reason, alwaysWrap = true, wrapProps, children }: ReasonWrapOptions) {
   const reasonId = useId();
   const why = reason?.trim() ? reason : null;
   if (!why && !alwaysWrap) return <>{children(undefined)}</>;
@@ -43,7 +47,10 @@ export interface ReasonButtonProps extends ButtonProps {
 }
 
 /** A `Button` that says why it is off: with a `reason` it is disabled, wrapped, titled and described by it (see `ReasonWrap`). Without one it is the plain button. */
-export function ReasonButton({ reason, alwaysWrap, wrapProps, disabled, "aria-describedby": describedBy, title, ...button }: ReasonButtonProps) {
+export const ReasonButton = forwardRef<HTMLButtonElement, ReasonButtonProps>(function ReasonButton(
+  { reason, alwaysWrap, wrapProps, disabled, "aria-describedby": describedBy, title, ...button },
+  ref,
+) {
   const why = reason?.trim() ? reason : null;
   return (
     <ReasonWrap alwaysWrap={alwaysWrap} reason={why} wrapProps={wrapProps}>
@@ -52,9 +59,10 @@ export function ReasonButton({ reason, alwaysWrap, wrapProps, disabled, "aria-de
           {...button}
           aria-describedby={[describedBy, reasonId].filter(Boolean).join(" ") || undefined}
           disabled={Boolean(why) || disabled}
+          ref={ref}
           title={why ?? title}
         />
       )}
     </ReasonWrap>
   );
-}
+});

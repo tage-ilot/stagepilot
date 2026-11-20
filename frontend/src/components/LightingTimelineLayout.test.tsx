@@ -28,6 +28,9 @@ describe("timeline toolbar", () => {
     expect(within(bar).getByRole("button", { name: "Add cue" })).toBeInTheDocument();
     const zoom = within(bar).getByRole("group", { name: "Timeline zoom" });
     expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+    // At Fit it cannot zoom out any further, and says so.
+    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeDisabled();
+    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toHaveAccessibleDescription("The whole song is already in view.");
     expect(within(zoom).getByRole("button", { name: "Fit" })).toBeInTheDocument();
     expect(within(zoom).getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
     expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();

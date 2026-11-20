@@ -28,16 +28,34 @@ describe("ReasonButton", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
   });
 
-  it("without a reason: the plain button, no wrapper, no hidden copy, no description", async () => {
+  it("without a reason: an enabled button in a quiet wrapper (no title, no hidden copy, no description)", async () => {
     const onClick = vi.fn();
     const { container } = render(<ReasonButton onClick={onClick}>Undo</ReasonButton>);
     const button = screen.getByRole("button", { name: "Undo" });
     expect(button).toBeEnabled();
     expect(button).not.toHaveAttribute("aria-describedby");
     expect(button).not.toHaveAttribute("title");
-    expect(container.querySelector("span")).toBeNull();
+    expect(container.querySelector("[title]")).toBeNull();
+    expect(container.querySelector(".sr-only")).toBeNull();
     await userEvent.setup().click(button);
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the same button element (and so its focus) when the reason comes", () => {
+    const { rerender } = render(<ReasonButton>Zoom out</ReasonButton>);
+    const button = screen.getByRole("button", { name: "Zoom out" });
+    button.focus();
+    rerender(<ReasonButton reason="The whole song is already in view.">Zoom out</ReasonButton>);
+    expect(screen.getByRole("button", { name: "Zoom out" })).toBe(button);
+    expect(button).toBeDisabled();
+    rerender(<ReasonButton>Zoom out</ReasonButton>);
+    expect(screen.getByRole("button", { name: "Zoom out" })).toBe(button);
+    expect(button).toBeEnabled();
+  });
+
+  it("alwaysWrap={false} draws no wrapper while there is no reason", () => {
+    const { container } = render(<ReasonButton alwaysWrap={false}>Go</ReasonButton>);
+    expect(container.firstElementChild!.tagName).toBe("BUTTON");
   });
 
   it("an empty reason is no reason", () => {
@@ -50,18 +68,18 @@ describe("ReasonButton", () => {
   });
 
   it("a button that is off for another cause (busy) stays off without a reason and adds nothing", () => {
-    const { container } = render(<ReasonButton disabled>Test connection</ReasonButton>);
-    expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    const { container } = render(<ReasonButton disabled>Refresh list</ReasonButton>);
+    expect(screen.getByRole("button", { name: "Refresh list" })).toBeDisabled();
     expect(container.querySelector("[title]")).toBeNull();
   });
 
-  it("alwaysWrap keeps the wrapper and its hooks while there is no reason, and the reason comes and goes on the same wrapper", () => {
-    const { rerender, container } = render(<ReasonButton alwaysWrap wrapProps={{ "data-testid": "wrap", "data-part": "scan-wrap" }}>Search</ReasonButton>);
+  it("keeps the wrapper and its hooks while there is no reason, and the reason comes and goes on the same wrapper", () => {
+    const { rerender, container } = render(<ReasonButton wrapProps={{ "data-testid": "wrap", "data-part": "scan-wrap" }}>Search</ReasonButton>);
     const wrap = screen.getByTestId("wrap");
     expect(wrap).toHaveAttribute("data-part", "scan-wrap");
     expect(wrap).not.toHaveAttribute("title");
     expect(container.querySelector(".sr-only")).toBeNull();
-    rerender(<ReasonButton alwaysWrap reason="Wait for the search to finish." wrapProps={{ "data-testid": "wrap", "data-part": "scan-wrap" }}>Search</ReasonButton>);
+    rerender(<ReasonButton reason="Wait for the search to finish." wrapProps={{ "data-testid": "wrap", "data-part": "scan-wrap" }}>Search</ReasonButton>);
     expect(screen.getByTestId("wrap")).toBe(wrap);
     expect(wrap).toHaveAttribute("title", "Wait for the search to finish.");
   });
@@ -74,16 +92,22 @@ describe("ReasonButton", () => {
 
 describe("ActionButton with a reason", () => {
   it("is the same contract", () => {
-    render(<ActionButton label="Test connection" onClick={() => undefined} reason="Enter the Planning Center credentials first." />);
-    const button = screen.getByRole("button", { name: "Test connection" });
+    render(<ActionButton label="Refresh list" onClick={() => undefined} reason="Enter the Planning Center credentials first." />);
+    const button = screen.getByRole("button", { name: "Refresh list" });
     expect(button).toBeDisabled();
     expect(button).toHaveAccessibleDescription("Enter the Planning Center credentials first.");
     expect(button.parentElement).toHaveAttribute("title", "Enter the Planning Center credentials first.");
   });
 
+  it("an alignment class goes to the wrapper, which is the item of the row", () => {
+    render(<ActionButton className="self-end" label="Send" onClick={() => undefined} />);
+    expect(screen.getByRole("button", { name: "Send" }).parentElement).toHaveClass("self-end");
+  });
+
   it("without a reason it is unchanged", () => {
     const { container } = render(<ActionButton label="Refresh" onClick={() => undefined} />);
-    expect(container.firstElementChild!.tagName).toBe("BUTTON");
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+    expect(container.querySelector("[title]")).toBeNull();
   });
 });
 

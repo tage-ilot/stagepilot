@@ -20,7 +20,7 @@ import { playbackMidiNote } from "./playbackStatus";
 import { Field } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { ActionButton, OptionalSection, PanelBody, PanelLayout, SectionNotice, SettingsSection } from "./sections";
+import { ActionButton, OptionalSection, PanelBody, PanelLayout, ReasonWrap, SectionNotice, SettingsSection } from "./sections";
 import { Select } from "./ui/Select";
 
 const cues: ReadonlyArray<readonly [MidiCueName, string]> = [
@@ -188,6 +188,11 @@ export function MidiSetupPanel({
   const selectedInput = midi?.inputs.find((input) => input.selected) ?? null;
   const connectedInput = midi?.inputs.find((input) => input.connected) ?? null;
   const controlsPending = pendingOperation !== null;
+  // Why a MIDI control is off (nothing is said while a request is only running: the button then says Connecting…).
+  const MIDI_OFF = "Save the MIDI method first.";
+  const selectReason = !enabled ? MIDI_OFF : !midi?.inputs.length ? "No MIDI input found. Press Refresh inputs." : undefined;
+  const connectReason = !enabled ? MIDI_OFF : !candidateId ? "Choose an input first." : candidateId === selectedInput?.id ? "That input is already connected." : undefined;
+  const disconnectReason = !enabled ? MIDI_OFF : !midi?.selected_input_name ? "No input is connected." : undefined;
   const connectionStatus = playback?.status ? playback.status.connected ? "connected" : "disconnected"
     : playback ? "loading" : connectedInput ? "connected" : midi ? "disconnected" : "loading";
 
@@ -295,8 +300,11 @@ export function MidiSetupPanel({
           </label>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <div className="min-w-0 flex-1">
+              <ReasonWrap reason={selectReason} wrapProps={{ className: "!flex w-full min-w-0" }}>
+                {(describedBy) => (
               <Select
-                disabled={!enabled || controlsPending || !midi?.inputs.length}
+                aria-describedby={describedBy}
+                disabled={controlsPending || Boolean(selectReason)}
                 id="midi-input"
                 onChange={(event) => setCandidateId(event.target.value)}
                 value={candidateId}
@@ -308,10 +316,12 @@ export function MidiSetupPanel({
                   </option>
                 ))}
               </Select>
+                )}
+              </ReasonWrap>
             </div>
             <ActionButton busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={controlsPending} label="Refresh inputs" onClick={onRefresh} tone="midi" />
-            <ActionButton busy={pendingOperation === "connect"} busyLabel="Connecting…" disabled={!enabled || controlsPending || !candidateId || candidateId === selectedInput?.id} label="Connect" onClick={() => onSelect(candidateId)} variant="primary" />
-            <ActionButton busy={pendingOperation === "disconnect"} busyLabel="Disconnecting…" disabled={!enabled || controlsPending || !midi?.selected_input_name} label="Disconnect" onClick={() => onSelect(null)} tone="midi" />
+            <ActionButton busy={pendingOperation === "connect"} busyLabel="Connecting…" disabled={controlsPending} label="Connect" onClick={() => onSelect(candidateId)} reason={connectReason} variant="primary" />
+            <ActionButton busy={pendingOperation === "disconnect"} busyLabel="Disconnecting…" disabled={controlsPending} label="Disconnect" onClick={() => onSelect(null)} reason={disconnectReason} tone="midi" />
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs">

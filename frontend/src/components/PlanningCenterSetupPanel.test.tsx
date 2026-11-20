@@ -134,6 +134,7 @@ function panelElement({
   error = null as string | null,
   panelPlugins = {} as Record<string, unknown>,
   servicePlanChoice = undefined as import("../hooks/useServicePlanChoice").ServicePlanChoice | undefined,
+  serviceTypes = [{ id: "sunday", name: "Sunday Morning" }, { id: "wednesday", name: "Wednesday Service" }],
 } = {}) {
   return (
     <PlanningCenterSetupPanel
@@ -151,10 +152,7 @@ function panelElement({
       pendingAction={null}
       pendingOperation={pendingOperation}
       pendingPlanId={null}
-      serviceTypes={[
-        { id: "sunday", name: "Sunday Morning" },
-        { id: "wednesday", name: "Wednesday Service" },
-      ]}
+      serviceTypes={serviceTypes}
       settings={panelSettings}
       state={{ ...panelState, plugins: { ...panelState.plugins, ...panelPlugins } } as ApplicationState}
       status={status}
@@ -177,6 +175,16 @@ describe("PlanningCenterSetupPanel", () => {
     const load = screen.getByRole("button", { name: "Load service types" });
     expect(load).toHaveAttribute("data-variant", "tinted");
     expect(load).toHaveAttribute("data-tone", "services");
+  });
+
+  it("says why Load service types, Load today's service plan and the Service type select are off", () => {
+    renderPanel({ status: { connection_status: "disconnected", configured: false, app_id: "", service_type_id: "", planning_center_secret_saved: false, connection_method: "manual", oauth_connected: false, oauth_needs_reconnect: false, detail: null } as PlanningCenterStatusResponse, panelPlugins: { planning_center: false }, serviceTypes: [] });
+    expect(screen.getByLabelText("Service type")).toBeDisabled();
+    expect(screen.getByLabelText("Service type")).toHaveAccessibleDescription("Load service types first.");
+    expect(screen.getByRole("button", { name: "Load service types" })).toHaveAccessibleDescription("Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Load service types" }).parentElement).toHaveAttribute("title", "Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Load today’s service plan" })).toHaveAccessibleDescription("Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Test connection" })).toHaveAccessibleDescription("Enter the Planning Center secret first.");
   });
 
   it.each([

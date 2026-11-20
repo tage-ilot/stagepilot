@@ -55,7 +55,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
   const songOrder = status && (
     <OptionalBand
       actions={(
-        <ReasonButton alwaysWrap loading={byLibrary && reading} onClick={() => byLibrary ? playback?.refreshFromLibrary?.() : setConfirm(true)} reason={scan.reason} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"} wrapProps={{ "data-part": "song-scan", "data-scan": scan.kind }}>{scan.label}</ReasonButton>
+        <ReasonButton loading={byLibrary && reading} onClick={() => byLibrary ? playback?.refreshFromLibrary?.() : setConfirm(true)} reason={scan.reason} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"} wrapProps={{ "data-part": "song-scan", "data-scan": scan.kind }}>{scan.label}</ReasonButton>
       )}
       headingId="song-order-heading"
       persistKey={SONG_ORDER_OPEN_KEY}

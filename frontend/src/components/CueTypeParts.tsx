@@ -42,21 +42,35 @@ export function CueTypeLegend({
             {types.map((id) => {
               const off = hidden.has(id);
               const unused = !present.has(id) && !off;
+              const look = (
+                <>
+                  <span aria-hidden="true" className={`inline-block h-4 w-2.5 rounded-ds-full ${barClassFor(id)}`} />
+                  <span aria-hidden="true" className="rounded-ds-sm border border-edge-medium px-1 text-ink">{CUE_TYPES[id].glyph}</span>
+                  <span aria-hidden="true">{group === "Notes" ? CUE_TYPES[id].glyph : CUE_TYPES[id].name}</span>
+                </>
+              );
+              const chip = `inline-flex min-h-[34px] coarse:min-h-[44px] items-center gap-1.5 rounded-ds-full border border-edge-medium bg-surface-panel-strong py-1 pl-2 pr-3 text-type-body-sm text-ink-body`;
+              // A type this song does not use is a label, not a switched-off button: nothing to press, nothing to tab to, and a screen reader hears what it is.
+              if (unused) {
+                return (
+                  <span className={`${chip} opacity-40`} data-testid="cue-legend-chip" data-type={id} data-unused="true" key={id}>
+                    <span className="sr-only">{CUE_TYPES[id].name} (not in this song)</span>
+                    {look}
+                  </span>
+                );
+              }
               return (
                 <button
                   aria-label={CUE_TYPES[id].name}
                   aria-pressed={!off}
-                  className={`inline-flex min-h-[34px] coarse:min-h-[44px] touch-manipulation items-center gap-1.5 rounded-ds-full border border-edge-medium bg-surface-panel-strong py-1 pl-2 pr-3 text-type-body-sm text-ink-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${off ? "line-through opacity-40" : ""} ${unused ? "opacity-40" : ""}`}
+                  className={`${chip} touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${off ? "line-through opacity-40" : ""}`}
                   data-testid="cue-legend-chip"
                   data-type={id}
-                  disabled={unused}
                   key={id}
                   onClick={() => onToggle(id)}
                   type="button"
                 >
-                  <span aria-hidden="true" className={`inline-block h-4 w-2.5 rounded-ds-full ${barClassFor(id)}`} />
-                  <span aria-hidden="true" className="rounded-ds-sm border border-edge-medium px-1 text-ink">{CUE_TYPES[id].glyph}</span>
-                  <span aria-hidden="true">{group === "Notes" ? CUE_TYPES[id].glyph : CUE_TYPES[id].name}</span>
+                  {look}
                 </button>
               );
             })}

@@ -30,7 +30,7 @@ import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { ActionButton, ActionRow, OptionalSection, PanelLayout, SectionNotice, SettingsSection } from "./sections";
+import { ActionButton, ActionRow, OptionalSection, PanelLayout, ReasonButton, SectionNotice, SettingsSection } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { accentClasses } from "./ui/accent";
@@ -796,8 +796,8 @@ export function LightingSetupPanel({
           <span aria-hidden="true" className={noteDisplayMode === "numeric" ? "text-integration-playback-midi-text" : "text-ink-muted"}>#</span>
         </div>
       )}
-      <Button className={CONTROL_34} disabled={!selectedSong || pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} variant="tinted">Add cue</Button>
-      <Button className={CONTROL_34} disabled={!shownCues.length || pendingOperation !== null || !selectedSong} onClick={clearSelectedSongCues} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear song\u2026"}</Button>
+      <ReasonButton className={CONTROL_34} disabled={pendingOperation !== null} onClick={method === "osc" ? addOscCue : addCue} reason={selectedSong ? undefined : "Choose a song first."} variant="tinted">Add cue</ReasonButton>
+      <ReasonButton className={CONTROL_34} disabled={pendingOperation !== null} onClick={clearSelectedSongCues} reason={!selectedSong ? "Choose a song first." : !shownCues.length ? "This song has no cues to clear." : undefined} variant="destructive">{pendingOperation === "save-cues" ? "Saving cues…" : "Clear song\u2026"}</ReasonButton>
       {method === "osc" && (
         <>
           <Button
@@ -1084,7 +1084,7 @@ export function LightingSetupPanel({
             {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
           </OptionalSection>
           <div className="flex justify-end">
-            <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs…</Button>
+            <ReasonButton onClick={clearEverySongCues} reason={songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0) ? undefined : "No song has anything to clear."} variant="secondary">Clear all songs…</ReasonButton>
           </div>
         </>
       )}

@@ -41,7 +41,6 @@ export function ScanConnectButtons({
     <>
       {/* The reason (the block's hint) goes on the shared wrapper; a button that is off with no hint is still just off. */}
       <ReasonButton
-        alwaysWrap
         className={SIZE}
         data-part="scan"
         disabled={scanOff}
@@ -56,7 +55,6 @@ export function ScanConnectButtons({
       </ReasonButton>
       {/* While it connects the button is busy (the sweep, aria-busy, no second press), not dimmed: nothing else in the row says it is working. */}
       <ReasonButton
-        alwaysWrap
         className={`live-link-connect ${SIZE}`}
         data-part="connect"
         disabled={connectOff}

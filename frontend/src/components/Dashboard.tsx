@@ -43,6 +43,7 @@ import type {
 } from "../types";
 import type { UpdaterController } from "../hooks/useUpdater";
 import { BackendSetupPanel } from "./BackendSetupPanel";
+import { ReasonButton } from "./sections";
 import { DashboardGrid } from "./dashboard/DashboardGrid";
 import { latestActiveError } from "./dashboard/dashboardActiveError";
 import {
@@ -139,24 +140,31 @@ function ActionButton({
   label,
   tone = "neutral",
   disabled,
+  reason,
   onAction,
 }: {
   action: ActionName;
   label: string;
   tone?: "green" | "orange" | "red" | "blue" | "neutral";
   disabled: boolean;
+  /** Why it is off (Restart current: nothing has played yet); see `ReasonButton`. */
+  reason?: string;
   onAction: (action: ActionName) => void;
 }) {
   const liveTone = { green: "go", orange: "back", red: "stop", blue: "reload", neutral: undefined }[tone] as LiveTone | undefined;
   return (
-    <Button
+    // A cell of the manual controls' grid: the wrapper fills it and the button fills the wrapper.
+    <ReasonButton
       disabled={disabled}
+      fullWidth
       liveTone={liveTone}
       onClick={() => onAction(action)}
+      reason={reason}
       variant={liveTone ? "live" : "secondary"}
+      wrapProps={{ className: "!flex" }}
     >
       {label}
-    </Button>
+    </ReasonButton>
   );
 }
 
@@ -1295,7 +1303,7 @@ export function Dashboard({
             )}
             <div className="manual-controls-grid mt-3 grid gap-2">
               <ActionButton action="start_next" label="Start next" tone="green" disabled={!live || pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={!live || pendingAction !== null || !state.current_song} onAction={dispatch} />
+              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={!live || pendingAction !== null} onAction={dispatch} reason={live && !state.current_song ? "Nothing has played yet." : undefined} />
               <ActionButton action="previous" label="Previous" tone="orange" disabled={!live || pendingAction !== null} onAction={dispatch} />
               <ActionButton action="reload_plan" label="Reload service plan" tone="blue" disabled={!live || pendingAction !== null} onAction={dispatch} />
               <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={!live || pendingAction !== null} onAction={dispatch} />

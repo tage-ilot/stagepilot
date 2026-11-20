@@ -38,7 +38,10 @@ describe("ServicePlanPicker", () => {
     expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sunday Service");
     expect(screen.getByText("Upcoming service")).toBeInTheDocument();
     expect(previous()).toBeDisabled();
+    expect(previous()).toHaveAccessibleDescription("This is the first service.");
+    expect(previous().parentElement).toHaveAttribute("title", "This is the first service.");
     expect(next()).toBeEnabled();
+    expect(next()).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByTestId("not-upcoming")).not.toBeInTheDocument();
   });
 

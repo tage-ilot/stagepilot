@@ -39,7 +39,7 @@ export interface ActionButtonProps {
   disabled?: boolean;
   /** Why it is off (`Sign in to Planning Center first.`): the button is disabled and says so on a wrapper, as a tooltip and to a screen reader (`ReasonButton`). */
   reason?: string | null;
-  /** Keep the wrapper (and its test hooks) even while there is no reason. */
+  /** `false`: no wrapper while there is no reason. Default: the wrapper stays, so focus survives a reason coming and going. */
   alwaysWrap?: boolean;
   wrapProps?: ReasonWrapAttributes;
   onClick: () => void;
@@ -55,7 +55,7 @@ export interface ActionButtonProps {
 /** One button of an `ActionRow`: the label, then the busy words, with the row's one look. */
 export function ActionButton({ label, busyLabel, busy = false, disabled = false, reason, alwaysWrap, wrapProps, onClick, tone, variant = "tinted", className, title, "aria-describedby": describedBy }: ActionButtonProps) {
   return (
-    <ReasonButton alwaysWrap={alwaysWrap} aria-describedby={describedBy} className={className} disabled={disabled} onClick={onClick} reason={reason} title={title} tone={variant === "tinted" ? tone : undefined} variant={variant} wrapProps={wrapProps}>
+    <ReasonButton alwaysWrap={alwaysWrap} aria-describedby={describedBy} className={className} disabled={disabled} onClick={onClick} reason={reason} title={title} tone={variant === "tinted" ? tone : undefined} variant={variant} wrapProps={{ ...wrapProps, className: cx(className?.match(/\bself-\S+/)?.[0], wrapProps?.className) || undefined }}>
       {busy && busyLabel ? busyLabel : label}
     </ReasonButton>
   );
