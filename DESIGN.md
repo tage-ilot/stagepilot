@@ -650,6 +650,7 @@ Icon tile + title + **status word** (Connected / Connecting / Not connected / Er
 
 ### 7.4 Widgets (GridStack, 12 columns desktop / 6 tablet, 5px gutters)
 Four widgets: **Service plan**, **Now playing**, **Manual controls**, **Recent event stream** (`dashboardWidgetRegistry.ts`).
+- **The Event stream is in plain words (decided 2026-11-18).** Each row is a time and the words (`Playback connected`, `Presentation not connected`, `Service plan loaded`, `Timer stopped`), never the developer's dotted name; the raw `type · source` is the row's hover text, for support. `plugin.status_changed` rows are not drawn. A type the table does not know reads as plain words (`Plugin something new`). The table is `lib/eventWords.ts`.
 - **Default (and "Reset layout") arrangement:** Service plan on the left (x 0, 7 wide); on the right, in one 5-wide column: Now playing, then Manual controls, then Event stream, all the same width as Now playing. First-time users get exactly this.
 - **Free placement:** widgets can go anywhere they do not overlap. There is no spacer tool. A light **upward gravity** keeps gaps from forming at the top unless a widget cannot fit beside what is there; the startup pass settles by gravity only (no compaction).
 - **No clipped content, no dead space:** every widget has min sizes; **Now playing and Manual controls heights lock to their content** (`dashboard/contentFit.ts`), so a user cannot resize them into cut-off controls or empty space. Service plan and Event stream scroll internally.

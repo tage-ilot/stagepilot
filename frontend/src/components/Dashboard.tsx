@@ -59,6 +59,7 @@ import {
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
 import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
+import { describeStream, isHiddenEvent, sourceName } from "../lib/eventWords";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -831,7 +832,7 @@ export function Dashboard({
   const connectionRowsPerSource = new Map<string, number>();
   let realEventRows = 0;
   // Playback's own song events (started, paused, ended...) join the backend's events in one stream, newest first.
-  const streamEvents = [...state.recent_events, ...playbackStreamRows(playback?.events, playback?.status)].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  const streamEvents = [...state.recent_events, ...playbackStreamRows(playback?.events, playback?.status)].filter((event) => !isHiddenEvent(event)).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   const activity = [...streamEvents].reverse().filter((event) => {
     if (event.type === "connection.changed") {
       const seen = connectionRowsPerSource.get(event.source) ?? 0;
@@ -856,12 +857,20 @@ export function Dashboard({
   if (activeErrorEventMissing && pinnedError) {
     activity.unshift({
       id: pinnedError.event_id ?? `evicted-error-${pinnedError.timestamp}`,
-      type: `${pinnedError.component} error`,
+      type: `${sourceName(pinnedError.component)} error`,
       timestamp: pinnedError.timestamp,
       source: "Evicted from event stream — shown from the pinned error",
     });
     activity.splice(10);
   }
+  // The stream in plain words; the raw `type · source` is each row's hover text, for support.
+  const plainActivity = describeStream(activity, {
+    planning_center: state.planning_center_status === "connected",
+    propresenter: state.propresenter_status === "connected",
+    lights: state.lights_status === "connected",
+    midi_playback: state.midi_status === "connected",
+    playback_connection: state.midi_status === "connected",
+  });
   const midiDetail = connectionViews.midi.detail;
   const { elapsed: timerElapsed, remaining: timerRemaining } = songClock(state.timer, state.playing_song, clockNow);
   // The Now playing rail sweeps to the live colour from its top end while the countdown runs. A CSS animation cannot be removed
@@ -1316,7 +1325,7 @@ export function Dashboard({
           <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
-            {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}
+            {activity.map((event, index) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs" title={plainActivity[index]?.title}><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate font-semibold text-ink-body">{plainActivity[index]?.text}</p></div>)}
             {!activity.length && <p className="p-4 text-sm text-ink-muted">Waiting for demo events…</p>}
           </div>
         </Panel>

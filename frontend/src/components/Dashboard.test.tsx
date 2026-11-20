@@ -305,7 +305,7 @@ describe("Recent event stream 5-minute expiry", () => {
     renderDashboard(loadedServiceState, { state });
 
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 
   it("shows Playback's song events in the Event stream with the backend's, newest first, and not its reconnect snapshots", () => {
@@ -327,10 +327,14 @@ describe("Recent event stream 5-minute expiry", () => {
 
     const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent ?? "");
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain("playback.song.paused");
+    // Plain words; the raw name is the hover text, for support.
     expect(rows[0]).toContain("Paused (while scanning Playback songs)");
-    expect(rows[1]).toContain("playback.song.started");
-    expect(rows[2]).toContain("song_started");
+    expect(rows[0]).not.toContain("playback.song.paused");
+    expect(rows[1]).toContain("Song 1 started");
+    expect(rows[2]).toContain("Song started");
+    expect([...document.querySelectorAll(".event-row")].map((row) => row.getAttribute("title"))).toEqual([
+      expect.stringContaining("playback.song.paused"), expect.stringContaining("playback.song.started"), "song_started · propresenter",
+    ]);
     expect(rows.join(" ")).not.toContain("snapshot");
     expect(screen.getByText("Latest 3")).toBeInTheDocument();
   });
@@ -350,8 +354,10 @@ describe("Recent event stream 5-minute expiry", () => {
 
     const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent);
     expect(rows).toHaveLength(3);
-    expect(rows.filter((row) => row?.includes("connection.changed"))).toHaveLength(2);
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(rows.filter((row) => row?.includes("connection.changed"))).toHaveLength(0);
+    expect(rows.join("|")).toMatch(/Presentation (connected|not connected)/);
+    expect(rows.join("|")).toMatch(/Lighting (connected|not connected)/);
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 
   it("never lets connection entries push real events out of the Latest 10", () => {
@@ -369,8 +375,8 @@ describe("Recent event stream 5-minute expiry", () => {
     });
     renderDashboard(loadedServiceState, { state });
 
-    expect(screen.getAllByText("song_started")).toHaveLength(10);
-    expect(screen.getAllByText("connection.changed")).toHaveLength(2);
+    expect(screen.getAllByText("Song started")).toHaveLength(10);
+    expect(document.querySelectorAll('.event-row[title^="connection.changed"]')).toHaveLength(2);
   });
 
   it("re-evaluates live: an event disappears on its own once it crosses 5 minutes", async () => {
@@ -383,14 +389,14 @@ describe("Recent event stream 5-minute expiry", () => {
     });
     renderDashboard(loadedServiceState, { state });
 
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
 
     await act(async () => {
       vi.setSystemTime(new Date("2026-07-13T16:05:05Z"));
       await vi.advanceTimersByTimeAsync(6_000);
     });
 
-    expect(screen.queryByText("song_started")).toBeNull();
+    expect(screen.queryByText("Song started")).toBeNull();
   });
 
   it("leaves the pinned active-error mechanism unaffected by event age", async () => {
@@ -411,7 +417,7 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(errorMessage).toBeInTheDocument();
     expect(errorMessage.closest("p")?.textContent).toMatch(/propresenter/i);
     expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
-    expect(screen.getByText("connection.changed")).toBeInTheDocument();
+    expect(document.querySelector('.event-row[title^="connection.changed"]')).not.toBeNull();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
 
     await act(async () => {
@@ -421,7 +427,7 @@ describe("Recent event stream 5-minute expiry", () => {
 
     // The pinned error and its matching raw event stay visible regardless of age.
     expect(screen.getByText(/Could not connect\./)).toBeInTheDocument();
-    expect(screen.getByText("connection.changed")).toBeInTheDocument();
+    expect(document.querySelector('.event-row[title^="connection.changed"]')).not.toBeNull();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
     expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
   });
@@ -445,8 +451,8 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(screen.getByText(/Could not connect\./)).toBeInTheDocument();
     // A synthesized row keeps the pinned error's original failure inspectable
     // in the event stream even though its raw event was evicted.
-    expect(screen.getByText("propresenter error")).toBeInTheDocument();
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Presentation error")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 });
 
