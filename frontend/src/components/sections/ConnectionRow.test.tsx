@@ -111,4 +111,26 @@ describe("ConnectionRow: the one line of address, port and the two buttons", () 
     expect(screen.getByTestId("row")).toHaveClass("live-link-modes", "flex", "flex-wrap");
     expect(within(screen.getByTestId("row")).queryAllByRole("button")).toHaveLength(0);
   });
+
+  it("draws the pair one way only: tinted, the same classes in every tone, and no prop takes a page-specific look", () => {
+    const classesOf = (tone: "lighting" | "playback" | "presentation") => {
+      const { unmount } = render(<ConnectionRow onConnect={vi.fn()} onScan={vi.fn()} testId="row" tone={tone}>x</ConnectionRow>);
+      const row = screen.getByTestId("row");
+      const result = ["scan", "connect"].map((part) => {
+        const button = row.querySelector<HTMLElement>(`[data-part=${part}]`)!;
+        expect(button).toHaveAttribute("data-variant", "tinted");
+        expect(button).toHaveAttribute("data-tone", tone);
+        return button.className.split(/\s+/).filter((name) => !name.includes(tone)).sort().join(" ");
+      });
+      unmount();
+      return result;
+    };
+    const lighting = classesOf("lighting");
+    expect(classesOf("playback")).toEqual(lighting);
+    expect(classesOf("presentation")).toEqual(lighting);
+    // The old per-page override (Lighting's dark fill) is not a prop any more: the types refuse it, and a stray one is not drawn.
+    // @ts-expect-error buttonClassName was removed; no page-specific look for the pair is allowed
+    render(<ConnectionRow buttonClassName="!bg-surface-950 page-look" onConnect={vi.fn()} onScan={vi.fn()} testId="row" tone="lighting">x</ConnectionRow>);
+    for (const button of buttons(screen.getByTestId("row"))) expect(button.className).not.toMatch(/page-look|!bg-surface-950/);
+  });
 });

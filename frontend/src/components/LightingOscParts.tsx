@@ -21,7 +21,7 @@ import { clampCueTime } from "./lightingTimelineMath";
 import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary, type RowValueIndex } from "./lightingSmooth";
 import { EffectDetail } from "./LightingEffectDetail";
 import { useLiveLinkTools } from "./useLiveLinkTools";
-import { HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
+import { HOST_LABEL, HOST_TITLE } from "./lightingHost";
 import { ActionButton, ActionRow, AddressBox, ConnectionRow, ConnectionSection, LiveLinkField, SectionNotice } from "./sections";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
@@ -64,7 +64,7 @@ export function OscConnectionFields({
       connection={(
         <>
           {/* The live link has not answered yet, so there is nothing to scan for or connect to: both buttons are there, switched off, and say why. */}
-          <ConnectionRow buttonClassName={LIGHTING_BUTTONS} connectDisabled connectHint={WAITING} scanDisabled scanHint={WAITING} testId="live-link-line" tone="lighting">
+          <ConnectionRow connectDisabled connectHint={WAITING} scanDisabled scanHint={WAITING} testId="live-link-line" tone="lighting">
             <LiveLinkField caption="Host" className="live-link-host">
               <AddressBox aria-label={HOST_LABEL} error={Boolean(hostError)} held={held.host} onChange={onHost} placeholder="192.0.2.10" scope="lighting" title={HOST_TITLE} value={host} />
             </LiveLinkField>

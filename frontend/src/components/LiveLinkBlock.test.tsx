@@ -6,7 +6,7 @@ import * as api from "../api";
 import type { ApplicationState, LightkeyStatus, LightsStatusResponse, SettingsResponse } from "../types";
 import { LightingSetupPanel } from "./LightingSetupPanel";
 import { LightkeyStrip } from "./LightkeyStrip";
-import { CUE_ADDRESS_HELP, liveLinkPillState, shortLightingMessage } from "./liveLink";
+import { CUE_ADDRESS_HELP, liveLinkPills, shortLightingMessage } from "./liveLink";
 import { statusTone } from "./ui/statusWord";
 
 vi.mock("../api", async (original) => ({
@@ -31,28 +31,39 @@ const down = status({ link: "unreachable", detail: "Lightkey API did not answer.
 beforeEach(() => { vi.mocked(api.getLightkeyStatus).mockResolvedValue(status()); });
 afterEach(() => { vi.clearAllMocks(); });
 
-const pill = () => screen.getByTestId("lightkey-link");
+const pill = () => screen.getByTestId("lightkey-sacn-pill");
+const dmxPill = () => screen.getByTestId("lightkey-dmx-pill");
 const strip = () => screen.getByTestId("lightkey-strip");
 const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
 
-describe("Live Link block: the state pill is the one statement of the connection", () => {
-  it("says Connected \u00B7 N fixtures with a green dot, announced politely", async () => {
+describe("Live Link block: two pills (sACN, DMX) are the one statement of the connection", () => {
+  it("says sACN: Connected and DMX: N fixtures identified with green dots, announced politely", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: live(66) }));
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Connected \u00B7 66 fixtures");
-    expect(pill()).toHaveAttribute("role", "status");
-    expect(pill()).toHaveAttribute("aria-live", "polite");
-    expect(pill()).toHaveAttribute("data-tone", "success");
-    expect(within(strip()).getByRole("heading", { name: "sACN DMX Live Link" }).parentElement).toContainElement(pill());
+    await screen.findByText("DMX: 66 fixtures identified");
+    for (const element of [pill(), dmxPill()]) {
+      expect(element).toHaveAttribute("role", "status");
+      expect(element).toHaveAttribute("aria-live", "polite");
+      expect(element).toHaveAttribute("data-tone", "success");
+    }
+    expect(pill()).toHaveTextContent("sACN: Connected");
+    const header = within(strip()).getByRole("heading", { name: "sACN DMX Live Link" }).parentElement;
+    expect(header).toContainElement(pill());
+    expect(header).toContainElement(dmxPill());
+    // sACN first, DMX second, in the header beside the title.
+    expect(pill().compareDocumentPosition(dmxPill()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says Not connected (red) and puts the reason in the tooltip and accessible name, and ONCE in the strip text", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     expect(pill()).toHaveAttribute("data-tone", "danger");
     expect(pill()).toHaveAttribute("title", expect.stringContaining("Lightkey API did not answer."));
-    expect(pill()).toHaveAccessibleName(expect.stringContaining("Not connected"));
+    expect(pill()).toHaveAccessibleName(expect.stringContaining("sACN: Not connected"));
+    // The DMX pill is still drawn, neutral, with a dash.
+    expect(dmxPill()).toHaveTextContent("DMX: \u2014");
+    expect(dmxPill()).toHaveAttribute("data-tone", "idle");
     expect(pill()).toHaveAccessibleName(expect.stringContaining("Lightkey API did not answer."));
     const text = strip().textContent ?? "";
     expect(occurrences(text, "Not connected")).toBe(1);
@@ -63,24 +74,54 @@ describe("Live Link block: the state pill is the one statement of the connection
   it("says Connecting\u2026 (amber) while the first fixture data is awaited, and the tooltip says why", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: { link: "waiting", detail: null, fixtures: 0, lost_packets: 0, recording: false } }));
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Connecting\u2026");
-    expect(pill()).toHaveAttribute("data-tone", "warning");
-    expect(pill()).toHaveAttribute("title", expect.stringContaining("Colour and levels: connecting"));
+    await screen.findByText("DMX: Connecting\u2026");
+    expect(pill()).toHaveTextContent("sACN: Connected");
+    expect(dmxPill()).toHaveAttribute("data-tone", "warning");
+    expect(dmxPill()).toHaveAttribute("title", expect.stringContaining("Colour and levels: connecting"));
   });
 
-  it("derives the colour from the same word table as the panel header's pill", () => {
-    expect(liveLinkPillState(status({ fixtures: live() })).tone).toBe(statusTone.Connected);
-    expect(liveLinkPillState(down).tone).toBe(statusTone.Error);
-    expect(liveLinkPillState(status({ link: "lightkey_closed", detail: "Lightkey is not running." })).tone).toBe(statusTone.Connecting);
-    expect(liveLinkPillState(status({ link: "off" })).tone).toBe(statusTone.Disconnected);
-    // The pill always has words, so no state rests on colour alone.
-    for (const link of ["off", "connected", "lightkey_closed", "unreachable"] as const) expect(liveLinkPillState(status({ link })).text.length).toBeGreaterThan(2);
+  // Every link / fixture state and the two pills it draws: words and tones (the tones come from the same word table as the panel header's pill).
+  const waiting = { link: "waiting" as const, detail: null, fixtures: 0, lost_packets: 0, recording: false };
+  const lost = { link: "lost" as const, detail: "No fixture data from the Lightkey API.", fixtures: 66, lost_packets: 2, recording: false };
+  const table: Array<[string, LightkeyStatus, [string, string], [string, string]]> = [
+    ["connected, 66 fixtures", status({ fixtures: live(66) }), ["sACN: Connected", statusTone.Connected], ["DMX: 66 fixtures identified", statusTone.Connected]],
+    ["connected, 1 fixture", status({ fixtures: live(1) }), ["sACN: Connected", statusTone.Connected], ["DMX: 1 fixture identified", statusTone.Connected]],
+    ["connected, waiting for fixtures", status({ fixtures: waiting }), ["sACN: Connected", statusTone.Connected], ["DMX: Connecting\u2026", statusTone.Connecting]],
+    ["connected, fixture stream lost", status({ fixtures: lost }), ["sACN: Connected", statusTone.Connected], ["DMX: Not receiving", statusTone.Connecting]],
+    ["connected, API without fixtures", status(), ["sACN: Connected", statusTone.Connected], ["DMX: \u2014", statusTone.Disconnected]],
+    ["not connected", down, ["sACN: Not connected", statusTone.Error], ["DMX: \u2014", statusTone.Disconnected]],
+    ["Lightkey is closed", status({ link: "lightkey_closed", detail: "Lightkey is not running." }), ["sACN: Lightkey is closed", statusTone.Connecting], ["DMX: \u2014", statusTone.Disconnected]],
+    ["off", status({ link: "off", detail: "Lighting is off." }), ["sACN: Off", statusTone.Disconnected], ["DMX: \u2014", statusTone.Disconnected]],
+  ];
+  it.each(table)("%s: the two pills' words and tones", (_name, state, [sacnText, sacnTone], [dmxText, dmxTone]) => {
+    const pills = liveLinkPills(state);
+    expect([pills.sacn.text, pills.sacn.tone]).toEqual([sacnText, sacnTone]);
+    expect([pills.dmx.text, pills.dmx.tone]).toEqual([dmxText, dmxTone]);
+  });
+
+  it.each(table)("%s: both pills are always drawn, in the same place, with the words in the DOM", async (_name, state, [sacnText, sacnTone], [dmxText, dmxTone]) => {
+    vi.mocked(api.getLightkeyStatus).mockResolvedValue(state);
+    render(<LightkeyStrip connection={connection} lightingEnabled />);
+    await screen.findByText(sacnText);
+    expect(pill()).toHaveTextContent(sacnText);
+    expect(dmxPill()).toHaveTextContent(dmxText);
+    expect(pill()).toHaveAttribute("data-tone", sacnTone);
+    expect(dmxPill()).toHaveAttribute("data-tone", dmxTone);
+    // The pill's accessible name is its words (no extra "sACN DMX Live Link:" in front), so it never says the same thing twice.
+    expect(pill().getAttribute("aria-label")?.startsWith(sacnText)).toBe(true);
+  });
+
+  it("the reason rides in the tooltip of the pill it belongs to", () => {
+    expect(liveLinkPills(down).sacn.detail).toBe("Lightkey API did not answer.");
+    expect(liveLinkPills(status({ fixtures: lost })).dmx.detail).toBe("No fixture data from the Lightkey API.");
+    expect(liveLinkPills(status({ fixtures: waiting })).dmx.detail).toBe("Colour and levels: connecting");
+    expect(liveLinkPills(status({ fixtures: live() })).dmx.detail).toBeNull();
   });
 
   it("shows no separate plain status word or dot text in the field row", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     expect(screen.getByTestId("live-link-line").textContent).not.toMatch(/Not connected|Connected|did not answer/);
   });
 });
@@ -160,7 +201,7 @@ describe("Live Link block: the state line (#296 nit 1)", () => {
   it("joins separate statements with a middle dot and ends each one with a full stop, on one muted line", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     const line = screen.getByTestId("lightkey-headline");
     expect(line.textContent).toBe("Auto: replaying (no connection). \u00B7 Lightkey API did not answer.");
     expect(line.className).toContain("text-ink-muted");
@@ -175,13 +216,16 @@ describe("Live Link block: the state line (#296 nit 1)", () => {
   });
 });
 
-describe("Live Link block: Connect is an action, not a state (#296 nit 3)", () => {
-  it("is an outlined primary with a dark fill and an accent border, never the crimson fill of a selected segment", async () => {
+describe("Live Link block: Connect is an action, not a state (#296 nit 3, F9)", () => {
+  it("is the same tinted button Playback and Presentation use, in the Lighting tone, never the crimson fill of a selected segment", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
     const connect = await screen.findByRole("button", { name: "Connect" });
-    expect(connect.className).toContain("!border-integration-lighting-soft");
-    expect(connect.className).toContain("!bg-surface-950");
+    expect(connect).toHaveAttribute("data-variant", "tinted");
+    expect(connect).toHaveAttribute("data-tone", "lighting");
+    // No page-specific look: the old Lighting override (dark fill with a forced border) is gone.
+    expect(connect.className).not.toContain("!border-integration-lighting-soft");
+    expect(connect.className).not.toContain("!bg-surface-950");
     expect(connect.className).not.toMatch(/bg-integration-lighting-soft\/(30|45)|bg-primary/);
   });
 });
@@ -251,7 +295,7 @@ describe("Live Link block: the strip under the fields", () => {
   it("keeps the three actions together after the state text, so How to find a cue's address can never sit alone on a row (#296 nit 2)", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     const sub = screen.getByTestId("live-link-sub");
     const actions = screen.getByTestId("live-link-actions");
     // Two children of the strip: the state text and ONE group holding Release, Send a test cue, How to find and Lighting computer setup.
@@ -337,7 +381,7 @@ describe("Lighting panel: each status fact once", () => {
   it("says Not connected once and 'Lightkey API did not answer' once, and the help sentence is present once", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     const { container } = mount();
-    await screen.findByText("Not connected");
+    await screen.findByText("sACN: Not connected");
     const text = container.textContent ?? "";
     expect(occurrences(text, "Not connected")).toBe(1);
     expect(occurrences(text, "Lightkey API did not answer")).toBe(1);

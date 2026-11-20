@@ -995,7 +995,7 @@ end-to-end harness (`scripts/lighting-e2e`, stage `discovery`) uses it so that i
 
 ### The Lightkey project, Read fixtures and the helper version
 
-The Lighting section shows which Lightkey project the helper is reading, under the state pill:
+The Lighting section shows which Lightkey project the helper is reading, under the pills:
 `Project: Show.lightkeyproj · 66 fixtures`. The name is the project's base name (never a path) and comes from the
 relay's `/relay/hello` (project, fixture count and map id); until a hello arrives the helper's own `GET /health` answer
 fills it in, and before that the line says `Project not reported yet`.
@@ -1327,10 +1327,10 @@ on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to i
 
 ### sACN DMX Live Link (one line)
 
-In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and one **state
-pill** (`Connected · 66 fixtures`, `Not connected`, `Connecting…`; the reason for a failure is the pill's tooltip). Under it
+In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and two **state
+pills**, always both: **`sACN: <word>`** (the link to Lightkey: `Connected`, `Connecting…`, `Not connected`, `Off`, `Lightkey is closed`; the reason for a failure is the pill's tooltip) and **`DMX: <word>`** (the fixture stream: `66 fixtures identified` (`1 fixture identified`), `Connecting…` while the first fixture data is awaited, `Not receiving` when the stream stops, and a grey `—` while sACN is not connected; the fixture detail is its tooltip). Under it
 is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one Host box** (the caption says only Host; hover it, or open the Lighting computer setup, for *Host or IP (OSC output + Live Link)*; its accessible name is *Lighting host or IP address*), a small **OSC UDP** port box (default 21600),
-a small **API** port box (default 8770), the pair **Search** and **Connect** (the same two buttons end the Playback and Presentation rows; Search finds a computer, the word Scan is kept for reading songs; Connect on a computer that is already connected only checks again and the status line says so; **Search** reads **Searching… (cancel)** while the search runs, and cancel only stops this block showing it: the search keeps its own schedule), and at the right the labelled **Mode** (Auto | Replay |
+a small **API** port box (default 8770), the pair **Search** and **Connect** (the same tinted buttons, in the Lighting colour, that end the Playback and Presentation rows; Search finds a computer, the word Scan is kept for reading songs; Connect on a computer that is already connected only checks again and the status line says so; **Search** reads **Searching… (cancel)** while the search runs, and cancel only stops this block showing it: the search keeps its own schedule), and at the right the labelled **Mode** (Auto | Replay |
 Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
 1 yielded to the operator"), **Release lights**, **Read fixtures**, **Send a test cue** and **How to find a cue's address**. The Lighting
 computer that receives OSC and the one that runs `lightkey-api` are always the same machine, so the host is shared.

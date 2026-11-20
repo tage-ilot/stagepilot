@@ -29,8 +29,8 @@ import { useLiveLinkTools } from "./useLiveLinkTools";
 import { AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice, scannedAddresses } from "./sections";
 import { useRecheckNote } from "./useRecheckNote";
 import { lightkeyScanState } from "./lightkeyScan";
-import { HOST_HELP, HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
-import { CONTROL_40, liveLinkPillState, lightkeyFixtureWord } from "./liveLink";
+import { HOST_HELP, HOST_LABEL, HOST_TITLE } from "./lightingHost";
+import { CONTROL_40, liveLinkPills, lightkeyFixtureWord } from "./liveLink";
 
 const POLL_MS = 1500;
 
@@ -321,8 +321,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
     }
   };
 
-  const pillState = liveLinkPillState(status);
-  // ONE line of state text: what just happened / the headline, why the link is down (once; the pill only carries it as a tooltip), what the
+  const pills = liveLinkPills(status);
+  // ONE line of state text: what just happened / the headline, why the link is down (once; the pills only carry it as a tooltip), what the
   // fixture stream is doing when it is not live, then what the replay holds.
   const fixtureNote = connected && status.fixtures && status.fixtures.link !== "live" ? lightkeyFixtureWord(status.fixtures) : null;
   const downNote = status.link !== "connected" && status.link !== "off" ? status.detail : null;
@@ -407,7 +407,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
                 />
               </ConnectionRow>
             )}
-            buttonClassName={LIGHTING_BUTTONS}
             connectDisabled={!lightingEnabled}
             connectHint={LIGHTING_OFF}
             connecting={connecting}
@@ -522,7 +521,12 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
         </>
       )}
       panels={tools.panels}
-      pills={<LiveLinkPill detail={pillState.detail} text={pillState.text} tone={pillState.tone} />}
+      pills={(
+        <>
+          <LiveLinkPill detail={pills.sacn.detail} name="" testId="lightkey-sacn-pill" text={pills.sacn.text} tone={pills.sacn.tone} />
+          <LiveLinkPill detail={pills.dmx.detail} name="" testId="lightkey-dmx-pill" text={pills.dmx.text} tone={pills.dmx.tone} />
+        </>
+      )}
       status={[{ text: statusText }]}
       statusTestId="lightkey-headline"
       className={className}
