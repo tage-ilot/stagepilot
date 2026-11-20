@@ -28,6 +28,7 @@ pub use plan::{clean_name, copy_file_name, PlanError};
 use super::api::ProPresenterApi;
 use super::ProPresenterHost;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use ts_rs::TS;
@@ -75,6 +76,21 @@ pub struct PlanRequest {
     /// The playlist's id (uuid) as `GET /v1/playlists` lists it.
     pub playlist_id: String,
     pub place: Place,
+    /// The file the person picked for a song that has more than one: the song's `ref_id` to the file as `choices` lists it
+    /// (`Songs / Firm Foundation.pro`). A key that is no song of this request or a file that is none of THAT song's
+    /// candidates is ignored (the song is asked about as before), never an error.
+    pub sources: BTreeMap<String, String>,
+}
+
+/// How the file of a song with more than one candidate was settled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, rename = "AddSongsChosenBy")]
+pub enum ChosenBy {
+    /// The person picked it (this request's `sources`).
+    Pick,
+    /// Exactly one candidate's file name is the song's title: the one rule StagePilot uses before asking.
+    Title,
 }
 
 /// What will happen to one song.
@@ -182,8 +198,13 @@ pub struct SongPlan {
     pub import_as: Option<String>,
     /// Why nothing can be done (`blocked`) or why a choice is needed (`needs_choice`).
     pub reason: Option<String>,
-    /// For `needs_choice`: the files that could be it.
+    /// The files that could be this song, as `Songs / Firm Foundation.pro`: for `needs_choice` the ones to pick from; for a
+    /// song settled by a pick or by the title rule the same list, so the person can pick another.
     pub choices: Vec<String>,
+    /// Set when `choices` had more than one file and one was used: by the person's pick or by the title rule.
+    pub chosen_by: Option<ChosenBy>,
+    /// The file used, written as in `choices`, when `chosen_by` is set.
+    pub chosen_file: Option<String>,
     /// Plain lines about this song: how sections were matched, what happens to the key.
     pub notes: Vec<String>,
     pub mapping: Vec<MappingLine>,

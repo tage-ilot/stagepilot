@@ -130,7 +130,17 @@ async fn world(loading: Loading) -> World {
     let host = Arc::new(
         FakeHost::new()
             .with_file("Songs", "Alpha.pro", &song_file("Alpha", 1001, 0xA1000000))
-            .with_file("Songs", "Beta.pro", &song_file("Beta", 1002, 0xB2000000)),
+            .with_file("Songs", "Beta.pro", &song_file("Beta", 1002, 0xB2000000))
+            .with_file(
+                "Songs",
+                "Echo (Live).pro",
+                &song_file("Echo", 3030, 0xE1000000),
+            )
+            .with_file(
+                "Songs",
+                "Echo (Studio).pro",
+                &song_file("Echo", 3030, 0xE2000000),
+            ),
     );
     host.set_import_song(2002, &song_file("Delta", 2002, 0xD4000000));
     rt.propresenter_link.set_local_host_for_test(host.clone());
@@ -156,6 +166,7 @@ async fn world(loading: Loading) -> World {
         lib_song(12, Some(2002), 2, "Delta", &["Intro", "Chorus"]),
         lib_song(13, Some(1002), 3, "Beta", &["Chorus", "Intro"]),
         lib_song(14, None, 4, "No Number", &["Intro"]),
+        lib_song(15, Some(3030), 5, "Echo", &["Intro", "Chorus"]),
     ])));
     let app = build_app(rt.clone(), AppOptions { web_root: None });
     World {
@@ -1127,4 +1138,78 @@ async fn the_title_inputs_are_checked_too() {
         (StatusCode::CONFLICT, Some("no_propresenter")),
         "{answer}"
     );
+}
+
+#[tokio::test]
+async fn a_pick_goes_in_the_preview_is_part_of_the_plan_and_is_what_apply_does() {
+    let w = world(Loading::Immediately).await;
+    let live = "Songs / Echo (Live).pro";
+    let studio = "Songs / Echo (Studio).pro";
+    let with = |sources: Value| {
+        let mut body = ask(&w, &[15], worship());
+        body["sources"] = sources;
+        body
+    };
+    // Nobody picked: two files are this song, in short words, and both are listed.
+    let (status, plain) = call(&w.app, "POST", PREVIEW, Some(ask(&w, &[15], worship()))).await;
+    assert_eq!(status, StatusCode::OK, "{plain}");
+    assert_eq!(plain["songs"][0]["action"], "needs_choice");
+    assert_eq!(
+        plain["songs"][0]["reason"],
+        "Two files are this song. Pick one."
+    );
+    assert_eq!(plain["songs"][0]["choices"], json!([live, studio]));
+    assert_eq!(plain["songs"][0]["chosen_by"], Value::Null);
+    // A pick for song 15 (its setlist number): used, said, and another pick is another plan.
+    let (status, picked) = call(&w.app, "POST", PREVIEW, Some(with(json!({"15": studio})))).await;
+    assert_eq!(status, StatusCode::OK, "{picked}");
+    let song = &picked["songs"][0];
+    assert_eq!(
+        (
+            song["action"].as_str(),
+            song["source"].as_str(),
+            song["chosen_by"].as_str(),
+            song["chosen_file"].as_str()
+        ),
+        (Some("copy"), Some(studio), Some("pick"), Some(studio))
+    );
+    assert_eq!(song["choices"], json!([live, studio]));
+    let (_, other) = call(&w.app, "POST", PREVIEW, Some(with(json!({"15": live})))).await;
+    assert_ne!(picked["plan_id"], other["plan_id"]);
+    // What does not fit is ignored, never an error: a wrong type, another song's key, a file that is none of its files.
+    for junk in [
+        json!("Songs / Echo (Live).pro"),
+        json!([live]),
+        json!({"15": 7}),
+        json!({"15": null}),
+        json!({"15": "Songs / Beta.pro"}),
+        json!({"99": live, "": live}),
+        json!({"15": "x".repeat(500)}),
+        json!({"15": "bad\u{7}"}),
+    ] {
+        let (status, answer) = call(&w.app, "POST", PREVIEW, Some(with(junk.clone()))).await;
+        assert_eq!(status, StatusCode::OK, "{junk}: {answer}");
+        assert_eq!(answer["songs"][0]["action"], "needs_choice", "{junk}");
+    }
+    // Apply takes the plan_id and does what was previewed with the pick: the copy is made from the picked file.
+    let (_, preview) = call(&w.app, "POST", PREVIEW, Some(with(json!({"15": studio})))).await;
+    let (status, started) = call(
+        &w.app,
+        "POST",
+        APPLY,
+        Some(json!({"plan_id": preview["plan_id"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{started}");
+    let done = finished(&w.app, started["job_id"].as_str().unwrap()).await;
+    assert_eq!(done["report"]["outcome"], "done", "{done}");
+    let made: Vec<String> = w
+        .host
+        .files_of("Playback")
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert_eq!(made, ["Echo (Studio) (1).pro"]);
+    // The old id of another pick still refers to ITS pick only; the plan without a pick is another plan again.
+    assert_ne!(plain["plan_id"], preview["plan_id"]);
 }
