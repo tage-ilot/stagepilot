@@ -48,7 +48,7 @@ describe("backend startup recovery", () => {
     desktop.status.state = "starting";
     render(<App />);
 
-    expect(await screen.findByText("Starting the local backend")).toBeInTheDocument();
+    expect(await screen.findByText("Starting the engine")).toBeInTheDocument();
     expect(
       screen.queryByText(/server stopped unexpectedly/),
     ).not.toBeInTheDocument();
@@ -60,7 +60,7 @@ describe("backend startup recovery", () => {
   it("shows the specific server failure instead of a reconnect loop", async () => {
     render(<App />);
 
-    expect(await screen.findByText("The StagePilot server stopped")).toBeInTheDocument();
+    expect(await screen.findByText("The engine stopped")).toBeInTheDocument();
     expect(screen.getByText(/The StagePilot server stopped unexpectedly/)).toBeInTheDocument();
     expect(screen.queryByText("Live connection interrupted; reconnecting.")).not.toBeInTheDocument();
     const progress = screen.getByRole("progressbar", { name: "StagePilot startup progress" });
@@ -68,23 +68,23 @@ describe("backend startup recovery", () => {
     expect(progress).toHaveAttribute("aria-valuenow", "1");
     expect(progress).toHaveAttribute(
       "aria-valuetext",
-      "Startup stopped because the local backend reported an error.",
+      "Startup stopped because the engine reported an error.",
     );
-    expect(screen.getByRole("button", { name: "Copy Backend Log" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy log" })).toBeInTheDocument();
   });
 
   it("offers a bounded supervisor retry action", async () => {
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Retry Backend" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
     await waitFor(() => expect(desktop.restartDesktopBackend).toHaveBeenCalledOnce());
   });
 
   it("renders the failure actions with the Button primitive at touch size", async () => {
     render(<App />);
 
-    const retry = await screen.findByRole("button", { name: "Retry Backend" });
-    const copy = screen.getByRole("button", { name: "Copy Backend Log" });
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    const copy = screen.getByRole("button", { name: "Copy log" });
     expect(retry).toHaveAttribute("data-variant", "destructive-soft");
     expect(copy).toHaveAttribute("data-variant", "secondary");
     expect(retry).toHaveAttribute("data-size", "touch");

@@ -60,7 +60,7 @@ describe("useStartupProgress", () => {
     });
     act(() => vi.advanceTimersByTime(2_000));
     expect(result.current.value).toBeGreaterThan(beforeFailure);
-    expect(result.current.headline).toBe("Retrying the local backend");
+    expect(result.current.headline).toBe("Retrying the engine");
   });
 
   it("completes smoothly once real application state exists", () => {

@@ -48,7 +48,7 @@ export function GlobalErrorListener() {
       const content = await copyDiagnosticsLog();
       await navigator.clipboard.writeText(content);
       setSending(false);
-      setSendMessage(`${result.message} Backend log copied instead.`);
+      setSendMessage(`${result.message} Log copied instead.`);
     } catch {
       setSending(false);
       setSendMessage(result.message);

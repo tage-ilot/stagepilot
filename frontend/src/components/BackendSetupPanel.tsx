@@ -334,7 +334,7 @@ export function BackendSetupPanel({
       header={(
         <SetupPanelHeader
           closeLabel="Close StagePilot configuration"
-          kicker="Backend configuration"
+          kicker="StagePilot configuration"
           headingId="backend-setup-heading"
           onClose={onClose}
           status={connectionStatus}

@@ -598,9 +598,9 @@ describe("Dashboard Planning Center plan states", () => {
   });
 
   it("shows errors in the same header slot with error styling", () => {
-    renderDashboard(loadedServiceState, { error: "Backend unavailable." });
+    renderDashboard(loadedServiceState, { error: "StagePilot is unavailable." });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Backend unavailable.");
+    expect(screen.getByRole("status")).toHaveTextContent("StagePilot is unavailable.");
     expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
     const chip = screen.getByTestId("header-chip");
     expect(chip).toHaveAttribute("data-state", "message");

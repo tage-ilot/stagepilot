@@ -661,7 +661,7 @@ Four widgets: **Service plan**, **Now playing**, **Manual controls**, **Recent e
 ## 8. Configuration panels: the shared anatomy
 
 Every connection opens a panel under the status cards, in this order, which `PanelLayout` (§6.6) draws. **A new connection uses it and copies nothing.**
-1. **Header** (`SetupPanelHeader`): kicker `Connection configuration` (the StagePilot panel says `Backend configuration`), a 20px bold **title in the connection's own colour** (`-soft`; the StagePilot title uses its pale `-text` tint because its red is only 3.2:1), a one-sentence description in body grey, the **status pill** and the 44px **Close** button. The pill sits in a **fixed slot immediately left of Close on every panel**, uses the real state colours (green/red/idle), **not** the connection tint, and does not change the title position. Below 480px the pill moves to its own row under the title.
+1. **Header** (`SetupPanelHeader`): kicker `Connection configuration` (the StagePilot panel says `StagePilot configuration`), a 20px bold **title in the connection's own colour** (`-soft`; the StagePilot title uses its pale `-text` tint because its red is only 3.2:1), a one-sentence description in body grey, the **status pill** and the 44px **Close** button. The pill sits in a **fixed slot immediately left of Close on every panel**, uses the real state colours (green/red/idle), **not** the connection tint, and does not change the title position. Below 480px the pill moves to its own row under the title.
 2. **`ConnectionMethod`** (only if the connection has more than one way).
 3. **General configuration** fields, ordered by how often they change.
 4. **`Disclosure advanced`** (optional).
@@ -721,7 +721,7 @@ Rules:
 | **Presentation** | ProPresenter (except where the product is the subject: "ProPresenter Look") | shows the countdown |
 | **Playback** | MultiTracks | tells StagePilot a song started. Status card accessible name: "MIDI / Playback" |
 | **Lighting** | Lightkey | receives cues |
-| **StagePilot** | backend, local API (except the kicker `Backend configuration`) | the fifth card; app-wide configuration |
+| **StagePilot** (the app), **the engine** (the part that runs on this computer, in startup and crash messages) | backend, local backend, local API, server | the fifth card; app-wide configuration. Operators never see "backend"; it stays in code, routes, logs and developer docs |
 | **Connection method**, **Connection Access** | connection type, mode | how a connection is reached; who can reach StagePilot |
 | **Host / Local network / Internet** | This Computer only, Remote access (as the option names) | the three Connection Access options |
 | **OSC**, **MIDI** | | protocol methods; MIDI is Playback's alternate and Lighting's alternate |

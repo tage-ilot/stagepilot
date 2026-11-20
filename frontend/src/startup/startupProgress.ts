@@ -108,8 +108,8 @@ export const startupPresentation = ({
     case "failed":
       return {
         tone: "failed",
-        headline: "Backend startup failed",
-        valueText: "Startup stopped because the local backend reported an error.",
+        headline: "StagePilot could not start",
+        valueText: "Startup stopped because the engine reported an error.",
         moving: false,
       };
     case "complete":
@@ -130,14 +130,14 @@ export const startupPresentation = ({
       return {
         tone: "normal",
         headline: "Loading dashboard data",
-        valueText: "The local backend is connected. Loading application state.",
+        valueText: "The engine is connected. Loading application state.",
         moving: true,
       };
     case "backend-ready":
       return {
         tone: "normal",
-        headline: "Verifying the local backend",
-        valueText: "The backend is ready. Establishing the dashboard connection.",
+        headline: "Checking the engine",
+        valueText: "The engine is ready. Establishing the dashboard connection.",
         moving: true,
       };
     case "starting-backend": {
@@ -145,15 +145,15 @@ export const startupPresentation = ({
       return {
         tone: delayed ? "delayed" : "normal",
         headline: retrying
-          ? "Retrying the local backend"
+          ? "Retrying the engine"
           : delayed
-            ? "The backend is taking a little longer than usual"
-            : "Starting the local backend",
+            ? "The engine is taking a little longer than usual"
+            : "Starting the engine",
         valueText: retrying
-          ? "Retrying backend startup."
+          ? "Retrying the engine's startup."
           : delayed
-            ? "Backend startup is still in progress."
-            : "The packaged backend is starting.",
+            ? "The engine is still starting."
+            : "The engine is starting.",
         moving: true,
       };
     }
