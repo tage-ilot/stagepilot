@@ -429,7 +429,7 @@ Each connection owns one hue. It tints that connection's status-card icon, its p
 | Playback → MIDI method | `integration-playback-midi` | `#7761b8` blue-violet | white |
 | Lighting | `integration-lighting` | `#d53367` pink-red | white |
 | Lighting → OSC method | `integration-lighting-osc` | `#2f9e8f` teal-green | white |
-| StagePilot (backend) | `integration-backend` | `#c7231d` (= primary) | white |
+| StagePilot (card titled Backend) | `integration-backend` | `#c7231d` (= primary) | white |
 
 Each family has three roles: the base (solid fills, rails), `-soft` (dots, borders, 10-30% tints) and `-text` (small text, 7:1). `advanced-<name>` is the muted tone (30% hue / 70% grey) for that connection's Advanced section.
 - **Inside a connection's panel** (via `Panel tone=…` and `AccentContext`): primary buttons, tinted buttons, links, checkboxes, badges, success and info messages and the Save bar all take the connection's colour. **Exceptions that keep their own colour:** errors and warnings (pure red), idle grey, destructive buttons, and everything outside the panel (header, dialogs, toasts).
@@ -643,7 +643,8 @@ What no template fits (the song list, the MIDI monitor, a cue table) goes in the
 - **The loading logo glides into the header** (`startup/logoLanding.ts`): the dashboard's own header logo starts at the loading logo's centre and size and moves home (translate + scale, 720ms) while the rest of the dashboard is hidden from the first frame, then the whole dashboard fades in over 200ms (borders and contents together; a border-first stagger was tried and dropped). It never plays on a reload of the loaded app or in tests; reduced motion skips it.
 - "Can't reach StagePilot" retries by itself when the dashboard loads and whenever that error occurs; the manual **Try again** remains.
 
-### 7.3 Status cards (five, in this order: Services, Playback, Presentation, Lighting, StagePilot)
+### 7.3 Status cards (five, in this order: Services, Playback, Presentation, Lighting, Backend)
+The fifth card is titled **Backend** while collapsed (Hunter's decision, 2026-11-18); its screen-reader name and the open panel say StagePilot. This is the one place the word is allowed in operator text (see section 10).
 Icon tile + title + **status word** (Connected / Connecting / Disconnected / Error) + one detail line. No status dot. The word is bold-pixel, uppercase, and **grows with the card** (about 12px up to a 22px maximum) so DISCONNECTED always fits on one line; the title is 13px. Card hover/open tints the title and description whenever the *card* is hovered or open (not only the text). At **≤1000px** viewport width the cards switch to **compact** (icon tile, word on one line beneath it; never wraps, ellipsizes or overlaps). The open card wears its connection colour (§3.4).
 
 ### 7.4 Widgets (GridStack, 12 columns desktop / 6 tablet, 5px gutters)
@@ -721,7 +722,7 @@ Rules:
 | **Presentation** | ProPresenter (except where the product is the subject: "ProPresenter Look") | shows the countdown |
 | **Playback** | MultiTracks | tells StagePilot a song started. Status card accessible name: "MIDI / Playback" |
 | **Lighting** | Lightkey | receives cues |
-| **StagePilot** (the app), **the engine** (the part that runs on this computer, in startup and crash messages) | backend, local backend, local API, server | the fifth card; app-wide configuration. Operators never see "backend"; it stays in code, routes, logs and developer docs |
+| **StagePilot** (the app), **the engine** (the part that runs on this computer, in startup and crash messages) | backend, local backend, local API, server | the fifth card; app-wide configuration. Operators never see "backend" except the collapsed fifth card's title, **Backend**, which Hunter decided to keep (2026-11-18; the one allowed string in `noBackendWords.test.ts`); it stays in code, routes, logs and developer docs |
 | **Connection method**, **Connection Access** | connection type, mode | how a connection is reached; who can reach StagePilot |
 | **Host / Local network / Internet** | This Computer only, Remote access (as the option names) | the three Connection Access options |
 | **OSC**, **MIDI** | | protocol methods; MIDI is Playback's alternate and Lighting's alternate |

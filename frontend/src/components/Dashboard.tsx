@@ -1079,7 +1079,7 @@ export function Dashboard({
           icon={connectionIcon(stagepilotIcon, "stagepilot", true)}
           onClick={() => toggleConnection("backend")}
           status={backendStatus}
-          title="StagePilot"
+          title="Backend"
           tone="backend"
         />
       </section>

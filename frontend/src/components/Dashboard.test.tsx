@@ -597,6 +597,15 @@ describe("Dashboard Planning Center plan states", () => {
     }
   });
 
+  it("titles the collapsed fifth card Backend (Hunter's decision) while its open panel and its screen-reader name say StagePilot", () => {
+    renderDashboard(loadedServiceState);
+
+    const card = document.querySelector<HTMLElement>('[aria-controls="backend-configuration"]');
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("Backend");
+    expect(card).toHaveAccessibleName(/StagePilot/);
+  });
+
   it("shows errors in the same header slot with error styling", () => {
     renderDashboard(loadedServiceState, { error: "StagePilot is unavailable." });
 
