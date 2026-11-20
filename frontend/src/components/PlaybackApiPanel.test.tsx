@@ -165,7 +165,8 @@ describe("Playback computer address box (no select, no Other computer…)", () =
     const u = user();
     render(<PlaybackApiPanel playback={playback} />);
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.queryByText("Type an address to connect.")).not.toBeInTheDocument();
+    // The reason is the button's tooltip and its hidden description for a screen reader; no line of it is drawn.
+    expect(screen.queryAllByText("Type an address to connect.").every((node) => node.classList.contains("sr-only"))).toBe(true);
     await u.type(computer(), "  192.0.2.10  {Enter}");
     expect(playback.scan).toHaveBeenCalledExactlyOnceWith("192.0.2.10");
     expect(screen.queryByText(/Save address|Find \/ Scan|override/)).not.toBeInTheDocument();

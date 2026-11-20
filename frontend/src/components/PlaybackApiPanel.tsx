@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
@@ -11,7 +11,7 @@ import { ScanProgress } from "./ScanProgress";
 import { PlaybackArrangement } from "./PlaybackArrangement";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { FactChips, OptionalBand, PanelBody, SectionNotice } from "./sections";
+import { FactChips, OptionalBand, PanelBody, ReasonButton, SectionNotice } from "./sections";
 import { Switch } from "./ui/Switch";
 import { SCAN_PLAYBACK_API, readFromLibraryText, songScanButton, SONG_ORDER_OPEN_KEY, songOrderSummary, learningOrderChip, DOUBTFUL_ORDER_HINT, LEARN_SWITCH_LABEL, playbackHasDoubtfulSong, playbackOrderMode, playbackOrderNotice, playbackSongCountMismatch } from "./playbackStatus";
 
@@ -30,7 +30,6 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
   // A condition of the Library Link's order failed: its plain line is shown, and the best scan available is the Playback API's.
   const libraryNote = libraryUsable ? status?.order_library_note ?? null : null;
   const apiConnected = status?.sources.playback_api.connected ?? false;
-  const reasonId = useId();
   const orderSaved = Boolean(status?.song_order.length) && !status?.stale && !status?.plan_changed;
   const libraryRead = playback?.libraryRead ?? null;
   const notice = status ? playbackOrderNotice(status) : null;
@@ -56,11 +55,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
   const songOrder = status && (
     <OptionalBand
       actions={(
-        // A disabled button shows no tooltip of its own in every browser, so the reason is on the wrapper too; a screen reader hears it as the button's description.
-        <span className="inline-flex" data-part="song-scan" data-scan={scan.kind} title={scan.reason ?? undefined}>
-          <Button aria-describedby={scan.reason ? reasonId : undefined} disabled={Boolean(scan.reason)} loading={byLibrary && reading} onClick={() => byLibrary ? playback?.refreshFromLibrary?.() : setConfirm(true)} size="control" title={scan.reason ?? undefined} tone="playback" variant={orderSaved ? "tinted" : "primary"}>{scan.label}</Button>
-          {scan.reason && <span className="sr-only" id={reasonId}>{scan.reason}</span>}
-        </span>
+        <ReasonButton alwaysWrap loading={byLibrary && reading} onClick={() => byLibrary ? playback?.refreshFromLibrary?.() : setConfirm(true)} reason={scan.reason} size="control" tone="playback" variant={orderSaved ? "tinted" : "primary"} wrapProps={{ "data-part": "song-scan", "data-scan": scan.kind }}>{scan.label}</ReasonButton>
       )}
       headingId="song-order-heading"
       persistKey={SONG_ORDER_OPEN_KEY}
