@@ -606,6 +606,23 @@ describe("the one button: when it is off, and why", () => {
     expect(addButton()).toHaveAccessibleDescription("Select a song");
   });
 
+  it("draws the reason as a small neutral pill beside the button (same row), not as heading-like text, never red", async () => {
+    view();
+    await ready();
+    const pill = screen.getByTestId("add-songs-reason");
+    expect(pill).toHaveAttribute("data-reason-pill", "true");
+    expect(pill.tagName).toBe("SPAN");
+    expect(pill).toHaveClass("rounded-ds-full", "border", "border-edge", "bg-surface-950");
+    expect(pill.className).not.toMatch(/danger|red/);
+    expect(pill.closest("h1, h2, h3, h4, h5, h6, p")).toBeNull();
+    expect(pill.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    // The same words describe the button, and the pill is in the button's own wrapping row (under it on a phone).
+    expect(addButton()).toHaveAccessibleDescription("Choose a playlist");
+    const row = addButton().closest("[data-part=buttons]")!;
+    expect(row).toContainElement(pill);
+    expect(row).toHaveClass("flex", "flex-wrap", "items-center");
+  });
+
   it("is off until the section is a header the playlist has", async () => {
     window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify({ playlist_id: "PL-SUNDAY", places: { "PL-SUNDAY": "Worship" } }));
     view();

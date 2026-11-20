@@ -60,15 +60,16 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
       {playing && !running && !finished && reason !== PLAYING_WORDS && <SectionNotice tone="info"><span data-testid="add-songs-playing">{PLAYING_WORDS}</span></SectionNotice>}
       {add.problem && <SectionNotice tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></SectionNotice>}
       <PresenterSongList add={add} headingId={ids.songs} />
-      <div className="space-y-3">
-        <Reason id={ids.reason}>{reason}</Reason>
-        {!running && !finished && (
-          <ActionRow>
-            <ActionButton aria-describedby={reason ? ids.reason : undefined} busy={working} busyLabel={IMPORTING} disabled={Boolean(add.blockedBy) || working} label={IMPORT_SONGS} onClick={() => void add.run()} tone="presentation" variant="primary" />
-            {add.canSkip && <ActionButton label={SKIP_AND_IMPORT} onClick={add.skipAndAdd} tone="presentation" />}
-          </ActionRow>
-        )}
-      </div>
+      {/* The reason is a small neutral pill BESIDE the button (it wraps under it on a phone), so it is not read as a heading. */}
+      {!running && !finished ? (
+        <ActionRow align="center">
+          <ActionButton aria-describedby={reason ? ids.reason : undefined} busy={working} busyLabel={IMPORTING} disabled={Boolean(add.blockedBy) || working} label={IMPORT_SONGS} onClick={() => void add.run()} tone="presentation" variant="primary" />
+          {add.canSkip && <ActionButton label={SKIP_AND_IMPORT} onClick={add.skipAndAdd} tone="presentation" />}
+          <Reason id={ids.reason}>{reason}</Reason>
+        </ActionRow>
+      ) : (
+        <div><Reason id={ids.reason}>{reason}</Reason></div>
+      )}
       {phase === "previewed" && made && <PreviewBody add={add} headingId={ids.preview} plan={made} />}
       {running && <Progress add={add} headingId={ids.progress} plan={made} />}
       {finished && (

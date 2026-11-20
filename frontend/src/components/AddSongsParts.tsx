@@ -6,7 +6,7 @@ import type { AddSongsPlan } from "../propresenterLink";
 import { placeHeading, songStatus, summaryParts } from "./addSongsStatus";
 import { END_OF_PLAYLIST, isStuck, neighbours, playlistLabel, STALE_WORDS, twoHeadersLine } from "./addSongsWording";
 import { StatusChip, StatusRow } from "./StatusChips";
-import { SectionNotice, SettingsSection } from "./sections";
+import { ReasonPill, SectionNotice, SettingsSection } from "./sections";
 import { Field } from "./ui/Field";
 import { Select } from "./ui/Select";
 import { cx } from "./ui/cx";
@@ -100,12 +100,7 @@ export function PreviewBody({ add, plan, headingId }: { add: AddSongsController;
   );
 }
 
-/** Above the button, when something stops it: why, in a few words. `id` is what the button's `aria-describedby` points at. */
+/** Beside the button, when something stops it: why, in a few words, as the shared neutral pill (`ReasonPill`). `id` is what the button's `aria-describedby` points at. */
 export function Reason({ id, children }: { id: string; children?: ReactNode }) {
-  if (!children) return null;
-  return (
-    <div className="min-w-0 space-y-1" data-testid="add-songs-reason-box">
-      <p className="break-words text-sm font-semibold text-ink" data-testid="add-songs-reason" id={id}>{children}</p>
-    </div>
-  );
+  return <ReasonPill id={id} testId="add-songs-reason">{children}</ReasonPill>;
 }

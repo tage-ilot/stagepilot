@@ -1,11 +1,9 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProPresenterStatusResponse } from "../types";
+import { readIndexCss } from "./sections/readIndexCss";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 
 // Presentation settings: Timer and Look on one line, each listing the real choices and marking the current one (no "Current Look"
@@ -76,14 +74,14 @@ describe("Presentation settings: no Timeout field", () => {
 });
 
 describe("Presentation settings: Timer and Look on one line", () => {
-  it("the two fields share one pair grid (side by side from 30rem of panel width, stacked below it, so stacked at 360 px)", () => {
+  it("the two fields share one pair grid (side by side from 30rem of panel width, stacked below it, so stacked at 360 px)", async () => {
     const { timer, look } = panel();
     const grid = timer.closest(".section-fields");
     expect(grid).toHaveAttribute("data-columns", "pair");
     expect(grid).toHaveClass("grid", "gap-4");
     expect(look.closest(".section-fields")).toBe(grid);
     expect(grid!.querySelectorAll("[data-field]")).toHaveLength(2);
-    const css = readFileSync(resolve(__dirname, "../index.css"), "utf8");
+    const css = await readIndexCss();
     expect(css).toMatch(/@container \(min-width: 30rem\) \{\s*\.section-fields\[data-columns="pair"\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   });
 

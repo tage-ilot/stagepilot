@@ -67,7 +67,7 @@ describe("every configuration page follows PanelLayout's order", () => {
     const parts = partsOf(panel);
     expectPanelOrder(parts);
     // The Presenter Link section (the page's own content) comes after the actions and before the Save bar, with the Link ready.
-    expect(parts).toEqual(["connection", "settings", "settings", "actions", "content", "saveBar", "summary"]);
+    expect(parts).toEqual(["connection", "settings", "actions", "content", "saveBar", "summary"]);
   });
 
   it("Services (Planning Center)", () => {
