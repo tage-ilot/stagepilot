@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import {
-  backupName, canTryAgain, END_OF_PLAYLIST, guessAnnouncement, guessLine, guessNote, IMPORT_SONGS, IMPORTING, isStuck, mappingLines, neighbours,
-  orderWords, ordinal, OUTCOME, playlistLabel, resultCounts, selectedWords, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
+  backupName, canTryAgain, CHANGE_FILE, END_OF_PLAYLIST, fileLabels, fileWords, guessAnnouncement, guessLine, guessNote, IMPORT_SONGS, IMPORTING, isStuck, mappingLines, neighbours,
+  orderWords, ordinal, OUTCOME, playlistLabel, resultCounts, selectedWords, usingPhrase, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
 } from "./addSongsWording";
 
 const sections = (...names: string[]) => ({ sections: names.map((name, i) => ({ name, start: i, end: i + 1 })) });
@@ -192,5 +192,23 @@ describe("a title-only add", () => {
     expect(songSentence(song, null)).toBe("Added as it is in ProPresenter as \u201CPlain\u201D: no copy, no new arrangement, no key change.");
     expect(songSentence({ ...song, already_in_playlist: true }, null)).toContain("It is already in this playlist, so it is not added again.");
     expect(isStuck(song)).toBe(false);
+  });
+});
+
+describe("the files of a song with more than one", () => {
+  it("a file is named without its library and without .pro", () => {
+    expect(fileWords("Songs / Firm Foundation (Live).pro")).toBe("Firm Foundation (Live)");
+    expect(fileWords("Firm Foundation.PRO")).toBe("Firm Foundation");
+    expect(CHANGE_FILE).toBe("Change");
+  });
+
+  it("the buttons add the library only for a name two libraries share", () => {
+    expect(fileLabels(["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"])).toEqual(["Firm Foundation (Live)", "Firm Foundation"]);
+    expect(fileLabels(["Songs / Firm Foundation.pro", "Other / Firm Foundation.pro", "Songs / Other Song.pro"])).toEqual(["Songs / Firm Foundation", "Other / Firm Foundation", "Other Song"]);
+  });
+
+  it("the quiet phrase is six words at most for an ordinary name", () => {
+    expect(usingPhrase("Songs / Firm Foundation (Live).pro")).toBe("Using \u201CFirm Foundation (Live)\u201D");
+    expect(usingPhrase("Songs / Firm Foundation (Live).pro").split(" ").length).toBeLessThanOrEqual(6);
   });
 });

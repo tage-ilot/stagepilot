@@ -1,15 +1,15 @@
 //! The preview: what would be done, decided from what ProPresenter has now. Reads only.
 
 use super::{
-    guesses_of, AddSongs, MappingLine, Place, Plan, PlanRequest, PlaylistPlan, SongAction,
-    SongPlan, WantedSong, MAX_SONGS,
+    guesses_of, AddSongs, ChosenBy, MappingLine, Place, Plan, PlanRequest, PlaylistPlan,
+    SongAction, SongPlan, WantedSong, MAX_SONGS,
 };
 use crate::link::api::{ApiError, LibraryEntry, PlaylistRef};
 use crate::link::{HostInfo, IndexEntry, LibraryFile, LinkError, PLAYBACK_LIBRARY, SONGS_LIBRARY};
 use crate::pro_file::{parse_key, resolve, unmapped_names, How, Mapped, Song};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// The longest file name made (without `.pro`).
 const MAX_NAME: usize = 80;
@@ -97,6 +97,53 @@ pub(super) fn stem(file: &str) -> &str {
 
 fn lower(name: &str) -> String {
     name.trim().to_lowercase()
+}
+
+/// A title or a file name to compare: lower case, trimmed, single spaces.
+fn same_key(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// A file as `choices` lists it and as a pick writes it: `Songs / Firm Foundation.pro`.
+pub(super) fn file_label(library: &str, file: &str) -> String {
+    format!("{library} / {file}")
+}
+
+/// Where the person's pick is among the candidates (written as `choices` lists them); `None` when nothing was picked or the
+/// pick is none of them.
+pub(super) fn picked_index(pick: Option<&String>, labels: &[String]) -> Option<usize> {
+    let pick = pick?;
+    labels.iter().position(|l| l == pick)
+}
+
+/// The title rule: the one candidate whose file name (without `.pro`) is the song's title. `None` when none or more than one is.
+pub(super) fn title_index(title: &str, files: &[&str]) -> Option<usize> {
+    let wanted = same_key(title);
+    if wanted.is_empty() {
+        return None;
+    }
+    let mut hits = files
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| same_key(stem(f)) == wanted)
+        .map(|(i, _)| i);
+    let first = hits.next()?;
+    hits.next().is_none().then_some(first)
+}
+
+/// The one plain line that says a file was used without the person having to ask for it.
+pub(super) fn used_note(by: ChosenBy, file: &str, playback_title: bool) -> String {
+    let name = stem(file);
+    match by {
+        ChosenBy::Pick => format!("Used \"{name}\": the file you picked."),
+        ChosenBy::Title if playback_title => {
+            format!("Used \"{name}\": its name matches the Playback title.")
+        }
+        ChosenBy::Title => format!("Used \"{name}\": its name matches the title."),
+    }
 }
 
 /// The lowest `n` from 1 for which `<base> (n)` is not taken; the name is taken then.
@@ -313,7 +360,7 @@ impl AddSongs {
         ordered.sort_by_key(|w| w.position);
         for wanted in ordered {
             songs.push(
-                self.plan_song(wanted, &world, &mut taken, &in_playlist)
+                self.plan_song(wanted, &world, &mut taken, &in_playlist, &request.sources)
                     .await,
             );
         }
@@ -360,7 +407,7 @@ impl AddSongs {
             can_import: world.info.can_import,
             warnings,
         };
-        plan.plan_id = plan_id(&plan);
+        plan.plan_id = plan_id(&plan, &request.sources);
         plan.propresenter = world.version;
         Ok(plan)
     }
@@ -371,7 +418,9 @@ impl AddSongs {
         world: &World,
         taken: &mut BTreeSet<String>,
         in_playlist: &HashSet<String>,
+        sources: &BTreeMap<String, String>,
     ) -> SongPlan {
+        let pick = sources.get(&wanted.ref_id);
         let mut plan = SongPlan {
             ref_id: wanted.ref_id.clone(),
             title: wanted.title.clone(),
@@ -384,6 +433,8 @@ impl AddSongs {
             import_as: None,
             reason: None,
             choices: Vec::new(),
+            chosen_by: None,
+            chosen_file: None,
             notes: Vec::new(),
             mapping: Vec::new(),
             guesses: Vec::new(),
@@ -396,7 +447,7 @@ impl AddSongs {
             plan
         };
         if wanted.as_is {
-            return Self::plan_as_is(plan, wanted, world, in_playlist);
+            return Self::plan_as_is(plan, wanted, world, in_playlist, pick);
         }
         let Some(id) = wanted.content_id else {
             return stuck(
@@ -475,7 +526,7 @@ impl AddSongs {
             if let Some(newest) = copies.first() {
                 // Only earlier copies exist: build from the newest.
                 return self
-                    .plan_copy(plan, wanted, &[(*newest).clone()], taken, true)
+                    .plan_copy(plan, wanted, &[(*newest).clone()], taken, true, pick)
                     .await;
             }
             return self.plan_import(plan, wanted, world, taken);
@@ -485,7 +536,7 @@ impl AddSongs {
             .take(MAX_SOURCES_LOOKED_AT)
             .cloned()
             .collect();
-        self.plan_copy(plan, wanted, &candidates, taken, false)
+        self.plan_copy(plan, wanted, &candidates, taken, false, pick)
             .await
     }
 
@@ -553,6 +604,7 @@ impl AddSongs {
         candidates: &[IndexEntry],
         taken: &mut BTreeSet<String>,
         from_copy: bool,
+        pick: Option<&String>,
     ) -> SongPlan {
         struct Candidate {
             entry: IndexEntry,
@@ -578,32 +630,58 @@ impl AddSongs {
             return plan;
         }
         let mapped = |c: &Candidate| c.mapping.iter().all(Mapped::is_mapped);
+        let label = |c: &Candidate| file_label(&c.entry.library, &c.entry.file);
+        let mut settled: Option<ChosenBy> = None;
+        let mut offered: Vec<String> = Vec::new();
         let chosen: &Candidate = if read.len() == 1 {
             &read[0]
         } else {
+            let labels: Vec<String> = read.iter().map(label).collect();
             let good: Vec<&Candidate> = read.iter().filter(|c| c.full && mapped(c)).collect();
-            match good.as_slice() {
-                [one] => one,
-                [] => {
-                    // None works: say why for the one that is closest.
-                    read.iter()
-                        .min_by_key(|c| c.mapping.iter().filter(|m| !m.is_mapped()).count())
-                        .unwrap_or(&read[0])
-                }
-                several => {
-                    plan.action = SongAction::NeedsChoice;
-                    plan.choices = several
-                        .iter()
-                        .map(|c| format!("{} / {}", c.entry.library, c.entry.file))
-                        .collect();
-                    plan.reason = Some(
-                        "More than one file in ProPresenter is this song and StagePilot does not guess which to use. Remove the extra files in ProPresenter or leave this song out."
-                            .into(),
-                    );
-                    return plan;
+            if let Some(i) = picked_index(pick, &labels) {
+                // The person's pick is used as it is: a file that cannot make the arrangement says why below.
+                settled = Some(ChosenBy::Pick);
+                offered = if good.len() > 1 && good.iter().any(|c| label(c) == labels[i]) {
+                    good.iter().map(|c| label(c)).collect()
+                } else {
+                    labels
+                };
+                &read[i]
+            } else {
+                match good.as_slice() {
+                    [one] => one,
+                    [] => {
+                        // None works: say why for the one that is closest.
+                        read.iter()
+                            .min_by_key(|c| c.mapping.iter().filter(|m| !m.is_mapped()).count())
+                            .unwrap_or(&read[0])
+                    }
+                    several => {
+                        let names: Vec<&str> =
+                            several.iter().map(|c| c.entry.file.as_str()).collect();
+                        offered = several.iter().map(|c| label(c)).collect();
+                        match title_index(&wanted.title, &names) {
+                            Some(i) => {
+                                settled = Some(ChosenBy::Title);
+                                several[i]
+                            }
+                            None => {
+                                plan.action = SongAction::NeedsChoice;
+                                plan.choices = offered;
+                                plan.reason = Some("Two files are this song. Pick one.".into());
+                                return plan;
+                            }
+                        }
+                    }
                 }
             }
         };
+        if let Some(by) = settled {
+            plan.chosen_by = Some(by);
+            plan.chosen_file = Some(label(chosen));
+            plan.choices = offered;
+            plan.notes.push(used_note(by, &chosen.entry.file, true));
+        }
         plan.mapping = chosen
             .mapping
             .iter()
@@ -693,13 +771,20 @@ fn key_note(key: Option<&str>) -> Option<String> {
 }
 
 /// The identity of a plan: a hash of everything that decides what apply would do.
-fn plan_id(plan: &Plan) -> String {
+fn plan_id(plan: &Plan, sources: &BTreeMap<String, String>) -> String {
     let mut copy = plan.clone();
     copy.plan_id = String::new();
     copy.propresenter = None;
     let bytes = serde_json::to_vec(&copy).unwrap_or_default();
     let mut digest = Sha256::new();
     digest.update(&bytes);
+    // The picks the person made are part of what was previewed: another pick is another plan.
+    for (ref_id, file) in sources {
+        digest.update(ref_id.as_bytes());
+        digest.update([2]);
+        digest.update(file.as_bytes());
+        digest.update([3]);
+    }
     // `source_file` is not part of the JSON but is part of what apply does.
     for song in &copy.songs {
         if let Some((library, file)) = &song.source_file {

@@ -3,8 +3,8 @@
 
 use serde_json::{json, Value};
 use stagepilot_propresenter::link::add_songs::{
-    AddSongs, ApplyOutcome, ApplyRefusal, Event, Guard, Place, PlanRequest, Progress, SongAction,
-    SongStatus, Timing, TitleFound, WantedSong,
+    AddSongs, ApplyOutcome, ApplyRefusal, ChosenBy, Event, Guard, Place, PlanRequest, Progress,
+    SongAction, SongStatus, Timing, TitleFound, WantedSong,
 };
 use stagepilot_propresenter::link::api::fake::{FakeApi, Loading};
 use stagepilot_propresenter::link::api::{ApiError, Layers, ProPresenterApi};
@@ -208,6 +208,7 @@ fn request(rig: &Rig, songs: Vec<WantedSong>, place: Place) -> PlanRequest {
         songs,
         playlist_id: rig.playlist.clone(),
         place,
+        sources: Default::default(),
     }
 }
 
@@ -437,7 +438,7 @@ async fn a_song_not_in_propresenter_is_imported_then_copied_when_it_can_be() {
 async fn several_files_for_one_song_take_the_one_that_works_or_ask() {
     let host = Arc::new(
         FakeHost::new()
-            .with_file("Songs", "Gamma.pro", &song_numbered("Gamma", 77, 1))
+            .with_file("Songs", "Gamma one.pro", &song_numbered("Gamma", 77, 1))
             .with_file("Songs", "Gamma copy.pro", &song_numbered("Gamma", 77, 2))
             // The third one has no Full arrangement and a name that does not match.
             .with_file(
@@ -463,6 +464,7 @@ async fn several_files_for_one_song_take_the_one_that_works_or_ask() {
         songs: vec![wanted("1", "Gamma", 1, Some(77), names)],
         playlist_id: playlist.clone(),
         place: Place::End,
+        sources: Default::default(),
     };
     let plan = engine.preview(&ask(&["Intro", "Chorus"])).await.unwrap();
     assert_eq!(
@@ -503,6 +505,7 @@ async fn several_files_for_one_song_take_the_one_that_works_or_ask() {
             songs: vec![wanted("1", "Gamma", 1, Some(77), &["Intro", "Chorus"])],
             playlist_id: playlist2,
             place: Place::End,
+            sources: Default::default(),
         })
         .await
         .unwrap();
@@ -831,6 +834,7 @@ async fn a_song_from_the_playback_library_alone_is_copied_from_its_newest_copy()
             songs: vec![wanted("1", "Solo", 1, Some(55), &["Intro", "Chorus"])],
             playlist_id: playlist,
             place: Place::End,
+            sources: Default::default(),
         })
         .await
         .unwrap();
@@ -2182,6 +2186,7 @@ async fn songs_land_at_the_end_of_the_chosen_section_or_the_end_of_the_playlist(
             songs: vec![titled("t1", "Beta", 1)],
             playlist_id: playlist.clone(),
             place: place.clone(),
+            sources: Default::default(),
         };
         let plan = rig.engine.preview(&req).await.unwrap();
         assert!(plan.can_apply, "{place:?}: {:?}", plan.playlist.blocked);
@@ -2212,6 +2217,7 @@ async fn a_header_name_the_playlist_has_twice_is_refused_with_a_plain_line() {
         songs: vec![titled("t1", "Beta", 1)],
         playlist_id: playlist,
         place: Place::AfterHeader("Worship".into()),
+        sources: Default::default(),
     };
     let plan = rig.engine.preview(&req).await.unwrap();
     assert_eq!(
@@ -2219,4 +2225,453 @@ async fn a_header_name_the_playlist_has_twice_is_refused_with_a_plain_line() {
         Some("More than one header in this playlist is named \"Worship\". Pick another place.")
     );
     assert!(!plan.can_apply);
+}
+
+// ---- F12: the person picks the file of a song that has more than one --------------------------------------------------------
+
+const FIRM: u64 = 5150;
+
+/// One song (mtID 5150) in two files of the Songs library, both with every section the arrangement asks for.
+fn firm_foundation(first: &str, second: &str) -> Rig {
+    rig_from(
+        Arc::new(
+            FakeHost::new()
+                .with_file("Songs", "Alpha.pro", &alpha())
+                .with_file(
+                    "Songs",
+                    first,
+                    &song_numbered("Firm Foundation", FIRM, 0xF1000000),
+                )
+                .with_file(
+                    "Songs",
+                    second,
+                    &song_numbered("Firm Foundation", FIRM, 0xF2000000),
+                ),
+        ),
+        Loading::Immediately,
+    )
+}
+
+fn firm_request(rig: &Rig, title: &str, picks: &[(&str, &str)]) -> PlanRequest {
+    let mut req = request(
+        rig,
+        vec![wanted(
+            "7",
+            title,
+            1,
+            Some(FIRM),
+            &["Intro", "Verse 1", "Chorus"],
+        )],
+        worship(),
+    );
+    for (ref_id, file) in picks {
+        req.sources
+            .insert((*ref_id).to_string(), (*file).to_string());
+    }
+    req
+}
+
+#[tokio::test]
+async fn two_files_of_one_song_ask_in_short_words_and_list_both() {
+    let rig = firm_foundation("Firm Foundation (Live).pro", "Firm Foundation (Studio).pro");
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[]))
+        .await
+        .unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::NeedsChoice);
+    assert_eq!(
+        song.choices,
+        vec![
+            "Songs / Firm Foundation (Live).pro".to_string(),
+            "Songs / Firm Foundation (Studio).pro".to_string()
+        ]
+    );
+    assert_eq!(
+        song.reason.as_deref(),
+        Some("Two files are this song. Pick one.")
+    );
+    assert_eq!((song.chosen_by, song.chosen_file.clone()), (None, None));
+    assert_eq!((plan.stuck, plan.can_apply), (1, false));
+}
+
+#[tokio::test]
+async fn a_pick_is_copied_from_and_another_pick_is_another_plan_that_apply_refuses_the_old_id_for()
+{
+    let rig = firm_foundation("Firm Foundation (Live).pro", "Firm Foundation (Studio).pro");
+    let live = "Songs / Firm Foundation (Live).pro";
+    let studio = "Songs / Firm Foundation (Studio).pro";
+    let first = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[("7", live)]))
+        .await
+        .unwrap();
+    let song = &first.songs[0];
+    assert_eq!(song.action, SongAction::Copy);
+    assert_eq!(song.source.as_deref(), Some(live));
+    assert_eq!(
+        song.source_file,
+        Some((
+            "Songs".to_string(),
+            "Firm Foundation (Live).pro".to_string()
+        ))
+    );
+    assert_eq!(song.file.as_deref(), Some("Firm Foundation (Live) (1)"));
+    assert_eq!(
+        (song.chosen_by, song.chosen_file.as_deref()),
+        (Some(ChosenBy::Pick), Some(live))
+    );
+    assert_eq!(
+        song.choices.len(),
+        2,
+        "the other file stays on offer so the person can change"
+    );
+    assert_eq!(song.mapping.len(), 3);
+    assert!(
+        song.notes
+            .iter()
+            .any(|n| n == "Used \"Firm Foundation (Live)\": the file you picked."),
+        "{:?}",
+        song.notes
+    );
+    assert!(first.can_apply);
+    let other = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[("7", studio)]))
+        .await
+        .unwrap();
+    assert_eq!(other.songs[0].source.as_deref(), Some(studio));
+    assert_ne!(
+        first.plan_id, other.plan_id,
+        "a different pick is a different plan"
+    );
+    // The same pick is the same plan.
+    let again = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[("7", live)]))
+        .await
+        .unwrap();
+    assert_eq!(first.plan_id, again.plan_id);
+    // Apply takes the request that was previewed: the old id is refused for the other pick and nothing is made.
+    let log = Log::default();
+    assert_eq!(
+        rig.engine
+            .apply(
+                &firm_request(&rig, "Firm Foundation", &[("7", studio)]),
+                &first.plan_id,
+                &[],
+                &Quiet,
+                &log
+            )
+            .await,
+        Err(ApplyRefusal::PlanChanged)
+    );
+    assert_eq!(
+        rig.engine
+            .apply(
+                &firm_request(&rig, "Firm Foundation", &[]),
+                &first.plan_id,
+                &[],
+                &Quiet,
+                &log
+            )
+            .await,
+        Err(ApplyRefusal::PlanChanged),
+        "no pick: the plan is another one"
+    );
+    assert!(rig
+        .host
+        .calls()
+        .iter()
+        .all(|c| !c.starts_with("create_file")));
+    let report = rig
+        .engine
+        .apply(
+            &firm_request(&rig, "Firm Foundation", &[("7", live)]),
+            &first.plan_id,
+            &[],
+            &Quiet,
+            &log,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        report.outcome,
+        ApplyOutcome::Done,
+        "{report:#?} {:?} {:?}",
+        log.texts(),
+        rig.host.calls()
+    );
+    assert!(rig
+        .host
+        .file("Playback", "Firm Foundation (Live) (1).pro")
+        .is_some());
+}
+
+#[tokio::test]
+async fn a_pick_that_is_none_of_the_songs_files_is_ignored_and_never_an_error() {
+    let rig = firm_foundation("Firm Foundation (Live).pro", "Firm Foundation (Studio).pro");
+    for pick in [
+        "Songs / Alpha.pro",
+        "Songs / Firm Foundation (Live)",
+        "firm foundation (live).pro",
+        "",
+        "Playback / Firm Foundation (Live) (1).pro",
+    ] {
+        let plan = rig
+            .engine
+            .preview(&firm_request(&rig, "Firm Foundation", &[("7", pick)]))
+            .await
+            .unwrap();
+        assert_eq!(plan.songs[0].action, SongAction::NeedsChoice, "{pick:?}");
+        assert_eq!(plan.songs[0].choices.len(), 2, "{pick:?}");
+        assert_eq!(plan.songs[0].chosen_by, None);
+    }
+    // A pick for a key that is no song of the request changes nothing about the song.
+    let plan = rig
+        .engine
+        .preview(&firm_request(
+            &rig,
+            "Firm Foundation",
+            &[("99", "Songs / Firm Foundation (Live).pro")],
+        ))
+        .await
+        .unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+}
+
+#[tokio::test]
+async fn a_picked_file_that_cannot_make_the_arrangement_is_blocked_in_its_own_words_not_swapped() {
+    let host = Arc::new(
+        FakeHost::new()
+            .with_file(
+                "Songs",
+                "Firm Foundation (Live).pro",
+                &song_numbered("Firm Foundation", FIRM, 1),
+            )
+            .with_file(
+                "Songs",
+                "Firm Foundation (Short).pro",
+                &SyntheticSong::new("Firm Foundation")
+                    .id(FIRM)
+                    .seed(2)
+                    .group("Intro", &["i"])
+                    .group("Verse 1", &["v"])
+                    .arrangement("Full", &[0, 1])
+                    .selected(0)
+                    .build(),
+            ),
+    );
+    let rig = rig_from(host, Loading::Immediately);
+    // Nobody picks: only the Live file works, it is used (as before).
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[]))
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.songs[0].source.as_deref(),
+        Some("Songs / Firm Foundation (Live).pro")
+    );
+    assert_eq!(plan.songs[0].chosen_by, None);
+    // The person picks the Short one: they see why, and the other file stays on offer.
+    let short = "Songs / Firm Foundation (Short).pro";
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[("7", short)]))
+        .await
+        .unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::Blocked);
+    assert!(
+        song.reason
+            .as_deref()
+            .unwrap()
+            .contains("no group with that name in the song: Chorus"),
+        "{:?}",
+        song.reason
+    );
+    assert_eq!(
+        (song.chosen_by, song.chosen_file.as_deref()),
+        (Some(ChosenBy::Pick), Some(short))
+    );
+    assert_eq!(song.choices.len(), 2);
+    assert!(song.mapping.iter().any(|m| m.how == "missing"));
+    assert!(!plan.can_apply);
+}
+
+#[tokio::test]
+async fn the_title_rule_uses_the_one_file_named_like_the_title_and_says_so() {
+    let rig = firm_foundation("Firm Foundation (Live).pro", "Firm Foundation.pro");
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation (Live)", &[]))
+        .await
+        .unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::Copy);
+    assert_eq!(
+        song.source.as_deref(),
+        Some("Songs / Firm Foundation (Live).pro")
+    );
+    assert_eq!(
+        (song.chosen_by, song.chosen_file.as_deref()),
+        (
+            Some(ChosenBy::Title),
+            Some("Songs / Firm Foundation (Live).pro")
+        )
+    );
+    assert!(
+        song.notes
+            .iter()
+            .any(|n| n == "Used \"Firm Foundation (Live)\": its name matches the Playback title."),
+        "{:?}",
+        song.notes
+    );
+    assert_eq!(song.choices.len(), 2);
+    assert!(plan.can_apply);
+    // Case and spacing do not matter.
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "  firm   FOUNDATION ", &[]))
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.songs[0].source.as_deref(),
+        Some("Songs / Firm Foundation.pro")
+    );
+    assert_eq!(plan.songs[0].chosen_by, Some(ChosenBy::Title));
+    // A pick beats the rule.
+    let plan = rig
+        .engine
+        .preview(&firm_request(
+            &rig,
+            "Firm Foundation",
+            &[("7", "Songs / Firm Foundation (Live).pro")],
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.songs[0].source.as_deref(),
+        Some("Songs / Firm Foundation (Live).pro")
+    );
+    assert_eq!(plan.songs[0].chosen_by, Some(ChosenBy::Pick));
+}
+
+#[tokio::test]
+async fn the_title_rule_does_not_decide_when_two_names_or_none_match() {
+    // Two names that are the title once case and spacing are ignored.
+    let rig = firm_foundation("Firm Foundation.pro", "FIRM  Foundation.pro");
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "firm foundation", &[]))
+        .await
+        .unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+    assert_eq!(plan.songs[0].chosen_by, None);
+    // No name is the title.
+    let rig = firm_foundation("Firm Foundation (Live).pro", "Firm Foundation (Studio).pro");
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "Firm Foundation", &[]))
+        .await
+        .unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+    // The title is a title of nothing.
+    let plan = rig
+        .engine
+        .preview(&firm_request(&rig, "   ", &[]))
+        .await
+        .unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+}
+
+#[tokio::test]
+async fn a_song_asked_for_by_its_title_takes_a_pick_and_the_title_rule_too() {
+    let host = Arc::new(
+        FakeHost::new()
+            .with_file(
+                "Songs",
+                "Beta.pro",
+                &song_numbered("Beta", 1002, 0xB2000000),
+            )
+            .with_file(
+                "Songs",
+                "BETA.pro",
+                &song_numbered("Beta", 1002, 0xB3000000),
+            ),
+    );
+    let rig = rig_from(host, Loading::Immediately);
+    let ask = |picks: &[(&str, &str)]| {
+        let mut req = request(&rig, vec![titled("t1", "beta", 1)], worship());
+        for (k, v) in picks {
+            req.sources.insert((*k).to_string(), (*v).to_string());
+        }
+        req
+    };
+    let plan = rig.engine.preview(&ask(&[])).await.unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+    assert_eq!(
+        plan.songs[0].reason.as_deref(),
+        Some("Two files are this song. Pick one.")
+    );
+    assert_eq!(plan.songs[0].choices.len(), 2);
+    let plan = rig
+        .engine
+        .preview(&ask(&[("t1", "Songs / BETA.pro")]))
+        .await
+        .unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::AsIs);
+    assert_eq!(song.source.as_deref(), Some("Songs / BETA.pro"));
+    assert_eq!(song.file.as_deref(), Some("BETA"));
+    assert_eq!(song.chosen_by, Some(ChosenBy::Pick));
+    assert_eq!(song.choices.len(), 2);
+    assert!(plan.can_apply);
+    // A pick that is none of the entries is ignored.
+    let plan = rig
+        .engine
+        .preview(&ask(&[("t1", "Songs / Gamma.pro")]))
+        .await
+        .unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::NeedsChoice);
+    // The title rule: only one of the two entries is named exactly like the title (ProPresenter cuts names at a dot).
+    let host = Arc::new(
+        FakeHost::new()
+            .with_file(
+                "Songs",
+                "Emptied (feat Tyana Reynolds).pro",
+                &song_numbered("Emptied", 3003, 1),
+            )
+            .with_file(
+                "Songs",
+                "Emptied (feat. Tyana Reynolds).pro",
+                &song_numbered("Emptied", 3003, 2),
+            ),
+    );
+    let rig = rig_from(host, Loading::Immediately);
+    let plan = rig
+        .engine
+        .preview(&request(
+            &rig,
+            vec![titled("t1", "Emptied (feat. Tyana Reynolds)", 1)],
+            worship(),
+        ))
+        .await
+        .unwrap();
+    let song = &plan.songs[0];
+    assert_eq!(song.action, SongAction::AsIs);
+    assert_eq!(
+        song.source.as_deref(),
+        Some("Songs / Emptied (feat. Tyana Reynolds).pro")
+    );
+    assert_eq!(song.chosen_by, Some(ChosenBy::Title));
+    assert!(
+        song.notes
+            .iter()
+            .any(|n| n == "Used \"Emptied (feat. Tyana Reynolds)\": its name matches the title."),
+        "{:?}",
+        song.notes
+    );
 }

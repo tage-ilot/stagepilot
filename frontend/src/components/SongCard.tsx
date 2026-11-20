@@ -126,16 +126,18 @@ export interface SongCardShellProps {
   after?: ReactNode;
   /** The list item's own attributes (`data-*`, `title`). */
   item?: Omit<ComponentPropsWithoutRef<"li">, "className" | "children"> & DataAttributes;
+  /** Controls UNDER the card's own button, inside the card's border and still in its list item (the Presenter Link's file buttons): never inside the button, which must not hold another one. */
+  under?: ReactNode;
 }
 
 /**
  * ONE song card, around a `SongCardBody`: the border and fill, the outline when selected, a 44 px target. Used by the Lighting tab's
  * strip (press mode) and the Presenter Link's song list (check mode), so the two read as the same thing.
  */
-export function SongCardShell({ look, mode = "press", selected = false, disabled = false, label, describedBy, onActivate, children, after, item }: SongCardShellProps) {
+export function SongCardShell({ look, mode = "press", selected = false, disabled = false, label, describedBy, onActivate, children, after, item, under }: SongCardShellProps) {
   const check = mode === "check";
   return (
-    <li className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${look} ${selected ? SELECTED : ""}`} {...item}>
+    <li className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${under ? "flex-wrap " : ""}${look} ${selected ? SELECTED : ""}`} {...item}>
       {mode === "static" ? <div className={PRESSABLE.replace(" touch-manipulation", "")} data-part="card">{children}</div> : (
         <button
           aria-checked={check ? selected : undefined}
@@ -151,7 +153,8 @@ export function SongCardShell({ look, mode = "press", selected = false, disabled
           {children}
         </button>
       )}
-            {after}
+      {after}
+      {under && <div className="min-w-0 basis-full px-2.5 pb-2" data-part="under">{under}</div>}
     </li>
   );
 }

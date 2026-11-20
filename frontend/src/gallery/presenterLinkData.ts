@@ -61,7 +61,7 @@ export const withoutPlayback = (): PlaybackLibraryController => libraryControlle
 
 // ---- what the routes answer --------------------------------------------------------------------------------------------------
 const row = (over: Partial<AddSongsSong> & Pick<AddSongsSong, "ref_id" | "title">): AddSongsSong => ({
-  position: 1, content_id: null, action: "copy", file: `${over.title} (1)`, source: `Songs / ${over.title}.pro`, import_as: null, reason: null, choices: [], notes: [], mapping: [], guesses: [], sections: 7, key: null, already_in_playlist: false, ...over,
+  position: 1, content_id: null, action: "copy", file: `${over.title} (1)`, source: `Songs / ${over.title}.pro`, import_as: null, reason: null, choices: [], chosen_by: null, chosen_file: null, notes: [], mapping: [], guesses: [], sections: 7, key: null, already_in_playlist: false, ...over,
 });
 const planOf = (songs: AddSongsSong[]): AddSongsPlan => {
   const stuck = songs.filter((s) => s.action === "blocked" || s.action === "needs_choice").length;
@@ -86,7 +86,7 @@ export const PREVIEW_ALL_STATUSES = planOf([
   row({ ref_id: REF(0), title: "Holy Forever", content_id: 43302, key: "G", action: "reuse", file: "Holy Forever (1)", already_in_playlist: true }),
   row({ ref_id: REF(1), title: "Battle Belongs", content_id: 23126, key: "Ab", action: "blocked", file: null, reason: MAC }),
   row({ ref_id: REF(2), title: "Gratitude", content_id: 31877, key: "A", action: "reuse", file: "Gratitude (1)", already_in_playlist: true }),
-  row({ ref_id: REF(3), title: "Firm Foundation", content_id: 8412, key: "E", action: "needs_choice", file: null, reason: "More than one file in ProPresenter is this song and StagePilot does not guess which to use. Remove the extra files in ProPresenter or leave this song out.", choices: ["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"] }),
+  row({ ref_id: REF(3), title: "Firm Foundation", content_id: 8412, key: "E", action: "needs_choice", file: null, reason: "Two files are this song. Pick one.", choices: ["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"] }),
   row({ ref_id: REF(4), title: "Living Hope", content_id: 21874, key: "D", action: "import_then_copy", file: "Living Hope (1)", import_as: "Living Hope" }),
   row({ ref_id: REF(5), title: "Graves Into Gardens", content_id: 24017, key: "B", action: "blocked", file: null, reason: "These sections have no group with that name in the song: Bridge 2. Nothing is made for this song.", mapping: [{ section: "Bridge 2", group: null, how: "missing", line: "No group called Bridge 2." }] }),
   row({ ref_id: REF(6), title: "Goodness of God", content_id: null, key: "Bb", action: "blocked", file: null, reason: "Playback did not give this song's MultiTracks number, so StagePilot cannot find it in ProPresenter." }),
@@ -96,6 +96,24 @@ export const PREVIEW_ALL_STATUSES = planOf([
 ]);
 /** The same four with nothing blocked: the one button goes on and adds them. */
 export const PREVIEW_PLAYBACK_CLEAN = planOf(PREVIEW_PLAYBACK_STOPPED.songs.map((s) => (s.action === "blocked" ? { ...s, action: "copy" as const, file: "Firm Foundation (1)", reason: null } : s)));
+// ---- "Pick one": the person chooses the song's file on its card ------------------------------------------------------------------
+const FIRM_FILES = ["Songs / Firm Foundation (Live).pro", "Songs / Firm Foundation.pro"];
+const firm = (over: Partial<AddSongsSong>): AddSongsSong => row({ ref_id: REF(3), title: "Firm Foundation", content_id: 8412, key: "E", ...over });
+/** The four songs with Firm Foundation as given and Battle Belongs unable to import, so the preview stops there and the cards stay to be looked at. */
+const withFirm = (song: AddSongsSong) => planOf(PREVIEW_PLAYBACK_STOPPED.songs.map((s) => (s.title === "Firm Foundation" ? song : s.title === "Battle Belongs" ? row({ ref_id: REF(1), title: "Battle Belongs", content_id: 23126, key: "Ab", action: "blocked", file: null, reason: MAC }) : s)));
+/** Two files are this song and the name rule cannot tell: the card asks. */
+export const PREVIEW_PICK_ONE = withFirm(firm({ action: "needs_choice", file: null, source: null, reason: "Two files are this song. Pick one.", choices: FIRM_FILES }));
+/** The person pressed the first file. */
+export const PREVIEW_PICKED = withFirm(firm({
+  file: "Firm Foundation (Live) (1)", source: FIRM_FILES[0]!, choices: FIRM_FILES, chosen_by: "pick", chosen_file: FIRM_FILES[0]!,
+  notes: ["Used \"Firm Foundation (Live)\": the file you picked."], mapping: [{ section: "Verse 1", group: "Verse 1", how: "full", line: null }],
+}));
+/** The name rule decided: only one file is named like the Playback title, so nobody was asked. */
+export const PREVIEW_PICKED_BY_NAME = withFirm(firm({
+  file: "Firm Foundation (1)", source: FIRM_FILES[1]!, choices: FIRM_FILES, chosen_by: "title", chosen_file: FIRM_FILES[1]!,
+  notes: ["Used \"Firm Foundation\": its name matches the Playback title."], mapping: [{ section: "Verse 1", group: "Verse 1", how: "full", line: null }],
+}));
+
 /** Planning Center names: the three ProPresenter has go in as they are; the fourth cannot be ticked so it is not asked for. */
 export const PREVIEW_NAMES = planOf(["Holy Forever", "Battle Belongs", "Gratitude"].map((title, i) => row({ ref_id: `t${i + 1}`, title, action: "as_is", file: title, source: `Songs / ${title}.pro`, sections: 0 })));
 

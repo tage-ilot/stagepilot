@@ -10,7 +10,8 @@
 //! The rules around them: the same dashboard PIN, origin and remote-access rules as every other write route (the guards sit in
 //! front of the whole router, so a remote viewer cannot even ask for a preview); both POSTs need the ProPresenter Link ready;
 //! nothing starts and nothing goes on while a song is playing (Playback says playing, or StagePilot's own countdown runs);
-//! one job at a time; the body is small, strictly checked, and holds numbers and names, never a path.
+//! one job at a time; the body is small, strictly checked, and holds numbers and names, never a path. A preview may also carry
+//! `sources` (a song's `ref_id` to the file the person picked): it is lenient, what does not fit is ignored.
 
 use crate::runtime::Runtime;
 use crate::validation::{ok, Json};
@@ -28,7 +29,7 @@ use stagepilot_propresenter::link::add_songs::{
 };
 use stagepilot_propresenter::link::api::{ApiError, HttpApi, ProPresenterApi};
 use stagepilot_propresenter::link::status::LinkState;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -59,6 +60,8 @@ struct Stored {
     selection: Selection,
     playlist_id: String,
     place: Place,
+    /// The files the person picked, by the song's `ref_id`.
+    sources: BTreeMap<String, String>,
     at: Instant,
 }
 
@@ -503,6 +506,28 @@ struct PreviewBody {
     selection: Selection,
     playlist_id: String,
     place: Place,
+    sources: BTreeMap<String, String>,
+}
+
+/// The longest file text a pick may have (`Songs / <name>.pro`).
+const MAX_PICK: usize = 240;
+
+/// The picks of a preview request: song `ref_id` to the file as `choices` lists it. Never an error: what is not text, too long
+/// or has a control character is left out, and the engine ignores a pick that is none of that song's files.
+fn parse_sources(value: Option<&Value>) -> BTreeMap<String, String> {
+    let Some(Value::Object(map)) = value else {
+        return BTreeMap::new();
+    };
+    map.iter()
+        .filter_map(|(ref_id, file)| {
+            let file = file.as_str()?;
+            let plain = |t: &str| {
+                !t.is_empty() && t.chars().count() <= MAX_PICK && !t.chars().any(char::is_control)
+            };
+            (plain(ref_id) && plain(file)).then(|| (ref_id.clone(), file.to_string()))
+        })
+        .take(MAX_SONGS)
+        .collect()
 }
 
 fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
@@ -515,6 +540,7 @@ fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
             "playlist_id",
             "after_header",
             "place",
+            "sources",
         ],
     )?;
     let selection = match (
@@ -556,6 +582,7 @@ fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
         selection,
         playlist_id,
         place,
+        sources: parse_sources(map.get("sources")),
     })
 }
 
@@ -831,6 +858,7 @@ async fn preview(State(rt): State<Rt>, body: Bytes) -> Json {
         songs,
         playlist_id: asked.playlist_id.clone(),
         place: asked.place.clone(),
+        sources: asked.sources.clone(),
     };
     match engine.preview(&request).await {
         Ok(made) => {
@@ -840,6 +868,7 @@ async fn preview(State(rt): State<Rt>, body: Bytes) -> Json {
                     selection: asked.selection,
                     playlist_id: asked.playlist_id,
                     place: asked.place,
+                    sources: asked.sources,
                     at: Instant::now(),
                 },
             );
@@ -962,6 +991,7 @@ async fn prepare(
         songs,
         playlist_id: stored.playlist_id.clone(),
         place: stored.place.clone(),
+        sources: stored.sources.clone(),
     };
     let guard = PlayingGuard(rt.clone());
     let prepared = engine
@@ -1082,6 +1112,24 @@ mod tests {
             json!({"setlist_song_ids": [1], "playlist_id": "x", "place": "end", "path": "/etc"})
         ));
         assert!(parse_preview(&Bytes::from_static(b"[1]")).is_err());
+        // The picks are lenient: what does not fit is left out and never refuses the preview.
+        let picks = |sources: Value| {
+            parse_preview(&body(json!({
+                "setlist_song_ids": [1], "playlist_id": "x", "place": "end", "sources": sources
+            })))
+            .map_err(|_| "refused")
+            .unwrap()
+            .sources
+        };
+        assert_eq!(
+            picks(
+                json!({"1": "Songs / A.pro", "2": 5, "3": null, "": "Songs / A.pro", "4": "x\ny"})
+            ),
+            BTreeMap::from([("1".to_string(), "Songs / A.pro".to_string())])
+        );
+        assert!(picks(json!("Songs / A.pro")).is_empty());
+        assert!(picks(json!(["a"])).is_empty());
+        assert!(picks(json!({"1": "y".repeat(241)})).is_empty());
         assert!(parse_preview(&Bytes::from(vec![b' '; MAX_BODY + 1])).is_err());
     }
 }

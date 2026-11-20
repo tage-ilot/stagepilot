@@ -1,8 +1,8 @@
 //! A song asked for by its title alone (the person has no Playback data for it): it is found in ProPresenter's Songs library
 //! and goes into the playlist AS IT IS. Nothing is imported, copied or edited, and no arrangement or key is changed.
 
-use super::plan::{clean_name, stem, World};
-use super::{AddSongs, PlanError, SongAction, SongPlan, WantedSong};
+use super::plan::{clean_name, file_label, picked_index, stem, title_index, used_note, World};
+use super::{AddSongs, ChosenBy, PlanError, SongAction, SongPlan, WantedSong};
 use crate::link::{IndexEntry, SONGS_LIBRARY};
 use serde::Serialize;
 use std::collections::HashSet;
@@ -63,57 +63,71 @@ impl AddSongs {
     }
 
     /// The plan for a song asked for by its title: the one Songs entry with that title, as it is, or the reason it cannot be.
+    /// More than one entry: the person's pick, else the one whose file name is the title, else a choice to make.
     pub(super) fn plan_as_is(
         mut plan: SongPlan,
         wanted: &WantedSong,
         world: &World,
         in_playlist: &HashSet<String>,
+        pick: Option<&String>,
     ) -> SongPlan {
         let title = wanted.title.trim();
         let files = songs_titled(&world.index, title);
-        match files.as_slice() {
+        let (only, by): (&IndexEntry, Option<ChosenBy>) = match files.as_slice() {
             [] => {
                 plan.reason = Some(format!(
                     "ProPresenter does not have \"{title}\" in its Songs library. Playback's data is needed to import it."
                 ));
+                return plan;
             }
-            [only] => {
-                let name = stem(&only.file).to_string();
-                let uuid = world
-                    .songs
+            [only] => (only, None),
+            several => {
+                let labels: Vec<String> = several
                     .iter()
-                    .find(|e| e.display_name(SONGS_LIBRARY) == name)
-                    .and_then(|e| e.uuid.clone())
-                    .filter(|u| !u.is_empty());
-                match uuid {
+                    .map(|e| file_label(&e.library, &e.file))
+                    .collect();
+                let names: Vec<&str> = several.iter().map(|e| e.file.as_str()).collect();
+                let settled = match picked_index(pick, &labels) {
+                    Some(i) => Some((i, ChosenBy::Pick)),
+                    None => title_index(title, &names).map(|i| (i, ChosenBy::Title)),
+                };
+                plan.choices = labels;
+                match settled {
+                    Some((i, by)) => (several[i], Some(by)),
                     None => {
-                        plan.reason = Some(format!(
-                            "ProPresenter has \"{title}\" but does not list it yet. Open the Songs library in ProPresenter once, then press the button again."
-                        ));
-                    }
-                    Some(uuid) => {
-                        plan.action = SongAction::AsIs;
-                        plan.already_in_playlist = in_playlist.contains(&uuid.to_ascii_uppercase());
-                        plan.source = Some(format!("{SONGS_LIBRARY} / {}", only.file));
-                        plan.file = Some(name);
-                        plan.notes.push(
-                            "Added as it is in ProPresenter: no copy is made and its arrangement and key are not changed."
-                                .into(),
-                        );
+                        plan.action = SongAction::NeedsChoice;
+                        plan.reason = Some("Two files are this song. Pick one.".into());
+                        return plan;
                     }
                 }
             }
-            several => {
-                plan.action = SongAction::NeedsChoice;
-                plan.choices = several
-                    .iter()
-                    .map(|e| format!("{} / {}", e.library, e.file))
-                    .collect();
-                plan.reason = Some(format!(
-                    "More than one song in ProPresenter's Songs library is called \"{title}\" and StagePilot does not guess which. Remove the extra files in ProPresenter or leave this song out."
-                ));
-            }
+        };
+        let name = stem(&only.file).to_string();
+        let uuid = world
+            .songs
+            .iter()
+            .find(|e| e.display_name(SONGS_LIBRARY) == name)
+            .and_then(|e| e.uuid.clone())
+            .filter(|u| !u.is_empty());
+        let Some(uuid) = uuid else {
+            plan.reason = Some(format!(
+                "ProPresenter has \"{title}\" but does not list it yet. Open the Songs library in ProPresenter once, then press the button again."
+            ));
+            return plan;
+        };
+        plan.action = SongAction::AsIs;
+        plan.already_in_playlist = in_playlist.contains(&uuid.to_ascii_uppercase());
+        plan.source = Some(format!("{SONGS_LIBRARY} / {}", only.file));
+        plan.file = Some(name);
+        if let Some(by) = by {
+            plan.chosen_by = Some(by);
+            plan.chosen_file = Some(file_label(&only.library, &only.file));
+            plan.notes.push(used_note(by, &only.file, false));
         }
+        plan.notes.push(
+            "Added as it is in ProPresenter: no copy is made and its arrangement and key are not changed."
+                .into(),
+        );
         plan
     }
 }

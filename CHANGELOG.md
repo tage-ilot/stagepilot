@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Presenter Link: pick the song's file on its card.** When ProPresenter has the same MultiTracks song in two files (*Firm Foundation (Live)* and *Firm Foundation*), the song used to say **Pick one** and the only way on was to delete a file in ProPresenter. Now the card has one small button per file under the title: press one and the card turns into **New copy** or **Ready** with *Using “Firm Foundation (Live)”* and a **Change** button. StagePilot remembers the pick for that song (in this browser, by its mtID), so the next time it does not ask. Before asking at all it looks at the names: when exactly one file is named like the song's title, that file is used and the card says so. Nothing in ProPresenter changes until you press Import songs to ProPresenter, as before.
+
 - **Presenter Link: the reason next to Import songs to ProPresenter is a small pill.** *Choose a playlist* and *Select a song* used to be a line of bold text above the button that read like a heading. It is now a small grey pill with an icon beside the button (under it on a phone), never red; the words are also the button's hover text and screen-reader description.
 - **Song order: no key or BPM under the songs.** The rows of Playback's Song order section show the titles, the order, each song's length and the match or *Check order* stamp. The key and BPM chips are gone from that section only (song cards everywhere keep them).
 
