@@ -69,15 +69,15 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
       {marks?.guessed && <StatusChip {...STATUS.check} testId="add-songs-guessed" />}
     </span>
   );
-  // The order Playback plays, always on the card (no button, no heading): the section names, wrapping onto as many lines as it needs.
+  // The order Playback plays, always on the card (no button, no heading), UNDER the colored bar: the section names, wrapping onto as many lines as it needs.
   // Each name stays whole (Verse 2 never splits across two lines); the dot goes with the name before it.
   const orderText = hasOrder ? (
-    <span className="block break-words text-xs text-ink-body" data-testid="add-songs-order" id={`${uid}-order`}>
+    <span className="mt-1 block break-words text-xs text-ink-body" data-testid="add-songs-order" id={`${uid}-order`}>
       {row.sections.map((name, index) => <Fragment key={index}>{index > 0 && " "}<span className="whitespace-nowrap">{index < row.sections.length - 1 ? `${name} \u00B7` : name}</span></Fragment>)}
     </span>
   ) : null;
   const body = (
-    <SongCardBody chips={chips} cover={librarySongCover(row.song)} detail={orderText} facts={facts && <span className="block" id={`${uid}-facts`}>{facts}</span>} sections={row.song?.sections ?? []} title={row.title} />
+    <SongCardBody below={orderText} chips={chips} cover={librarySongCover(row.song)} facts={facts && <span className="block" id={`${uid}-facts`}>{facts}</span>} sections={row.song?.sections ?? []} title={row.title} />
   );
   const item = { "data-blocked": block ?? undefined, "data-row": row.id, "data-source": row.source, "data-testid": block === "unnamed" ? "add-songs-unnamed" : "add-songs-row", title: hasOrder ? `${row.title}: ${order}` : undefined };
   // A song Playback gave no number is a card with nothing to tick: it cannot be imported, and says why.

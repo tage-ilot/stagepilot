@@ -26,7 +26,7 @@ export function cardLibrary(song: LibraryPlanSong | undefined, now: number): Car
  * two lists read as the same thing: a small cover when Playback has a picture, the title, one line of facts, and under both a thin
  * bar of the arranged song. The caller draws the border and any buttons around it.
  */
-export function SongCardBody({ title, cover, sections, lead, facts, chips, detail, children }: {
+export function SongCardBody({ title, cover, sections, lead, facts, chips, below, children }: {
   title: string;
   cover: string | null;
   sections: LibrarySection[];
@@ -36,8 +36,8 @@ export function SongCardBody({ title, cover, sections, lead, facts, chips, detai
   facts?: ReactNode;
   /** Small chips under the line of facts (a key, where the song comes from, why it cannot be used). Left out: nothing is drawn. */
   chips?: ReactNode;
-  /** More plain text under the line of facts, never cut short (the Presenter Link's arrangement). Left out: nothing is drawn. */
-  detail?: ReactNode;
+  /** More plain text UNDER the bar, never cut short (the Presenter Link's arrangement): title, facts, the bar, then this. Left out: nothing is drawn. */
+  below?: ReactNode;
   /** Words under the title when a card has no facts to chip (`not in Playback's setlist`). */
   children?: ReactNode;
 }) {
@@ -63,11 +63,11 @@ export function SongCardBody({ title, cover, sections, lead, facts, chips, detai
           </span>
           {facts && <span className="mt-0.5 block text-xs" data-part="facts-row">{facts}</span>}
           {children && <span className="block line-clamp-2 text-xs tabular-nums text-ink-muted">{children}</span>}
-          {detail}
           {chips && <span className="mt-1 flex flex-wrap items-center gap-1" data-part="chips">{chips}</span>}
         </span>
       </span>
       <ArrangementBar sections={sections} />
+      {below}
     </>
   );
 }

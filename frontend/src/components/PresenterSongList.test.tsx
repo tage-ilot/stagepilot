@@ -126,6 +126,23 @@ describe("the song cards", () => {
     expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
   });
 
+  it("lays the card out top to bottom: the title, the fact chips, the colored section bar, THEN the arrangement text", async () => {
+    draw();
+    await ready();
+    const holy = card("Holy Forever");
+    const title = holy.querySelector("[title='Holy Forever']") as HTMLElement;
+    const facts = holy.querySelector("[id$='-facts']") as HTMLElement;
+    const bar = within(holy).getByTestId("library-bar");
+    const order = within(holy).getByTestId("add-songs-order");
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(title, facts)).toBe(true);
+    expect(follows(facts, bar)).toBe(true);
+    expect(follows(bar, order)).toBe(true);
+    // The text keeps its words and its hover text.
+    expect(order).toHaveTextContent("Count Off · Verse 1 · Vamp on 1");
+    expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
+  });
+
   it("the card shows the MultiTracks number (content_id), never Playback's own song number", async () => {
     draw();
     await ready();
