@@ -38,16 +38,16 @@ export function lightkeyBoxProps(status: LightkeyStatus): BoxProps {
     controller: { start: () => startLightkeyHelperInstall(), end: () => endLightkeyHelperInstall() },
     wording: {
       testId: "lightkey-install",
-      headings: { setup: "Set up the Lighting computer", update: "Update the helper", command: "Lighting computer command" },
+      headings: { setup: "Set up the Lighting computer", update: "Update the Lighting Link", command: "Lighting Link command" },
       why: {
-        not_installed: "StagePilot gives you one command to paste into Terminal on the Lighting computer. It installs the Lightkey helper from StagePilot, so that computer needs no internet.",
-        outdated: "The helper on the Lighting computer is older than the one StagePilot carries. Run one command on that computer to update it.",
+        not_installed: "StagePilot gives you one command to paste into Terminal on the Lighting computer. It installs the Lighting Link from StagePilot, so that computer needs no internet.",
+        outdated: "The Lighting Link on the Lighting computer is older than the one StagePilot carries. Run one command on that computer to update it.",
       },
-      waitingFor: "the helper",
+      waitingFor: "the Lighting Link",
       done: "The Lighting computer is connected.",
       before: "On the Lighting Mac, turn on sACN output in Lightkey and open your project.",
       paste: "Open Terminal there and paste this command.",
-      label: "Capture Script for Lighting Computer (beta, only for Lightkey):",
+      label: <span title="Capture script for the Lighting computer (beta, only for Lightkey)">Capture script:</span>,
       permissions: "macOS may ask to let Lightkey API use your local network and read your Documents and Downloads folders. Click Allow each time (the Lighting Mac must be unlocked).",
     },
   };

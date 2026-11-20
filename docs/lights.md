@@ -882,7 +882,7 @@ that fixture's next look row. To keep the lights released, pause or stop first.
 
 While there is no connected Lighting computer, the Lightkey strip shows **Set up the Lighting computer**. It installs the
 `lightkey-api` helper on the Lighting Mac from StagePilot itself: the Mac needs no internet, no GitHub and no SSH. A
-connected helper older than the one StagePilot carries gets the same box as **Update the helper**.
+connected helper older than the one StagePilot carries gets the same box as **Update the Lighting Link**.
 
 1. On the Lighting Mac, turn on sACN output in Lightkey and open your project.
 2. In StagePilot press **Set up the Lighting computer**, then **Copy**, open Terminal on the Lighting Mac and paste.
@@ -925,7 +925,7 @@ those checks: the signature is the one thing that matters, and no new secret was
 restarts, and a wrapper the installer writes (`lightkey_api_run.py`, never replaced by an update) puts them back when the new version
 exits with an error within 20 seconds of starting three times in a row; `/health` then says `last_update_error`. The strip says
 `Updating the helper to 0.6.0…` and, once, `Updated to 0.6.0 automatically.` A helper older than 0.6.0 is updated once with the
-setup command ("Update the helper"). The switch `helper_auto_update` in `settings.json` (on unless it says `false`) turns it off.
+setup command ("Update the Lighting Link"). The switch `helper_auto_update` in `settings.json` (on unless it says `false`) turns it off.
 
 **Removing it.** The helper's `uninstall.sh` is one of the five served files. Press **Set up the Lighting computer** to
 start a session, then in Terminal on the Lighting Mac run
@@ -1003,14 +1003,14 @@ fills it in, and before that the line says `Project not reported yet`.
 - **Helper version and watch state.** On connect and about every 30 s StagePilot reads the helper's `GET /health`
   and keeps `version`, `fixture_map` (project, count, map id) and `watch` (state and a plain sentence) in the status
   (`GET /api/v1/lights/lightkey`, key `helper`). A helper that reports no `version` is older than 0.5.0.
-- **Helper update notice.** For a helper older than 0.5.0 the strip says `Helper update available`. Capture and
+- **Helper update notice.** For a helper older than 0.5.0 the strip says `Lighting Link update available`. Capture and
   replay keep working exactly as before; only the new features below need 0.5.0.
 - **Read fixtures** (button in the strip, `POST /api/v1/lights/lightkey/read-fixtures`) asks the helper to read the
   open Lightkey project again, for fixtures added to the same project. The answer is `{ok, message, project, count,
   changed, code?}` and the strip shows `message`: `Read 66 fixtures from Show.lightkeyproj`, `No change: 66 fixtures`,
   or the helper's own plain-language reason (Lightkey closed, no saved project, a read already running, the macOS
   folder permission text, an unreadable project). The button is disabled when not connected and, for a helper
-  older than 0.5.0, shows `Update the helper to use this.` The route is served like the other lights routes (same
+  older than 0.5.0, shows `Update the Lighting Link to use this.` The route is served like the other lights routes (same
   host and session checks, no body) and is not on any remote-tunnel allow-list.
 - **Captures remember their project.** A saved recording stores `capture.project`, the project name the hello gave
   when the recording began (optional: older captures have none and are never warned about; an rc.5 build ignores the
@@ -1329,7 +1329,7 @@ on the Playback API, Playback MIDI and Lighting screens. Narrower, it moves to i
 
 In OSC mode the connection is one bordered block, **sACN DMX Live Link**. Its header has the title and two **state
 pills**, always both: **`sACN: <word>`** (the link to Lightkey: `Connected`, `Connecting…`, `Not connected`, `Off`, `Lightkey is closed`; the reason for a failure is the pill's tooltip) and **`DMX: <word>`** (the fixture stream: `66 fixtures identified` (`1 fixture identified`), `Connecting…` while the first fixture data is awaited, `Not receiving` when the stream stops, and a grey `—` while sACN is not connected; the fixture detail is its tooltip). Under it
-is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one Host box** (the caption says only Host; hover it, or open the Lighting computer setup, for *Host or IP (OSC output + Live Link)*; its accessible name is *Lighting host or IP address*), a small **OSC UDP** port box (default 21600),
+is the project line (see "The Lightkey project, Read fixtures and the helper version"), then a field row that wraps cleanly on narrow screens: **one Host box** (the caption says only Host; hover it, or open Lighting Link setup, for *Host or IP (OSC output + Live Link)*; its accessible name is *Lighting host or IP address*), a small **OSC UDP** port box (default 21600),
 a small **API** port box (default 8770), the pair **Search** and **Connect** (the same tinted buttons, in the Lighting colour, that end the Playback and Presentation rows; Search finds a computer, the word Scan is kept for reading songs; Connect on a computer that is already connected only checks again and the status line says so; **Search** reads **Searching… (cancel)** while the search runs, and cancel only stops this block showing it: the search keeps its own schedule), and at the right the labelled **Mode** (Auto | Replay |
 Record) toggle. A quiet strip below has one line of state text (for example "Holding 12 fixtures ·
 1 yielded to the operator"), **Release lights**, **Read fixtures**, **Send a test cue** and **How to find a cue's address**. The Lighting

@@ -532,11 +532,11 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
   it("offers the helper update for a helper older than 0.5.0 and disables Read fixtures with the reason", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByTestId("lightkey-helper-update")).toHaveTextContent("Helper update available");
+    expect(await screen.findByTestId("lightkey-helper-update")).toHaveTextContent("Lighting Link update available. Capture and replay keep working; Read fixtures and the project check need Lighting Link 0.5.0.");
     // Capture and replay keep working: an update is information (as the Library Link and Presenter Link say it), never red.
     expect(screen.getByTestId("lightkey-helper-update")).toHaveAttribute("data-tone", "info");
     expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
-    expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Update the helper to use this.");
+    expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Update the Lighting Link to use this.");
     // everything else still works
     expect(screen.getByRole("radio", { name: "Record" })).toBeEnabled();
   });
@@ -608,7 +608,7 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
   it("offers the Update variant for a connected helper older than the bundled one", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
     render(<LightkeyStrip lightingEnabled />);
-    expect(await screen.findByRole("button", { name: "Update the helper" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Update the Lighting Link" })).toBeInTheDocument();
     expect(screen.getByTestId("lightkey-helper-update")).toBeInTheDocument();
   });
 });

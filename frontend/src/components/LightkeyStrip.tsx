@@ -474,7 +474,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           )}
           {outdated && (
             <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-helper-update" tone="info" variant="line">
-              Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
+              Lighting Link update available. Capture and replay keep working; Read fixtures and the project check need Lighting Link 0.5.0.
             </SectionNotice>
           )}
 
@@ -509,7 +509,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           <HelperSetupBox {...lightkeyBoxProps(status)} autoStart={byChoice} />
         </>
       )}
-      detailsLabel={status.link === "off" ? null : "Lighting computer setup"}
+      detailsLabel={status.link === "off" ? null : "Lighting Link setup"}
       footer={(
         <>
           {footer}

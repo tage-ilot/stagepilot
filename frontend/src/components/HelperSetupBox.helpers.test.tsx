@@ -71,8 +71,8 @@ const made = (kind: string, version: string) => (minutes = 30): LightkeyHelperIn
 
 const harnesses: [Harness, Harness, Harness] = [
   {
-    name: "Lightkey helper", id: "lightkey-install", setup: "Set up the Lighting computer", update: "Update the helper", command: "Lighting computer command",
-    done: "The Lighting computer is connected.", waitingFor: "the helper", label: "Capture Script for Lighting Computer (beta, only for Lightkey):",
+    name: "Lightkey helper", id: "lightkey-install", setup: "Set up the Lighting computer", update: "Update the Lighting Link", command: "Lighting Link command",
+    done: "The Lighting computer is connected.", waitingFor: "the Lighting Link", label: "Capture script:",
     start: vi.mocked(api.startLightkeyHelperInstall), end: vi.mocked(api.endLightkeyHelperInstall), made: made("lightkey", "0.5.0"), needsComputer: false, endsOnClose: true,
     box: (situation, opts = {}) => ({ ui: <HelperSetupBox {...lightkeyBoxProps(lightkeyFor(situation))} autoStart={opts.autoStart ?? false} /> }),
   },
@@ -362,7 +362,7 @@ describe("HelperSetupBox: Lightkey helper only", () => {
   it("stays until the helper is current: still connected and old, or briefly lost, does not end the session", async () => {
     h.start.mockResolvedValue(h.made());
     const { rerender } = render(<HelperSetupBox {...lightkeyBoxProps(connected({ helper: oldHelper }))} />);
-    await userEvent.click(screen.getByRole("button", { name: "Update the helper" }));
+    await userEvent.click(screen.getByRole("button", { name: "Update the Lighting Link" }));
     await screen.findByTestId("lightkey-install-ready");
     rerender(<HelperSetupBox {...lightkeyBoxProps(connected({ helper: oldHelper }))} />);
     rerender(<HelperSetupBox {...lightkeyBoxProps(lightkeyStatus())} />);
