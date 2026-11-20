@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.44.0-rc.3] - 2026-11-19
+
 ### Added
 
 - **Presenter Link: pick the song's file on its card.** When ProPresenter has the same MultiTracks song in two files (*Firm Foundation (Live)* and *Firm Foundation*), the song used to say **Pick one** and the only way on was to delete a file in ProPresenter. Now the card has one small button per file under the title: press one and the card turns into **New copy** or **Ready** with *Using “Firm Foundation (Live)”* and a **Change** button. StagePilot remembers the pick for that song (in this browser, by its mtID), so the next time it does not ask. Before asking at all it looks at the names: when exactly one file is named like the song's title, that file is used and the card says so. Nothing in ProPresenter changes until you press Import songs to ProPresenter, as before.
