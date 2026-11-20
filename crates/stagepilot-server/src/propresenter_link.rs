@@ -27,7 +27,9 @@ use stagepilot_core::settings::{CredentialStore, MemoryCredentialStore, Settings
 use stagepilot_propresenter::helper_assets::{is_older_than_bundled, BUNDLED_HELPER_VERSION};
 use stagepilot_propresenter::link::helper::{base_url, usable_key, Health, HelperHost};
 use stagepilot_propresenter::link::local::LocalHost;
-use stagepilot_propresenter::link::status::{state_words, LinkMode, LinkState, LinkStatus};
+use stagepilot_propresenter::link::status::{
+    state_words, LinkMode, LinkState, LinkStatus, WAITING_FOR_MACOS,
+};
 use stagepilot_propresenter::link::{HostInfo, LinkError, ProPresenterHost};
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
@@ -42,6 +44,9 @@ pub const MIN_CHECK: Duration = Duration::from_secs(2);
 pub const MIN_RETRY_AFTER_REFUSAL: Duration = Duration::from_secs(10);
 /// How long the last good answer is shown, marked old, while the helper is silent.
 pub const KEEP_GOOD: Duration = Duration::from_secs(60);
+/// The longest a look at this computer's own ProPresenter folder and screen may take before the status says `waiting`. macOS holds
+/// those reads while it asks the person for permission; the status never waits for the person.
+pub const LOCAL_LOOK_LIMIT: Duration = Duration::from_secs(8);
 /// Shown when no ProPresenter computer is chosen.
 pub const NO_COMPUTER: &str = "Choose the ProPresenter computer first.";
 
@@ -202,6 +207,8 @@ pub struct ProPresenterLink {
     own: Mutex<OwnCheck>,
     /// The helper's port (8790; tests use another).
     helper_port: AtomicU16,
+    /// How long a look at this computer may take (milliseconds; tests shorten it).
+    local_limit_ms: AtomicU64,
     /// Added to the clock (tests move it to pass minutes at once; it is 0 in the product).
     skew_ms: AtomicU64,
     local: Mutex<Option<(Option<String>, Arc<LocalHost>)>>,
@@ -228,6 +235,7 @@ impl ProPresenterLink {
             asking: tokio::sync::Mutex::new(()),
             own: Mutex::new(Arc::new(is_own_address)),
             helper_port: AtomicU16::new(stagepilot_core::config::DEFAULT_PROPRESENTER_LINK_PORT),
+            local_limit_ms: AtomicU64::new(LOCAL_LOOK_LIMIT.as_millis() as u64),
             skew_ms: AtomicU64::new(0),
             local: Mutex::new(None),
             stand_in: Mutex::new(None),
@@ -251,6 +259,13 @@ impl ProPresenterLink {
     #[doc(hidden)]
     pub fn set_helper_port(&self, port: u16) {
         self.helper_port.store(port, Ordering::SeqCst);
+    }
+
+    /// Shortens the time a look at this computer may take before the status says `waiting` (tests).
+    #[doc(hidden)]
+    pub fn set_local_look_limit(&self, limit: Duration) {
+        self.local_limit_ms
+            .store(limit.as_millis() as u64, Ordering::SeqCst);
     }
 
     /// Moves the clock forward (tests).
@@ -443,7 +458,15 @@ impl ProPresenterLink {
     async fn look(&self, choice: &Choice) -> Result<Seen, LinkError> {
         match choice {
             Choice::NoHost => Err(LinkError::BadPath(NO_COMPUTER.to_string())),
-            Choice::Local => self.local_host().info().await.map(Seen::from_info),
+            Choice::Local => {
+                // macOS holds a read of ProPresenter's folder (and the screen check) while it asks the person for permission.
+                // The look is given a limit; when it is over the future is dropped, nothing is held, and the next call tries again.
+                let limit = Duration::from_millis(self.local_limit_ms.load(Ordering::SeqCst));
+                match tokio::time::timeout(limit, self.local_host().info()).await {
+                    Ok(answer) => answer.map(Seen::from_info),
+                    Err(_) => Err(LinkError::Timeout(WAITING_FOR_MACOS.to_string())),
+                }
+            }
             Choice::Helper(host) => {
                 let host = HelperHost::new(&self.helper_address(host), self.keys.clone());
                 host.health().await.map(Seen::from_health)
@@ -483,7 +506,10 @@ impl ProPresenterLink {
                 let answer = self.look(&choice).await;
                 let now = self.now();
                 let mut slot = self.slot();
-                slot.asked = Some(now);
+                // A look that ran out of time is not remembered as asked: the next call looks again.
+                let waiting =
+                    matches!(choice, Choice::Local) && matches!(answer, Err(LinkError::Timeout(_)));
+                slot.asked = (!waiting).then_some(now);
                 if let Ok(seen) = &answer {
                     slot.good = Some((now, seen.clone()));
                 }
@@ -504,9 +530,10 @@ impl ProPresenterLink {
         let shown = match last {
             None => None,
             Some(Ok(seen)) => Some((Ok(seen), false)),
+            // Waiting for macOS is said as it is, not hidden behind an old good answer.
             Some(Err(error)) => match good {
-                Some(seen) => Some((Ok(seen), true)),
-                None => Some((Err(error), false)),
+                Some(seen) if !matches!(error, LinkError::Timeout(_)) => Some((Ok(seen), true)),
+                _ => Some((Err(error), false)),
             },
         };
         self.render(Some(mode), shown, &choice)
@@ -586,6 +613,7 @@ impl ProPresenterLink {
                 status.state = match &error {
                     LinkError::Refused(_) => LinkState::NeedsCommand,
                     LinkError::BadPath(_) => LinkState::NotInstalled,
+                    LinkError::Timeout(_) if mode == Some(LinkMode::Local) => LinkState::Waiting,
                     _ if mode == Some(LinkMode::Local) => LinkState::NotAnswering,
                     _ if paired => LinkState::NotAnswering,
                     _ => LinkState::NotInstalled,

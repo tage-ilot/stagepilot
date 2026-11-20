@@ -73,9 +73,17 @@ plain words when it cannot.
 **Status.** `GET /api/v1/propresenter-link/status[?check=1]` answers
 `{mode: "local"|"helper"|null, state, message, version?, bundled_version, can_import, import_blocker?, libraries, playback_library_exists, data_folder?, computer_address?, paired, updater, stale, update?}`.
 `state` is `ready`, `not_installed`, `outdated` (works, an update is available), `needs_command` (the helper does not know this
-StagePilot's key: run the setup command again), `not_answering` or `checking`. It is read when a ProPresenter host is saved and
+StagePilot's key: run the setup command again), `not_answering`, `checking` or `waiting`. It is read when a ProPresenter host is saved and
 at most every 30 seconds while a window asks (the Check button waits 2 seconds, 10 after a refusal); a helper that goes quiet
 keeps its last good answer for a minute, marked `stale`. The state never changes the header's Ready / Check system verdict.
+
+**Waiting for macOS (this computer only).** The first look at ProPresenter's folder (`~/Documents`) and the Accessibility check can
+make macOS ask the person for permission, and macOS holds the read until they answer. So the look on this computer has a hard
+limit of 8 seconds: when it is over, the status answers `state: "waiting"` with the message *macOS may be asking for permission
+on this computer. Answer the prompt, then press Connect again.* (`import_blocker` is left out, `can_import` is `false`, no libraries
+are listed) and never keeps the request or the status lock waiting. It is not remembered as asked: the next call looks again, and
+joins the look that is still waiting for the person instead of starting another. The panel shows the pill `Presenter Link: Waiting
+for macOS`. Another computer's helper (and the bundled helper's own checks) are not changed by this.
 
 **Setup (Helper only).** `POST /api/v1/propresenter-link/helper-install` opens a 30-minute session and answers a command
 to paste into Terminal on the ProPresenter computer; `DELETE` closes it. The command fetches `/propresenter-helper/<token>/install.sh`
@@ -276,6 +284,7 @@ value stays in `settings.json` and is saved back as it was.
 | `Can add songs, cannot import missing songs (macOS Accessibility not allowed)` | the Link works, but cannot drive ProPresenter's own Search to load a missing song | the sentence under the lines says how: allow it in System Settings > Privacy & Security > Accessibility |
 | `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the Presenter Link** and run the command |
 | `Needs the command again` | the helper does not know this StagePilot's key | press **Set up the ProPresenter computer** and run the command again |
+| `Waiting for macOS` | on this computer, macOS did not let StagePilot read ProPresenter's folder or check the Accessibility permission within 8 seconds, most likely because it is asking you for permission (a window such as "StagePilot would like to access files in your Documents folder", or "wants to control System Events") | answer the window, then press **Connect** again; nothing else is needed, StagePilot looks again at once |
 | `Not answering` | the other computer is off, asleep or not on the network | wake it; if it was set up again from another StagePilot, run the command here again |
 | `Not installed` | there is no Link (grey, never a warning) | nothing, unless you want Import songs to ProPresenter |
 

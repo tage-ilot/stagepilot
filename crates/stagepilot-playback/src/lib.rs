@@ -3,6 +3,7 @@ pub mod api;
 pub mod arbiter;
 pub mod arrangement;
 pub mod client;
+mod connect_log;
 pub mod discovery;
 pub mod find;
 pub mod helper_assets;

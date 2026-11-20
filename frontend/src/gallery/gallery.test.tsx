@@ -14,7 +14,7 @@ const ids = (group: string) => Array.from(document.querySelectorAll(`[data-group
 describe("the section gallery page", () => {
   it("shows every state the review asked for, for Presentation", () => {
     render(<Frame />);
-    expect(ids("presentation")).toEqual(["ready", "checking", "not-connected", "scanning", "found-one", "found-many", "not-found", "blocked", "address-list", "connecting", "host-error", "held", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "import-blocked", "this-computer", "no-link"]);
+    expect(ids("presentation")).toEqual(["ready", "checking", "not-connected", "scanning", "found-one", "found-many", "not-found", "blocked", "address-list", "connecting", "host-error", "held", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "waiting-for-macos", "import-blocked", "this-computer", "no-link"]);
   });
 
   it("shows every state the review asked for, for Playback (including scanning)", () => {
@@ -57,7 +57,7 @@ describe("the section gallery page", () => {
 
   it("opens the Details by themselves where something needs doing, and not where nothing does", async () => {
     render(<Frame />);
-    for (const id of ["presentation-not-installed", "presentation-update-by-hand", "presentation-needs-command", "presentation-not-answering", "playback-not-installed", "playback-update-by-hand", "playback-needs-command", "playback-not-answering"]) {
+    for (const id of ["presentation-not-installed", "presentation-update-by-hand", "presentation-needs-command", "presentation-not-answering", "presentation-waiting-for-macos", "playback-not-installed", "playback-update-by-hand", "playback-needs-command", "playback-not-answering"]) {
       expect(toggle(id), id).toHaveAttribute("aria-expanded", "true");
     }
     for (const id of ["presentation-ready", "presentation-update-by-itself", "presentation-this-computer", "presentation-import-blocked", "playback-ready", "playback-update-by-itself"]) {

@@ -21,9 +21,12 @@ use stagepilot_core::helper_update::{HelperUpdateMode, UpdateBundle};
 use stagepilot_core::settings::{PersistentSettings, SettingsService};
 use stagepilot_lights::lightkey::LightkeyStatus;
 use stagepilot_propresenter::helper_assets::BUNDLED_HELPER_VERSION;
+use stagepilot_propresenter::link::fake::FakeHost;
 use stagepilot_propresenter::link::helper::sign;
 use stagepilot_propresenter::link::status::{LinkMode, LinkState};
-use stagepilot_propresenter::link::PLAYBACK_LIBRARY;
+use stagepilot_propresenter::link::{
+    HostInfo, IndexEntry, LibraryFile, LinkError, ProPresenterHost, SelectOutcome, PLAYBACK_LIBRARY,
+};
 use stagepilot_server::helper_update::{HelperUpdater, Outcome, UpdateEnvironment, UpdaterConfig};
 use stagepilot_server::playback_library::PlaybackLibrary;
 use stagepilot_server::propresenter_link::{
@@ -288,6 +291,150 @@ async fn rig(fake: &Fake) -> (Arc<SettingsService>, Arc<ProPresenterLink>) {
     link.set_helper_port(fake.serve().await);
     link.set_key_for_test(KEY);
     (settings, link)
+}
+
+// ---- macOS asks for permission --------------------------------------------------------------------------------------------
+
+/// This computer while macOS asks the person for permission: `info()` never comes back while `stuck` is set.
+struct AskingMac {
+    inner: FakeHost,
+    stuck: AtomicBool,
+    looks: std::sync::atomic::AtomicUsize,
+}
+
+impl AskingMac {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: FakeHost::new()
+                .with_library("Songs")
+                .with_library("Playback"),
+            stuck: AtomicBool::new(true),
+            looks: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+}
+
+#[async_trait]
+impl ProPresenterHost for AskingMac {
+    async fn info(&self) -> Result<HostInfo, LinkError> {
+        self.looks.fetch_add(1, Ordering::SeqCst);
+        if self.stuck.load(Ordering::SeqCst) {
+            std::future::pending::<()>().await;
+        }
+        self.inner.info().await
+    }
+    async fn list_library(&self, name: &str) -> Result<Vec<LibraryFile>, LinkError> {
+        self.inner.list_library(name).await
+    }
+    async fn read_file(&self, library: &str, file: &str) -> Result<Vec<u8>, LinkError> {
+        self.inner.read_file(library, file).await
+    }
+    async fn ensure_library(&self, name: &str) -> Result<bool, LinkError> {
+        self.inner.ensure_library(name).await
+    }
+    async fn create_file(
+        &self,
+        library: &str,
+        file: &str,
+        bytes: &[u8],
+        sha256: &str,
+    ) -> Result<(), LinkError> {
+        self.inner.create_file(library, file, bytes, sha256).await
+    }
+    async fn song_index(&self) -> Result<Vec<IndexEntry>, LinkError> {
+        self.inner.song_index().await
+    }
+    async fn search_import(
+        &self,
+        multitracks_id: &str,
+        name: &str,
+        playlist: Option<String>,
+    ) -> Result<String, LinkError> {
+        self.inner
+            .search_import(multitracks_id, name, playlist)
+            .await
+    }
+    async fn select_library(&self, name: &str) -> Result<SelectOutcome, LinkError> {
+        self.inner.select_library(name).await
+    }
+}
+
+fn local_link(host: &Arc<AskingMac>, limit: Duration) -> Arc<ProPresenterLink> {
+    let settings = memory_settings();
+    save_host(&settings, "127.0.0.1", true);
+    let link = Arc::new(ProPresenterLink::new(settings));
+    link.set_local_host_for_test(host.clone());
+    link.set_local_look_limit(limit);
+    link
+}
+
+#[tokio::test]
+async fn while_macos_asks_for_permission_the_status_answers_waiting_within_the_limit_and_the_next_call_looks_again(
+) {
+    let mac = AskingMac::new();
+    let link = local_link(&mac, Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    let waiting = link.status(false).await;
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "answered after {:?}, the probe never returns",
+        started.elapsed()
+    );
+    assert_eq!(waiting.mode, Some(LinkMode::Local));
+    assert_eq!(waiting.state, LinkState::Waiting);
+    assert_eq!(
+        waiting.message,
+        "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again."
+    );
+    assert!(waiting.import_blocker.is_none() && !waiting.can_import && !waiting.stale);
+    assert!(waiting.libraries.is_empty() && waiting.data_folder.is_none());
+    assert_eq!(
+        serde_json::to_value(&waiting).unwrap()["state"],
+        json!("waiting")
+    );
+    // The same ask again, at once (no 30 s wait): it looks again, and does not wait on the first look's fate.
+    let again = link.status(false).await;
+    assert_eq!(again.state, LinkState::Waiting);
+    assert_eq!(mac.looks.load(Ordering::SeqCst), 2);
+    // The person answered the prompt: the next call gets the real answer, and nothing was left held.
+    mac.stuck.store(false, Ordering::SeqCst);
+    let ready = link.status(false).await;
+    assert_eq!(ready.state, LinkState::Ready);
+    assert_eq!(ready.libraries, ["Playback", "Songs"]);
+    assert_eq!(mac.looks.load(Ordering::SeqCst), 3);
+    // A good answer is then kept for the usual 30 s.
+    link.status(false).await;
+    assert_eq!(mac.looks.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn waiting_for_macos_is_said_even_when_an_older_good_answer_is_held() {
+    let mac = AskingMac::new();
+    mac.stuck.store(false, Ordering::SeqCst);
+    let link = local_link(&mac, Duration::from_millis(300));
+    assert_eq!(link.status(false).await.state, LinkState::Ready);
+    mac.stuck.store(true, Ordering::SeqCst);
+    link.advance_clock(Duration::from_secs(31));
+    let status = link.status(false).await;
+    assert_eq!((status.state, status.stale), (LinkState::Waiting, false));
+}
+
+#[tokio::test]
+async fn two_windows_asking_while_macos_asks_are_not_held_up_by_each_other() {
+    let mac = AskingMac::new();
+    let link = local_link(&mac, Duration::from_millis(400));
+    let first = {
+        let link = link.clone();
+        tokio::spawn(async move { link.status(false).await })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    // The second window does not wait for the first look's limit: it reads what is held.
+    let second = tokio::time::timeout(Duration::from_millis(250), link.status(false))
+        .await
+        .expect("the second ask must not wait for the first");
+    assert_eq!(second.state, LinkState::Checking);
+    assert_eq!(first.await.unwrap().state, LinkState::Waiting);
+    assert_eq!(mac.looks.load(Ordering::SeqCst), 1);
 }
 
 // ---- which computer ---------------------------------------------------------------------------------------------------
@@ -700,9 +847,17 @@ async fn the_status_route_says_the_shape_and_never_the_key() {
         .as_str()
         .unwrap()
         .contains("Accessibility"));
+    // A working tree carries an empty SHA256SUMS.sig (the release machine signs), so StagePilot cannot send the update itself
+    // ("manual"); a release commit carries the signature, and then it can ("automatic").
+    let signed = std::fs::metadata(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../stagepilot-propresenter/assets/propresenter-link/SHA256SUMS.sig"
+    ))
+    .is_ok_and(|m| m.len() > 0);
     assert_eq!(
-        body["update"]["mode"], "manual",
-        "the bundled files are not signed in a working tree"
+        body["update"]["mode"],
+        if signed { "automatic" } else { "manual" },
+        "the bundled files are signed on a release commit and not in a working tree"
     );
     assert!(!text.contains(KEY), "the key is never part of an answer");
     for field in [

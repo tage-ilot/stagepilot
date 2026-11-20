@@ -91,7 +91,7 @@ export function proPresenterBoxProps(link: ProPresenterLinkController, hasComput
   const update = link.status?.update;
   return {
     state,
-    quiet: state === "ready" || state === null || state === "checking" || (state === "outdated" && updatesItself(update)),
+    quiet: state === "ready" || state === null || state === "checking" || state === "waiting" || (state === "outdated" && updatesItself(update)),
     lead: state === "outdated" && update?.mode === "manual" ? update.message : undefined,
     hasComputer,
     needComputer: <>Save the Presentation connection above with the ProPresenter computer&apos;s address, then set up its {PRESENTER_LINK_NAME}.</>,

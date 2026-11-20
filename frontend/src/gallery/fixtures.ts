@@ -18,6 +18,8 @@ export const linkOf = (state: LinkState, over: Partial<LinkStatus> = {}): LinkSt
   computer_address: "192.0.2.10", paired: state !== "not_installed", updater: state === "ready" || state === "outdated", stale: false, ...over,
 });
 export const localLink = (over: Partial<LinkStatus> = {}): LinkStatus => linkOf("ready", { mode: "local", version: BUNDLED, paired: false, updater: false, computer_address: undefined, ...over });
+/** This computer while macOS is asking the person for permission: the backend's waiting answer, with nothing read yet. */
+export const waitingLink = (): LinkStatus => localLink({ state: "waiting", message: "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.", can_import: false, libraries: [], playback_library_exists: false, version: undefined });
 export const noComputerLink = (): LinkStatus => linkOf("not_installed", { mode: null, can_import: false, paired: false, updater: false });
 export const updateOf = (mode: HelperUpdateStatus["mode"], message: string): HelperUpdateStatus => ({ mode, version: BUNDLED, message });
 export const linkController = (status: LinkStatus | null): ProPresenterLinkController => ({ status, error: null, pending: null, check: none, watch: none });

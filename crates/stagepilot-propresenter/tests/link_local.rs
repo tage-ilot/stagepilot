@@ -585,3 +585,69 @@ fn the_data_folder_is_the_default_or_the_saved_one() {
     assert!(resolve_data_folder(Some("~/PP")).ends_with("PP"));
     assert!(!resolve_data_folder(Some("~/PP")).starts_with("~"));
 }
+
+/// A screen whose Accessibility check waits for the person to answer macOS's prompt (it comes back when `answer` is set).
+struct AskingScreen {
+    asked: std::sync::atomic::AtomicUsize,
+    answered: tokio::sync::Notify,
+}
+
+#[async_trait]
+impl Screen for AskingScreen {
+    async fn access(&self) -> (bool, Option<String>) {
+        self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.answered.notified().await;
+        (true, None)
+    }
+    async fn import(&self, _: &str, _: &str, _: &str) -> Result<(), LinkError> {
+        Ok(())
+    }
+    async fn select_library(&self, _: &str) -> SelectOutcome {
+        SelectOutcome {
+            tried: false,
+            detail: None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_look_that_macos_holds_is_joined_not_repeated_and_giving_up_does_not_stop_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("ProPresenter");
+    std::fs::create_dir_all(root.join("Libraries/Songs")).unwrap();
+    let screen = Arc::new(AskingScreen {
+        asked: Default::default(),
+        answered: tokio::sync::Notify::new(),
+    });
+    let host = Arc::new(LocalHost::with_screen(root, screen.clone()));
+    // Three callers give up after a moment (the status has a time limit): one look is running, not three.
+    for _ in 0..3 {
+        let waited = tokio::time::timeout(Duration::from_millis(100), host.info()).await;
+        assert!(waited.is_err(), "the look is held, so the caller gives up");
+    }
+    assert_eq!(
+        screen.asked.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the second and third caller joined the look that was running"
+    );
+    // The person answers: the caller that is waiting now gets the answer of that same look.
+    let waiting = {
+        let host = host.clone();
+        tokio::spawn(async move { host.info().await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    screen.answered.notify_waiters();
+    let info = waiting.await.unwrap().unwrap();
+    assert!(info.can_import && info.data_folder_exists);
+    assert_eq!(info.libraries, ["Songs"]);
+    assert_eq!(screen.asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+    // A finished look is not reused: the next call looks again.
+    let again = {
+        let host = host.clone();
+        tokio::spawn(async move { host.info().await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    screen.answered.notify_waiters();
+    assert!(again.await.unwrap().unwrap().can_import);
+    assert_eq!(screen.asked.load(std::sync::atomic::Ordering::SeqCst), 2);
+}

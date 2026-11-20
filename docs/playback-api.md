@@ -485,6 +485,14 @@ Backend log lines are `playback_scan_start`, `playback_scan_result`,
 and `playback_connect_failed` in
 `~/Library/Logs/org.stagepilot.desktop/stagepilot-backend.log`.
 
+**The connection retry and the log.** While Playback cannot be reached (the computer is off, or off the network), StagePilot
+tries again every second, and that has not changed. The log does not say it every second: the first failure, and every change of
+reason (`class`: `no_route`, `timed_out`, `refused`..., or another address), is one `playback_connect_failed: <what happened>`
+WARN line with `host`, `port`, `class`, `step` and `retry_in_ms`. The same reason again is said at most once a minute, as
+`playback_connect_failed: <what happened> - still failing (61 attempts since 12:01:04, same reason)` (the time is the clock of the
+log's own timestamps, UTC). When Playback answers again (its first valid heartbeat) there is one INFO line,
+`playback_connect_recovered: connected again after 90 failed attempts since 12:01:04`.
+
 
 ## Explicit Planning Center song-time updates
 

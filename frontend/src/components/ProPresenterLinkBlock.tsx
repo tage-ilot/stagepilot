@@ -84,7 +84,7 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
   const state = status?.state ?? null;
   // A Link that is behind and can update itself is updated by StagePilot: its setup box stays closed, with only a line to read.
   const updatesBySelf = state === "outdated" && updatesItself(status?.update);
-  const needsSetup = helper && state !== "ready" && state !== null && state !== "checking" && !updatesBySelf;
+  const needsSetup = helper && state !== "ready" && state !== null && state !== "checking" && state !== "waiting" && !updatesBySelf;
   // The Details button: "Presenter Link setup", or what is to be done when the Link is behind and StagePilot cannot update it.
   const detailsLabel = state === "outdated" && !updatesBySelf ? `Update the ${PRESENTER_LINK_NAME}` : `${PRESENTER_LINK_NAME} setup`;
   const updateLine = helperUpdateLine(status?.update);

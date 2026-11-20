@@ -34,6 +34,9 @@ pub enum LinkState {
     NotAnswering,
     /// The first look is being made.
     Checking,
+    /// Local: macOS did not let the look through in time, most likely because it is asking the person for permission (Documents
+    /// folder, Automation, Accessibility). The next look tries again.
+    Waiting,
 }
 
 impl LinkState {
@@ -43,6 +46,10 @@ impl LinkState {
     }
 }
 
+/// What the status says while macOS may be asking the person for permission on this computer.
+pub const WAITING_FOR_MACOS: &str =
+    "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.";
+
 /// The one plain sentence for a state.
 pub fn state_words(mode: Option<LinkMode>, state: LinkState, version: Option<&str>) -> String {
     let version = version
@@ -50,6 +57,7 @@ pub fn state_words(mode: Option<LinkMode>, state: LinkState, version: Option<&st
         .map_or(String::new(), |v| format!(" (version {v})"));
     match (mode, state) {
         (None, _) => "Choose the ProPresenter computer first.".to_string(),
+        (Some(LinkMode::Local), LinkState::Waiting) => WAITING_FOR_MACOS.to_string(),
         (Some(LinkMode::Local), LinkState::Ready) => {
             "ProPresenter is on this computer, so no setup is needed.".to_string()
         }
@@ -70,6 +78,7 @@ pub fn state_words(mode: Option<LinkMode>, state: LinkState, version: Option<&st
         (_, LinkState::Ready) => format!("The Presenter Link{version} is ready."),
         (_, LinkState::NotAnswering) => "The Presenter Link did not answer.".to_string(),
         (_, LinkState::Checking) => "Checking the Presenter Link…".to_string(),
+        (_, LinkState::Waiting) => "Waiting for the ProPresenter computer to answer.".to_string(),
     }
 }
 
@@ -134,6 +143,7 @@ mod tests {
                 LinkState::NeedsCommand,
                 LinkState::NotAnswering,
                 LinkState::Checking,
+                LinkState::Waiting,
             ] {
                 let words = state_words(mode, state, Some("0.1.0"));
                 assert!(
@@ -153,6 +163,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(LinkState::NeedsCommand).unwrap(),
             serde_json::json!("needs_command")
+        );
+        assert_eq!(
+            serde_json::to_value(LinkState::Waiting).unwrap(),
+            serde_json::json!("waiting")
+        );
+        assert_eq!(
+            state_words(Some(LinkMode::Local), LinkState::Waiting, None),
+            "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again."
         );
     }
 }

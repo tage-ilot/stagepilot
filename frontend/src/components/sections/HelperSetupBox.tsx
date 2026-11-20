@@ -7,7 +7,7 @@ import { Button } from "../ui/Button";
 import type { Tone } from "../ui/types";
 
 /** Where the helper stands, in the words every Live Link shares (each page maps its own status onto these). `null`: not heard from yet. */
-export type HelperBoxState = "ready" | "outdated" | "not_installed" | "needs_command" | "not_answering" | "checking" | null;
+export type HelperBoxState = "ready" | "outdated" | "not_installed" | "needs_command" | "not_answering" | "checking" | "waiting" | null;
 
 /** The three requests of the one-time command: make it, end it, and (optionally) look more often while it waits. */
 export interface HelperInstallController {

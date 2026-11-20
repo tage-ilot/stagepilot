@@ -354,6 +354,8 @@ pub struct LocalHost {
     screen: Arc<dyn Screen>,
     one_import: tokio::sync::Mutex<()>,
     import_wait: Duration,
+    /// The look at the folder and the screen that is running now, if any (see [`LocalHost::info`]).
+    looking: Mutex<Option<tokio::sync::watch::Receiver<Option<HostInfo>>>>,
 }
 
 impl LocalHost {
@@ -371,6 +373,7 @@ impl LocalHost {
             screen,
             one_import: tokio::sync::Mutex::new(()),
             import_wait: Duration::from_secs(IMPORT_WAIT_SECONDS),
+            looking: Mutex::new(None),
         }
     }
 
@@ -398,26 +401,54 @@ impl LocalHost {
 
 #[async_trait]
 impl ProPresenterHost for LocalHost {
+    /// One look at a time, and one that is never cut short: macOS can hold a read of ProPresenter's folder or the Accessibility
+    /// check while it asks the person for permission, for as long as they take. The look runs in its own task, so a caller that
+    /// gives up waiting (the status has a time limit) neither stops it nor starts a second one: the next caller joins the look
+    /// that is running, and a finished look is never reused.
     async fn info(&self) -> Result<HostInfo, LinkError> {
-        let (can_import, import_blocker) = self.screen.access().await;
-        let (exists, libraries) = self
-            .blocking(|f| {
-                Ok(match f.library_names() {
-                    Ok(names) => (true, names),
-                    Err(_) => (false, vec![]),
-                })
-            })
-            .await?;
-        Ok(HostInfo {
-            version: crate::helper_assets::BUNDLED_HELPER_VERSION.to_string(),
-            propresenter_version: None,
-            os: os_name().to_string(),
-            data_folder: self.folder.root().display().to_string(),
-            data_folder_exists: exists,
-            libraries,
-            can_import,
-            import_blocker: import_blocker.or_else(|| (!can_import).then(|| NOT_A_MAC.to_string())),
-        })
+        let mut answer = {
+            let mut held = self.looking.lock().unwrap_or_else(|p| p.into_inner());
+            match held.as_ref() {
+                Some(running) if running.borrow().is_none() && running.has_changed().is_ok() => {
+                    running.clone()
+                }
+                _ => {
+                    let (send, receive) = tokio::sync::watch::channel(None);
+                    let (folder, screen) = (self.folder.clone(), self.screen.clone());
+                    tokio::spawn(async move {
+                        let on_folder = folder.clone();
+                        let (screen_says, names) = tokio::join!(
+                            screen.access(),
+                            tokio::task::spawn_blocking(move || on_folder.library_names())
+                        );
+                        let (can_import, import_blocker) = screen_says;
+                        let (exists, libraries) = match names {
+                            Ok(Ok(names)) => (true, names),
+                            _ => (false, vec![]),
+                        };
+                        let _ = send.send(Some(HostInfo {
+                            version: crate::helper_assets::BUNDLED_HELPER_VERSION.to_string(),
+                            propresenter_version: None,
+                            os: os_name().to_string(),
+                            data_folder: folder.root().display().to_string(),
+                            data_folder_exists: exists,
+                            libraries,
+                            can_import,
+                            import_blocker: import_blocker
+                                .or_else(|| (!can_import).then(|| NOT_A_MAC.to_string())),
+                        }));
+                    });
+                    *held = Some(receive.clone());
+                    receive
+                }
+            }
+        };
+        let info = answer
+            .wait_for(Option::is_some)
+            .await
+            .map_err(|_| LinkError::Io("ProPresenter's folder could not be read.".into()))?
+            .clone();
+        info.ok_or_else(|| LinkError::Io("ProPresenter's folder could not be read.".into()))
     }
 
     async fn list_library(&self, name: &str) -> Result<Vec<LibraryFile>, LinkError> {

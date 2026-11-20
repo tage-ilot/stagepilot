@@ -9,6 +9,7 @@
 //! Address discovery (manual host, loopback, LAN scan) is in `find.rs`; arbitration and length
 //! measurement are in `arbiter.rs` and `lengths.rs`.
 
+use crate::connect_log::{Attempt, ConnectLog};
 use crate::find::{
     classify_error, find_playback, saved_address_blocked, CancelToken, DiscoverySource, ErrorClass,
     Network, ProbeError, SystemNetwork, SCAN_BLOCK_DETAIL,
@@ -557,6 +558,8 @@ async fn run(
     let mut source: Option<DiscoverySource> = None;
     let mut last_source: Option<DiscoverySource> = None;
     let mut last_scan: Option<Instant> = None;
+    // The failed attempts since the last valid heartbeat: what the log says about them (see `connect_log`).
+    let mut connect_log = ConnectLog::default();
     while !*stop.borrow() {
         let mut valid_heartbeat = false;
         let result: Result<(), ConnError> = async {
@@ -666,6 +669,9 @@ async fn run(
                         let events = norm.feed(raw.as_str(), ts);
                         if norm.heartbeat_serial != before {
                             last_heartbeat = Instant::now();
+                            if !valid_heartbeat {
+                                connect_log.connected(&host, options.port);
+                            }
                             valid_heartbeat = true;
                             shared.heartbeat_serial.fetch_add(1, Ordering::SeqCst);
                             *shared.last_heartbeat_at.lock().unwrap() = tokio::time::Instant::now();
@@ -673,6 +679,9 @@ async fn run(
                         if norm.songless_serial != before_songless {
                             // Alive but no song yet: liveness only, no song events.
                             last_heartbeat = Instant::now();
+                            if !valid_heartbeat {
+                                connect_log.connected(&host, options.port);
+                            }
                             valid_heartbeat = true;
                         }
                         if *stop.borrow() { return Ok(()); }
@@ -697,16 +706,18 @@ async fn run(
         let stopping = *stop.borrow();
         if let (Err(err), false) = (&result, stopping) {
             let (class, detail, step) = classify_error(&err.probe_error());
-            // One line per failed attempt (Python logs `playback_connect_failed`); without it a
-            // client stuck against half-closed sockets looks silent (rig D finding).
-            tracing::warn!(
-                target: "playback",
-                host = %host,
-                port = options.port,
-                class = ?class,
-                step = ?step,
-                retry_in_ms = options.reconnect_delay.as_millis() as u64,
-                "playback_connect_failed: {detail}"
+            // The first failure of a streak and every change of reason are one WARN line each; a repeat is at most one a minute
+            // (Python logs one per attempt; without any line a client stuck against half-closed sockets looks silent, rig D).
+            connect_log.failed(
+                tokio::time::Instant::now(),
+                &Attempt {
+                    host: &host,
+                    port: options.port,
+                    class,
+                    step: step.as_deref(),
+                    retry_in_ms: options.reconnect_delay.as_millis() as u64,
+                    detail: &detail,
+                },
             );
             // A saved address that fails at once may be the OS refusing all local-network use.
             let blocked = matches!(class, ErrorClass::PermissionDenied | ErrorClass::NoRoute)

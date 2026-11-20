@@ -1,4 +1,4 @@
-import { FRONT_MAC, STAGE_MAC, linkOf, localLink, noComputerLink, presenterApi, presenterScan, updateOf } from "./fixtures";
+import { FRONT_MAC, STAGE_MAC, linkOf, localLink, noComputerLink, presenterApi, presenterScan, updateOf, waitingLink } from "./fixtures";
 import { Presentation } from "./PresentationSample";
 import { Scripted } from "./Scripted";
 import type { SampleState } from "./StateCard";
@@ -21,6 +21,7 @@ export const presentationStates: SampleState[] = [
   { id: "update-by-itself", label: "Update available (StagePilot does it)", look: "Details closed; one calm line inside says StagePilot updates it by itself.", render: () => <Presentation link={linkOf("outdated", { update: updateOf("automatic", "StagePilot updates the Presenter Link by itself when nothing is playing.") })} /> },
   { id: "needs-command", label: "Needs the command again", look: "Warning words in the status line, pill and the open Details.", render: () => <Presentation link={linkOf("needs_command")} /> },
   { id: "not-answering", label: "Not answering", look: "The one state that also shows in the panel header; here: the warning pill and the open Details.", render: () => <Presentation link={linkOf("not_answering")} /> },
+  { id: "waiting-for-macos", label: "Waiting for macOS", look: "This computer while macOS asks for permission (Documents folder, System Events): the info pill 'Waiting for macOS', and the Details open by themselves with the one sentence: answer the prompt, then press Connect again.", render: () => <Presentation link={waitingLink()} /> },
   { id: "import-blocked", label: "Import blocked", look: "Limited pill; the sentence with the fix sits in the closed Details (open them).", render: () => <Presentation link={linkOf("ready", { can_import: false, import_blocker: "Allow the Presenter Link in System Settings > Privacy & Security > Accessibility, then try again." })} /> },
   { id: "this-computer", label: "On this computer", look: "'Ready, on this computer'; the Details hold the 'nothing to set up' line.", render: () => <Presentation link={localLink()} /> },
   { id: "no-link", label: "No Presenter Link offered", look: "Only the ProPresenter API line, pill and boxes: no Presenter Link line, pill or Details button.", render: () => <Presentation /> },
