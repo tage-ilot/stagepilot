@@ -181,3 +181,19 @@ test("a private key never sits in the helper folders", () => {
   }
   assert.equal(execFileSync("git", ["ls-files", "*.pem", "*.key"], { cwd: repo, encoding: "utf8" }).trim(), "");
 });
+
+test("the ProPresenter Link helper is signed and checked like the other two", () => {
+  const mine = keyPair();
+  const root = checkout();
+  const entry = HELPERS.find((h) => /ProPresenter Link/.test(h.name));
+  assert.ok(entry, "listed in HELPERS");
+  assert.equal(entry.dir, "crates/stagepilot-propresenter/assets/propresenter-link");
+  run(["--root", root, "--key", writePem(root, mine), "--public-key", mine.raw], quiet);
+  const dir = path.join(root, entry.dir);
+  assert.deepEqual(bundleProblems(dir, mine.raw), []);
+  assert.match(fs.readFileSync(path.join(dir, SUMS), "utf8"), /propresenter_link\.py/);
+  fs.appendFileSync(path.join(dir, "propresenter_link.py"), "# tampered\n");
+  assert.match(bundleProblems(dir, mine.raw).join("\n"), /propresenter_link\.py does not match SHA256SUMS/);
+  fs.rmSync(path.join(dir, "install.sh"));
+  assert.match(bundleProblems(dir, mine.raw).join("\n"), /install\.sh/);
+});

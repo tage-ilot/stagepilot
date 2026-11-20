@@ -2,3 +2,7 @@
 crates/stagepilot-lights/assets/lightkey-helper/* -text
 # The vendored Playback helper is hashed byte for byte: never convert line endings.
 crates/stagepilot-playback/assets/playback-helper/* -text
+# The ProPresenter Link helper is hashed byte for byte: never convert line endings.
+crates/stagepilot-propresenter/assets/propresenter-link/* -text
+# The screen scripts are compared byte for byte with the copies inside the helper: never convert line endings.
+crates/stagepilot-propresenter/assets/gui/* -text

@@ -538,6 +538,8 @@ async fn propresenter_settings_body(rt: Rt, raw: Bytes) -> Json {
         reconnect_initial_seconds: current.reconnect_initial_seconds,
         reconnect_max_seconds: current.reconnect_max_seconds,
         health_check_interval_seconds: current.health_check_interval_seconds,
+        // The ProPresenter Link's settings are not this form's: they stay as they are.
+        link: current.link.clone(),
     };
     updated.normalise();
     let mut errors = Vec::new();

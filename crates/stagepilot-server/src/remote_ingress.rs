@@ -146,10 +146,11 @@ async fn authorise(
         return Err(denial(403, "Remote same-origin request required."));
     }
     // The Lighting and Playback computers' installers are LAN only, whoever is logged in remotely (the
-    // Playback one carries the helper's key).
+    // Playback and ProPresenter ones carry the helper's key).
     if [
         crate::helper_install::PREFIX,
         crate::playback_helper_install::PREFIX,
+        crate::propresenter_helper_install::PREFIX,
     ]
     .iter()
     .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")))

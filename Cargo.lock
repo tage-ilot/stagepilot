@@ -2885,14 +2885,19 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "hex",
+ "hmac",
  "reqwest",
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "stagepilot-core",
+ "tempfile",
  "tokio",
  "tracing",
  "ts-rs",
+ "url",
 ]
 
 [[package]]

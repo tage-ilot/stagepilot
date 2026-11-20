@@ -68,6 +68,11 @@ pub struct Runtime {
     pub playback_library: Arc<crate::playback_library::PlaybackLibrary>,
     /// The one-time "Set up the Playback computer" session (token, expiry, optional listener).
     pub playback_helper_install: Arc<crate::playback_helper_install::PlaybackHelperInstall>,
+    /// How the files and the screen of the ProPresenter computer are reached (`propresenter_link`), and its setup session.
+    pub propresenter_link: Arc<crate::propresenter_link::ProPresenterLink>,
+    pub propresenter_helper_install:
+        Arc<crate::propresenter_helper_install::ProPresenterHelperInstall>,
+    link_connect: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The helpers update themselves when StagePilot starts (signed bundles only, only while nothing is playing).
     pub helper_updater: Arc<crate::helper_update::HelperUpdater>,
     helper_update_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -259,6 +264,19 @@ impl Runtime {
             );
         }
         let playback_library = Arc::new(playback_library);
+        // The key StagePilot makes for the ProPresenter Link helper: the same choice again, under its own name.
+        let link_credentials: Arc<dyn stagepilot_core::settings::CredentialStore> =
+            if options.memory_tokens {
+                Arc::new(stagepilot_core::settings::MemoryCredentialStore::default())
+            } else {
+                Arc::new(stagepilot_core::settings::KeyringCredentialStore::propresenter_link())
+            };
+        let propresenter_link = Arc::new(
+            crate::propresenter_link::ProPresenterLink::with_credentials(
+                settings_service.clone(),
+                link_credentials,
+            ),
+        );
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
             let demo = Arc::new(
@@ -294,15 +312,18 @@ impl Runtime {
             &pco,
             &playback,
         ));
-        let helper_updater = Arc::new(crate::helper_update::HelperUpdater::new(
-            Arc::new(crate::helper_update::LiveEnvironment {
-                settings: settings_service.clone(),
-                store: store.clone(),
-                playback: playback.clone(),
-                outputs: outputs.clone(),
-            }),
-            playback_library.clone(),
-        ));
+        let helper_updater = Arc::new(
+            crate::helper_update::HelperUpdater::new(
+                Arc::new(crate::helper_update::LiveEnvironment {
+                    settings: settings_service.clone(),
+                    store: store.clone(),
+                    playback: playback.clone(),
+                    outputs: outputs.clone(),
+                }),
+                playback_library.clone(),
+            )
+            .with_propresenter_link(propresenter_link.clone()),
+        );
         let runtime = Arc::new(Self {
             settings,
             bus,
@@ -335,6 +356,13 @@ impl Runtime {
                     playback_library.clone(),
                 ),
             ),
+            propresenter_helper_install: Arc::new(
+                crate::propresenter_helper_install::ProPresenterHelperInstall::new(
+                    propresenter_link.clone(),
+                ),
+            ),
+            propresenter_link,
+            link_connect: Mutex::new(None),
             playback_library,
             helper_updater,
             helper_update_task: Mutex::new(None),
@@ -519,6 +547,10 @@ impl Runtime {
         *self.order_connect.lock().unwrap_or_else(|p| p.into_inner()) = Some(
             crate::playback_order::connect_at_start(Arc::downgrade(self)),
         );
+        // The same for the ProPresenter Link, only when a setup was once done and the saved ProPresenter computer is another one.
+        *self.link_connect.lock().unwrap_or_else(|p| p.into_inner()) = Some(
+            crate::propresenter_link::connect_at_start(Arc::downgrade(self)),
+        );
         self.plugins.start_all().await;
         // Proactive OAuth refresh: one lifespan-owned task polling a stop signal.
         let _ = self.oauth_stop.send(false);
@@ -593,6 +625,14 @@ impl Runtime {
         }
         if let Some(task) = self
             .order_connect
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            task.abort();
+        }
+        if let Some(task) = self
+            .link_connect
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .take()

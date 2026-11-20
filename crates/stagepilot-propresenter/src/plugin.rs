@@ -130,9 +130,14 @@ impl ProPresenterPlugin {
     pub fn is_running_with(&self, settings: &ProPresenterSettings) -> bool {
         let snapshot = self.inner.snapshot();
         let st = self.inner.st();
+        // The ProPresenter Link's folder setting is not the connection's: changing it never reconnects.
+        let same = ProPresenterSettings {
+            link: settings.link.clone(),
+            ..st.settings.clone()
+        } == *settings;
         !st.stopping
             && st.client.is_some()
-            && st.settings == *settings
+            && same
             && snapshot.connection_status == ConnectionStatus::Connected
             && snapshot.timer_found
             && snapshot.look_found

@@ -2020,6 +2020,55 @@ pub struct ProPresenterSettings {
     pub reconnect_max_seconds: f64,
     #[serde(default = "ten_f64")]
     pub health_check_interval_seconds: f64,
+    /// The ProPresenter Link (files and screen of the ProPresenter computer). Left out of the saved file while it holds
+    /// nothing, so an older file saves back unchanged.
+    #[serde(default, skip_serializing_if = "ProPresenterLinkSettings::is_default")]
+    #[ts(optional, as = "Option<ProPresenterLinkSettings>")]
+    pub link: ProPresenterLinkSettings,
+}
+
+/// Default port of the ProPresenter Link helper (`propresenter-link`, a small agent on the ProPresenter computer).
+pub const DEFAULT_PROPRESENTER_LINK_PORT: u16 = 8790;
+
+/// The optional ProPresenter Link settings (`propresenter.link`). Nothing secret: the helper's key lives in the credential store.
+/// `data_folder` is where ProPresenter keeps its libraries on the ProPresenter computer; left out, the default
+/// `~/Documents/ProPresenter` is used (on this computer for the Local connection, on the other one the helper's own setting).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProPresenterLinkSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<String>")]
+    pub data_folder: Option<String>,
+}
+
+impl ProPresenterLinkSettings {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn normalise(&mut self) {
+        self.data_folder = trim_or_none(&self.data_folder);
+    }
+
+    pub fn validate(&self, path: &[Value], errors: &mut Errors) {
+        if let Some(folder) = &self.data_folder {
+            let absolute = folder.starts_with('/')
+                || folder.starts_with("~/")
+                || folder.starts_with("\\\\")
+                || folder.as_bytes().get(1..3) == Some(b":\\")
+                || folder.as_bytes().get(1..3) == Some(b":/");
+            if folder.chars().any(|c| (c as u32) < 32) || !absolute {
+                value_error(
+                    errors,
+                    &path_with(path, "data_folder"),
+                    "Enter the full path of ProPresenter's folder, for example /Users/name/Documents/ProPresenter.",
+                    json!(folder),
+                );
+            } else {
+                check_len(errors, path, "data_folder", folder, 1, 1024);
+            }
+        }
+    }
 }
 
 fn pp_host() -> String {
@@ -2056,17 +2105,20 @@ impl Default for ProPresenterSettings {
             reconnect_initial_seconds: 1.0,
             reconnect_max_seconds: 30.0,
             health_check_interval_seconds: 10.0,
+            link: ProPresenterLinkSettings::default(),
         }
     }
 }
 
 impl ProPresenterSettings {
     pub fn normalise(&mut self) {
+        self.link.normalise();
         self.host = self.host.trim().to_string();
         self.timer_name = self.timer_name.trim().to_string();
         self.look_id = trim_or_none(&self.look_id);
     }
     pub fn validate(&self, path: &[Value], errors: &mut Errors) {
+        self.link.validate(&path_with(path, "link"), errors);
         for (key, v) in [("host", &self.host), ("timer_name", &self.timer_name)] {
             if v.is_empty() {
                 value_error(

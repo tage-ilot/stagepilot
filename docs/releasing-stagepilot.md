@@ -72,13 +72,15 @@ either secret is absent. The private key is never passed to frontend code.
 
    It refuses any key whose public half is not the pinned one (`Evky97ydM5zWJ02p6Wc7RguEHMglX3WRxiPrege4Op8=`),
    rewrites `SHA256SUMS` for each helper folder (every file in it, so the version is covered) and writes
-   `SHA256SUMS.sig` (base64 of the 64-byte Ed25519 signature of those exact bytes) next to it. The four files:
+   `SHA256SUMS.sig` (base64 of the 64-byte Ed25519 signature of those exact bytes) next to it. The six files:
 
    ```text
    crates/stagepilot-playback/assets/playback-helper/SHA256SUMS
    crates/stagepilot-playback/assets/playback-helper/SHA256SUMS.sig
    crates/stagepilot-lights/assets/lightkey-helper/SHA256SUMS
    crates/stagepilot-lights/assets/lightkey-helper/SHA256SUMS.sig
+   crates/stagepilot-propresenter/assets/propresenter-link/SHA256SUMS
+   crates/stagepilot-propresenter/assets/propresenter-link/SHA256SUMS.sig
    ```
 
    Commit them in the release commit. A signature is deterministic, so a release whose helper files did

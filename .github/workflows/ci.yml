@@ -69,6 +69,12 @@ jobs:
       - name: Lightkey helper update tests (signature check, refusals, swap, wrapper)
         run: python -m unittest discover -s scripts/lightkey-helper-tests -v
 
+      - name: ProPresenter Link helper tests (keys, paths, create-only, index, screen scripts, update, installer)
+        run: python -m unittest discover -s scripts/propresenter-link-tests -v
+
+      - name: ProPresenter Link stand-ins (the helper on a temp folder, ProPresenter's own API)
+        run: python -m unittest discover -s tools -p "test_fake_propresenter_*.py" -v
+
       - name: Helper signing script tests
         run: node --test scripts/helper_signing.test.mjs
 

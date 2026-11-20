@@ -219,6 +219,33 @@ fn an_unknown_nested_key_is_kept_at_its_place() {
 }
 
 #[test]
+fn an_unknown_key_inside_the_propresenter_link_section_is_kept() {
+    let mut value = valid_value();
+    value["propresenter"]["link"] =
+        json!({"data_folder": "/Volumes/Show/ProPresenter", "future_link_field": [1, 2]});
+    let c = case(&text(&value));
+    let store = SettingsFileStore::new(&c.path);
+    let (loaded, logs) = logged(|| store.load());
+    let settings = loaded.unwrap().unwrap();
+    assert_eq!(
+        settings.propresenter.link.data_folder.as_deref(),
+        Some("/Volumes/Show/ProPresenter")
+    );
+    let warnings = logs.at(Level::WARN);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("propresenter.link.future_link_field"),
+        "{warnings:?}"
+    );
+    store.save(&settings).unwrap();
+    assert_eq!(
+        c.json(),
+        value,
+        "the key and the folder are identical after a save"
+    );
+}
+
+#[test]
 fn a_newer_schema_is_quarantined_and_never_overwritten() {
     let mut value = valid_value();
     value["schema_version"] = json!(3);

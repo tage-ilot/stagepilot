@@ -19,6 +19,8 @@ pub mod playback_key_watch;
 pub mod playback_library;
 pub mod playback_order;
 pub mod playback_routes;
+pub mod propresenter_helper_install;
+pub mod propresenter_link;
 pub mod remote_fakes;
 pub mod remote_feature;
 pub mod remote_ingress;

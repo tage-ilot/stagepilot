@@ -95,6 +95,12 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::playback_library::routes())
         // "Set up the Playback computer": the same, for the Playback helper (LAN only, with the key inside).
         .merge(crate::playback_helper_install::api_routes())
+        // The ProPresenter Link: how the ProPresenter computer is reached, and its setup session (LAN only, with the key inside).
+        .merge(crate::propresenter_link::routes())
+        .merge(crate::propresenter_helper_install::api_routes())
+        .merge(crate::propresenter_helper_install::served_routes(
+            runtime.propresenter_helper_install.clone(),
+        ))
         .merge(crate::playback_helper_install::served_routes(
             runtime.playback_helper_install.clone(),
         ))
@@ -392,6 +398,16 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
         }
     };
     let _serialised = rt.pco.lock.lock().await;
+    // The ProPresenter Link's folder (`propresenter.link`) is kept when the window did not send it, so an older window or a save of
+    // anything else never clears it.
+    let sent_link = parsed
+        .as_ref()
+        .and_then(|v| v.get("propresenter"))
+        .and_then(|p| p.get("link"))
+        .is_some();
+    if !sent_link {
+        requested.propresenter.link = rt.settings_service.snapshot().propresenter.link;
+    }
     // The Playback library connection is changed by its own route only (`PUT /api/v1/playback-library/settings`),
     // so a save of anything else, even from an older window, never switches it on or off.
     requested.playback_library = rt.settings_service.snapshot().playback_library;
