@@ -245,7 +245,8 @@ describe("Song order card", () => {
     const playback = controller({ status: playbackStatus({ song_order: [], stale: true, captured_version: null }) });
     const user = userEvent.setup();
     render(<PlaybackApiPanel playback={playback} />);
-    expect(screen.getByText(/steps through your Playback songs once/)).toBeVisible();
+    // The one-sentence explanation lives in docs/playback-api.md; the confirmation below is what warns.
+    expect(screen.queryByText(/steps through your Playback songs once/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Scan Playback API" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("must stay stopped");
@@ -285,7 +286,8 @@ describe("Song order card", () => {
     expect(screen.getByText("Your Playback setlist changed. Scan the setlist again before updating Planning Center.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Scan Playback API" })).toBeEnabled();
     view.rerender(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
-    expect(screen.getByText("Song order saved (2 songs)")).toBeVisible();
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Order saved (2 songs)");
+    expect(screen.queryByText(/Song order saved/)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -314,7 +316,8 @@ describe("Song order card", () => {
 
   it("uses singular for a saved one-song order", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ song_order: [101], song_count: 1, plan_song_count: 1 }) })} />);
-    expect(screen.getByText("Song order saved (1 song)")).toBeVisible();
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Order saved (1 song)");
+    expect(screen.queryByText(/Song order saved/)).not.toBeInTheDocument();
   });
 
   it("progress and failure are plain", () => {
@@ -897,7 +900,7 @@ describe("Song order section", () => {
   it("is expanded by default, with chevron, title, one-line summary and the scan button in the header", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Saved - 2 songs");
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Order saved (2 songs)");
     const header = document.querySelector("[data-section=band] [data-part=band-header]")!;
     expect(within(header as HTMLElement).getByRole("button", { name: "Scan Playback API" })).toBeVisible();
     expect(header.querySelector('[data-part="chevron"]')).not.toBeNull();
@@ -921,8 +924,8 @@ describe("Song order section", () => {
   });
 
   it.each([
-    ["saved", {}, "Saved - 2 songs"],
-    ["learning", { song_order: [], song_count: 6, plan_song_count: 6, order_mode: "learned" as const, learned_songs: [{ song_id: 7, plan_position: 0, confirmed: true, doubtful: false }, { song_id: 9, plan_position: 1, confirmed: false, doubtful: false }] }, "Learning - 2 of 6 placed"],
+    ["saved", {}, "Order saved (2 songs)"],
+    ["learning", { song_order: [], song_count: 6, plan_song_count: 6, order_mode: "learned" as const, learned_songs: [{ song_id: 7, plan_position: 0, confirmed: true, doubtful: false }, { song_id: 9, plan_position: 1, confirmed: false, doubtful: false }] }, "Learning order (2 of 6)"],
     ["none", { song_order: [], song_count: 0, order_mode: "none" as const, learned_songs: [] }, "No order yet"],
     ["stale", { stale: true }, "Needs a new scan"],
   ])("summary when %s", (_name, extra, text) => {
@@ -931,10 +934,10 @@ describe("Song order section", () => {
   });
 
   it.each([
-    ["from the Library Link", { order_source: "library" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "From the Library Link (6 songs)"],
-    ["from a scan", { order_source: "scan" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "From a scan (6 songs)"],
-    ["from a scan, one song", { order_source: "scan" as const, song_order: [1], song_count: 1 }, "From a scan (1 song)"],
-    ["learning", { song_order: [], song_count: 6, order_mode: "learned" as const, order_source: "learned" as const, learned_songs: [] }, "Learning as songs play"],
+    ["from the Library Link", { order_source: "library" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "Order from the Library Link (6 songs)"],
+    ["from a scan", { order_source: "scan" as const, song_order: [1, 2, 3, 4, 5, 6], song_count: 6 }, "Order from a scan (6 songs)"],
+    ["from a scan, one song", { order_source: "scan" as const, song_order: [1], song_count: 1 }, "Order from a scan (1 song)"],
+    ["learning", { song_order: [], song_count: 6, order_mode: "learned" as const, order_source: "learned" as const, learned_songs: [] }, "Learning order (0 of 2)"],
     ["a library order the setlist has left behind", { order_source: "library" as const, stale: true }, "Needs a new scan"],
   ])("summary says where the order came from: %s", (_name, extra, text) => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus(extra) })} />);
@@ -951,7 +954,7 @@ describe("Song order section", () => {
     view.unmount();
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_source: "library", order_library_note: null }) })} />);
     expect(screen.queryByTestId("order-library-note")).toBeNull();
-    expect(screen.getByTestId("order-mode")).toHaveTextContent("Order from the Library Link");
+    expect(screen.queryByTestId("order-mode")).toBeNull();
   });
 
   it("uses the Scan Playback API wording in the dialog and the activity line", async () => {
@@ -973,21 +976,30 @@ describe("Learned song order", () => {
     settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: true }, ...extra,
   });
 
-  it("learned: says the order is being learned, with the count, and never says saved", () => {
+  it("learned: a neutral chip in the header says the order is being learned, with the count, and never says saved (D6)", () => {
     render(<PlaybackApiPanel playback={controller({ status: learned() })} />);
-    expect(screen.getByTestId("order-mode")).toHaveTextContent("Learning the order as songs play (2 of 6 placed)");
+    const chip = screen.getByTestId("order-learning-chip");
+    expect(chip).toHaveTextContent("Learning order (2 of 6)");
+    expect(chip).toHaveAttribute("data-tone", "neutral");
+    expect(screen.getByTestId("song-order-summary")).toContainElement(chip);
+    // Not a sentence in the body, and not in an alarm colour.
+    expect(screen.queryByText(/Learning the order as songs play/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-mode")).toBeNull();
+    expect(chip.className).not.toMatch(/danger|warning/);
     expect(screen.queryByText(/Song order saved/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Scan Playback API" })).toBeVisible();
   });
 
-  it("scanned: Order scanned", () => {
-    render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_mode: "scanned", learned_songs: [] }) })} />);
-    expect(screen.getByTestId("order-mode")).toHaveTextContent("Order scanned");
+  it("scanned: the header says it once (Order from a scan), with no second line in the body", () => {
+    render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ order_mode: "scanned", order_source: "scan", learned_songs: [] }) })} />);
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Order from a scan (2 songs)");
+    expect(screen.queryByText(/Order scanned/)).not.toBeInTheDocument();
   });
 
-  it("none: asks for Up next or a scan", () => {
+  it("none: the header says No order yet, and the learning chip is not drawn", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus({ song_order: [], song_count: 0, order_mode: "none", learned_songs: [], settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: true } }) })} />);
-    expect(screen.getByTestId("order-mode")).toHaveTextContent("No order yet - set Up next or scan");
+    expect(screen.getByTestId("song-order-summary")).toHaveTextContent("No order yet");
+    expect(screen.queryByTestId("order-learning-chip")).toBeNull();
   });
 
   it("shows the note and the doubtful-song hint only when they apply", () => {
@@ -998,10 +1010,10 @@ describe("Learned song order", () => {
     expect(screen.getByText(/Check the order: a song's length differs from the plan\. Run a scan\./)).toBeVisible();
   });
 
-  it("the switch explains itself and reflects the saved setting", () => {
+  it("the switch reflects the saved setting and has no explanation under it (the sentence is in docs/playback-api.md)", () => {
     const view = render(<PlaybackApiPanel playback={controller({ status: learned() })} />);
     expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).toBeChecked();
-    expect(screen.getByText("A scan always replaces the learned order.")).toBeVisible();
+    expect(screen.queryByText("A scan always replaces the learned order.")).not.toBeInTheDocument();
     view.rerender(<PlaybackApiPanel playback={controller({ status: learned({ order_mode: "none", learned_songs: [], settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true, learn_order: false } }) })} />);
     expect(screen.getByRole("switch", { name: "Learn the order as songs play" })).not.toBeChecked();
   });

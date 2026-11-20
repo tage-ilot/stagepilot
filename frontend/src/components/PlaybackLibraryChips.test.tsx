@@ -163,6 +163,16 @@ describe("the song chips in the Playback config", () => {
     expect(screen.getByTestId("library-notices")).toHaveTextContent("Playback has no setlist for 2026-11-22");
   });
 
+  it("does not write the order sentence under the songs: the ledger's Check order stamp says it (D6)", () => {
+    mount(planOf([
+      planSong("Song One", 1, { library: library({ position: 2 }) }),
+      planSong("Song Two", 2, { library: library({ position: 1 }) }),
+    ]));
+    expect(screen.queryByText(/is song \d+ in the plan but song \d+ in Playback/)).toBeNull();
+    expect(screen.queryByTestId("library-notices")).toBeNull();
+    expect(chips()).toHaveLength(2);
+  });
+
   it("keeps showing the chips (marked old by the status) while Playback does not answer for a moment", () => {
     mount(planOf([planSong("Song One", 1)], { stale: true, message: "Playback did not answer just now; this is what it said a moment ago." }));
     expect(chips()).toHaveLength(1);

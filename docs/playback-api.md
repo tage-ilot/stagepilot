@@ -74,8 +74,27 @@ the Library Link, see "Playback library"), otherwise **Scan Playback API** (this
 "Scan Playback API?", and the activity list marks events as "while scanning Playback songs"). The button is always drawn; when no
 scan can run it is greyed out and not pressable, with the reason as its tooltip and as screen-reader text: `Connect to the Playback
 API first.`, `Stop Playback to scan songs.` (the API scan) or `A scan is running.`. The section can be folded with its chevron; the choice is remembered on this device and the section
-starts expanded. A folded section still shows a one-line summary ("Saved - 6 songs", "Learning - 2 of 6 placed",
-"No order yet") and the scan button.
+starts expanded. A folded section still shows a one-line summary ("Order from a scan (6 songs)", "Order from the Library Link (6 songs)",
+"Order saved (6 songs)", "Needs a new scan", "No order yet") and the scan button. While the order is being learned the
+summary is a neutral chip, "Learning order (2 of 6)". The body says each fact once and carries no explanation; the
+sentences that used to sit there are here:
+
+- **What a scan does.** A scan always replaces the learned order. "Scan Playback API" steps through the songs in Playback once
+  to read their lengths, then returns to the song that was selected; Playback must stay stopped and nothing is played (the
+  confirmation dialog says this, and it stays). "Scan Playback Library" reads the order from the Library Link instead: Playback
+  is not touched and can keep playing, and the button reads it again whenever it is pressed.
+- **The song arrangement ledger.** Songs always stay in order: the plan's Nth song is started by Playback's Nth song once the
+  skipped songs are set aside. Songs never change places, and StagePilot does not reorder anything for you. When the plan and
+  Playback list some songs in a different order, the pair is stamped **Check order**: turn on Skip for a song that is only on
+  one side, or change the order in Playback or Planning Center. Titles are compared by their words; a pair that is only alike is
+  marked for you to check. Lengths are where Playback's countdown ends (the start of its last measure).
+- **Before a scan.** Without a scan of this setlist the ledger is only a comparison: scan the Playback songs once to turn on
+  Skip and to see which Playback song will start each timer.
+- **Which setlist.** With no choice the ledger uses the Playback setlist on the plan's date; "Chosen by you" says when a person
+  picked another one.
+- **Order differences under the song chips.** The Playback config's song chips no longer write "X is song 1 in the plan but song 2
+  in Playback." under them; the ledger's **Check order** stamp and the row's own note say it, and the header pill still counts it
+  in "Playback library: N things to check".
 
 ### Scan again in the hour before the service
 
@@ -127,9 +146,10 @@ is not added next to it. It is worked out in the dashboard from the status it al
 
 With **Learn the order as songs play** on (the default; `playback_api.learn_order`),
 StagePilot may pair a Playback song with a plan position while no valid scanned
-order exists. The Playback panel labels this "Learning the order as songs play
-(N of M placed)"; a scanned order reads "Order scanned"; with neither it reads
-"No order yet - set Up next or scan". A scan always replaces the learned order.
+order exists. The Playback panel shows this as a neutral chip "Learning order (N of M)" in the
+Song order header; a scanned order reads "Order from a scan (N songs)"; with neither it reads
+"No order yet". (The dashboard's Playback card still says "Learning the order as songs play (N of M placed)".)
+A scan always replaces the learned order.
 
 When a song starts, the first matching rule applies:
 
