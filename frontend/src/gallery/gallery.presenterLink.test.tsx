@@ -8,12 +8,13 @@ import { installMadeUpApi } from "./madeUpApi";
 const real = window.fetch;
 beforeEach(() => { installMadeUpApi(); window.localStorage.clear(); });
 afterEach(() => { window.fetch = real; });
-const WAIT = { timeout: 15000 };
+// The gallery presses every sample's real buttons one after another; the slow macOS Intel runner needs well over 15 s for the later ones (release dry run, twice, a different test each time).
+const WAIT = { timeout: 45000 };
 const sample = (id: string) => document.querySelector(`[data-sample="presenter-link-${id}"]`) as HTMLElement;
 const hook = (id: string, testId: string) => () => { const found = sample(id)?.querySelector(`[data-testid="${testId}"]`); expect(found, `${id}: ${testId}`).not.toBeNull(); return found as HTMLElement; };
 const draw = () => render(<Frame only={["presenter-link"]} />);
 
-describe("the Presenter Link states", () => {
+describe("the Presenter Link states", { timeout: 60000 }, () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="presenter-link"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("presenter-link-", ""));
