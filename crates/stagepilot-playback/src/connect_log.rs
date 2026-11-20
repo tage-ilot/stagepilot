@@ -304,7 +304,7 @@ mod tests {
         )
         .unwrap();
         // The first refusal comes at once on Linux and macOS and after about a second on Windows: wait for it, then let many more
-        // attempts (10 ms apart) go by.
+        // attempts (10 ms apart where the refusal is immediate) go by.
         for _ in 0..3000 {
             if !lines.of(Level::WARN).is_empty() {
                 break;
@@ -315,7 +315,9 @@ mod tests {
         let warns = lines.of(Level::WARN);
         assert_eq!(warns.len(), 1, "{warns:#?}");
         assert!(
-            warns[0].contains("class=Refused") && warns[0].contains("host=127.0.0.1"),
+            // Linux and macOS refuse a closed port at once; Windows retries first and reports no answer.
+            (warns[0].contains("class=Refused") || warns[0].contains("class=TimedOut"))
+                && warns[0].contains("host=127.0.0.1"),
             "{}",
             warns[0]
         );
