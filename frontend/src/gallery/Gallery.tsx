@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 
+import { auditStates } from "./AuditStates";
 import { addressTemplates } from "./AddressStates";
 import { factTemplates } from "./FactStates";
 import { seedRecentAddresses } from "./seedRecent";
@@ -44,6 +45,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "template-summary", title: "Template: Summary", intro: "StatusSummary: the list and the cards, with ok, warn and danger words.", states: summaryTemplates },
   { id: "template-notices", title: "Template: Notices", intro: "SectionNotice: the four tones as boxes, with a title and a button, as a question group, and as lines.", states: noticeTemplates },
   { id: "template-facts", title: "Template: Fact chips", intro: "FactChips: a song's small facts (key, length, tempo, mtID, capture status) as square chips, by themselves and in the cards that have them: Lighting's songs, Playback's config songs and the matchup ledger. The Presenter Link's cards are in Section: Presenter Link.", states: factTemplates },
+  { id: "template-audit", title: "Template: Design audit follow-ups", intro: "Switched-off buttons that say why, the Event stream in plain words, the header's check list with its marks, the Save bar on a phone, and the Song order header while the order is learned.", states: auditStates },
   { id: "template-optional", title: "Template: Optional sections", intro: "OptionalSection and the band: closed, open, remembered, opened by a question.", states: optionalTemplates },
   { id: "template-layout", title: "Template: Panel order, and a new connection page", intro: "PanelLayout with every slot, with the summary first, and the worked example of DESIGN.md: a new connection built from the templates in 35 lines.", states: layoutTemplates },
 ];

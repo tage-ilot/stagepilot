@@ -49,16 +49,14 @@ import { latestActiveError } from "./dashboard/dashboardActiveError";
 import {
   buildConnectionCardViews,
   buildReadinessChecks,
-  READINESS_ROW_MARK,
-  READINESS_ROW_MARK_CLASS,
-  READINESS_ROW_TEXT_CLASS,
-  readinessRowTone,
   readinessWarnings,
   readinessErrorCauses,
   readinessHasError,
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
 import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
+import { EventRow } from "./dashboard/EventRow";
+import { ReadinessRows } from "./dashboard/ReadinessRows";
 import { describeStream, isHiddenEvent, sourceName } from "../lib/eventWords";
 import { clocksWords, dateWords, timeWords, whenWords } from "../lib/dateWords";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
@@ -950,22 +948,7 @@ export function Dashboard({
             role="tooltip"
           >
             <div className="rounded-ds-xl border border-edge bg-surface-950/85 p-3 shadow-elevation-overlay backdrop-blur-xl">
-              <ul className="grid gap-1.5">
-                {checks.map((check) => (
-                  <li
-                    className="flex items-center gap-2 rounded-ds-lg bg-edge-subtle px-3 py-2 text-sm"
-                    key={check.id}
-                    title={check.detail}
-                  >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${READINESS_ROW_MARK_CLASS[readinessRowTone(check)]}`} data-row-tone={readinessRowTone(check)}>
-                      {READINESS_ROW_MARK[readinessRowTone(check)]}
-                    </span>
-                    <span className={READINESS_ROW_TEXT_CLASS[readinessRowTone(check)]}>
-                      {check.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <ReadinessRows checks={checks} />
             </div>
           </div>
           )}
@@ -1319,7 +1302,7 @@ export function Dashboard({
           <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
-            {activity.map((event, index) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs" title={plainActivity[index]?.title}><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate font-semibold text-ink-body">{plainActivity[index]?.text}</p></div>)}
+            {activity.map((event, index) => <EventRow key={event.id} text={plainActivity[index]?.text ?? ""} time={formatTime(event.timestamp)} title={plainActivity[index]?.title} />)}
             {!activity.length && <p className="p-4 text-sm text-ink-muted">Waiting for demo events…</p>}
           </div>
         </Panel>
