@@ -8,7 +8,7 @@ import { SONG_ORDER_OPEN_KEY } from "../components/playbackStatus";
  * One thing a person does on a page: type into a field by its label, pick an option, or press a button by its words. The gallery runs
  * these on the REAL page after it is drawn, so a held change or an error is reached the way a person reaches it, not painted on.
  */
-export type Step = { type: [label: string, value: string] } | { pick: [label: string, value: string] } | { press: string } | { toggle: string };
+export type Step = { type: [label: string, value: string] } | { pick: [label: string, value: string] } | { press: string } | { toggle: string } | { key: [label: string, key: string] };
 
 const nativeValue = (element: HTMLInputElement | HTMLSelectElement, value: string) => {
   const proto = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -25,6 +25,13 @@ const controlOf = (root: HTMLElement, label: string) => {
 
 /** Does the step if it can be done now. `true`: done; `false`: what it needs (a control, an option, an enabled button) is not drawn yet. */
 function runStep(root: HTMLElement, step: Step): boolean {
+  if ("key" in step) {
+    // A key pressed in a control, found by its label (ArrowDown in an address box opens its list).
+    const target = controlOf(root, step.key[0]);
+    if (!target) return false;
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: step.key[1], bubbles: true, cancelable: true }));
+    return true;
+  }
   if ("toggle" in step) {
     // A tick box, found by the words of its label.
     const caption = Array.from(root.querySelectorAll("label")).find((node) => node.textContent?.trim() === step.toggle);

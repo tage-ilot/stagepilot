@@ -50,7 +50,7 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
     // The row holds the address, the port and the pair of buttons; the status line is one line with both connections.
     expect(within(row).getByLabelText("Host")).toBeInTheDocument();
     expect(within(row).getByLabelText("ProPresenter API port")).toBeInTheDocument();
-    expect(within(row).getAllByRole("button").map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
+    expect(within(row).getAllByRole("button").filter((button) => button.tabIndex !== -1).map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
     expect(status).toHaveTextContent("ProPresenter API: Connected to ProPresenter at 192.168.1.60. \u00B7 Presenter Link: Ready, version 0.1.0.");
     // Collapsed: the setup box and the notes wait behind the button.
     expect(button).toHaveAttribute("aria-expanded", "false");
@@ -87,7 +87,7 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={{ status: playbackStatus({ reason: "Connected to Playback at 10.30.0.141.", host: "10.30.0.141", settings: { enabled: true, host: "10.30.0.141", port: 8080, auto_scan: true, fast_transport: true } }), events: [], error: null, message: null, pending: null, saveArrangement: vi.fn(), save: vi.fn(), selectSource: vi.fn(), scan: vi.fn(), cancelScan: vi.fn(), discover: vi.fn() }} />);
     const section = screen.getByTestId("playback-live-link");
     expect(parts(section)).toEqual(["header", "connection", "status-row", "details"]);
-    expect(within(screen.getByTestId("playback-live-link-line")).getAllByRole("button").map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
+    expect(within(screen.getByTestId("playback-live-link-line")).getAllByRole("button").filter((button) => button.tabIndex !== -1).map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
     expect(screen.getByTestId("live-link-sub").querySelector("[data-part=status]")).toHaveTextContent("Connected to Playback at 10.30.0.141. \u00B7 Library Link: Ready, version");
     expect(screen.getByRole("button", { name: /Library Link setup/ })).toHaveAttribute("aria-expanded", "false");
   });

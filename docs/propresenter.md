@@ -236,7 +236,7 @@ the whole write `404`).
 The block is the **first block under the header** (and under the panel's alert lines), where the Playback and Lighting panels put their
 Live Link blocks, in the same spacing. It is built like them: a title, two pills (`ProPresenter API: Connected`,
 `Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
-**connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API, with the recent addresses) and the
+**connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API); **Host** is the address box every Live Link block has (type any address, or open its arrow for the computers the last scan found and the ones that worked before) and the
 same two buttons every Live Link block ends its row with, **Scan** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
 connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Refresh uses the
 saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`

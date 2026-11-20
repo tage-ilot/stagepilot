@@ -1,5 +1,6 @@
 import { FRONT_MAC, STAGE_MAC, linkOf, localLink, noComputerLink, presenterApi, presenterScan, updateOf } from "./fixtures";
 import { Presentation } from "./PresentationSample";
+import { Scripted } from "./Scripted";
 import type { SampleState } from "./StateCard";
 
 export const presentationStates: SampleState[] = [
@@ -11,6 +12,7 @@ export const presentationStates: SampleState[] = [
   { id: "found-many", label: "Scan found more than one", look: "The chooser under the row, the same one Playback uses: choosing a computer fills Host and API.", render: () => <Presentation link={linkOf("ready")} scan={presenterScan("found", { candidates: [FRONT_MAC, STAGE_MAC] })} /> },
   { id: "not-found", label: "Scan found nothing", look: "The checklist under the row: it stays in view. Scan and Connect are still both there.", render: () => <Presentation api={presenterApi({ connection_status: "disconnected" })} link={linkOf("ready")} scan={presenterScan("not_found", { reason: "No ProPresenter answered on this network.", hostsProbed: 255, hostsTotal: 255, networks: ["192.0.2.0/24"], elapsed: 18.4 })} /> },
   { id: "blocked", label: "macOS blocks the local network", look: "The red notice with the steps, Open Local Network settings and Copy diagnostic details.", render: () => <Presentation api={presenterApi({ connection_status: "disconnected" })} link={linkOf("ready")} scan={presenterScan("not_found", { error: "permission_denied", reason: "macOS is blocking StagePilot's local-network access.", details: "{\"outcome\":\"blocked\"}", settingsUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork" })} /> },
+  { id: "address-list", label: "The Host arrow open: Scanned and Recent", look: "ArrowDown in Host (or the arrow) opens the list under the box: the computers the scan found, then what worked before. Choosing one fills Host (and API); Connect still does the connecting.", render: () => <div className="pb-64"><Scripted steps={[{ key: ["Host", "ArrowDown"] }]}><Presentation link={linkOf("ready")} scan={presenterScan("found", { candidates: [FRONT_MAC, STAGE_MAC] })} /></Scripted></div> },
   { id: "connecting", label: "Connecting", look: "Connect says Connecting… and waits; Scan waits too.", render: () => <Presentation connecting held link={linkOf("ready")} /> },
   { id: "host-error", label: "Error on the Host field", look: "The red border and the sentence under the row, which the Host box points at.", render: () => <Presentation error="Enter the computer's name or an address like 192.0.2.10 (no spaces)." link={linkOf("ready")} /> },
   { id: "held", label: "Held (unsaved) change on Host", look: "'Not saved yet' beside the caption, with the warning border: words and border, never colour alone.", render: () => <Presentation held link={linkOf("ready")} /> },

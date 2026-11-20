@@ -1,12 +1,10 @@
 import { useId, useState } from "react";
 
-import { RecentAddresses } from "./RecentAddresses";
-
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ProPresenterStatusResponse } from "../types";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { proPresenterBoxProps } from "./helperBoxProps";
-import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice, type ScanState } from "./sections";
+import { AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice, scannedAddresses, type ScanState } from "./sections";
 import { PROPRESENTER_SCAN_WORDS } from "./proPresenterScan";
 import { useRecheckNote } from "./useRecheckNote";
 import { CONTROL_40 } from "./liveLink";
@@ -101,6 +99,12 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
   // The scan's own request can take a moment before the backend says "scanning": the button already reads Scanning… (cancel).
   const scanState = fields?.scan.state;
   const scanning = scanState?.state === "scanning" || Boolean(fields?.scan.starting);
+  const scanned = scanState ? scannedAddresses(scanState) : [];
+  const connectNow = () => {
+    if (!fields || fields.connectDisabled || fields.busy || fields.connecting) return;
+    if (fields.checksAgain) recheck.mark(); else recheck.clear();
+    fields.onConnect();
+  };
   const hostMarker = fields?.held.host ? <HeldMarker id={heldHostId} /> : undefined;
   const portMarker = fields?.held.port ? <HeldMarker id={heldPortId} /> : undefined;
 
@@ -117,7 +121,7 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
             connectHint={fields.connectHint}
             connecting={fields.connecting}
             onCancelScan={fields.scan.cancel}
-            onConnect={() => { if (fields.checksAgain) recheck.mark(); else recheck.clear(); fields.onConnect(); }}
+            onConnect={connectNow}
             onScan={() => { recheck.clear(); fields.scan.start(); }}
             scanDisabled={fields.busy}
             scanHint={fields.busy ? "Wait for the saving to finish." : undefined}
@@ -126,16 +130,18 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
             tone="presentation"
           >
             <LiveLinkField caption="Host" className="live-link-host" marker={hostMarker}>
-              <Input
+              <AddressBox
                 aria-describedby={[hostMarker ? heldHostId : null, fields.errors.host ? errorHostId : null].filter(Boolean).join(" ") || undefined}
                 aria-label="Host"
-                autoCapitalize="none"
-                autoCorrect="off"
-                className={`w-full font-mono ${CONTROL_40} ${fields.held.host ? "!border-warning" : ""}`}
                 disabled={fields.busy}
                 error={Boolean(fields.errors.host)}
-                onChange={(event) => fields.onHost(event.target.value)}
-                spellCheck={false}
+                held={fields.held.host}
+                onChange={fields.onHost}
+                // A computer chosen from the Scanned group brings the port it answered on, as the chooser does.
+                onPick={(picked) => { if (picked.port !== undefined) fields.onPort(String(picked.port)); }}
+                onSubmit={connectNow}
+                scanned={scanned}
+                scope="presentation"
                 value={fields.host}
               />
             </LiveLinkField>
@@ -153,7 +159,6 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
               />
             </LiveLinkField>
           </ConnectionRow>
-          <RecentAddresses className="mt-2" disabled={fields.busy} onPick={fields.onHost} scope="presentation" value={fields.host} />
           {fields.errors.host && <SectionNotice className="mt-1" id={errorHostId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.host}</SectionNotice>}
           {fields.errors.port && <SectionNotice className="mt-1" id={errorPortId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.port}</SectionNotice>}
           <ScanProgress scan={fields.scan.state} wording={PROPRESENTER_SCAN_WORDS} />

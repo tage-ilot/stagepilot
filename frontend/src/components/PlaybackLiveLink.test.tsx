@@ -156,10 +156,12 @@ describe("the Library Link setup box in the block", () => {
 describe("the computer field takes in the scan, with the old behaviour", () => {
   it("Scan is the first button, then Connect, and the field is labelled Playback computer", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected()} />);
-    const first = within(block()).getAllByRole("button")[0];
-    expect(first).toBe(screen.getByRole("button", { name: "Scan" }));
-    expect(within(block()).getAllByRole("button")[1]).toBe(screen.getByRole("button", { name: "Connect" }));
-    expect(screen.getByLabelText("Playback computer").tagName).toBe("SELECT");
+    // The little arrow inside the address box is not a tab stop (tabindex -1): the buttons a person reaches are Scan, then Connect.
+    const buttons = within(block()).getAllByRole("button").filter((button) => button.tabIndex !== -1);
+    expect(buttons[0]).toBe(screen.getByRole("button", { name: "Scan" }));
+    expect(buttons[1]).toBe(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.getByRole("combobox", { name: "Playback computer" }).tagName).toBe("INPUT");
+    expect(screen.queryByRole("option", { name: /Other computer/ })).toBeNull();
   });
 
   it("choosing a computer sets the API host and the Library Link's address: an Advanced override is cleared", async () => {
@@ -195,17 +197,28 @@ describe("recent computers: a computer that connected before is one choice and C
     expect(window.localStorage.getItem("stagepilot.recent-addresses.playback")).toBeNull();
   });
 
-  it("lists the recent ones after the saved and found ones, and Connect on one connects to it directly", async () => {
+  it("lists the scanned ones, then the recent ones (once each), and Connect on a recent one connects to it directly", async () => {
     window.localStorage.setItem("stagepilot.recent-addresses.playback", JSON.stringify(["10.20.0.102", "10.30.0.141", "10.30.0.7"]));
     const playback = disconnected("10.30.0.141", { scan: scanOf("found", { candidates: [{ name: "Example Mac", host: "10.30.0.7" }] }) });
     render(<PlaybackLiveLink library={libraryController("not_installed")} playback={playback} />);
-    const select = screen.getByRole("combobox", { name: "Playback computer" });
-    const labels = within(select).getAllByRole("option").map((option) => option.textContent);
-    expect(labels).toEqual(["Example Mac (10.30.0.7)", "10.30.0.141 (saved)", "10.20.0.102 (recent)", "Other computer…"]);
     const user = userEvent.setup();
-    await user.selectOptions(select, "10.20.0.102");
+    expect(screen.getByRole("combobox", { name: "Playback computer" })).toHaveValue("10.30.0.141");
+    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    const groups = within(screen.getByRole("listbox")).getAllByRole("group");
+    expect(groups.map((group) => within(group).getAllByRole("option").map((option) => option.textContent?.replace("(in the box now)", "")))).toEqual([["Example Mac (10.30.0.7)"], ["10.20.0.102", "10.30.0.141"]]);
+    await user.click(screen.getByRole("option", { name: "10.20.0.102" }));
+    expect(playback.scan).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(playback.scan).toHaveBeenCalledWith("10.20.0.102");
+  });
+
+  it("a computer that connects is in the list afterwards (the list follows the memory)", async () => {
+    const view = render(<PlaybackLiveLink library={libraryController("not_installed")} playback={disconnected("10.30.0.9")} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    expect(screen.getByText("No recent or scanned addresses yet.")).toBeVisible();
+    view.rerender(<PlaybackLiveLink library={libraryController("not_installed")} playback={controller()} />);
+    expect(await screen.findByRole("option", { name: /10\.30\.0\.141/ })).toBeVisible();
   });
 });
 

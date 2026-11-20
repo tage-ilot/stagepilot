@@ -14,17 +14,17 @@ const ids = (group: string) => Array.from(document.querySelectorAll(`[data-group
 describe("the section gallery page", () => {
   it("shows every state the review asked for, for Presentation", () => {
     render(<Frame />);
-    expect(ids("presentation")).toEqual(["ready", "checking", "not-connected", "scanning", "found-one", "found-many", "not-found", "blocked", "connecting", "host-error", "held", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "import-blocked", "this-computer", "no-link"]);
+    expect(ids("presentation")).toEqual(["ready", "checking", "not-connected", "scanning", "found-one", "found-many", "not-found", "blocked", "address-list", "connecting", "host-error", "held", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "import-blocked", "this-computer", "no-link"]);
   });
 
   it("shows every state the review asked for, for Playback (including scanning)", () => {
     render(<Frame />);
-    expect(ids("playback")).toEqual(["ready", "scanning", "not-connected", "error", "found-many", "found-one", "blocked", "connecting", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "no-link"]);
+    expect(ids("playback")).toEqual(["ready", "scanning", "not-connected", "error", "found-many", "found-one", "address-list", "blocked", "connecting", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "no-link"]);
   });
 
   it("shows every state the review asked for, for Lighting", () => {
     render(<Frame />);
-    expect(ids("lighting")).toEqual(["ready", "searching", "found-one", "found-many", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "off"]);
+    expect(ids("lighting")).toEqual(["ready", "searching", "found-one", "found-many", "address-list", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "off"]);
   });
 
   it("draws each state with the REAL block: a Live Link section with its title, pills and (where there is a Link) a Details button", async () => {

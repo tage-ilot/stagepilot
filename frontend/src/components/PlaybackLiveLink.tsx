@@ -1,20 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import { rememberAddress, useRecentAddresses } from "../hooks/useRecentAddresses";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
-import { CONTROL_40 } from "./liveLink";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { playbackBoxProps } from "./helperBoxProps";
 import { PLAYBACK_SCAN_WORDS, playbackScanState } from "./playbackScan";
-import { NO_SCAN, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice } from "./sections";
+import { NO_SCAN, AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice, scannedAddresses } from "./sections";
 import { useRecheckNote } from "./useRecheckNote";
 import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
 import { validPlaybackHost } from "./playbackStatus";
-import { Input } from "./ui/Input";
-import { Select } from "./ui/Select";
 
-const OTHER_COMPUTER = "__other__";
 const SCAN_CANCEL_GUARD_MS = 600;
 const TITLE = "Playback Live Link";
 
@@ -32,9 +27,10 @@ const TITLE = "Playback Live Link";
 export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackController; library?: PlaybackLibraryController }) {
   const status = playback?.status;
   const [host, setHost] = useState("");
-  const [choice, setChoice] = useState("");
+  const hostField = useRef<HTMLInputElement>(null);
+  const errorId = useId();
   const [copied, setCopied] = useState(false);
-  useEffect(() => { setHost(status?.settings.host ?? ""); setChoice(status?.settings.host ?? ""); }, [status?.settings.host]);
+  useEffect(() => { setHost(status?.settings.host ?? ""); }, [status?.settings.host]);
   // The Library Link is always on the Playback computer: an address typed in an older version is cleared once.
   const strayAddress = Boolean(library?.address);
   const cleared = useRef(false);
@@ -44,7 +40,6 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
     void library.saveAddress("");
   }, [strayAddress, library]);
 
-  const recent = useRecentAddresses("playback");
   const scan = status ? playbackScanState(status.scan) : NO_SCAN;
   const busy = scan.state === "scanning" || playback?.pending === "scan";
   // What was pressed: a typed or chosen computer is Connect, the network scan is Scan. The backend marks a one-address scan `typed`.
@@ -53,19 +48,12 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   const connecting = busy && (scan.typed === true || pressed === "connect");
   const scanning = busy && !connecting;
   const recheck = useRecheckNote();
-  const other = choice === OTHER_COMPUTER;
-  const trimmed = other ? host.trim() : choice;
+  const trimmed = host.trim();
   const hostOk = validPlaybackHost(trimmed);
   const savedHost = status?.settings.host ?? null;
   const connectedNow = apiGood(status);
-  useEffect(() => { if (connectedNow) rememberAddress("playback", savedHost); }, [connectedNow, savedHost]);
-  const candidates = status?.scan.candidates ?? [];
-  const computers = [
-    ...candidates.map((candidate) => ({ host: candidate.host, label: `${candidate.name} (${candidate.host})` })),
-    ...(savedHost && !candidates.some((candidate) => candidate.host === savedHost) ? [{ host: savedHost, label: `${savedHost} (saved)` }] : []),
-    // The last few that connected, so a computer used before is one choice and Connect, with no scan.
-    ...recent.filter((address) => address !== savedHost && !candidates.some((candidate) => candidate.host === address)).map((address) => ({ host: address, label: `${address} (recent)` })),
-  ];
+  // The computers the last scan found, and the last few that connected, are the lists of the arrow in the box: a computer used before is one pick and Connect.
+  const scanned = scannedAddresses(scan);
 
   const copyDetails = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
@@ -89,7 +77,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
     if (connectedNow && trimmed === savedHost) recheck.mark(); else recheck.clear();
     choose(trimmed);
   };
-  const connectHint = !choice ? "Choose a computer first." : !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the scan to finish, or cancel it." : undefined;
+  const connectHint = !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the scan to finish, or cancel it." : undefined;
 
   const api = status ? apiLine(status, "Checking Playback…") : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
   const hasComputer = Boolean(library?.target || savedHost);
@@ -125,22 +113,13 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
             tone="playback"
           >
             <LiveLinkField caption="Playback computer" className="live-link-host">
-              <Select aria-label="Playback computer" className={`w-full font-mono ${CONTROL_40}`} onChange={(event) => { setChoice(event.target.value); recheck.clear(); }} placeholder="Choose a computer…" value={computers.some((computer) => computer.host === choice) || other ? choice : ""}>
-                {computers.map((computer) => <option key={computer.host} value={computer.host}>{computer.label}</option>)}
-                <option value={OTHER_COMPUTER}>Other computer…</option>
-              </Select>
+              <AddressBox aria-describedby={hostOk ? undefined : errorId} aria-label="Playback computer" error={!hostOk} inputRef={hostField} onChange={(next) => { setHost(next); recheck.clear(); }} placeholder="For example, 192.0.2.10" scanned={scanned} scope="playback" value={host} working={connectedNow ? savedHost : null} />
             </LiveLinkField>
-            {other && (
-              <LiveLinkField caption="Computer name or address" className="live-link-host">
-                <Input aria-label="Computer name or address" className={`w-full font-mono ${CONTROL_40}`} error={!hostOk} onChange={(event) => setHost(event.target.value)} placeholder="For example, 192.0.2.10…" spellCheck={false} value={host} />
-              </LiveLinkField>
-            )}
           </ConnectionRow>
-          {other && !trimmed && <p className="mt-2 text-xs text-ink-muted">Type an address to connect.</p>}
-          {other && !hostOk && <SectionNotice className="mt-2" role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}
+          {!hostOk && <SectionNotice className="mt-2" id={errorId} role="alert" tone="danger" variant="line">Enter a computer name or address like 192.0.2.10 (no http://, port or spaces).</SectionNotice>}
 
           <ScanArea>
-            <ScanHelp copied={copied} onCopy={copyDetails} onOther={() => setChoice(OTHER_COMPUTER)} scan={scan} scanning={busy} tone="playback" wording={PLAYBACK_SCAN_WORDS} />
+            <ScanHelp copied={copied} onCopy={copyDetails} onOther={() => hostField.current?.focus()} scan={scan} scanning={busy} tone="playback" wording={PLAYBACK_SCAN_WORDS} />
             <ScanChooser onChoose={(chosen) => choose(chosen)} scan={scan} tone="playback" wording={PLAYBACK_SCAN_WORDS} />
             {playback?.error && <p className="text-sm text-danger-text" role="alert">{playback.error}</p>}
             {playback?.message && <p className="text-sm text-integration-playback-text" role="status">{playback.message}</p>}

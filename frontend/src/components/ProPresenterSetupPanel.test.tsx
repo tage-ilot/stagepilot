@@ -72,7 +72,7 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getAllByText("Song Countdown").length).toBeGreaterThan(0);
   });
 
-  it("remembers a saved host, and offers the recent ones as one-tap buttons so nobody retypes", async () => {
+  it("remembers a saved host, and the arrow in the Host box offers the recent ones so nobody retypes", async () => {
     window.localStorage.clear();
     const user = userEvent.setup();
     const props = { error: null, message: null, onRefreshTimers: vi.fn(), onSave: vi.fn(), onTest: vi.fn(), pendingOperation: null, propresenter: status } as const;
@@ -84,9 +84,11 @@ describe("ProPresenterSetupPanel", () => {
     render(<ProPresenterSetupPanel {...props} />);
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "10.1.1.1");
-    await user.click(screen.getByRole("button", { name: "Use 192.168.4.40" }));
-    expect(screen.getByLabelText("Host")).toHaveValue("192.168.4.40");
     expect(screen.queryByRole("button", { name: "Use 192.168.4.40" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    await user.click(screen.getByRole("option", { name: "192.168.4.40" }));
+    expect(screen.getByLabelText("Host")).toHaveValue("192.168.4.40");
+    expect(screen.queryByRole("listbox")).toBeNull();
     window.localStorage.clear();
   });
 
@@ -492,7 +494,8 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
   it("Scan then Connect end the row, in that order, and nothing is called Test connection", () => {
     panel();
     const row = screen.getByTestId("propresenter-live-link-line");
-    expect(within(row).getAllByRole("button").map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
+    // (The little arrow inside the Host box is not a tab stop and has no words: the row ENDS with Scan, then Connect.)
+    expect(within(row).getAllByRole("button").filter((button) => button.tabIndex !== -1).map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
     expect(screen.queryByRole("button", { name: /Test connection/ })).toBeNull();
   });
 
@@ -585,5 +588,50 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.34");
     expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("11025");
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("a scanned computer is in the Host box's list; choosing it fills Host and API (held, not saved); it can be edited before Connect saves", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    panel({ onSave, scanner: scanner({ state: "found", candidates: [{ host: "192.0.2.21", port: 1026, label: "Front MacBook" }, { host: "192.0.2.34", port: 11025, label: "Stage Mac" }], current: 255, total: 255 }) });
+    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    expect(within(screen.getByRole("group", { name: "Scanned" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["Front MacBook (192.0.2.21)", "Stage Mac (192.0.2.34)"]);
+    await user.click(screen.getByRole("option", { name: /Front MacBook/ }));
+    expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.21");
+    expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("1026");
+    expect(onSave).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Host"), "0");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ host: "192.0.2.210", port: 1026 }));
+  });
+
+  it("no scan result, no Scanned group: a scan that found nothing or is still running lists only what worked", async () => {
+    window.localStorage.setItem("stagepilot.recent-addresses.presentation", JSON.stringify(["10.9.9.9"]));
+    const user = userEvent.setup();
+    for (const state of ["scanning", "not_found", "idle"] as const) {
+      const { unmount } = panel({ scanner: scanner({ state, candidates: [], current: 0, total: 0 }) });
+      await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+      expect(screen.queryByRole("group", { name: "Scanned" })).toBeNull();
+      expect(screen.getByRole("option", { name: "10.9.9.9" })).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("Enter in the Host box with the list closed is Connect; with the list open it chooses and does not connect", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    panel({ onSave, scanner: scanner({ state: "found", candidates: [{ host: "192.0.2.21", port: 1025, label: "Front MacBook" }, { host: "192.0.2.34", port: 11025, label: "Stage Mac" }], current: 255, total: 255 }) });
+    await user.click(screen.getByLabelText("Host"));
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.34");
+    expect(onSave).not.toHaveBeenCalled();
+    await user.keyboard("{Enter}");
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ host: "192.0.2.34", port: 11025 }));
+  });
+
+  it("while the page is busy the Host box and its arrow wait", () => {
+    panel({ pendingOperation: "refresh" });
+    expect(screen.getByLabelText("Host")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Show recent and scanned addresses" })).toBeDisabled();
   });
 });

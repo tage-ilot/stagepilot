@@ -26,6 +26,8 @@ const WRONG: { what: string; code: string; says: RegExp }[] = [
   { what: "a Details button", code: "export const A = ({ open }: { open: boolean }) => <button aria-expanded={open} type=\"button\">Details</button>;", says: /ConnectionSection|OptionalSection/ },
   { what: "a Refresh button", code: 'declare const Button: (p: { children: unknown }) => null;\nexport const A = () => <Button>Refresh timers</Button>;', says: /ActionRow/ },
   { what: "a Test button with busy words", code: 'declare const Button: (p: { children: unknown }) => null;\nexport const A = ({ busy }: { busy: boolean }) => <Button>{busy ? "Testing…" : "Test connection"}</Button>;', says: /ActionButton/ },
+  { what: "its own host box", code: 'declare const Input: (p: { "aria-label": string }) => null;\nexport const A = () => <Input aria-label="Host" />;', says: /AddressBox/ },
+  { what: "its own computer box", code: 'declare const Input: (p: { "aria-label": string }) => null;\nexport const A = () => <Input aria-label="Playback computer" />;', says: /AddressBox/ },
   { what: "its own Panel", code: 'import { Panel } from "./ui/Panel";\nexport const A = () => <Panel tone="midi" />;', says: /PanelLayout/ },
   { what: "its own Disclosure", code: 'import { Disclosure } from "./ui/Disclosure";\nexport const A = () => <Disclosure title="x" />;', says: /OptionalSection/ },
   { what: "its own InlineAlert", code: 'import { InlineAlert } from "./ui/InlineAlert";\nexport const A = () => <InlineAlert tone="info">x</InlineAlert>;', says: /SectionNotice/ },

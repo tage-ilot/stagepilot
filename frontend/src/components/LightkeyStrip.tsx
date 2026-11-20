@@ -16,7 +16,6 @@ import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
 import { lightkeyBoxProps } from "./helperBoxProps";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, formatCount, simplifiedNote, startLookNote, type CaptureLabel } from "./lightingLooks";
-import { RecentAddresses } from "./RecentAddresses";
 import { Button } from "./ui/Button";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { confirmRerecordLooks } from "./lightingCueConfirmations";
@@ -27,8 +26,9 @@ import { apiHostMismatch, apiPortError, composeApiUrl, splitApiUrl } from "./lig
 import { oscHostError, oscPortError } from "./lightingOsc";
 import { OscConnectionFields } from "./LightingOscParts";
 import { useLiveLinkTools } from "./useLiveLinkTools";
-import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
+import { AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice, scannedAddresses } from "./sections";
 import { useRecheckNote } from "./useRecheckNote";
+import { lightkeyScanState } from "./lightkeyScan";
 import { HOST_HELP, HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
 import { CONTROL_40, liveLinkPillState, lightkeyFixtureWord } from "./liveLink";
 
@@ -337,6 +337,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const holding = lightkeyHolding(status);
   const shownMode = status.recording || status.mode === "record" ? "record" : (status.mode ?? "replay");
   const enterToConnect = (event: { key: string }) => { if (event.key === "Enter") void connect(); };
+  // The computers the search found (several answered): the arrow of the Host box lists them beside the recent ones.
+  const scanned = scannedAddresses(lightkeyScanState(status.discovery, stopped));
   const outdated = helperIsOutdated(status);
   const readBlocked = outdated ? UPDATE_HELPER_TIP : !connected ? "Connect to Lightkey first." : undefined;
   const releasable = Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) > 0;
@@ -419,18 +421,18 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             tone="lighting"
           >
             <LiveLinkField caption="Host" className="live-link-host">
-              <Input
+              <AddressBox
                 aria-label={HOST_LABEL}
-                autoCapitalize="none"
-                autoCorrect="off"
-                className={`w-full font-mono ${CONTROL_40} ${connection?.held.host ? "!border-warning" : ""}`}
+                held={Boolean(connection?.held.host)}
                 error={Boolean(hostError)}
-                onChange={(event) => setHost(event.target.value)}
-                onKeyDown={enterToConnect}
+                onChange={setHost}
+                onSubmit={() => void connect()}
                 placeholder="192.0.2.10"
-                spellCheck={false}
+                scanned={scanned}
+                scope="lighting"
                 title={HOST_TITLE}
                 value={host}
+                working={connected ? saved.host : null}
               />
             </LiveLinkField>
             {connection && (
@@ -442,7 +444,6 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
               <Input aria-label="API port" className={`${smallBox} font-mono ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
             </LiveLinkField>
           </ConnectionRow>
-          <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
           {status.link !== "off" && (
             <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
           )}
