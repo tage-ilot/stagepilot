@@ -16,7 +16,7 @@ The production setup panel persistently stores:
 - Host
 - API port (the port of ProPresenter's network API; saved as `port`)
 - Timer name
-- Request timeout
+- Request timeout (kept and sent back unchanged: the Presentation panel does not show or edit it; the backend still checks it, and `STAGEPILOT_PROPRESENTER_TIMEOUT_SECONDS` overrides it)
 - Connection test
 - Timer rediscovery
 
@@ -237,11 +237,21 @@ Live Link blocks, in the same spacing. It is built like them: a title, two pills
 `Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
 **connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API); **Host** is the address box every Live Link block has (type any address, or open its arrow for the computers the last search found, under **Found**, and the ones that worked before, under **Recent**) and the
 same two buttons every Live Link block ends its row with, **Search** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
-connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Refresh uses the
+connection: **Timer** and **Look** side by side on one line (stacked on a phone), **Refresh timers and Looks**, the note that Refresh uses the
 saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`
 (in words, with the warning border) and is saved by **Save configuration**, or by **Connect**, which saves the connection (Host and API only) and connects the way Save does;
 with ProPresenter saved and nothing held in those two boxes, **Connect** only checks the saved connection again and the status line says `Checked again.` The two names are exactly **ProPresenter API** and **Presenter Link**; they are written once in the code
 (`proPresenterLinkState.ts`). macOS still lists the little app that runs the Presenter Link as "ProPresenter Link" in System Settings.
+
+**Timer and Look.** Each box lists only the real choices and marks the current one, so there is no `Current Look` option and no
+placeholder choice. **Timer** lists the timers ProPresenter has by name; the saved one reads `<name> (current)` and is selected (a
+timer that is not a countdown keeps `(converted when cued)`); with none saved nothing is marked and the box shows the hint `Choose a
+timer`; a saved timer that is no longer found reads `<name> (unavailable)`. **Look** lists ProPresenter's Looks by name; the Look
+ProPresenter shows now reads `<name> (current)` and is selected by default, and choosing it means *do not change the Look*: Save keeps
+`look_id` empty, exactly what `Current Look` did. Any other Look saves its id and is applied by Save as before; a saved Look that is gone
+reads `<id> (unavailable)`. With no Looks known (ProPresenter not connected) the box is dimmed and its hint says `Connect to
+ProPresenter first`. Choosing a Look changes nothing in ProPresenter until you save. The request timeout is not on the screen: the saved
+value stays in `settings.json` and is saved back as it was.
 
 | The line says | It means | What to do |
 |---|---|---|
@@ -276,8 +286,7 @@ has no window; everything, including progress and the result, happens in place, 
    the default when it is the last section) shows ProPresenter Link's own line under the box (*More than one header in this playlist is
    named "Worship". Pick another place.*) and the button stays off: StagePilot does not guess.
 2. **Songs**: the same song cards as the Lighting tab's songs (an auto-fill grid, the cover when the Library Link has one, the title, a
-   small line of facts, the thin arrangement bar), with the count (`3 of 4 selected`, read out politely) and **Select all** / **Select
-   none** above them. Every card starts selected: a selected card has a solid border, a tinted fill and the outline, a card that is off a dashed, dimmed border (there is no mark in the corner, so the colored bar runs the whole width of the card, as in Lighting); Space or Enter turns it on or off.
+   small line of facts, the thin arrangement bar), with no header row over them (the count, `3 of 4 selected`, is only read out politely by a screen reader; the list is named `Songs to import`). Every card starts selected: a selected card has a solid border, a tinted fill and the outline, a card that is off a dashed, dimmed border (there is no mark in the corner, so the colored bar runs the whole width of the card, as in Lighting); Space or Enter turns it on or off.
    With Playback data a card shows, as plain text and nothing to open: one line `C` and `mtID-23126` as two square chips (the key as letters, `Ab (was G)` for a
    key changed in Playback in the last day, then **mtID-** and the number, no spaces), and under it the **order Playback plays**, section by section
    (`Intro · Verse 1 · Chorus · Verse 2 · Chorus · Bridge · Chorus`, wrapping onto as many lines as it needs), **under** the thin bar (title, facts, bar, then the order). The

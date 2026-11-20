@@ -54,17 +54,17 @@ describe("Presentation panel: failed save", () => {
     selected_timer_id: "t", timer_found: true, looks: [], current_look_id: null, look_found: false, last_checked_at: null,
   } as unknown as ProPresenterStatusResponse;
 
-  it("empty host and bad timeout: first (Host) focused, both errors under their fields, values kept, no API call", () => {
+  it("empty host and bad port: first (Host) focused, both errors under their fields, values kept, no API call", () => {
     const onSave = vi.fn();
     render(<ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={onSave} onTest={vi.fn()} pendingOperation={null} propresenter={status} />);
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "99" } });
+    fireEvent.change(screen.getByLabelText("ProPresenter API port"), { target: { value: "99999" } });
     fireEvent.click(save());
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Host")).toHaveFocus();
     expect(screen.getByText("Enter a host.")).toBeInTheDocument();
-    expect(screen.getByText("Enter a timeout above 0 and up to 60 seconds.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("99");
+    expect(screen.getByText("Enter the API port from 1 to 65535.")).toBeInTheDocument();
+    expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("99999");
   });
 
   it("a double click on a valid save sends one request while pending", () => {

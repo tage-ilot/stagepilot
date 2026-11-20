@@ -14,7 +14,7 @@ const fields = (held = false, error = false) => (
   <>
     <Field error={error ? "Enter a host." : undefined} heldChange={held} label="Host"><Input defaultValue={error ? "" : "192.0.2.10"} /></Field>
     <Field heldChange={held} hint="A hint sits under the control." label="Mode"><Select defaultValue="a"><option value="a">Auto</option><option value="b">Manual</option></Select></Field>
-    <Field label="Timeout (seconds)"><Input defaultValue="3" inputMode="decimal" /></Field>
+    <Field label="Port"><Input defaultValue="3" inputMode="decimal" /></Field>
     <Field label="Note"><Input defaultValue="Sunday" /></Field>
   </>
 );

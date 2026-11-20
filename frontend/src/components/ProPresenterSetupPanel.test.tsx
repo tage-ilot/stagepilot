@@ -128,9 +128,10 @@ describe("ProPresenterSetupPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Detected timer")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: /Detected timer/i })).toHaveValue("Song Countdown");
+    expect(screen.getByText("Timer")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Timer" })).toHaveValue("Song Countdown");
     expect(screen.queryByText("Detected timers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Detected timer")).not.toBeInTheDocument();
   });
 
   it("saves real connection settings before the plugin is running", async () => {
@@ -192,22 +193,12 @@ describe("ProPresenterSetupPanel", () => {
     });
     expect(option).not.toBeDisabled();
     await user.selectOptions(
-      screen.getByRole("combobox", { name: /Detected timer/i }),
+      screen.getByRole("combobox", { name: "Timer" }),
       "Alternate Timer",
     );
-    expect(screen.getByRole("combobox", { name: /Detected timer/i })).toHaveValue(
+    expect(screen.getByRole("combobox", { name: "Timer" })).toHaveValue(
       "Alternate Timer",
     );
-  });
-
-  it("the first Look option, which leaves the Look alone, is called Current Look", () => {
-    render(
-      <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={{ ...status, looks: [] }} />,
-    );
-    const look = screen.getByRole("combobox", { name: "ProPresenter Look" }) as HTMLSelectElement;
-    expect(look.options[0]).toHaveTextContent("Current Look");
-    expect(look.options[0]!.value).toBe("");
-    expect(look).not.toHaveTextContent(/Do not change/);
   });
 
   it("stages a Look change and applies it only when settings are saved", async () => {
@@ -225,7 +216,7 @@ describe("ProPresenterSetupPanel", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "look-worship");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Look" }), "look-worship");
     expect(onSave).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
@@ -253,8 +244,9 @@ describe("ProPresenterSetupPanel", () => {
       expect(button).toHaveAttribute("data-variant", "tinted");
       expect(button).toHaveAttribute("data-tone", "presentation");
     }
-    expect(screen.getByLabelText("ProPresenter Look")).toHaveValue("look-default");
-    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("3");
+    expect(screen.getByLabelText("Look")).toHaveValue("");
+    expect(screen.getByLabelText("Look")).toHaveDisplayValue("Default (current)");
+    expect(screen.queryByLabelText("Timeout (seconds)")).toBeNull();
   });
 
   it("shows the anatomy copy: kicker, Presentation title, one sentence and a visible Look label", () => {
@@ -264,8 +256,8 @@ describe("ProPresenterSetupPanel", () => {
     expect(screen.getByText("Connection configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Presentation" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "General configuration" })).not.toBeInTheDocument();
-    const look = screen.getByRole("combobox", { name: "ProPresenter Look" });
-    expect(document.querySelector(`label[for="${look.id}"]`)).toHaveTextContent(/^ProPresenter Look$/);
+    const look = screen.getByRole("combobox", { name: "Look" });
+    expect(document.querySelector(`label[for="${look.id}"]`)).toHaveTextContent(/^Look$/);
   });
 
   const renderPanel = (props: Partial<React.ComponentProps<typeof ProPresenterSetupPanel>> = {}) =>
@@ -292,7 +284,7 @@ describe("ProPresenterSetupPanel", () => {
     renderPanel({ onSave });
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "192.0.2.10");
-    await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "look-worship");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Look" }), "look-worship");
     expect(onSave).not.toHaveBeenCalled();
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
     expect(screen.getByText(/2 changes/)).toBeInTheDocument();
@@ -311,7 +303,7 @@ describe("ProPresenterSetupPanel", () => {
       onSave,
       propresenter: { ...status, timers: [...status.timers, { id: "t2", name: "Alternate Timer", index: 1, is_countdown: true, state: "stopped" }] },
     });
-    await user.selectOptions(screen.getByRole("combobox", { name: /Detected timer/i }), "Alternate Timer");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Timer" }), "Alternate Timer");
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
     expect(screen.getByText(/1 change/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
@@ -326,13 +318,11 @@ describe("ProPresenterSetupPanel", () => {
     await user.type(screen.getByLabelText("Host"), "  192.0.2.10  ");
     await user.clear(screen.getByLabelText("ProPresenter API port"));
     await user.type(screen.getByLabelText("ProPresenter API port"), "1026");
-    await user.clear(screen.getByLabelText("Timeout (seconds)"));
-    await user.type(screen.getByLabelText("Timeout (seconds)"), "4.5");
-    await user.selectOptions(screen.getByRole("combobox", { name: "ProPresenter Look" }), "");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Look" }), "");
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(onSave.mock.calls[0]?.[0])).toBe(
-      JSON.stringify({ host: "192.0.2.10", port: 1026, timer_name: "Song Countdown", look_id: null, request_timeout_seconds: 4.5 }),
+      JSON.stringify({ host: "192.0.2.10", port: 1026, timer_name: "Song Countdown", look_id: null, request_timeout_seconds: 3 }),
     );
   });
 
@@ -444,15 +434,15 @@ describe("Presentation hold-until-saved conformance (guard)", () => {
       onSave={extra.onSave ?? vi.fn()}
       onTest={extra.onTest ?? vi.fn()}
       pendingOperation={null}
-      propresenter={status}
+      propresenter={{ ...status, timers: [...status.timers, { id: "t2", name: "Alternate Timer", index: 1, is_countdown: true, state: "stopped" }] }}
     />,
   );
   const bar = () => document.querySelector("[data-save-bar]")!;
   const held: Array<{ label: string; value: string; saved: string; payload: Record<string, unknown> }> = [
     { label: "Host", value: "192.0.2.10", saved: "127.0.0.1", payload: { host: "192.0.2.10" } },
     { label: "ProPresenter API port", value: "1100", saved: "1025", payload: { port: 1100 } },
-    { label: "Timeout (seconds)", value: "7", saved: "3", payload: { request_timeout_seconds: 7 } },
-    { label: "ProPresenter Look", value: "look-worship", saved: "look-default", payload: { look_id: "look-worship" } },
+    { label: "Look", value: "look-worship", saved: "", payload: { look_id: "look-worship" } },
+    { label: "Timer", value: "Alternate Timer", saved: "Song Countdown", payload: { timer_name: "Alternate Timer" } },
   ];
   it.each(held)("$label is held: marked, counted, not saved on blur, flagged dirty, restored by Discard, saved only by Save configuration", ({ label, value, saved, payload }) => {
     const onSave = vi.fn();
@@ -509,7 +499,7 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     expect(screen.getByTestId("propresenter-recheck")).toHaveTextContent("Checked again.");
   });
 
-  it("with Host or API held, Connect saves the connection the way Save does and leaves a held timeout held", async () => {
+  it("with Host or API held, Connect saves the connection the way Save does and leaves a held Look held", async () => {
     const onTest = vi.fn();
     const onSave = vi.fn();
     const user = userEvent.setup();
@@ -518,13 +508,13 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     await user.type(screen.getByLabelText("Host"), "  192.0.2.10  ");
     await user.clear(screen.getByLabelText("ProPresenter API port"));
     await user.type(screen.getByLabelText("ProPresenter API port"), "11025");
-    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("Look"), { target: { value: "look-worship" } });
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(onTest).not.toHaveBeenCalled();
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ host: "192.0.2.10", port: 11025, timer_name: "Song Countdown", look_id: "look-default", request_timeout_seconds: 3 });
     expect(screen.queryByTestId("propresenter-recheck")).toBeNull();
     // The Save bar still holds what Connect did not take.
-    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue("9");
+    expect(screen.getByLabelText("Look")).toHaveValue("look-worship");
   });
 
   it("before ProPresenter is saved, Connect saves what the boxes hold (it is how the first computer is saved), the payload Save sends", async () => {

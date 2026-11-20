@@ -1172,7 +1172,7 @@ textarea:focus-visible {
   }
 }
 
-/* Two fields side by side (Presentation's timer and timeout, the manual connection's App ID and Secret), one when narrow. */
+/* Two fields side by side (Presentation's Timer and Look, the manual connection's App ID and Secret), one when narrow. */
 @container (min-width: 30rem) {
   .section-fields[data-columns="pair"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));

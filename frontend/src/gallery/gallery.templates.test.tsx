@@ -19,7 +19,7 @@ afterEach(() => { window.fetch = real; });
 describe("the section gallery: configuration pages", () => {
   it("lists every state of every page and every template", () => {
     render(<Frame />);
-    expect(ids("page-presentation")).toEqual(["clean", "held", "error", "busy-refresh", "busy-save", "disabled", "failed", "loading"]);
+    expect(ids("page-presentation")).toEqual(["clean", "held", "look-chosen", "unavailable", "timer-none", "not-connected", "error", "busy-refresh", "busy-save", "disabled", "failed", "loading"]);
     expect(ids("page-services")).toEqual(["signed-out", "signed-in", "expired", "manual-held", "busy", "no-types", "error"]);
     expect(ids("page-backend")).toEqual(["clean", "advanced-open", "error", "disconnected", "failure"]);
     expect(ids("page-playback")).toEqual(["api-open", "api-closed", "midi", "midi-held"]);
@@ -36,15 +36,26 @@ describe("the section gallery: configuration pages", () => {
     render(<Frame />);
     const clean = sample("page-presentation-clean");
     const sections = Array.from(clean.querySelectorAll("[data-section]")).map((node) => node.getAttribute("data-section"));
-    // The Live Link block, the settings pair and the narrow Look, the actions, the Presenter Link section (its own options, its song cards with no header row over them, and its button row), then the summary.
-    expect(sections).toEqual(["connection", "settings", "settings", "actions", "settings", "actions", "summary"]);
+    // The Live Link block, the settings pair (Timer and Look), the actions, the Presenter Link section (its own options, its song cards with no header row over them, and its button row), then the summary.
+    expect(sections).toEqual(["connection", "settings", "actions", "settings", "actions", "summary"]);
     expect(clean.querySelector("[data-panel-body]")).toBeInTheDocument();
-    await waitFor(() => expect(sample("page-presentation-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(3), WAIT);
-    await waitFor(() => expect(Array.from(sample("page-presentation-error").querySelectorAll("[role=alert]")).some((node) => /timeout above 0/.test(node.textContent ?? ""))).toBe(true), WAIT);
+    await waitFor(() => expect(sample("page-presentation-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(2), WAIT);
+    await waitFor(() => expect(Array.from(sample("page-presentation-error").querySelectorAll("[role=alert]")).some((node) => /Enter a host\./.test(node.textContent ?? ""))).toBe(true), WAIT);
     // Busy: the section disables every control; the button says why in words.
     const busy = sample("page-presentation-busy-refresh");
-    expect(control(busy, "Timeout (seconds)")).toBeDisabled();
+    expect(control(busy, "Timer")).toBeDisabled();
+    expect(control(busy, "Look")).toBeDisabled();
     expect(button(busy, /^Refreshing…/)).toBeTruthy();
+    // The Presentation settings states: (current) by default, the saved Look, unavailable, no timer, not connected.
+    expect(control(clean, "Timer")).toHaveDisplayValue("Song Countdown (current)");
+    expect(control(clean, "Look")).toHaveDisplayValue("Worship (current)");
+    expect(clean.querySelector("[data-panel-body]")!.textContent).not.toMatch(/Timeout|Current Look/);
+    expect(control(sample("page-presentation-look-chosen"), "Look")).toHaveDisplayValue("Message");
+    expect(control(sample("page-presentation-unavailable"), "Timer")).toHaveDisplayValue("Old Timer (unavailable)");
+    expect(control(sample("page-presentation-unavailable"), "Look")).toHaveDisplayValue("l9 (unavailable)");
+    expect(control(sample("page-presentation-timer-none"), "Timer")).toHaveDisplayValue("Choose a timer");
+    expect(control(sample("page-presentation-not-connected"), "Look")).toBeDisabled();
+    expect(sample("page-presentation-not-connected").textContent).toContain("Connect to ProPresenter first");
     // Warn words in the summary.
     expect(text(sample("page-presentation-disabled"), "Not found")[0]).toHaveAttribute("data-tone", "warn");
   }, 60000);
