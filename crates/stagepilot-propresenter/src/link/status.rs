@@ -58,18 +58,18 @@ pub fn state_words(mode: Option<LinkMode>, state: LinkState, version: Option<&st
                 .to_string()
         }
         (_, LinkState::NotInstalled) => {
-            "The ProPresenter Link is not installed on the ProPresenter computer.".to_string()
+            "The Presenter Link is not installed on the ProPresenter computer.".to_string()
         }
         (_, LinkState::NeedsCommand) => {
-            "The ProPresenter Link does not know this StagePilot yet. Run the setup command again."
+            "The Presenter Link does not know this StagePilot yet. Run the setup command again."
                 .to_string()
         }
         (_, LinkState::Outdated) => format!(
-            "The ProPresenter Link{version} can be updated. It still works; run the setup command to update it."
+            "The Presenter Link{version} can be updated. It still works; run the setup command to update it."
         ),
-        (_, LinkState::Ready) => format!("The ProPresenter Link{version} is ready."),
-        (_, LinkState::NotAnswering) => "The ProPresenter Link did not answer.".to_string(),
-        (_, LinkState::Checking) => "Checking the ProPresenter Link…".to_string(),
+        (_, LinkState::Ready) => format!("The Presenter Link{version} is ready."),
+        (_, LinkState::NotAnswering) => "The Presenter Link did not answer.".to_string(),
+        (_, LinkState::Checking) => "Checking the Presenter Link…".to_string(),
     }
 }
 
@@ -144,11 +144,11 @@ mod tests {
         }
         assert_eq!(
             state_words(Some(LinkMode::Helper), LinkState::Ready, Some("0.1.0")),
-            "The ProPresenter Link (version 0.1.0) is ready."
+            "The Presenter Link (version 0.1.0) is ready."
         );
         assert_eq!(
             state_words(Some(LinkMode::Helper), LinkState::Ready, None),
-            "The ProPresenter Link is ready."
+            "The Presenter Link is ready."
         );
         assert_eq!(
             serde_json::to_value(LinkState::NeedsCommand).unwrap(),

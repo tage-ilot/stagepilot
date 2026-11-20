@@ -49,16 +49,16 @@ disconnect.
 
 ## ProPresenter Link
 
-The ProPresenter Link is how StagePilot reaches the **files and the screen of the ProPresenter computer**: it reads the
+(In the app this is called the **Presenter Link**.) The Presenter Link is how StagePilot reaches the **files and the screen of the ProPresenter computer**: it reads the
 song files (to find which MultiTracks song each one is), adds new files to a library named `Playback`, and, on a Mac, drives
 ProPresenter's own Search window to import a song. What it is used for is [Adding Playback songs to a playlist](#adding-playback-songs-to-a-playlist)
-below. It is optional: with no ProPresenter Link StagePilot works as before.
+below. It is optional: with no Presenter Link StagePilot works as before.
 
 **Which connection (no switch, the saved ProPresenter computer decides).** The link is used while the ProPresenter output is
 in use and a ProPresenter host is saved (`propresenter.host`). If that host is this computer (`127.0.0.1`, `localhost`, `::1`,
 or one of this computer's own addresses) the link is **Local**: StagePilot reads and writes the ProPresenter folder itself, and
 there is nothing to install, no key and no setup. Any other address is **Helper**: a small signed program on the
-ProPresenter computer (the ProPresenter Link, port 8790) does it. While no ProPresenter host is saved nothing is asked, ever.
+ProPresenter computer (the Presenter Link, port 8790) does it. While no ProPresenter host is saved nothing is asked, ever.
 
 **Folder.** `~/Documents/ProPresenter` by default; `propresenter.link.data_folder` (a full path, optional, nothing secret) points
 elsewhere. Every path is relative to it: `..`, absolute paths and links leading out of the folder are refused. Only `*.pro`
@@ -104,7 +104,7 @@ own HTTP API (libraries and playlists) for the later arrangement work.
 
 StagePilot can put the songs Playback plays into one ProPresenter playlist, in setlist order, at a place you choose, each one
 **with the arrangement and the key Playback plays it in**. It needs the Playback Library Link (for the songs, their sections,
-their keys and their MultiTracks numbers), the ProPresenter Link (for the files; **Ready**) and ProPresenter's own network
+their keys and their MultiTracks numbers), the Presenter Link (for the files; **Ready**) and ProPresenter's own network
 setting (its API, port 1025). Nothing happens unless a person asks for a **preview** and then presses the button for exactly
 what the preview showed.
 
@@ -180,7 +180,7 @@ ProPresenter's import) and **one** named playlist. It does not delete playlists 
 playlist write is refused (a `404` makes ProPresenter drop the whole write), nothing in the playlist changed and the answer
 says so and names the backup.
 
-**Safety conditions** (checked again when the change is applied): the ProPresenter Link is Ready; no song is playing in
+**Safety conditions** (checked again when the change is applied): the Presenter Link is Ready; no song is playing in
 StagePilot (Playback says playing, or StagePilot's countdown runs), checked before anything starts and again before every song
 and before the playlist is written (`409 song_playing`) and, before any screen step, nothing is shown on screen (`live_on_screen`, above); ProPresenter's API answers (its version from `GET /version` is part of
 the answer); the preview is still true (`409 plan_changed` when ProPresenter, the playlist or Playback's arrangement changed
@@ -215,17 +215,23 @@ the whole write `404`).
 
 ### The ProPresenter Live Link block (Configuration, Presentation)
 
-Under the timer and Look fields (which are not touched by it) sits a block built like the Playback Live Link block: a title, two
-pills (`ProPresenter: Connected`, `ProPresenter Link: Connected`) and one polite line that says both in words, a dot and words, never
-colour alone.
+The block is the **first block under the header** (and under the panel's alert lines), where the Playback and Lighting panels put their
+Live Link blocks, in the same spacing. It is built like them: a title, two pills (`ProPresenter API: Connected`,
+`Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
+**connection**, like the other two blocks do: under the two status lines, **Host** and **Port** (with the recent addresses) and
+**Test connection**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
+connection: **Detected timer**, **Timeout (seconds)**, **ProPresenter Look**, **Refresh timers and Looks**, the note that Test connection and
+Refresh use the saved settings, the Save bar, and the summary. Nothing about saving changed: a changed Host or Port is marked `Not saved yet`
+(in words, with the warning border) and is saved only by **Save configuration**. The two names are exactly **ProPresenter API** and **Presenter Link**; they are written once in the code
+(`proPresenterLinkState.ts`). macOS still lists the little app that runs the Presenter Link as "ProPresenter Link" in System Settings.
 
 | The line says | It means | What to do |
 |---|---|---|
-| `ProPresenter: Connected to ProPresenter at <host>` | the connection the timer and Looks use (the existing status) | nothing |
-| `ProPresenter Link: Ready, on this computer` | ProPresenter runs on the computer StagePilot runs on | nothing, there is nothing to set up |
-| `ProPresenter Link: Ready, version 0.1.1` | the helper on the other ProPresenter computer answers | nothing |
+| `ProPresenter API: Connected to ProPresenter at <host>` | the connection the timer and Looks use (the existing status) | nothing |
+| `Presenter Link: Ready, on this computer` | ProPresenter runs on the computer StagePilot runs on | nothing, there is nothing to set up |
+| `Presenter Link: Ready, version 0.1.1` | the helper on the other ProPresenter computer answers | nothing |
 | `Can add songs, cannot import missing songs (macOS Accessibility not allowed)` | the Link works, but cannot drive ProPresenter's own Search to load a missing song | the sentence under the lines says how: allow it in System Settings > Privacy & Security > Accessibility |
-| `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the ProPresenter Link** and run the command |
+| `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the Presenter Link** and run the command |
 | `Needs the command again` | the helper does not know this StagePilot's key | press **Set up the ProPresenter computer** and run the command again |
 | `Not answering` | the other computer is off, asleep or not on the network | wake it; if it was set up again from another StagePilot, run the command here again |
 | `Not installed` | there is no Link (grey, never a warning) | nothing, unless you want Add to ProPresenter |
@@ -233,12 +239,12 @@ colour alone.
 When ProPresenter is on **this** computer the block has no setup button and says so. For **another** computer the button **Set up the
 ProPresenter computer** opens a box: **press it** to get one command (nothing is made until you press), paste it in Terminal on the
 ProPresenter computer, and wait: the box shows the command, **Copy**, how long it still works (30 minutes, this network only), **Cancel**,
-and closes by itself with `The ProPresenter Link is ready.` when the helper answers. The command never holds the key. A computer without
+and closes by itself with `The Presenter Link is ready.` when the helper answers. The command never holds the key. A computer without
 the Link shows no warning anywhere, and the Link never changes the header's Ready / Check system verdict.
 
 ### Add to ProPresenter (Configuration, Playback, under the songs Playback plays)
 
-The button is drawn **only when all three hold**: the ProPresenter Link is **Ready** (this computer, or the helper), the Playback Library
+The button is drawn **only when all three hold**: the Presenter Link is **Ready** (this computer, or the helper), the Playback Library
 Link answers with fresh data, and the loaded plan is paired with a Playback setlist. Otherwise nothing is drawn. It opens one window:
 
 1. **Songs**: the paired setlist songs, all ticked, each with Playback's **key** (a chip, `Key Ab`) and **arrangement name**. A song Playback
@@ -261,9 +267,9 @@ Link answers with fresh data, and the loaded plan is paired with a Playback setl
 
 ### One page
 
-**Set up (once).** *Same computer:* nothing. *Another computer:* Configuration > Presentation > save the host and port > in **ProPresenter
-Live Link** press **Set up the ProPresenter computer**, paste the command in Terminal on that computer, wait for `Ready`. For songs missing
-from ProPresenter, allow ProPresenter Link (or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
+**Set up (once).** *Same computer:* nothing. *Another computer:* Configuration > Presentation > in **ProPresenter
+Live Link** type the host and port, **Save configuration**, then press **Set up the ProPresenter computer**, paste the command in Terminal on that computer, wait for `Ready`. For songs missing
+from ProPresenter, allow "ProPresenter Link" (the name macOS shows for the Presenter Link; or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
 In ProPresenter, Settings > Network must have the API on.
 
 **Add the songs.** Playback panel > **Add to ProPresenter** > tick the songs > choose the playlist and the place > **Preview** > read it >

@@ -9,9 +9,10 @@ import { PlaylistPicker, PreviewBody, Progress, Reason, Result, SongPicker } fro
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
 import { InlineAlert } from "./ui/InlineAlert";
+import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 
 /**
- * **Add to ProPresenter**, beside the songs Playback plays. It is drawn only when the ProPresenter Link is ready (this computer or the
+ * **Add to ProPresenter**, beside the songs Playback plays. It is drawn only when the Presenter Link is ready (this computer or the
  * helper), the Playback Library Link answers, and the loaded plan is paired with a Playback setlist; otherwise it draws nothing (the
  * feature is optional, so a computer without it shows no warning). It opens the window; nothing in ProPresenter changes until a person
  * has looked at the preview and pressed Add songs.
@@ -91,7 +92,7 @@ export function AddToProPresenterDialog({ rows, link, playing, onClose }: { rows
     >
       <div className="space-y-4" data-phase={phase} data-testid="add-songs-window">
         <p aria-live="polite" className="sr-only" data-testid="add-songs-live" role="status">{add.announcement}</p>
-        {gone && <InlineAlert tone="warning"><span data-testid="add-songs-link-gone">The ProPresenter Link is not ready now. Nothing was changed.</span></InlineAlert>}
+        {gone && <InlineAlert tone="warning"><span data-testid="add-songs-link-gone">The {PRESENTER_LINK_NAME} is not ready now. Nothing was changed.</span></InlineAlert>}
         {playing && !running && !finished && <InlineAlert tone="info"><span data-testid="add-songs-playing">A song is playing. You can look at a preview now, but songs can only be added when it has ended.</span></InlineAlert>}
         {add.problem && <InlineAlert tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></InlineAlert>}
         {!running && !finished && (

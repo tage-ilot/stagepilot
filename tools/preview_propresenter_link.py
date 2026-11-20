@@ -191,9 +191,9 @@ SCENARIOS = [
      {"state": "ready", "version": BUNDLED, "can_import": False,
       "import_blocker": "Allow the ProPresenter Link in System Settings > Privacy & Security > Accessibility, then try again."}),
     ("outdated", "Another computer: Update available (StagePilot cannot update it)",
-     {"state": "outdated", "version": "0.0.9", "update": {"mode": "manual", "version": BUNDLED, "message": "The ProPresenter Link could not update itself. Run the setup command on the ProPresenter computer to update it."}}),
+     {"state": "outdated", "version": "0.0.9", "update": {"mode": "manual", "version": BUNDLED, "message": "The Presenter Link could not update itself. Run the setup command on the ProPresenter computer to update it."}}),
     ("outdated_auto", "Another computer: Update available (StagePilot updates it)",
-     {"state": "outdated", "version": "0.0.9", "update": {"mode": "automatic", "version": BUNDLED, "message": "StagePilot updates the ProPresenter Link by itself when nothing is playing."}}),
+     {"state": "outdated", "version": "0.0.9", "update": {"mode": "automatic", "version": BUNDLED, "message": "StagePilot updates the Presenter Link by itself when nothing is playing."}}),
     ("needs_command", "Another computer: Needs the command again", {"state": "needs_command"}),
     ("not_answering", "Another computer: Not answering", {"state": "not_answering"}),
 ]
@@ -208,7 +208,7 @@ def helper_status(over):
     status.update(over)
     if status["state"] in ("not_installed", "not_answering", "needs_command"):
         status.update({"can_import": False, "libraries": [], "playback_library_exists": False, "data_folder": None})
-    status["message"] = status.get("message") or "Preview of the ProPresenter Link on another computer."
+    status["message"] = status.get("message") or "Preview of the Presenter Link on another computer."
     return status
 
 
@@ -235,8 +235,8 @@ class Preview:
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>ProPresenter Link preview</title>
 <style>body{font:16px/1.5 system-ui;max-width:42rem;margin:1rem auto;padding:0 1rem}a.b,button{display:block;margin:.4rem 0;padding:.6rem .8rem;border:2px solid #444;border-radius:6px;text-decoration:none;color:inherit;background:#fff;font:inherit;text-align:left;width:100%%}
 .on{background:#ffe9a8!important}code{background:#eee;padding:0 .2rem}</style>
-<h1>ProPresenter Link preview</h1>
-<p>Pick how the ProPresenter Link looks, then <a href="/">open StagePilot</a> (Configuration &gt; Presentation, and Playback &gt; songs). Nothing here touches a real ProPresenter.</p>
+<h1>Presenter Link preview</h1>
+<p>Pick how the Presenter Link looks, then <a href="/">open StagePilot</a> (Configuration &gt; Presentation, and Playback &gt; songs). Nothing here touches a real ProPresenter.</p>
 %(items)s
 <h2>Other things to try</h2>
 <form method=post action="/__preview/lazy"><button>Simulate: ProPresenter loads the new songs only after "Open the Playback library once" (press, then add songs)</button></form>

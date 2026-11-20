@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getProPresenterLinkStatus } from "../api";
 import { describeError } from "../errorText";
 import type { LinkStatus } from "../propresenterLink";
+import { PRESENTER_LINK_NAME } from "../components/proPresenterLinkState";
 
 /** How often an open window asks again. The backend asks the ProPresenter computer at most every 30 seconds however many windows there are. */
 export const LINK_REFRESH_MS = 30_000;
-/** While a setup box waits for the ProPresenter Link to answer, the window looks this often. */
+/** While a setup box waits for the Presenter Link to answer, the window looks this often. */
 export const LINK_WATCH_MS = 3_000;
 
 export interface ProPresenterLinkController {
@@ -20,7 +21,7 @@ export interface ProPresenterLinkController {
 }
 
 /**
- * The optional ProPresenter Link (`GET propresenter-link/status`). It asks only while a ProPresenter computer is saved (`enabled`) and
+ * The optional Presenter Link (`GET propresenter-link/status`). It asks only while a ProPresenter computer is saved (`enabled`) and
  * a window that uses the answer is on screen (`wanted`), and only while the page is visible. Read-only; a Link that is not there is a
  * quiet state (the backend answers `not_installed`), never an error. The answer never feeds the header's verdict.
  */
@@ -39,7 +40,7 @@ export function useProPresenterLink(enabled: boolean, wanted: boolean): ProPrese
       setStatus(next);
       setError(null);
     } catch (cause) {
-      if (generation.current === current) setError(describeError(cause, "The ProPresenter Link could not be read."));
+      if (generation.current === current) setError(describeError(cause, `The ${PRESENTER_LINK_NAME} could not be read.`));
     }
   }, []);
 

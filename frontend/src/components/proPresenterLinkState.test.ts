@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { helperStatus, localStatus, noComputerStatus, presentation } from "../test/propresenterLinkFixtures";
 import { importBlocked, importBlockedWords, linkLine, linkNote, linkPill, proPresenterLine, proPresenterPill } from "./proPresenterLinkState";
 
-const ACCESS = "Allow the ProPresenter Link in System Settings > Privacy & Security > Accessibility, then try again.";
+const ACCESS = "Allow the Presenter Link in System Settings > Privacy & Security > Accessibility, then try again.";
 
 describe("the ProPresenter line (the existing connection)", () => {
   it.each([
@@ -17,7 +17,7 @@ describe("the ProPresenter line (the existing connection)", () => {
   });
 
   it("says plainly when Presentation is not on, and while it has not been read", () => {
-    expect(proPresenterLine(presentation({ enabled: false }))).toEqual({ tone: "idle", text: "Not connected. Save the connection above to use ProPresenter" });
+    expect(proPresenterLine(presentation({ enabled: false }))).toEqual({ tone: "idle", text: "Not connected. Save the connection to use ProPresenter" });
     expect(proPresenterLine(null).text).toBe("Checking ProPresenter\u2026");
     expect(proPresenterPill(null)).toEqual({ word: "Checking", tone: "idle" });
     expect(proPresenterPill(presentation({ connection_status: "connected" }))).toEqual({ word: "Connected", tone: "success" });
@@ -26,7 +26,7 @@ describe("the ProPresenter line (the existing connection)", () => {
   });
 });
 
-describe("the ProPresenter Link line: every status text", () => {
+describe("the Presenter Link line: every status text", () => {
   it.each([
     ["ready, another computer", helperStatus("ready"), "success", "Ready, version 0.1.0"],
     ["ready, this computer", localStatus(), "success", "Ready, on this computer"],

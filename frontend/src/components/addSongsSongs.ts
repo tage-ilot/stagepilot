@@ -33,7 +33,7 @@ export function addSongsRows(plan: LibraryPlan | null | undefined): AddSongsRow[
 }
 
 /**
- * The one rule for whether **Add to ProPresenter** is drawn: the ProPresenter Link is ready (this computer, or the helper), the Playback
+ * The one rule for whether **Add to ProPresenter** is drawn: the Presenter Link is ready (this computer, or the helper), the Playback
  * Library Link answers with data that is not an old copy, and the loaded plan is paired with a Playback setlist that has songs.
  * Anything else draws nothing at all (no warning: the feature is optional).
  */

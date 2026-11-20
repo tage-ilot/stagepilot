@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { rememberAddress } from "../hooks/useRecentAddresses";
-import { RecentAddresses } from "./RecentAddresses";
 
 import type {
   ProPresenterSettingsInput,
@@ -43,7 +42,7 @@ export function ProPresenterSetupPanel({
   onRefreshTimers: () => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
-  /** The optional ProPresenter Link (the block under the timer fields). Left out, the panel is exactly the timer and Look setup. */
+  /** The optional Presenter Link (its line, pill and setup in the Live Link block). Left out, the block holds the connection and the ProPresenter API line only. */
   link?: ProPresenterLinkController;
 }) {
   const [host, setHost] = useState("127.0.0.1");
@@ -175,121 +174,116 @@ export function ProPresenterSetupPanel({
         </InlineAlert>
       )}
 
-      <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field error={errHost} heldChange={held.host} label="Host">
-          <Input
-            disabled={busy}
-            onChange={(event) => setHost(event.target.value)}
-            value={host}
-          />
-          <RecentAddresses disabled={busy} onPick={setHost} scope="presentation" value={host} />
-        </Field>
-        <Field error={errPort} heldChange={held.port} label="Port">
-          <Input
-            disabled={busy}
-            inputMode="numeric"
-            onChange={(event) => setPort(event.target.value)}
-            value={port}
-          />
-        </Field>
-        <Field error={errTimer} heldChange={held.timer} label="Detected timer">
-          <Select
-            disabled={busy}
-            onChange={(event) => setTimerName(event.target.value)}
-            value={timerName}
-          >
-            <option value="">Choose a detected timer</option>
-            {timerName && !timerDetected && (
-              <option value={timerName}>{timerName} (currently unavailable)</option>
-            )}
-            {propresenter?.timers.map((timer) => (
-              <option key={timer.id} value={timer.name}>
-                {timer.name}{timer.is_countdown ? "" : " (converted when cued)"}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
-          <Input
-            disabled={busy}
-            inputMode="decimal"
-            onChange={(event) => setTimeout(event.target.value)}
-            value={timeout}
-          />
-        </Field>
-      </div>
-
-      <div className="mt-4 max-w-md">
-        <Field
-          heldChange={held.look}
-          hint="Selecting a Look does not change Presentation until you save these settings."
-          label="ProPresenter Look"
-        >
-          <Select
-            aria-label="ProPresenter Look"
-            disabled={busy}
-            onChange={(event) => setLookId(event.target.value)}
-            value={lookId}
-          >
-            <option value="">Current Look</option>
-            {lookId && !lookDetected && (
-              <option value={lookId}>Saved Look (currently unavailable)</option>
-            )}
-            {propresenter?.looks.map((look) => (
-              <option key={look.id} value={look.id}>
-                {look.name}{look.id === propresenter.current_look_id ? " (current)" : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button
-          disabled={disabled || busy}
-          onClick={onTest}
-          tone="presentation"
-          variant="tinted"
-        >
-          {pendingOperation === "test" ? "Testing…" : "Test connection"}
-        </Button>
-        <Button
-          disabled={disabled || busy}
-          onClick={onRefreshTimers}
-          tone="presentation"
-          variant="tinted"
-        >
-          {pendingOperation === "refresh" ? "Refreshing…" : "Refresh timers and Looks"}
-        </Button>
-      </div>
-
-      {changeCount > 0 && <p className="mt-3 text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
-
       <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
 
-      {link && <ProPresenterLinkBlock link={link} propresenter={propresenter} />}
+      {/* Same placing and spacing as the Playback panel: the Live Link block is the first block under the header (and its alert lines) and
+          holds the connection (Host, Port, Test connection). Everything that is not the connection comes after it. */}
+      <div className="mt-6 space-y-4">
+        <ProPresenterLinkBlock
+          connection={{
+            host,
+            port,
+            onHost: setHost,
+            onPort: setPort,
+            held: { host: held.host, port: held.port },
+            errors: { host: errHost, port: errPort },
+            busy,
+            testDisabled: disabled || busy,
+            testing: pendingOperation === "test",
+            onTest,
+          }}
+          link={link}
+          propresenter={propresenter}
+        />
 
-      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
-      <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field error={errTimer} heldChange={held.timer} label="Detected timer">
+            <Select
+              disabled={busy}
+              onChange={(event) => setTimerName(event.target.value)}
+              value={timerName}
+            >
+              <option value="">Choose a detected timer</option>
+              {timerName && !timerDetected && (
+                <option value={timerName}>{timerName} (currently unavailable)</option>
+              )}
+              {propresenter?.timers.map((timer) => (
+                <option key={timer.id} value={timer.name}>
+                  {timer.name}{timer.is_countdown ? "" : " (converted when cued)"}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
+            <Input
+              disabled={busy}
+              inputMode="decimal"
+              onChange={(event) => setTimeout(event.target.value)}
+              value={timeout}
+            />
+          </Field>
+        </div>
 
-      <dl className="mt-5 grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">API</dt>
-          <dd className="mt-1 text-ink-body">{propresenter ? connectionWord[propresenter.connection_status] : "Unknown"}</dd>
+        <div className="max-w-md">
+          <Field
+            heldChange={held.look}
+            hint="Selecting a Look does not change Presentation until you save these settings."
+            label="ProPresenter Look"
+          >
+            <Select
+              aria-label="ProPresenter Look"
+              disabled={busy}
+              onChange={(event) => setLookId(event.target.value)}
+              value={lookId}
+            >
+              <option value="">Current Look</option>
+              {lookId && !lookDetected && (
+                <option value={lookId}>Saved Look (currently unavailable)</option>
+              )}
+              {propresenter?.looks.map((look) => (
+                <option key={look.id} value={look.id}>
+                  {look.name}{look.id === propresenter.current_look_id ? " (current)" : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Configured timer</dt>
-          <dd className={`mt-1 ${propresenter?.timer_found ? "text-integration-presentation-text" : "text-warning-text"}`}>
-            {propresenter?.timer_found ? propresenter.timer_name : "Not found"}
-          </dd>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={disabled || busy}
+            onClick={onRefreshTimers}
+            tone="presentation"
+            variant="tinted"
+          >
+            {pendingOperation === "refresh" ? "Refreshing…" : "Refresh timers and Looks"}
+          </Button>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-ink-muted">Last checked</dt>
-          <dd className="mt-1 text-ink-body tabular-nums">
-            {propresenter?.last_checked_at ? new Date(propresenter.last_checked_at).toLocaleTimeString() : "Not checked"}
-          </dd>
-        </div>
-      </dl>
+
+        {changeCount > 0 && <p className="text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
+
+        {blockedReason && <p className="text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
+        <SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
+
+        <dl className="grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs uppercase tracking-wider text-ink-muted">API</dt>
+            <dd className="mt-1 text-ink-body">{propresenter ? connectionWord[propresenter.connection_status] : "Unknown"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wider text-ink-muted">Configured timer</dt>
+            <dd className={`mt-1 ${propresenter?.timer_found ? "text-integration-presentation-text" : "text-warning-text"}`}>
+              {propresenter?.timer_found ? propresenter.timer_name : "Not found"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wider text-ink-muted">Last checked</dt>
+            <dd className="mt-1 text-ink-body tabular-nums">
+              {propresenter?.last_checked_at ? new Date(propresenter.last_checked_at).toLocaleTimeString() : "Not checked"}
+            </dd>
+          </div>
+        </dl>
+      </div>
     </Panel>
   );
 }

@@ -16,11 +16,11 @@ import type {
 } from "../propresenterLink";
 import type { ProPresenterStatusResponse } from "../types";
 
-/** The ProPresenter Link's answer for another computer (the helper) in `state`. The words are the backend's. */
+/** The Presenter Link's answer for another computer (the helper) in `state`. The words are the backend's. */
 export const helperStatus = (state: LinkState = "ready", over: Partial<LinkStatus> = {}): LinkStatus => ({
   mode: "helper",
   state,
-  message: `The ProPresenter Link is ${state}.`,
+  message: `The Presenter Link is ${state}.`,
   version: state === "ready" ? "0.1.0" : state === "outdated" ? "0.0.9" : undefined,
   bundled_version: "0.1.0",
   can_import: state === "ready" || state === "outdated",

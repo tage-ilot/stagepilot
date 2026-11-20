@@ -62,7 +62,7 @@ impl HelperKind {
         match self {
             Self::LibraryLink => "the Library Link",
             Self::Lightkey => "the helper",
-            Self::ProPresenterLink => "the ProPresenter Link",
+            Self::ProPresenterLink => "the Presenter Link",
         }
     }
 
@@ -659,10 +659,9 @@ impl HelperUpdater {
         let sent = match link.post_update(&target.url, &target.host, body).await {
             Ok((200, answer)) if answer.get("updating") == Some(&Value::Bool(true)) => Ok(()),
             Ok((_, answer)) => Err(error_text(&answer)),
-            Err(LinkError::NoAnswer) => Err("The ProPresenter Link did not answer.".to_string()),
+            Err(LinkError::NoAnswer) => Err("The Presenter Link did not answer.".to_string()),
             Err(_) => Err(
-                "The ProPresenter Link answered in a way StagePilot does not understand."
-                    .to_string(),
+                "The Presenter Link answered in a way StagePilot does not understand.".to_string(),
             ),
         };
         if let Err(message) = sent {
@@ -683,7 +682,7 @@ impl HelperUpdater {
                 return self.failed(
                     kind,
                     &bundle.version,
-                    "The ProPresenter Link did not come back with the new version in time.".into(),
+                    "The Presenter Link did not come back with the new version in time.".into(),
                 );
             }
         }

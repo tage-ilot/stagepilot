@@ -118,8 +118,8 @@ impl Assets {
         let names = embedded::FILE_NAMES.join(" ");
         format!(
             r#"#!/bin/sh
-# StagePilot: set up the ProPresenter computer (ProPresenter Link {version}).
-# Downloads the ProPresenter Link from StagePilot at the address below (this local network only, no
+# StagePilot: set up the ProPresenter computer (Presenter Link {version}).
+# Downloads the Presenter Link from StagePilot at the address below (this local network only, no
 # internet), checks every file against the checksums written in this script, then runs the script's
 # own installer with the key StagePilot made for it. Run it in Terminal on the ProPresenter computer.
 set -eu
@@ -149,7 +149,7 @@ main() {{
   TMP=$(mktemp -d "${{TMPDIR:-/tmp}}/stagepilot-propresenter.XXXXXX") || fail "could not make a temporary folder."
   trap 'cd /; rm -rf "$TMP"' EXIT
   trap 'exit 1' HUP INT TERM
-  printf 'Downloading the ProPresenter Link {version} from StagePilot ...\n'
+  printf 'Downloading the Presenter Link {version} from StagePilot ...\n'
   for name in {names}; do
     case "$name" in
 {wants}    esac

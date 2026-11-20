@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api";
 import { helperStatus, linkController, localStatus, noComputerStatus, presentation } from "../test/propresenterLinkFixtures";
 import type { LinkStatus } from "../propresenterLink";
-import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
+import { ProPresenterLinkBlock, type ProPresenterConnectionFields } from "./ProPresenterLinkBlock";
 
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -24,10 +24,10 @@ describe("ProPresenterLinkBlock: the two lines", () => {
     block(helperStatus("ready"));
     const region = screen.getByRole("region", { name: "ProPresenter Live Link" });
     expect(within(region).getByRole("heading", { name: "ProPresenter Live Link" })).toBeInTheDocument();
-    expect(screen.getByTestId("propresenter-api-pill")).toHaveTextContent("ProPresenter: Connected");
-    expect(screen.getByTestId("propresenter-link-pill")).toHaveTextContent("ProPresenter Link: Connected");
-    expect(screen.getByTestId("propresenter-banner")).toHaveTextContent("ProPresenter: Connected to ProPresenter at 192.168.1.60.");
-    expect(line()).toHaveTextContent("ProPresenter Link: Ready, version 0.1.0.");
+    expect(screen.getByTestId("propresenter-api-pill")).toHaveTextContent("ProPresenter API: Connected");
+    expect(screen.getByTestId("propresenter-link-pill")).toHaveTextContent("Presenter Link: Connected");
+    expect(screen.getByTestId("propresenter-banner")).toHaveTextContent("ProPresenter API: Connected to ProPresenter at 192.168.1.60.");
+    expect(line()).toHaveTextContent("Presenter Link: Ready, version 0.1.0.");
   });
 
   it.each([
@@ -38,10 +38,10 @@ describe("ProPresenterLinkBlock: the two lines", () => {
     ["Ready, version 0.1.0", helperStatus("ready")],
     ["Ready, on this computer", localStatus()],
     ["Can add songs, cannot import missing songs (macOS Accessibility not allowed), on this computer", localStatus({ can_import: false, import_blocker: "Allow StagePilot in System Settings > Privacy & Security > Accessibility, then try again." })],
-    ["Can add songs, cannot import missing songs (macOS Accessibility not allowed)", helperStatus("ready", { can_import: false, import_blocker: "Allow the ProPresenter Link in System Settings > Privacy & Security > Accessibility, then try again." })],
+    ["Can add songs, cannot import missing songs (macOS Accessibility not allowed)", helperStatus("ready", { can_import: false, import_blocker: "Allow the Presenter Link in System Settings > Privacy & Security > Accessibility, then try again." })],
   ])("says %s", (words, status) => {
     block(status);
-    expect(line()).toHaveTextContent(`ProPresenter Link: ${words}.`);
+    expect(line()).toHaveTextContent(`Presenter Link: ${words}.`);
   });
 
   it("says the state with a dot AND words: the line carries its tone and every state has words", () => {
@@ -60,7 +60,7 @@ describe("ProPresenterLinkBlock: the two lines", () => {
 
   it("reads the existing connection: connected, not connected, error", () => {
     const { unmount } = block(helperStatus("ready"), presentation({ connection_status: "disconnected" }));
-    expect(screen.getByTestId("propresenter-banner")).toHaveTextContent("ProPresenter: Not connected to ProPresenter at 192.168.1.60.");
+    expect(screen.getByTestId("propresenter-banner")).toHaveTextContent("ProPresenter API: Not connected to ProPresenter at 192.168.1.60.");
     unmount();
     block(helperStatus("ready"), presentation({ connection_status: "error" }));
     expect(screen.getByTestId("propresenter-banner")).toHaveTextContent("Cannot reach ProPresenter at 192.168.1.60");
@@ -70,7 +70,7 @@ describe("ProPresenterLinkBlock: the two lines", () => {
 describe("ProPresenterLinkBlock: this computer or another one", () => {
   it("this computer: no setup button, says so, and shows the blocker with its fix", () => {
     block(localStatus({ can_import: false, import_blocker: "Allow StagePilot in System Settings > Privacy & Security > Accessibility, then try again." }));
-    expect(screen.queryByRole("button", { name: /Set up the ProPresenter computer|Update the ProPresenter Link/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Set up the ProPresenter computer|Update the Presenter Link/ })).toBeNull();
     expect(screen.queryByTestId("propresenter-install")).toBeNull();
     expect(screen.getByTestId("propresenter-link-local")).toHaveTextContent("ProPresenter runs on this computer, so there is nothing to set up.");
     expect(screen.getByTestId("propresenter-link-note")).toHaveTextContent(/cannot load a missing song.*Allow StagePilot in System Settings > Privacy & Security > Accessibility, then try again\./);
@@ -98,12 +98,12 @@ describe("ProPresenterLinkBlock: this computer or another one", () => {
     expect(disclosure(/Set up the ProPresenter computer/)).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("an outdated Link: the button is Update the ProPresenter Link; one that StagePilot updates by itself needs no command and says so", () => {
+  it("an outdated Link: the button is Update the Presenter Link; one that StagePilot updates by itself needs no command and says so", () => {
     const { unmount } = block(helperStatus("outdated"));
-    expect(disclosure(/Update the ProPresenter Link/)).toBeInTheDocument();
+    expect(disclosure(/Update the Presenter Link/)).toBeInTheDocument();
     unmount();
-    block(helperStatus("outdated", { update: { mode: "automatic", version: "0.1.0", message: "StagePilot updates the ProPresenter Link by itself when nothing is playing." } }));
-    expect(screen.getByTestId("propresenter-link-update")).toHaveTextContent("StagePilot updates the ProPresenter Link by itself when nothing is playing.");
+    block(helperStatus("outdated", { update: { mode: "automatic", version: "0.1.0", message: "StagePilot updates the Presenter Link by itself when nothing is playing." } }));
+    expect(screen.getByTestId("propresenter-link-update")).toHaveTextContent("StagePilot updates the Presenter Link by itself when nothing is playing.");
     expect(disclosure(/Set up the ProPresenter computer/)).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -124,7 +124,7 @@ describe("ProPresenterLinkBlock: this computer or another one", () => {
 describe("ProPresenterLinkBlock: optional, never a warning", () => {
   it("no ProPresenter computer saved: grey 'Not installed', no setup button, no alert", () => {
     block(noComputerStatus(), presentation({ enabled: false }));
-    expect(line()).toHaveTextContent("ProPresenter Link: Not installed.");
+    expect(line()).toHaveTextContent("Presenter Link: Not installed.");
     expect(line()).toHaveAttribute("data-tone", "idle");
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -132,7 +132,7 @@ describe("ProPresenterLinkBlock: optional, never a warning", () => {
 
   it("before the first answer it says Checking, still no alert and no button", () => {
     block(null);
-    expect(line()).toHaveTextContent("ProPresenter Link: Checking…");
+    expect(line()).toHaveTextContent("Presenter Link: Checking…");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -143,7 +143,67 @@ describe("ProPresenterLinkBlock: optional, never a warning", () => {
   });
 
   it("a read that failed shows its own sentence as an alert, and nothing else changes", () => {
-    render(<ProPresenterLinkBlock link={linkController(null, { error: "The ProPresenter Link could not be read." })} propresenter={presentation()} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("The ProPresenter Link could not be read.");
+    render(<ProPresenterLinkBlock link={linkController(null, { error: "The Presenter Link could not be read." })} propresenter={presentation()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The Presenter Link could not be read.");
+  });
+});
+
+describe("ProPresenterLinkBlock: the connection it holds", () => {
+  const fields = (over: Partial<ProPresenterConnectionFields> = {}): ProPresenterConnectionFields => ({
+    host: "192.168.1.60", port: "1025", onHost: vi.fn(), onPort: vi.fn(), held: { host: false, port: false }, errors: {}, busy: false, testDisabled: false, testing: false, onTest: vi.fn(), ...over,
+  });
+  const withFields = (connection: ProPresenterConnectionFields, status: LinkStatus | null = helperStatus("ready")) => render(<ProPresenterLinkBlock connection={connection} link={linkController(status)} propresenter={presentation()} />);
+
+  it("draws Host, Port and Test connection under the two status lines and above the setup box; without `connection` it draws none of them", () => {
+    withFields(fields(), helperStatus("not_installed"));
+    const row = screen.getByTestId("propresenter-live-link-line");
+    expect(screen.getByTestId("propresenter-live-link-sub").compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row.compareDocumentPosition(screen.getByTestId("propresenter-install")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(row).getByLabelText("Host")).toHaveValue("192.168.1.60");
+    expect(within(row).getByLabelText("Port")).toHaveValue("1025");
+    expect(within(row).getByRole("button", { name: "Test connection" })).toBeEnabled();
+  });
+
+  it("without `connection` the block is only the lines", () => {
+    block(helperStatus("ready"));
+    expect(screen.queryByTestId("propresenter-live-link-line")).toBeNull();
+    expect(screen.queryByLabelText("Host")).toBeNull();
+  });
+
+  it("typing and Test connection are reported to the panel, nothing is saved here", async () => {
+    const connection = fields();
+    withFields(connection);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Host"), "5");
+    await user.type(screen.getByLabelText("Port"), "6");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(connection.onHost).toHaveBeenCalledWith("192.168.1.605");
+    expect(connection.onPort).toHaveBeenCalledWith("10256");
+    expect(connection.onTest).toHaveBeenCalledTimes(1);
+  });
+
+  it("a held change says so in words next to the caption, with the warning border, and the box points at the words", () => {
+    withFields(fields({ held: { host: true, port: false } }));
+    const marker = document.querySelector("[data-held-marker]")!;
+    expect(marker).toHaveTextContent("Not saved yet");
+    expect(screen.getByLabelText("Host")).toHaveClass("!border-warning");
+    expect(screen.getByLabelText("Host")).toHaveAttribute("aria-describedby", marker.id);
+    expect(screen.getByLabelText("Port")).not.toHaveClass("!border-warning");
+    expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
+  });
+
+  it("an error is an alert under the row, wired to its box", () => {
+    withFields(fields({ errors: { host: "Enter a host." } }));
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Enter a host.");
+    expect(screen.getByLabelText("Host")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Host")).toHaveAttribute("aria-describedby", alert.id);
+  });
+
+  it("a request in flight waits the boxes, the recent addresses and the button; Test connection says Testing…", () => {
+    withFields(fields({ busy: true, testDisabled: true, testing: true }));
+    expect(screen.getByLabelText("Host")).toBeDisabled();
+    expect(screen.getByLabelText("Port")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Testing…" })).toBeDisabled();
   });
 });

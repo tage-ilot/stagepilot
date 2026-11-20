@@ -23,7 +23,7 @@ const controller = (status = playbackStatus({ order_source: "library", order_lib
 const button = () => screen.queryByRole("button", { name: "Add to ProPresenter" });
 
 describe("Add to ProPresenter in the Playback panel", () => {
-  it("is under the songs Playback plays when the ProPresenter Link is ready, on another computer or this one", () => {
+  it("is under the songs Playback plays when the Presenter Link is ready, on another computer or this one", () => {
     const { unmount } = render(<PlaybackApiPanel library={libraryController("ready")} link={linkController(helperStatus("ready"))} playback={controller()} />);
     expect(within(screen.getByTestId("playback-library")).getByRole("button", { name: "Add to ProPresenter" })).toBeInTheDocument();
     unmount();
@@ -31,7 +31,7 @@ describe("Add to ProPresenter in the Playback panel", () => {
     expect(button()).toBeInTheDocument();
   });
 
-  it("is not drawn without the ProPresenter Link, and a computer without it sees nothing else about it", () => {
+  it("is not drawn without the Presenter Link, and a computer without it sees nothing else about it", () => {
     const { container, rerender } = render(<PlaybackApiPanel library={libraryController("ready")} playback={controller()} />);
     expect(button()).toBeNull();
     for (const status of [null, helperStatus("not_installed"), helperStatus("needs_command"), helperStatus("not_answering"), helperStatus("outdated")]) {
