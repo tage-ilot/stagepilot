@@ -11,7 +11,7 @@ import { SongsStrip } from "./SongsStrip";
 
 /**
  * The Presenter Link's songs are the Lighting tab's song cards in check mode: the same grid, border, outline and 44 px target, a visible
- * check mark, all selected at first, Select all / Select none above them, and small chips for what a card must say.
+ * check mark, all selected at first (no header row, no Select all / Select none), and small chips for what a card must say.
  */
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -100,6 +100,7 @@ describe("the song cards", () => {
     expect(box).not.toBeChecked();
     const count = screen.getByTestId("add-songs-count");
     expect(count).toHaveTextContent("3 of 4 selected");
+    expect(count).toHaveClass("sr-only");
     expect(count).toHaveAttribute("role", "status");
     expect(count).toHaveAttribute("aria-live", "polite");
     await user.keyboard("{Enter}");
@@ -107,17 +108,22 @@ describe("the song cards", () => {
     expect(count).toHaveTextContent("4 of 4 selected");
   });
 
-  it("Select all and Select none are small section buttons above the grid", async () => {
+  it("has no header row: no Songs heading on screen, no count, no Select all or Select none; the list still has its name and the count is read out", async () => {
     draw();
-    const user = await ready();
-    const group = screen.getByRole("group", { name: "Select songs" });
-    expect(group.closest("[data-section=actions]")).not.toBeNull();
-    expect(group.compareDocumentPosition(screen.getByRole("list", { name: "Songs to import" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await user.click(within(group).getByRole("button", { name: "Select none" }));
-    expect(screen.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "false")).toBe(true);
-    expect(screen.getByTestId("add-songs-count")).toHaveTextContent("0 of 4 selected");
-    await user.click(within(group).getByRole("button", { name: "Select all" }));
-    expect(screen.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "true")).toBe(true);
+    await ready();
+    const section = screen.getByTestId("add-songs-songs");
+    expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Select none" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Select songs" })).toBeNull();
+    // The first thing a person sees in the section is the grid of cards; the heading and the count are visually hidden.
+    const heading = within(section).getByRole("heading", { name: "Songs" });
+    expect(heading).toHaveClass("sr-only");
+    expect(section).toHaveAccessibleName("Songs");
+    const count = screen.getByTestId("add-songs-count");
+    expect(count).toHaveClass("sr-only");
+    expect(count).toHaveTextContent("4 of 4 selected");
+    expect([...section.children].filter((node) => !node.classList.contains("sr-only")).map((node) => node.tagName)).toEqual(["UL"]);
+    expect(screen.getByRole("list", { name: "Songs to import" })).toBeInTheDocument();
   });
 
   it("each Playback card has the cover (when Playback has one), then the key and `mtID-number` as one square chip each, the arrangement, and its bar", async () => {

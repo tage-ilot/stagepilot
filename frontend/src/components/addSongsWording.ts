@@ -25,9 +25,7 @@ export const IMPORTING = "Importing\u2026";
 export const END_OF_PLAYLIST = "End of Playlist";
 /** The small chip on a card that is a Planning Center name (Playback has not given the songs). */
 export const PLANNING_CENTER = "Planning Center";
-export const SELECT_ALL = "Select all";
-export const SELECT_NONE = "Select none";
-/** The count over the cards, read out politely: `3 of 4 selected`. */
+/** The count for the cards, read out politely and never drawn (a screen-reader line): `3 of 4 selected`. */
 export const selectedWords = (selected: number, of: number): string => `${selected} of ${of} selected`;
 /** The engine's own line for a header name the playlist has twice: StagePilot does not guess which one. */
 export const twoHeadersLine = (header: string): string => `More than one header in this playlist is named \u201C${header.trim()}\u201D. Pick another place.`;

@@ -6,11 +6,11 @@ import type { AddSongsRow } from "./addSongsSongs";
 import { songStatus, STATUS, type StatusWords } from "./addSongsStatus";
 import {
   isStuck, NO_NUMBER, NO_NUMBER_PHRASE, NO_NUMBER_WHY, NO_PLAN_SONGS, NOT_IN_PROPRESENTER, NOT_IN_PROPRESENTER_PHRASE, NOT_IN_PROPRESENTER_WHY, PLANNING_CENTER,
-  SELECT_ALL, SELECT_NONE, selectedWords, SEVERAL_IN_PROPRESENTER, SEVERAL_IN_PROPRESENTER_WHY,
+  selectedWords, SEVERAL_IN_PROPRESENTER, SEVERAL_IN_PROPRESENTER_WHY,
 } from "./addSongsWording";
 import { StatusChip } from "./StatusChips";
 import { keyWas, librarySongCover } from "./playbackLibrary";
-import { ActionButton, ActionRow, FactChips } from "./sections";
+import { FactChips } from "./sections";
 import { SONG_CARD_LOOK, SONG_GRID_CHECK, SongCardBody, SongCardShell } from "./SongCard";
 
 /** What the last preview (while it is still true) and the last import say about a song: the chip of a song it stopped for, and whether a section was guessed. */
@@ -115,16 +115,9 @@ export function PresenterSongList({ add, headingId }: { add: AddSongsController;
   const marks = marksOf(add);
   return (
     <section aria-labelledby={headingId} className="space-y-2" data-source={names ? "planning-center" : "playback"} data-testid="add-songs-songs">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex items-baseline gap-x-3">
-          <h3 className="font-semibold text-ink" id={headingId}>Songs</h3>
-          <span aria-live="polite" className="text-sm tabular-nums text-ink-muted" data-testid="add-songs-count" role="status">{selectedWords(selectedCount, choices.length)}</span>
-        </div>
-        <ActionRow aria-label="Select songs">
-          <ActionButton disabled={busy || choices.length === 0} label={SELECT_ALL} onClick={() => add.toggleAll(true)} tone="presentation" />
-          <ActionButton disabled={busy || choices.length === 0} label={SELECT_NONE} onClick={() => add.toggleAll(false)} tone="presentation" />
-        </ActionRow>
-      </div>
+      {/* No visible header row: the heading and the count are for screen readers only (the count is the polite line that says 3 of 4 selected). */}
+      <h3 className="sr-only" id={headingId}>Songs</h3>
+      <span aria-live="polite" className="sr-only" data-testid="add-songs-count" role="status">{selectedWords(selectedCount, choices.length)}</span>
       {rows.length === 0 ? <p className="text-sm text-ink-muted" data-testid="add-songs-empty">{NO_PLAN_SONGS}</p> : (
         <ul aria-label="Songs to import" className={SONG_GRID_CHECK} data-testid="add-songs-list">
           {rows.map((row) => <SongCard add={add} busy={busy} key={row.id} marks={marks.get(row.id)} now={now} row={row} />)}
