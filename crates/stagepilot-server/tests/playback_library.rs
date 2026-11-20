@@ -108,7 +108,7 @@ fn artwork_info(id: i64, content_type: &str, etag: &str, bytes: usize) -> Value 
 
 fn item(id: i64, order: u32, title: &str) -> Value {
     json!({
-        "setlist_song_id": id, "order": order, "title": title, "artist": "Artist",
+        "setlist_song_id": id, "content_id": 5_000_000 + id, "order": order, "title": title, "artist": "Artist",
         "key": {"id": 3, "name": "Ab"}, "key_original": {"id": 1, "name": "C"},
         "bpm": 65.0, "bpm_original": 65.0, "length_s": 300.5, "scan_length_s": 297.25,
         "arrangement": "Default", "planning_center_song_id": null,
@@ -423,6 +423,11 @@ async fn a_ready_helper_pairs_the_plan_and_reads_each_song_without_a_waveform() 
         (Some(65.0), Some(297.25), Some(7))
     );
     assert_eq!(one.arrangement.as_deref(), Some("Default"));
+    // The MultiTracks number comes through, and it is the song's own, not the setlist-song number.
+    assert_eq!(
+        (one.setlist_song_id, one.content_id),
+        (Some(11), Some(5_000_011))
+    );
     assert!(result.songs[3].library.is_none());
 
     let hits = helper.hits();

@@ -79,12 +79,32 @@ def configure(helper, args, key, folder):
         target = os.path.join(helper.FOLDER.library_path(helper.SONGS_LIBRARY), name + ".pro")
         if os.path.lexists(target):
             raise helper.Refused(409, "exists", "A song with that name is already in the Songs library.")
+        # `--import-dir DIR`: DIR/<song number>.pro is what the import writes (a test's own made-up song); else a tiny stand-in.
+        bytes_ = None
+        import_dir = getattr(args, "import_dir", None)
+        if import_dir:
+            try:
+                with open(os.path.join(import_dir, song_id + ".pro"), "rb") as f:
+                    bytes_ = f.read()
+            except OSError:
+                bytes_ = None
         with open(target, "wb") as f:
-            f.write(synthetic_song(int(song_id)))
+            f.write(bytes_ if bytes_ is not None else synthetic_song(int(song_id)))
         return {"file": name + ".pro"}
 
     helper.search_import = import_song
-    helper.select_library = lambda name: {"tried": True, "detail": ""} if helper.library_name(name) else None
+    def select_library(name):
+        if not helper.library_name(name):
+            return None
+        # What a person's click on the library does in ProPresenter: the fake ProPresenter API (`--lazy select`) loads the files then.
+        try:
+            with open(os.path.join(folder, ".selected-" + name), "w"):
+                pass
+        except OSError:
+            pass
+        return {"tried": True, "detail": ""}
+
+    helper.select_library = select_library
 
 
 def make_folder(base, playback=True):
@@ -114,6 +134,7 @@ def main(argv=None):
     p.add_argument("--version", default=None, help="the version it reports (default: the bundled helper's)")
     p.add_argument("--folder", default=None, help="use this ProPresenter folder instead of a fresh temporary one")
     p.add_argument("--playback", action="store_true", help="start with a Playback library folder")
+    p.add_argument("--import-dir", default=None, help="an import writes DIR/<song number>.pro when it is there (made-up songs of a test)")
     args = p.parse_args(argv)
     helper = load_helper()
     args.version = args.version or helper.__version__

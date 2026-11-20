@@ -19,6 +19,8 @@
 //!
 //! [`fake::FakeHost`] is an in-memory host with the same rules, for tests.
 
+pub mod add_songs;
+pub mod api;
 pub mod fake;
 pub mod helper;
 pub mod local;

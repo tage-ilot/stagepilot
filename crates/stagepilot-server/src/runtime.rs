@@ -72,6 +72,8 @@ pub struct Runtime {
     pub propresenter_link: Arc<crate::propresenter_link::ProPresenterLink>,
     pub propresenter_helper_install:
         Arc<crate::propresenter_helper_install::ProPresenterHelperInstall>,
+    /// The songs-to-playlist feature: previews waiting to be applied, its one job at a time, the playlist list.
+    pub propresenter_add_songs: Arc<crate::propresenter_add_songs::AddSongsService>,
     link_connect: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The helpers update themselves when StagePilot starts (signed bundles only, only while nothing is playing).
     pub helper_updater: Arc<crate::helper_update::HelperUpdater>,
@@ -277,6 +279,16 @@ impl Runtime {
                 link_credentials,
             ),
         );
+        // Playlist backups sit beside the settings file; demo and test runtimes keep them in a temporary folder.
+        let add_songs_backup_dir = if options.memory_tokens {
+            std::env::temp_dir().join(format!(
+                "stagepilot-propresenter-playlist-backups-{}",
+                std::process::id()
+            ))
+        } else {
+            stagepilot_core::settings::default_settings_path(settings_service.environ())
+                .with_file_name("propresenter-playlist-backups")
+        };
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
             let demo = Arc::new(
@@ -362,6 +374,9 @@ impl Runtime {
                 ),
             ),
             propresenter_link,
+            propresenter_add_songs: Arc::new(crate::propresenter_add_songs::AddSongsService::new(
+                add_songs_backup_dir,
+            )),
             link_connect: Mutex::new(None),
             playback_library,
             helper_updater,

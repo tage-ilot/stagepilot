@@ -1299,3 +1299,81 @@ async fn a_symlink_out_of_the_root_is_not_followed() {
     let (status, _) = call(&h.local, "GET", "/link.txt", None, &[]).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// The ProPresenter song routes change a playlist and drive a screen: a remote viewer is read-only and may not even ask for a
+/// preview, nobody without a remote session gets in, and an operator gets as far as the route (which says no ProPresenter is
+/// chosen on this demo computer).
+#[tokio::test]
+async fn remote_viewers_cannot_use_the_propresenter_song_routes() {
+    let dir = tempfile::tempdir().unwrap();
+    let e = edge_harness(dir.path());
+    let store = &e.h.access.store;
+    store.bootstrap("operator@example.test", PASSWORD).unwrap();
+    store
+        .create_user("viewer@example.test", PASSWORD, RemoteRole::Viewer, false)
+        .unwrap();
+    let cookie_of = |token: &str| format!("__Host-stagepilot_remote={token}");
+    let preview = json!({"setlist_song_ids": [1], "playlist_id": "x", "place": "end"});
+    let apply = json!({"plan_id": "0".repeat(32), "skip": []});
+    let job = "/api/v1/propresenter-link/add-songs/jobs/00000000000000000000000000000000";
+    let routes: [(&str, &str, Option<Value>); 4] = [
+        (
+            "POST",
+            "/api/v1/propresenter-link/add-songs/preview",
+            Some(preview.clone()),
+        ),
+        (
+            "POST",
+            "/api/v1/propresenter-link/add-songs/apply",
+            Some(apply),
+        ),
+        ("GET", "/api/v1/propresenter-link/playlists", None),
+        ("GET", job, None),
+    ];
+    let (token, csrf) = session_for(&e, "viewer@example.test");
+    let viewer = ingress_headers(&[("cookie", cookie_of(&token)), ("x-csrf-token", csrf)]);
+    for (method, path, body) in &routes {
+        assert_eq!(
+            edge(&e.router, method, path, body.clone(), &viewer).await.0,
+            StatusCode::FORBIDDEN,
+            "{method} {path}"
+        );
+        assert_eq!(
+            edge(&e.router, method, path, body.clone(), &ingress_headers(&[]))
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED,
+            "no session: {method} {path}"
+        );
+    }
+    let (token, csrf) = session_for(&e, "operator@example.test");
+    let operator = ingress_headers(&[("cookie", cookie_of(&token)), ("x-csrf-token", csrf)]);
+    let reply = edge(
+        &e.router,
+        "POST",
+        "/api/v1/propresenter-link/add-songs/preview",
+        Some(preview),
+        &operator,
+    )
+    .await;
+    assert_eq!(
+        reply.0,
+        StatusCode::CONFLICT,
+        "the operator is past the guards: {}",
+        String::from_utf8_lossy(&reply.2)
+    );
+    // The POST needs the CSRF token like every other remote write.
+    let no_csrf = ingress_headers(&[("cookie", cookie_of(&token))]);
+    assert_eq!(
+        edge(
+            &e.router,
+            "POST",
+            "/api/v1/propresenter-link/add-songs/apply",
+            Some(json!({"plan_id": "0".repeat(32)})),
+            &no_csrf
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+}

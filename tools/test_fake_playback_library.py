@@ -122,6 +122,10 @@ class Fake(unittest.TestCase):
         item = json.loads(get(self.base, "/setlists/2026-11-22")[1])["items"][0]
         sid = item["setlist_song_id"]
         detail = json.loads(get(self.base, "/songs/%d" % sid)[1])
+        # The MultiTracks number: in the setlist and in the song's own answer, the same, and not the setlist-song number.
+        self.assertIsInstance(item["content_id"], int)
+        self.assertEqual(detail["content_id"], item["content_id"])
+        self.assertNotEqual(item["content_id"], sid)
         sections = detail["arrangement_detail"]["sections"]
         self.assertGreater(len(sections), 5)
         self.assertAlmostEqual(sections[-1]["performed_end"], item["length_s"], places=2)
