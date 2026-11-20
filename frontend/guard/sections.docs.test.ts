@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 
 /** The documentation of the section templates (DESIGN.md §6.6, CONTRIBUTING.md) cannot drift from the code it describes. */
 const frontend = fileURLToPath(new URL("../", import.meta.url));
-const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
+// Windows checks files out with CRLF; the quoted example is compared line for line, so read every file with LF.
+const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8").replace(/\r\n/g, "\n");
 const design = read("../../DESIGN.md");
 const section = design.slice(design.indexOf("### 6.6 Section templates"), design.indexOf("## 7. The dashboard"));
 

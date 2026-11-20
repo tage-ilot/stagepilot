@@ -70,7 +70,7 @@ export const A = () => (
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
         const path = join(dir, name);
-        if (statSync(path).isDirectory()) { if (!/(^|\/)(sections|gallery|test|node_modules)$/.test(path)) walk(path); continue; }
+        if (statSync(path).isDirectory()) { if (!/(^|\/)(sections|gallery|test|node_modules)$/.test(path.replaceAll("\\", "/"))) walk(path); continue; }
         if (/\.tsx$/.test(name) && !/\.test\.tsx$/.test(name)) files.push(path);
       }
     };
