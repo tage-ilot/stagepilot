@@ -274,14 +274,14 @@ describe("the list: Playback's songs once it has given them", () => {
     expect(row.querySelector("[aria-expanded]")).toBeNull();
   });
 
-  it("a song can be ticked off by its name, and all of them at once", async () => {
+  it("a song can be ticked off by its name, and each one ticked on again", async () => {
     view();
     const user = await ready();
     await user.click(screen.getByRole("checkbox", { name: "Battle Belongs" }));
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("2 of 3 selected");
-    await user.click(screen.getByRole("button", { name: "Select all" }));
+    await user.click(screen.getByRole("checkbox", { name: "Battle Belongs" }));
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("3 of 3 selected");
-    await user.click(screen.getByRole("button", { name: "Select none" }));
+    for (const name of ["Holy Forever", "Battle Belongs", "Gratitude"]) await user.click(screen.getByRole("checkbox", { name }));
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("0 of 3 selected");
   });
 
@@ -600,10 +600,27 @@ describe("the one button: when it is off, and why", () => {
     expect(reason()).toBe("Choose a playlist");
     await choose(user);
     expect(addButton()).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Select none" }));
+    for (const name of ["Holy Forever", "Battle Belongs", "Gratitude"]) await user.click(screen.getByRole("checkbox", { name }));
     expect(addButton()).toBeDisabled();
     expect(reason()).toBe("Select a song");
     expect(addButton()).toHaveAccessibleDescription("Select a song");
+  });
+
+  it("draws the reason as a small neutral pill beside the button (same row), not as heading-like text, never red", async () => {
+    view();
+    await ready();
+    const pill = screen.getByTestId("add-songs-reason");
+    expect(pill).toHaveAttribute("data-reason-pill", "true");
+    expect(pill.tagName).toBe("SPAN");
+    expect(pill).toHaveClass("rounded-ds-full", "border", "border-edge", "bg-surface-950");
+    expect(pill.className).not.toMatch(/danger|red/);
+    expect(pill.closest("h1, h2, h3, h4, h5, h6, p")).toBeNull();
+    expect(pill.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    // The same words describe the button, and the pill is in the button's own wrapping row (under it on a phone).
+    expect(addButton()).toHaveAccessibleDescription("Choose a playlist");
+    const row = addButton().closest("[data-part=buttons]")!;
+    expect(row).toContainElement(pill);
+    expect(row).toHaveClass("flex", "flex-wrap", "items-center");
   });
 
   it("is off until the section is a header the playlist has", async () => {
@@ -1128,9 +1145,9 @@ describe("keyboard and screen reader", () => {
       return node.labels?.[0]?.textContent ?? node.getAttribute("aria-label") ?? node.textContent?.replace(/[\u25B8\u25BE]/g, "").trim();
     };
     const seen: (string | null | undefined)[] = [];
-    for (let i = 0; i < 7; i += 1) { await user.tab(); seen.push(here()); }
+    for (let i = 0; i < 5; i += 1) { await user.tab(); seen.push(here()); }
     // No Sections button on a card any more: the order is text on the card, so Tab goes from card to card.
-    expect(seen).toEqual(["Section", "Select all", "Select none", "Holy Forever", "Battle Belongs", "Gratitude", "Import songs to ProPresenter"]);
+    expect(seen).toEqual(["Section", "Holy Forever", "Battle Belongs", "Gratitude", "Import songs to ProPresenter"]);
     const box = screen.getByRole("checkbox", { name: "Holy Forever" });
     box.focus();
     await user.keyboard(" ");
@@ -1155,7 +1172,7 @@ describe("keyboard and screen reader", () => {
     expect(screen.getByRole("list", { name: "Songs to import" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Songs" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Holy Forever" }).closest("li")).not.toBeNull();
-    expect(screen.getByRole("group", { name: "Select songs" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Select songs" })).toBeNull();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toHaveAccessibleName(/\S/);
     await press(user, stuckPlan());
     await screen.findByTestId("add-songs-preview");

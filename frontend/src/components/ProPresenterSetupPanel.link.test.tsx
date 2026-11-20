@@ -38,16 +38,15 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     expect(before(header, block())).toBe(true);
   });
 
-  it("DOM order: header, alerts, block, Detected timer, Timeout, Look, Refresh, the note, Save bar, summary list", async () => {
+  it("DOM order: header, alerts, block, Timer, Look, Refresh, the note, Save bar, summary list", async () => {
     const { container } = panel(linkController(helperStatus("ready")), { message: "Saved." });
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "192.0.2.10" } });
     const order = [
       within(container).getByRole("heading", { name: "Presentation" }),
       screen.getByText("Saved."),
       block(),
-      screen.getByRole("combobox", { name: /Detected timer/i }),
-      screen.getByLabelText("Timeout (seconds)"),
-      screen.getByRole("combobox", { name: "ProPresenter Look" }),
+      screen.getByRole("combobox", { name: "Timer" }),
+      screen.getByRole("combobox", { name: "Look" }),
       screen.getByRole("button", { name: "Refresh timers and Looks" }),
       screen.getByText(/Refresh uses the saved settings/),
       screen.getByRole("button", { name: "Save configuration" }),
@@ -66,7 +65,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     expect(before(row, lines)).toBe(true);
     expect(before(row, screen.getByTestId("propresenter-install"))).toBe(true);
     // Everything that is not the connection stays outside of it.
-    for (const outside of [screen.getByRole("combobox", { name: /Detected timer/i }), screen.getByLabelText("Timeout (seconds)"), screen.getByLabelText("ProPresenter Look"), screen.getByRole("button", { name: "Refresh timers and Looks" }), screen.getByRole("button", { name: "Save configuration" })]) expect(block()).not.toContainElement(outside);
+    for (const outside of [screen.getByRole("combobox", { name: "Timer" }), screen.getByLabelText("Look"), screen.getByRole("button", { name: "Refresh timers and Looks" }), screen.getByRole("button", { name: "Save configuration" })]) expect(block()).not.toContainElement(outside);
   });
 
   it("the recent addresses are the arrow's list inside the Host box (no chip row under the row), and one pick fills Host", async () => {
@@ -123,9 +122,10 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
 });
 
 describe("ProPresenterSetupPanel: tab order follows the new visual order", () => {
-  it("Host, API, Scan, Connect, the Details button, then Detected timer, Timeout, Look, Refresh, Save", async () => {
+  it("Host, API, Scan, Connect, the Details button, then Timer, Look, Refresh, Save", async () => {
     const user = userEvent.setup();
-    panel(linkController(helperStatus("ready")));
+    // (With Looks listed, so the Look box is a tab stop: without them it is disabled and tabbing skips it.)
+    panel(linkController(helperStatus("ready")), { propresenter: presentation({ looks: [{ id: "l1", name: "Default", index: 0 }], current_look_id: "l1" }) });
     const seen: string[] = [];
     for (let i = 0; i < 14; i += 1) {
       await user.tab();
@@ -135,7 +135,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
-      "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks",
+      "Timer", "Look", "Refresh timers and Looks",
       // The Presenter Link section sits between the settings and the Save bar (it has no list to tick without a plan).
       "Playlist",
       "Save configuration",

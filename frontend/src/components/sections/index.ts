@@ -1,4 +1,5 @@
 export { ReasonButton, ReasonWrap, type ReasonButtonProps, type ReasonWrapAttributes, type ReasonWrapOptions } from "./ReasonButton";
+export { ReasonPill, type ReasonPillProps } from "./ReasonPill";
 export { ActionButton, ActionRow, type ActionButtonProps, type ActionRowProps } from "./ActionRow";
 export { AddressBox, NO_ADDRESSES, type AddressBoxProps } from "./AddressBox";
 export { addressGroups, scannedAddresses, type AddressGroups, type AddressOption, type ScannedAddress } from "./addressOptions";

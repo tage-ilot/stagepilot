@@ -10,7 +10,6 @@ import type {
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Field } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
-import { Input } from "./ui/Input";
 import { ActionButton, ActionRow, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
@@ -21,6 +20,14 @@ import { useProPresenterScan, type ProPresenterScanController } from "../hooks/u
 import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
 import { PresenterLinkSection } from "./PresenterLinkSection";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+
+const DEFAULT_TIMEOUT_SECONDS = 3;
+const CHOOSE_TIMER = "Choose a timer";
+const CURRENT = " (current)";
+const UNAVAILABLE = " (unavailable)";
+const CONVERTED = " (converted when cued)";
+const LOOK_HINT = "Selecting a Look does not change Presentation until you save these settings.";
+const LOOK_NEEDS_CONNECTION = "Connect to ProPresenter first";
 
 export function ProPresenterSetupPanel({
   propresenter,
@@ -66,12 +73,13 @@ export function ProPresenterSetupPanel({
   const [port, setPort] = useState("1025");
   const [timerName, setTimerName] = useState("Song Countdown");
   const [lookId, setLookId] = useState("");
-  const [timeout, setTimeout] = useState("3");
   const configuredHost = propresenter?.host;
   const configuredPort = propresenter?.port;
   const configuredTimerName = propresenter?.timer_name;
   const configuredLookId = propresenter?.look_id;
-  const configuredTimeout = propresenter?.request_timeout_seconds;
+  // The request timeout is a saved setting this page never shows or edits: it is loaded with the rest and saved back unchanged
+  // (the backend still validates it; docs/propresenter.md says where it is changed).
+  const savedTimeout = propresenter?.request_timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
 
   useEffect(() => {
     if (
@@ -79,29 +87,25 @@ export function ProPresenterSetupPanel({
       || configuredPort === undefined
       || configuredTimerName === undefined
       || configuredLookId === undefined
-      || configuredTimeout === undefined
     ) return;
     setHost(configuredHost);
     setPort(String(configuredPort));
     setTimerName(configuredTimerName);
     setLookId(configuredLookId ?? "");
-    setTimeout(String(configuredTimeout));
-  }, [configuredHost, configuredLookId, configuredPort, configuredTimeout, configuredTimerName]);
+  }, [configuredHost, configuredLookId, configuredPort, configuredTimerName]);
 
   const parsedSettings = useMemo<ProPresenterSettingsInput | null>(() => {
     const parsedPort = Number(port);
-    const parsedTimeout = Number(timeout);
     if (!host.trim() || !timerName.trim()) return null;
     if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return null;
-    if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0 || parsedTimeout > 60) return null;
     return {
       host: host.trim(),
       port: parsedPort,
       timer_name: timerName.trim(),
       look_id: lookId || null,
-      request_timeout_seconds: parsedTimeout,
+      request_timeout_seconds: savedTimeout,
     };
-  }, [host, lookId, port, timeout, timerName]);
+  }, [host, lookId, port, savedTimeout, timerName]);
 
   const disabled = !propresenter?.enabled;
   const busy = pendingOperation !== null;
@@ -112,18 +116,15 @@ export function ProPresenterSetupPanel({
     port: configuredPort !== undefined && port.trim() !== String(configuredPort),
     timer: configuredTimerName !== undefined && timerName.trim() !== configuredTimerName,
     look: configuredLookId !== undefined && lookId !== (configuredLookId ?? ""),
-    timeout: configuredTimeout !== undefined && timeout.trim() !== String(configuredTimeout),
   };
   const changeCount = Object.values(held).filter(Boolean).length;
   useEffect(() => { onDirtyChange?.(changeCount > 0); return () => onDirtyChange?.(false); }, [changeCount, onDirtyChange]);
   const [saveFailed, setSaveFailed] = useState(false);
   const attempt = useSaveAttempt("propresenter-configuration");
   const portNumber = Number(port);
-  const timeoutNumber = Number(timeout);
   const errHost = attempt.attempted && !host.trim() ? "Enter a host." : undefined;
   const errPort = attempt.attempted && !(Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535) ? "Enter the API port from 1 to 65535." : undefined;
   const errTimer = attempt.attempted && !timerName.trim() ? "Choose a timer." : undefined;
-  const errTimeout = attempt.attempted && !(Number.isFinite(timeoutNumber) && timeoutNumber > 0 && timeoutNumber <= 60) ? "Enter a timeout above 0 and up to 60 seconds." : undefined;
   const wasSaving = useRef(false);
   useEffect(() => {
     const saving = pendingOperation === "save";
@@ -138,7 +139,7 @@ export function ProPresenterSetupPanel({
         ? { kind: "held", count: changeCount }
         : { kind: "clean" };
   const blockedReason = changeCount > 0 && parsedSettings === null
-    ? "Enter a host, an API port from 1 to 65535, a timer and a timeout above 0 and up to 60 seconds before saving."
+    ? "Enter a host, an API port from 1 to 65535 and a timer before saving."
     : null;
 
   const discard = () => {
@@ -147,7 +148,6 @@ export function ProPresenterSetupPanel({
     setPort(String(propresenter.port));
     setTimerName(propresenter.timer_name);
     setLookId(propresenter.look_id ?? "");
-    setTimeout(String(propresenter.request_timeout_seconds));
     setSaveFailed(false);
     attempt.reset();
   };
@@ -161,8 +161,8 @@ export function ProPresenterSetupPanel({
     onSave(parsedSettings);
   };
 
-  // Connect: the connection the boxes hold, saved and connected the way Save does it (the same request), without taking the timer, Look or
-  // timeout along while they are held. A saved ProPresenter with nothing held in the two boxes is only checked again.
+  // Connect: the connection the boxes hold, saved and connected the way Save does it (the same request), without taking the timer or Look
+  // along while they are held. A saved ProPresenter with nothing held in the two boxes is only checked again.
   const [connectPressed, setConnectPressed] = useState(false);
   useEffect(() => { if (!busy) setConnectPressed(false); }, [busy]);
   const hostOk = Boolean(host.trim());
@@ -174,7 +174,7 @@ export function ProPresenterSetupPanel({
     if (checksAgain) { onTest(); return; }
     if (!hostOk || !portOk) { attempt.refuse(); return; }
     const settings: ProPresenterSettingsInput | null = propresenter.enabled
-      ? { host: host.trim(), port: portNumber, timer_name: propresenter.timer_name, look_id: propresenter.look_id ?? null, request_timeout_seconds: propresenter.request_timeout_seconds }
+      ? { host: host.trim(), port: portNumber, timer_name: propresenter.timer_name, look_id: propresenter.look_id ?? null, request_timeout_seconds: savedTimeout }
       : parsedSettings;
     if (!settings) { attempt.refuse(); return; }
     setSaveFailed(false);
@@ -195,10 +195,14 @@ export function ProPresenterSetupPanel({
     filled.current = true;
     chooseComputer(only.host, only.port);
   }, [scanState]);
-  const timerDetected = Boolean(
-    propresenter?.timers.some((timer) => timer.name === timerName),
-  );
-  const lookDetected = Boolean(propresenter?.looks.some((look) => look.id === lookId));
+  // What the Timer and Look boxes list. No option stands for "nothing": each box shows the real choices and marks the current one.
+  const timers = propresenter?.timers ?? [];
+  const looks = propresenter?.looks ?? [];
+  const savedTimer = configuredTimerName ?? "";
+  const currentLook = looks.find((look) => look.id === propresenter?.current_look_id);
+  // The saved value is empty (follow ProPresenter's Look) or the Look ProPresenter shows now: both are the "(current)" option.
+  const lookValue = lookId === "" || lookId === currentLook?.id ? "" : lookId;
+  const lookKnown = looks.some((look) => look.id === lookId);
 
   return (
     <PanelLayout
@@ -247,37 +251,28 @@ export function ProPresenterSetupPanel({
       settings={(
         <>
           <SettingsSection busy={busy} columns="pair">
-            <Field error={errTimer} heldChange={held.timer} label="Detected timer">
-              <Select onChange={(event) => setTimerName(event.target.value)} value={timerName}>
-                <option value="">Choose a detected timer</option>
-                {timerName && !timerDetected && (
-                  <option value={timerName}>{timerName} (currently unavailable)</option>
-                )}
-                {propresenter?.timers.map((timer) => (
+            <Field error={errTimer} heldChange={held.timer} label="Timer">
+              <Select aria-label="Timer" onChange={(event) => setTimerName(event.target.value)} placeholder={CHOOSE_TIMER} value={timerName}>
+                {savedTimer && !timers.some((timer) => timer.name === savedTimer) && <option value={savedTimer}>{savedTimer}{UNAVAILABLE}</option>}
+                {timers.map((timer) => (
                   <option key={timer.id} value={timer.name}>
-                    {timer.name}{timer.is_countdown ? "" : " (converted when cued)"}
+                    {timer.name}{timer.name === savedTimer ? CURRENT : ""}{timer.is_countdown ? "" : CONVERTED}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
-              <Input inputMode="decimal" onChange={(event) => setTimeout(event.target.value)} value={timeout} />
-            </Field>
-          </SettingsSection>
-          <SettingsSection busy={busy} columns="single" width="narrow">
             <Field
               heldChange={held.look}
-              hint="Selecting a Look does not change Presentation until you save these settings."
-              label="ProPresenter Look"
+              hint={looks.length === 0 ? LOOK_NEEDS_CONNECTION : LOOK_HINT}
+              label="Look"
             >
-              <Select aria-label="ProPresenter Look" onChange={(event) => setLookId(event.target.value)} value={lookId}>
-                <option value="">Current Look</option>
-                {lookId && !lookDetected && (
-                  <option value={lookId}>Saved Look (currently unavailable)</option>
-                )}
-                {propresenter?.looks.map((look) => (
-                  <option key={look.id} value={look.id}>
-                    {look.name}{look.id === propresenter.current_look_id ? " (current)" : ""}
+              <Select aria-label="Look" disabled={looks.length === 0} onChange={(event) => setLookId(event.target.value)} value={lookValue}>
+                {lookValue === "" && !currentLook && <option disabled hidden value="" />}
+                {lookId && !lookKnown && <option value={lookId}>{lookId}{looks.length > 0 ? UNAVAILABLE : ""}</option>}
+                {looks.map((look) => (
+                  // The Look ProPresenter shows now stands for "leave the Look alone" (the saved value stays empty), so its value is "".
+                  <option key={look.id} value={look.id === currentLook?.id ? "" : look.id}>
+                    {look.name}{look.id === currentLook?.id ? CURRENT : ""}
                   </option>
                 ))}
               </Select>

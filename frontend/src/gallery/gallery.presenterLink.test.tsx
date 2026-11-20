@@ -17,7 +17,7 @@ describe("the Presenter Link states", () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="presenter-link"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("presenter-link-", ""));
-    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "playback-stopped", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
+    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "no-songs", "playback-stopped", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
   });
 
   it("no playlists yet: nothing to choose, the button off with its reason", async () => {
@@ -68,6 +68,16 @@ describe("the Presenter Link states", () => {
     expect(within(rows[0]!).queryByRole("button", { name: /Sections/ })).toBeNull();
     expect(within(rows[0]!).getByTestId("library-bar")).toBeInTheDocument();
   });
+
+  it("the reason beside the button is a pill: no playlist chosen, and no song ticked", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("no-playlists")).getByTestId("add-songs-reason")).toHaveAttribute("data-reason-pill", "true"), WAIT);
+    await waitFor(() => expect(within(sample("no-songs")).getByTestId("add-songs-reason")).toHaveTextContent("Select a song"), WAIT);
+    const pill = within(sample("no-songs")).getByTestId("add-songs-reason");
+    expect(pill).toHaveAttribute("data-reason-pill", "true");
+    expect(within(sample("no-songs")).getByRole("button", { name: "Import songs to ProPresenter" })).toBeDisabled();
+    expect(pill.closest("[data-part=buttons]")).toContainElement(within(sample("no-songs")).getByRole("button", { name: "Import songs to ProPresenter" }));
+  }, 30000);
 
   it("mixed selection: two cards off, the count says so", async () => {
     draw();

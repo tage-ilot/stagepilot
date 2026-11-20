@@ -79,7 +79,7 @@ describe("the matchup without the library", () => {
 });
 
 describe("the matchup with the library", () => {
-  it("shows Playback's own titles, cover, key, length and bar, with a stamp and plain words per row", () => {
+  it("shows Playback's own titles, cover, length and bar (no key or BPM chips), with a stamp and plain words per row", () => {
     render(<Host library={withLibrary(sampleLibrary())} />);
     expect(rows()).toHaveLength(5);
     const first = rows()[0]!;
@@ -91,11 +91,11 @@ describe("the matchup with the library", () => {
     expect(cover).toHaveAttribute("height", "28");
     expect(cover.getAttribute("src")).toContain("/api/v1/playback-library/songs/2000002/artwork");
     expect(first.querySelector("[data-testid=library-bar]")).toBeInTheDocument();
-    expect(first.querySelector(".arr-pb")).toHaveTextContent("Ab 65 BPM");
-    // The key and the tempo are one square chip each (the bare key letter, as everywhere), with no dot between them.
-    const facts = within(first.querySelector(".arr-pb") as HTMLElement).getByRole("list", { name: "Key Ab, 65 BPM", hidden: true });
-    expect(within(facts).getAllByRole("listitem", { hidden: true }).map((chip) => chip.textContent)).toEqual(["Ab", "65 BPM"]);
-    expect(first.textContent).not.toMatch(/Key Ab|\u00B7/);
+    // Song order shows no key or BPM chips under the songs (Hunter's call); the song's length beside it stays.
+    expect(within(first.querySelector(".arr-pb") as HTMLElement).queryByRole("list", { name: /Key|BPM/, hidden: true })).toBeNull();
+    expect(first.querySelector(".arr-pb")).not.toHaveTextContent(/\bAb\b|65 BPM/);
+    expect(first.querySelector(".arr-plan")).not.toHaveTextContent(/Key|BPM/);
+    expect(first.querySelector(".arr-pb")).toHaveTextContent(/\d+:\d{2}/);
     expect(first.querySelector("[title]")).toBeTruthy();
     const stamps = rows().map((row) => row.querySelector("[data-stamp]")!.textContent);
     expect(stamps).toEqual(["!Check order", "!Check order", "!Check key", "?Check title", "+Only in Playback"]);
