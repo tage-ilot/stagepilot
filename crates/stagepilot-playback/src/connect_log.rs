@@ -303,6 +303,14 @@ mod tests {
             None,
         )
         .unwrap();
+        // The first refusal comes at once on Linux and macOS and after about a second on Windows: wait for it, then let many more
+        // attempts (10 ms apart) go by.
+        for _ in 0..3000 {
+            if !lines.of(Level::WARN).is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         tokio::time::sleep(Duration::from_millis(800)).await;
         let warns = lines.of(Level::WARN);
         assert_eq!(warns.len(), 1, "{warns:#?}");
