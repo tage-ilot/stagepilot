@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { addSong, report, result } from "../test/propresenterLinkFixtures";
+import { addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import {
-  ACTION_STAMP, afterHeaderLabel, backupName, canTryAgain, isStuck, mappingLines, neighbours, orderWords, OUTCOME, playlistLabel, playlistSentence,
-  resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
+  ACTION_STAMP, afterHeaderLabel, backupName, canTryAgain, guessAnnouncement, guessLine, guessNote, importsSentence, isStuck, mappingLines, neighbours,
+  NOTHING_CHANGES, orderWords, ordinal, OUTCOME, playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
 } from "./addSongsWording";
 
 const sections = (...names: string[]) => ({ sections: names.map((name, i) => ({ name, start: i, end: i + 1 })) });
@@ -94,7 +94,7 @@ describe("the job and its result", () => {
     for (const step of ["check", "backup", "library", "import", "copy", "load", "playlist", "read_back"] as const) expect(STEP_WORDS[step]).toBeTruthy();
     for (const state of ["running", "done", "failed", "note"] as const) expect(STEP_STATE[state].word && STEP_STATE[state].mark).toBeTruthy();
     for (const status of ["added", "already_there", "skipped", "failed", "not_tried", "not_loaded"] as const) expect(SONG_STATUS[status].word && SONG_STATUS[status].mark).toBeTruthy();
-    for (const outcome of ["done", "done_with_differences", "needs_library_open", "stopped", "song_playing", "playlist_refused", "playlist_failed", "backup_failed", "not_reachable", "nothing_to_do"] as const) {
+    for (const outcome of ["done", "done_with_differences", "needs_library_open", "stopped", "song_playing", "live_on_screen", "playlist_refused", "playlist_failed", "backup_failed", "not_reachable", "nothing_to_do"] as const) {
       expect(OUTCOME[outcome].heading).toBeTruthy();
       expect(OUTCOME[outcome].mark).toBeTruthy();
     }
@@ -102,6 +102,7 @@ describe("the job and its result", () => {
   it("offers Try again after a failure, never after success", () => {
     expect(canTryAgain("needs_library_open")).toBe(true);
     expect(canTryAgain("song_playing")).toBe(true);
+    expect(canTryAgain("live_on_screen")).toBe(true);
     expect(canTryAgain("done")).toBe(false);
     expect(canTryAgain("done_with_differences")).toBe(false);
     expect(canTryAgain("nothing_to_do")).toBe(false);
@@ -111,5 +112,65 @@ describe("the job and its result", () => {
     expect(backupName("C:\\Users\\church\\backups\\Sunday-1.json")).toBe("Sunday-1.json");
     expect(backupName(null)).toBeNull();
     expect(resultCounts(report({ songs: [result("1", "A", "added"), result("2", "B", "added"), result("3", "C", "skipped"), result("4", "D", "failed"), result("5", "E", "not_loaded")] }))).toBe("2 added, 1 skipped, 1 failed, 1 not loaded yet");
+  });
+});
+
+describe("what pressing Add songs does", () => {
+  it("says it imports songs, arrangements and keys and that the playlist's contents are replaced as the preview shows", () => {
+    expect(importsSentence("Sunday Morning Service")).toBe(
+      "This imports songs, arrangements and keys into Sunday Morning Service. The playlist's contents are replaced with what the preview shows.",
+    );
+    expect(importsSentence(null)).toContain("into the playlist.");
+    // The older promise stays as it was, and no warning about hand-chosen arrangements is added.
+    expect(NOTHING_CHANGES).toBe("Nothing in ProPresenter changes until you press Add songs.");
+    expect(importsSentence("X")).not.toMatch(/hand|chosen|reset/i);
+  });
+});
+
+describe("sections that were guessed", () => {
+  it("reads ordinals the natural way", () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111].map(ordinal)).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st", "111th"]);
+  });
+
+  it("names the use, the group and which rule picked it", () => {
+    expect(guessLine(guess({ section: "Interlude", position: 2, group_index: 2, rule: "in_order" }))).toBe("Interlude (2nd use) uses the 2nd \u201CInterlude\u201D group");
+    expect(guessLine(guess())).toBe(
+      "Interlude (3rd use) uses the 2nd \u201CInterlude\u201D group (Playback uses it once more than the song has groups, so the last group is used again)",
+    );
+    expect(guessLine(guess({ position: 5, group_index: 1, rule: "repeat_in_turn" }))).toBe(
+      "Interlude (5th use) uses the 1st \u201CInterlude\u201D group (Playback uses it more often than the song has groups, so the groups are used in turn)",
+    );
+    expect(guessLine(guess({ section: "Count Off", position: 1, group_name: "", group_index: 3, rule: "in_order" }))).toBe("Count Off (1st use) uses the 3rd blank-named group");
+  });
+
+  it("is one short note per song under 'Check in ProPresenter:', and none when nothing was guessed", () => {
+    expect(guessNote([])).toBeNull();
+    expect(guessNote(undefined)).toBeNull();
+    const note = guessNote([guess({ section: "Count Off", position: 1, group_name: "", group_index: 1, rule: "in_order" }), guess()]);
+    expect(note?.heading).toBe("Check in ProPresenter:");
+    expect(note?.lines).toHaveLength(2);
+    expect(note?.lines[0]).toBe("Count Off (1st use) uses the 1st blank-named group");
+  });
+
+  it("is read out after the job, per song, only for songs that have guesses", () => {
+    const withGuess = { ...result("1", "How Awesome", "added"), guesses: [guess()] };
+    expect(guessAnnouncement(report({ songs: [result("2", "Plain", "added")] }))).toBe("");
+    expect(guessAnnouncement(null)).toBe("");
+    expect(guessAnnouncement(report({ songs: [withGuess, result("2", "Plain", "added")] }))).toMatch(/^Check in ProPresenter: How Awesome: Interlude \(3rd use\) uses the 2nd/);
+  });
+
+  it("counts guessed sections apart from the ones that did not match", () => {
+    const song = addSong({
+      ref_id: "1", title: "How Awesome",
+      mapping: [
+        { section: "Verse 1", group: "Verse 1", how: "full", line: null },
+        { section: "Interlude", group: "Interlude", how: "guessed", line: guess().text },
+        { section: "Interlude", group: "Interlude", how: "guessed", line: guess().text },
+      ],
+    });
+    const lines = mappingLines(song);
+    expect(lines[0]).toBe("1 of 3 sections matched exactly, 2 guessed (check them in ProPresenter).");
+    expect(lines).not.toContain("1 of 3 sections matched exactly, 2 not matched.");
+    expect(lines[1]).toContain("Interlude (3rd use) uses the 2nd");
   });
 });

@@ -200,5 +200,39 @@ class FolderModeTests(unittest.TestCase):
         self.assertEqual(fake.selected_arrangement(b""), "")
 
 
+class Layers(unittest.TestCase):
+    """GET /v1/status/layers: what is on screen, as the real rig answers it."""
+
+    def setUp(self):
+        self.api = Api(libraries={"Songs": []})
+        self.addCleanup(self.api.stop)
+
+    def test_it_answers_like_the_real_rig_with_a_camera_input_and_nothing_on_screen(self):
+        status, layers = self.api.call("GET", "/v1/status/layers")
+        self.assertEqual(status, 200)
+        self.assertEqual(layers, {"video_input": True, "media": False, "slide": False, "announcements": False,
+                                  "props": False, "messages": False, "audio": False})
+
+    def test_a_layer_is_set_from_a_test_and_cleared_again(self):
+        self.api.state.set_layers(slide=True, props=True)
+        layers = self.api.call("GET", "/v1/status/layers")[1]
+        self.assertTrue(layers["slide"] and layers["props"])
+        self.assertTrue(layers["video_input"], "the other layers stay as they were")
+        self.api.state.set_layers()
+        layers = self.api.call("GET", "/v1/status/layers")[1]
+        self.assertFalse(any(v for k, v in layers.items() if k != "video_input"))
+        self.assertEqual(self.api.state.layer_reads, 2)
+        with self.assertRaises(ValueError):
+            self.api.state.set_layers(sparkles=True)
+
+    def test_it_can_answer_something_that_is_not_the_layers(self):
+        self.api.state.set_layers_unreadable()
+        status, layers = self.api.call("GET", "/v1/status/layers")
+        self.assertEqual(status, 200)
+        self.assertNotIn("slide", layers)
+        self.api.state.set_layers()
+        self.assertIn("slide", self.api.call("GET", "/v1/status/layers")[1])
+
+
 if __name__ == "__main__":
     unittest.main()

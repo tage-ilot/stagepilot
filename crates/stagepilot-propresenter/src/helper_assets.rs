@@ -14,7 +14,7 @@ use stagepilot_core::helper_update::UpdateBundle;
 pub const FILE_NAMES: [&str; 3] = ["install.sh", "propresenter_link.py", "SHA256SUMS"];
 
 /// The helper version bundled here. A test keeps it equal to `__version__` in `propresenter_link.py`.
-pub const BUNDLED_HELPER_VERSION: &str = "0.1.0";
+pub const BUNDLED_HELPER_VERSION: &str = "0.1.1";
 
 const INSTALL_SH: &[u8] = include_bytes!("../assets/propresenter-link/install.sh");
 const PROPRESENTER_LINK_PY: &[u8] =

@@ -51,7 +51,7 @@ sys.dont_write_bytecode = True
 import fake_playback_library as playback_library  # noqa: E402
 import fake_propresenter_api as pp_api  # noqa: E402
 
-BUNDLED = "0.1.0"
+BUNDLED = "0.1.1"
 
 # ---- tiny synthetic songs (the same protobuf layout ProPresenter 19 uses; made up, no lyrics) --------------------------------
 
@@ -111,8 +111,13 @@ def synthetic_song(title, multitracks_id, seed, groups, arrangements, selected):
 SECTIONS = ["", "Intro", "Verse 1", "Chorus 1", "Verse 2", "Chorus 2", "Bridge", "Chorus 3", "Outro"]
 
 
-def song_groups():
-    return [(name, ["made-up slide for %s" % (name or "count off")]) for name in SECTIONS]
+def song_groups(count_offs=1):
+    """The groups of a made-up song. `count_offs` blank-named groups that say different things make Count Off a section that fits
+    more than one group: StagePilot guesses one and says so (the real Thank God I'm Free has four)."""
+    groups = [(name, ["made-up slide for %s" % (name or "count off")]) for name in SECTIONS]
+    for n in range(2, count_offs + 1):
+        groups.insert(n - 1, ("", ["made-up slide for count off, take %d" % n]))
+    return groups
 
 
 def make_folder(root):
@@ -127,14 +132,14 @@ def make_folder(root):
     def content_id(index):
         return 5_000_000 + 1_000_000 + days * 10 + index + 1
 
-    def write(file, title, index, seed):
-        groups = song_groups()
+    def write(file, title, index, seed, count_offs=1):
+        groups = song_groups(count_offs)
         data = synthetic_song(title, content_id(index), seed, groups, [("Full", list(range(len(groups))))], 0)
         with open(os.path.join(songs, file + ".pro"), "wb") as handle:
             handle.write(data)
 
     write("Holy Forever", "Holy Forever", 0, 0xA0000001)
-    write("Gratitude", "Gratitude", 3, 0xA0000002)
+    write("Gratitude", "Gratitude", 3, 0xA0000002, count_offs=2)   # two different blank groups: the preview shows a guess
     write("Firm Foundation", "Firm Foundation", 4, 0xA0000003)
     write("Firm Foundation (Live)", "Firm Foundation", 4, 0xA0000004)
 
@@ -181,7 +186,7 @@ def start_api(folder, port, lazy):
 SCENARIOS = [
     ("live", "As this computer really is (Local)", None),
     ("not_installed", "Another computer: Not installed", {"state": "not_installed", "paired": False}),
-    ("ready", "Another computer: Ready, version 0.1.0", {"state": "ready", "version": BUNDLED}),
+    ("ready", "Another computer: Ready, version 0.1.1", {"state": "ready", "version": BUNDLED}),
     ("no_import", "Another computer: Ready, cannot import (macOS Accessibility not allowed)",
      {"state": "ready", "version": BUNDLED, "can_import": False,
       "import_blocker": "Allow the ProPresenter Link in System Settings > Privacy & Security > Accessibility, then try again."}),
@@ -236,6 +241,9 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <h2>Other things to try</h2>
 <form method=post action="/__preview/lazy"><button>Simulate: ProPresenter loads the new songs only after "Open the Playback library once" (press, then add songs)</button></form>
 <form method=post action="/__preview/select"><button>I opened the Playback library in ProPresenter (let it load the new songs)</button></form>
+<form method=post action="/__preview/slides"><button>Pretend ProPresenter is showing slides (StagePilot must not touch the screen: try Add songs after the simulation above)</button></form>
+<form method=post action="/__preview/clear"><button>ProPresenter shows nothing again (press Try again)</button></form>
+<p>On screen now: <b>%(live)s</b></p>
 <form method=post action="/__preview/reset"><button>Start over: forget the songs added to the playlists</button></form>
 <p>Made-up folder: <code>%(folder)s</code></p>
 """
@@ -267,7 +275,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if method == "GET" and path == "/__preview/":
             items = "".join('<a class="b%s" href="/__preview/set?scenario=%s">%s</a>' % (" on" if key == self.preview.scenario else "", key, label) for key, label, _ in SCENARIOS)
-            self.send_text(200, PAGE % {"items": items, "folder": self.preview.args.folder})
+            shown = [name for name, on in sorted(self.preview.api_state.layers.items()) if on and name not in ("video_input", "audio")]
+            live = "nothing (a camera input and audio do not count)" if not shown else ", ".join(shown)
+            self.send_text(200, PAGE % {"items": items, "folder": self.preview.args.folder, "live": live})
         elif method == "GET" and path == "/__preview/set":
             key = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("scenario", ["live"])[0]
             if key in dict((k, 1) for k, _, _ in SCENARIOS):
@@ -282,6 +292,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 os.remove(os.path.join(self.preview.args.folder, ".selected-Playback"))
             except OSError:
                 pass
+            self.send_text(303, "", extra=[("Location", "/__preview/")])
+        elif method == "POST" and path == "/__preview/slides":
+            self.preview.api_state.set_layers(slide=True)
+            self.send_text(303, "", extra=[("Location", "/__preview/")])
+        elif method == "POST" and path == "/__preview/clear":
+            self.preview.api_state.set_layers()
             self.send_text(303, "", extra=[("Location", "/__preview/")])
         elif method == "POST" and path == "/__preview/reset":
             for playlist in self.preview.api_state.playlists:

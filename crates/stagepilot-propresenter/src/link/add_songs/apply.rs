@@ -2,7 +2,8 @@
 
 use super::plan::{insert_position, item_kind, item_name, item_uuids, items_of};
 use super::{
-    AddSongs, Plan, PlanError, PlanRequest, SongAction, SongPlan, WantedSong, PLAYBACK_ARRANGEMENT,
+    guesses_of, AddSongs, Plan, PlanError, PlanRequest, SongAction, SongGuess, SongPlan,
+    WantedSong, PLAYBACK_ARRANGEMENT,
 };
 use crate::link::api::{ApiError, LibraryEntry};
 use crate::link::{LinkError, PLAYBACK_LIBRARY, SONGS_LIBRARY};
@@ -128,8 +129,10 @@ pub struct SongResult {
     /// The Playback-library file used or made, without `.pro`.
     pub file: Option<String>,
     pub text: String,
-    /// `wrong_song`, `needs_library_open`, `unmapped`, ...
+    /// `wrong_song`, `needs_library_open`, `unmapped`, `live_on_screen`, ...
     pub code: Option<String>,
+    /// Sections that fit more than one group and were given one: check them in ProPresenter. Never a reason to stop.
+    pub guesses: Vec<SongGuess>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -146,6 +149,9 @@ pub enum ApplyOutcome {
     Stopped,
     /// A song started playing; nothing more was done and the playlist was not written.
     SongPlaying,
+    /// ProPresenter is showing something on screen (or would not say): no screen step was run, nothing was typed or clicked.
+    /// Files already made are kept; press Try again once it is clear.
+    LiveOnScreen,
     /// ProPresenter refused the new playlist: it is unchanged.
     PlaylistRefused,
     /// The playlist write failed in another way: look at the playlist (the backup is kept).
@@ -378,6 +384,7 @@ impl AddSongs {
                     String::new()
                 },
                 code: None,
+                guesses: s.guesses.clone(),
             })
             .collect();
         let mut report = ApplyReport {
@@ -427,6 +434,28 @@ impl AddSongs {
             }
         }
 
+        // 1b. nothing on screen, before any screen step is even planned
+        let will_use_screen = active
+            .iter()
+            .any(|s| s.action == SongAction::ImportThenCopy && !s.already_in_playlist);
+        if will_use_screen {
+            if let Err(failure) = self.screen_is_free().await {
+                run.say(None, Step::Check, StepState::Failed, failure.text.clone());
+                for (result, song) in results.iter_mut().zip(&plan.songs) {
+                    if song.action == SongAction::ImportThenCopy && !song.already_in_playlist {
+                        result.code = Some("live_on_screen".into());
+                        result.text = failure.text.clone();
+                    }
+                }
+                return Ok(done(
+                    report,
+                    results,
+                    ApplyOutcome::LiveOnScreen,
+                    format!("{} Nothing was changed.", failure.text),
+                ));
+            }
+        }
+
         // 2. the backup
         run.say(
             None,
@@ -446,6 +475,7 @@ impl AddSongs {
                 ));
             }
         };
+        let items_before = items_of(&before).len();
         match self.write_backup(&plan.playlist.name, &before) {
             Ok(path) => {
                 run.say(
@@ -533,18 +563,48 @@ impl AddSongs {
                             "Using the copy \"{stem}\" that is already in the Playback library."
                         ),
                     );
-                    Ok(stem)
+                    Ok((stem, Vec::new()))
                 }
                 (Some(wanted), SongAction::Copy | SongAction::ImportThenCopy) => {
-                    self.make_song(&run, wanted, song).await
+                    self.make_song(
+                        &run,
+                        wanted,
+                        song,
+                        &plan.playlist.id,
+                        items_before,
+                        &mut report.differences,
+                    )
+                    .await
                 }
                 _ => Err(failure("not_possible", "This song cannot be added.")),
             };
             match result {
-                Ok(stem) => {
+                Ok((stem, guesses)) => {
                     results[at].file = Some(stem.clone());
                     results[at].text = "The copy is ready.".into();
+                    if !guesses.is_empty() {
+                        results[at].guesses = guesses;
+                    }
                     stems.insert(song.ref_id.clone(), stem);
+                }
+                Err(Failure {
+                    code: "live_on_screen",
+                    text,
+                }) => {
+                    run.say(
+                        Some(&song.ref_id),
+                        Step::Import,
+                        StepState::Failed,
+                        text.clone(),
+                    );
+                    results[at].code = Some("live_on_screen".into());
+                    results[at].text = text.clone();
+                    return Ok(done(
+                        report,
+                        results,
+                        ApplyOutcome::LiveOnScreen,
+                        format!("{text} The playlist was not changed. Files already made are kept and used next time."),
+                    ));
                 }
                 Err(Failure { code, text }) => {
                     run.say(
@@ -594,6 +654,15 @@ impl AddSongs {
                     results,
                     ApplyOutcome::NotReachable,
                     format!("{} The playlist was not changed.", error.words()),
+                ));
+            }
+            Err(Waited::Live(text)) => {
+                run.say(None, Step::Load, StepState::Failed, text.clone());
+                return Ok(done(
+                    report,
+                    results,
+                    ApplyOutcome::LiveOnScreen,
+                    format!("{text} The playlist was not changed; the copies that were made are kept and used next time."),
                 ));
             }
             Err(Waited::Missing(missing)) => {
@@ -760,7 +829,8 @@ impl AddSongs {
                 error.words()
             )],
         };
-        report.differences = differences.clone();
+        report.differences.extend(differences);
+        let differences = report.differences.clone();
         let (outcome, message) = if differences.is_empty() {
             run.say(
                 None,
@@ -793,7 +863,10 @@ impl AddSongs {
         run: &Run<'_>,
         wanted: &WantedSong,
         song: &SongPlan,
-    ) -> Result<String, Failure> {
+        playlist_id: &str,
+        items_before: usize,
+        differences: &mut Vec<String>,
+    ) -> Result<(String, Vec<SongGuess>), Failure> {
         let id = wanted.content_id.ok_or_else(|| {
             failure(
                 "no_id",
@@ -804,11 +877,15 @@ impl AddSongs {
         let (library, file) = if song.action == SongAction::ImportThenCopy {
             let name = song.import_as.clone().unwrap_or_default();
             run.say(ref_id, Step::Import, StepState::Running, format!("Importing the song through ProPresenter's Search as \"{name}\". This takes a few seconds."));
-            let made = self
-                .host
-                .search_import(&id.to_string(), &name, None)
-                .await
-                .map_err(|e| link_failure("The import", &e))?;
+            // Right before the screen is touched, ask again: something may have gone live since the check at the start.
+            self.screen_is_free().await?;
+            let imported = self.host.search_import(&id.to_string(), &name, None).await;
+            // The import is made with Playlist "None": whatever it did, the playlist must have the items it had.
+            if let Some(difference) = self.playlist_unchanged(playlist_id, items_before).await {
+                run.say(ref_id, Step::Import, StepState::Note, difference.clone());
+                differences.push(difference);
+            }
+            let made = imported.map_err(|e| link_failure("The import", &e))?;
             let index = self
                 .host
                 .song_index()
@@ -873,6 +950,7 @@ impl AddSongs {
             ),
             other => failure("copy_failed", other.words()),
         })?;
+        let guesses = guesses_of(&copy.mapping);
         let digest = sha256_hex(&copy.bytes);
         let mut name = song.file.clone().unwrap_or_default();
         let base = super::plan::clean_name(&strip_n(&name));
@@ -899,7 +977,7 @@ impl AddSongs {
                         StepState::Done,
                         format!("Made \"{name}\" in the Playback library.{key}"),
                     );
-                    return Ok(name);
+                    return Ok((name, guesses));
                 }
                 Err(LinkError::AlreadyExists(_)) => {
                     // Taken since the preview: the same song already says the right thing (an earlier try), or the next number.
@@ -912,7 +990,7 @@ impl AddSongs {
                                 "\"{name}\" is already there and plays this arrangement; using it."
                             ),
                         );
-                        return Ok(name);
+                        return Ok((name, guesses));
                     }
                     name = super::plan::copy_file_name(&base, next_number(&name) + attempt);
                 }
@@ -923,6 +1001,50 @@ impl AddSongs {
             "name_taken",
             "No free name was found for the copy.",
         ))
+    }
+
+    /// `Ok` only when ProPresenter's layers say nothing is on screen (`slide`, `media`, `announcements`, `props`, `messages`
+    /// all off; a camera input and audio do not count). An answer that cannot be read counts as live. Asked right before every
+    /// screen step: nothing is typed or clicked unless this said yes.
+    async fn screen_is_free(&self) -> Result<(), Failure> {
+        match self.api.layers().await {
+            Ok(layers) => {
+                let showing = layers.on_screen();
+                if showing.is_empty() {
+                    Ok(())
+                } else {
+                    Err(failure(
+                        "live_on_screen",
+                        format!(
+                            "ProPresenter is showing something on screen ({}). Clear it or wait, then press Try again.",
+                            showing.join(", ")
+                        ),
+                    ))
+                }
+            }
+            Err(_) => Err(failure(
+                "live_on_screen",
+                "StagePilot could not read what ProPresenter is showing on screen, so it treats the screen as live and does not touch it. Check that ProPresenter is open and its Network setting is on, then press Try again.",
+            )),
+        }
+    }
+
+    /// `None` when the playlist still has as many items as before the import step; else a sentence saying what differs.
+    async fn playlist_unchanged(&self, playlist_id: &str, items_before: usize) -> Option<String> {
+        match self.api.playlist(playlist_id).await {
+            Ok(now) => {
+                let after = items_of(&now).len();
+                (after != items_before).then(|| {
+                    format!(
+                        "The playlist had {items_before} item(s) before the import and has {after} now. The import was meant to leave the playlist alone: look at it in ProPresenter."
+                    )
+                })
+            }
+            Err(error) => Some(format!(
+                "The playlist could not be read to check that the import left it alone: {}",
+                error.words()
+            )),
+        }
     }
 
     async fn same_copy_exists(&self, stem: &str, id: u64, wanted: &WantedSong) -> bool {
@@ -983,6 +1105,9 @@ impl AddSongs {
             }
             if !selected && waited >= self.timing.select_after {
                 selected = true;
+                if let Err(Failure { text, .. }) = self.screen_is_free().await {
+                    return Err(Waited::Live(text));
+                }
                 let said = match self.host.select_library(PLAYBACK_LIBRARY).await {
                     Ok(outcome) if outcome.tried => {
                         "Selected the Playback library on screen so ProPresenter loads it."
@@ -1073,6 +1198,8 @@ impl AddSongs {
 enum Waited {
     Missing(Vec<String>),
     Api(ApiError),
+    /// ProPresenter is showing something (or would not say): the screen was not touched. The words for the person.
+    Live(String),
 }
 
 /// The id of the entry for a file in ProPresenter's listing of the Playback library.

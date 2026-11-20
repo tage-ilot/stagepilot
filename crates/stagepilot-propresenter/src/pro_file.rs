@@ -5,7 +5,7 @@
 //!
 //! * **Reading** ([`Song::read`]): the name, the song's uuid, the groups (name, uuid, the cues in it), the arrangements and the
 //!   selected one, the key (`music`) and the MultiTracks number.
-//! * **Mapping** ([`resolve`]): the section names Playback plays are matched to the song's groups, never guessed.
+//! * **Mapping** ([`resolve`]): the section names Playback plays are matched to the song's groups; a name that fits several groups gets one of them as a named guess, a name no group has is missing.
 //! * **Copying** ([`build_copy`]): the bytes of a new song file that has ALL the original arrangements plus one more (named
 //!   `Playback` by the caller), selected, the key written in, a new presentation uuid, every inner uuid replaced consistently
 //!   and fresh dates. Only the fields that change are rewritten: every other field, known or not, is copied as the bytes it
@@ -607,8 +607,8 @@ pub enum How {
     Only,
     /// Several groups have that name and say the same thing: the one in the same turn.
     Identical,
-    /// Several groups have that name and they differ: not chosen.
-    Ambiguous,
+    /// Several groups have that name and they differ: one is guessed (see [`Guess`]) and the person checks it in ProPresenter.
+    Guessed,
     /// No group has that name.
     Missing,
 }
@@ -618,10 +618,79 @@ pub struct Mapped {
     /// The section as Playback names it.
     pub section: String,
     pub how: How,
-    /// The group's uuid (original, not remapped); `None` for `Ambiguous` and `Missing`.
+    /// The group's uuid (original, not remapped); `None` for `Missing`.
     pub group_uuid: Option<String>,
     /// The group's name as the song has it.
     pub group_name: Option<String>,
+    /// Set for `Guessed`: which group of the same name was taken and why.
+    pub guess: Option<Guess>,
+}
+
+/// Which rule picked the group of a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuessRule {
+    /// The Nth use takes the Nth group of that name, in the order the song has them.
+    InOrder,
+    /// Playback uses the name once more than the song has groups: the extra use takes the last group again.
+    LastReused,
+    /// Playback uses the name at least twice more than the song has groups: the groups are used in turn, round and round.
+    RepeatInTurn,
+}
+
+impl GuessRule {
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::InOrder => "in_order",
+            Self::LastReused => "last_reused",
+            Self::RepeatInTurn => "repeat_in_turn",
+        }
+    }
+}
+
+/// A section that fits more than one group of the song and was given one of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Guess {
+    /// Which use of this name in Playback's list it is, from 1.
+    pub position: usize,
+    /// How many times Playback uses the name.
+    pub uses: usize,
+    /// Which of the song's groups with that name was taken, from 1.
+    pub group_index: usize,
+    /// How many groups of the song have that name.
+    pub groups: usize,
+    pub rule: GuessRule,
+}
+
+/// `1st`, `2nd`, `3rd`, `4th`, `11th`, `21st`.
+pub fn ordinal(n: usize) -> String {
+    let suffix = match (n % 100, n % 10) {
+        (11..=13, _) => "th",
+        (_, 1) => "st",
+        (_, 2) => "nd",
+        (_, 3) => "rd",
+        _ => "th",
+    };
+    format!("{n}{suffix}")
+}
+
+impl Guess {
+    /// The plain sentence for the person: which group was taken, and the rule.
+    pub fn words(&self, section: &str, group_name: &str) -> String {
+        let group = if group_name.is_empty() {
+            format!("the {} blank-named group", ordinal(self.group_index))
+        } else {
+            format!("the {} \"{group_name}\" group", ordinal(self.group_index))
+        };
+        let why = match self.rule {
+            GuessRule::InOrder => "The song's groups with that name are used in the order the song has them.",
+            GuessRule::LastReused => "Playback uses the name once more than the song has groups, so the last group is used again.",
+            GuessRule::RepeatInTurn => "Playback uses the name more often than the song has groups, so the groups are used in turn, round and round.",
+        };
+        format!(
+            "{section} ({} use) uses {group}: check it in ProPresenter. {why}",
+            ordinal(self.position)
+        )
+    }
 }
 
 impl Mapped {
@@ -631,7 +700,10 @@ impl Mapped {
     }
 
     pub fn is_mapped(&self) -> bool {
-        matches!(self.how, How::Full | How::Only | How::Identical)
+        matches!(
+            self.how,
+            How::Full | How::Only | How::Identical | How::Guessed
+        )
     }
 }
 
@@ -639,10 +711,7 @@ impl Mapped {
 pub fn unmapped_names(map: &[Mapped]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for entry in map.iter().filter(|m| !m.is_mapped()) {
-        let label = match entry.how {
-            How::Ambiguous => format!("{} (more than one group has that name)", entry.section),
-            _ => format!("{} (no group has that name)", entry.section),
-        };
+        let label = format!("{} (no group has that name)", entry.section);
         if !out.contains(&label) {
             out.push(label);
         }
@@ -704,7 +773,8 @@ fn matching_pairs(a: &[String], b: &[String]) -> Vec<(usize, usize)> {
 
 /// Matches Playback's section names (in playing order, repeats as separate entries, "Count Off" included) to the groups of
 /// `song`. First by laying the names alongside the song's own `Full` arrangement (longest matching runs), then by the one group
-/// with that name; several groups of one name are fine only when they say the same thing.
+/// with that name. When several groups have the name and they differ, one is guessed ([`How::Guessed`], with its [`Guess`]):
+/// the person checks it in ProPresenter. A name no group has stays [`How::Missing`].
 pub fn resolve(song: &Song, sections: &[String]) -> Vec<Mapped> {
     let gname: Vec<String> = song.groups.iter().map(|g| normalise(&g.name)).collect();
     // The Full arrangement as (group index) per entry; an entry naming no group is left out.
@@ -725,6 +795,12 @@ pub fn resolve(song: &Song, sections: &[String]) -> Vec<Mapped> {
     for (i, j) in matching_pairs(&wanted, &fn_names) {
         chosen[i] = Some((full[j], How::Full));
     }
+    // How many times Playback uses each name (all uses, also the ones `Full` already placed).
+    let mut uses: HashMap<&str, usize> = HashMap::new();
+    for name in &wanted {
+        *uses.entry(name.as_str()).or_insert(0) += 1;
+    }
+    let mut guesses: Vec<Option<Guess>> = vec![None; sections.len()];
     let mut seen: HashMap<&str, usize> = HashMap::new();
     for (i, name) in wanted.iter().enumerate() {
         let turn = {
@@ -751,7 +827,14 @@ pub fn resolve(song: &Song, sections: &[String]) -> Vec<Mapped> {
                 if many.iter().all(|&j| &song.groups[j].signature == first_sig) {
                     (many[turn.min(many.len() - 1)], How::Identical)
                 } else {
-                    (usize::MAX, How::Ambiguous)
+                    let (at, guess) = guess_group(
+                        &full,
+                        many,
+                        turn,
+                        uses.get(name.as_str()).copied().unwrap_or(1),
+                    );
+                    guesses[i] = Some(guess);
+                    (at, How::Guessed)
                 }
             }
         });
@@ -759,7 +842,8 @@ pub fn resolve(song: &Song, sections: &[String]) -> Vec<Mapped> {
     sections
         .iter()
         .zip(chosen)
-        .map(|(section, found)| {
+        .zip(guesses)
+        .map(|((section, found), guess)| {
             let (index, how) = found.unwrap_or((usize::MAX, How::Missing));
             let group = song.groups.get(index);
             Mapped {
@@ -767,9 +851,41 @@ pub fn resolve(song: &Song, sections: &[String]) -> Vec<Mapped> {
                 how,
                 group_uuid: group.map(|g| g.uuid.clone()),
                 group_name: group.map(|g| g.name.clone()),
+                guess,
             }
         })
         .collect()
+}
+
+/// Which of several groups with one name the `turn`th use (from 0) of that name takes, when Playback uses the name `uses`
+/// times in all. The groups are taken in the order the song's own `Full` arrangement first plays them when it plays every one
+/// of them, else in the song's group order. With no more uses than groups the Nth use takes the Nth group; with exactly one use
+/// too many the extra use takes the last group again (A, B, B); with two or more too many the groups go round and round
+/// (A, B, A, B, A).
+fn guess_group(full: &[usize], candidates: &[usize], turn: usize, uses: usize) -> (usize, Guess) {
+    let first_in_full = |g: usize| full.iter().position(|&f| f == g);
+    let mut ordered: Vec<usize> = candidates.to_vec();
+    if ordered.iter().all(|&g| first_in_full(g).is_some()) {
+        ordered.sort_by_key(|&g| first_in_full(g));
+    }
+    let groups = ordered.len();
+    let extra = uses.saturating_sub(groups);
+    let (slot, rule) = match extra {
+        0 => (turn, GuessRule::InOrder),
+        1 if turn < groups => (turn, GuessRule::InOrder),
+        1 => (groups - 1, GuessRule::LastReused),
+        _ => (turn % groups, GuessRule::RepeatInTurn),
+    };
+    (
+        ordered[slot],
+        Guess {
+            position: turn + 1,
+            uses,
+            group_index: slot + 1,
+            groups,
+            rule,
+        },
+    )
 }
 
 // ---- making the copy --------------------------------------------------------------------------------------------------

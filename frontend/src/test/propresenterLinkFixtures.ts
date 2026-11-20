@@ -2,6 +2,7 @@ import { vi } from "vitest";
 
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type {
+  AddSongsGuess,
   AddSongsJob,
   AddSongsJobSong,
   AddSongsJobStep,
@@ -81,7 +82,7 @@ export const playlists = (): ProPresenterPlaylist[] => [
 
 export const addSong = (over: Partial<AddSongsSong> & Pick<AddSongsSong, "ref_id" | "title">): AddSongsSong => ({
   position: 1, content_id: 5_000_001, action: "copy", file: `${over.title} (1)`, source: `Songs / ${over.title}.pro`, import_as: null, reason: null,
-  choices: [], notes: [], mapping: [], sections: 9, key: "G", already_in_playlist: false, ...over,
+  choices: [], notes: [], mapping: [], guesses: [], sections: 9, key: "G", already_in_playlist: false, ...over,
 });
 
 export const addPlan = (songs: AddSongsSong[], over: Partial<AddSongsPlan> = {}): AddSongsPlan => {
@@ -106,7 +107,13 @@ export const addPlan = (songs: AddSongsSong[], over: Partial<AddSongsPlan> = {})
 export const step = (name: AddSongsJobStep["step"], state: AddSongsJobStep["state"], text = "", notes: string[] = []): AddSongsJobStep => ({ step: name, state, text, notes });
 
 export const result = (ref_id: string, title: string, status: AddSongsSongResult["status"], text = "Added to the playlist."): AddSongsSongResult => ({
-  ref_id, title, status, file: `${title} (1)`, text, code: null,
+  ref_id, title, status, file: `${title} (1)`, text, code: null, guesses: [],
+});
+
+/** A guess as the backend sends it (the 3rd use of a name when the song has two groups with it). */
+export const guess = (over: Partial<AddSongsGuess> = {}): AddSongsGuess => ({
+  section: "Interlude", position: 3, uses: 3, group_name: "Interlude", group_index: 2, groups: 2, rule: "last_reused",
+  text: "Interlude (3rd use) uses the 2nd \"Interlude\" group: check it in ProPresenter. Playback uses the name once more than the song has groups, so the last group is used again.", ...over,
 });
 
 export const report = (over: Partial<AddSongsReport> = {}): AddSongsReport => ({

@@ -38,7 +38,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 HOME = os.path.expanduser("~")
 APP_SUPPORT = os.path.join(HOME, "Library", "Application Support", "ProPresenterLink")
@@ -805,6 +805,11 @@ IMPORT_SONG_APPLESCRIPT = r'''-- ProPresenter Link: import ONE song through ProP
 -- its close button) and the Import dialog (Name, Library read only, Playlist, Import, Cancel). Nothing else.
 -- At any unexpected thing it stops, presses Cancel on an Import dialog if one is open, closes the Search panel
 -- and prints ERR|<step>|<reason>. On success it prints OK|<name>.pro once the Import dialog has gone.
+-- Nothing is typed blind: before EVERY keystroke the script checks that ProPresenter is the front app and that the
+-- field meant to receive it has the keyboard (assertFocus); after typing it reads the field back and it must hold exactly
+-- what was typed (the song number; the name), the Import dialog's other text fields must still hold what they held before
+-- and its Library must still read Songs. Any mismatch stops with ERR (Cancel is pressed if the Import dialog is open,
+-- the Search panel is closed) and nothing more is typed or pressed. At most 40 characters of what a field held are printed.
 
 on nameOf(e)
 	set t to ""
@@ -816,6 +821,76 @@ on nameOf(e)
 	end repeat
 	return t
 end nameOf
+
+-- The text of a field (its value), "" when it has none.
+on textOf(e)
+	try
+		tell application "System Events" to set v to value of e
+		if v is missing value then return ""
+		return v as text
+	on error
+		return ""
+	end try
+end textOf
+
+-- Exactly the same text: letters in the same case (AppleScript compares without case unless told to).
+on sameText(a, b)
+	considering case
+		return ((a as text) is equal to (b as text))
+	end considering
+end sameText
+
+-- At most 40 characters, on one line, safe to print: control characters become ? and | becomes /.
+on shortText(v)
+	set t to v as text
+	set out to ""
+	set n to count of characters of t
+	if n > 40 then set n to 40
+	repeat with i from 1 to n
+		set c to character i of t
+		set charCode to id of c
+		if charCode < 32 or charCode is 127 then
+			set out to out & "?"
+		else if c is "|" then
+			set out to out & "/"
+		else
+			set out to out & c
+		end if
+	end repeat
+	if (count of characters of t) > 40 then set out to out & "..."
+	return out
+end shortText
+
+-- Before every keystroke: ProPresenter is the front app and `target` is the element that has the keyboard. Else an error,
+-- so nothing is typed anywhere.
+on assertFocus(procName, target, what)
+	set isFront to false
+	set hasFocus to false
+	tell application "System Events"
+		try
+			set isFront to (frontmost of process procName)
+		end try
+		try
+			set hasFocus to (focused of target)
+		end try
+	end tell
+	if isFront is not true then error "ProPresenter is not the front app, so nothing was typed."
+	if hasFocus is not true then error "The " & what & " does not have the keyboard, so nothing was typed."
+end assertFocus
+
+-- After typing the name: the name field holds exactly the name, the other text fields hold what they held before, and the
+-- Library still reads Songs.
+on verifyDialog(textFields, heldBefore, nameIndex, songName, libraryPopup)
+	set held to my textOf(item nameIndex of textFields)
+	if not my sameText(held, songName) then error "The Name field held \"" & my shortText(held) & "\" instead of the name. Nothing was imported."
+	repeat with i from 1 to (count of textFields)
+		if i is not nameIndex then
+			set nowHeld to my textOf(item i of textFields)
+			if not my sameText(nowHeld, item i of heldBefore) then error "Another field of the Import dialog changed to \"" & my shortText(nowHeld) & "\". Nothing was imported."
+		end if
+	end repeat
+	if not my sameText(my textOf(libraryPopup), "Songs") then error "The Import dialog's Library no longer reads Songs. Nothing was imported."
+end verifyDialog
 
 on findWindow(procName, wantedSubrole)
 	tell application "System Events"
@@ -887,6 +962,9 @@ on run argv
 		set songName to item 2 of argv
 		set playlistName to item 3 of argv
 		if songId is "" or songId contains " " then error "The song number is not valid."
+		repeat with ch in (characters of songId)
+			if "0123456789" does not contain (ch as text) then error "The song number is not valid."
+		end repeat
 		if songName is "" or songName contains "." then error "The song name is not valid."
 
 		set stepName to "find ProPresenter"
@@ -974,8 +1052,13 @@ on run argv
 				if field is missing value then error "The Search panel has no text field."
 				set focused of field to true
 				delay 0.3
+				my assertFocus(procName, field, "Search field")
 				keystroke "a" using command down
+				my assertFocus(procName, field, "Search field")
 				keystroke songId
+				delay 0.3
+				set held to my textOf(field)
+				if not my sameText(held, songId) then error "The Search field held \"" & my shortText(held) & "\" instead of the song number. Nothing else was typed or pressed."
 			end tell
 		end tell
 
@@ -1004,6 +1087,11 @@ on run argv
 			tell process procName
 				select row 1 of (my resultTable(fw))
 				delay 0.6
+				try
+					set focused of (my resultTable(fw)) to true
+				end try
+				delay 0.2
+				my assertFocus(procName, (my resultTable(fw)), "results list")
 				key code 36
 			end tell
 		end tell
@@ -1017,28 +1105,45 @@ on run argv
 				set firstField to missing value
 				set libraryPopup to missing value
 				set playlistPopup to missing value
+				set textFields to {}
+				set nameIndex to 0
 				repeat with e in (entire contents of dlg)
 					try
 						set r to role of e
 						set n to my nameOf(e)
 						if r is "AXTextField" then
+							set end of textFields to e
 							if firstField is missing value then set firstField to e
-							if nameField is missing value and (n contains "|Name") then set nameField to e
+							if nameField is missing value and (n contains "|Name") then
+								set nameField to e
+								set nameIndex to count of textFields
+							end if
 						else if r is "AXPopUpButton" then
 							if libraryPopup is missing value and (n contains "Library") then set libraryPopup to e
 							if playlistPopup is missing value and (n contains "Playlist") then set playlistPopup to e
 						end if
 					end try
 				end repeat
-				if nameField is missing value then set nameField to firstField
+				if nameField is missing value then
+					set nameField to firstField
+					set nameIndex to 1
+				end if
 				if nameField is missing value then error "The Import dialog has no Name field."
 				if libraryPopup is missing value then error "The Import dialog has no Library choice."
 				if (value of libraryPopup as text) is not "Songs" then error "The Import dialog's Library is not Songs."
+				-- What every text field holds before anything is typed.
+				set heldBefore to {}
+				repeat with f in textFields
+					set end of heldBefore to my textOf(f)
+				end repeat
 				set focused of nameField to true
 				delay 0.3
+				my assertFocus(procName, nameField, "Name field")
 				keystroke "a" using command down
+				my assertFocus(procName, nameField, "Name field")
 				keystroke songName
 				delay 0.3
+				my verifyDialog(textFields, heldBefore, nameIndex, songName, libraryPopup)
 				if playlistName is not "" then
 					if playlistPopup is missing value then error "The Import dialog has no Playlist choice."
 					click playlistPopup
@@ -1061,6 +1166,8 @@ on run argv
 		set stepName to "press Import"
 		tell application "System Events"
 			tell process procName
+				-- Once more, after the Playlist choice: what is about to be imported is what was asked for.
+				my verifyDialog(textFields, heldBefore, nameIndex, songName, libraryPopup)
 				click button "Import" of dlg
 			end tell
 		end tell

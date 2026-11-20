@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 import type { AddSongsController } from "../hooks/useAddSongs";
 import { PLACE_END } from "../hooks/useAddSongs";
-import type { AddSongsJob, AddSongsJobStep, AddSongsPlan, AddSongsReport, AddSongsSong } from "../propresenterLink";
+import type { AddSongsGuess, AddSongsJob, AddSongsJobStep, AddSongsPlan, AddSongsReport, AddSongsSong } from "../propresenterLink";
 import type { AddSongsRow } from "./addSongsSongs";
 import {
-  ACTION_STAMP, afterHeaderLabel, AT_THE_END, backupName, isStuck, KEY_NOTE, mappingLines, neighbours, NOTHING_CHANGES, OPEN_LIBRARY_ONCE, OUTCOME,
+  ACTION_STAMP, afterHeaderLabel, AT_THE_END, backupName, guessNote, importsSentence, isStuck, KEY_NOTE, mappingLines, neighbours, NOTHING_CHANGES, OPEN_LIBRARY_ONCE, OUTCOME,
   playlistLabel, playlistSentence, resultCounts, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS,
 } from "./addSongsWording";
 import { Field } from "./ui/Field";
@@ -111,7 +111,8 @@ export function PlaylistPicker({ add }: { add: AddSongsController }) {
 // ---- 3. the preview ----------------------------------------------------------------------------------------------------------
 
 function mappingTone(song: AddSongsSong): string {
-  return song.mapping.some((m) => m.how === "ambiguous" || m.how === "missing") ? "text-warning-text" : "text-ink-muted";
+  if (song.mapping.some((m) => m.how === "missing")) return "text-warning-text";
+  return song.mapping.some((m) => m.how === "guessed") ? "text-info-text" : "text-ink-muted";
 }
 
 export function PreviewSong({ song, row, skipped = false }: { song: AddSongsSong; row: AddSongsRow | undefined; skipped?: boolean }) {
@@ -150,6 +151,7 @@ export function PreviewBody({ add, plan, headingId }: { add: AddSongsController;
     <section aria-labelledby={headingId} className={cx("space-y-2", add.stale && "opacity-60")} data-stale={add.stale || undefined} data-testid="add-songs-preview">
       <h3 className="font-semibold text-ink" id={headingId} tabIndex={-1}>Preview</h3>
       {add.stale && <p className="text-sm font-semibold text-warning-text" data-testid="add-songs-stale">You changed something since this preview. Press Preview again.</p>}
+      <p className="text-sm text-ink-body" data-testid="add-songs-imports">{importsSentence(plan.playlist.name)}</p>
       <p className="text-sm font-semibold text-ink" data-testid="add-songs-nothing-changes">{NOTHING_CHANGES}</p>
       <p className="text-sm text-ink-body" data-testid="add-songs-playlist-line">
         {playlistSentence(plan, header)}{around && plan.to_add > 0 ? ` ${around}` : ""}
@@ -251,6 +253,7 @@ export function Result({ add, headingId }: { add: AddSongsController; headingId:
                 <Stamp mark={status.mark} tone={status.tone} word={status.word} />
               </div>
               {song.text && <p className="break-words text-sm text-ink-body">{song.text}</p>}
+              <GuessNote guesses={song.guesses} title={song.title} />
             </li>
           );
         })}
@@ -267,7 +270,26 @@ export function Result({ add, headingId }: { add: AddSongsController; headingId:
   );
 }
 
-/** A footer line for the buttons: why one of them is off, in words. */
-export function Reason({ id, children }: { id: string; children: ReactNode }) {
-  return <p className="min-w-0 break-words text-sm text-ink-body max-[480px]:col-span-3 min-[481px]:mr-auto min-[481px]:!w-auto min-[481px]:flex-[1_1_0%] min-[481px]:self-center" data-testid="add-songs-reason" id={id}>{children}</p>;
+/** After an import: what was guessed for a song. Information only: nothing here stops or asks for anything. */
+export function GuessNote({ guesses, title }: { guesses: AddSongsGuess[]; title: string }) {
+  const note = guessNote(guesses);
+  if (!note) return null;
+  return (
+    <div className="text-sm text-info-text" data-testid="add-songs-guess-note">
+      <p className="font-semibold">{note.heading}</p>
+      <ul aria-label={`${note.heading} ${title}`} className="mt-0.5 list-disc space-y-0.5 pl-5 text-ink-body">
+        {note.lines.map((line) => <li className="break-words" key={line}>{line}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+/** A footer area for the buttons: why one of them is off, in words, and (always) what pressing Add songs does. */
+export function Reason({ id, children, note }: { id: string; children?: ReactNode; note?: string }) {
+  return (
+    <div className="min-w-0 space-y-0.5 max-[480px]:col-span-3 min-[481px]:mr-auto min-[481px]:!w-auto min-[481px]:flex-[1_1_0%] min-[481px]:self-center">
+      {children && <p className="break-words text-sm text-ink-body" data-testid="add-songs-reason" id={id}>{children}</p>}
+      {note && <p className="break-words text-xs text-ink-muted" data-testid="add-songs-what-it-does">{note}</p>}
+    </div>
+  );
 }
