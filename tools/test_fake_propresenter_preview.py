@@ -98,7 +98,7 @@ class PreviewTests(unittest.TestCase):
     def test_the_made_up_songs_are_songs_the_engine_can_read(self):
         songs = os.path.join(self.rig.args.folder, "Libraries", "Songs")
         files = sorted(os.listdir(songs))
-        self.assertEqual(files, ["Firm Foundation (Live).pro", "Firm Foundation.pro", "Gratitude.pro", "Holy Forever.pro"])
+        self.assertEqual(files, ["Firm Foundation (Live).pro", "Firm Foundation (Studio).pro", "Gratitude.pro", "Holy Forever (Live).pro", "Holy Forever.pro"])
         for name in files:
             with open(os.path.join(songs, name), "rb") as handle:
                 self.assertEqual(pp_api.selected_arrangement(handle.read()), "Full", name)
@@ -107,13 +107,14 @@ class PreviewTests(unittest.TestCase):
     def test_the_numbers_inside_the_songs_are_the_numbers_playback_gives_the_same_songs(self):
         days = (datetime.date.today() - playback_library.EPOCH_DATE).days
         songs = os.path.join(self.rig.args.folder, "Libraries", "Songs")
-        want = {"Holy Forever": 0, "Gratitude": 3, "Firm Foundation": 4}
-        for name, index in want.items():
-            with open(os.path.join(songs, name + ".pro"), "rb") as handle:
+        want = {"Holy Forever.pro": ("Holy Forever", 0), "Holy Forever (Live).pro": ("Holy Forever", 0), "Gratitude.pro": ("Gratitude", 3),
+                "Firm Foundation (Live).pro": ("Firm Foundation", 4), "Firm Foundation (Studio).pro": ("Firm Foundation", 4)}
+        for file, (title, index) in want.items():
+            with open(os.path.join(songs, file), "rb") as handle:
                 data = handle.read()
             number = playback_library.song_master_id(1_000_000 + days * 10 + index + 1)
-            self.assertIn(preview.vrec(1, number), data, name)
-            self.assertIn(name.encode(), data)
+            self.assertIn(preview.vrec(1, number), data, file)
+            self.assertIn(title.encode(), data)
 
     def test_no_real_song_text_is_made_up_in_the_files(self):
         with open(os.path.join(self.rig.args.folder, "Libraries", "Songs", "Holy Forever.pro"), "rb") as handle:

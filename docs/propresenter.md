@@ -160,7 +160,15 @@ section does not warn about it. Planning Center names go in **as they are** in P
    file is copied as it was, byte for byte.
 4. If a copy that **already plays what Playback plays now, in the same key** is in the Playback library, it is used and nothing
    new is made. When several files in `Songs` carry the number, the one with a `Full` arrangement whose groups match is used;
-   when more than one qualifies the song is `needs_choice` and is never guessed.
+   when more than one qualifies StagePilot first applies **one rule, no guessing**: if the song's title (Playback's title when
+   Playback has data, else the plan title; compared in lower case, trimmed, with single spaces) is exactly the file name without
+   `.pro` of EXACTLY ONE of them, that file is used, and the preview says so (*Used "Firm Foundation (Live)": its name matches the
+   Playback title.*; `chosen_by` is `title`). *Firm Foundation (Live).pro* and *Firm Foundation.pro* for the song "Firm Foundation"
+   gives *Firm Foundation.pro*; with the song "Firm Foundation (Live)" it gives the other. Two or no names equal to the title (for
+   example *Firm Foundation (Live).pro* and *Firm Foundation (Studio).pro*) leave the song `needs_choice` (*Two files are this song.
+   Pick one.*), and the person **picks the file on the card** (below). A picked file is used when it is one of the song's files; if
+   it cannot make the arrangement (a section has no group of that name) the song is `blocked` for THAT file in the usual words and
+   no other file is used instead, so the person sees why and picks the other.
 5. **Screen steps never run while ProPresenter is showing something.** Before any step that types or clicks in ProPresenter (the
    import through Search, selecting the Playback library) and again right before each one, StagePilot asks ProPresenter's
    `GET /v1/status/layers`. If `slide`, `media`, `announcements`, `props` or `messages` is on, nothing is typed or clicked: the
@@ -209,13 +217,20 @@ write route; a remote viewer cannot use them; ids are numbers or plain text, nev
 - `POST add-songs/titles {titles: [...]}` → `{titles: [{title, state}]}` with `state` `found`, `missing` or `several`: which of those titles the
   Songs library has (file names only; nothing is written, the screen is not touched). The Presenter Link section uses it to mark a Planning
   Center name that ProPresenter does not have.
-- `POST add-songs/preview {setlist_song_ids: [...] | content_ids: [...] | titles: [...], playlist_id, after_header: "<name>" | place: "end"}` → the plan
+- `POST add-songs/preview {setlist_song_ids: [...] | content_ids: [...] | titles: [...], playlist_id, after_header: "<name>" | place: "end", sources?: {"<ref_id>": "<file>"}}` → the plan
   (a `titles` request needs no Playback data; its songs are called `t1`, `t2`... in the order sent):
   `plan_id`, `playlist {name, place, insert_at, before, after, untouched, blocked?}`, `songs [{ref_id, title, position, action, file, source,
-  import_as, reason, choices, notes, mapping [{section, group, how, line?}], guesses [{section, position, uses, group_name, group_index, groups, rule, text}],
+  import_as, reason, choices, chosen_by?, chosen_file?, notes, mapping [{section, group, how, line?}], guesses [{section, position, uses, group_name, group_index, groups, rule, text}],
   already_in_playlist}]` (`how` is `full`, `only`, `identical`, `guessed` or `missing`; `rule` is `in_order`, `last_reused` or
   `repeat_in_turn`), `to_add`, `stuck`, `can_apply`,
   `propresenter`, `warnings`. `action` is `reuse`, `copy`, `import_then_copy`, `as_is`, `needs_choice` or `blocked`. Nothing is written.
+  **`sources`** is the file the person picked for a song that has more than one: the song's `ref_id` to the file written exactly as
+  `choices` lists it (`"Songs / Firm Foundation.pro"`, the library, ` / `, the file name). It is lenient: a key that is no song of the
+  request, a value that is not text, too long or has a control character, or a file that is none of THAT song's files is ignored (the
+  song is asked about as before) and is never an error. `choices` lists the files that could be the song: for `needs_choice` the ones
+  to pick from, and for a song settled by a pick or by the title rule the same list, with `chosen_by` (`pick` or `title`) and
+  `chosen_file` naming the one used. The picks are part of the plan's identity: another pick is another `plan_id`, and `apply` (which
+  still takes only `plan_id` and `skip`) does what the preview with those picks said.
 - `POST add-songs/apply {plan_id, skip: [ref_id, ...]}` → `202 {job_id}`. Refusals come at once, before anything is touched:
   `404 unknown_plan`, `409 plan_changed | songs_blocked | song_playing | busy | nothing_to_add | link_not_ready | place_blocked`.
 - `GET add-songs/jobs/<id>` → `{state: running | done | failed, steps, songs [{ref_id, title, steps, result}], events, report}`; the
@@ -294,7 +309,17 @@ has no window; everything, including progress and the result, happens in place, 
    in ProPresenter's Search; the helper's `content_id`), never Playback's own song number (the long `setlist_song_id`). A song with no id
    shows `mtID—` (nothing follows); a song Playback gave no number at all is a grey card that says `Can't import`. Without Playback data a card is the
    Planning Center name and a **Planning Center** chip. After a preview, the cards it stopped for carry its chip (`Can't import`,
-   `Pick one`...) and a song with a guessed section a **Check** chip.
+   `Pick one`...) and a song with a guessed section a **Check** chip. A `Pick one` card has, **under the title, one small button per
+   file** (the file name without `.pro`; the library too only when two libraries have a file of that name): a radio group named *Firm
+   Foundation: use file*, one tab stop, arrow keys move between the buttons and Space or Enter picks (44 px tall, wrapping on a phone).
+   Pressing one asks for a new preview with `sources`; the pressed button shows the loading sweep, nothing else moves, and the card turns
+   into its real status (`New copy`, `Ready`...) with a quiet phrase, *Using “Firm Foundation (Live)”*, and a small **Change** button that
+   brings the buttons back (a song settled by the title rule says the same, and its hover text says the name matches the Playback title).
+   **The pick is remembered in this browser** (`localStorage`, key `stagepilot.presenter-song-file.<mtID>`, the value the file as written in
+   `choices`), so the next preview sends it without asking again; a song with no mtID is not remembered (its pick lasts while the section is
+   open). A remembered file that is no longer one of the song's files is dropped without a word and the card asks again. Nothing is saved in
+   StagePilot's settings. A song that still needs a pick stops Import like any song that cannot be imported (the count line says `1 pick
+   one`); pick a file, or leave it out with **Skip those and import the rest**.
 3. Above the button, only when it is off or the preview stopped: why, in a few words.
 4. **Import songs to ProPresenter**: ONE button (`Importing…` while it works). It makes the preview and, when nothing is blocked and no song is playing, imports the songs at once.
    If a song is blocked or needs a choice, the playlist side is blocked, there is nothing to add, or a song is playing, it **stops after the
@@ -321,10 +346,10 @@ word is the status: colour never carries it alone.
 | --- | --- | --- | --- |
 | `✓ In playlist` | preview, result | none | the song is already an item of the playlist: it is not added again |
 | `+ Ready` | preview | `Copy exists` or `Used as is` | a copy that plays this arrangement exists (or a Planning Center name goes in as it is), and it will be added |
-| `+ New copy` | preview | `Playback order, “(2)”` | a new file `<Song> (2)` is made with Playback's order |
+| `+ New copy` | preview, cards | `Playback order, “(2)”`, or `Using “Firm Foundation (Live)”` when the file was picked or chosen by its name | a new file `<Song> (2)` is made with Playback's order |
 | `↓ Will import` | preview | none | ProPresenter does not have the song; it is imported through ProPresenter's Search, then copied |
 | `! Can't import` | preview, cards, result | `Needs a Mac`, `Rental ended`, `No arrangement`, `File unreadable`... | the song cannot be done; the full reason is the hover text |
-| `? Pick one` | preview, cards | the file names, one per line | more than one file in ProPresenter is this song; StagePilot does not guess |
+| `? Pick one` | preview, cards | the file names, one per line (the card has the buttons) | more than one file in ProPresenter is this song and no file name is its title; pick one on the card |
 | `! Can't map` | preview, result | `Missing: Bridge 2` | these sections have no group of that name in the song |
 | `! No mtID` | preview | none | Playback gave no MultiTracks number for the song |
 | `? Check` | preview, cards, result | `Interlude (3rd use): 2nd group` | a section fit more than one group and one was picked: look at it in ProPresenter (never blocks) |

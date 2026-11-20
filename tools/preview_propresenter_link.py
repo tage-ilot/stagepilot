@@ -121,8 +121,9 @@ def song_groups(count_offs=1):
 
 
 def make_folder(root):
-    """The made-up ProPresenter folder: Holy Forever, Gratitude and two files for Firm Foundation (so StagePilot has to ask); Battle
-    Belongs is not there at all (it would have to be loaded through ProPresenter's own search)."""
+    """The made-up ProPresenter folder: Gratitude; Holy Forever in two files, one named like the song (StagePilot uses it by the name
+    rule and says so); two files for Firm Foundation and neither named like the song (so StagePilot has to ask, and the card has the file
+    buttons); Battle Belongs is not there at all (it would have to be loaded through ProPresenter's own search)."""
     songs = os.path.join(root, "Libraries", "Songs")
     os.makedirs(songs)
     os.makedirs(os.path.join(root, "Libraries", "Playback"))
@@ -139,9 +140,10 @@ def make_folder(root):
             handle.write(data)
 
     write("Holy Forever", "Holy Forever", 0, 0xA0000001)
+    write("Holy Forever (Live)", "Holy Forever", 0, 0xA0000005)
     write("Gratitude", "Gratitude", 3, 0xA0000002, count_offs=2)   # two different blank groups: the preview shows a guess
-    write("Firm Foundation", "Firm Foundation", 4, 0xA0000003)
-    write("Firm Foundation (Live)", "Firm Foundation", 4, 0xA0000004)
+    write("Firm Foundation (Live)", "Firm Foundation", 4, 0xA0000003)
+    write("Firm Foundation (Studio)", "Firm Foundation", 4, 0xA0000004)
 
 
 # ---- ProPresenter's API, with two playlists ---------------------------------------------------------------------------------
