@@ -583,8 +583,9 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     });
     panel(controller({ status }));
     // One banner, one sentence: exactly the backend text.
-    expect(screen.getByTestId("playback-banner")).toHaveTextContent(reason);
-    expect(screen.getAllByText(reason)).toHaveLength(1);
+    // The Playback API's line is prefixed like the other blocks'; MIDI's own sentence is not the API's to say, so it is shown as it is.
+    expect(screen.getByTestId("playback-banner").textContent).toBe(active === "midi" ? reason : `Playback API: ${reason}`);
+    expect(screen.getAllByText((_text, node) => node?.textContent === (active === "midi" ? reason : `Playback API: ${reason}`) && node.children.length === 0)).toHaveLength(1);
     await userEvent.setup().click(screen.getByRole("radio", { name: /^MIDI/ }));
     // MIDI detail in the alternate connection section never says the opposite of the banner.
     const advanced = document.getElementById("playback-midi-method") as HTMLElement;
