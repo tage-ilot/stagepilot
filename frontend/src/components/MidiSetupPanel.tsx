@@ -204,9 +204,6 @@ export function MidiSetupPanel({
           <p className="text-xs font-bold uppercase tracking-wider text-ink-body">
             Live MIDI note monitor
           </p>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Shows note-on and note-off messages received from the selected input.
-          </p>
         </div>
         <span className="rounded-ds-full bg-edge-subtle px-2.5 py-1 text-xs tabular-nums text-ink-muted">
           {messages.length} recent
@@ -214,7 +211,7 @@ export function MidiSetupPanel({
       </div>
       {messages.length === 0 ? (
         <p className="px-3 py-4 text-sm text-ink-muted">
-          No MIDI notes received yet. Send a cue from Playback; an empty monitor points to port or routing configuration.
+          No notes yet.
         </p>
       ) : (
         <div className="max-h-64 overflow-auto overscroll-contain">
@@ -264,9 +261,7 @@ export function MidiSetupPanel({
 
   const velocityMap = (
       <div className="mt-2 rounded-ds-lg bg-integration-playback-midi-soft/10 p-3">
-        <p className="mt-1 text-xs text-ink-body">
-          Set each song-start cue to a velocity corresponding with its position in the service plan. Velocities 1–99 correspond to the songs in order; 100–127 are reserved for action cues.
-        </p>
+        <p className="text-type-kicker uppercase text-ink-muted" data-testid="velocity-map-header">Velocity 1-99: songs in order; 100-127: actions</p>
         {songs.length > 0 ? (
           <>
             {/* eslint-disable-next-line no-restricted-syntax -- page-specific: a numbered list of the service plan's songs, not fields. */}

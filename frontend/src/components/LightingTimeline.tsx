@@ -549,7 +549,7 @@ export function LightingTimeline({
           Drawing {formatCount(drawnMarkers.length)} of {formatCount(visibleMarkers.length)} cues so the timeline stays quick. Every cue is still saved and listed below; zoom in to see more of them.
         </p>
       )}
-      {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
+      {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song plays.</p>}
       {selected && (
         <div aria-label="Selected cue" className="mt-2 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-ds-lg border border-edge-medium bg-surface-panel px-2 py-1" data-testid="lighting-marker-popover" role="group">
           <span className="shrink-0 text-type-body-sm text-ink-body">

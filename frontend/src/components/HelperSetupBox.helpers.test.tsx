@@ -103,12 +103,12 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
 
 describe.each(harnesses)("HelperSetupBox: $name", (h) => {
-  it("offers the setup button while it is not ready, and says it runs on the other computer without internet", () => {
+  it("offers the setup button while it is not ready, and says what it is in a sentence or two", () => {
     render(h.box("not_installed").ui);
     expect(screen.getByRole("region", { name: h.setup })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: h.setup })).toBeEnabled();
-    expect(screen.getByTestId(h.id)).toHaveTextContent(/no internet/);
-    expect(screen.getByTestId(h.id)).toHaveTextContent(/Terminal on the (Lighting|Playback|ProPresenter) computer/);
+    // Only the first sentence is said here; the rest (that it runs there, that no internet is needed) is in the docs and in the command's own steps.
+    expect(screen.getByTestId(`${h.id}-why`).textContent!.split(/(?<=[.:?])\s/).length).toBeLessThanOrEqual(3);
     expect(h.start).not.toHaveBeenCalled();
   });
 

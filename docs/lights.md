@@ -884,6 +884,14 @@ While there is no connected Lighting computer, the Lightkey strip shows **Set up
 `lightkey-api` helper on the Lighting Mac from StagePilot itself: the Mac needs no internet, no GitHub and no SSH. A
 connected helper older than the one StagePilot carries gets the same box as **Update the Lighting Link**.
 
+**The words in the box.** The box says one short sentence of what is wrong (`Paste one command into Terminal on the Lighting
+computer.`, `The Lighting Link on the Lighting computer is older than the one StagePilot carries.`) and then the command and its
+steps. What the box used to add, here: the command is made by StagePilot and runs only on that computer; that computer needs no
+internet (the Link is installed from StagePilot itself); and an update is the same command run again. The Library Link's and the
+Presenter Link's boxes work the same way (their one sentence: `The Library Link is optional: it reads each song's key, BPM and
+arrangement from Playback.`, `... does not know this StagePilot yet.`, `StagePilot cannot reach the Library Link. Is the Playback
+computer on and awake?`; if the Link was set up again from another computer, run the command again from here).
+
 1. On the Lighting Mac, turn on sACN output in Lightkey and open your project.
 2. In StagePilot press **Set up the Lighting computer**, then **Copy**, open Terminal on the Lighting Mac and paste.
 3. Wait in StagePilot. The strip changes to `Connected` by itself and the command stops working.
@@ -1108,6 +1116,12 @@ it and press the left or right arrow to move it 0.1 s (Shift: 1 s). Click or
 press Enter to open the small editor to set an exact time or delete the cue.
 Markers for the method that is not on screen are not drawn; those cues stay
 saved. On narrow widths the bar scrolls sideways, and **Zoom** changes its scale.
+
+**What the page does not say (it used to, in four sentences under the Timeline header).** Cue times are elapsed from the
+song's start. Cues for the method that is not on screen stay saved. Changes save automatically. The timeline begins only
+after the Presentation countdown confirms it started. With no cue the timeline says one line, `No cues yet. Press a pad while the
+song plays.` The scheduled song length is shown (`Scheduled song length: 04:41`); the timeline ends there, so the page does
+not repeat that cues must fall within it.
 
 **Big songs.** A song may hold up to 50,000 rows. The cue list shows 40 rows a page and the
 timeline draws at most one bar per pixel column (a song with more than 1,500 cues is thinned

@@ -948,7 +948,6 @@ export function LightingSetupPanel({
             {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
             {draftDiffersFromSaved && <SectionNotice className="mt-2" id={testReasonId} quiet tone="info" variant="line">{testReasonText}</SectionNotice>}
             {selectedSong && projectNotice && <SectionNotice className="mt-2" role="status" size="xs" testId="lighting-project-notice" tone="warning" variant="line">{projectNotice}</SectionNotice>}
-            <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
 
             {onSavePads && (
               <OptionalSection className="mt-4" defaultOpen persistKey={LIGHTING_CUE_BOARD_OPEN_KEY} title="Cue board" tone={accent}>
@@ -1073,7 +1072,6 @@ export function LightingSetupPanel({
               ))}
               </>
               )}
-              {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
             </ScrollRegion>
             {method === "osc" && pageCount > 1 && (
               <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
@@ -1082,7 +1080,7 @@ export function LightingSetupPanel({
                 <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
               </nav>
             )}
-            {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
+            {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}</p>}
           </OptionalSection>
           <div className="flex justify-end">
             <ReasonButton onClick={clearEverySongCues} reason={songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0) ? undefined : "No song has anything to clear."} variant="secondary">Clear all songs…</ReasonButton>

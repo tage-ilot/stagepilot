@@ -121,4 +121,10 @@ describe("selected cue", () => {
     const scroll = screen.getByTestId("lighting-timeline-scroll");
     expect(scroll.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it("has one empty line, and it says nothing about how the timeline works (design audit, small text trims)", () => {
+    render(<LightingTimeline {...base} markers={[]} />);
+    expect(screen.getByText("No cues yet. Press a pad while the song plays.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/while the song runs|Cue times are elapsed|Cues must fall within/);
+  });
 });
