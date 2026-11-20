@@ -33,6 +33,23 @@ export type ReadinessCheck = {
   detail?: string;
 };
 
+/**
+ * How a row of the header's check list looks (decided 2026-11-18, D3 of the design audit). The colour follows what the row does to the
+ * service, not how it failed: a row that BLOCKS a service and is not ready is red with an ×, an optional row that is not ready is grey with
+ * a !, and a row that is fine is green with a ✓. The mark always carries it, never the colour alone. The pill's own verdict
+ * (Ready / Check system / Error) is not read from this; it has its own logic.
+ */
+export type ReadinessRowTone = "ok" | "blocking" | "optional";
+export const readinessRowTone = (check: Pick<ReadinessCheck, "passed" | "required">): ReadinessRowTone =>
+  check.passed ? "ok" : check.required ? "blocking" : "optional";
+export const READINESS_ROW_MARK: Record<ReadinessRowTone, string> = { ok: "\u2713", blocking: "\u00D7", optional: "!" };
+export const READINESS_ROW_MARK_CLASS: Record<ReadinessRowTone, string> = {
+  ok: "bg-success-soft/20 text-success-text",
+  blocking: "bg-danger/15 text-danger-text",
+  optional: "bg-edge text-ink-muted",
+};
+export const READINESS_ROW_TEXT_CLASS: Record<ReadinessRowTone, string> = { ok: "text-success-text", blocking: "text-danger-text", optional: "text-ink-muted" };
+
 type DashboardIntegrationViews = {
   planningCenter: ConnectionCardView;
   midi: ConnectionCardView;

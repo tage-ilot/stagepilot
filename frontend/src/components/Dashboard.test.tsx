@@ -993,6 +993,28 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
   });
 
+  it("draws the header check list with a red × on every row that blocks", () => {
+    const unavailableState = applicationState(
+      { ...loadedServiceState, status: "not_found" },
+      { plan: null, planning_center_status: "disconnected", midi_status: "disconnected", propresenter_status: "disconnected", lights_status: "disconnected" },
+    );
+    renderDashboard({ ...loadedServiceState, status: "not_found" }, {
+      state: unavailableState,
+    });
+
+    const row = (label: string) => screen.getByText(label).closest("li") as HTMLElement;
+    const mark = (label: string) => row(label).querySelector<HTMLElement>("[data-row-tone]")!;
+    // The rows that make it Check system are red with a ×, not grey dashes.
+    for (const label of ["Services disconnected", "Service plan not loaded", "Song durations invalid"]) {
+      expect(mark(label)).toHaveAttribute("data-row-tone", "blocking");
+      expect(mark(label)).toHaveTextContent("\u00D7");
+      expect(mark(label)).toHaveClass("text-danger-text");
+      expect(screen.getByText(label)).toHaveClass("text-danger-text");
+    }
+    // The pill says what it said before.
+    expect(screen.getByRole("button", { name: /Check system/ })).toBeInTheDocument();
+  });
+
   it("shows when the service plan was last successfully loaded", () => {
     renderDashboard(loadedServiceState, {
       state: applicationState(loadedServiceState, {
@@ -1628,7 +1650,7 @@ describe("Dashboard widget layout", () => {
       expect(screen.queryByTestId("settings-notices-main")).not.toBeInTheDocument();
     });
 
-    it("unreadable settings: the pill is the error, the list row has the ! mark and the sentence", () => {
+    it("unreadable settings: the pill is the error, the list row has the red × mark and the sentence", () => {
       renderDashboard(loadedServiceState, readyBase({ ...productionSettings, settings_degraded: true, settings_degraded_reason: "not valid JSON" }));
       const pill = screen.getByTestId("header-chip");
       expect(screen.getByRole("button", { name: /^Error: Saved settings could not be read$/ })).toBe(pill);
@@ -1636,7 +1658,7 @@ describe("Dashboard widget layout", () => {
       expect(pill).toHaveAttribute("title", expect.stringContaining("It started with the default settings, so Planning Center, Lighting and the other saved settings are not loaded."));
       const row = rowFor("Saved settings could not be read");
       expect(row).toBeDefined();
-      expect(row).toHaveTextContent("!");
+      expect(row).toHaveTextContent("\u00D7");
       expect(row).not.toHaveTextContent("Optional");
       expect(row).toHaveAttribute("title", expect.stringContaining("default settings"));
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();

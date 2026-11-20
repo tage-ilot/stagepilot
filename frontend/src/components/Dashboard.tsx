@@ -48,6 +48,10 @@ import { latestActiveError } from "./dashboard/dashboardActiveError";
 import {
   buildConnectionCardViews,
   buildReadinessChecks,
+  READINESS_ROW_MARK,
+  READINESS_ROW_MARK_CLASS,
+  READINESS_ROW_TEXT_CLASS,
+  readinessRowTone,
   readinessWarnings,
   readinessErrorCauses,
   readinessHasError,
@@ -942,10 +946,10 @@ export function Dashboard({
                     key={check.id}
                     title={check.detail}
                   >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${check.status === "connected" ? "bg-success-soft/20 text-success-text" : check.status === "error" ? "bg-danger/15 text-danger-text" : "bg-edge text-ink-muted"}`}>
-                      {check.status === "connected" ? "✓" : check.status === "error" ? "!" : "—"}
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${READINESS_ROW_MARK_CLASS[readinessRowTone(check)]}`} data-row-tone={readinessRowTone(check)}>
+                      {READINESS_ROW_MARK[readinessRowTone(check)]}
                     </span>
-                    <span className={check.status === "connected" ? "text-success-text" : check.status === "error" ? "text-danger-text" : "text-ink-muted"}>
+                    <span className={READINESS_ROW_TEXT_CLASS[readinessRowTone(check)]}>
                       {check.label}
                     </span>
                   </li>
