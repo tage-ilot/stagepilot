@@ -212,7 +212,7 @@ export function ProPresenterSetupPanel({
       header={(
         <SetupPanelHeader
           closeLabel="Close Presentation configuration"
-          description="Send the countdown timer to Presentation, with its configuration kept between StagePilot launches."
+          description="Sends the countdown timer to Presentation."
           onClose={onClose}
           status={propresenter?.connection_status ?? "loading"}
           title="Presentation"

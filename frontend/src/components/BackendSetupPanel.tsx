@@ -44,7 +44,7 @@ export function CopyLogButton() {
       const content = await copyDiagnosticsLog();
       await navigator.clipboard.writeText(content);
       setStatus("copied");
-      setMessage("Backend log copied to the clipboard.");
+      setMessage("Log copied to the clipboard.");
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to copy the StagePilot log.");
@@ -58,7 +58,7 @@ export function CopyLogButton() {
       title={message ?? undefined}
       variant="secondary"
     >
-      {status === "copying" ? "Copying…" : "Copy Log"}
+      {status === "copying" ? "Copying…" : "Copy log"}
     </Button>
   );
 }
@@ -122,7 +122,7 @@ export function SendAllLogsButton() {
         {label}
       </Button>
       <p className="text-xs text-ink-muted">
-        Sends recent backend/frontend logs and app info straight to the developer, for support purposes. Limited to once per minute.
+        Sends recent logs and app info to the developer. Once a minute at most.
       </p>
       {message && (
         <p
@@ -360,7 +360,7 @@ export function BackendSetupPanel({
       optional={(
         <OptionalSection onOpenChange={setAdvancedOpen} open={advancedOpen} summary={advancedSummary} title="Advanced" tone="backend">
           {/* Four settings, laid out 1, 2 or 4 across by the width of the section, exactly like the status cards above (never 3). */}
-          <SettingsSection busy={pending} columns="inset" note="Timezone, logging and port changes take effect after a backend restart.">
+          <SettingsSection busy={pending} columns="inset" note="Timezone, logging and port changes take effect after StagePilot restarts.">
             <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
               <Select onChange={(event) => setTimezone(event.target.value)} value={timezone}>
                 {timezoneChoices.map((zone) => (

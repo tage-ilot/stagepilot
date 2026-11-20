@@ -525,7 +525,7 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Clear all songs…" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("permanently erased");
     expect(dialog).toHaveTextContent("Holy Forever");
@@ -534,11 +534,11 @@ describe("LightingSetupPanel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(onSaveCues).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Clear all songs…" }));
     await user.click(screen.getByRole("button", { name: "Keep cues" }));
     expect(onSaveCues).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Clear all songs…" }));
     await user.click(screen.getByRole("button", { name: "Erase permanently" }));
     expect(onSaveCues).toHaveBeenCalledTimes(1);
     expect(onSaveCues).toHaveBeenCalledWith(song, [], "midi");
@@ -553,7 +553,7 @@ describe("LightingSetupPanel", () => {
       <LightingSetupPanel error={null} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={onSaveCues}
         onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={settings} state={state} />,
     );
-    await user.click(screen.getByRole("button", { name: "Clear song..." }));
+    await user.click(screen.getByRole("button", { name: "Clear song…" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("Holy Forever");
     expect(onSaveCues).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Erase permanently" }));
@@ -1030,7 +1030,7 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
   it("puts Clear all songs... below the whole timeline card, not above the song cards", () => {
     wire(() => json({ step_s: 0.125, peak: [0, 100] }));
     mountWith(libraryOf([planSong()]));
-    const button = screen.getByRole("button", { name: "Clear all songs..." });
+    const button = screen.getByRole("button", { name: "Clear all songs…" });
     const card = screen.getByRole("button", { name: /^Song lighting timeline/ }).closest("[data-variant]")!;
     const cards = screen.getByRole("list", { name: "Songs in this service" });
     expect(cards.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

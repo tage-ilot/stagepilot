@@ -1309,7 +1309,7 @@ tritanopia to keep the colours apart.
 
 ## Clearing cues
 
-**Clear song...** (the selected song, in the timeline toolbar), **Clear all songs...** and the **x** on a song chip (see
+**Clear song…** (the selected song, in the timeline toolbar), **Clear all songs…** and the **x** on a song chip (see
 "Lighting screen layout" below), and **Clear loudness**, all ask first in an in-app
 dialog. It says the cues will be **permanently erased** and cannot be undone, names the song (or "every song in
 <plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness). The focus starts on **Keep
@@ -1351,7 +1351,7 @@ the timeline section. It behaves as before. Its **OSC address** field is the cue
 ### Songs strip
 
 Above the timeline, **Songs in this service - N of M captured** shows one chip per plan song, in plan order, with
-**Clear all songs...** at the right. A captured song is a small coloured box with its title, its look count (or cue
+**Clear all songs…** at the right. A captured song is a small coloured box with its title, its look count (or cue
 count in MIDI mode), a note glyph when it has loudness, and an **x** that opens the permanent-erase dialog for that song
 only. A plan song with nothing saved is greyed with a dashed outline and says "not captured". Clicking a chip selects
 that song in the timeline exactly like the **Song** menu (a hand pick; **Follow live** returns). The song that is
@@ -1368,13 +1368,13 @@ older number reloads the settings once, 2 seconds after the first change of a bu
 the number is unchanged (the settings can be tens of megabytes, so no timer asks). Unchanged parts keep their identity,
 so a row being typed, the selected song, an open dialog and the timeline's zoom and scroll stay as they are. A save
 from a screen that has not reloaded yet still carries the old song revision and gets 409 (see "Saving a song's cue
-map"); **Clear all songs...** sends each song's revision too. The Record prompt about replacing hand edits reads what
+map"); **Clear all songs…** sends each song's revision too. The Record prompt about replacing hand edits reads what
 the screen shows, so it is only as current as the screen.
 
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
-the following-live status, Add cue, Clear song..., Merge rows, Undo, then at the right Zoom (- / Fit / +) and
+the following-live status, Add cue, Clear song…, Merge rows, Undo, then at the right Zoom (- / Fit / +) and
 timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
 cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
 how you left it on this device.

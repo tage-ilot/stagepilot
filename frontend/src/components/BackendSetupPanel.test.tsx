@@ -154,7 +154,7 @@ describe("Internet access (Connection Access switch)", () => {
 
     // Enabled, but still no Operator: the bootstrap form is a required next step and sits under Remote access.
     expect(await screen.findByRole("heading", {name: "Create first Operator"})).toBeInTheDocument();
-    expect(screen.getByText(/Remote Access is running\. Create the first Operator/)).toBeInTheDocument();
+    expect(screen.getByText(/Remote access is running\. Create the first Operator/)).toBeInTheDocument();
     expect(screen.getByRole("button", {name: /^Remote access/})).toBeInTheDocument();
 
     // Creating the first Operator must NOT call setRemoteEnabled again (it's already enabled) -- only bootstrapRemote itself.
@@ -195,7 +195,7 @@ describe("Internet access (Connection Access switch)", () => {
     expect(screen.getByRole("button", {name: /^Remote access/})).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", {name: "Host"}));
-    expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
+    expect(await screen.findByRole("group", {name: "Confirm disable Remote access"})).toBeInTheDocument();
     expect(api.setRemoteEnabled).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", {name: "Confirm disable"}));
@@ -203,7 +203,7 @@ describe("Internet access (Connection Access switch)", () => {
     expect(desktop.setRemoteAutostart).toHaveBeenCalledWith(false);
     await waitFor(() => expect(screen.getByRole("radio", {name: "Host"})).toBeChecked());
     expect(screen.queryByRole("button", {name: /^Remote access/})).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Remote Access", {selector: "div"})).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Remote access", {selector: "div"})).not.toBeInTheDocument();
     // Going back to Host also takes the local network away again, in the same flow.
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({lan_access: false});
@@ -233,11 +233,11 @@ describe("Internet access (Connection Access switch)", () => {
     await waitFor(() => expect(radio).toBeChecked());
 
     fireEvent.click(screen.getByRole("radio", {name: "Host"}));
-    expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
+    expect(await screen.findByRole("group", {name: "Confirm disable Remote access"})).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", {name: "Cancel"}));
     expect(api.setRemoteEnabled).not.toHaveBeenCalled();
     expect(radio).toBeChecked();
-    expect(screen.queryByRole("group", {name: "Confirm disable Remote Access"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", {name: "Confirm disable Remote access"})).not.toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 });
@@ -297,7 +297,7 @@ describe("Copy Log", () => {
     });
     renderPanel();
 
-    const copyButton = screen.getByRole("button", { name: "Copy Log" });
+    const copyButton = screen.getByRole("button", { name: "Copy log" });
     const sendButton = screen.getByRole("button", { name: "Send all logs to developer" });
     // "to the left of" -- Copy Log must appear earlier in DOM order within
     // the shared button row than Send all logs to developer.
@@ -307,7 +307,7 @@ describe("Copy Log", () => {
 
     expect(diagnostics.copyDiagnosticsLog).toHaveBeenCalledOnce();
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("log contents here"));
-    expect(await screen.findByRole("button", { name: "Copy Log" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copy log" })).toBeInTheDocument();
   });
 
   it("shows an error message when the copy fails", async () => {
@@ -316,7 +316,7 @@ describe("Copy Log", () => {
     );
     renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy Log" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy log" }));
 
     expect(await screen.findByTitle("No backend log is available yet.")).toBeInTheDocument();
   });
@@ -486,7 +486,7 @@ describe("Remote access collapses and remembers it (owner 2026-10-14)", () => {
     await screen.findByRole("button", {name: /^Remote access/});
     await waitFor(() => expect(screen.getByRole("radio", {name: "Internet"})).toBeChecked());
     fireEvent.click(screen.getByRole("radio", {name: "Host"}));
-    expect(await screen.findByRole("group", {name: "Confirm disable Remote Access"})).toBeInTheDocument();
+    expect(await screen.findByRole("group", {name: "Confirm disable Remote access"})).toBeInTheDocument();
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
     expect(window.localStorage.getItem(KEY)).toBe("false");
     fireEvent.click(screen.getByRole("button", {name: "Cancel"}));
@@ -764,13 +764,13 @@ describe("Save configuration SaveBar", () => {
     expect(bar()).toHaveTextContent("Couldn't save");
     fireEvent.click(screen.getByRole("button", {name: "Try again"}));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({server_port: 9000}));
-    expect(screen.getByText(/take effect after a backend restart/)).toBeInTheDocument();
+    expect(screen.getByText(/take effect after StagePilot restarts/)).toBeInTheDocument();
   });
 
   it("puts the restart sentence inside the Advanced section, under its settings", () => {
     withSettings();
     const note = document.querySelector("[data-part=note]")!;
-    expect(note).toHaveTextContent("Timezone, logging and port changes take effect after a backend restart.");
+    expect(note).toHaveTextContent("Timezone, logging and port changes take effect after StagePilot restarts.");
     const advanced = screen.getByRole("button", { name: /Advanced/ }).closest("[data-variant]")!;
     expect(advanced.contains(note)).toBe(true);
     // It follows the four fields, so it reads as a note to them rather than to the whole panel.
@@ -780,7 +780,7 @@ describe("Save configuration SaveBar", () => {
 
   it("keeps diagnostics and the Connection Access switch available", async () => {
     withSettings();
-    expect(screen.getByRole("button", {name: "Copy Log"})).toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Copy log"})).toBeInTheDocument();
     expect(screen.getByRole("button", {name: "Send all logs to developer"})).toBeInTheDocument();
     expect(await screen.findByRole("radio", {name: "Internet"})).toBeInTheDocument();
   });

@@ -18,7 +18,7 @@ When the installed version is current—or GitHub cannot be reached—nothing is
 shown in the header. When a newer signed release exists, a compact **Update**
 button appears immediately to the right of the StagePilot logo. Pressing it
 opens a confirmation dialog containing the current version, available version,
-and plain-text release notes. No download begins until **Update and Restart** is
+and plain-text release notes. No download begins until **Update and restart** is
 pressed.
 
 After confirmation StagePilot records an update marker and safe route, saves

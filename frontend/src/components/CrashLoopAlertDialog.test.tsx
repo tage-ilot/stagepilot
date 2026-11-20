@@ -43,7 +43,7 @@ describe("CrashLoopAlertDialog", () => {
     });
 
     render(<CrashLoopAlertDialog crashLoop={crashLoop} onDismiss={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Copy Log" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy log" }));
 
     expect(await screen.findByText("Backend log copied.")).toBeInTheDocument();
     expect(mocks.copyDiagnosticsLog).toHaveBeenCalledOnce();

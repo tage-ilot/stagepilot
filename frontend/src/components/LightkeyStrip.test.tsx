@@ -399,6 +399,7 @@ describe("LightkeyStrip operator override", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ yielded_fixtures: 2 }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByRole("button", { name: "Release lights" })).toBeDisabled();
+    expect(screen.getByTestId("lightkey-release-wrap")).toHaveAttribute("title", "No lights to release.");
   });
 
   it("Release lights calls the backend and shows the new status", async () => {
@@ -439,6 +440,7 @@ describe("LightkeyStrip saved replay off and release after a restart", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ known_fixtures: 4 }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByRole("button", { name: "Release lights" })).toBeEnabled();
+    expect(screen.getByTestId("lightkey-release-wrap")).not.toHaveAttribute("title");
   });
 });
 
@@ -531,6 +533,8 @@ describe("LightkeyStrip helper update and Read fixtures", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ helper: { outdated: true } }));
     render(<LightkeyStrip lightingEnabled />);
     expect(await screen.findByTestId("lightkey-helper-update")).toHaveTextContent("Helper update available");
+    // Capture and replay keep working: an update is information (as the Library Link and Presenter Link say it), never red.
+    expect(screen.getByTestId("lightkey-helper-update")).toHaveAttribute("data-tone", "info");
     expect(screen.getByRole("button", { name: "Read fixtures" })).toBeDisabled();
     expect(screen.getByTestId("lightkey-read-fixtures-wrap")).toHaveAttribute("title", "Update the helper to use this.");
     // everything else still works

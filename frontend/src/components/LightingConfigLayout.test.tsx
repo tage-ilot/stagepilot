@@ -169,7 +169,7 @@ describe("songs strip in the panel", () => {
   it("Clear all songs... uses the same dialog", async () => {
     const { onSaveCues } = mount();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Clear all songs..." }));
+    await user.click(screen.getByRole("button", { name: "Clear all songs…" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("permanently erased");
     await user.click(screen.getByRole("button", { name: "Keep cues" }));
     expect(onSaveCues).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe("song lighting timeline toolbar", () => {
     const bar = screen.getByRole("toolbar", { name: "Timeline tools" });
     expect(bar.className).toContain("flex-wrap");
     expect(within(bar).getByLabelText("Song")).toBeInTheDocument();
-    for (const name of ["Add cue", "Clear song...", "Merge rows", "Zoom out", "Fit", "Zoom in"]) {
+    for (const name of ["Add cue", "Clear song…", "Merge rows", "Zoom out", "Fit", "Zoom in"]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
     }
     expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
