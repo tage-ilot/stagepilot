@@ -8,6 +8,7 @@ import { libraryController, libraryOf } from "./fixtures";
 
 export const PLAYLISTS: ProPresenterPlaylist[] = [
   { id: "PL-SUNDAY", name: "Sunday Morning Service", folder: null, headers: ["Welcome", "Worship", "Message", "Closing"] },
+  { id: "PL-TWICE", name: "Easter (two Worship headers)", folder: null, headers: ["Welcome", "Worship", "Message", "Worship"] },
   { id: "PL-WED", name: "Wednesday Night", folder: null, headers: [] },
   { id: "PL-YOUTH", name: "Youth Night", folder: "Special services", headers: ["Games", "Worship"] },
 ];
@@ -27,7 +28,9 @@ const SET: { title: string; key: string; arrangement: string; id: number; sectio
   { title: "Firm Foundation", key: "E", arrangement: "Default", id: 5_000_104, sections: ["Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge"] },
 ];
 const librarySong = (item: (typeof SET)[number], index: number): LibrarySong => ({
-  setlist_song_id: 2_000_001 + index, content_id: item.id, position: index + 1, title: item.title, key: item.key, key_original: item.key, key_was: null, key_changed_at: null, bpm: 72,
+  setlist_song_id: 2_000_001 + index, content_id: item.id, position: index + 1, title: item.title, key: item.key, key_original: item.key,
+  // The first song's key was changed in Playback an hour ago: its card says "(was F)".
+  key_was: index === 0 ? "F" : null, key_changed_at: index === 0 ? new Date(Date.now() - 3_600_000).toISOString() : null, bpm: 72,
   scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure", arrangement: item.arrangement, section_count: item.sections.length,
   sections: item.sections.map((name, i) => ({ name, start: i * 20, end: i * 20 + 19 })), artwork: null, rental_expires_utc: null,
 });

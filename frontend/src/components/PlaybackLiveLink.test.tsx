@@ -158,7 +158,7 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
     render(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected()} />);
     // The little arrow inside the address box is not a tab stop (tabindex -1): the buttons a person reaches are Scan, then Connect.
     const buttons = within(block()).getAllByRole("button").filter((button) => button.tabIndex !== -1);
-    expect(buttons[0]).toBe(screen.getByRole("button", { name: "Scan" }));
+    expect(buttons[0]).toBe(screen.getByRole("button", { name: "Search" }));
     expect(buttons[1]).toBe(screen.getByRole("button", { name: "Connect" }));
     expect(screen.getByRole("combobox", { name: "Playback computer" }).tagName).toBe("INPUT");
     expect(screen.queryByRole("option", { name: /Other computer/ })).toBeNull();
@@ -168,7 +168,7 @@ describe("the computer field takes in the scan, with the old behaviour", () => {
     const playback = disconnected(null, { scan: scanOf("found", { candidates: [{ name: "Example Mac", host: "10.30.0.141" }, { name: "Other PC", host: "10.20.0.102" }] }) });
     const library = libraryController("not_installed", { address: "http://10.99.0.5" });
     render(<PlaybackLiveLink library={library} playback={playback} />);
-    fireEvent.click(within(screen.getByRole("group", { name: "Choose which Playback" })).getByRole("button", { name: /Other PC/ }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Found 2 Playback computers. Choose one:" })).getByRole("button", { name: /Other PC/ }));
     expect(playback.scan).toHaveBeenCalledWith("10.20.0.102");
     expect(library.saveAddress).toHaveBeenCalledWith("");
   });
@@ -203,7 +203,7 @@ describe("recent computers: a computer that connected before is one choice and C
     render(<PlaybackLiveLink library={libraryController("not_installed")} playback={playback} />);
     const user = userEvent.setup();
     expect(screen.getByRole("combobox", { name: "Playback computer" })).toHaveValue("10.30.0.141");
-    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
     const groups = within(screen.getByRole("listbox")).getAllByRole("group");
     expect(groups.map((group) => within(group).getAllByRole("option").map((option) => option.textContent?.replace("(in the box now)", "")))).toEqual([["Example Mac (10.30.0.7)"], ["10.20.0.102", "10.30.0.141"]]);
     await user.click(screen.getByRole("option", { name: "10.20.0.102" }));
@@ -215,8 +215,8 @@ describe("recent computers: a computer that connected before is one choice and C
   it("a computer that connects is in the list afterwards (the list follows the memory)", async () => {
     const view = render(<PlaybackLiveLink library={libraryController("not_installed")} playback={disconnected("10.30.0.9")} />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
-    expect(screen.getByText("No recent or scanned addresses yet.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
+    expect(screen.getByText("No recent or found addresses yet.")).toBeVisible();
     view.rerender(<PlaybackLiveLink library={libraryController("not_installed")} playback={controller()} />);
     expect(await screen.findByRole("option", { name: /10\.30\.0\.141/ })).toBeVisible();
   });

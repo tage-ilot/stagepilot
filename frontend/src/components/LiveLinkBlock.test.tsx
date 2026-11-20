@@ -119,7 +119,7 @@ describe("Live Link block: Connect button", () => {
   it("is disabled only when Lighting itself is off", async () => {
     render(<LightkeyStrip connection={connection} lightingEnabled={false} />);
     expect(await screen.findByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
   });
 });
 
@@ -199,7 +199,7 @@ describe("Live Link block: the strip under the fields", () => {
       names.push(el.getAttribute("aria-label") ?? (el.getAttribute("type") === "radio" ? `radio:${el.getAttribute("value")}` : (el.textContent ?? "")));
     }
     expect(names).toEqual([
-      "Lighting host or IP address", "OSC UDP port", "API port", "Scan", "Connect", "radio:auto",
+      "Lighting host or IP address", "OSC UDP port", "API port", "Search", "Connect", "radio:auto",
       "Release lights", "Read fixtures", "Send a test cue\u25B8", "How to find a cue's address\u25B8",
     ]);
   });

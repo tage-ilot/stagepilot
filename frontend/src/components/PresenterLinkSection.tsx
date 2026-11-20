@@ -5,18 +5,19 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ServicePlan } from "../types";
 import { presenterRows } from "./addSongsSongs";
-import { ADD_TO_PROPRESENTER, asTheyAreSentence, canTryAgain, importsSentence, SKIP_AND_ADD } from "./addSongsWording";
+import { canTryAgain, IMPORT_SONGS, IMPORTING, SKIP_AND_IMPORT } from "./addSongsWording";
 import { PlaylistPicker, PreviewBody, Progress, Reason, Result } from "./AddSongsParts";
 import { PresenterSongList } from "./PresenterSongList";
 import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 import { ActionButton, ActionRow, SectionNotice } from "./sections";
 
 /**
- * **Presenter Link**, in the ProPresenter (Presentation) panel: which playlist and which section of it, the songs (Playback's, in Playback's
- * order, with MultiTracks id, key and arrangement; until Playback has given them, the plan's Planning Center names), and ONE button that makes the
- * preview and, when nothing in it is blocked, adds the songs. It is drawn only while the Presenter Link is ready (this computer or the
- * helper); otherwise it draws nothing (the feature is optional, so a computer without it shows no warning). Nothing in ProPresenter changes
- * until the button is pressed, and never while a song is playing.
+ * **Presenter Link**, in the ProPresenter (Presentation) panel: which playlist and which section of it, the songs as cards (Playback's, in
+ * Playback's order, with MultiTracks id, key and arrangement; until Playback has given them, the plan's Planning Center names), and ONE
+ * button, **Import songs to ProPresenter**, that makes the preview and, when nothing in it is blocked, imports the songs. It is drawn only
+ * while the Presenter Link is ready (this computer or the helper); otherwise it draws nothing (the feature is optional, so a computer
+ * without it shows no warning). Nothing in ProPresenter changes until the button is pressed, and never while a song is playing. The page
+ * says only what a person must act on; docs/propresenter.md explains the rest.
  */
 export function PresenterLinkSection({ library, link, plan, playing = false }: { library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null; playing?: boolean }) {
   if (!link) return null;
@@ -49,22 +50,21 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
   // The section never outlives the state that allowed it, unless it is running a job (it stays to say how it ended).
   if (!add.linkReady && !running && !finished) return null;
 
-  const playlistName = add.playlist?.name ?? null;
-  const reason = running ? "Adding songs. Wait here until it says it is finished." : finished ? null : add.blockedBy ?? add.stopped;
+  const reason = running ? "Importing songs. Wait here until it says it is finished." : finished ? null : add.blockedBy ?? add.stopped;
   return (
     <div className="space-y-4" data-phase={phase} data-testid="presenter-link-section">
       <p aria-live="polite" className="sr-only" data-testid="add-songs-live" role="status">{add.announcement}</p>
       <PlaylistPicker add={add} title={PRESENTER_LINK_NAME} />
       {!add.linkReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone">{`The ${PRESENTER_LINK_NAME} is not ready now. Nothing was changed.`}</span></SectionNotice>}
-      {playing && !running && !finished && <SectionNotice tone="info"><span data-testid="add-songs-playing">A song is playing. You can look at a preview now, but songs can only be added when it has ended.</span></SectionNotice>}
+      {playing && !running && !finished && <SectionNotice tone="info"><span data-testid="add-songs-playing">A song is playing. You can look at a preview now, but songs can only be imported when it has ended.</span></SectionNotice>}
       {add.problem && <SectionNotice tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></SectionNotice>}
       <PresenterSongList add={add} headingId={ids.songs} />
       <div className="space-y-3">
-        {(reason || (!running && !finished)) && <Reason id={ids.reason} note={!running && !finished ? (add.fromPlayback ? importsSentence : asTheyAreSentence)(playlistName) : undefined}>{reason}</Reason>}
+        <Reason id={ids.reason}>{reason}</Reason>
         {!running && !finished && (
           <ActionRow>
-            <ActionButton aria-describedby={reason ? ids.reason : undefined} busy={working} busyLabel={"Making the preview\u2026"} disabled={Boolean(add.blockedBy) || working} label={ADD_TO_PROPRESENTER} onClick={() => void add.run()} tone="presentation" variant="primary" />
-            {add.canSkip && <ActionButton label={SKIP_AND_ADD} onClick={add.skipAndAdd} tone="presentation" />}
+            <ActionButton aria-describedby={reason ? ids.reason : undefined} busy={working} busyLabel={IMPORTING} disabled={Boolean(add.blockedBy) || working} label={IMPORT_SONGS} onClick={() => void add.run()} tone="presentation" variant="primary" />
+            {add.canSkip && <ActionButton label={SKIP_AND_IMPORT} onClick={add.skipAndAdd} tone="presentation" />}
           </ActionRow>
         )}
       </div>

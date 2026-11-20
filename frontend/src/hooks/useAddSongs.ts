@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { presenterLinkReady, type AddSongsRow } from "../components/addSongsSongs";
-import { guessAnnouncement, isStuck, liveText, LINK_NOT_READY_WORDS, NOTHING_CHANGES, OUTCOME, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
+import { guessAnnouncement, IMPORTING, isStuck, liveText, LINK_NOT_READY_WORDS, OUTCOME, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
 import { usePresenterApi } from "./presenterApi";
 import { useTitleLookup } from "./useTitleLookup";
 
-/** The last playlist and place, remembered in this browser only (never sent anywhere, never saved in StagePilot's settings). */
+/**
+ * In this browser only (never sent anywhere, never saved in StagePilot's settings): the last playlist chosen, and per playlist the section
+ * that was last USED FOR AN IMPORT (choosing a section alone does not remember it). `""` is End of Playlist.
+ */
 export const ADD_SONGS_CHOICE_KEY = "stagepilot.propresenter.add-songs-choice";
+/** The Section box's value for End of Playlist (the route's `place: "end"`). */
 export const PLACE_END = "";
 /** How often a running job is looked at. */
 export const JOB_POLL_MS = 1000;
@@ -21,18 +25,27 @@ export type AddSongsPhase = "choose" | "previewing" | "previewed" | "applying" |
 /** Why a row cannot be ticked: Playback gave it no number, ProPresenter has no song with this title, or it has two. */
 export type RowBlock = "unnamed" | "missing" | "several";
 
-interface Remembered { playlist_id: string; place: string }
+interface Remembered { playlist_id: string; places: Record<string, string> }
 
-function remembered(): Remembered | null {
+function remembered(): Remembered {
   try {
     const value = JSON.parse(window.localStorage.getItem(ADD_SONGS_CHOICE_KEY) ?? "null") as Partial<Remembered> | null;
-    return value && typeof value.playlist_id === "string" && typeof value.place === "string" ? { playlist_id: value.playlist_id, place: value.place } : null;
+    const places = value?.places && typeof value.places === "object" && !Array.isArray(value.places)
+      ? Object.fromEntries(Object.entries(value.places).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+      : {};
+    return { playlist_id: typeof value?.playlist_id === "string" ? value.playlist_id : "", places };
   } catch {
-    return null;
+    return { playlist_id: "", places: {} };
   }
 }
-function remember(choice: Remembered) {
-  try { window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify(choice)); } catch { /* the choice lasts while the section is on screen */ }
+function remember(change: Partial<Remembered>) {
+  const next = { ...remembered(), ...change };
+  try { window.localStorage.setItem(ADD_SONGS_CHOICE_KEY, JSON.stringify(next)); } catch { /* the choice lasts while the section is on screen */ }
+}
+/** The section the songs went to last time in this playlist, while the playlist still has it; else End of Playlist. */
+function rememberedPlace(playlist: ProPresenterPlaylist | null | undefined): string {
+  const place = playlist ? remembered().places[playlist.id] : undefined;
+  return place && playlist?.headers.includes(place) ? place : PLACE_END;
 }
 
 export interface AddSongsProblem { message: string; code: string | null }
@@ -80,6 +93,8 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const [plan, setPlan] = useState<AddSongsPlan | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<Map<string, AddSongsRow>>(() => new Map());
+  // The playlist and section the preview was made for: what an import that starts from it remembers.
+  const previewWhere = useRef<{ playlist: string; place: string } | null>(null);
   const [gone, setGone] = useState(false);
   const [skipBlocked, setSkipBlocked] = useState(false);
   const [problem, setProblem] = useState<AddSongsProblem | null>(null);
@@ -97,6 +112,8 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const playlist = playlists?.find((candidate) => candidate.id === playlistId) ?? null;
   // A header the playlist no longer has falls back to the end.
   const placeOk = place === PLACE_END || Boolean(playlist?.headers.includes(place));
+  // Two headers with this name: the engine refuses to guess which one, and so does the page (the line under the Section box says so).
+  const placeTwice = place !== PLACE_END && (playlist?.headers.filter((header) => header === place).length ?? 0) > 1;
 
   const loadPlaylists = useCallback(async () => {
     setPlaylistsError(null);
@@ -104,11 +121,10 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       const answer = await stagepilot.playlists();
       if (!alive.current) return;
       setPlaylists(answer.playlists);
-      const last = remembered();
-      const chosen = answer.playlists.find((candidate) => candidate.id === last?.playlist_id);
+      const chosen = answer.playlists.find((candidate) => candidate.id === remembered().playlist_id);
       if (chosen) {
         setPlaylistId((current) => current || chosen.id);
-        setPlace((current) => (current === PLACE_END && last && chosen.headers.includes(last.place) ? last.place : current));
+        setPlace((current) => (current === PLACE_END ? rememberedPlace(chosen) : current));
       }
     } catch (cause) {
       if (alive.current) setPlaylistsError(problemOf(cause, "StagePilot could not read the playlists from ProPresenter.").message);
@@ -128,23 +144,19 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
 
   const choosePlaylist = useCallback((id: string) => {
     setPlaylistId(id);
-    const last = remembered();
-    const next = playlists?.find((candidate) => candidate.id === id);
-    const keep = last?.playlist_id === id && next?.headers.includes(last.place) ? last.place : PLACE_END;
-    setPlace(keep);
-    remember({ playlist_id: id, place: keep });
+    setPlace(rememberedPlace(playlists?.find((candidate) => candidate.id === id)));
+    remember({ playlist_id: id });
   }, [playlists]);
-  const choosePlace = useCallback((value: string) => {
-    setPlace(value);
-    remember({ playlist_id: playlistId, place: value });
-  }, [playlistId]);
+  // Choosing a section is not remembered: only an import is (see `start`).
+  const choosePlace = useCallback((value: string) => setPlace(value), []);
 
   // ---- what stops the button, said in words -------------------------------------------------------------------------------
   const blockedBy: string | null = !linkReady ? LINK_NOT_READY_WORDS
-    : picked.length === 0 ? "Tick at least one song."
+    : picked.length === 0 ? "Select at least one song."
       : !playlistId ? "Choose a playlist."
         : !placeOk ? "Choose a section of the playlist."
-          : null;
+          : placeTwice ? "Choose another section."
+            : null;
 
   // ---- the one button -----------------------------------------------------------------------------------------------------
   /** The preview of what is ticked. `null` when it could not be made (then `problem` says why). */
@@ -166,6 +178,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       setPlan(made);
       setPreviewSignature(signature);
       setPreviewRows(refs);
+      previewWhere.current = { playlist: playlistId, place };
       setSkipBlocked(false);
       return made;
     } catch (cause) {
@@ -186,6 +199,9 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     setPhase("applying");
     try {
       const started = await stagepilot.apply(made.plan_id, skip ? made.songs.filter(isStuck).map((song) => song.ref_id) : []);
+      // The import started: this playlist's section is the one the Section box offers first next time.
+      const where = previewWhere.current;
+      if (where?.playlist) remember({ places: { ...remembered().places, [where.playlist]: where.place } });
       if (!alive.current) return;
       setJobId(started.job_id);
     } catch (cause) {
@@ -207,7 +223,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     await start(made, false);
   }, [blockedBy, makePreview, playing, start]);
 
-  /** **Skip those and add the rest**: only on a preview that stopped for blocked songs and is still true. */
+  /** **Skip those and import the rest**: only on a preview that stopped for blocked songs and is still true. */
   const canSkip = phase === "previewed" && plan !== null && !stale && !playing && linkReady && plan.stuck > 0 && !plan.playlist.blocked && plan.to_add > 0;
   const skipAndAdd = useCallback(() => { if (canSkip && plan) void start(plan, true); }, [canSkip, plan, start]);
 
@@ -248,11 +264,11 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   // ---- the sentence a screen reader hears: the newest thing the job did, then its result ----------------------------------
   const report = job?.report ?? null;
   const announcement = useMemo(() => {
-    if (phase === "previewing") return "Making the preview\u2026";
-    if (phase === "previewed" && plan && !stale) return stopped ? `Preview ready. ${stopped} ${NOTHING_CHANGES}` : `Preview ready. ${plan.to_add === 1 ? "1 song" : `${plan.to_add} songs`} would be added. ${NOTHING_CHANGES}`;
+    if (phase === "previewing") return IMPORTING;
+    if (phase === "previewed" && plan && !stale) return stopped ? `Preview ready. ${stopped}` : `Preview ready. ${plan.to_add === 1 ? "1 song" : `${plan.to_add} songs`} would be imported.`;
     if (phase === "applying") {
       const last = job?.events[job.events.length - 1];
-      if (!last) return "Adding songs\u2026";
+      if (!last) return "Importing songs\u2026";
       const title = last.song ? job?.songs.find((song) => song.ref_id === last.song)?.title ?? null : null;
       return liveText(title, last.text);
     }
@@ -262,7 +278,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
 
   return {
     rows, choices, blockOf, selected, toggle, toggleAll, selectedCount: picked.length, fromPlayback, previewRows,
-    playlists, playlistsError, reloadPlaylists: loadPlaylists, playlistId, choosePlaylist, place, choosePlace, playlist,
+    playlists, playlistsError, reloadPlaylists: loadPlaylists, playlistId, choosePlaylist, place, choosePlace, playlist, placeTwice,
     phase, plan, stale, skipBlocked, problem, blockedBy, stopped, canSkip,
     run, skipAndAdd, tryAgain, job, report, lostContact, announcement, linkReady,
   };

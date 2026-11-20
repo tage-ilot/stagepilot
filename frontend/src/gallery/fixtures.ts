@@ -43,7 +43,7 @@ export const playbackOf = (over: Partial<PlaybackStatusResponse> = {}, scan: Pla
   settings: { enabled: true, host: "10.30.0.141", port: 8080, auto_scan: true, fast_transport: true }, ...over,
 });
 export const playbackDown = (scan: PlaybackScanResult = scanOf("idle")): PlaybackStatusResponse => playbackOf({
-  connected: false, active_source: "none", reason: "Disconnected. Choose Scan to find Playback.", host: null,
+  connected: false, active_source: "none", reason: "Disconnected. Choose Scan Network to find Playback.", host: null,
   sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: false, reason: "MIDI is disconnected." } },
   settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true },
 }, scan);

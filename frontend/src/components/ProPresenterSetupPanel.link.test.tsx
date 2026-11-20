@@ -59,7 +59,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
   it("holds the connection: Host, API, Scan and Connect are inside the block, above the status line and the setup box", () => {
     panel(linkController(helperStatus("not_installed")));
     const inside = within(block());
-    for (const control of [inside.getByLabelText("Host"), inside.getByLabelText("ProPresenter API port"), inside.getByRole("button", { name: "Scan" }), inside.getByRole("button", { name: "Connect" })]) expect(block()).toContainElement(control);
+    for (const control of [inside.getByLabelText("Host"), inside.getByLabelText("ProPresenter API port"), inside.getByRole("button", { name: "Search" }), inside.getByRole("button", { name: "Connect" })]) expect(block()).toContainElement(control);
     const lines = screen.getByTestId("propresenter-live-link-sub");
     const row = screen.getByTestId("propresenter-live-link-line");
     // The connection row is on top (DOM order changed on purpose: it used to sit under the status lines).
@@ -77,8 +77,8 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     const host = within(block()).getByRole("combobox", { name: "Host" });
     const row = screen.getByTestId("propresenter-live-link-line");
     expect(row).toContainElement(host);
-    expect(row).toContainElement(within(block()).getByRole("button", { name: "Show recent and scanned addresses" }));
-    await userEvent.setup().click(within(block()).getByRole("button", { name: "Show recent and scanned addresses" }));
+    expect(row).toContainElement(within(block()).getByRole("button", { name: "Show recent and found addresses" }));
+    await userEvent.setup().click(within(block()).getByRole("button", { name: "Show recent and found addresses" }));
     expect(within(screen.getByRole("group", { name: "Recent" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["10.30.0.211"]);
     await userEvent.setup().click(screen.getByRole("option", { name: "10.30.0.211" }));
     expect(screen.getByLabelText("Host")).toHaveValue("10.30.0.211");
@@ -98,7 +98,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     expect(screen.getByTestId("propresenter-api-pill")).toHaveTextContent("ProPresenter API: Checking");
     // Nothing has been read yet: Connect has nothing to save or check, and says why. Scan does not need it.
     expect(within(block()).getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(within(block()).getByRole("button", { name: "Scan" })).toBeEnabled();
+    expect(within(block()).getByRole("button", { name: "Search" })).toBeEnabled();
   });
 
   it("without a controller the block still holds the connection and the ProPresenter API line, and draws no Presenter Link line", () => {
@@ -134,7 +134,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
       if (active.textContent === "Save configuration") break;
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
-      "Host", "ProPresenter API port", "Scan", "Connect", "Presenter Link setup",
+      "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
       "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks",
       // The Presenter Link section sits between the settings and the Save bar (it has no list to tick without a plan).
       "Playlist",
@@ -150,7 +150,7 @@ describe("ProPresenterSetupPanel: the connection boxes lay out like the other Li
     expect(row).toHaveClass("flex", "flex-wrap", "items-end");
     const host = screen.getByLabelText("Host");
     const port = screen.getByLabelText("ProPresenter API port");
-    const scan = screen.getByRole("button", { name: "Scan" });
+    const scan = screen.getByRole("button", { name: "Search" });
     const connect = screen.getByRole("button", { name: "Connect" });
     expect(host.closest("label")).toHaveClass("live-link-host", "min-w-0");
     expect(port.closest("label")).not.toHaveClass("live-link-host");

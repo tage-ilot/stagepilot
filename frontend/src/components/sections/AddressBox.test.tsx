@@ -18,7 +18,7 @@ function Harness({ initial = "", ...props }: { initial?: string } & Partial<Addr
   return <AddressBox aria-label="Host" {...props} onChange={(next) => { setValue(next); props.onChange?.(next); }} scope="playback" value={value} />;
 }
 const box = () => screen.getByRole("combobox", { name: "Host" });
-const arrow = () => screen.getByRole("button", { name: "Show recent and scanned addresses" });
+const arrow = () => screen.getByRole("button", { name: "Show recent and found addresses" });
 const names = () => screen.queryAllByRole("option").map((option) => option.textContent?.replace("(in the box now)", "").trim());
 const remember = (...hosts: string[]) => hosts.reverse().forEach((host) => rememberAddress("playback", host));
 
@@ -268,11 +268,11 @@ describe("AddressBox: what the list holds", () => {
     await user.click(arrow());
     const list = screen.getByRole("listbox");
     const groups = within(list).getAllByRole("group");
-    expect(groups.map((group) => group.getAttribute("aria-labelledby") && document.getElementById(group.getAttribute("aria-labelledby") as string)?.textContent)).toEqual(["Scanned", "Recent"]);
+    expect(groups.map((group) => group.getAttribute("aria-labelledby") && document.getElementById(group.getAttribute("aria-labelledby") as string)?.textContent)).toEqual(["Found", "Recent"]);
     expect(within(groups[0]!).getAllByRole("option").map((option) => option.textContent)).toEqual(["Playback (front) (10.30.0.141)", "Playback (stage) (10.30.0.152)"]);
     expect(within(groups[1]!).getAllByRole("option").map((option) => option.textContent)).toEqual(["10.0.0.5", "10.0.0.6"]);
     expect(within(list).queryByText(/other computer/i)).toBeNull();
-    expect(screen.getByRole("group", { name: "Scanned" })).toBe(groups[0]);
+    expect(screen.getByRole("group", { name: "Found" })).toBe(groups[0]);
     expect(screen.getByRole("group", { name: "Recent" })).toBe(groups[1]);
   });
 
@@ -281,13 +281,13 @@ describe("AddressBox: what the list holds", () => {
     remember("10.0.0.5");
     const { unmount } = render(<Harness />);
     await user.click(arrow());
-    expect(screen.queryByRole("group", { name: "Scanned" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Found" })).toBeNull();
     expect(screen.getByRole("group", { name: "Recent" })).toBeInTheDocument();
     unmount();
     window.localStorage.clear();
     render(<Harness scanned={SCANNED} />);
     await user.click(arrow());
-    expect(screen.getByRole("group", { name: "Scanned" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Found" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
   });
 
@@ -327,7 +327,7 @@ describe("AddressBox: what the list holds", () => {
     render(<Harness />);
     await user.click(arrow());
     expect(screen.getByText(NO_ADDRESSES)).toBeInTheDocument();
-    expect(NO_ADDRESSES).toBe("No recent or scanned addresses yet.");
+    expect(NO_ADDRESSES).toBe("No recent or found addresses yet.");
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     expect(box()).toHaveAttribute("aria-expanded", "true");

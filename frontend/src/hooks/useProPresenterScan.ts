@@ -44,7 +44,7 @@ export function useProPresenterScan(): ProPresenterScanController {
         if (next.state === "scanning") poll(current);
       } catch (cause) {
         if (generation.current !== current) return;
-        setError(describeError(cause, "The scan could not be read."));
+        setError(describeError(cause, "The search could not be read."));
       }
     }, SCAN_POLL_MS);
   }, [stopPolling]);
@@ -60,7 +60,7 @@ export function useProPresenterScan(): ProPresenterScanController {
         setRaw(next);
         if (next.state === "scanning") poll(current);
       })
-      .catch((cause) => { if (generation.current === current) setError(describeError(cause, "The scan could not start.")); })
+      .catch((cause) => { if (generation.current === current) setError(describeError(cause, "The search could not start.")); })
       .finally(() => { if (generation.current === current) setStarting(false); });
   }, [poll, stopPolling]);
 
@@ -70,7 +70,7 @@ export function useProPresenterScan(): ProPresenterScanController {
     setStarting(false);
     cancelProPresenterScan()
       .then((next) => { if (generation.current === current) setRaw(next); })
-      .catch((cause) => { if (generation.current === current) setError(describeError(cause, "Could not cancel the scan.")); });
+      .catch((cause) => { if (generation.current === current) setError(describeError(cause, "Could not cancel the search.")); });
   }, [stopPolling]);
 
   return { scan: proPresenterScanState(raw), error, starting, start, cancel };

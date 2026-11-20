@@ -1,3 +1,4 @@
+import { playbackLibraryArtworkUrl } from "../api";
 import type { LengthSource, LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, ServicePlan } from "../types";
 import { serviceStartsMs, zonedWallTimeToMs } from "./dashboard/scanReminder";
 
@@ -207,3 +208,7 @@ export function arrangementLabel(sections: LibrarySection[]): string {
   const more = sections.length - BAR_NAMES_SPOKEN;
   return `Arrangement: ${names}${more > 0 ? ` and ${more} more` : ""} (${sections.length} ${sections.length === 1 ? "section" : "sections"})`;
 }
+
+/** The picture of a Playback song, fetched through StagePilot (the etag in the address makes a changed picture a new address). */
+export const librarySongCover = (library: LibrarySong | null | undefined): string | null =>
+  library?.artwork && library.setlist_song_id !== null ? playbackLibraryArtworkUrl(library.setlist_song_id, library.artwork.etag) : null;

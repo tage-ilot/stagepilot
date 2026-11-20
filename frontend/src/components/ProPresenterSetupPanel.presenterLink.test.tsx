@@ -47,7 +47,7 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
     panel({ library: undefined });
     await screen.findByRole("option", { name: "Sunday Morning Service" });
     expect(screen.getByTestId("add-songs-songs")).toHaveAttribute("data-source", "planning-center");
-    expect(screen.getAllByTestId("add-songs-row").map((row) => row.querySelector("th")?.textContent)).toEqual(["Holy Forever", "Gratitude"]);
+    expect(screen.getAllByTestId("add-songs-row").map((row) => within(row).getByRole("checkbox").getAttribute("aria-label"))).toEqual(["Holy Forever", "Gratitude"]);
   });
 
   it("lists Playback's songs, with id, key and arrangement, when the Library Link has given them", async () => {
@@ -68,7 +68,7 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
   ])("is not drawn, and says nothing about it, when the Link is %s", (_name, over) => {
     panel(over);
     expect(screen.queryByTestId("presenter-link-section")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add to ProPresenter" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Import songs to ProPresenter" })).toBeNull();
     expect(screen.queryByText("Presenter Link", { selector: "h3" })).toBeNull();
     expect(api.getProPresenterPlaylists).not.toHaveBeenCalled();
   });
@@ -76,6 +76,6 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
   it("is still not the way the Playback panel adds songs: the button is in this panel only", async () => {
     panel();
     await screen.findByRole("option", { name: "Sunday Morning Service" });
-    expect(screen.getAllByRole("button", { name: "Add to ProPresenter" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Import songs to ProPresenter" })).toHaveLength(1);
   });
 });

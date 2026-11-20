@@ -56,11 +56,11 @@ function HeldMarker({ id }: { id: string }) {
 /**
  * The ProPresenter Live Link block of the Presentation panel, built like the Playback and Lighting Live Link blocks: the FIRST block under
  * the header, a bordered card with a title, a state pill beside it, and two status lines (ProPresenter API, and the optional Presenter
- * Link). It holds the CONNECTION: the Host and API boxes (with the recent addresses) and the Scan and Connect pair, under the two lines and above the
+ * Link). It holds the CONNECTION: the Host and API boxes (with the recent addresses) and the Search and Connect pair, under the two lines and above the
  * setup box. Timer, Look, Refresh and Save stay in the panel, after the block.
  *
  * The Presenter Link is how StagePilot reaches the song files and the screen of the ProPresenter computer; it adds Playback's songs to a
- * playlist (the "Add to ProPresenter" window, in the Playback panel). When ProPresenter runs on THIS computer there is nothing to set
+ * playlist (the Presenter Link section's Import songs to ProPresenter, in this panel). When ProPresenter runs on THIS computer there is nothing to set
  * up: the line says "on this computer", there is no setup button, and an import blocker is shown in plain words with its one-sentence
  * fix. Another computer gets the button **Set up the ProPresenter computer** (one command to paste into Terminal there).
  *

@@ -80,11 +80,11 @@ describe("Scan double click", () => {
     const playback = controller();
     const user = userEvent.setup();
     const view = render(<PlaybackApiPanel playback={playback} />);
-    await user.click(screen.getByRole("button", { name: "Scan" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
     expect(playback.scan).toHaveBeenCalledTimes(1);
     // The hook flips pending to "scan" and the button becomes Cancel; a click within the guard is ignored.
     view.rerender(<PlaybackApiPanel playback={{ ...playback, pending: "scan" }} />);
-    await user.click(screen.getByRole("button", { name: /Scanning/ }));
+    await user.click(screen.getByRole("button", { name: /Searching/ }));
     expect(playback.cancelScan).not.toHaveBeenCalled();
   });
 
@@ -94,10 +94,10 @@ describe("Scan double click", () => {
       const playback = controller();
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const view = render(<PlaybackApiPanel playback={playback} />);
-      await user.click(screen.getByRole("button", { name: "Scan" }));
+      await user.click(screen.getByRole("button", { name: "Search" }));
       view.rerender(<PlaybackApiPanel playback={{ ...playback, pending: "scan" }} />);
       await act(async () => { vi.advanceTimersByTime(1000); });
-      await user.click(screen.getByRole("button", { name: /Scanning/ }));
+      await user.click(screen.getByRole("button", { name: /Searching/ }));
       expect(playback.cancelScan).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

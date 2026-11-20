@@ -14,35 +14,39 @@ import type { LibrarySong } from "../types";
 import type { Tone } from "./ui/types";
 import { PRESENTER_LINK_NAME } from "./proPresenterLinkState";
 
-/** The words of the "Add to ProPresenter" window, in one place (church-operator wording: short, plain, no jargon). */
+/**
+ * The words of the Presenter Link section, in one place (church-operator wording: short, plain, no jargon). The section says as little as
+ * it can: only what a person must act on. What the button does is explained in docs/propresenter.md, not on the page.
+ */
 
-export const ADD_TO_PROPRESENTER = "Add to ProPresenter";
-export const NOTHING_CHANGES = `Nothing in ProPresenter changes until you press ${ADD_TO_PROPRESENTER}.`;
-/** What pressing the button does, said plainly. The playlist's contents are replaced on purpose: no warning about it, just the fact. */
-export const importsSentence = (playlist: string | null): string =>
-  `This imports songs, arrangements and keys into ${playlist ?? "the playlist"}. The playlist's contents are replaced with what the preview shows.`;
-/** The same for the Planning Center names: nothing is imported or copied, the songs ProPresenter has go in as they are. */
-export const asTheyAreSentence = (playlist: string | null): string =>
-  `This adds the songs as they are in ProPresenter to ${playlist ?? "the playlist"}: no copy, no new arrangement, no key change. The playlist's contents are replaced with what the preview shows.`;
-export const PC_NAMES_NOTE = "Playback has not given the songs yet: these are the Planning Center names.";
-export const PLAYBACK_NOTE = "These songs come from Playback, in Playback's order, with the key and arrangement it plays.";
+export const IMPORT_SONGS = "Import songs to ProPresenter";
+/** The button's words while it makes the preview (and, when nothing stops it, starts the import). */
+export const IMPORTING = "Importing\u2026";
+/** The last option of the Section box: after everything in the playlist. */
+export const END_OF_PLAYLIST = "End of Playlist";
+/** The small chip on a card that is a Planning Center name (Playback has not given the songs). */
+export const PLANNING_CENTER = "Planning Center";
+export const SELECT_ALL = "Select all";
+export const SELECT_NONE = "Select none";
+/** The count over the cards, read out politely: `3 of 4 selected`. */
+export const selectedWords = (selected: number, of: number): string => `${selected} of ${of} selected`;
+/** The engine's own line for a header name the playlist has twice: StagePilot does not guess which one. */
+export const twoHeadersLine = (header: string): string => `More than one header in this playlist is named \u201C${header.trim()}\u201D. Pick another place.`;
 export const NOT_IN_PROPRESENTER = "Not in ProPresenter";
 export const NOT_IN_PROPRESENTER_WHY = "Playback data is needed to import it.";
 export const SEVERAL_IN_PROPRESENTER = "More than one song in ProPresenter has this title";
-export const SKIP_AND_ADD = "Skip those and add the rest";
+export const SKIP_AND_IMPORT = "Skip those and import the rest";
+/** A Playback song with no number: the reason on its card. */
+export const NO_NUMBER = "No number";
+export const NO_NUMBER_WHY = "Playback gave this song no number, so it cannot be imported.";
 export const NO_PLAN_SONGS = "The loaded plan has no songs yet.";
 export const CHECK_IN_PROPRESENTER = "Check in ProPresenter:";
-export const KEY_NOTE = "ProPresenter does not show the key for these songs; it is written into the copy and shown here.";
 export const OTHER_ITEMS_STAY = "Other items stay as they are.";
 export const OPEN_LIBRARY_ONCE = "Open the Playback library in ProPresenter once, then press Try again.";
 export const PLAYING_WORDS = "A song is playing. Wait until it has ended, then try again.";
 export const LINK_NOT_READY_WORDS = `The ${PRESENTER_LINK_NAME} is not ready. Check it in the Presentation panel.`;
-export const AT_THE_END = "At the end";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** The place picker's option for a header. */
-export const afterHeaderLabel = (header: string) => `After \u201C${header}\u201D`;
 
 /** `Folder / Name`, or the name alone. */
 export const playlistLabel = (playlist: Pick<ProPresenterPlaylist, "name" | "folder">) =>
@@ -81,11 +85,11 @@ export function stuckReason(plan: Pick<AddSongsPlan, "songs" | "stuck" | "to_add
   if (plan.playlist.blocked) return `Blocked: ${plan.playlist.blocked}`;
   if (plan.stuck > 0) {
     const names = plan.songs.filter((song) => isStuck(song)).map((song) => song.title).join(", ");
-    const lead = `${plural(plan.stuck, "song")} cannot be added yet (${names}).`;
+    const lead = `${plural(plan.stuck, "song")} cannot be imported yet (${names}).`;
     if (!full) return lead;
-    return plan.to_add > 0 ? `${lead} Skip those to add the rest, or fix them and press ${ADD_TO_PROPRESENTER} again.` : `${lead} Fix them, or tick other songs, and press ${ADD_TO_PROPRESENTER} again.`;
+    return plan.to_add > 0 ? `${lead} Skip those to import the rest, or fix them and press ${IMPORT_SONGS} again.` : `${lead} Fix them, or select other songs, and press ${IMPORT_SONGS} again.`;
   }
-  if (!plan.can_apply) return "There is nothing to add: every ticked song is already in the playlist.";
+  if (!plan.can_apply) return "There is nothing to import: every selected song is already in the playlist.";
   return null;
 }
 
@@ -162,12 +166,12 @@ export function mappingLines(song: Pick<AddSongsSong, "mapping">): string[] {
   return lines;
 }
 
-/** `Adds 4 songs after Worship in Sunday Morning Service. Other items stay as they are.` */
+/** `Imports 4 songs at the end of the section Worship in Sunday Morning Service. Other items stay as they are.` (the end of a section: right before the next header) */
 export function playlistSentence(plan: Pick<AddSongsPlan, "playlist" | "to_add">, header: string | null): string {
   const { playlist, to_add: count } = plan;
-  if (count === 0) return `Adds nothing to ${playlist.name}. ${OTHER_ITEMS_STAY}`;
-  const where = header ? `after ${header}` : "at the end";
-  return `Adds ${plural(count, "song")} ${where} in ${playlist.name}. ${OTHER_ITEMS_STAY}`;
+  if (count === 0) return `Imports nothing into ${playlist.name}. ${OTHER_ITEMS_STAY}`;
+  const where = header ? `at the end of the section ${header} in ${playlist.name}` : `at the end of ${playlist.name}`;
+  return `Imports ${plural(count, "song")} ${where}. ${OTHER_ITEMS_STAY}`;
 }
 
 /** The neighbours the new songs land between, when the plan names them. */
@@ -200,7 +204,7 @@ export const STEP_STATE: Record<AddSongsStepState, { word: string; mark: string 
 };
 
 export const SONG_STATUS: Record<AddSongsSongStatus, { word: string; mark: string; tone: Tone }> = {
-  added: { word: "Added", mark: "\u2713", tone: "success" },
+  added: { word: "Imported", mark: "\u2713", tone: "success" },
   already_there: { word: "Was already there", mark: "\u2713", tone: "success" },
   skipped: { word: "Skipped", mark: "\u2212", tone: "idle" },
   failed: { word: "Failed", mark: "\u2715", tone: "danger" },
@@ -216,8 +220,8 @@ export interface OutcomeWords {
 
 /** The headline of the result. The sentence under it is the backend's own (`report.message`). */
 export const OUTCOME: Record<AddSongsOutcome, OutcomeWords> = {
-  done: { heading: "Added", tone: "success", mark: "\u2713" },
-  done_with_differences: { heading: "Added, but ProPresenter shows something different", tone: "warning", mark: "!" },
+  done: { heading: "Imported", tone: "success", mark: "\u2713" },
+  done_with_differences: { heading: "Imported, but ProPresenter shows something different", tone: "warning", mark: "!" },
   needs_library_open: { heading: "ProPresenter has not loaded the new songs yet", tone: "warning", mark: "!" },
   stopped: { heading: "Stopped", tone: "warning", mark: "!" },
   song_playing: { heading: "Stopped: a song is playing", tone: "warning", mark: "!" },
@@ -226,7 +230,7 @@ export const OUTCOME: Record<AddSongsOutcome, OutcomeWords> = {
   playlist_failed: { heading: "The playlist could not be changed", tone: "danger", mark: "\u2715" },
   backup_failed: { heading: "Nothing was changed: the playlist could not be saved first", tone: "danger", mark: "\u2715" },
   not_reachable: { heading: "ProPresenter did not answer", tone: "danger", mark: "\u2715" },
-  nothing_to_do: { heading: "Nothing to add", tone: "info", mark: "i" },
+  nothing_to_do: { heading: "Nothing to import", tone: "info", mark: "i" },
 };
 
 /** The outcomes after which a fresh preview is the sensible next step (files made before are reused, so it is safe to repeat). */
@@ -238,11 +242,11 @@ export const backupName = (backup: string | null): string | null => (backup ? ba
 /** One sentence for a screen reader when the job's newest event changes. */
 export const liveText = (title: string | null, text: string): string => (title ? `${title}: ${text}` : text);
 
-/** What the report says in one line for the counts: `3 added, 1 skipped`. */
+/** What the report says in one line for the counts: `3 imported, 1 skipped`. */
 export function resultCounts(report: Pick<AddSongsReport, "songs">): string {
   const count = (status: AddSongsSongStatus) => report.songs.filter((song) => song.status === status).length;
   return [
-    count("added") ? `${count("added")} added` : null,
+    count("added") ? `${count("added")} imported` : null,
     count("already_there") ? `${count("already_there")} already there` : null,
     count("skipped") ? `${count("skipped")} skipped` : null,
     count("failed") ? `${count("failed")} failed` : null,

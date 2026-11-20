@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Look at the ProPresenter Link block and the Presenter Link section (Add to ProPresenter) in a browser, without ProPresenter, without Playback and
+"""Look at the ProPresenter Link block and the Presenter Link section (Import songs to ProPresenter) in a browser, without ProPresenter, without Playback and
 without a second computer. Standard library only; read docs/preview-live-link.md ("The ProPresenter Link") for the whole recipe.
 
 It starts, on this computer:

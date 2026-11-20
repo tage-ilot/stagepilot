@@ -11,7 +11,7 @@ export interface OptionalBandProps {
   /** One line beside the heading: what is inside (`Saved: 12 songs`). A polite status of the section. */
   summary?: ReactNode;
   summaryTestId?: string;
-  /** Buttons that sit on the header row, beside the toggle (never inside it): `Scan Playback songs`. */
+  /** Buttons that sit on the header row, beside the toggle (never inside it): `Scan Playback API` / `Scan Playback Library`. */
   actions?: ReactNode;
   persistKey: string;
   defaultOpen?: boolean;

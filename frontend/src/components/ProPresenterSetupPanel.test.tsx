@@ -85,7 +85,7 @@ describe("ProPresenterSetupPanel", () => {
     await user.clear(screen.getByLabelText("Host"));
     await user.type(screen.getByLabelText("Host"), "10.1.1.1");
     expect(screen.queryByRole("button", { name: "Use 192.168.4.40" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
+    await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
     await user.click(screen.getByRole("option", { name: "192.168.4.40" }));
     expect(screen.getByLabelText("Host")).toHaveValue("192.168.4.40");
     expect(screen.queryByRole("listbox")).toBeNull();
@@ -248,7 +248,7 @@ describe("ProPresenterSetupPanel", () => {
     expect(container.querySelector("#propresenter-configuration")).toHaveAttribute("data-variant", "setup");
     expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("data-variant", "primary");
     expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
-    for (const name of ["Scan", "Connect", "Refresh timers and Looks"]) {
+    for (const name of ["Search", "Connect", "Refresh timers and Looks"]) {
       const button = screen.getByRole("button", { name });
       expect(button).toHaveAttribute("data-variant", "tinted");
       expect(button).toHaveAttribute("data-tone", "presentation");
@@ -495,7 +495,7 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     panel();
     const row = screen.getByTestId("propresenter-live-link-line");
     // (The little arrow inside the Host box is not a tab stop and has no words: the row ENDS with Scan, then Connect.)
-    expect(within(row).getAllByRole("button").filter((button) => button.tabIndex !== -1).map((button) => button.textContent)).toEqual(["Scan", "Connect"]);
+    expect(within(row).getAllByRole("button").filter((button) => button.tabIndex !== -1).map((button) => button.textContent)).toEqual(["Search", "Connect"]);
     expect(screen.queryByRole("button", { name: /Test connection/ })).toBeNull();
   });
 
@@ -552,7 +552,7 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     unmount();
     panel({ pendingOperation: "refresh" });
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
   });
 
   it("Scan asks the scanner, shows the progress, and cancel stops it", async () => {
@@ -560,12 +560,12 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     const cancel = vi.fn();
     const user = userEvent.setup();
     const view = panel({ scanner: scanner({ state: "idle", candidates: [], current: 0, total: 0 }, { start, cancel }) });
-    await user.click(screen.getByRole("button", { name: "Scan" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
     expect(start).toHaveBeenCalledOnce();
     view.unmount();
     panel({ scanner: scanner({ state: "scanning", candidates: [], current: 10, total: 255, elapsed: 1 }, { start, cancel }) });
     expect(screen.getByTestId("scan-progress")).toHaveTextContent("Checked 10 of 255 addresses");
-    await user.click(screen.getByRole("button", { name: "Scanning… (cancel)" }));
+    await user.click(screen.getByRole("button", { name: "Searching… (cancel)" }));
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -594,8 +594,8 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     const onSave = vi.fn();
     const user = userEvent.setup();
     panel({ onSave, scanner: scanner({ state: "found", candidates: [{ host: "192.0.2.21", port: 1026, label: "Front MacBook" }, { host: "192.0.2.34", port: 11025, label: "Stage Mac" }], current: 255, total: 255 }) });
-    await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
-    expect(within(screen.getByRole("group", { name: "Scanned" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["Front MacBook (192.0.2.21)", "Stage Mac (192.0.2.34)"]);
+    await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
+    expect(within(screen.getByRole("group", { name: "Found" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["Front MacBook (192.0.2.21)", "Stage Mac (192.0.2.34)"]);
     await user.click(screen.getByRole("option", { name: /Front MacBook/ }));
     expect(screen.getByLabelText("Host")).toHaveValue("192.0.2.21");
     expect(screen.getByLabelText("ProPresenter API port")).toHaveValue("1026");
@@ -610,8 +610,8 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
     const user = userEvent.setup();
     for (const state of ["scanning", "not_found", "idle"] as const) {
       const { unmount } = panel({ scanner: scanner({ state, candidates: [], current: 0, total: 0 }) });
-      await user.click(screen.getByRole("button", { name: "Show recent and scanned addresses" }));
-      expect(screen.queryByRole("group", { name: "Scanned" })).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Show recent and found addresses" }));
+      expect(screen.queryByRole("group", { name: "Found" })).toBeNull();
       expect(screen.getByRole("option", { name: "10.9.9.9" })).toBeInTheDocument();
       unmount();
     }
@@ -632,6 +632,6 @@ describe("Presentation Connect and Scan (the pair that ends the Live Link row)",
   it("while the page is busy the Host box and its arrow wait", () => {
     panel({ pendingOperation: "refresh" });
     expect(screen.getByLabelText("Host")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Show recent and scanned addresses" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Show recent and found addresses" })).toBeDisabled();
   });
 });

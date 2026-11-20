@@ -33,9 +33,10 @@ function runStep(root: HTMLElement, step: Step): boolean {
     return true;
   }
   if ("toggle" in step) {
-    // A tick box, found by the words of its label.
+    // A tick box, found by the words of its label, or a card that is a checkbox (role="checkbox"), found by its name.
     const caption = Array.from(root.querySelectorAll("label")).find((node) => node.textContent?.trim() === step.toggle);
-    const box = caption?.htmlFor ? (document.getElementById(caption.htmlFor) as HTMLInputElement | null) : null;
+    const box = (caption?.htmlFor ? document.getElementById(caption.htmlFor) : null) as HTMLInputElement | HTMLButtonElement | null
+      ?? Array.from(root.querySelectorAll<HTMLButtonElement>("[role=checkbox]")).find((node) => node.getAttribute("aria-label") === step.toggle) ?? null;
     if (!box || box.disabled) return false;
     box.click();
     return true;

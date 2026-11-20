@@ -2126,3 +2126,97 @@ async fn a_song_as_it_is_and_a_copy_can_go_in_together_in_the_order_asked() {
         ["Alpha (1).pro"]
     );
 }
+
+/// The Section box's words, against the fake playlist: a section is every item after its header up to the next header, and the songs
+/// go at its END (right before the next header). A section with items, a section with none, the last section, and End of Playlist.
+#[tokio::test]
+async fn songs_land_at_the_end_of_the_chosen_section_or_the_end_of_the_playlist() {
+    let alpha_uuid = stagepilot_propresenter::link::api::fake::entry_uuid("Songs", "Alpha.pro");
+    let items = || {
+        vec![
+            FakeApi::header_item("Welcome", 0.1),
+            FakeApi::presentation_item(&alpha_uuid, "Alpha", "Default", 12.5),
+            FakeApi::header_item("Empty", 0.2),
+            FakeApi::header_item("Worship", 0.3),
+            FakeApi::presentation_item(&alpha_uuid, "Alpha", "Default", 80.0),
+            FakeApi::header_item("Message", 0.4),
+            FakeApi::presentation_item(&alpha_uuid, "Alpha", "Default", 30.0),
+        ]
+    };
+    let cases: [(Place, [&str; 8]); 5] = [
+        (
+            Place::AfterHeader("Welcome".into()),
+            [
+                "Welcome", "Alpha", "Beta", "Empty", "Worship", "Alpha", "Message", "Alpha",
+            ],
+        ),
+        (
+            Place::AfterHeader("Empty".into()),
+            [
+                "Welcome", "Alpha", "Empty", "Beta", "Worship", "Alpha", "Message", "Alpha",
+            ],
+        ),
+        (
+            Place::AfterHeader("Worship".into()),
+            [
+                "Welcome", "Alpha", "Empty", "Worship", "Alpha", "Beta", "Message", "Alpha",
+            ],
+        ),
+        (
+            Place::AfterHeader("Message".into()),
+            [
+                "Welcome", "Alpha", "Empty", "Worship", "Alpha", "Message", "Alpha", "Beta",
+            ],
+        ),
+        (
+            Place::End,
+            [
+                "Welcome", "Alpha", "Empty", "Worship", "Alpha", "Message", "Alpha", "Beta",
+            ],
+        ),
+    ];
+    for (place, want) in cases {
+        let rig = rig(Loading::Immediately);
+        let playlist = rig.api.add_playlist("Sections", None, items());
+        let req = PlanRequest {
+            songs: vec![titled("t1", "Beta", 1)],
+            playlist_id: playlist.clone(),
+            place: place.clone(),
+        };
+        let plan = rig.engine.preview(&req).await.unwrap();
+        assert!(plan.can_apply, "{place:?}: {:?}", plan.playlist.blocked);
+        let report = rig
+            .engine
+            .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+            .await
+            .unwrap();
+        assert_eq!(report.outcome, ApplyOutcome::Done, "{place:?}: {report:#?}");
+        assert_eq!(names_of(&rig.api.stored(&playlist)), want, "{place:?}");
+    }
+}
+
+/// Two headers with the same name: the engine does not guess which section is meant, and says so in one plain line.
+#[tokio::test]
+async fn a_header_name_the_playlist_has_twice_is_refused_with_a_plain_line() {
+    let rig = rig(Loading::Immediately);
+    let playlist = rig.api.add_playlist(
+        "Twice",
+        None,
+        vec![
+            FakeApi::header_item("Worship", 0.1),
+            FakeApi::header_item("Message", 0.2),
+            FakeApi::header_item("Worship", 0.3),
+        ],
+    );
+    let req = PlanRequest {
+        songs: vec![titled("t1", "Beta", 1)],
+        playlist_id: playlist,
+        place: Place::AfterHeader("Worship".into()),
+    };
+    let plan = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(
+        plan.playlist.blocked.as_deref(),
+        Some("More than one header in this playlist is named \"Worship\". Pick another place.")
+    );
+    assert!(!plan.can_apply);
+}

@@ -1,10 +1,11 @@
 import type { ProPresenterScan } from "../propresenterScan";
+import { searchWords } from "./playbackScan";
 import type { ScanState, ScanWording } from "./sections";
 
 /** The ProPresenter scan's words, in the one shape every block's scan uses. */
 export const PROPRESENTER_SCAN_WORDS: ScanWording = {
-  looking: "Looking for ProPresenter…",
-  choose: () => "Choose which ProPresenter",
+  looking: "Searching the network for ProPresenter\u2026",
+  choose: (count) => `Found ${count} ProPresenter computers. Choose one:`,
   checklist: ["ProPresenter is open on a computer", "The network API is turned on in ProPresenter (Settings > Network)", "Both computers are on the same network"],
 };
 
@@ -23,7 +24,7 @@ export function proPresenterScanState(scan: ProPresenterScan | null): ScanState 
     total: scan.total,
     phase: scan.phase,
     elapsed: scan.elapsed,
-    reason: scan.reason,
+    reason: searchWords(scan.reason),
     error: scan.error_class === "permission_denied" ? "permission_denied" : scan.error_class ? "failed" : null,
     networks: scan.networks,
     hostsProbed: scan.hosts_probed,

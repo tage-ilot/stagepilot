@@ -33,15 +33,15 @@ describe("the gallery: the address box", () => {
   it("shows the groups: Scanned and Recent, only Recent, none, with a check on the address in the box", () => {
     render(<Frame only={["template-address"]} />);
     const both = sample("template-address-both");
-    expect(within(both).getAllByRole("group", { name: "Scanned" })).toHaveLength(3);
+    expect(within(both).getAllByRole("group", { name: "Found" })).toHaveLength(3);
     expect(within(both).getAllByRole("group", { name: "Recent" })).toHaveLength(3);
     // 192.0.2.21 is both scanned and recent: once.
     expect(within(both).getAllByRole("option", { name: /192\.0\.2\.21/ })).toHaveLength(3);
     expect(both.querySelectorAll("[data-current]").length).toBe(3);
     const onlyRecent = sample("template-address-only-recent");
-    expect(within(onlyRecent).queryAllByRole("group", { name: "Scanned" })).toHaveLength(0);
+    expect(within(onlyRecent).queryAllByRole("group", { name: "Found" })).toHaveLength(0);
     expect(within(onlyRecent).getAllByRole("group", { name: "Recent" })).toHaveLength(3);
-    expect(within(sample("template-address-none")).getAllByText("No recent or scanned addresses yet.")).toHaveLength(3);
+    expect(within(sample("template-address-none")).getAllByText("No recent or found addresses yet.")).toHaveLength(3);
     expect(within(sample("template-address-picked-recent")).getAllByRole("option").filter((option) => option.hasAttribute("data-current"))).toHaveLength(3);
   });
 
@@ -72,7 +72,7 @@ describe("the gallery: the address box", () => {
     for (const id of ["presentation-address-list", "playback-address-list", "lighting-address-list"]) {
       await waitFor(() => expect(within(sample(id)).getByRole("listbox")).toBeInTheDocument(), WAIT);
       const list = within(sample(id)).getByRole("listbox");
-      expect(within(list).getByRole("group", { name: "Scanned" })).toBeInTheDocument();
+      expect(within(list).getByRole("group", { name: "Found" })).toBeInTheDocument();
       expect(within(list).getByRole("group", { name: "Recent" })).toBeInTheDocument();
     }
   }, 30000);

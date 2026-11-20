@@ -164,7 +164,7 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
     expect(row.compareDocumentPosition(screen.getByTestId("propresenter-install")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(row).getByLabelText("Host")).toHaveValue("192.168.1.60");
     expect(within(row).getByLabelText("ProPresenter API port")).toHaveValue("1025");
-    expect(within(row).getByRole("button", { name: "Scan" })).toBeEnabled();
+    expect(within(row).getByRole("button", { name: "Search" })).toBeEnabled();
     expect(within(row).getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
@@ -209,7 +209,7 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
     expect(screen.getByLabelText("Host")).toBeDisabled();
     expect(screen.getByLabelText("ProPresenter API port")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
   });
 });
 
@@ -236,11 +236,11 @@ describe("ProPresenterLinkBlock: Scan and Connect, the pair every Live Link bloc
   it("Scan starts the scan, then reads Scanning… (cancel) with the progress line, and cancel stops it", async () => {
     const connection = fields();
     const view = draw(connection);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Scan" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Search" }));
     expect(connection.scan.start).toHaveBeenCalledTimes(1);
     view.rerender(<ProPresenterLinkBlock connection={{ ...connection, scan: { ...connection.scan, state: { state: "scanning", candidates: [], current: 64, total: 255, phase: "Looking for ProPresenter…", elapsed: 3 } } }} link={linkController(helperStatus("ready"))} propresenter={presentation()} />);
-    expect(screen.getByTestId("scan-progress")).toHaveTextContent("Looking for ProPresenter… — Checked 64 of 255 addresses (3s)");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Scanning… (cancel)" }));
+    expect(screen.getByTestId("scan-progress")).toHaveTextContent("Searching the network for ProPresenter… — Checked 64 of 255 addresses (3s)");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Searching… (cancel)" }));
     expect(connection.scan.cancel).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
@@ -248,13 +248,13 @@ describe("ProPresenterLinkBlock: Scan and Connect, the pair every Live Link bloc
   it("one computer found: a line says so and tells to press Connect; no chooser", () => {
     draw(fields({ scan: { state: found([{ label: "Front MacBook", host: "192.168.1.70", port: 1025 }]), start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } }));
     expect(screen.getByTestId("propresenter-scan-found")).toHaveTextContent("Found Front MacBook at 192.168.1.70:1025. It is in the Host and API boxes: press Connect to use it.");
-    expect(screen.queryByRole("group", { name: "Choose which ProPresenter" })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Choose one/ })).toBeNull();
   });
 
   it("several found: the same chooser Playback uses, and choosing one hands the host and the API port to the panel", async () => {
     const connection = fields({ scan: { state: found([{ label: "Front MacBook", host: "192.168.1.70", port: 1025, hint: "192.168.1.70:1025 · ProPresenter 19" }, { label: "Stage Mac", host: "192.168.1.71", port: 11025 }]), start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } });
     draw(connection);
-    await userEvent.setup().click(within(screen.getByRole("group", { name: "Choose which ProPresenter" })).getByRole("button", { name: /Stage Mac/ }));
+    await userEvent.setup().click(within(screen.getByRole("group", { name: "Found 2 ProPresenter computers. Choose one:" })).getByRole("button", { name: /Stage Mac/ }));
     expect(connection.scan.choose).toHaveBeenCalledWith("192.168.1.71", 11025);
     expect(connection.onConnect).not.toHaveBeenCalled();
   });

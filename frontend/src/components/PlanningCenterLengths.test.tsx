@@ -13,11 +13,11 @@ const update = () => screen.getByRole("button", { name: "Update Services" });
 const show = (extra: Partial<PlaybackStatusResponse> = {}) => render(<PlanningCenterLengths status={ready(extra)} />);
 describe("explicit Planning Center split button", () => {
   it.each([
-    [{ captured_at: null, song_order: [] }, "Scan songs first to read the lengths from Playback."],
+    [{ captured_at: null, song_order: [] }, "Press Scan Playback API first to read the lengths from Playback."],
     [{ stale: true }, "Your Playback setlist changed. Scan the setlist again before updating Planning Center."],
     [{ plan_changed: true }, "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center."],
-    [{ discovery: "failed" }, "The song scan failed or was cancelled. Scan songs again."],
-    [{ song_lengths: [null] }, "The scan has no song lengths. Scan songs again."],
+    [{ discovery: "failed" }, "The song scan failed or was cancelled. Press Scan Playback API again."],
+    [{ song_lengths: [null] }, "The scan has no song lengths. Press Scan Playback API again."],
     [{ planning_center_connected: false }, "Connect Services first."],
     [{ playing: true }, "Stop Playback first."],
     [{ discovery: "running" }, "Wait for the song scan to finish."],
