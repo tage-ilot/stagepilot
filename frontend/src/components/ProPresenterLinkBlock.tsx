@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { RecentAddresses } from "./RecentAddresses";
 
@@ -6,17 +6,22 @@ import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ProPresenterStatusResponse } from "../types";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
 import { proPresenterBoxProps } from "./helperBoxProps";
-import { ActionButton, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice } from "./sections";
+import { ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice, type ScanState } from "./sections";
+import { PROPRESENTER_SCAN_WORDS } from "./proPresenterScan";
+import { useRecheckNote } from "./useRecheckNote";
 import { CONTROL_40 } from "./liveLink";
 import { PRESENTER_LINK_NAME, apiWords, importBlocked, linkLine, linkNote, linkPill, linkWords, proPresenterLine, proPresenterPill } from "./proPresenterLinkState";
 import { Input } from "./ui/Input";
 
 const TITLE = "ProPresenter Live Link";
 const smallBox = "!w-[5.25rem] text-center tabular-nums";
+/** What the API box is for (its caption says only API: this is the port of ProPresenter's network API, not a general port). */
+export const API_TITLE = "The port of ProPresenter's network API";
+export const API_LABEL = "ProPresenter API port";
 
 /**
  * The connection the block holds, like the Lighting strip holds its Host and port: the panel owns the values and the save logic (a
- * held change is saved only by the panel's Save bar); the block only draws the boxes and the Test button.
+ * held change is saved by the panel's Save bar, or by Connect, which saves the connection the way the panel does); the block only draws the boxes and the pair.
  */
 export type ProPresenterConnectionFields = {
   host: string;
@@ -27,12 +32,18 @@ export type ProPresenterConnectionFields = {
   held: { host: boolean; port: boolean };
   /** Plain-words problems with what was typed (shown after a Save was tried). */
   errors: { host?: string; port?: string };
-  /** A request is in flight: the boxes and the button wait. */
+  /** A request is in flight: the boxes and the buttons wait. */
   busy: boolean;
-  /** Test connection is not offered (ProPresenter is not saved yet) or a request is in flight. */
-  testDisabled: boolean;
-  testing: boolean;
-  onTest: () => void;
+  /** Connect: saves what the boxes hold and connects, as the panel's save does. When nothing is held and ProPresenter is saved, it only checks again. */
+  onConnect: () => void;
+  connecting: boolean;
+  connectDisabled: boolean;
+  /** Why Connect is switched off, as a hint on the button. */
+  connectHint?: string;
+  /** Connect would only check the saved connection again (nothing held, ProPresenter saved): the status line says so after it. */
+  checksAgain: boolean;
+  /** Scan: look for ProPresenter's API on the network (a hook beside `useProPresenterLink`); the panel puts the chosen computer in the boxes. */
+  scan: { state: ScanState; start: () => void; cancel: () => void; choose: (host: string, port?: number) => void; error?: string | null; starting?: boolean };
 };
 
 function HeldMarker({ id }: { id: string }) {
@@ -47,7 +58,7 @@ function HeldMarker({ id }: { id: string }) {
 /**
  * The ProPresenter Live Link block of the Presentation panel, built like the Playback and Lighting Live Link blocks: the FIRST block under
  * the header, a bordered card with a title, a state pill beside it, and two status lines (ProPresenter API, and the optional Presenter
- * Link). It holds the CONNECTION: the Host and Port boxes (with the recent addresses) and Test connection, under the two lines and above the
+ * Link). It holds the CONNECTION: the Host and API boxes (with the recent addresses) and the Scan and Connect pair, under the two lines and above the
  * setup box. Timer, Look, Refresh and Save stay in the panel, after the block.
  *
  * The Presenter Link is how StagePilot reaches the song files and the screen of the ProPresenter computer; it adds Playback's songs to a
@@ -60,7 +71,7 @@ function HeldMarker({ id }: { id: string }) {
  * setup; left out, `connection` draws no boxes.
  */
 export function ProPresenterLinkBlock({ propresenter, link, connection }: { propresenter: ProPresenterStatusResponse | null; link?: ProPresenterLinkController; connection?: ProPresenterConnectionFields }) {
-    const heldHostId = useId();
+  const heldHostId = useId();
   const heldPortId = useId();
   const errorHostId = useId();
   const errorPortId = useId();
@@ -82,6 +93,14 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
   const note = link ? linkNote(status) : null;
 
   const fields = connection;
+  const recheck = useRecheckNote();
+  const [copied, setCopied] = useState(false);
+  const copyDetails = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
+  };
+  // The scan's own request can take a moment before the backend says "scanning": the button already reads Scanning… (cancel).
+  const scanState = fields?.scan.state;
+  const scanning = scanState?.state === "scanning" || Boolean(fields?.scan.starting);
   const hostMarker = fields?.held.host ? <HeldMarker id={heldHostId} /> : undefined;
   const portMarker = fields?.held.port ? <HeldMarker id={heldPortId} /> : undefined;
 
@@ -93,7 +112,19 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
       className="!mt-0"
       connection={fields && (
         <>
-          <ConnectionRow testId="propresenter-live-link-line">
+          <ConnectionRow
+            connectDisabled={fields.connectDisabled || fields.busy}
+            connectHint={fields.connectHint}
+            connecting={fields.connecting}
+            onCancelScan={fields.scan.cancel}
+            onConnect={() => { if (fields.checksAgain) recheck.mark(); else recheck.clear(); fields.onConnect(); }}
+            onScan={() => { recheck.clear(); fields.scan.start(); }}
+            scanDisabled={fields.busy}
+            scanHint={fields.busy ? "Wait for the saving to finish." : undefined}
+            scanning={scanning}
+            testId="propresenter-live-link-line"
+            tone="presentation"
+          >
             <LiveLinkField caption="Host" className="live-link-host" marker={hostMarker}>
               <Input
                 aria-describedby={[hostMarker ? heldHostId : null, fields.errors.host ? errorHostId : null].filter(Boolean).join(" ") || undefined}
@@ -108,23 +139,34 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
                 value={fields.host}
               />
             </LiveLinkField>
-            <LiveLinkField caption="Port" marker={portMarker}>
+            <LiveLinkField caption="API" marker={portMarker}>
               <Input
                 aria-describedby={[portMarker ? heldPortId : null, fields.errors.port ? errorPortId : null].filter(Boolean).join(" ") || undefined}
-                aria-label="Port"
+                aria-label={API_LABEL}
                 className={`${smallBox} font-mono ${CONTROL_40} ${fields.held.port ? "!border-warning" : ""}`}
                 disabled={fields.busy}
                 error={Boolean(fields.errors.port)}
                 inputMode="numeric"
                 onChange={(event) => fields.onPort(event.target.value)}
+                title={API_TITLE}
                 value={fields.port}
               />
             </LiveLinkField>
-            <ActionButton busy={fields.testing} busyLabel="Testing…" className={`flex-none ${CONTROL_40}`} disabled={fields.testDisabled} label="Test connection" onClick={fields.onTest} tone="presentation" />
           </ConnectionRow>
           <RecentAddresses className="mt-2" disabled={fields.busy} onPick={fields.onHost} scope="presentation" value={fields.host} />
           {fields.errors.host && <SectionNotice className="mt-1" id={errorHostId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.host}</SectionNotice>}
           {fields.errors.port && <SectionNotice className="mt-1" id={errorPortId} role="alert" size="xs" tone="danger" variant="line">{fields.errors.port}</SectionNotice>}
+          <ScanProgress scan={fields.scan.state} wording={PROPRESENTER_SCAN_WORDS} />
+          <ScanArea>
+            <ScanHelp copied={copied} onCopy={copyDetails} scan={fields.scan.state} scanning={scanning} tone="presentation" wording={PROPRESENTER_SCAN_WORDS} />
+            {scanState?.state === "found" && scanState.candidates.length === 1 && scanState.candidates[0] && (
+              <p className="text-sm text-integration-presentation-text" data-testid="propresenter-scan-found" role="status">
+                {`Found ${scanState.candidates[0].label} at ${scanState.candidates[0].host}:${scanState.candidates[0].port ?? ""}. It is in the Host and API boxes: press Connect to use it.`}
+              </p>
+            )}
+            <ScanChooser onChoose={fields.scan.choose} scan={fields.scan.state} tone="presentation" wording={PROPRESENTER_SCAN_WORDS} />
+            {fields.scan.error && <p className="text-sm text-danger-text" role="alert">{fields.scan.error}</p>}
+          </ScanArea>
         </>
       )}
       details={hasDetails && link ? ({ byChoice }) => (
@@ -145,6 +187,7 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
       )}
       status={[
         { text: apiWords(`${api.text}.`), testId: "propresenter-banner", tone: api.tone },
+        ...(recheck.note ? [{ text: recheck.note, testId: "propresenter-recheck" }] : []),
         ...(link ? [{ text: linkWords(`${line.text}.`), testId: "propresenter-link-status", tone: line.tone }] : []),
       ]}
       testId="propresenter-live-link"

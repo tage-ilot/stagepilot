@@ -74,6 +74,8 @@ pub struct Runtime {
         Arc<crate::propresenter_helper_install::ProPresenterHelperInstall>,
     /// The songs-to-playlist feature: previews waiting to be applied, its one job at a time, the playlist list.
     pub propresenter_add_songs: Arc<crate::propresenter_add_songs::AddSongsService>,
+    /// The network scan for ProPresenter's API (`propresenter_scan`): one at a time, nothing saved.
+    pub propresenter_scan: Arc<stagepilot_propresenter::scan::ScanService>,
     link_connect: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The helpers update themselves when StagePilot starts (signed bundles only, only while nothing is playing).
     pub helper_updater: Arc<crate::helper_update::HelperUpdater>,
@@ -377,6 +379,7 @@ impl Runtime {
             propresenter_add_songs: Arc::new(crate::propresenter_add_songs::AddSongsService::new(
                 add_songs_backup_dir,
             )),
+            propresenter_scan: Arc::new(stagepilot_propresenter::scan::ScanService::system()),
             link_connect: Mutex::new(None),
             playback_library,
             helper_updater,

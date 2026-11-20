@@ -10,7 +10,9 @@ describe("the Playback API line: the backend's own sentence, with a tone", () =>
     expect(apiLine(playbackStatus({ reason: "Connected to Playback at 10.30.0.141." }), "x")).toEqual({ tone: "success", text: "Connected to Playback at 10.30.0.141." });
     expect(apiLine(playbackStatus({ active_source: "midi", reason: "Connected through MIDI." }), "x")).toEqual({ tone: "midi", text: "Connected through MIDI." });
     expect(apiLine(playbackStatus({ active_source: "none", reason: "Looking for Playback…", scan: { state: "scanning", candidates: [], reason: null, current: 1, total: 2 } }), "x").tone).toBe("info");
-    expect(apiLine(playbackStatus({ active_source: "none", reason: "Disconnected. Choose Scan Network to find Playback." }), "x")).toEqual({ tone: "idle", text: "Disconnected. Choose Scan Network to find Playback." });
+    // The backend's sentence still names the old button; the page says the button's name.
+    expect(apiLine(playbackStatus({ active_source: "none", reason: "Disconnected. Choose Scan Network to find Playback." }), "x")).toEqual({ tone: "idle", text: "Disconnected. Choose Scan to find Playback." });
+    expect(apiLine(playbackStatus({ active_source: "none", reason: "Disconnected. Choose Scan to find Playback." }), "x").text).toBe("Disconnected. Choose Scan to find Playback.");
     expect(apiLine(playbackStatus({ active_source: "none", reason: "" }), "Checking Playback…").text).toBe("Checking Playback…");
   });
 

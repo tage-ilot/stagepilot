@@ -58,7 +58,7 @@ stay under 100 MB.
 ## One-time prompts
 
 macOS sees a new identity once. After the first update to the stable identity, click once
-each: **Allow** for Local Network (run Scan Network), **Always Allow** for the Keychain
+each: **Allow** for Local Network (press Scan), **Always Allow** for the Keychain
 password prompt (Planning Center), and approve any "App Management" or background-item
 prompt. Later updates should show none.
 

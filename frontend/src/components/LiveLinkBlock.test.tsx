@@ -86,16 +86,19 @@ describe("Live Link block: the state pill is the one statement of the connection
 });
 
 describe("Live Link block: Connect button", () => {
-  it("reads Connect when not connected and Check again when connected, enabled and not dimmed", async () => {
+  it("reads Connect whether or not it is connected (never Check again), enabled and not dimmed", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(down);
     const { unmount } = render(<LightkeyStrip connection={connection} lightingEnabled />);
-    const connect = await screen.findByRole("button", { name: "Connect" });
+    await screen.findByRole("radiogroup", { name: "Mode" });
+    const connect = screen.getByRole("button", { name: "Connect" });
     expect(connect).toBeEnabled();
     expect(connect.className).not.toContain("opacity-40");
     unmount();
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ fixtures: live() }));
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    expect(await screen.findByRole("button", { name: "Check again" })).toBeEnabled();
+    await screen.findByRole("radiogroup", { name: "Mode" });
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
   });
 
   it("shows a busy state (not a dimmed one) while a request is in flight", async () => {
@@ -103,8 +106,9 @@ describe("Live Link block: Connect button", () => {
     let release: (value: { accepted: boolean; message: string; lightkey: LightkeyStatus }) => void = () => undefined;
     vi.mocked(api.saveLightkeySettings).mockReturnValue(new Promise((resolve) => { release = resolve; }));
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Connect" }));
-    const busy = await screen.findByRole("button", { name: "Checking\u2026" });
+    await screen.findByRole("radiogroup", { name: "Mode" });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    const busy = await screen.findByRole("button", { name: "Connecting\u2026" });
     expect(busy).toHaveAttribute("aria-busy", "true");
     expect(busy).not.toBeDisabled();
     expect(busy.className).not.toContain("opacity-40");
@@ -114,7 +118,8 @@ describe("Live Link block: Connect button", () => {
 
   it("is disabled only when Lighting itself is off", async () => {
     render(<LightkeyStrip connection={connection} lightingEnabled={false} />);
-    expect(await screen.findByRole("button", { name: /Check again|Connect/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
   });
 });
 
@@ -182,19 +187,19 @@ describe("Live Link block: Connect is an action, not a state (#296 nit 3)", () =
 });
 
 describe("Live Link block: the strip under the fields", () => {
-  it("tab order is host, UDP, API, Connect, Mode, Release lights, Read fixtures, Send a test cue, How to find", async () => {
+  it("tab order is host, UDP, API, Scan, Connect, Mode, Release lights, Read fixtures, Send a test cue, How to find", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ mode: "auto", holding_fixtures: 3, fixtures: live() }));
     render(<LightkeyStrip connection={connection} lightingEnabled testCue={<p>cue fields</p>} />);
     await screen.findByRole("radiogroup", { name: "Mode" });
     const user = userEvent.setup();
     const names: string[] = [];
-    for (let step = 0; step < 9; step += 1) {
+    for (let step = 0; step < 10; step += 1) {
       await user.tab();
       const el = document.activeElement as HTMLElement;
       names.push(el.getAttribute("aria-label") ?? (el.getAttribute("type") === "radio" ? `radio:${el.getAttribute("value")}` : (el.textContent ?? "")));
     }
     expect(names).toEqual([
-      "Host or IP address", "OSC UDP port", "API port", "Check again", "radio:auto",
+      "Lighting host or IP address", "OSC UDP port", "API port", "Scan", "Connect", "radio:auto",
       "Release lights", "Read fixtures", "Send a test cue\u25B8", "How to find a cue's address\u25B8",
     ]);
   });

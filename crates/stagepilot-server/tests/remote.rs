@@ -1316,7 +1316,7 @@ async fn remote_viewers_cannot_use_the_propresenter_song_routes() {
     let preview = json!({"setlist_song_ids": [1], "playlist_id": "x", "place": "end"});
     let apply = json!({"plan_id": "0".repeat(32), "skip": []});
     let job = "/api/v1/propresenter-link/add-songs/jobs/00000000000000000000000000000000";
-    let routes: [(&str, &str, Option<Value>); 5] = [
+    let routes: [(&str, &str, Option<Value>); 8] = [
         (
             "POST",
             "/api/v1/propresenter-link/add-songs/preview",
@@ -1334,6 +1334,10 @@ async fn remote_viewers_cannot_use_the_propresenter_song_routes() {
         ),
         ("GET", "/api/v1/propresenter-link/playlists", None),
         ("GET", job, None),
+        // The network scan for ProPresenter's API: starting and stopping it are writes like the rest.
+        ("GET", "/api/v1/propresenter/scan", None),
+        ("POST", "/api/v1/propresenter/scan", Some(json!({}))),
+        ("POST", "/api/v1/propresenter/scan/cancel", Some(json!({}))),
     ];
     let (token, csrf) = session_for(&e, "viewer@example.test");
     let viewer = ingress_headers(&[("cookie", cookie_of(&token)), ("x-csrf-token", csrf)]);

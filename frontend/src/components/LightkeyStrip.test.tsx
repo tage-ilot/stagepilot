@@ -54,7 +54,7 @@ describe("LightkeyStrip", () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ link: "unreachable", detail: "Cannot reach the Lightkey API." }));
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ link: "unreachable" })));
     render(<LightkeyStrip lightingEnabled />);
-    await screen.findByLabelText("Host or IP address");
+    await screen.findByLabelText("Lighting host or IP address");
     await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "" }));
   });
@@ -89,7 +89,7 @@ describe("LightkeyStrip", () => {
     expect(await screen.findByTestId("lightkey-host-notice")).toHaveTextContent("192.0.2.99");
     const user = userEvent.setup();
     // Connect never rewrites it: the saved address goes back unchanged.
-    await user.click(screen.getByRole("button", { name: /Connect|Check again/ }));
+    await user.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(api.saveLightkeySettings).toHaveBeenCalledWith({ api_url: "http://192.0.2.99:8770" }));
     vi.mocked(api.saveLightkeySettings).mockClear();
     vi.mocked(api.saveLightkeySettings).mockResolvedValue(respond(status({ api_url: "http://192.0.2.10:8770" })));
@@ -102,7 +102,7 @@ describe("LightkeyStrip", () => {
     const onPort = vi.fn();
     const connection = { host: "10.30.0.211", onHost: vi.fn(), oscPort: "21600", onPort, savedOscHost: "10.30.0.211", attempted: false, held: { host: false, port: false } };
     render(<LightkeyStrip connection={connection} lightingEnabled />);
-    await screen.findByLabelText("Host or IP address");
+    await screen.findByLabelText("Lighting host or IP address");
     expect(screen.queryByTestId("lightkey-host-notice")).toBeNull();
     await userEvent.setup().type(screen.getByLabelText("OSC UDP port"), "1");
     expect(onPort).toHaveBeenCalledWith("216001");
@@ -115,8 +115,8 @@ describe("LightkeyStrip", () => {
     expect(screen.getByRole("heading", { name: "sACN DMX Live Link" })).toBeInTheDocument();
     const line = screen.getByTestId("live-link-line");
     expect(line.className).toContain("flex-wrap");
-    for (const name of ["Host or IP address", "OSC UDP port", "API port"]) expect(line).toContainElement(screen.getByLabelText(name));
-    expect(line).toContainElement(screen.getByRole("button", { name: /Connect|Check again/ }));
+    for (const name of ["Lighting host or IP address", "OSC UDP port", "API port"]) expect(line).toContainElement(screen.getByLabelText(name));
+    expect(line).toContainElement(screen.getByRole("button", { name: "Connect" }));
     expect(line).toContainElement(screen.getByRole("radiogroup", { name: "Mode" }));
     // The one state pill sits in the header beside the title, not in the field row.
     expect(line).not.toContainElement(screen.getByTestId("lightkey-link"));

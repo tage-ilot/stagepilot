@@ -22,6 +22,7 @@ import { clampCueTime } from "./lightingTimelineMath";
 import { clampRampStart, effectLabel, fadeError, fadeOf, formatFade, parseFadeInput, rowSummary, type RowValueIndex } from "./lightingSmooth";
 import { EffectDetail } from "./LightingEffectDetail";
 import { useLiveLinkTools } from "./useLiveLinkTools";
+import { HOST_LABEL, HOST_TITLE, LIGHTING_BUTTONS } from "./lightingHost";
 import { ActionButton, ActionRow, ConnectionRow, ConnectionSection, LiveLinkField, SectionNotice } from "./sections";
 
 const argumentTypes: { value: OscArgumentType; label: string }[] = [
@@ -33,6 +34,8 @@ const argumentTypes: { value: OscArgumentType; label: string }[] = [
 
 import { CueTypeBadge } from "./CueTypeParts";
 import { classifyOscCue } from "./lightingCueTypes";
+
+const WAITING = "Lighting has not answered yet. Scan and Connect work once it has.";
 
 /**
  * The sACN DMX Live Link block when the live link itself is not on screen (Lighting is not saved as OSC yet): the same shared host
@@ -61,9 +64,10 @@ export function OscConnectionFields({
       className={`lighting-osc-connection${className ? ` ${className}` : ""}`}
       connection={(
         <>
-          <ConnectionRow testId="live-link-line">
-            <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
-              <Input aria-label="Host or IP address" autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} value={host} />
+          {/* The live link has not answered yet, so there is nothing to scan for or connect to: both buttons are there, switched off, and say why. */}
+          <ConnectionRow buttonClassName={LIGHTING_BUTTONS} connectDisabled connectHint={WAITING} scanDisabled scanHint={WAITING} testId="live-link-line" tone="lighting">
+            <LiveLinkField caption="Host" className="live-link-host">
+              <Input aria-label={HOST_LABEL} autoCapitalize="none" autoCorrect="off" className={`w-full font-mono ${CONTROL_40} ${held.host ? "!border-warning" : ""}`} error={Boolean(hostError)} onChange={(event) => onHost(event.target.value)} placeholder="192.0.2.10" spellCheck={false} title={HOST_TITLE} value={host} />
             </LiveLinkField>
             <LiveLinkField caption="OSC UDP">
               <Input aria-label="OSC UDP port" className={`!w-[5.25rem] text-center font-mono tabular-nums ${CONTROL_40} ${held.port ? "!border-warning" : ""}`} error={Boolean(portError)} inputMode="numeric" onChange={(event) => onPort(event.target.value)} value={port} />

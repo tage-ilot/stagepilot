@@ -1,5 +1,6 @@
 import type { PlaybackConnection } from "../types";
 import type { HelperState, LibraryStatus } from "../types";
+import { playbackWords } from "./playbackStatus";
 import type { Tone } from "./ui/types";
 
 /**
@@ -19,7 +20,7 @@ export interface LiveLinkLine {
 /** The Playback API line: the backend's own sentence (`reason`), with a tone for how it stands. */
 export function apiLine(status: Pick<PlaybackConnection, "reason" | "active_source" | "sources"> & { scan?: { state: string } }, fallback: string): LiveLinkLine {
   if (!status) return { tone: "idle", text: fallback };
-  const text = status.reason || fallback;
+  const text = status.reason ? playbackWords(status.reason) : fallback;
   if (status.scan?.state === "scanning") return { tone: "info", text };
   if (status.active_source === "playback_api") return { tone: "success", text };
   if (status.active_source === "midi") return { tone: "midi", text };

@@ -30,7 +30,7 @@ export interface PlaybackDraft {
   revert: () => void;
 }
 
-// One draft of every editable setting in the visible Playback panel. Scan Network and
+// One draft of every editable setting in the visible Playback panel. Scan and
 // Connect are instant actions that save themselves; they never read or wait on this draft.
 export function usePlaybackDraft(playback?: PlaybackController, savedMethod: PlaybackMethod = "playback_api"): PlaybackDraft {
   const status = playback?.status ?? null;
@@ -51,7 +51,7 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
   useEffect(() => setPlaybackSkips(new Set(JSON.parse(savedPlaybackKey) as number[])), [savedPlaybackKey]);
 
   // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. An install saved with it off while Playback
-  // API is the saved method is turned back on once, quietly, with the settings it already has (Scan Network and Connect do the same).
+  // API is the saved method is turned back on once, quietly, with the settings it already has (Scan and Connect do the same).
   const healed = useRef(false);
   useEffect(() => {
     if (healed.current || !playback || !status || savedMethod !== "playback_api" || savedEnabled) return;

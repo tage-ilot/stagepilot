@@ -49,17 +49,17 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
       screen.getByLabelText("Timeout (seconds)"),
       screen.getByRole("combobox", { name: "ProPresenter Look" }),
       screen.getByRole("button", { name: "Refresh timers and Looks" }),
-      screen.getByText(/Test connection and Refresh use the saved settings/),
+      screen.getByText(/Refresh uses the saved settings/),
       screen.getByRole("button", { name: "Save configuration" }),
       container.querySelector("dl")!,
     ];
     for (let i = 0; i < order.length - 1; i += 1) expect(before(order[i]!, order[i + 1]!), `${i} before ${i + 1}`).toBe(true);
   });
 
-  it("holds the connection: Host, Port and Test connection are inside the block, above the status line and the setup box", () => {
+  it("holds the connection: Host, API, Scan and Connect are inside the block, above the status line and the setup box", () => {
     panel(linkController(helperStatus("not_installed")));
     const inside = within(block());
-    for (const control of [inside.getByLabelText("Host"), inside.getByLabelText("Port"), inside.getByRole("button", { name: "Test connection" })]) expect(block()).toContainElement(control);
+    for (const control of [inside.getByLabelText("Host"), inside.getByLabelText("ProPresenter API port"), inside.getByRole("button", { name: "Scan" }), inside.getByRole("button", { name: "Connect" })]) expect(block()).toContainElement(control);
     const lines = screen.getByTestId("propresenter-live-link-sub");
     const row = screen.getByTestId("propresenter-live-link-line");
     // The connection row is on top (DOM order changed on purpose: it used to sit under the status lines).
@@ -90,12 +90,14 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     panel(linkController(null), { propresenter: null });
     expect(block()).toBeInTheDocument();
     expect(screen.getByTestId("propresenter-api-pill")).toHaveTextContent("ProPresenter API: Checking");
-    expect(within(block()).getByRole("button", { name: "Test connection" })).toBeDisabled();
+    // Nothing has been read yet: Connect has nothing to save or check, and says why. Scan does not need it.
+    expect(within(block()).getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(within(block()).getByRole("button", { name: "Scan" })).toBeEnabled();
   });
 
   it("without a controller the block still holds the connection and the ProPresenter API line, and draws no Presenter Link line", () => {
     panel();
-    expect(within(block()).getByRole("button", { name: "Test connection" })).toBeInTheDocument();
+    expect(within(block()).getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(within(block()).getByLabelText("Host")).toBeInTheDocument();
     expect(screen.queryByTestId("propresenter-link-status")).toBeNull();
     expect(screen.queryByTestId("propresenter-link-pill")).toBeNull();
@@ -115,7 +117,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
 });
 
 describe("ProPresenterSetupPanel: tab order follows the new visual order", () => {
-  it("Host, Port, Test connection, the Details button, then Detected timer, Timeout, Look, Refresh, Save", async () => {
+  it("Host, API, Scan, Connect, the Details button, then Detected timer, Timeout, Look, Refresh, Save", async () => {
     const user = userEvent.setup();
     panel(linkController(helperStatus("ready")));
     const seen: string[] = [];
@@ -126,7 +128,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
       if (active.textContent === "Save configuration") break;
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
-      "Host", "Port", "Test connection", "Presenter Link setup",
+      "Host", "ProPresenter API port", "Scan", "Connect", "Presenter Link setup",
       "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks",
       // The Presenter Link section sits between the settings and the Save bar (it has no list to tick without a plan).
       "Playlist",
@@ -136,21 +138,24 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
 });
 
 describe("ProPresenterSetupPanel: the connection boxes lay out like the other Live Link blocks", () => {
-  it("one row that wraps: Host takes the whole row on a narrow block and shares it on a wide one (live-link-host), Port is a small box, Test is a fixed-size button", () => {
+  it("one row that wraps: Host takes the whole row on a narrow block and shares it on a wide one (live-link-host), API is a small box, Scan and Connect are fixed-size buttons", () => {
     panel(linkController(helperStatus("ready")));
     const row = screen.getByTestId("propresenter-live-link-line");
     expect(row).toHaveClass("flex", "flex-wrap", "items-end");
     const host = screen.getByLabelText("Host");
-    const port = screen.getByLabelText("Port");
-    const test = screen.getByRole("button", { name: "Test connection" });
+    const port = screen.getByLabelText("ProPresenter API port");
+    const scan = screen.getByRole("button", { name: "Scan" });
+    const connect = screen.getByRole("button", { name: "Connect" });
     expect(host.closest("label")).toHaveClass("live-link-host", "min-w-0");
     expect(port.closest("label")).not.toHaveClass("live-link-host");
-    for (const control of [host, port, test]) expect(control).toHaveClass("!h-10", "!min-h-10", "coarse:!h-11", "coarse:!min-h-[44px]");
+    for (const control of [host, port, scan, connect]) expect(control).toHaveClass("!h-10", "!min-h-10", "coarse:!h-11", "coarse:!min-h-[44px]");
     expect(host).toHaveClass("w-full", "font-mono");
     expect(port).toHaveClass("!w-[5.25rem]", "text-center", "tabular-nums");
-    expect(test).toHaveClass("flex-none");
-    expect(test).toHaveAttribute("data-tone", "presentation");
-    expect(test).toHaveAttribute("data-variant", "tinted");
+    for (const button of [scan, connect]) {
+      expect(button).toHaveClass("flex-none");
+      expect(button).toHaveAttribute("data-tone", "presentation");
+      expect(button).toHaveAttribute("data-variant", "tinted");
+    }
     // The block is a container: the narrow and wide rules (stack below 34rem, side by side above) are the shared index.css ones.
     expect(block()).toHaveClass("live-link");
   });
@@ -167,7 +172,7 @@ describe("ProPresenterSetupPanel: the save flow is unchanged with the boxes insi
     expect(within(block()).getByText("Not saved yet")).toBeInTheDocument();
     expect(screen.getByLabelText("Host")).toHaveClass("!border-warning");
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "held");
-    expect(screen.getByText(/Test connection and Refresh use the saved settings/)).toBeInTheDocument();
+    expect(screen.getByText(/Refresh uses the saved settings/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByLabelText("Host")).toHaveValue("192.168.1.60");
     expect(block().querySelector("[data-held-marker]")).toBeNull();
@@ -178,27 +183,27 @@ describe("ProPresenterSetupPanel: the save flow is unchanged with the boxes insi
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ host: "192.0.2.10", port: 1025 }));
   });
 
-  it("a held Port is marked in the block too, and a bad port is said in words with an alert wired to the box", async () => {
+  it("a held API is marked in the block too, and a bad API port is said in words with an alert wired to the box", async () => {
     const user = userEvent.setup();
     panel(linkController(helperStatus("ready")));
-    await user.clear(screen.getByLabelText("Port"));
-    await user.type(screen.getByLabelText("Port"), "99999");
+    await user.clear(screen.getByLabelText("ProPresenter API port"));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "99999");
     expect(within(block()).getByText("Not saved yet")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save configuration" }));
     const alert = within(block()).getByRole("alert");
-    expect(alert).toHaveTextContent("Enter a port from 1 to 65535.");
-    expect(screen.getByLabelText("Port")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText("Port").getAttribute("aria-describedby")).toContain(alert.id);
+    expect(alert).toHaveTextContent("Enter the API port from 1 to 65535.");
+    expect(screen.getByLabelText("ProPresenter API port")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("ProPresenter API port").getAttribute("aria-describedby")).toContain(alert.id);
   });
 
-  it("Test connection runs the same test as before, and waits while a request is in flight", async () => {
+  it("Connect with nothing held runs the same test as before, and waits while a request is in flight", async () => {
     const onTest = vi.fn();
     const { unmount } = panel(linkController(helperStatus("ready")), { onTest });
-    await userEvent.setup().click(within(block()).getByRole("button", { name: "Test connection" }));
+    await userEvent.setup().click(within(block()).getByRole("button", { name: "Connect" }));
     expect(onTest).toHaveBeenCalledTimes(1);
     unmount();
     panel(linkController(helperStatus("ready")), { pendingOperation: "test" });
-    expect(within(block()).getByRole("button", { name: "Testing…" })).toBeDisabled();
+    expect(within(block()).getByRole("button", { name: "Connecting…" })).toBeDisabled();
     expect(screen.getByLabelText("Host")).toBeDisabled();
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { SetupPanelHeader } from "../components/SetupPanelHeader";
-import { ActionButton, ConnectionRow, ConnectionSection, LiveLinkField, LiveLinkPill, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "../components/sections";
+import { ConnectionRow, ConnectionSection, LiveLinkField, LiveLinkPill, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "../components/sections";
 import { Field } from "../components/ui/Field";
 import { Input } from "../components/ui/Input";
 import { SaveBar } from "../components/ui/SaveBar";
@@ -15,9 +15,8 @@ export function AcmeSetupPanel({ saved, onTest, onSave }: { saved: { host: strin
   const changes = Number(host !== saved.host) + Number(port !== saved.port);
   const test = async () => { setTesting(true); setReachable(await onTest(host)); setTesting(false); };
   const row = (
-    <ConnectionRow>
+    <ConnectionRow connecting={testing} onConnect={() => void test()} scanHint="Acme cannot be found by scanning: type its host." tone="presentation">
       <LiveLinkField caption="Host"><Input aria-label="Host" onChange={(event) => setHost(event.target.value)} value={host} /></LiveLinkField>
-      <ActionButton busy={testing} busyLabel="Testing…" label="Test connection" onClick={() => void test()} />
     </ConnectionRow>
   );
   return (

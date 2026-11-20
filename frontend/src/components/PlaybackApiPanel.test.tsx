@@ -30,7 +30,7 @@ const panel = (playback = controller(), extra: { onDirtyChange?: (dirty: boolean
   settings={playbackSettings} onSaveSettings={vi.fn()} {...extra}
 />);
 
-describe("Scan Network is always first and never dead", () => {
+describe("Scan is always first and never dead", () => {
   it.each([
     ["fresh install, nothing configured", none({ selected: true, settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
     ["MIDI-selected install", none({ selected: false, enabled: false, active_source: "midi", connected: true, reason: "Connected through MIDI.", settings: { enabled: false, host: null, port: 8080, auto_scan: true, fast_transport: true } })],
@@ -38,7 +38,7 @@ describe("Scan Network is always first and never dead", () => {
   ])("%s", (_name, status) => {
     const playback = controller({ status });
     panel(playback);
-    const scan = screen.getByRole("button", { name: "Scan Network" });
+    const scan = screen.getByRole("button", { name: "Scan" });
     expect(scan).toBeEnabled();
     const primary = screen.getAllByRole("button").find((b) => !/Close/.test(b.textContent ?? "") && !/Close/.test(b.getAttribute("aria-label") ?? ""));
     expect(primary).toBe(scan);
@@ -46,7 +46,7 @@ describe("Scan Network is always first and never dead", () => {
     expect(playback.scan).toHaveBeenCalledWith();
   });
 
-  it("shows scanning with progress and a working cancel, then returns to Scan again", () => {
+  it("shows scanning with progress and a working cancel, then returns to Scan", () => {
     const playback = controller({ status: none({ scan: scanOf("scanning", { current: 64, total: 254 }), reason: "Looking for Playback…" }), pending: "scan" });
     const view = render(<PlaybackApiPanel playback={playback} />);
     expect(screen.getByTestId("playback-banner")).toHaveTextContent("Looking for Playback…");
@@ -63,12 +63,12 @@ describe("Scan Network is always first and never dead", () => {
     expect(screen.getByRole("button", { name: "Enter address instead" })).toHaveClass("text-integration-playback-text", "underline", "min-h-ds-touch-target", "can-hover:text-integration-playback");
   });
 
-  it("not found: plain checklist, Scan again and Enter address instead; never a stuck spinner", async () => {
+  it("not found: plain checklist, Scan and Enter address instead; never a stuck spinner", async () => {
     const playback = controller({ status: none({ scan: scanOf("not_found"), reason: "Couldn't find Playback. Check things." }) });
     render(<PlaybackApiPanel playback={playback} />);
     expect(screen.getByText("Make sure:")).toBeVisible();
     expect(screen.getByText("Remote Connections is turned on in Playback")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scan" }));
     expect(playback.scan).toHaveBeenCalledWith();
     await userEvent.setup().click(screen.getByRole("button", { name: "Enter address instead" }));
     expect(screen.getByLabelText("Computer name or address")).toBeVisible();
@@ -109,7 +109,9 @@ describe("Computer select with Other computer…", () => {
     render(<PlaybackApiPanel playback={withHosts(null)} />);
     expect(within(computer()).getAllByRole("option").map((o) => o.textContent)).toEqual(["Other computer…"]);
     expect(computer()).toHaveValue("");
-    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    // Connect is always there; with no computer chosen it is off, and says what to do.
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" }).closest("[data-part=connect-wrap]")).toHaveAttribute("title", "Choose a computer first.");
     expect(screen.queryByLabelText("Computer name or address")).not.toBeInTheDocument();
   });
 
@@ -316,7 +318,7 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(screen.queryByText(/switch back here/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Alternate connection: MIDI settings/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("MIDI channel")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeInTheDocument();
   });
 
   it("the toggle sits in the panel header slot on the Playback API and the Playback MIDI screens alike", async () => {
@@ -339,9 +341,9 @@ describe("Connection method control (Playback API primary / MIDI alternate)", ()
     expect(playback.selectSource).not.toHaveBeenCalled();
     expect(playback.save).not.toHaveBeenCalled();
     expect(screen.getByLabelText("MIDI channel")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Scan Network" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Scan" })).not.toBeInTheDocument();
     await chooseMethod(user, "playback_api");
-    expect(screen.getByRole("button", { name: "Scan Network" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save configuration" })).toHaveAttribute("aria-disabled", "true");
     expect(document.querySelector("[data-save-bar]")).toHaveAttribute("data-state", "clean");
   });
@@ -510,7 +512,7 @@ const scenarios = [
   { name: "API only", api: true, midi: false, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
   { name: "MIDI only", api: false, midi: true, active: "midi" as const, reason: "Connected through MIDI." },
   { name: "both", api: true, midi: true, active: "playback_api" as const, reason: "Connected to Playback on 192.0.2.10." },
-  { name: "neither", api: false, midi: false, active: "none" as const, reason: "Disconnected. Choose Scan Network to find Playback." },
+  { name: "neither", api: false, midi: false, active: "none" as const, reason: "Disconnected. Choose Scan to find Playback." },
   { name: "scanning", api: false, midi: false, active: "none" as const, reason: "Looking for Playback…", scanning: true },
 ];
 describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI settings never contradict", () => {
@@ -563,9 +565,10 @@ describe("No dead primary button without a visible fix", () => {
   it.each(states)("%s", (_name, status) => {
     panel(controller({ status }));
     const footer = document.querySelector("[data-save-bar]") as HTMLElement;
-    const disabled = screen.getAllByRole("button").filter((button) => (button as HTMLButtonElement).disabled && !footer.contains(button) && !button.closest('[aria-label="Services song times"]'));
+    // A switched-off Connect is not dead: it says what to do (the hint on the button).
+    const disabled = screen.getAllByRole("button").filter((button) => (button as HTMLButtonElement).disabled && !footer.contains(button) && !button.closest('[aria-label="Services song times"]') && !button.closest("[data-part=connect-wrap][title]"));
     expect(disabled.map((b) => b.textContent)).toEqual([]);
-    expect(screen.getAllByRole("button").some((b) => /Scan Network|Scanning|Scan again/.test(b.textContent ?? "") && !(b as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.getAllByRole("button").some((b) => /^Scan$|Scanning/.test(b.textContent ?? "") && !(b as HTMLButtonElement).disabled)).toBe(true);
   });
 });
 
@@ -677,14 +680,14 @@ describe("Save configuration bar (Playback)", () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
-  it("Scan Network and Connect are never gated by unsaved edits", async () => {
+  it("Scan and Connect are never gated by unsaved edits", async () => {
     const playback = controller();
     const Gate = () => { const draft = usePlaybackDraft(playback); const bar = usePlaybackSave(draft, playback, noMidi); return <><PlaybackApiPanel playback={playback} draft={draft} /><PlaybackSaveBar save={bar} /><button onClick={() => draft.setMethod("real")} type="button">edit</button></>; };
     render(<Gate />);
     fireEvent.click(screen.getByRole("button", { name: "edit" }));
     expect(state()).toBe("held");
-    expect(screen.getByRole("button", { name: "Scan Network" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Scan Network" }));
+    expect(screen.getByRole("button", { name: "Scan" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Scan" }));
     expect(playback.scan).toHaveBeenCalledWith();
   });
 

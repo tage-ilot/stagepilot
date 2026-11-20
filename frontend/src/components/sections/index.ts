@@ -1,5 +1,11 @@
 export { ActionButton, ActionRow, type ActionButtonProps, type ActionRowProps } from "./ActionRow";
 export { ConnectionRow, type ConnectionRowProps } from "./ConnectionRow";
+export { SCAN_WORDS, ScanConnectButtons, type ScanConnectProps } from "./ScanConnectButtons";
+export { ScanArea } from "./ScanArea";
+export { ScanChooser } from "./ScanChooser";
+export { ScanHelp } from "./ScanHelp";
+export { ScanProgress, type ScanWording } from "./ScanProgress";
+export { NO_SCAN, scanSummary, type ScanCandidate, type ScanErrorKind, type ScanPhase, type ScanState } from "./scanState";
 export { ConnectionSection, type ConnectionSectionProps, type DetailsState, type StatusLine } from "./ConnectionSection";
 export { DisclosureButton } from "./DisclosureButton";
 export { HelperSetupBox, type HelperBoxState, type HelperInstallController, type HelperSetupBoxProps, type HelperSetupWording } from "./HelperSetupBox";

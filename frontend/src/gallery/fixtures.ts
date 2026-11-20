@@ -1,4 +1,5 @@
 // Made-up data for the section gallery: nothing here is a real computer, key or song. No backend is asked.
+import type { ScanState } from "../components/sections";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
@@ -25,6 +26,12 @@ export const presenterApi = (over: Partial<ProPresenterStatusResponse> = {}): Pr
   timers: [], selected_timer_id: null, timer_found: true, looks: [], current_look_id: null, look_found: true, last_checked_at: null, ...over,
 });
 
+// ---- The ProPresenter scan, as the block reads it ---------------------------------------------------------------------
+
+export const FRONT_MAC = { host: "192.0.2.21", port: 1025, label: "Front MacBook", hint: "192.0.2.21:1025 · ProPresenter 19.0.1" };
+export const STAGE_MAC = { host: "192.0.2.34", port: 1025, label: "Stage Mac mini", hint: "192.0.2.34:1025 · ProPresenter 19.0.1" };
+export const presenterScan = (state: ScanState["state"], over: Partial<ScanState> = {}): ScanState => ({ state, candidates: [], current: 0, total: 0, ...over });
+
 // ---- Playback ---------------------------------------------------------------------------------------------------------
 
 const scanOf = (state: PlaybackScanResult["state"], over: Partial<PlaybackScanResult> = {}): PlaybackScanResult => ({ state, candidates: [], reason: null, current: 0, total: 0, ...over });
@@ -36,7 +43,7 @@ export const playbackOf = (over: Partial<PlaybackStatusResponse> = {}, scan: Pla
   settings: { enabled: true, host: "10.30.0.141", port: 8080, auto_scan: true, fast_transport: true }, ...over,
 });
 export const playbackDown = (scan: PlaybackScanResult = scanOf("idle")): PlaybackStatusResponse => playbackOf({
-  connected: false, active_source: "none", reason: "Disconnected. Choose Scan Network to find Playback.", host: null,
+  connected: false, active_source: "none", reason: "Disconnected. Choose Scan to find Playback.", host: null,
   sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: false, reason: "MIDI is disconnected." } },
   settings: { enabled: true, host: null, port: 8080, auto_scan: true, fast_transport: true },
 }, scan);

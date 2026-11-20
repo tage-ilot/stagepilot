@@ -17,3 +17,4 @@ pub use snapshot::*;
 pub mod helper_assets;
 pub mod link;
 pub mod pro_file;
+pub mod scan;

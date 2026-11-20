@@ -1,57 +1,45 @@
 import type { LightkeyDiscovery } from "../types";
 import { CONTROL_34 } from "./compactControl";
+import { lightkeyScanState, LIGHTKEY_SCAN_WORDS } from "./lightkeyScan";
+import { ScanChooser, ScanHelp, ScanProgress } from "./sections";
 import { Button } from "./ui/Button";
 
-/** The words of the search, exactly as the operator reads them. */
+/** The words of the one case that is not a scan result, exactly as the operator reads them. */
 const DISCOVERY_TEXT = {
-  searching: "Looking for a Lighting computer on this network\u2026",
-  none: "No Lighting computer found on this network.",
-  several: (count: number) => `Found ${count} Lighting computers. Choose one:`,
-  row: (address: string, running: boolean) => `${address} (Lightkey ${running ? "running" : "not running"})`,
   offer: (chosen: string, address: string) => `${chosen} isn't answering. A Lighting computer answered at ${address}. Use it?`,
   refusing: (address: string) => `A Lighting computer at ${address} is refusing StagePilot. Run the setup command on it again.`,
 } as const;
-
-const linkButton =
-  "min-h-ds-touch-target touch-manipulation text-integration-lighting-text underline transition-colors duration-[140ms] motion-reduce:transition-none can-hover:text-integration-lighting active:text-integration-lighting-text";
 
 /**
  * The strip's line about finding the Lighting computer. Nothing here is an error: no Lighting computer on the
  * network is an ordinary state (the setup box under it stays), and a found one is only ever switched to by
  * the person pressing a button (Automatic with exactly one found connects by itself and says so).
+ *
+ * The search itself (looking, several found, none found) is drawn by the same scan templates as the Playback and ProPresenter
+ * scans; the **Scan** button of the connection row starts it now, so there is no button of its own here.
  */
-export function LightkeyDiscoveryNotice({ discovery, busy, onUse, onKeepWaiting, onSearchAgain }: {
+export function LightkeyDiscoveryNotice({ discovery, busy, stopped = false, onChoose, onUse, onKeepWaiting }: {
   discovery: LightkeyDiscovery | undefined;
   busy: boolean;
+  /** The person stopped watching the search (Scanning… (cancel)). */
+  stopped?: boolean;
+  /** One of several computers was chosen: it goes in the Host box; Connect connects. */
+  onChoose: (address: string) => void;
   onUse: (address: string) => void;
   onKeepWaiting: (address: string) => void;
-  onSearchAgain: () => void;
 }) {
   if (!discovery || discovery.state === "off") return null;
   const refusing = discovery.state === "connected" ? [] : discovery.refusing;
   const offered = discovery.found[0];
+  const scan = lightkeyScanState(discovery, stopped);
   return (
     <div aria-live="polite" className="mt-2 space-y-1 text-type-body-sm text-ink-muted" data-testid="lightkey-discovery" role="status">
-      {discovery.state === "searching" && <p data-testid="lightkey-discovery-searching">{DISCOVERY_TEXT.searching}</p>}
+      <ScanProgress className="" scan={scan} testId="lightkey-discovery-searching" wording={LIGHTKEY_SCAN_WORDS} />
 
       {discovery.state === "connected" && discovery.message && <p data-testid="lightkey-discovery-message">{discovery.message}</p>}
       {discovery.state === "connected" && discovery.note && <p data-testid="lightkey-discovery-note">{discovery.note}</p>}
 
-      {discovery.state === "choose" && (
-        <div data-testid="lightkey-discovery-choose">
-          <p>{DISCOVERY_TEXT.several(discovery.found.length)}</p>
-          <ul className="mt-1 space-y-1">
-            {discovery.found.map((found) => (
-              <li className="flex flex-wrap items-center gap-2" key={found.address}>
-                <span className="font-mono text-ink-body" id={`lightkey-found-${found.address}`}>{DISCOVERY_TEXT.row(found.address, found.lightkey_running)}</span>
-                <Button aria-describedby={`lightkey-found-${found.address}`} className={CONTROL_34} disabled={busy} onClick={() => onUse(found.address)} tone="lighting" variant="secondary">
-                  Use this one
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ScanChooser onChoose={(address) => onChoose(address)} scan={scan} testId="lightkey-discovery-choose" tone="lighting" wording={LIGHTKEY_SCAN_WORDS} disabled={busy} />
 
       {discovery.state === "offer" && offered && (
         <div className="flex flex-wrap items-center gap-2" data-testid="lightkey-discovery-offer">
@@ -65,12 +53,7 @@ export function LightkeyDiscoveryNotice({ discovery, busy, onUse, onKeepWaiting,
         </div>
       )}
 
-      {discovery.state === "none" && (
-        <p data-testid="lightkey-discovery-none">
-          {DISCOVERY_TEXT.none}{" "}
-          <button className={linkButton} disabled={busy} onClick={onSearchAgain} type="button">Search again</button>
-        </p>
-      )}
+      <ScanHelp scan={scan} testId="lightkey-discovery" tone="lighting" wording={LIGHTKEY_SCAN_WORDS} />
 
       {refusing.map((address) => (
         <p className="text-warning-text" data-testid="lightkey-discovery-refusing" key={address}>{DISCOVERY_TEXT.refusing(address)}</p>

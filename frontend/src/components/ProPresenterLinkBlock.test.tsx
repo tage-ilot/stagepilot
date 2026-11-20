@@ -6,6 +6,7 @@ import * as api from "../api";
 import { helperStatus, linkController, localStatus, noComputerStatus, presentation } from "../test/propresenterLinkFixtures";
 import type { LinkStatus } from "../propresenterLink";
 import { ProPresenterLinkBlock, type ProPresenterConnectionFields } from "./ProPresenterLinkBlock";
+import { NO_SCAN, type ScanState } from "./sections";
 
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -150,19 +151,21 @@ describe("ProPresenterLinkBlock: optional, never a warning", () => {
 
 describe("ProPresenterLinkBlock: the connection it holds", () => {
   const fields = (over: Partial<ProPresenterConnectionFields> = {}): ProPresenterConnectionFields => ({
-    host: "192.168.1.60", port: "1025", onHost: vi.fn(), onPort: vi.fn(), held: { host: false, port: false }, errors: {}, busy: false, testDisabled: false, testing: false, onTest: vi.fn(), ...over,
+    host: "192.168.1.60", port: "1025", onHost: vi.fn(), onPort: vi.fn(), held: { host: false, port: false }, errors: {}, busy: false, checksAgain: false, connectDisabled: false, connecting: false, onConnect: vi.fn(),
+    scan: { state: NO_SCAN, start: vi.fn(), cancel: vi.fn(), choose: vi.fn() }, ...over,
   });
   const withFields = (connection: ProPresenterConnectionFields, status: LinkStatus | null = helperStatus("ready")) => render(<ProPresenterLinkBlock connection={connection} link={linkController(status)} propresenter={presentation()} />);
 
-  it("draws Host, Port and Test connection above the status line and the setup box; without `connection` it draws none of them", () => {
+  it("draws Host, API, Scan and Connect above the status line and the setup box; without `connection` it draws none of them", () => {
     withFields(fields(), helperStatus("not_installed"));
     const row = screen.getByTestId("propresenter-live-link-line");
     // The connection row is on top (DOM order changed on purpose: it used to sit under the status lines).
     expect(row.compareDocumentPosition(screen.getByTestId("propresenter-live-link-sub")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(row.compareDocumentPosition(screen.getByTestId("propresenter-install")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(row).getByLabelText("Host")).toHaveValue("192.168.1.60");
-    expect(within(row).getByLabelText("Port")).toHaveValue("1025");
-    expect(within(row).getByRole("button", { name: "Test connection" })).toBeEnabled();
+    expect(within(row).getByLabelText("ProPresenter API port")).toHaveValue("1025");
+    expect(within(row).getByRole("button", { name: "Scan" })).toBeEnabled();
+    expect(within(row).getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
   it("without `connection` the block is only the lines", () => {
@@ -171,16 +174,16 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
     expect(screen.queryByLabelText("Host")).toBeNull();
   });
 
-  it("typing and Test connection are reported to the panel, nothing is saved here", async () => {
+  it("typing and Connect are reported to the panel, nothing is saved here", async () => {
     const connection = fields();
     withFields(connection);
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Host"), "5");
-    await user.type(screen.getByLabelText("Port"), "6");
-    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await user.type(screen.getByLabelText("ProPresenter API port"), "6");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(connection.onHost).toHaveBeenCalledWith("192.168.1.605");
     expect(connection.onPort).toHaveBeenCalledWith("10256");
-    expect(connection.onTest).toHaveBeenCalledTimes(1);
+    expect(connection.onConnect).toHaveBeenCalledTimes(1);
   });
 
   it("a held change says so in words next to the caption, with the warning border, and the box points at the words", () => {
@@ -189,7 +192,7 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
     expect(marker).toHaveTextContent("Not saved yet");
     expect(screen.getByLabelText("Host")).toHaveClass("!border-warning");
     expect(screen.getByLabelText("Host")).toHaveAttribute("aria-describedby", marker.id);
-    expect(screen.getByLabelText("Port")).not.toHaveClass("!border-warning");
+    expect(screen.getByLabelText("ProPresenter API port")).not.toHaveClass("!border-warning");
     expect(document.querySelectorAll("[data-held-marker]")).toHaveLength(1);
   });
 
@@ -201,10 +204,89 @@ describe("ProPresenterLinkBlock: the connection it holds", () => {
     expect(screen.getByLabelText("Host")).toHaveAttribute("aria-describedby", alert.id);
   });
 
-  it("a request in flight waits the boxes, the recent addresses and the button; Test connection says Testing…", () => {
-    withFields(fields({ busy: true, testDisabled: true, testing: true }));
+  it("a request in flight waits the boxes, the recent addresses and the buttons; Connect says Connecting…", () => {
+    withFields(fields({ busy: true, connectDisabled: true, connecting: true }));
     expect(screen.getByLabelText("Host")).toBeDisabled();
-    expect(screen.getByLabelText("Port")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Testing…" })).toBeDisabled();
+    expect(screen.getByLabelText("ProPresenter API port")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Scan" })).toBeDisabled();
+  });
+});
+
+const found = (hosts: { label: string; host: string; port: number; hint?: string }[]): ScanState => ({ state: "found", candidates: hosts, current: 255, total: 255 });
+
+describe("ProPresenterLinkBlock: the caption of the port box is API", () => {
+  it("reads API, with the words of ProPresenter's network API as its hint, and keeps the accessible name specific", () => {
+    render(<ProPresenterLinkBlock connection={{ host: "192.168.1.60", port: "1025", onHost: vi.fn(), onPort: vi.fn(), held: { host: false, port: false }, errors: {}, busy: false, checksAgain: false, connectDisabled: false, connecting: false, onConnect: vi.fn(), scan: { state: NO_SCAN, start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } }} link={linkController(helperStatus("ready"))} propresenter={presentation()} />);
+    const box = screen.getByLabelText("ProPresenter API port");
+    expect(box).toHaveAttribute("title", "The port of ProPresenter's network API");
+    const caption = box.closest("label")!;
+    expect(caption.childNodes[0]?.textContent).toBe("API");
+    expect(screen.queryByText("Port")).toBeNull();
+  });
+});
+
+describe("ProPresenterLinkBlock: Scan and Connect, the pair every Live Link block ends its row with", () => {
+  const fields = (over: Partial<ProPresenterConnectionFields> = {}): ProPresenterConnectionFields => ({
+    host: "192.168.1.60", port: "1025", onHost: vi.fn(), onPort: vi.fn(), held: { host: false, port: false }, errors: {}, busy: false, checksAgain: false, connectDisabled: false, connecting: false, onConnect: vi.fn(),
+    scan: { state: NO_SCAN, start: vi.fn(), cancel: vi.fn(), choose: vi.fn() }, ...over,
+  });
+  const draw = (connection: ProPresenterConnectionFields) => render(<ProPresenterLinkBlock connection={connection} link={linkController(helperStatus("ready"))} propresenter={presentation()} />);
+
+  it("Scan starts the scan, then reads Scanning… (cancel) with the progress line, and cancel stops it", async () => {
+    const connection = fields();
+    const view = draw(connection);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Scan" }));
+    expect(connection.scan.start).toHaveBeenCalledTimes(1);
+    view.rerender(<ProPresenterLinkBlock connection={{ ...connection, scan: { ...connection.scan, state: { state: "scanning", candidates: [], current: 64, total: 255, phase: "Looking for ProPresenter…", elapsed: 3 } } }} link={linkController(helperStatus("ready"))} propresenter={presentation()} />);
+    expect(screen.getByTestId("scan-progress")).toHaveTextContent("Looking for ProPresenter… — Checked 64 of 255 addresses (3s)");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Scanning… (cancel)" }));
+    expect(connection.scan.cancel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("one computer found: a line says so and tells to press Connect; no chooser", () => {
+    draw(fields({ scan: { state: found([{ label: "Front MacBook", host: "192.168.1.70", port: 1025 }]), start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } }));
+    expect(screen.getByTestId("propresenter-scan-found")).toHaveTextContent("Found Front MacBook at 192.168.1.70:1025. It is in the Host and API boxes: press Connect to use it.");
+    expect(screen.queryByRole("group", { name: "Choose which ProPresenter" })).toBeNull();
+  });
+
+  it("several found: the same chooser Playback uses, and choosing one hands the host and the API port to the panel", async () => {
+    const connection = fields({ scan: { state: found([{ label: "Front MacBook", host: "192.168.1.70", port: 1025, hint: "192.168.1.70:1025 · ProPresenter 19" }, { label: "Stage Mac", host: "192.168.1.71", port: 11025 }]), start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } });
+    draw(connection);
+    await userEvent.setup().click(within(screen.getByRole("group", { name: "Choose which ProPresenter" })).getByRole("button", { name: /Stage Mac/ }));
+    expect(connection.scan.choose).toHaveBeenCalledWith("192.168.1.71", 11025);
+    expect(connection.onConnect).not.toHaveBeenCalled();
+  });
+
+  it("found nothing: the checklist stays in view; macOS blocking says how to fix it", () => {
+    const { unmount } = draw(fields({ scan: { state: { state: "not_found", candidates: [], current: 255, total: 255, reason: "No ProPresenter answered on this network.", hostsProbed: 255, hostsTotal: 255, networks: ["192.168.1.0/24"], elapsed: 12 }, start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } }));
+    expect(screen.getByText("Make sure:")).toBeVisible();
+    expect(screen.getByText("ProPresenter is open on a computer")).toBeVisible();
+    expect(screen.getByText(/Checked 255 of 255 addresses on 1 network \(192.168.1.0\/24\)/)).toBeVisible();
+    unmount();
+    draw(fields({ scan: { state: { state: "not_found", candidates: [], current: 0, total: 0, error: "permission_denied", reason: "macOS is blocking", details: "{}", settingsUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork" }, start: vi.fn(), cancel: vi.fn(), choose: vi.fn() } }));
+    expect(screen.getByTestId("scan-error")).toHaveTextContent("macOS is blocking StagePilot's local-network access");
+    expect(screen.getByRole("button", { name: "Open Local Network settings" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy diagnostic details" })).toBeVisible();
+  });
+
+  it("Connect on a connection that only needs checking says so in the status line; Connect with something to save does not", async () => {
+    const checking = fields({ checksAgain: true });
+    draw(checking);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    expect(checking.onConnect).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("propresenter-recheck")).toHaveTextContent("Checked again.");
+    expect(screen.getByTestId("propresenter-live-link-sub")).toContainElement(screen.getByTestId("propresenter-recheck"));
+    document.body.innerHTML = "";
+    draw(fields({ checksAgain: false }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.queryByTestId("propresenter-recheck")).toBeNull();
+  });
+
+  it("Connect says why it is off", () => {
+    draw(fields({ connectDisabled: true, connectHint: "Waiting for the saved settings to load." }));
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" }).closest("[data-part=connect-wrap]")).toHaveAttribute("title", "Waiting for the saved settings to load.");
   });
 });
