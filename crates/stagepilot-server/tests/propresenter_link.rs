@@ -847,9 +847,17 @@ async fn the_status_route_says_the_shape_and_never_the_key() {
         .as_str()
         .unwrap()
         .contains("Accessibility"));
+    // A working tree carries an empty SHA256SUMS.sig (the release machine signs), so StagePilot cannot send the update itself
+    // ("manual"); a release commit carries the signature, and then it can ("automatic").
+    let signed = std::fs::metadata(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../stagepilot-propresenter/assets/propresenter-link/SHA256SUMS.sig"
+    ))
+    .is_ok_and(|m| m.len() > 0);
     assert_eq!(
-        body["update"]["mode"], "manual",
-        "the bundled files are not signed in a working tree"
+        body["update"]["mode"],
+        if signed { "automatic" } else { "manual" },
+        "the bundled files are signed on a release commit and not in a working tree"
     );
     assert!(!text.contains(KEY), "the key is never part of an answer");
     for field in [
