@@ -30,10 +30,9 @@ import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { Panel } from "./ui/Panel";
+import { ActionButton, ActionRow, OptionalSection, PanelLayout, SectionNotice, SettingsSection } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
-import { Disclosure } from "./ui/Disclosure";
 import { accentClasses } from "./ui/accent";
 import { ScrollRegion } from "./ui/ScrollRegion";
 import { Select } from "./ui/Select";
@@ -265,9 +264,7 @@ export function LightingSetupPanel({
   const timerRunning = state.timer?.status === "running" && Boolean(state.timer?.started_at);
   // The whole song-timeline group (song picker, cue board, timeline, cue list) folds away for people who do not use it. It starts
   // open and then stays however the user leaves it, across restarts (owner, 2026-10-15).
-  const [timelineOpen, setTimelineOpen] = usePersistedFlag(LIGHTING_TIMELINE_OPEN_KEY, true);
   // The Cue board folds away on its own and is remembered on this device; it starts open.
-  const [cueBoardOpen, setCueBoardOpen] = usePersistedFlag(LIGHTING_CUE_BOARD_OPEN_KEY, true);
   const selectedSongRunning = timerRunning && selectedSong !== null
     && playingSong !== null && playingSong !== undefined && songKey(playingSong) === songKey(selectedSong);
   useEffect(() => {
@@ -724,7 +721,7 @@ export function LightingSetupPanel({
     </div>
   );
   const midiTestCue = (
-    <Disclosure className="mt-4" tone="midi" title="Send a test cue" variant="advanced">
+    <OptionalSection title="Send a test cue" tone="midi">
       <div aria-label="Test cue" className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2" role="group">
         <div className="w-28 flex-none">
           <Field label="Note">
@@ -741,7 +738,7 @@ export function LightingSetupPanel({
         <Button className="flex-none" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(Number(testNote), Number(testVelocity))} variant="tinted">{pendingOperation === "test" ? "Sending…" : "Send test cue"}</Button>
         {draftDiffersFromSaved && <p className="w-full text-type-body-sm text-ink-muted">Save the changes above first, then send a test cue.</p>}
       </div>
-    </Disclosure>
+    </OptionalSection>
   );
   // Under the Live Link block's strip. The "ready" state is NOT repeated here (the banner above and the header pill say it once): only what
   // is new (an error, the last cue sent) or what has no other home.
@@ -819,33 +816,54 @@ export function LightingSetupPanel({
   );
 
   return (
-    <Panel accent={accent} className="mt-5" id="lighting-configuration" tone="lighting" variant="setup">
-      <SetupPanelHeader
-        closeLabel="Close Lighting configuration"
-        description="Sends timed cues to your lighting software."
-        onClose={onClose}
-        status={connectionStatus ?? lights?.connection_status ?? "loading"}
-        title="Lighting"
-        titleTone="lighting"
-        method={<ConnectionMethod
-          placement="header"
-        disabled={!lights && !settings}
-        heldChange={heldMethod}
-        onChange={(value) => setMethod(value === "midi" ? "midi" : "osc")}
-        options={[
-          { value: "osc", label: "OSC", role: "primary", chip: "border-integration-lighting-osc bg-integration-lighting-osc/45" },
-          { value: "midi", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
-        ]}
-        value={method}
-        />}
-      />
-
-
-      <PanelAlert className="mt-4 !py-1.5" dot error={error} message={message ? shortLightingMessage(message) : message} messageTone="info" neutral={Boolean(message && /^OSC /.test(message))} onRetry={!lights ? onRetryLoad : undefined} />
-
-      {method === "osc" ? (
+    <PanelLayout
+      accent={accent}
+      alerts={<PanelAlert className="!py-1.5" dot error={error} message={message ? shortLightingMessage(message) : message} messageTone="info" neutral={Boolean(message && /^OSC /.test(message))} onRetry={!lights ? onRetryLoad : undefined} />}
+      below={(
+        <>
+          <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
+          <Dialog
+            actions={effectToRemove && (
+              <>
+                <Button autoFocus onClick={() => setPendingRemoveEffect(null)} size="touch" variant="secondary">Keep loop</Button>
+                <Button onClick={() => removeEffect(effectToRemove.id)} size="touch" variant="destructive">Remove loop</Button>
+              </>
+            )}
+            description={effectToRemove && "The motion it plays is lost until you record again."}
+            onClose={() => setPendingRemoveEffect(null)}
+            open={effectToRemove !== null}
+            title="Remove this loop?"
+            tone="danger"
+          />
+        </>
+      )}
+      header={(
+        <SetupPanelHeader
+          closeLabel="Close Lighting configuration"
+          description="Sends timed cues to your lighting software."
+          onClose={onClose}
+          status={connectionStatus ?? lights?.connection_status ?? "loading"}
+          title="Lighting"
+          titleTone="lighting"
+          method={<ConnectionMethod
+            placement="header"
+          disabled={!lights && !settings}
+          heldChange={heldMethod}
+          onChange={(value) => setMethod(value === "midi" ? "midi" : "osc")}
+          options={[
+            { value: "osc", label: "OSC", role: "primary", chip: "border-integration-lighting-osc bg-integration-lighting-osc/45" },
+            { value: "midi", label: "MIDI", role: "alternate", chip: "border-integration-playback-midi bg-integration-playback-midi/45" },
+          ]}
+          value={method}
+          />}
+        />
+      )}
+      id="lighting-configuration"
+      tone="lighting"
+      connection={method === "osc" ? (
         savedMethod === "osc" ? (
           <LightkeyStrip
+            className="!mt-0"
             connection={{ host: oscHost, onHost: setOscHost, oscPort, onPort: setOscPort, savedOscHost: savedLighting?.osc_host ?? "127.0.0.1", attempted: attempt.attempted, held: { host: heldHost, port: heldPort } }}
             lightingEnabled={Boolean(lights?.enabled)}
             looks={looks}
@@ -857,6 +875,7 @@ export function LightingSetupPanel({
         ) : (
           <OscConnectionFields
             attempted={attempt.attempted}
+            className="!mt-0"
             held={{ host: heldHost, port: heldPort }}
             host={oscHost}
             onHost={setOscHost}
@@ -866,224 +885,210 @@ export function LightingSetupPanel({
             testCue={oscTestCue}
           />
         )
-      ) : (
+      ) : undefined}
+      settings={method === "midi" ? (
+        <SettingsSection columns="lead" note="Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.">
+          <Field error={errOutput} heldChange={heldOutput} label="MIDI Output">
+            <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
+              <option value="">Choose an output</option>
+              {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
+              {lights?.outputs.map((output, index) => (
+                <option disabled={output.ambiguous} key={`${output.name}-${index}`} value={output.name}>
+                  {output.name}{output.connected ? " (connected)" : output.ambiguous ? " (ambiguous)" : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field heldChange={heldChannel} label="MIDI channel">
+            <Select onChange={(event) => setChannel(event.target.value)} value={channel}>
+              {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
+            </Select>
+          </Field>
+          <Field error={errPulse} heldChange={heldPulse} label="Note length (ms)">
+            <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
+          </Field>
+        </SettingsSection>
+      ) : undefined}
+      actions={method === "midi" ? (
+        <ActionRow>
+          <ActionButton busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={pendingOperation !== null} label="Refresh outputs" onClick={onRefresh} />
+        </ActionRow>
+      ) : undefined}
+      optional={method === "midi" ? midiTestCue : undefined}
+      content={(
         <>
-      <div className="lighting-output mt-4">
-      <div className="lighting-output-fields grid gap-4">
-        <Field error={errOutput} heldChange={heldOutput} label="MIDI Output">
-          <Select onChange={(event) => setOutputName(event.target.value)} value={outputName}>
-            <option value="">Choose an output</option>
-            {currentOutputMissing && <option value={outputName}>{outputName} (currently unavailable)</option>}
-            {lights?.outputs.map((output, index) => (
-              <option disabled={output.ambiguous} key={`${output.name}-${index}`} value={output.name}>
-                {output.name}{output.connected ? " (connected)" : output.ambiguous ? " (ambiguous)" : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field heldChange={heldChannel} label="MIDI channel">
-          <Select onChange={(event) => setChannel(event.target.value)} value={channel}>
-            {Array.from({ length: 15 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
-          </Select>
-        </Field>
-        <Field error={errPulse} heldChange={heldPulse} label="Note length (ms)">
-          <Input className="tabular-nums" max={2000} min={10} onChange={(event) => setPulseMs(event.target.value)} type="number" value={pulseMs} />
-        </Field>
-      </div>
-      </div>
-      <p className="mt-2 text-type-body-sm text-ink-muted">Choose this network session under Settings → External Control → Input. Channels 1–15 are supported here.</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={pendingOperation !== null} onClick={onRefresh} variant="tinted">{pendingOperation === "refresh" ? "Refreshing…" : "Refresh outputs"}</Button>
-      </div>
-      {midiTestCue}
+          {method === "midi" && savedMethod === "osc" && <LightkeyStrip
+            lightingEnabled={Boolean(lights?.enabled)}
+            looks={looks}
+            onStatus={onLightkeyStatus}
+            loudness={loudnessProp}
+          />}
+          <SongsStrip
+            chips={songChips}
+            liveKey={hasSong(liveKey) ? liveKey : ""}
+            noun={method === "osc" ? "looks" : "cues"}
+            onClear={clearSongByKey}
+            onSelect={setManualSongKey}
+            selectedKey={selectedSongKey}
+          />
+          <OptionalSection
+            aside={(
+              <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
+                {method === "osc" ? "OSC" : "MIDI"}
+              </span>
+            )}
+            detail={timelineDetail}
+            defaultOpen
+            persistKey={LIGHTING_TIMELINE_OPEN_KEY}
+            title="Song lighting timeline"
+            tone={accent}
+            variant="feature"
+          >
+            {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
+            {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{testReasonText}</p>}
+            {selectedSong && projectNotice && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lighting-project-notice" role="status">{projectNotice}</p>}
+            <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
+
+            {onSavePads && (
+              <OptionalSection className="mt-4" defaultOpen persistKey={LIGHTING_CUE_BOARD_OPEN_KEY} title="Cue board" tone={accent}>
+              <div className="mt-3">
+              <LightingCueBoard
+                embedded
+                busy={boardBusy || pendingOperation !== null}
+                canUndo={lastCapture !== null}
+                captureMode={captureMode}
+                onCaptureMode={setCaptureMode}
+                onPress={(pad) => void pressPad(pad)}
+                onSavePads={onSavePads}
+                onUndo={() => void undoCapture()}
+                pads={pads}
+                running={selectedSongRunning}
+                savedMethod={savedMethod}
+                status={captureStatus}
+                viewMethod={method}
+              />
+              </div>
+              </OptionalSection>
+            )}
+            {selectedSong && (
+              <LightingTimeline
+                toolbar={toolbarNode}
+                arrangement={songMapSections}
+                waveform={waveform}
+                songMap={songMapOn}
+                onSongMapChange={setSongMapOn}
+                disabled={pendingOperation !== null}
+                markers={timelineMarkers}
+                onMerge={mergeSelected}
+                onMove={moveCue}
+                onRemove={removeCue}
+                onSelect={(id) => setFocusId(id)}
+                onSelectionChange={setSelectedIds}
+                selectedIds={selectedIds}
+                playhead={elapsed}
+                loudness={savedCueMap?.loudness ?? null}
+                effects={method === "osc" ? effects : []}
+                hiddenTypes={typeFilter.hidden}
+                mergeBlockedReason={mergeBlocked}
+                method={method}
+                onRemoveEffect={(id) => setPendingRemoveEffect(id)}
+                onShowAllTypes={typeFilter.showAll}
+                onToggleType={typeFilter.toggle}
+                songLength={songLength}
+              />
+            )}
+
+            {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
+                over any edge that has more to see, so the user can tell where the scrolling area starts and ends. */}
+            <ScrollRegion
+              aria-label={shownCues.length > 0 ? "Lighting cues, scrollable" : undefined}
+              className="grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain p-3"
+              data-testid="lighting-cue-list"
+              frameClassName="mt-3 rounded-ds-lg"
+              framed={shownCues.length > 0}
+              role={shownCues.length > 0 ? "region" : undefined}
+              tabIndex={shownCues.length > 0 ? 0 : undefined}
+            >
+              {method === "osc" && listedEffects.map((effect) => (
+                <EffectRow
+                  disabled={pendingOperation !== null}
+                  effect={effect}
+                  highlight={effect.id === focusId}
+                  key={effect.id}
+                  onRemove={() => setPendingRemoveEffect(effect.id)}
+                />
+              ))}
+              {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
+                <LookRow
+                  allRows={rowIndex}
+                  cue={cue}
+                  disabled={pendingOperation !== null}
+                  highlight={cue.id === focusId}
+                  key={cue.id}
+                  onCommit={commitLook}
+                  onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
+                  onRemoveFixture={removeFixture}
+                  onToggleSelect={() => setSelectedIds((ids) => ids.includes(cue.id) ? ids.filter((id) => id !== cue.id) : [...ids, cue.id])}
+                  selected={selectedIds.includes(cue.id)}
+                  songDuration={selectedSong?.duration_seconds ?? null}
+                />
+              ) : (
+                <OscCueRow
+                  canTest={savedMethod === "osc" && !draftDiffersFromSaved}
+                  cue={cue}
+                  disabled={pendingOperation !== null}
+                  key={`${cue.id}-${cue.at_seconds}`}
+                  onCommit={(next) => persistOscCues(oscCues.map((item) => item.id === next.id ? next : item))}
+                  onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
+                  onTest={(address, args) => onTestOsc?.(address, args)}
+                  songDuration={selectedSong?.duration_seconds ?? null}
+                  testDisabledReason={draftDiffersFromSaved}
+                  testReasonId={testReasonId}
+                />
+              ))}
+              {method === "midi" && (
+              <>
+              {listedMidi.map((cue) => (
+                <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[auto_7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" data-testid="midi-cue-row" key={cue.id}>
+                  <span className="self-end pb-2"><CueTypeBadge sharp={classifyMidiCue(cue).sharp} type={classifyMidiCue(cue).type} /></span>
+                  <Field label="Elapsed time">
+                    <Input aria-label="Elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
+                  </Field>
+                  <Field label="Lighting cue note">
+                    <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
+                    {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
+                  </Select>
+                  </Field>
+                  <Field label="Lighting cue velocity">
+                    <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
+                  </Field>
+                  <Field label="Cue label">
+                    <Input aria-label="Cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
+                  </Field>
+                  <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} variant="tinted">Test</Button>
+                  <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
+                </div>
+              ))}
+              </>
+              )}
+              {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
+            </ScrollRegion>
+            {method === "osc" && pageCount > 1 && (
+              <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
+                <Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} variant="tinted">Previous</Button>
+                <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(listedOsc.length, (safePage + 1) * PAGE_SIZE)} of {listedOsc.length}</span>
+                <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
+              </nav>
+            )}
+            {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
+          </OptionalSection>
+          <div className="flex justify-end">
+            <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs...</Button>
+          </div>
         </>
       )}
-      {method === "midi" && savedMethod === "osc" && <LightkeyStrip
-        lightingEnabled={Boolean(lights?.enabled)}
-        looks={looks}
-            onStatus={onLightkeyStatus}
-        loudness={loudnessProp}
-      />}
-      <SongsStrip
-        chips={songChips}
-        liveKey={hasSong(liveKey) ? liveKey : ""}
-        noun={method === "osc" ? "looks" : "cues"}
-        onClear={clearSongByKey}
-        onSelect={setManualSongKey}
-        selectedKey={selectedSongKey}
-      />
-      <Disclosure
-        aside={(
-          <span className={`rounded-ds-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${accentClasses[accent].banner}`}>
-            {method === "osc" ? "OSC" : "MIDI"}
-          </span>
-        )}
-        className="mt-6"
-        detail={timelineDetail}
-        onOpenChange={setTimelineOpen}
-        open={timelineOpen}
-        title="Song lighting timeline"
-        tone={accent}
-        variant="feature"
-      >
-        {!selectedSong && <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">{toolbarNode}</div>}
-        {draftDiffersFromSaved && <p className="mt-2 text-sm text-ink-muted" id={testReasonId}>{testReasonText}</p>}
-        {selectedSong && projectNotice && <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lighting-project-notice" role="status">{projectNotice}</p>}
-        <p className="mt-2 text-type-body-sm text-ink-muted">Cue times are elapsed from song start. Cues for the other method stay saved. Changes save automatically. The timeline begins only after the Presentation countdown confirms it started.</p>
-
-        {onSavePads && (
-          <Disclosure className="mt-4" onOpenChange={setCueBoardOpen} open={cueBoardOpen} title="Cue board" tone={accent} variant="advanced">
-          <div className="mt-3">
-          <LightingCueBoard
-            embedded
-            busy={boardBusy || pendingOperation !== null}
-            canUndo={lastCapture !== null}
-            captureMode={captureMode}
-            onCaptureMode={setCaptureMode}
-            onPress={(pad) => void pressPad(pad)}
-            onSavePads={onSavePads}
-            onUndo={() => void undoCapture()}
-            pads={pads}
-            running={selectedSongRunning}
-            savedMethod={savedMethod}
-            status={captureStatus}
-            viewMethod={method}
-          />
-          </div>
-          </Disclosure>
-        )}
-        {selectedSong && (
-          <LightingTimeline
-            toolbar={toolbarNode}
-            arrangement={songMapSections}
-            waveform={waveform}
-            songMap={songMapOn}
-            onSongMapChange={setSongMapOn}
-            disabled={pendingOperation !== null}
-            markers={timelineMarkers}
-            onMerge={mergeSelected}
-            onMove={moveCue}
-            onRemove={removeCue}
-            onSelect={(id) => setFocusId(id)}
-            onSelectionChange={setSelectedIds}
-            selectedIds={selectedIds}
-            playhead={elapsed}
-            loudness={savedCueMap?.loudness ?? null}
-            effects={method === "osc" ? effects : []}
-            hiddenTypes={typeFilter.hidden}
-            mergeBlockedReason={mergeBlocked}
-            method={method}
-            onRemoveEffect={(id) => setPendingRemoveEffect(id)}
-            onShowAllTypes={typeFilter.showAll}
-            onToggleType={typeFilter.toggle}
-            songLength={songLength}
-          />
-        )}
-
-        {/* The list scrolls once it is taller than 32rem, so it is drawn as its own bordered box (only while it has cues) with a fade
-            over any edge that has more to see, so the user can tell where the scrolling area starts and ends. */}
-        <ScrollRegion
-          aria-label={shownCues.length > 0 ? "Lighting cues, scrollable" : undefined}
-          className="grid max-h-[32rem] gap-2 overflow-y-auto overscroll-contain p-3"
-          data-testid="lighting-cue-list"
-          frameClassName="mt-3 rounded-ds-lg"
-          framed={shownCues.length > 0}
-          role={shownCues.length > 0 ? "region" : undefined}
-          tabIndex={shownCues.length > 0 ? 0 : undefined}
-        >
-          {method === "osc" && listedEffects.map((effect) => (
-            <EffectRow
-              disabled={pendingOperation !== null}
-              effect={effect}
-              highlight={effect.id === focusId}
-              key={effect.id}
-              onRemove={() => setPendingRemoveEffect(effect.id)}
-            />
-          ))}
-          {method === "osc" && shownPage.map((cue) => isLook(cue) ? (
-            <LookRow
-              allRows={rowIndex}
-              cue={cue}
-              disabled={pendingOperation !== null}
-              highlight={cue.id === focusId}
-              key={cue.id}
-              onCommit={commitLook}
-              onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
-              onRemoveFixture={removeFixture}
-              onToggleSelect={() => setSelectedIds((ids) => ids.includes(cue.id) ? ids.filter((id) => id !== cue.id) : [...ids, cue.id])}
-              selected={selectedIds.includes(cue.id)}
-              songDuration={selectedSong?.duration_seconds ?? null}
-            />
-          ) : (
-            <OscCueRow
-              canTest={savedMethod === "osc" && !draftDiffersFromSaved}
-              cue={cue}
-              disabled={pendingOperation !== null}
-              key={`${cue.id}-${cue.at_seconds}`}
-              onCommit={(next) => persistOscCues(oscCues.map((item) => item.id === next.id ? next : item))}
-              onRemove={() => persistOscCues(oscCues.filter((item) => item.id !== cue.id))}
-              onTest={(address, args) => onTestOsc?.(address, args)}
-              songDuration={selectedSong?.duration_seconds ?? null}
-              testDisabledReason={draftDiffersFromSaved}
-              testReasonId={testReasonId}
-            />
-          ))}
-          {method === "midi" && (
-          <>
-          {listedMidi.map((cue) => (
-            <div className="grid gap-2 border-t border-edge-subtle pt-3 first:border-t-0 first:pt-0 md:grid-cols-[auto_7rem_minmax(11rem,1fr)_7rem_minmax(9rem,1fr)_auto_auto]" data-testid="midi-cue-row" key={cue.id}>
-              <span className="self-end pb-2"><CueTypeBadge sharp={classifyMidiCue(cue).sharp} type={classifyMidiCue(cue).type} /></span>
-              <Field label="Elapsed time">
-                <Input aria-label="Elapsed time" className="font-mono tabular-nums" defaultValue={formatElapsed(cue.at_seconds)} key={`${cue.id}-${cue.at_seconds}`} disabled={pendingOperation !== null} onBlur={(event) => { const parsed = parseElapsed(event.target.value); if (parsed !== null && (selectedSong?.duration_seconds == null || parsed <= selectedSong.duration_seconds)) updateCue(cue.id, { at_seconds: parsed }, true); else event.target.value = formatElapsed(cue.at_seconds); }} placeholder="For example, 01:30…" />
-              </Field>
-              <Field label="Lighting cue note">
-                <Select aria-label="Lighting cue note" disabled={pendingOperation !== null} onChange={(event) => updateCue(cue.id, { note: Number(event.target.value) }, true)} value={cue.note}>
-                {displayedNoteOptions.map((option) => <option key={option.note} value={option.note}>{option.label}</option>)}
-              </Select>
-              </Field>
-              <Field label="Lighting cue velocity">
-                <Input aria-label="Lighting cue velocity" className="tabular-nums" disabled={pendingOperation !== null} max={127} min={1} onBlur={() => cue.velocity >= 1 && cue.velocity <= 127 && persistCues(cues)} onChange={(event) => updateCue(cue.id, { velocity: Number(event.target.value) })} type="number" value={cue.velocity} />
-              </Field>
-              <Field label="Cue label">
-                <Input aria-label="Cue label" disabled={pendingOperation !== null} maxLength={120} onBlur={() => persistCues(cues)} onChange={(event) => updateCue(cue.id, { label: event.target.value })} placeholder="For example, Verse, chorus, blackout…" value={cue.label} />
-              </Field>
-              <Button className="self-end" aria-describedby={draftDiffersFromSaved ? testReasonId : undefined} disabled={lights?.connection_status !== "connected" || pendingOperation !== null || draftDiffersFromSaved} onClick={() => onTest(cue.note, cue.velocity)} variant="tinted">Test</Button>
-              <Button className="self-end" aria-label={`Remove cue at ${formatElapsed(cue.at_seconds)}`} disabled={pendingOperation !== null} onClick={() => persistCues(cues.filter((item) => item.id !== cue.id))} tone="danger" variant="tinted">Remove</Button>
-            </div>
-          ))}
-          </>
-          )}
-          {!shownCues.length && <p className="px-4 py-5 text-center text-type-body-sm text-ink-muted">{method === "osc" ? "No OSC cues saved for this song." : "No lighting cues saved for this song."}</p>}
-        </ScrollRegion>
-        {method === "osc" && pageCount > 1 && (
-          <nav aria-label="Cue pages" className="mt-2 flex items-center gap-2" data-testid="cue-pages">
-            <Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} variant="tinted">Previous</Button>
-            <span className="text-type-body-sm tabular-nums text-ink-muted">Rows {safePage * PAGE_SIZE + 1}–{Math.min(listedOsc.length, (safePage + 1) * PAGE_SIZE)} of {listedOsc.length}</span>
-            <Button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} variant="tinted">Next</Button>
-          </nav>
-        )}
-        {selectedSong?.duration_seconds != null && <p className="mt-2 text-type-body-sm text-ink-muted">Scheduled song length: {formatElapsed(selectedSong.duration_seconds)}. Cues must fall within this duration.</p>}
-      </Disclosure>
-      <div className="mt-3 flex justify-end">
-        <Button disabled={!songChips.some((chip) => chip.looks + (chip.loops ?? 0) + chip.handmade > 0)} onClick={clearEverySongCues} variant="secondary">Clear all songs...</Button>
-      </div>
-
-      {blockedReason && <p className="mt-4 text-sm text-ink-body" id="lighting-save-blocked">{blockedReason}</p>}
-      <SaveBar className="mt-4" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
-      <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
-      <Dialog
-        actions={effectToRemove && (
-          <>
-            <Button autoFocus onClick={() => setPendingRemoveEffect(null)} size="touch" variant="secondary">Keep loop</Button>
-            <Button onClick={() => removeEffect(effectToRemove.id)} size="touch" variant="destructive">Remove loop</Button>
-          </>
-        )}
-        description={effectToRemove && "The motion it plays is lost until you record again."}
-        onClose={() => setPendingRemoveEffect(null)}
-        open={effectToRemove !== null}
-        title="Remove this loop?"
-        tone="danger"
-      />
-    </Panel>
+      notices={blockedReason ? <SectionNotice id="lighting-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice> : undefined}
+      saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
+    />
   );
 }

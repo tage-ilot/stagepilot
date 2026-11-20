@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
+import { SectionNotice } from "./sections";
 import { SaveBar } from "./ui/SaveBar";
 import type { PlaybackSave } from "./usePlaybackSave";
 
@@ -116,9 +117,9 @@ export function usePlaybackDraft(playback?: PlaybackController, savedMethod: Pla
 
 export function PlaybackSaveBar({ save }: { save: PlaybackSave }) {
   return (
-    <>
-      {save.reason && <p role="alert" className="mt-5 text-sm text-danger-text">{save.reason}</p>}
-      <SaveBar className="mt-5" state={save.state} onSave={() => void save.save()} onRetry={() => void save.save()} onDiscard={save.discard} />
-    </>
+    <div className="mt-4 space-y-4" data-slot="save">
+      {save.reason && <SectionNotice role="alert" tone="danger" variant="line">{save.reason}</SectionNotice>}
+      <SaveBar state={save.state} onSave={() => void save.save()} onRetry={() => void save.save()} onDiscard={save.discard} />
+    </div>
   );
 }

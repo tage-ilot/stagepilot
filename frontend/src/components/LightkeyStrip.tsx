@@ -153,7 +153,9 @@ const smallBox = "!w-[5.25rem] text-center tabular-nums";
  * Captures the fixtures' colour and levels from the lightkey-api agent and holds them with overrides on replay.
  * `connection` is the panel's shared host/port draft; on its own (tests, other screens) the strip keeps a host of its own.
  */
-export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer, onStatus, readStatus }: {
+export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer, onStatus, readStatus, className }: {
+  /** Added to the block (the panel body takes the space above it: `!mt-0`). */
+  className?: string;
   lightingEnabled: boolean;
   /** Told every time the status is read (the panel shows the project notice on the song's timeline). */
   onStatus?: (status: LightkeyStatus) => void;
@@ -479,6 +481,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
       pills={<LiveLinkPill detail={pillState.detail} text={pillState.text} tone={pillState.tone} />}
       status={[{ text: statusText }]}
       statusTestId="lightkey-headline"
+      className={className}
       testId="lightkey-strip"
       title="sACN DMX Live Link"
     />

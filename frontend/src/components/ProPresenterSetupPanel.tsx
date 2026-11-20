@@ -6,12 +6,10 @@ import type {
   ProPresenterStatusResponse,
 } from "../types";
 import { SetupPanelHeader } from "./SetupPanelHeader";
-import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
-import { InlineAlert } from "./ui/InlineAlert";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { Panel } from "./ui/Panel";
+import { ActionButton, ActionRow, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
@@ -149,36 +147,29 @@ export function ProPresenterSetupPanel({
   const lookDetected = Boolean(propresenter?.looks.some((look) => look.id === lookId));
 
   return (
-    <Panel className="mt-5" id="propresenter-configuration" tone="presentation" variant="setup">
-      <SetupPanelHeader
-        closeLabel="Close Presentation configuration"
-        description="Send the countdown timer to Presentation, with its configuration kept between StagePilot launches."
-        onClose={onClose}
-        status={propresenter?.connection_status ?? "loading"}
-        title="Presentation"
-      />
-
-      {propresenter?.detail && (
-        <p className="mt-3 text-xs text-ink-muted">{propresenter.detail}</p>
+    <PanelLayout
+      alerts={(
+        <>
+          {propresenter?.detail && <p className="text-xs text-ink-muted">{propresenter.detail}</p>}
+          {!propresenter && !error && <SectionNotice tone="info">Loading Presentation configuration…</SectionNotice>}
+          {pendingOperation === "save" && <SectionNotice tone="info">Connecting to Presentation…</SectionNotice>}
+          <PanelAlert error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
+        </>
       )}
-
-      {!propresenter && !error && (
-        <InlineAlert className="mt-4" tone="info">
-          Loading Presentation configuration…
-        </InlineAlert>
+      header={(
+        <SetupPanelHeader
+          closeLabel="Close Presentation configuration"
+          description="Send the countdown timer to Presentation, with its configuration kept between StagePilot launches."
+          onClose={onClose}
+          status={propresenter?.connection_status ?? "loading"}
+          title="Presentation"
+        />
       )}
-
-      {pendingOperation === "save" && (
-        <InlineAlert className="mt-4" tone="info">
-          Connecting to Presentation…
-        </InlineAlert>
-      )}
-
-      <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
-
-      {/* Same placing and spacing as the Playback panel: the Live Link block is the first block under the header (and its alert lines) and
-          holds the connection (Host, Port, Test connection). Everything that is not the connection comes after it. */}
-      <div className="mt-6 space-y-4">
+      id="propresenter-configuration"
+      tone="presentation"
+      // The Live Link block is the first block under the header (and its alert lines) and holds the connection (Host, Port, Test
+      // connection). Everything that is not the connection comes after it, in the order every page follows.
+      connection={(
         <ProPresenterLinkBlock
           connection={{
             host,
@@ -195,95 +186,67 @@ export function ProPresenterSetupPanel({
           link={link}
           propresenter={propresenter}
         />
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field error={errTimer} heldChange={held.timer} label="Detected timer">
-            <Select
-              disabled={busy}
-              onChange={(event) => setTimerName(event.target.value)}
-              value={timerName}
+      )}
+      settings={(
+        <>
+          <SettingsSection busy={busy} columns="pair">
+            <Field error={errTimer} heldChange={held.timer} label="Detected timer">
+              <Select onChange={(event) => setTimerName(event.target.value)} value={timerName}>
+                <option value="">Choose a detected timer</option>
+                {timerName && !timerDetected && (
+                  <option value={timerName}>{timerName} (currently unavailable)</option>
+                )}
+                {propresenter?.timers.map((timer) => (
+                  <option key={timer.id} value={timer.name}>
+                    {timer.name}{timer.is_countdown ? "" : " (converted when cued)"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
+              <Input inputMode="decimal" onChange={(event) => setTimeout(event.target.value)} value={timeout} />
+            </Field>
+          </SettingsSection>
+          <SettingsSection busy={busy} columns="single" width="narrow">
+            <Field
+              heldChange={held.look}
+              hint="Selecting a Look does not change Presentation until you save these settings."
+              label="ProPresenter Look"
             >
-              <option value="">Choose a detected timer</option>
-              {timerName && !timerDetected && (
-                <option value={timerName}>{timerName} (currently unavailable)</option>
-              )}
-              {propresenter?.timers.map((timer) => (
-                <option key={timer.id} value={timer.name}>
-                  {timer.name}{timer.is_countdown ? "" : " (converted when cued)"}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field error={errTimeout} heldChange={held.timeout} label="Timeout (seconds)">
-            <Input
-              disabled={busy}
-              inputMode="decimal"
-              onChange={(event) => setTimeout(event.target.value)}
-              value={timeout}
-            />
-          </Field>
-        </div>
-
-        <div className="max-w-md">
-          <Field
-            heldChange={held.look}
-            hint="Selecting a Look does not change Presentation until you save these settings."
-            label="ProPresenter Look"
-          >
-            <Select
-              aria-label="ProPresenter Look"
-              disabled={busy}
-              onChange={(event) => setLookId(event.target.value)}
-              value={lookId}
-            >
-              <option value="">Current Look</option>
-              {lookId && !lookDetected && (
-                <option value={lookId}>Saved Look (currently unavailable)</option>
-              )}
-              {propresenter?.looks.map((look) => (
-                <option key={look.id} value={look.id}>
-                  {look.name}{look.id === propresenter.current_look_id ? " (current)" : ""}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={disabled || busy}
-            onClick={onRefreshTimers}
-            tone="presentation"
-            variant="tinted"
-          >
-            {pendingOperation === "refresh" ? "Refreshing…" : "Refresh timers and Looks"}
-          </Button>
-        </div>
-
-        {changeCount > 0 && <p className="text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
-
-        {blockedReason && <p className="text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
-        <SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
-
-        <dl className="grid gap-x-4 gap-y-3 border-t border-edge-subtle pt-4 text-sm sm:grid-cols-3">
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-ink-muted">API</dt>
-            <dd className="mt-1 text-ink-body">{propresenter ? connectionWord[propresenter.connection_status] : "Unknown"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-ink-muted">Configured timer</dt>
-            <dd className={`mt-1 ${propresenter?.timer_found ? "text-integration-presentation-text" : "text-warning-text"}`}>
-              {propresenter?.timer_found ? propresenter.timer_name : "Not found"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-ink-muted">Last checked</dt>
-            <dd className="mt-1 text-ink-body tabular-nums">
-              {propresenter?.last_checked_at ? new Date(propresenter.last_checked_at).toLocaleTimeString() : "Not checked"}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </Panel>
+              <Select aria-label="ProPresenter Look" onChange={(event) => setLookId(event.target.value)} value={lookId}>
+                <option value="">Current Look</option>
+                {lookId && !lookDetected && (
+                  <option value={lookId}>Saved Look (currently unavailable)</option>
+                )}
+                {propresenter?.looks.map((look) => (
+                  <option key={look.id} value={look.id}>
+                    {look.name}{look.id === propresenter.current_look_id ? " (current)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </SettingsSection>
+        </>
+      )}
+      actions={(
+        <ActionRow
+          note={changeCount > 0 ? "Test connection and Refresh use the saved settings. Save configuration first to try the new ones." : undefined}
+          noteId="propresenter-test-saved-note"
+        >
+          <ActionButton busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={disabled || busy} label="Refresh timers and Looks" onClick={onRefreshTimers} tone="presentation" />
+        </ActionRow>
+      )}
+      notices={blockedReason ? <SectionNotice id="propresenter-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice> : undefined}
+      saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
+      summary={(
+        <StatusSummary
+          items={[
+            { label: "API", value: propresenter ? connectionWord[propresenter.connection_status] : "Unknown" },
+            { label: "Configured timer", value: propresenter?.timer_found ? propresenter.timer_name : "Not found", tone: propresenter?.timer_found ? "ok" : "warn" },
+            { label: "Last checked", value: propresenter?.last_checked_at ? new Date(propresenter.last_checked_at).toLocaleTimeString() : "Not checked", tabular: true },
+          ]}
+        />
+      )}
+    />
   );
 }

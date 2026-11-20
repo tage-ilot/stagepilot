@@ -1,0 +1,63 @@
+import { ActionButton, ActionRow, OptionalBand, OptionalSection, SectionNotice, SettingsSection, StatusSummary, type SettingsColumns } from "../components/sections";
+import { Button } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
+import { Panel, type PanelIdentity } from "../components/ui/Panel";
+import { Select } from "../components/ui/Select";
+import { Fresh } from "./Scripted";
+import type { SampleState } from "./StateCard";
+
+/** A template by itself, in a connection's panel colour, so its look can be judged apart from any page. */
+const inPanel = (tone: PanelIdentity, node: React.ReactNode) => <Fresh><Panel tone={tone} variant="setup">{node}</Panel></Fresh>;
+
+const fields = (held = false, error = false) => (
+  <>
+    <Field error={error ? "Enter a host." : undefined} heldChange={held} label="Host"><Input defaultValue={error ? "" : "192.0.2.10"} /></Field>
+    <Field heldChange={held} hint="A hint sits under the control." label="Mode"><Select defaultValue="a"><option value="a">Auto</option><option value="b">Manual</option></Select></Field>
+    <Field label="Timeout (seconds)"><Input defaultValue="3" inputMode="decimal" /></Field>
+    <Field label="Note"><Input defaultValue="Sunday" /></Field>
+  </>
+);
+const COLUMNS: Array<[SettingsColumns, string]> = [["standard", "1, 2 or 4 across (never 3 + 1)"], ["inset", "1, 2 or 4 across, inside a padded row (Advanced)"], ["pair", "two side by side"], ["triple", "three across"], ["lead", "three across, the first twice as wide"], ["single", "one column"]];
+const noop = () => undefined;
+
+export const settingsTemplates: SampleState[] = [
+  { id: "clean", label: "Settings: clean", look: "Four fields in the standard grid; the hint sits under its control.", render: () => inPanel("presentation", <SettingsSection>{fields()}</SettingsSection>) },
+  { id: "title", label: "Settings: with a kicker, divided, with a note", look: "The optional uppercase kicker, a rule above, and the one note under the group.", render: () => inPanel("services", <SettingsSection divided note="Takes effect after a restart." title="Service plan">{fields()}</SettingsSection>) },
+  { id: "held", label: "Settings: held change", look: "'Not saved yet' in words with a warning dot, and the warning border, on every changed field.", render: () => inPanel("backend", <SettingsSection>{fields(true)}</SettingsSection>) },
+  { id: "error", label: "Settings: error", look: "The red border and the sentence under the control (role alert).", render: () => inPanel("lighting", <SettingsSection>{fields(false, true)}</SettingsSection>) },
+  { id: "busy", label: "Settings: busy", look: "Every control inside is disabled by the section, with no page passing disabled.", render: () => inPanel("playback", <SettingsSection busy>{fields()}</SettingsSection>) },
+  ...COLUMNS.map(([columns, words]): SampleState => ({ id: `columns-${columns}`, label: `Settings: columns "${columns}"`, look: `${words}. Follows the width of the panel it is in.`, render: () => inPanel("midi", <SettingsSection columns={columns}>{fields().props.children.slice(0, columns === "pair" ? 2 : columns === "triple" || columns === "lead" ? 3 : 4)}</SettingsSection>) })),
+  { id: "boxed", label: "Settings: boxed group", look: "One bordered box (the two Remote-access groups); any fields or lines inside.", render: () => inPanel("backend", <SettingsSection aria-label="Example group" boxed columns="single">{fields().props.children.slice(0, 2)}</SettingsSection>) },
+];
+
+export const actionTemplates: SampleState[] = [
+  { id: "idle", label: "Actions: idle", look: "Tinted buttons in one wrapping row, in the connection's colour.", render: () => inPanel("presentation", <ActionRow><ActionButton label="Test connection" onClick={noop} tone="presentation" /><ActionButton label="Refresh timers and Looks" onClick={noop} tone="presentation" /></ActionRow>) },
+  { id: "busy", label: "Actions: busy", look: "The button whose request runs says so in words.", render: () => inPanel("services", <ActionRow><ActionButton busy busyLabel="Loading…" label="Load service types" onClick={noop} tone="services" /><ActionButton disabled label="Load today’s service plan" onClick={noop} tone="services" /></ActionRow>) },
+  { id: "disabled", label: "Actions: disabled", look: "A disabled button is dimmed and does nothing; the note under the row says why the others use the saved settings.", render: () => inPanel("presentation", <ActionRow note="Test connection and Refresh use the saved settings. Save configuration first to try the new ones."><ActionButton disabled label="Refresh timers and Looks" onClick={noop} tone="presentation" /></ActionRow>) },
+  { id: "primary", label: "Actions: a primary action", look: "The one filled button of a row (Connect), beside tinted ones.", render: () => inPanel("midi", <ActionRow><ActionButton label="Refresh inputs" onClick={noop} tone="midi" /><ActionButton label="Connect" onClick={noop} variant="primary" /><ActionButton disabled label="Disconnect" onClick={noop} tone="midi" /></ActionRow>) },
+];
+
+export const summaryTemplates: SampleState[] = [
+  { id: "list-ok", label: "Summary: list, all well", look: "A dl under a rule; the connection's colour for what is fine; numbers line up.", render: () => inPanel("presentation", <StatusSummary items={[{ label: "API", value: "Connected" }, { label: "Configured timer", value: "Song Countdown", tone: "ok" }, { label: "Last checked", value: "5:45:00 PM", tabular: true }]} />) },
+  { id: "list-warn", label: "Summary: list, something to look at", look: "The warning words say it (Not found); the colour only backs them up.", render: () => inPanel("presentation", <StatusSummary items={[{ label: "API", value: "Disconnected" }, { label: "Configured timer", value: "Not found", tone: "warn" }, { label: "Last checked", value: "Not checked", tabular: true }]} />) },
+  { id: "list-four", label: "Summary: four facts", look: "Four across while their words fit, then two, then one.", render: () => inPanel("services", <StatusSummary items={[{ label: "Connection", value: "Connected" }, { label: "Credential", value: "Saved securely" }, { label: "Target date", value: "2026-11-15", tabular: true }, { label: "Last successful sync", value: "11/15/2026, 9:42:00 AM", tabular: true }]} />) },
+  { id: "cards", label: "Summary: cards", look: "Each fact in its own recessed box; ok and danger words; a second quiet line.", render: () => inPanel("backend", <StatusSummary items={[{ label: "Version", value: "0.0.0" }, { label: "State revision", value: 41, tabular: true }, { label: "API endpoint", value: "http://127.0.0.1:8765", mono: true }, { label: "WebSocket", value: "Connected", tone: "ok", detail: "ws://127.0.0.1:8765/ws" }]} variant="cards" />) },
+  { id: "cards-danger", label: "Summary: cards, a fact is down", look: "Danger words for what is wrong.", render: () => inPanel("backend", <StatusSummary items={[{ label: "Version", value: "0.0.0" }, { label: "WebSocket", value: "Disconnected", tone: "danger" }]} variant="cards" />) },
+];
+
+export const noticeTemplates: SampleState[] = [
+  { id: "boxes", label: "Notices: the four tones (boxes)", look: "Info and success are polite (status); warning and danger interrupt (alert). Info and success wear the connection's colour inside its panel.", render: () => inPanel("services", <div className="space-y-3"><SectionNotice tone="info">Loading Presentation configuration…</SectionNotice><SectionNotice tone="success">Settings saved.</SectionNotice><SectionNotice tone="warning">Your Services connection has expired.</SectionNotice><SectionNotice tone="danger">Could not reach Planning Center.</SectionNotice></div>) },
+  { id: "title-actions", label: "Notices: with a title and a button", look: "A bold first line, the words, then the button.", render: () => inPanel("services", <div className="space-y-3"><SectionNotice actions={<Button tone="warning" variant="tinted">Reconnect to Planning Center</Button>} title="Your Services connection has expired" tone="warning">Sign in again to keep loading your Service plan.</SectionNotice><SectionNotice actions={<Button variant="primary">Planning Center OAuth</Button>} title="Sign in with Planning Center" tone="info" /></div>) },
+  { id: "group", label: "Notices: a question with buttons", look: "A warning box that is a named group (the person just asked for it), so it does not interrupt.", render: () => inPanel("backend", <SectionNotice actions={<ActionRow><Button variant="primary">Confirm disable</Button><Button variant="secondary">Cancel</Button></ActionRow>} group="Confirm disable Remote Access" tone="warning">Disconnect all people? Local StagePilot will keep running.</SectionNotice>) },
+  { id: "lines", label: "Notices: lines", look: "The same words without the box, in the tone's text colour: for what belongs to a field or a button.", render: () => inPanel("lighting", <div className="space-y-2"><SectionNotice tone="info" variant="line">Enter a host and a UDP port from 1 to 65535 before saving.</SectionNotice><SectionNotice quiet size="xs" tone="info" variant="line">A quiet hint in the muted ink.</SectionNotice><SectionNotice tone="accent" variant="line" strong>Scanned order in use.</SectionNotice><SectionNotice tone="warning" variant="line">Restart StagePilot to let other devices connect.</SectionNotice><SectionNotice role="alert" tone="danger" variant="line">The settings could not be saved.</SectionNotice></div>) },
+];
+
+export const optionalTemplates: SampleState[] = [
+  { id: "advanced-closed", label: "Optional: advanced, closed", look: "One tinted row with the one-line summary of what is inside.", render: () => inPanel("backend", <OptionalSection summary="Port 8765 · Logging info" title="Advanced" tone="backend"><SettingsSection columns="inset">{fields()}</SettingsSection></OptionalSection>) },
+  { id: "advanced-open", label: "Optional: advanced, open", look: "The 3px bar in the connection's colour; its fields inside.", render: () => inPanel("backend", <OptionalSection defaultOpen summary="Port 8765 · Logging info" title="Advanced" tone="backend"><SettingsSection columns="inset">{fields()}</SettingsSection></OptionalSection>) },
+  { id: "activity", label: "Optional: activity (remembered)", look: "Flat, with a dashed rule and a count pill: read-only information or a group people may not use. Remembers open/closed.", render: () => inPanel("backend", <OptionalSection count={12} defaultOpen persistKey="gallery.optional.activity" summary="Connected" title="Recent activity" variant="activity"><p className="text-sm text-ink-body">Twelve things happened.</p></OptionalSection>) },
+  { id: "feature", label: "Optional: feature", look: "A card with a rail and a wash, a two-line header that says what is inside, a tag at the right.", render: () => inPanel("lighting", <OptionalSection aside={<span className="rounded-ds-full border border-edge px-2.5 py-0.5 text-xs font-bold">OSC</span>} defaultOpen detail="16 cues on 2 of 4 songs" title="Song lighting timeline" tone="lighting" variant="feature"><p className="text-sm text-ink-body">The timeline and its cues.</p></OptionalSection>) },
+  { id: "forced", label: "Optional: opened by a question", look: "A persisted section kept closed by the person opens while a question inside needs an answer (forceOpen).", render: () => inPanel("backend", <OptionalSection forceOpen persistKey="gallery.optional.forced" title="Remote access" variant="activity"><SectionNotice group="Confirm disable Remote Access" tone="warning">Disconnect all people?</SectionNotice></OptionalSection>) },
+  { id: "band-open", label: "Optional: band, open (remembered)", look: "A tinted band whose header also holds buttons: toggle, heading, summary, then the action.", render: () => inPanel("playback", <OptionalBand actions={<Button size="control" tone="playback" variant="tinted">Scan Playback songs</Button>} headingId="gallery-band-open" persistKey="gallery.optional.band" summary="Saved: 12 songs" title="Song order"><p className="text-sm text-ink-body">What is inside the band.</p></OptionalBand>) },
+];

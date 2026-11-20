@@ -898,28 +898,6 @@ textarea:focus-visible {
   }
 }
 
-/* The status checks at the bottom of a configuration (Services): four across for as long as their words fit, then two, then one.
-   It follows the panel's own width, not the window's. The columns are never narrower than their widest text. */
-.status-checks-box {
-  container-type: inline-size;
-}
-
-.status-checks {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@container (min-width: 23rem) {
-  .status-checks {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (min-width: 30rem) {
-  .status-checks {
-    grid-template-columns: repeat(4, minmax(max-content, 1fr));
-  }
-}
-
 /* ---- Dashboard header (owner, 2026-10-15) ------------------------------------------------------------------------------------
    One row at every width. The logo is the first thing on it and never moves; everything else lives in .app-header-status to its
    right, the only part that gives way. The status pill (.header-chip) is a single element: when a message arrives it grows to the
@@ -1072,27 +1050,6 @@ textarea:focus-visible {
   box-shadow: inset 3px 0 0 var(--ds-integration-backend-soft), var(--ds-elevation-default);
 }
 
-/* Service plan configuration: the four fields sit in 1, 2 or 4 columns, never 3 + 1. Driven by the panel's own width. */
-.service-plan-section {
-  container-type: inline-size;
-}
-
-.service-plan-fields {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@container (min-width: 28rem) {
-  .service-plan-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (min-width: 56rem) {
-  .service-plan-fields {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 /* Services: OAuth sign-in takes the wide column, Manual API Connection the narrow one (about a quarter), stacking when the panel is compact. */
 .pco-connect {
   container-type: inline-size;
@@ -1111,16 +1068,6 @@ textarea:focus-visible {
 
 .pco-manual {
   container-type: inline-size;
-}
-
-.manual-connection-fields {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@container (min-width: 30rem) {
-  .manual-connection-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 /* The collapsed-row summary would truncate in the narrow Manual API column; hide it there so nothing is cut off. */
@@ -1146,21 +1093,6 @@ textarea:focus-visible {
 @container (min-width: 40rem) {
   .playback-connect-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* Lighting: MIDI Output, MIDI channel and Note length share one line when the panel is medium wide, otherwise stack (never 2 + 1). */
-.lighting-output {
-  container-type: inline-size;
-}
-
-.lighting-output-fields {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@container (min-width: 30rem) {
-  .lighting-output-fields {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -1200,46 +1132,97 @@ textarea:focus-visible {
 /* Lighting test cue: a compact group (heading, Note, Velocity, button) pushed to the right of the timeline controls.
    The toolbar wraps in reverse, so when both cannot share a line the Test cue group moves ABOVE the timeline selector. */
 
-/* Backend status: four boxes in 1, 2 or 4 columns (never 3 + 1), following the panel's own width. */
-.backend-status-wrap {
+/* ---- Section templates (components/sections/): the field grid and the summary list, drawn once ------------------------------------
+   SettingsSection and StatusSummary follow the width of the panel they sit in (a container), never the window's. A section type is
+   restyled here, once, and every page that uses it changes together. */
+.section-fields-wrap,
+.section-summary-wrap {
   container-type: inline-size;
 }
 
-.backend-status {
+.section-fields,
+.section-summary {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@container (min-width: 24rem) {
-  .backend-status {
+/* Fields: 1, 2 or 4 columns, never 3 + 1 (Services' service plan, Backend's Advanced). */
+@container (min-width: 28rem) {
+  .section-fields[data-columns="standard"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@container (min-width: 52rem) {
-  .backend-status {
+@container (min-width: 56rem) {
+  .section-fields[data-columns="standard"] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-/* Advanced settings (Timezone, Server port, Log level, Release channel): 1, 2 or 4 across, never 3, switching at the same window
-   widths as the status cards above them (owner, 2026-10-14). The Advanced row has about 35px (2.2rem) of its own padding, so its
-   container breakpoints are the status cards' 24rem and 52rem less that. */
-.backend-advanced-wrap {
-  container-type: inline-size;
-}
-
-.backend-advanced {
-  grid-template-columns: minmax(0, 1fr);
-}
-
+/* The same 1, 2 or 4 inside a row that has about 35px (2.2rem) of its own padding (Advanced): it switches at the same window widths as the
+   summary cards above it (24rem and 52rem less that). */
 @container (min-width: 21.8rem) {
-  .backend-advanced {
+  .section-fields[data-columns="inset"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @container (min-width: 49.8rem) {
-  .backend-advanced {
+  .section-fields[data-columns="inset"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Two fields side by side (Presentation's timer and timeout, the manual connection's App ID and Secret), one when narrow. */
+@container (min-width: 30rem) {
+  .section-fields[data-columns="pair"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Three fields on one line when the panel is medium wide, otherwise stacked (never 2 + 1). `lead` gives the first one twice the room. */
+@container (min-width: 30rem) {
+  .section-fields[data-columns="lead"] {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@container (min-width: 40rem) {
+  .section-fields[data-columns="triple"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Summary list (Services' checks, Presentation's API line): four across for as long as the words fit, then two, then one. The columns are
+   never narrower than their widest text. */
+@container (min-width: 23rem) {
+  .section-summary[data-variant="list"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 30rem) {
+  .section-summary[data-variant="list"] {
+    grid-template-columns: repeat(4, minmax(max-content, 1fr));
+  }
+
+  .section-summary[data-variant="list"][data-count="3"] {
+    grid-template-columns: repeat(3, minmax(max-content, 1fr));
+  }
+
+  .section-summary[data-variant="list"][data-count="2"] {
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+  }
+}
+
+/* Summary cards (Backend's Status): 1, 2 or 4 across, never 3 + 1. */
+@container (min-width: 24rem) {
+  .section-summary[data-variant="cards"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 52rem) {
+  .section-summary[data-variant="cards"] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

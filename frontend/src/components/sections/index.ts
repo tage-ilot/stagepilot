@@ -1,6 +1,13 @@
+export { ActionButton, ActionRow, type ActionButtonProps, type ActionRowProps } from "./ActionRow";
 export { ConnectionSection, type ConnectionSectionProps, type DetailsState, type StatusLine } from "./ConnectionSection";
 export { DisclosureButton } from "./DisclosureButton";
 export { HelperSetupBox, type HelperBoxState, type HelperInstallController, type HelperSetupBoxProps, type HelperSetupWording } from "./HelperSetupBox";
 export { LiveLinkField } from "./LiveLinkField";
 export { LiveLinkPill } from "./LiveLinkPill";
 export { LiveLinkShell } from "./LiveLinkShell";
+export { OptionalBand, type OptionalBandProps } from "./OptionalBand";
+export { OptionalSection, type OptionalSectionProps } from "./OptionalSection";
+export { PanelBody, PanelLayout, type PanelBodySlots, type PanelLayoutProps } from "./PanelLayout";
+export { SectionNotice, type NoticeTone, type SectionNoticeProps } from "./SectionNotice";
+export { SettingsSection, type SettingsColumns, type SettingsSectionProps } from "./SettingsSection";
+export { StatusSummary, type StatusSummaryProps, type SummaryItem, type SummaryTone } from "./StatusSummary";

@@ -4,6 +4,7 @@ import {
   updateRemoteUser, type RemoteUser,
 } from "../api";
 import type { RemoteAccessControl } from "../hooks/useRemoteAccess";
+import { ActionRow, SectionNotice, SettingsSection } from "./sections";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
@@ -91,32 +92,32 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
 
   // Remote Access is two separate groups (owner, 2026-10-14): the link and its status, then the people who can use it.
   const showPeople = Boolean(status?.needs_operator && !local) || bootstrap || Boolean(status && !status.needs_operator);
-  const group = "space-y-4 rounded-ds-lg border border-edge-subtle bg-surface-950/40 p-4";
 
   return <div aria-label="Remote Access" className="space-y-4">
-    <div aria-label="Remote link" className={group} data-remote-group="link" role="group">
-    <p className="text-sm text-ink-body">Securely view or operate this StagePilot from another device. Local operation continues if Remote disconnects.</p>
-    <p role="status" className="text-sm text-integration-backend-text">{status ? labels[status.state] : "Checking Remote Access…"}</p>
-    {status?.state === "enabling" && <p className="text-sm text-ink-muted">
+    <SettingsSection aria-label="Remote link" boxed columns="single" data-remote-group="link">
+    <SectionNotice tone="info" variant="line">Securely view or operate this StagePilot from another device. Local operation continues if Remote disconnects.</SectionNotice>
+    <SectionNotice role="status" tone="success" variant="line">{status ? labels[status.state] : "Checking Remote Access…"}</SectionNotice>
+    {status?.state === "enabling" && <SectionNotice quiet tone="info" variant="line">
       Check for a system password prompt (Keychain/Credential Manager) and enter it — this can take a moment.
-    </p>}
+    </SectionNotice>}
     {status?.temporary_url ?
-      <p className="text-sm text-warning-text">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</p> :
-      <p className="text-sm text-integration-backend-text">Stable Remote link: this installation keeps the same address after reconnecting.</p>}
-    {status && !status.available && <p className="text-sm text-ink-body">Remote Access is unavailable on this installation. Local StagePilot is unaffected.</p>}
-    {status?.provisioned && !status.credential_available && credentialWarning && <p className="text-sm text-warning-text">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</p>}
-    {status?.permanently_revoked && <div role="group" aria-label="Reset installation identity" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
-      <p className="text-sm text-warning-text">
-        Your previous Remote Access configuration could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
-      </p>
-      <Button className="gap-2" variant="primary" disabled={busy || resetBusy} type="button" onClick={() => {
+      <SectionNotice tone="warning" variant="line">Temporary Remote link: the address changes after reconnection or restart. This preview is not a permanent remote address.</SectionNotice> :
+      <SectionNotice tone="success" variant="line">Stable Remote link: this installation keeps the same address after reconnecting.</SectionNotice>}
+    {status && !status.available && <SectionNotice tone="info" variant="line">Remote Access is unavailable on this installation. Local StagePilot is unaffected.</SectionNotice>}
+    {status?.provisioned && !status.credential_available && credentialWarning && <SectionNotice tone="warning" variant="line">The installation credential is unavailable or revoked. Remote remains off; contact beta support to recover this installation.</SectionNotice>}
+    {status?.permanently_revoked && <SectionNotice
+      actions={<Button className="gap-2" variant="primary" disabled={busy || resetBusy} type="button" onClick={() => {
         if (resetBusy) return;
         setResetBusy(true);
         void run(async () => { await resetRemoteIdentity(); }).catch(() => undefined).finally(() => setResetBusy(false));
-      }}>{resetBusy && <ButtonSpinner />}{resetBusy ? "Resetting…" : "Reset installation identity"}</Button>
-    </div>}
-    {status?.state === "error" && <p className="text-sm text-ink-body">Check your Internet connection. You can disable Remote and try enabling it again.</p>}
-    {status?.state === "reconnecting" && <p className="text-sm text-ink-body">Reconnecting. Check here for the current link once connected.</p>}
+      }}>{resetBusy && <ButtonSpinner />}{resetBusy ? "Resetting…" : "Reset installation identity"}</Button>}
+      group="Reset installation identity"
+      tone="warning"
+    >
+      Your previous Remote Access configuration could not be restored and needs to be reset. This is safe and won't affect local StagePilot.
+    </SectionNotice>}
+    {status?.state === "error" && <SectionNotice tone="info" variant="line">Check your Internet connection. You can disable Remote and try enabling it again.</SectionNotice>}
+    {status?.state === "reconnecting" && <SectionNotice tone="info" variant="line">Reconnecting. Check here for the current link once connected.</SectionNotice>}
 
     {url && <div className="flex flex-wrap items-center gap-3">
       <output aria-label="Remote URL" className="break-all text-sm text-integration-backend-text">{url}</output>
@@ -126,11 +127,8 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
       }}>Copy link</Button>
       <Button className="gap-2" variant="secondary" disabled={busy || regenBusy} type="button" onClick={() => setConfirmRegenerate(true)}>{regenBusy && <ButtonSpinner />}{regenBusy ? "Regenerating…" : "Regenerate Remote link"}</Button>
     </div>}
-    {confirmRegenerate && <div role="group" aria-label="Confirm regenerate Remote link" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
-      <p className="text-sm text-warning-text">
-        The current Remote link will stop working. Anyone using the old address will lose access. Continue?
-      </p>
-      <div className="flex flex-wrap gap-3">
+    {confirmRegenerate && <SectionNotice
+      actions={<ActionRow>
         <Button className="gap-2" variant="primary" disabled={busy || regenBusy} type="button" onClick={() => {
           if (regenBusy) return;
           setConfirmRegenerate(false);
@@ -138,24 +136,31 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
           void run(async () => { await regenerateRemote(); }).catch(() => undefined).finally(() => setRegenBusy(false));
         }}>{regenBusy && <ButtonSpinner />}{regenBusy ? "Regenerating…" : "Confirm regenerate"}</Button>
         <Button variant="secondary" disabled={regenBusy} type="button" onClick={() => setConfirmRegenerate(false)}>Cancel</Button>
-      </div>
-    </div>}
-    {confirmDisable && <div role="group" aria-label="Confirm disable Remote Access" className="space-y-3 rounded-ds-lg border border-warning/30 bg-warning/10 px-3 py-3">
-      <p className="text-sm text-warning-text">Disconnect all people? Local StagePilot will keep running.</p>
-      <div className="flex flex-wrap gap-3">
+      </ActionRow>}
+      group="Confirm regenerate Remote link"
+      tone="warning"
+    >
+      The current Remote link will stop working. Anyone using the old address will lose access. Continue?
+    </SectionNotice>}
+    {confirmDisable && <SectionNotice
+      actions={<ActionRow>
         <Button variant="primary" disabled={busy} type="button" onClick={confirmDisableAccept}>Confirm disable</Button>
         <Button variant="secondary" type="button" onClick={cancelDisable}>Cancel</Button>
-      </div>
-    </div>}
-    </div>
-    {showPeople && <div aria-label="Remote users" className={group} data-remote-group="people" role="group">
-    {status?.needs_operator && !local && <p className="text-sm text-ink-body">Create the first Operator from local StagePilot.</p>}
+      </ActionRow>}
+      group="Confirm disable Remote Access"
+      tone="warning"
+    >
+      Disconnect all people? Local StagePilot will keep running.
+    </SectionNotice>}
+    </SettingsSection>
+    {showPeople && <SettingsSection aria-label="Remote users" boxed columns="single" data-remote-group="people">
+    {status?.needs_operator && !local && <SectionNotice tone="info" variant="line">Create the first Operator from local StagePilot.</SectionNotice>}
     {bootstrap && <>
       <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">Create first Operator</h3>
-      <p className="text-sm text-warning-text">Remote Access is running. Create the first Operator to allow sign-in.</p>
+      <SectionNotice tone="warning" variant="line">Remote Access is running. Create the first Operator to allow sign-in.</SectionNotice>
     </>}
     {(bootstrap || status && !status.needs_operator) && <>
-      <p className="text-sm text-ink-body">Viewers are read-only. Operators can control StagePilot.</p>
+      <SectionNotice tone="info" variant="line">Viewers are read-only. Operators can control StagePilot.</SectionNotice>
       {!bootstrap && <ul className="divide-y divide-edge-subtle">{users.map((user) => {
         const last = user.enabled && user.role === "Operator" && operators <= 1;
         const self = user.email === access.user?.email;
@@ -178,7 +183,7 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
           }}>Delete {user.email}</Button>
         </li>;
       })}</ul>}
-      {operators === 1 && <p className="text-sm text-warning-text">Last Operator protection is active. Add or enable another Operator before changing or deleting the remaining Operator.</p>}
+      {operators === 1 && <SectionNotice tone="warning" variant="line">Last Operator protection is active. Add or enable another Operator before changing or deleting the remaining Operator.</SectionNotice>}
       {!bootstrap && !edit && !adding && (
         <div>
           <Button disabled={busy} onClick={() => setAdding(true)} type="button" variant="tinted">Add a person</Button>
@@ -198,8 +203,8 @@ export function RemoteAccessPanel({ control }: { control: RemoteAccessControl })
         {(edit || adding) && <Button variant="secondary" type="button" onClick={() => {setEdit(null); setAdding(false); setEmail(""); setPassword("");}}>Cancel</Button>}
       </form>}
     </>}
-    </div>}
-    {notice && <p role="status" className="text-sm text-integration-backend-text">{notice}</p>}
-    {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
+    </SettingsSection>}
+    {notice && <SectionNotice role="status" tone="success" variant="line">{notice}</SectionNotice>}
+    {error && <SectionNotice role="alert" tone="danger" variant="line">{error}</SectionNotice>}
   </div>;
 }

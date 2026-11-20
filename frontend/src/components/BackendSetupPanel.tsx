@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiOrigin, websocketUrl } from "../api";
 import { copyDiagnosticsLog, sendDiagnosticsBundle } from "../diagnostics";
-import { usePersistedFlag } from "../hooks/usePersistedFlag";
 import { useRemoteAccess } from "../hooks/useRemoteAccess";
 import type {
   ApplicationState,
@@ -14,11 +13,10 @@ import { ButtonSpinner, RemoteAccessPanel } from "./RemoteAccessPanel";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { ConnectionMethod, type ConnectionMethodOption } from "./ui/ConnectionMethod";
-import { Disclosure } from "./ui/Disclosure";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { PanelAlert } from "./PanelAlert";
-import { Panel } from "./ui/Panel";
+import { OptionalSection, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
@@ -143,9 +141,6 @@ type AccessChoice = "host" | "network" | "internet";
 export const REMOTE_ACCESS_OPEN_KEY = "stagepilot.backend.remote-access-open";
 const remoteStateWord = { off: "Off", enabling: "Enabling…", connected: "Connected", reconnecting: "Reconnecting…", error: "Connection unavailable" } as const;
 
-// Status facts are small bordered cards, like the style guide (a recessed well on the panel).
-const factCard = "rounded-ds-lg border border-edge-subtle bg-surface-950/40 px-3 py-2.5";
-const factLabel = "font-type-kicker text-type-kicker uppercase text-ink-muted";
 
 export function BackendSetupPanel({
   state,
@@ -177,8 +172,6 @@ export function BackendSetupPanel({
   const [serverPort, setServerPort] = useState("8765");
   const [dashboardPin, setDashboardPin] = useState("");
   const remote = useRemoteAccess();
-  // The Remote access section starts open and then stays however the user leaves it, across restarts (owner, 2026-10-14).
-  const [remoteOpenSaved, setRemoteOpenSaved] = usePersistedFlag(REMOTE_ACCESS_OPEN_KEY, true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Each draft follows its own saved value.
@@ -336,164 +329,135 @@ export function BackendSetupPanel({
     : state.application_status === "error" ? "error" : "disconnected";
 
   return (
-    <Panel
+    <PanelLayout
       aria-labelledby="backend-setup-heading"
-      className="mt-5"
+      header={(
+        <SetupPanelHeader
+          closeLabel="Close StagePilot configuration"
+          kicker="Backend configuration"
+          headingId="backend-setup-heading"
+          onClose={onClose}
+          status={connectionStatus}
+          title="StagePilot"
+        />
+      )}
       id="backend-configuration"
       tone="backend"
-      variant="setup"
-    >
-      <SetupPanelHeader
-        closeLabel="Close StagePilot configuration"
-        kicker="Backend configuration"
-        headingId="backend-setup-heading"
-        onClose={onClose}
-        status={connectionStatus}
-        title="StagePilot"
-      />
-
-      {/* The removed Status heading used to add 52.5px under the header (24px margin + 16.5px line + 12px). The owner wanted about
-          half of that back (2026-10-14), so 26px. */}
-      <div className="backend-status-wrap mt-[26px]">
-      <dl aria-label="Status" className="backend-status grid gap-3 text-sm">
-        <div className={factCard}>
-          <dt className={factLabel}>Version</dt>
-          <dd className="mt-1 font-semibold text-ink">{health ? health.version : "Loading"}</dd>
-        </div>
-        <div className={factCard}>
-          <dt className={factLabel}>State revision</dt>
-          <dd className="mt-1 font-semibold tabular-nums text-ink">{state.revision}</dd>
-        </div>
-        <div className={factCard}>
-          <dt className={factLabel}>API endpoint</dt>
-          <dd className="mt-1 break-all font-mono text-xs text-ink">{apiOrigin}</dd>
-        </div>
-        <div className={factCard}>
-          <dt className={factLabel}>WebSocket</dt>
-          <dd className={`mt-1 font-semibold ${live ? "text-integration-backend-text" : "text-danger-text"}`}>
-            {live ? "Connected" : "Disconnected"}
-          </dd>
-          <dd className="mt-1 break-all font-mono text-type-micro text-ink-muted">{websocketUrl}</dd>
-        </div>
-      </dl>
-      </div>
-
-      <div className="mt-3">
-        <Disclosure
-          onOpenChange={setAdvancedOpen}
-          open={advancedOpen}
-          summary={advancedSummary}
-          title="Advanced"
-          tone="backend"
-          variant="advanced"
-        >
-        {/* Four settings, laid out 1, 2 or 4 across by the width of the section, exactly like the status cards above (never 3). */}
-        <div className="backend-advanced-wrap">
-        <div className="backend-advanced grid gap-4">
-          <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
-            <Select disabled={pending} onChange={(event) => setTimezone(event.target.value)} value={timezone}>
-              {timezoneChoices.map((zone) => (
-                <option key={zone} value={zone}>{zone}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field error={errPort} heldChange={heldPort} hint={heldPort ? "Takes effect after you restart StagePilot." : undefined} label="Server port">
-            <Input
-              disabled={pending}
-              inputMode="numeric"
-              onChange={(event) => setServerPort(event.target.value)}
-              value={serverPort}
-            />
-          </Field>
-          <Field heldChange={heldLogLevel} label="Log level">
-            <Select
-              disabled={pending}
-              onChange={(event) => {
-                const value = event.target.value as GeneralSettingsInput["log_level"];
-                setLogLevel(value);
-              }}
-              value={logLevel}
-            >
-              {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <p className="mt-3 text-xs text-ink-muted" data-advanced-restart-note>
-          Timezone, logging and port changes take effect after a backend restart.
-        </p>
-        </div>
-        </Disclosure>
-      </div>
-
-      <div className="mt-4" data-connection-access>
-        <ConnectionMethod
-          disabled={pending || remote.checkboxBusy || saved === null}
-          label="Connection Access"
-          onChange={chooseAccess}
-          options={accessOptions}
-          value={access}
+      // Status is the first thing read on this page, so its cards open it (the summary at the top); Advanced and Connection Access follow.
+      summaryAt="top"
+      summary={(
+        <StatusSummary
+          items={[
+            { label: "Version", value: health ? health.version : "Loading" },
+            { label: "State revision", value: state.revision, tabular: true },
+            { label: "API endpoint", value: apiOrigin, mono: true },
+            { label: "WebSocket", value: live ? "Connected" : "Disconnected", tone: live ? "ok" : "danger", detail: websocketUrl },
+          ]}
+          label="Status"
+          variant="cards"
         />
-        <p className="mt-2 max-w-3xl text-xs text-ink-muted" data-access-hint>
-          {access === "host"
-            ? "Only this computer can open StagePilot."
-            : `Other devices on this network can open http://<this-computer's-IP>:${serverPort}.`}
-          {access === "internet" ? " Anyone you add below can also sign in from anywhere." : ""}
-        </p>
-        {remote.checkboxBusy && <p className="mt-2 inline-flex items-center gap-2 text-xs text-ink-muted"><ButtonSpinner />Applying…</p>}
-        {needsRestart && !pending && !saveFailed && (
-          <p className="mt-2 text-xs text-warning-text" data-access-restart role="status">
-            Saved. Restart StagePilot to {chosenLan ? "let other devices connect" : "make it available to this computer only"}.
-          </p>
-        )}
-        {showAccessPin && (
-          <div className="mt-3" data-access-pin>
-            {/* The label sits above; the small input and its Save PIN button share one row directly below it. */}
-            <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} label="Access PIN">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  autoComplete="new-password"
-                  className="!w-28 font-mono"
-                  disabled={pending}
-                  inputMode="numeric"
-                  maxLength={64}
-                  minLength={4}
-                  onChange={(event) => setDashboardPin(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
-                  type="password"
-                  value={dashboardPin}
-                />
-                <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
-              </div>
+      )}
+      optional={(
+        <OptionalSection onOpenChange={setAdvancedOpen} open={advancedOpen} summary={advancedSummary} title="Advanced" tone="backend">
+          {/* Four settings, laid out 1, 2 or 4 across by the width of the section, exactly like the status cards above (never 3). */}
+          <SettingsSection busy={pending} columns="inset" note="Timezone, logging and port changes take effect after a backend restart.">
+            <Field error={errTimezone} heldChange={heldTimezone} label="Timezone">
+              <Select onChange={(event) => setTimezone(event.target.value)} value={timezone}>
+                {timezoneChoices.map((zone) => (
+                  <option key={zone} value={zone}>{zone}</option>
+                ))}
+              </Select>
             </Field>
-            <p className="mt-2 max-w-3xl text-xs text-ink-muted">The initial PIN is 1234. Replacing it signs out every open dashboard.</p>
-          </div>
-        )}
-        {access === "internet" && remote.panelOpen && (
-          <div className="mt-4" data-access-people>
-            {/* A pending "turn Remote Access off?" question must never hide inside a folded section, so it opens the section for as
-                long as it is asked, without changing the saved choice. */}
-            <Disclosure
-              onOpenChange={setRemoteOpenSaved}
-              open={remoteOpenSaved || remote.confirmDisable}
-              summary={remote.bootstrap ? "Create the first Operator" : remote.status ? remoteStateWord[remote.status.state] : undefined}
-              title="Remote access"
-              variant="activity"
-            >
-              <RemoteAccessPanel control={remote} />
-            </Disclosure>
-          </div>
-        )}
-        {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
-      </div>
-
-      {blockedReason && <p className="mt-3 text-sm text-ink-body" id="backend-save-blocked">{blockedReason}</p>}
-      <SaveBar className="mt-3" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />
-
-      <PanelAlert className="mt-3" error={error} message={message} messageTone="info" onRetry={!settings ? onRetryLoad : undefined} />
-
-      <SendAllLogsButton />
-    </Panel>
+            <Field error={errPort} heldChange={heldPort} hint={heldPort ? "Takes effect after you restart StagePilot." : undefined} label="Server port">
+              <Input inputMode="numeric" onChange={(event) => setServerPort(event.target.value)} value={serverPort} />
+            </Field>
+            <Field heldChange={heldLogLevel} label="Log level">
+              <Select
+                onChange={(event) => {
+                  const value = event.target.value as GeneralSettingsInput["log_level"];
+                  setLogLevel(value);
+                }}
+                value={logLevel}
+              >
+                {(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const).map((level) => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </Select>
+            </Field>
+          </SettingsSection>
+        </OptionalSection>
+      )}
+      content={(
+        <div data-connection-access>
+          <ConnectionMethod
+            disabled={pending || remote.checkboxBusy || saved === null}
+            label="Connection Access"
+            onChange={chooseAccess}
+            options={accessOptions}
+            value={access}
+          />
+          <SectionNotice className="mt-2 max-w-3xl" data-access-hint quiet size="xs" tone="info" variant="line">
+            {access === "host"
+              ? "Only this computer can open StagePilot."
+              : `Other devices on this network can open http://<this-computer's-IP>:${serverPort}.`}
+            {access === "internet" ? " Anyone you add below can also sign in from anywhere." : ""}
+          </SectionNotice>
+          {remote.checkboxBusy && <p className="mt-2 inline-flex items-center gap-2 text-xs text-ink-muted"><ButtonSpinner />Applying…</p>}
+          {needsRestart && !pending && !saveFailed && (
+            <SectionNotice className="mt-2" data-access-restart role="status" size="xs" tone="warning" variant="line">
+              Saved. Restart StagePilot to {chosenLan ? "let other devices connect" : "make it available to this computer only"}.
+            </SectionNotice>
+          )}
+          {showAccessPin && (
+            <div className="mt-3" data-access-pin>
+              {/* The label sits above; the small input and its Save PIN button share one row directly below it. */}
+              <Field error={pinTooShort ? "Enter a PIN of at least 4 characters." : undefined} label="Access PIN">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    autoComplete="new-password"
+                    className="!w-28 font-mono"
+                    disabled={pending}
+                    inputMode="numeric"
+                    maxLength={64}
+                    minLength={4}
+                    onChange={(event) => setDashboardPin(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); savePin(); } }}
+                    type="password"
+                    value={dashboardPin}
+                  />
+                  <Button disabled={pending || dashboardPin.length < 4} onClick={savePin} type="button" variant="secondary">Save PIN</Button>
+                </div>
+              </Field>
+              <SectionNotice className="mt-2 max-w-3xl" quiet size="xs" tone="info" variant="line">The initial PIN is 1234. Replacing it signs out every open dashboard.</SectionNotice>
+            </div>
+          )}
+          {access === "internet" && remote.panelOpen && (
+            <div className="mt-4" data-access-people>
+              {/* A pending "turn Remote Access off?" question must never hide inside a folded section, so it opens the section for as
+                  long as it is asked, without changing the saved choice. */}
+              <OptionalSection
+                forceOpen={remote.confirmDisable}
+                persistKey={REMOTE_ACCESS_OPEN_KEY}
+                defaultOpen
+                summary={remote.bootstrap ? "Create the first Operator" : remote.status ? remoteStateWord[remote.status.state] : undefined}
+                title="Remote access"
+                variant="activity"
+              >
+                <RemoteAccessPanel control={remote} />
+              </OptionalSection>
+            </div>
+          )}
+          {access !== "internet" && remote.panelOpen && <div className="mt-4"><RemoteAccessPanel control={remote} /></div>}
+        </div>
+      )}
+      notices={(
+        <>
+          {blockedReason && <SectionNotice id="backend-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice>}
+          <PanelAlert error={error} message={message} messageTone="info" onRetry={!settings ? onRetryLoad : undefined} />
+        </>
+      )}
+      saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
+      below={<SendAllLogsButton />}
+    />
   );
 }

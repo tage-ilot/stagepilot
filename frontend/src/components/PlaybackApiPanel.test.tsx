@@ -835,7 +835,7 @@ describe("Song order section", () => {
     render(<PlaybackApiPanel playback={controller({ status: playbackStatus() })} />);
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("song-order-summary")).toHaveTextContent("Saved - 2 songs");
-    const header = document.querySelector("[data-song-order-header]")!;
+    const header = document.querySelector("[data-section=band] [data-part=band-header]")!;
     expect(within(header as HTMLElement).getByRole("button", { name: "Scan Playback Songs" })).toBeVisible();
     expect(header.querySelector('[data-part="chevron"]')).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
